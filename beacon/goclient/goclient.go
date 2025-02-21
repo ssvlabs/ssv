@@ -232,33 +232,41 @@ func New(
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
-	headChan, err := client.SubscribeToHeadEvents(opt.Context, "go_client")
+	if err := client.launchEventListener(opt.Context); err != nil {
+		return nil, errors.Wrap(err, "failed to launch head event listener")
+	}
+
+	return client, nil
+}
+
+func (gc *GoClient) launchEventListener(ctx context.Context) error {
+	headChan, err := gc.SubscribeToHeadEvents(ctx, "go_client")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to add subscriber to head events")
+		return errors.Wrap(err, "failed to subscribe to head events")
 	}
 
 	go func() {
 		for {
 			select {
 			case headEvent := <-headChan:
-				logger := client.log.
+				logger := gc.log.
 					With(fields.Slot(headEvent.Slot)).
 					With(fields.BlockRoot(headEvent.Block))
 
 				logger.Info("received head event. Updating cache")
 
-				item := client.blockRootToSlotCache.Set(headEvent.Block, headEvent.Slot, ttlcache.NoTTL)
+				item := gc.blockRootToSlotCache.Set(headEvent.Block, headEvent.Slot, ttlcache.NoTTL)
 
 				logger.
 					With(zap.Int64("cache_item_version", item.Version())).
 					Info("cache updated")
-			case <-opt.Context.Done():
+			case <-ctx.Done():
 				return
 			}
 		}
 	}()
 
-	return client, nil
+	return nil
 }
 
 func (gc *GoClient) initMultiClient(ctx context.Context) error {
@@ -454,17 +462,4 @@ func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
 	duration := time.Second * casts.DurationFromUint64(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(gc.network.MinGenesisTime(), 0).Add(duration)
 	return startTime
-}
-
-func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
-	if err := gc.multiClient.Events(ctx, topics, handler); err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Events"),
-			zap.Error(err),
-		)
-
-		return err
-	}
-
-	return nil
 }
