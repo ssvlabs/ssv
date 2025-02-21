@@ -13,7 +13,14 @@ type Event interface {
 
 type Subscriber[T Event] struct {
 	Identifier string
-	Channel    chan<- T
+	Channel    chan T
+}
+
+func NewSubscriber[T Event](identifier string) *Subscriber[T] {
+	return &Subscriber[T]{
+		Identifier: identifier,
+		Channel:    make(chan T, 32),
+	}
 }
 
 func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *apiv1.HeadEvent, error) {
@@ -32,18 +39,14 @@ func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentif
 		}
 	}
 
-	ch := make(chan *apiv1.HeadEvent, gc.network.SlotsPerEpoch())
-	headEventSubscriber := Subscriber[*apiv1.HeadEvent]{
-		Identifier: subscriberIdentifier,
-		Channel:    ch,
-	}
+	headEventSubscriber := NewSubscriber[*apiv1.HeadEvent](subscriberIdentifier)
 	gc.headEventSubscribers = append(gc.headEventSubscribers, headEventSubscriber)
 
 	gc.log.
 		With(zap.Int("head_event_subscribers_len", len(gc.headEventSubscribers))).
 		Info("Subscribed to head events")
 
-	return ch, nil
+	return headEventSubscriber.Channel, nil
 }
 
 func (gc *GoClient) startEventListener(ctx context.Context) error {

@@ -160,7 +160,7 @@ type GoClient struct {
 	withWeightedAttestationData bool
 
 	subscribersLock      sync.RWMutex
-	headEventSubscribers []Subscriber[*apiv1.HeadEvent]
+	headEventSubscribers []*Subscriber[*apiv1.HeadEvent]
 	supportedTopics      []EventTopic
 }
 
@@ -231,6 +231,25 @@ func New(
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
+
+	headChan, err := client.SubscribeToHeadEvents(opt.Context, "go_client")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to add subscriber to head events")
+	}
+
+	go func() {
+		for {
+			select {
+			case headEvent := <-headChan:
+				client.log.Info("received head event",
+					zap.Uint64("slot", uint64(headEvent.Slot)),
+					zap.String("block_root", headEvent.Block.String()),
+				)
+			case <-opt.Context.Done():
+				return
+			}
+		}
+	}()
 
 	return client, nil
 }
