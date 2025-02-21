@@ -274,13 +274,13 @@ var StartNodeCmd = &cobra.Command{
 
 		var keyManager ekm.KeyManager
 		if cfg.SSVSignerEndpoint != "" { // TODO: try to remove repetitive check
-			encryptionKey := "encryptionKey" // TODO: define
+			encryptionKey := hex.EncodeToString([]byte("encryptionKey")) // TODO: define
 			keyManager, err = ekm.NewETHKeyManagerSigner(logger, db, networkConfig, encryptionKey)
 			if err != nil {
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
 
-			keyManager, err = ekm.NewSSVSignerKeyManagerAdapter(logger, networkConfig, db, ssvSignerClient, consensusClient, encryptionKey)
+			keyManager, err = ekm.NewSSVSignerKeyManagerAdapter(logger, ssvSignerClient, consensusClient, keyManager)
 			if err != nil {
 				logger.Fatal("could not create ssv-signer adapter", zap.Error(err))
 			}
