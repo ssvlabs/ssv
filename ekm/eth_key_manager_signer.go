@@ -265,6 +265,14 @@ func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slo
 	return nil
 }
 
+func (km *ethKeyManagerSigner) UpdateHighestAttestation(pubKey []byte, attestation *phase0.AttestationData) error {
+	return km.slashingProtector.UpdateHighestAttestation(pubKey, attestation)
+}
+
+func (km *ethKeyManagerSigner) UpdateHighestProposal(pubKey []byte, slot phase0.Slot) error {
+	return km.slashingProtector.UpdateHighestProposal(pubKey, slot)
+}
+
 func (km *ethKeyManagerSigner) AddShare(sharePrivKey []byte) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()

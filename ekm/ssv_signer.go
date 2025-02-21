@@ -79,6 +79,19 @@ func (s *SSVSignerKeyManagerAdapter) IsBeaconBlockSlashable(pk []byte, slot phas
 	return s.keyManager.IsBeaconBlockSlashable(pk, slot)
 }
 
+type slashingDataUpdater interface {
+	UpdateHighestAttestation(pk []byte, attestationData *phase0.AttestationData) error
+	UpdateHighestProposal(pk []byte, slot phase0.Slot) error
+}
+
+func (s *SSVSignerKeyManagerAdapter) UpdateHighestAttestation(pk []byte, attestationData *phase0.AttestationData) error {
+	return s.keyManager.(slashingDataUpdater).UpdateHighestAttestation(pk, attestationData)
+}
+
+func (s *SSVSignerKeyManagerAdapter) UpdateHighestProposal(pk []byte, slot phase0.Slot) error {
+	return s.keyManager.(slashingDataUpdater).UpdateHighestProposal(pk, slot)
+}
+
 // AddShare is a dummy method to match KeyManager interface. This method panics and should never be called.
 func (s *SSVSignerKeyManagerAdapter) AddShare(encryptedShare []byte) error {
 	statuses, publicKeys, err := s.client.AddValidators(encryptedShare)
@@ -133,6 +146,14 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 		data, ok := obj.(*phase0.AttestationData)
 		if !ok {
 			return nil, [32]byte{}, errors.New("could not cast obj to AttestationData")
+		}
+
+		if err := s.IsAttestationSlashable(sharePubkey, data); err != nil {
+			return nil, [32]byte{}, err
+		}
+
+		if err := s.UpdateHighestAttestation(sharePubkey, data); err != nil {
+			return nil, [32]byte{}, err
 		}
 
 		req.Type = web3signer.Attestation
