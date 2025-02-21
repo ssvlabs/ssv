@@ -119,8 +119,13 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 	sharePubkey []byte,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, [32]byte, error) {
+	forkInfo, err := s.getForkInfo()
+	if err != nil {
+		return spectypes.Signature{}, [32]byte{}, fmt.Errorf("get fork info: %w", err)
+	}
+
 	req := web3signer.SignRequest{
-		ForkInfo: s.getForkInfo(),
+		ForkInfo: forkInfo,
 	}
 
 	switch signatureDomain {
@@ -273,17 +278,21 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 	return sig, root, nil
 }
 
-func (s *SSVSignerKeyManagerAdapter) getForkInfo() web3signer.ForkInfo {
+func (s *SSVSignerKeyManagerAdapter) getForkInfo() (web3signer.ForkInfo, error) {
 	denebForkHolesky := web3signer.ForkType{
 		PreviousVersion: "0x04017000",
 		CurrentVersion:  "0x05017000",
 		Epoch:           29696,
 	}
 
+	genesis := s.consensusClient.Genesis()
+	if genesis == nil {
+		return web3signer.ForkInfo{}, fmt.Errorf("genesis is not ready")
+	}
 	return web3signer.ForkInfo{
 		Fork:                  denebForkHolesky,
-		GenesisValidatorsRoot: hex.EncodeToString(s.consensusClient.Genesis().GenesisValidatorsRoot[:]), // TODO: fix panic when genesis is not ready
-	}
+		GenesisValidatorsRoot: hex.EncodeToString(genesis.GenesisValidatorsRoot[:]),
+	}, nil
 }
 
 type SSVSignerKeysOperatorSignerAdapter struct {
