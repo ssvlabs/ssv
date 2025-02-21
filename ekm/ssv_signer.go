@@ -282,7 +282,7 @@ func (s *SSVSignerKeyManagerAdapter) getForkInfo() web3signer.ForkInfo {
 
 	return web3signer.ForkInfo{
 		Fork:                  denebForkHolesky,
-		GenesisValidatorsRoot: hex.EncodeToString(s.consensusClient.Genesis().GenesisValidatorsRoot[:]),
+		GenesisValidatorsRoot: hex.EncodeToString(s.consensusClient.Genesis().GenesisValidatorsRoot[:]), // TODO: fix panic when genesis is not ready
 	}
 }
 
