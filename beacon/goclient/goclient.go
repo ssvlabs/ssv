@@ -242,8 +242,8 @@ func New(
 			select {
 			case headEvent := <-headChan:
 				logger := client.log.
-					With(zap.Uint64("slot", uint64(headEvent.Slot))).
-					With(zap.String("block_root", headEvent.Block.String()))
+					With(fields.Slot(headEvent.Slot)).
+					With(fields.BlockRoot(headEvent.Block))
 
 				logger.Info("received head event. Updating cache")
 
