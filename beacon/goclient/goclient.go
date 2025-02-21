@@ -110,6 +110,12 @@ type MultiClient interface {
 	eth2client.VoluntaryExitSubmitter
 }
 
+type EventTopic string
+
+const (
+	HeadEventTopic EventTopic = "head"
+)
+
 // GoClient implementing Beacon struct
 type GoClient struct {
 	log         *zap.Logger
@@ -152,6 +158,10 @@ type GoClient struct {
 	longTimeout   time.Duration
 
 	withWeightedAttestationData bool
+
+	subscribersLock      sync.RWMutex
+	headEventSubscribers []Subscriber[*apiv1.HeadEvent]
+	supportedTopics      []EventTopic
 }
 
 // New init new client and go-client instance
@@ -192,6 +202,7 @@ func New(
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
+		supportedTopics:                    []EventTopic{HeadEventTopic},
 	}
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
