@@ -57,11 +57,14 @@ type StorageProvider interface {
 	RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error)
 	RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error)
 	BumpSlashingProtection(pubKey []byte) error
+	RemoveHighestAttestation(pubKey []byte) error
+	RemoveHighestProposal(pubKey []byte) error
 }
 
 type KeyManager interface {
 	spectypes.BeaconSigner
 	// AddShare saves a share key
+	// secret differs in different implementations: ekm receives share private key, ssv signer receives encrypted share private key
 	AddShare(secret []byte) error
 	// RemoveShare removes a share key
 	RemoveShare(pubKey []byte) error
@@ -118,6 +121,14 @@ func (km *ethKeyManagerSigner) RetrieveHighestAttestation(pubKey []byte) (*phase
 
 func (km *ethKeyManagerSigner) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
 	return km.storage.RetrieveHighestProposal(pubKey)
+}
+
+func (km *ethKeyManagerSigner) RemoveHighestAttestation(pubKey []byte) error {
+	return km.storage.RemoveHighestAttestation(pubKey)
+}
+
+func (km *ethKeyManagerSigner) RemoveHighestProposal(pubKey []byte) error {
+	return km.storage.RemoveHighestProposal(pubKey)
 }
 
 func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
@@ -268,7 +279,7 @@ func (km *ethKeyManagerSigner) AddShare(sharePrivKey []byte) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		if err := km.BumpSlashingProtection(blsPrivKey.Serialize()); err != nil {
+		if err := km.BumpSlashingProtection(blsPrivKey.GetPublicKey().Serialize()); err != nil {
 			return errors.Wrap(err, "could not bump slashing protection")
 		}
 		if err := km.saveShare(sharePrivKey); err != nil {

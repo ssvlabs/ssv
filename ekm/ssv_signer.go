@@ -48,43 +48,69 @@ func NewSSVSignerKeyManagerAdapter(
 }
 
 func (s *SSVSignerKeyManagerAdapter) ListAccounts() ([]core.ValidatorAccount, error) {
-	return nil, nil // TODO: fix
-	//return s.keyManager.(StorageProvider).ListAccounts()
+	return s.keyManager.(StorageProvider).ListAccounts()
 }
 
 func (s *SSVSignerKeyManagerAdapter) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
-	return nil, true, nil // TODO: fix
-	//return s.keyManager.(StorageProvider).RetrieveHighestAttestation(pubKey)
+	return s.keyManager.(StorageProvider).RetrieveHighestAttestation(pubKey)
 }
 
 func (s *SSVSignerKeyManagerAdapter) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
-	return 0, true, nil // TODO: fix
-	//return s.keyManager.(StorageProvider).RetrieveHighestProposal(pubKey)
+	return s.keyManager.(StorageProvider).RetrieveHighestProposal(pubKey)
 }
 
 func (s *SSVSignerKeyManagerAdapter) BumpSlashingProtection(pubKey []byte) error {
-	return nil // TODO: fix
-	//return s.keyManager.(StorageProvider).BumpSlashingProtection(pubKey)
+	return s.keyManager.(StorageProvider).BumpSlashingProtection(pubKey)
+}
+
+func (s *SSVSignerKeyManagerAdapter) RemoveHighestAttestation(pubKey []byte) error {
+	return s.keyManager.(StorageProvider).RemoveHighestAttestation(pubKey)
+}
+
+func (s *SSVSignerKeyManagerAdapter) RemoveHighestProposal(pubKey []byte) error {
+	return s.keyManager.(StorageProvider).RemoveHighestProposal(pubKey)
 }
 
 func (s *SSVSignerKeyManagerAdapter) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
-	return nil // TODO: fix
-	//return s.keyManager.IsAttestationSlashable(pk, data)
+	return s.keyManager.IsAttestationSlashable(pk, data)
 }
 
 func (s *SSVSignerKeyManagerAdapter) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
-	return nil // TODO: fix
-	//return s.keyManager.IsBeaconBlockSlashable(pk, slot)
+	return s.keyManager.IsBeaconBlockSlashable(pk, slot)
 }
 
 // AddShare is a dummy method to match KeyManager interface. This method panics and should never be called.
-// TODO: add a comment that it uses encryptedShare instead of pubkey
 func (s *SSVSignerKeyManagerAdapter) AddShare(encryptedShare []byte) error {
-	return s.client.AddValidator(encryptedShare)
+	statuses, publicKeys, err := s.client.AddValidators(encryptedShare)
+	if err != nil {
+		return fmt.Errorf("add validator: %w", err)
+	}
+
+	if statuses[0] == ssvsignerclient.StatusImported {
+		if err := s.BumpSlashingProtection(publicKeys[0]); err != nil {
+			return fmt.Errorf("could not bump slashing protection: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey []byte) error {
-	return s.client.RemoveValidator(pubKey)
+	statuses, err := s.client.RemoveValidators(pubKey)
+	if err != nil {
+		return fmt.Errorf("remove validator: %w", err)
+	}
+
+	if statuses[0] == ssvsignerclient.StatusDeleted {
+		if err := s.RemoveHighestAttestation(pubKey); err != nil {
+			return fmt.Errorf("could not remove highest attestation: %w", err)
+		}
+		if err := s.RemoveHighestProposal(pubKey); err != nil {
+			return fmt.Errorf("could not remove highest proposal: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
