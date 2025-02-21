@@ -14,93 +14,67 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/ssvlabs/eth2-key-manager/core"
-	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	ssvsignerclient "github.com/ssvlabs/ssv-signer/client"
 	"github.com/ssvlabs/ssv-signer/web3signer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // TODO: move to another package?
 
 type SSVSignerKeyManagerAdapter struct {
-	logger            *zap.Logger
-	client            *ssvsignerclient.SSVSignerClient
-	consensusClient   *goclient.GoClient
-	slashingProtector *slashingprotection.NormalProtection
-	signerStore       Storage
+	logger          *zap.Logger
+	client          *ssvsignerclient.SSVSignerClient
+	consensusClient *goclient.GoClient
+	keyManager      KeyManager
 }
 
 func NewSSVSignerKeyManagerAdapter(
 	logger *zap.Logger,
-	netCfg networkconfig.NetworkConfig,
-	db basedb.Database,
 	client *ssvsignerclient.SSVSignerClient,
 	consensusClient *goclient.GoClient,
-	encryptionKey string,
+	keyManager KeyManager,
 ) (*SSVSignerKeyManagerAdapter, error) {
-	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
-	if encryptionKey != "" {
-		err := signerStore.SetEncryptionKey(encryptionKey)
-		if err != nil {
-			return nil, err
-		}
-	}
-	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
 	return &SSVSignerKeyManagerAdapter{
-		logger:            logger.Named("SSVSignerKeyManagerAdapter"),
-		client:            client,
-		consensusClient:   consensusClient,
-		slashingProtector: slashingProtector,
-		signerStore:       signerStore,
+		logger:          logger.Named("SSVSignerKeyManagerAdapter"),
+		client:          client,
+		consensusClient: consensusClient,
+		keyManager:      keyManager,
 	}, nil
 }
 
 func (s *SSVSignerKeyManagerAdapter) ListAccounts() ([]core.ValidatorAccount, error) {
-	return s.signerStore.ListAccounts()
+	return nil, nil // TODO: fix
+	//return s.keyManager.(StorageProvider).ListAccounts()
 }
 
 func (s *SSVSignerKeyManagerAdapter) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
-	return s.signerStore.RetrieveHighestAttestation(pubKey)
+	return nil, true, nil // TODO: fix
+	//return s.keyManager.(StorageProvider).RetrieveHighestAttestation(pubKey)
 }
 
 func (s *SSVSignerKeyManagerAdapter) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
-	return s.signerStore.RetrieveHighestProposal(pubKey)
+	return 0, true, nil // TODO: fix
+	//return s.keyManager.(StorageProvider).RetrieveHighestProposal(pubKey)
 }
 
 func (s *SSVSignerKeyManagerAdapter) BumpSlashingProtection(pubKey []byte) error {
-	// TODO: consider using ekm instead of slashingProtector
-	panic("implement") // TODO
+	return nil // TODO: fix
+	//return s.keyManager.(StorageProvider).BumpSlashingProtection(pubKey)
 }
 
 func (s *SSVSignerKeyManagerAdapter) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
-	// TODO: consider using ekm instead of slashingProtector
-	if val, err := s.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf("slashable attestation (%s), not signing", val.Status)
-	}
-	return nil
+	return nil // TODO: fix
+	//return s.keyManager.IsAttestationSlashable(pk, data)
 }
 
 func (s *SSVSignerKeyManagerAdapter) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
-	// TODO: consider using ekm instead of slashingProtector
-	status, err := s.slashingProtector.IsSlashableProposal(pk, slot)
-	if err != nil {
-		return err
-	}
-	if status.Status != core.ValidProposal {
-		return fmt.Errorf("slashable proposal (%s), not signing", status.Status)
-	}
-
-	return nil
+	return nil // TODO: fix
+	//return s.keyManager.IsBeaconBlockSlashable(pk, slot)
 }
 
 // AddShare is a dummy method to match KeyManager interface. This method panics and should never be called.
