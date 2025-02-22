@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/keys"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -100,9 +101,13 @@ func (s *SSVSignerKeyManagerAdapter) AddShare(encryptedShare []byte) error {
 	}
 
 	if statuses[0] == ssvsignerclient.StatusImported {
+		s.logger.Info("bumping slashing protection", fields.PubKey(publicKeys[0]))
 		if err := s.BumpSlashingProtection(publicKeys[0]); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
+	} else {
+		s.logger.Info("share was not imported, no slashing protection bump",
+			fields.PubKey(publicKeys[0]), zap.String("status", string(statuses[0])))
 	}
 
 	return nil
