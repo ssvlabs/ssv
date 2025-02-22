@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/keys"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -101,13 +100,9 @@ func (s *SSVSignerKeyManagerAdapter) AddShare(encryptedShare []byte) error {
 	}
 
 	if statuses[0] == ssvsignerclient.StatusImported || statuses[0] == ssvsignerclient.StatusDuplicated {
-		s.logger.Info("bumping slashing protection", fields.PubKey(publicKeys[0]))
 		if err := s.BumpSlashingProtection(publicKeys[0]); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
-	} else {
-		s.logger.Info("share was not imported, no slashing protection bump",
-			fields.PubKey(publicKeys[0]), zap.String("status", string(statuses[0])))
 	}
 
 	return nil
@@ -120,16 +115,12 @@ func (s *SSVSignerKeyManagerAdapter) RemoveShare(pubKey []byte) error {
 	}
 
 	if statuses[0] == ssvsignerclient.StatusDeleted {
-		s.logger.Info("removing highest slashing protection data for deleted share", fields.PubKey(pubKey))
 		if err := s.RemoveHighestAttestation(pubKey); err != nil {
 			return fmt.Errorf("could not remove highest attestation: %w", err)
 		}
 		if err := s.RemoveHighestProposal(pubKey); err != nil {
 			return fmt.Errorf("could not remove highest proposal: %w", err)
 		}
-	} else {
-		s.logger.Info("share was not removed, no slashing protection removal",
-			fields.PubKey(pubKey), zap.String("status", string(statuses[0])))
 	}
 
 	return nil
