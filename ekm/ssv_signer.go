@@ -171,6 +171,14 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (capella): %w", err)
 			}
 
+			if err := s.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
+				return nil, [32]byte{}, err
+			}
+
+			if err = s.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
+				return nil, [32]byte{}, err
+			}
+
 			req.BeaconBlock = &web3signer.BeaconBlockData{
 				Version: "CAPELLA",
 				BlockHeader: &phase0.BeaconBlockHeader{
@@ -187,6 +195,14 @@ func (s *SSVSignerKeyManagerAdapter) SignBeaconObject(
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
+			}
+
+			if err := s.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
+				return nil, [32]byte{}, err
+			}
+
+			if err = s.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
+				return nil, [32]byte{}, err
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
