@@ -88,15 +88,15 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 	}
 }
 
-// StartDuty starts a new duty for the given slot
+// StartDuty starts a new duty for the given slot.
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	r, trimmedDuty, err := c.prepareDutyRunner(logger, duty)
+	r, runnableDuty, err := c.prepareDutyRunner(logger, duty)
 	if err != nil {
 		return fmt.Errorf("could not prepare duty runner: %w", err)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
-	err = r.StartNewDuty(ctx, logger, trimmedDuty, c.CommitteeMember.GetQuorum())
+	err = r.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
 	if err != nil {
 		return errors.Wrap(err, "runner failed to start duty")
 	}
@@ -105,7 +105,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 
 func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
 	r *runner.CommitteeRunner,
-	trimmedDuty *spectypes.CommitteeDuty,
+	runnableDuty *spectypes.CommitteeDuty,
 	err error,
 ) {
 	c.mtx.Lock()
@@ -115,7 +115,7 @@ func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.Commit
 		return nil, nil, fmt.Errorf("CommitteeRunner for slot %d already exists", duty.Slot)
 	}
 
-	shares, attesters, trimmedDuty, err := c.prepareDuty(logger, duty)
+	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
 		return nil, nil, fmt.Errorf("prepare duty: %w", err)
 	}
@@ -147,26 +147,26 @@ func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.Commit
 		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
-	return r, trimmedDuty, nil
+	return r, runnableDuty, nil
 }
 
-// prepareDuty will analyse duty and prepare the data we need to further process it.
+// prepareDuty filters out unrunnable validator duties and returns the shares and attesters.
 func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
-	map[phase0.ValidatorIndex]*spectypes.Share,
-	[]spectypes.ShareValidatorPK,
-	*spectypes.CommitteeDuty,
-	error,
+	shares map[phase0.ValidatorIndex]*spectypes.Share,
+	attesters []spectypes.ShareValidatorPK,
+	runnableDuty *spectypes.CommitteeDuty,
+	err error,
 ) {
 	if len(duty.ValidatorDuties) == 0 {
 		return nil, nil, nil, errors.New("no beacon duties")
 	}
 
-	trimmedDuty := &spectypes.CommitteeDuty{
+	runnableDuty = &spectypes.CommitteeDuty{
 		Slot:            duty.Slot,
 		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
 	}
-	shares := make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
-	attesters := make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
+	shares = make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
+	attesters = make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
 	for _, beaconDuty := range duty.ValidatorDuties {
 		share, exists := c.Shares[beaconDuty.ValidatorIndex]
 		if !exists {
@@ -177,7 +177,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 			continue
 		}
 		shares[beaconDuty.ValidatorIndex] = share
-		trimmedDuty.ValidatorDuties = append(trimmedDuty.ValidatorDuties, beaconDuty)
+		runnableDuty.ValidatorDuties = append(runnableDuty.ValidatorDuties, beaconDuty)
 
 		if beaconDuty.Type == spectypes.BNRoleAttester {
 			attesters = append(attesters, share.SharePubKey)
@@ -188,7 +188,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 		return nil, nil, nil, errors.New("no shares for duty's validators")
 	}
 
-	return shares, attesters, trimmedDuty, nil
+	return shares, attesters, runnableDuty, nil
 }
 
 // ProcessMessage processes Network Message of all types
