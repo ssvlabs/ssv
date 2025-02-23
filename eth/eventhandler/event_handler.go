@@ -9,22 +9,21 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ssvlabs/ssv/ekm"
-	"github.com/ssvlabs/ssv/observability"
-	"go.opentelemetry.io/otel/metric"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/localevents"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
@@ -59,15 +58,20 @@ type taskExecutor interface {
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 }
 
+type DoppelgangerProvider interface {
+	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
+}
+
 type EventHandler struct {
-	nodeStorage       nodestorage.Storage
-	taskExecutor      taskExecutor
-	eventParser       eventparser.Parser
-	networkConfig     networkconfig.NetworkConfig
-	operatorDataStore operatordatastore.OperatorDataStore
-	operatorDecrypter keys.OperatorDecrypter
-	keyManager        ekm.KeyManager
-	beacon            beaconprotocol.BeaconNode
+	nodeStorage         nodestorage.Storage
+	taskExecutor        taskExecutor
+	eventParser         eventparser.Parser
+	networkConfig       networkconfig.NetworkConfig
+	operatorDataStore   operatordatastore.OperatorDataStore
+	operatorDecrypter   keys.OperatorDecrypter
+	keyManager          ekm.KeyManager
+	beacon              beaconprotocol.BeaconNode
+	doppelgangerHandler DoppelgangerProvider
 
 	fullNode bool
 	logger   *zap.Logger
@@ -82,18 +86,20 @@ func New(
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
 	beacon beaconprotocol.BeaconNode,
+	doppelgangerHandler DoppelgangerProvider,
 	opts ...Option,
 ) (*EventHandler, error) {
 	eh := &EventHandler{
-		nodeStorage:       nodeStorage,
-		taskExecutor:      taskExecutor,
-		eventParser:       eventParser,
-		networkConfig:     networkConfig,
-		operatorDataStore: operatorDataStore,
-		operatorDecrypter: operatorDecrypter,
-		keyManager:        keyManager,
-		beacon:            beacon,
-		logger:            zap.NewNop(),
+		nodeStorage:         nodeStorage,
+		taskExecutor:        taskExecutor,
+		eventParser:         eventParser,
+		networkConfig:       networkConfig,
+		operatorDataStore:   operatorDataStore,
+		operatorDecrypter:   operatorDecrypter,
+		keyManager:          keyManager,
+		beacon:              beacon,
+		doppelgangerHandler: doppelgangerHandler,
+		logger:              zap.NewNop(),
 	}
 
 	for _, opt := range opts {
