@@ -90,7 +90,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 
 // StartDuty starts a new duty for the given slot.
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	r, runnableDuty, err := c.prepareDutyRunner(logger, duty)
+	r, runnableDuty, err := c.prepareDutyAndRunner(logger, duty)
 	if err != nil {
 		return fmt.Errorf("could not prepare duty runner: %w", err)
 	}
@@ -103,7 +103,7 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	return nil
 }
 
-func (c *Committee) prepareDutyRunner(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+func (c *Committee) prepareDutyAndRunner(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
 	r *runner.CommitteeRunner,
 	runnableDuty *spectypes.CommitteeDuty,
 	err error,
