@@ -16,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -43,7 +45,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -136,7 +137,7 @@ type SharesStorage interface {
 type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
-	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	SubscribeRandoms(numSubnets int) error
 	ActiveSubnets() records.Subnets
 	FixedSubnets() records.Subnets
 }
@@ -459,7 +460,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		if len(inited) == 0 {
 			// If no validators were started and therefore we're not subscribed to any subnets,
 			// then subscribe to a random subnet to participate in the network.
-			if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
+			if err := c.network.SubscribeRandoms(1); err != nil {
 				c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
 			}
 		}
