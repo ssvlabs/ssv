@@ -243,7 +243,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			validDuties++
 
 			if cr.doppelgangerHandler.ValidatorStatus(validatorDuty.ValidatorIndex) != doppelganger.SigningEnabled {
-				logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(duty.ValidatorIndex))
+				logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(validatorDuty.ValidatorIndex))
 				continue
 			}
 
