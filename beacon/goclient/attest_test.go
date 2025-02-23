@@ -58,7 +58,12 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 					"SYNC_COMMITTEE_SUBNET_COUNT": "4",
 					"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
 					"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
-					"INTERVALS_PER_SLOT": "3"
+					"INTERVALS_PER_SLOT": "3",
+					"ALTAIR_FORK_EPOCH": "74240",
+					"BELLATRIX_FORK_EPOCH": "144896",
+					"CAPELLA_FORK_EPOCH": "194048",
+					"DENEB_FORK_EPOCH": "269568",
+					"ELECTRA_FORK_EPOCH": "18446744073709551615"
 				  }
 				}`),
 				"/eth/v1/beacon/genesis": []byte(`{
@@ -152,8 +157,6 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 	t.Run("requests must be cached (per slot)", func(t *testing.T) {
 		slot1 := phase0.Slot(12345678)
 		slot2 := phase0.Slot(12345679)
-		committeeIndex1 := phase0.CommitteeIndex(1)
-		committeeIndex2 := phase0.CommitteeIndex(2)
 
 		server, serverGotRequests := newMockServer()
 
@@ -177,11 +180,10 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		require.NoError(t, err)
 
 		// First request with slot1.
-		gotResult1a, gotVersion, err := client.GetAttestationData(slot1, committeeIndex1)
+		gotResult1a, gotVersion, err := client.GetAttestationData(slot1)
 		require.NoError(t, err)
 		require.Equal(t, spec.DataVersionPhase0, gotVersion)
 		require.Equal(t, slot1, gotResult1a.Slot)
-		require.Equal(t, committeeIndex1, gotResult1a.Index)
 		require.NotEmpty(t, gotResult1a.BeaconBlockRoot)
 		require.NotEmpty(t, gotResult1a.Source.Epoch)
 		require.NotEmpty(t, gotResult1a.Source.Root)
@@ -189,11 +191,10 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		require.NotEmpty(t, gotResult1a.Target.Root)
 
 		// Second request with slot1, result should have been cached.
-		gotResult1b, gotVersion, err := client.GetAttestationData(slot1, committeeIndex1)
+		gotResult1b, gotVersion, err := client.GetAttestationData(slot1)
 		require.NoError(t, err)
 		require.Equal(t, spec.DataVersionPhase0, gotVersion)
 		require.Equal(t, slot1, gotResult1b.Slot)
-		require.Equal(t, committeeIndex1, gotResult1b.Index)
 		require.NotEmpty(t, gotResult1b.BeaconBlockRoot)
 		require.NotEmpty(t, gotResult1b.Source.Epoch)
 		require.NotEmpty(t, gotResult1b.Source.Root)
@@ -207,11 +208,10 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		require.Equal(t, gotResult1b.Target.Root, gotResult1a.Target.Root)
 
 		// Third request with slot2.
-		gotResult2a, gotVersion, err := client.GetAttestationData(slot2, committeeIndex2)
+		gotResult2a, gotVersion, err := client.GetAttestationData(slot2)
 		require.NoError(t, err)
 		require.Equal(t, spec.DataVersionPhase0, gotVersion)
 		require.Equal(t, slot2, gotResult2a.Slot)
-		require.Equal(t, committeeIndex2, gotResult2a.Index)
 		require.NotEmpty(t, gotResult2a.BeaconBlockRoot)
 		require.NotEmpty(t, gotResult2a.Source.Epoch)
 		require.NotEmpty(t, gotResult2a.Source.Root)
@@ -219,11 +219,10 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		require.NotEmpty(t, gotResult2a.Target.Root)
 
 		// Fourth request with slot2, result should have been cached.
-		gotResult2b, gotVersion, err := client.GetAttestationData(slot2, committeeIndex2)
+		gotResult2b, gotVersion, err := client.GetAttestationData(slot2)
 		require.NoError(t, err)
 		require.Equal(t, spec.DataVersionPhase0, gotVersion)
 		require.Equal(t, slot2, gotResult2b.Slot)
-		require.Equal(t, committeeIndex2, gotResult2b.Index)
 		require.NotEmpty(t, gotResult2b.BeaconBlockRoot)
 		require.NotEmpty(t, gotResult2b.Source.Epoch)
 		require.NotEmpty(t, gotResult2b.Source.Root)
@@ -237,11 +236,10 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		require.Equal(t, gotResult2b.Target.Root, gotResult2a.Target.Root)
 
 		// Second request with slot1, result STILL should be cached.
-		gotResult1c, gotVersion, err := client.GetAttestationData(slot1, committeeIndex1)
+		gotResult1c, gotVersion, err := client.GetAttestationData(slot1)
 		require.NoError(t, err)
 		require.Equal(t, spec.DataVersionPhase0, gotVersion)
 		require.Equal(t, slot1, gotResult1c.Slot)
-		require.Equal(t, committeeIndex1, gotResult1c.Index)
 		require.NotEmpty(t, gotResult1c.BeaconBlockRoot)
 		require.NotEmpty(t, gotResult1c.Source.Epoch)
 		require.NotEmpty(t, gotResult1c.Source.Root)
@@ -297,13 +295,11 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 		p := pool.New()
 		for i := 0; i < 1000; i++ {
 			slot := phase0.Slot(slotStartPos + i%slotsTotalCnt)
-			committeeIndex := phase0.CommitteeIndex(i % 64)
 			p.Go(func() {
-				gotResult, gotVersion, err := client.GetAttestationData(slot, committeeIndex)
+				gotResult, gotVersion, err := client.GetAttestationData(slot)
 				require.NoError(t, err)
 				require.Equal(t, spec.DataVersionPhase0, gotVersion)
 				require.Equal(t, slot, gotResult.Slot)
-				require.Equal(t, committeeIndex, gotResult.Index)
 
 				prevResult, ok := gotResults.GetOrSet(slot, gotResult)
 				if ok {

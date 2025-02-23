@@ -10,9 +10,11 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -534,6 +536,8 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 				return summarizeBlock(b.CapellaBlinded)
 			case spec.DataVersionDeneb:
 				return summarizeBlock(b.DenebBlinded)
+			case spec.DataVersionElectra:
+				return summarizeBlock(b.ElectraBlinded)
 			default:
 				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 			}
@@ -546,6 +550,11 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 				return summary, fmt.Errorf("deneb block contents is nil")
 			}
 			return summarizeBlock(b.Deneb.Block)
+		case spec.DataVersionElectra:
+			if b.Electra == nil {
+				return summary, fmt.Errorf("electra block contents is nil")
+			}
+			return summarizeBlock(b.Electra.Block)
 		default:
 			return summary, fmt.Errorf("unsupported block version %d", b.Version)
 		}
@@ -556,6 +565,8 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summarizeBlock(b.Capella)
 		case spec.DataVersionDeneb:
 			return summarizeBlock(b.Deneb)
+		case spec.DataVersionElectra:
+			return summarizeBlock(b.Electra)
 		default:
 			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 		}
@@ -573,6 +584,16 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
 		summary.Version = spec.DataVersionDeneb
+
+	case *electra.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return summary, fmt.Errorf("block, body or execution payload is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.Version = spec.DataVersionElectra
+
+	case *apiv1electra.BlockContents:
+		return summarizeBlock(b.Block)
 
 	case *apiv1deneb.BlockContents:
 		return summarizeBlock(b.Block)
@@ -592,6 +613,15 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
 		summary.Blinded = true
 		summary.Version = spec.DataVersionDeneb
+
+	case *apiv1electra.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.Blinded = true
+		summary.Version = spec.DataVersionElectra
 	}
+
 	return
 }

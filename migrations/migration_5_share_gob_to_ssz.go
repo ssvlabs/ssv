@@ -40,6 +40,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		// we like without "breaking" anything)
 		sharesSSZEncoded := make([]basedb.Obj, 0)
 
+		// sharesGOB maps share ID to GOB-encoded shares we already have stored in DB
 		sharesGOB := make(map[string]*storageShareGOB)
 		err = opt.Db.GetAll(append(opstorage.OperatorStoragePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
 			shareGOB := &storageShareGOB{}
@@ -92,11 +93,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			sID := shareID(shareSSZ.ValidatorPubKey)
 			shareGOB, ok := sharesGOB[sID]
 			if !ok {
-				// this shouldn't really happen & we should probably return error if it does, but
-				// on stage since we already have some SSV nodes that migrated to SSZ format and
-				// potentially added new validators (new SSZ shares) erroring would prevent migration
-				// from completing, so we don't return error here
-				return nil
+				return fmt.Errorf("SSZ share %s doesn't have corresponding GOB share", sID)
 			}
 			if !matchGOBvsSSZ(shareGOB, shareSSZ) {
 				return fmt.Errorf(
