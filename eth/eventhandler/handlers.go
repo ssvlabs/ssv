@@ -13,12 +13,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -237,28 +237,16 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if ssvSigner, ok := eh.keyManager.(*ssvsigner.SSVSigner); ok {
-			if err := ssvSigner.AddShare(encryptedKey); err != nil {
-				var shareDecryptionError ssvsignerclient.ShareDecryptionError
-				if errors.As(err, &shareDecryptionError) {
-					return nil, &MalformedEventError{Err: err}
-				}
-				return nil, fmt.Errorf("could not add share encrypted key to remote signer : %w", err)
+		if err := eh.keyManager.AddShare(encryptedKey); err != nil {
+			var shareDecryptionSSVSignerError ssvsignerclient.ShareDecryptionError
+			if errors.As(err, &shareDecryptionSSVSignerError) {
+				return nil, &MalformedEventError{Err: err}
 			}
-		} else {
-			sharePrivKey, err := eh.decryptSharePrivKey(share.SharePubKey, encryptedKey)
-			if err != nil {
-				return nil, fmt.Errorf("could not extract share private key from event: %w", err)
+			var shareDecryptionEKMError ekm.ShareDecryptionError
+			if errors.As(err, &shareDecryptionEKMError) {
+				return nil, &MalformedEventError{Err: err}
 			}
-
-			if sharePrivKey == nil {
-				return nil, errors.New("could not decode share private key")
-			}
-
-			// Save secret key into BeaconSigner.
-			if err := eh.keyManager.AddShare(sharePrivKey.Serialize()); err != nil {
-				return nil, fmt.Errorf("could not add share private key to key manager: %w", err)
-			}
+			return nil, fmt.Errorf("could not add share encrypted key: %w", err)
 		}
 
 		// Set the minimum participation epoch to match slashing protection.

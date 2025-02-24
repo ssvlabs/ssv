@@ -22,11 +22,11 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/keys"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -49,6 +49,7 @@ type ethKeyManagerSigner struct {
 	storage           Storage
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
+	operatorDecrypter keys.OperatorDecrypter
 }
 
 // StorageProvider provides the underlying KeyManager storage.
@@ -66,19 +67,26 @@ type KeyManager interface {
 	UpdateHighestAttestation(pk []byte, attestationData *phase0.AttestationData) error
 	UpdateHighestProposal(pk []byte, slot phase0.Slot) error
 	StorageProvider
-	// AddShare saves a share key
-	// secret differs in different implementations: ekm receives share private key, ssv signer receives encrypted share private key
-	AddShare(secret []byte) error
+	// AddShare decrypts and saves an encrypted share private key
+	AddShare(encryptedSharePrivKey []byte) error
 	// RemoveShare removes a share key
 	RemoveShare(pubKey []byte) error
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string) (KeyManager, error) {
+func NewETHKeyManagerSigner(
+	logger *zap.Logger,
+	db basedb.Database,
+	network networkconfig.NetworkConfig,
+	operatorPrivKey keys.OperatorPrivateKey,
+) (KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
-	if encryptionKey != "" {
-		err := signerStore.SetEncryptionKey(encryptionKey)
+	if operatorPrivKey != nil {
+		encKey, err := operatorPrivKey.EKMHash()
 		if err != nil {
+			return nil, fmt.Errorf("get operator private key ekm hash: %w", err)
+		}
+		if err := signerStore.SetEncryptionKey(encKey); err != nil {
 			return nil, err
 		}
 	}
@@ -111,6 +119,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		storage:           signerStore,
 		domain:            network.DomainType,
 		slashingProtector: slashingProtector,
+		operatorDecrypter: operatorPrivKey,
 	}, nil
 }
 
@@ -276,24 +285,30 @@ func (km *ethKeyManagerSigner) UpdateHighestProposal(pubKey []byte, slot phase0.
 	return km.slashingProtector.UpdateHighestProposal(pubKey, slot)
 }
 
-func (km *ethKeyManagerSigner) AddShare(sharePrivKey []byte) error {
+type ShareDecryptionError error
+
+func (km *ethKeyManagerSigner) AddShare(encryptedSharePrivKey []byte) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
-	blsPrivKey := &bls.SecretKey{}
-	if err := blsPrivKey.Deserialize(sharePrivKey); err != nil {
-		return fmt.Errorf("malformed private key: %w", err)
+	sharePrivKeyHex, err := km.operatorDecrypter.Decrypt(encryptedSharePrivKey)
+	if err != nil {
+		return ShareDecryptionError(fmt.Errorf("decrypt: %w", err))
+	}
+	sharePrivKey := &bls.SecretKey{}
+	if err := sharePrivKey.SetHexString(string(sharePrivKeyHex)); err != nil {
+		return ShareDecryptionError(fmt.Errorf("decode hex: %w", err))
 	}
 
-	acc, err := km.wallet.AccountByPublicKey(blsPrivKey.SerializeToHexStr())
+	acc, err := km.wallet.AccountByPublicKey(string(sharePrivKeyHex))
 	if err != nil && err.Error() != "account not found" {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		if err := km.BumpSlashingProtection(blsPrivKey.GetPublicKey().Serialize()); err != nil {
+		if err := km.BumpSlashingProtection(sharePrivKey.GetPublicKey().Serialize()); err != nil {
 			return errors.Wrap(err, "could not bump slashing protection")
 		}
-		if err := km.saveShare(sharePrivKey); err != nil {
+		if err := km.saveShare(sharePrivKey.Serialize()); err != nil {
 			return errors.Wrap(err, "could not save share")
 		}
 	}

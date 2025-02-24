@@ -152,7 +152,6 @@ var StartNodeCmd = &cobra.Command{
 		var operatorPrivKeyPEM string
 		var ssvSignerClient *ssvsignerclient.SSVSignerClient
 		var operatorPubKeyBase64 []byte
-		ekmEncryptionKey := hex.EncodeToString([]byte("encryptionKey")) // TODO: define it for ssv signer
 
 		if usingSSVSigner {
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
@@ -213,11 +212,6 @@ var StartNodeCmd = &cobra.Command{
 			operatorPubKeyBase64, err = operatorPrivKey.Public().Base64()
 			if err != nil {
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
-			}
-
-			ekmEncryptionKey, err = operatorPrivKey.EKMHash()
-			if err != nil {
-				logger.Fatal("could not get operator private key hash", zap.Error(err))
 			}
 		}
 
@@ -288,7 +282,7 @@ var StartNodeCmd = &cobra.Command{
 			executionClient = ec
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmEncryptionKey)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, operatorPrivKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
