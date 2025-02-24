@@ -321,26 +321,10 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 }
 
 func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, validatorPubKey []byte) {
-	var role spectypes.BeaconRole
-
-	switch ssvMsg.MsgID.GetRoleType() {
-	case spectypes.RoleCommittee:
-		n.logger.Error("unexpected committee duty")
-		return
-	case spectypes.RoleProposer:
-		role = spectypes.BNRoleProposer
-	case spectypes.RoleAggregator:
-		role = spectypes.BNRoleAggregator
-	case spectypes.RoleSyncCommitteeContribution:
-		role = spectypes.BNRoleSyncCommitteeContribution
-	case spectypes.RoleValidatorRegistration:
-		role = spectypes.BNRoleValidatorRegistration
-	case spectypes.RoleVoluntaryExit:
-		role = spectypes.BNRoleVoluntaryExit
-	}
-
+	runnerRole := ssvMsg.MsgID.GetRoleType()
+	role := toBNRole(runnerRole)
 	slot := uint64(msg.Slot)
-	trace := n.getOrCreateValidatorTrace(slot, ssvMsg.MsgID.GetRoleType(), string(validatorPubKey))
+	trace := n.getOrCreateValidatorTrace(slot, runnerRole, string(validatorPubKey))
 	trace.Lock()
 	defer trace.Unlock()
 
@@ -352,7 +336,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 		zap.String("pubkey", hex.EncodeToString(validatorPubKey)),
 		zap.Uint64("slot", slot),
 		zap.Uint64("validator", uint64(trace.Validator)),
-		zap.String("type", trace.Role.String()),
+		zap.String("type", role.String()),
 	}
 
 	n.logger.Info("signed validator", fields...)
@@ -674,7 +658,7 @@ func (n *InMemTracer) getValidatorDuty(bnRole spectypes.BeaconRole, slot phase0.
 func (n *InMemTracer) getValidatorDutyFromDisk(bnRole spectypes.BeaconRole, slot phase0.Slot, vIndex phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
 	trace, err := n.store.GetValidatorDuty(slot, bnRole, vIndex)
 	if err != nil {
-		return nil, fmt.Errorf("get committee duty from disk: %w", err)
+		return nil, fmt.Errorf("get validator duty from disk: %w", err)
 	}
 
 	return trace, nil

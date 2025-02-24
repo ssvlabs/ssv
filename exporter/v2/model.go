@@ -11,12 +11,12 @@ import (
 type ValidatorDutyTrace struct {
 	ConsensusTrace
 
-	Slot phase0.Slot
+	Slot      phase0.Slot
+	Role      spectypes.BeaconRole
+	Validator phase0.ValidatorIndex
+
 	Pre  []*PartialSigTrace `ssz-max:"13"`
 	Post []*PartialSigTrace `ssz-max:"13"`
-	Role spectypes.BeaconRole
-	// this could be a pubkey
-	Validator phase0.ValidatorIndex
 }
 
 type ConsensusTrace struct {
