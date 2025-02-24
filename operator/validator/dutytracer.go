@@ -32,14 +32,17 @@ if bad perf - for performance we can use map/mutex instead of ttlcache
 */
 
 type InMemTracer struct {
-	sync.Mutex
 	logger *zap.Logger
 
 	// consider having the validator pubkey before of the slot
 	validatorMappingsMu sync.Mutex
 	validatorMappings   *ttlcache.Cache[uint64, map[phase0.ValidatorIndex]spectypes.ValidatorPK] // index/pubkey
-	validatorTraces     *ttlcache.Cache[uint64, map[string][]*validatorDutyTrace]                // /traces/validator
-	committeeTraces     *ttlcache.Cache[uint64, map[string]*committeeDutyTrace]                  // /traces/committee
+
+	validatorTracesMu sync.Mutex
+	validatorTraces   *ttlcache.Cache[uint64, map[string][]*validatorDutyTrace] // /traces/validator
+
+	committeeTracesMu sync.Mutex
+	committeeTraces   *ttlcache.Cache[uint64, map[string]*committeeDutyTrace] // /traces/committee
 
 	store      *store.DutyTraceStore
 	client     *gc.GoClient
@@ -135,10 +138,10 @@ func (n *InMemTracer) Store() DutyTraceStore {
 }
 
 func (n *InMemTracer) getOrCreateValidatorTrace(slot uint64, role spectypes.BeaconRole, vPubKey string) *validatorDutyTrace {
-	n.Lock()
-	defer n.Unlock()
-
 	mp, _ := n.validatorTraces.GetOrSet(slot, make(map[string][]*validatorDutyTrace))
+
+	n.validatorTracesMu.Lock()
+	defer n.validatorTracesMu.Unlock()
 
 	traces, found := mp.Value()[vPubKey]
 
@@ -191,10 +194,10 @@ func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole) {
 }
 
 func (n *InMemTracer) getOrCreateCommitteeTrace(slot uint64, committeeID []byte) *committeeDutyTrace {
-	n.Lock()
-	defer n.Unlock()
-
 	mp, _ := n.committeeTraces.GetOrSet(slot, make(map[string]*committeeDutyTrace))
+
+	n.committeeTracesMu.Lock()
+	defer n.committeeTracesMu.Unlock()
 
 	trace, found := mp.Value()[string(committeeID)]
 	if !found {
@@ -650,6 +653,9 @@ func (n *InMemTracer) getValidatorDuty(bnRole spectypes.BeaconRole, slot phase0.
 		return n.getValidatorDutyFromDisk(bnRole, slot, vIndex)
 	}
 
+	n.validatorTracesMu.Lock()
+	defer n.validatorTracesMu.Unlock()
+
 	pubkey := indexMap.Value()[vIndex]
 	m := n.validatorTraces.Get(uint64(slot))
 
@@ -681,9 +687,6 @@ func (n *InMemTracer) getValidatorDutyFromDisk(bnRole spectypes.BeaconRole, slot
 }
 
 func (n *InMemTracer) getCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
-	n.Lock()
-	defer n.Unlock()
-
 	m := n.committeeTraces.Get(uint64(slot))
 
 	if m == nil {
@@ -699,11 +702,15 @@ func (n *InMemTracer) getCommitteeDuty(slot phase0.Slot, committeeID spectypes.C
 		return nil, errors.New("slot not found")
 	}
 
+	n.committeeTracesMu.Lock()
+	defer n.committeeTracesMu.Unlock()
+
 	trace, ok := m.Value()[string(committeeID[:])]
 	if !ok {
 		return nil, errors.New("committe ID not found: " + hex.EncodeToString(committeeID[:]))
 	}
 
+	// TODO(me): create deep copies
 	trace.Lock()
 	defer trace.Unlock()
 
