@@ -20,32 +20,32 @@ import (
 var expectedErrorOverride = map[string]map[string][]string{
 	"consensus_past_message_attester": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_past_message_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_past_message_attester_and_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_future_decided_no_running_instance_attester": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_future_decided_no_running_instance_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_future_decided_no_running_instance_attester_and_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"post_consensus_invalid_msg_slot_attester": {
@@ -65,47 +65,47 @@ var expectedErrorOverride = map[string]map[string][]string{
 	},
 	"consensus_future_decided_attester": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_future_decided_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_future_decided_attester_and_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_future_message_attester": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_future_message_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"consensus_future_message_attester_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"past_msg_duty_does_not_exist_30_attestation": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"past_msg_duty_does_not_exist_30_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 	"past_msg_duty_does_not_exist_30_attestation_30_sync_committee": {
 		"no runner found for message's slot": {
-			"no runner found for consensus message's slot",
+			"no runner found for slot",
 		},
 	},
 }

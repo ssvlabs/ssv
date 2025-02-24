@@ -222,7 +222,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.RUnlock()
 		if !exists {
-			return fmt.Errorf("no runner found for consensus message's slot %d", qbftMsg.Height)
+			return fmt.Errorf("no runner found for slot %d", qbftMsg.Height)
 		}
 		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
