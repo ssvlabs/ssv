@@ -65,17 +65,51 @@ func TestSaveValidatorDutyTrace(t *testing.T) {
 	require.NoError(t, store.SaveValidatorDuty(trace1))
 	require.NoError(t, store.SaveValidatorDuty(trace2))
 
-	trace, err := store.GetValidatorDuty(types.BNRoleAttester, phase0.Slot(1), phase0.ValidatorIndex(39393))
+	trace, err := store.GetValidatorDuty(phase0.Slot(1), types.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
 	require.Equal(t, phase0.Slot(1), trace.Slot)
 	require.Equal(t, phase0.ValidatorIndex(39393), trace.Validator)
 
-	trace, err = store.GetValidatorDuty(types.BNRoleAttester, phase0.Slot(2), phase0.ValidatorIndex(39393))
+	trace, err = store.GetValidatorDuty(phase0.Slot(2), types.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
 	require.Equal(t, phase0.Slot(2), trace.Slot)
 	require.Equal(t, phase0.ValidatorIndex(39393), trace.Validator)
 
-	_, err = store.GetValidatorDuty(types.BNRoleAttester, phase0.Slot(3), phase0.ValidatorIndex(39393))
+	_, err = store.GetValidatorDuty(phase0.Slot(3), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	require.Error(t, err)
+
+	traces, err := store.GetAllValidatorDuties(types.BNRoleAttester, phase0.Slot(1))
+	require.NoError(t, err)
+	require.Len(t, traces, 1)
+
+	traces, err = store.GetAllValidatorDuties(types.BNRoleAttester, phase0.Slot(2))
+	require.NoError(t, err)
+	require.Len(t, traces, 1)
+}
+
+func TestSaveValidatorDuties(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	trace1 := makeVTrace(1)
+	trace2 := makeVTrace(2)
+
+	store := store.New(db)
+	require.NoError(t, store.SaveValidatorDuties([]*model.ValidatorDutyTrace{trace1, trace2}))
+
+	trace, err := store.GetValidatorDuty(phase0.Slot(1), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(1), trace.Slot)
+	require.Equal(t, phase0.ValidatorIndex(39393), trace.Validator)
+
+	trace, err = store.GetValidatorDuty(phase0.Slot(2), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	require.NoError(t, err)
+	require.Equal(t, phase0.Slot(2), trace.Slot)
+	require.Equal(t, phase0.ValidatorIndex(39393), trace.Validator)
+
+	_, err = store.GetValidatorDuty(phase0.Slot(3), types.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.Error(t, err)
 
 	traces, err := store.GetAllValidatorDuties(types.BNRoleAttester, phase0.Slot(1))

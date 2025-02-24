@@ -198,8 +198,8 @@ type DutyTracer interface {
 }
 
 type DutyTraceStore interface {
-	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error)
-	GetCommitteeDutiesByOperator(indexes []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
+	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, vIndex phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
+	GetCommitteeDutiesByOperator(indices []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
 }

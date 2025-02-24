@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 	gc "github.com/ssvlabs/ssv/beacon/goclient"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -30,9 +28,7 @@ import (
 /*
 TODO
 - define expiration for duties per ROLE
-- slot ticker instead of relying on cache eviction interval (be in sync with beacon node)
 if bad perf - for performance we can use map/mutex instead of ttlcache
-
 */
 
 type InMemTracer struct {
@@ -40,8 +36,10 @@ type InMemTracer struct {
 	logger *zap.Logger
 
 	// consider having the validator pubkey before of the slot
-	validatorTraces *ttlcache.Cache[uint64, map[string]*validatorDutyTrace] // /traces/validator
-	committeeTraces *ttlcache.Cache[uint64, map[string]*committeeDutyTrace] // /traces/committee
+	validatorMappingsMu sync.Mutex
+	validatorMappings   *ttlcache.Cache[uint64, map[phase0.ValidatorIndex]spectypes.ValidatorPK] // index/pubkey
+	validatorTraces     *ttlcache.Cache[uint64, map[string][]*validatorDutyTrace]                // /traces/validator
+	committeeTraces     *ttlcache.Cache[uint64, map[string]*committeeDutyTrace]                  // /traces/committee
 
 	store      *store.DutyTraceStore
 	client     *gc.GoClient
@@ -54,10 +52,13 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 	tracer := &InMemTracer{
 		logger: logger,
 		validatorTraces: ttlcache.New(
-			ttlcache.WithTTL[uint64, map[string]*validatorDutyTrace](flushToDisk),
+			ttlcache.WithTTL[uint64, map[string][]*validatorDutyTrace](flushToDisk),
 		),
 		committeeTraces: ttlcache.New(
 			ttlcache.WithTTL[uint64, map[string]*committeeDutyTrace](flushToDisk),
+		),
+		validatorMappings: ttlcache.New(
+			ttlcache.WithTTL[uint64, map[phase0.ValidatorIndex]spectypes.ValidatorPK](flushToDisk),
 		),
 		client:     client,
 		validators: validators,
@@ -75,6 +76,7 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 			case <-ticker.Next():
 				tracer.committeeTraces.DeleteExpired()
 				tracer.validatorTraces.DeleteExpired()
+				tracer.validatorMappings.DeleteExpired()
 			}
 		}
 	}()
@@ -86,10 +88,10 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 		}
 		err := store.SaveCommiteeDuties(phase0.Slot(item.Key()), duties)
 		if err != nil {
-			logger.Error("save committees duties to disk", zap.Uint64("slot", item.Key()), zap.Int("items", len(item.Value())))
+			logger.Error("save committees duties to disk", zap.Uint64("slot", item.Key()), zap.Int("items", len(duties)))
 			return
 		}
-		logger.Info("move to disk committee duties", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+		logger.Info("save committees duties to disk", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
 	})
 
 	tracer.committeeTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*committeeDutyTrace]) {
@@ -100,11 +102,21 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 		// }
 	})
 
-	tracer.validatorTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
-		logger.Info("eviction", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+	tracer.validatorTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[string][]*validatorDutyTrace]) {
+		var duties []*model.ValidatorDutyTrace
+		for _, d := range item.Value() {
+			for _, r := range d {
+				duties = append(duties, &r.ValidatorDutyTrace)
+			}
+		}
+		if err := store.SaveValidatorDuties(duties); err != nil {
+			logger.Error("save validator duties to disk", zap.Uint64("slot", item.Key()), zap.Int("items", len(duties)))
+			return
+		}
+		logger.Info("save validator duties to disk", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
 	})
 
-	tracer.validatorTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string]*validatorDutyTrace]) {
+	tracer.validatorTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[string][]*validatorDutyTrace]) {
 		// tracer.Lock()
 		// defer tracer.Unlock()
 		// for id := range i.Value() {
@@ -122,38 +134,53 @@ func (n *InMemTracer) Store() DutyTraceStore {
 	}
 }
 
-func (n *InMemTracer) getOrCreateValidatorTrace(slot uint64, vPubKey string, role spectypes.RunnerRole) *validatorDutyTrace {
+func (n *InMemTracer) getOrCreateValidatorTrace(slot uint64, role spectypes.RunnerRole, vPubKey string) *validatorDutyTrace {
 	n.Lock()
 	defer n.Unlock()
 
-	mp, _ := n.validatorTraces.GetOrSet(slot, make(map[string]*validatorDutyTrace))
+	mp, _ := n.validatorTraces.GetOrSet(slot, make(map[string][]*validatorDutyTrace))
 
-	trace, ok := mp.Value()[vPubKey]
-	if !ok {
-		trace = new(validatorDutyTrace)
+	traces, ok := mp.Value()[vPubKey]
+	bnRole := toBNRole(role)
 
-		var bnRole spectypes.BeaconRole
-
-		switch role {
-		case spectypes.RoleCommittee:
-			panic("unexpected committee role")
-		case spectypes.RoleProposer:
-			bnRole = spectypes.BNRoleProposer
-		case spectypes.RoleAggregator:
-			bnRole = spectypes.BNRoleAggregator
-		case spectypes.RoleSyncCommitteeContribution:
-			bnRole = spectypes.BNRoleSyncCommitteeContribution
-		case spectypes.RoleValidatorRegistration:
-			bnRole = spectypes.BNRoleValidatorRegistration
-		case spectypes.RoleVoluntaryExit:
-			bnRole = spectypes.BNRoleVoluntaryExit
-		}
-
+	if !ok || len(traces) == 0 {
+		trace := new(validatorDutyTrace)
 		trace.ValidatorDutyTrace.Role = bnRole
-		mp.Value()[vPubKey] = trace
+		mp.Value()[vPubKey] = append(traces, trace)
+		return trace
 	}
 
+	// find the trace for the role
+	for _, trace := range traces {
+		if trace.Role == bnRole {
+			return trace
+		}
+	}
+
+	// create a new trace for the role
+	trace := new(validatorDutyTrace)
+	trace.ValidatorDutyTrace.Role = bnRole
+	mp.Value()[vPubKey] = append(traces, trace)
 	return trace
+}
+
+func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole) {
+	switch r {
+	case spectypes.RoleCommittee:
+		panic("unexpected committee role")
+	case spectypes.RoleProposer:
+		bnRole = spectypes.BNRoleProposer
+	case spectypes.RoleAggregator:
+		bnRole = spectypes.BNRoleAggregator
+	case spectypes.RoleSyncCommitteeContribution:
+		bnRole = spectypes.BNRoleSyncCommitteeContribution
+	case spectypes.RoleValidatorRegistration:
+		bnRole = spectypes.BNRoleValidatorRegistration
+	case spectypes.RoleVoluntaryExit:
+		bnRole = spectypes.BNRoleVoluntaryExit
+	}
+
+	return
 }
 
 func (n *InMemTracer) getOrCreateCommitteeTrace(slot uint64, committeeID []byte) *committeeDutyTrace {
@@ -170,25 +197,6 @@ func (n *InMemTracer) getOrCreateCommitteeTrace(slot uint64, committeeID []byte)
 	}
 
 	return trace
-}
-
-// TODO: HOW TO? id -> validator or committee id
-func getOperators([]byte) []spectypes.OperatorID {
-	return []spectypes.OperatorID{}
-}
-
-func (n *InMemTracer) toMockState(msg *specqbft.Message, operatorIDs []spectypes.OperatorID) *specqbft.State {
-	var mockState = &specqbft.State{}
-	mockState.Height = msg.Height
-	mockState.CommitteeMember = &spectypes.CommitteeMember{
-		Committee: make([]*spectypes.Operator, 0, len(operatorIDs)),
-	}
-	for i := 0; i < len(operatorIDs); i++ {
-		mockState.CommitteeMember.Committee = append(mockState.CommitteeMember.Committee, &spectypes.Operator{
-			OperatorID: operatorIDs[i],
-		})
-	}
-	return mockState
 }
 
 func (n *InMemTracer) decodeJustificationWithPrepares(justifications [][]byte) []*model.QBFTTrace {
@@ -280,7 +288,7 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 		m.Round = uint64(msg.Round)
 		m.BeaconRoot = msg.Root
 		m.Signer = signedMsg.OperatorIDs[0]
-		m.ReceivedTime = time.Now() // TODO fixme
+		m.ReceivedTime = time.Now()
 
 		round.Prepares = append(round.Prepares, m)
 
@@ -298,7 +306,7 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 		m.Round = uint64(msg.Round)
 		m.BeaconRoot = msg.Root
 		m.Signer = signedMsg.OperatorIDs[0]
-		m.ReceivedTime = time.Now() // TODO fixme
+		m.ReceivedTime = time.Now()
 
 		round.Commits = append(round.Commits, m)
 
@@ -332,16 +340,18 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 	}
 
 	slot := uint64(msg.Slot)
-	trace := n.getOrCreateValidatorTrace(slot, string(validatorPubKey), ssvMsg.MsgID.GetRoleType())
+	trace := n.getOrCreateValidatorTrace(slot, ssvMsg.MsgID.GetRoleType(), string(validatorPubKey))
 	trace.Lock()
 	defer trace.Unlock()
 
 	trace.Role = role
 	trace.Validator = msg.Messages[0].ValidatorIndex
+	n.updateValidatorMapping(slot, trace.Validator, validatorPubKey)
 
 	fields := []zap.Field{
 		zap.String("pubkey", hex.EncodeToString(validatorPubKey)),
 		zap.Uint64("slot", slot),
+		zap.Uint64("validator", uint64(trace.Validator)),
 		zap.String("type", trace.Role.String()),
 	}
 
@@ -369,8 +379,15 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 	defer trace.Unlock()
 
 	trace.CommitteeID = [32]byte(committeeID[:])
-	trace.OperatorIDs = getOperators(committeeID) // TODO confirm is needed
 	trace.Slot = msg.Slot
+
+	{ // TODO(moshe) confirm is needed
+		cmt, err := n.validators.Committee(trace.CommitteeID)
+		_ = err
+		if cmt != nil && len(cmt.Operators) > 0 {
+			trace.OperatorIDs = cmt.Operators
+		}
+	}
 
 	for _, partialSigMsg := range msg.Messages {
 		var tr model.SignerData
@@ -385,6 +402,13 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 		// TODO:me (electra) - implement a check for: attestation is correct instead of assuming
 		trace.Attester = append(trace.Attester, &tr)
 	}
+}
+
+func (n *InMemTracer) updateValidatorMapping(slot uint64, vIndex phase0.ValidatorIndex, vPubKey []byte) {
+	m, _ := n.validatorMappings.GetOrSet(slot, make(map[phase0.ValidatorIndex]spectypes.ValidatorPK))
+	n.validatorMappingsMu.Lock()
+	defer n.validatorMappingsMu.Unlock()
+	m.Value()[vIndex] = spectypes.ValidatorPK(vPubKey)
 }
 
 // func (n *InMemTracer) fillInSyncCommitteeRoots(trace *committeeDutyTrace, in []byte, slot phase0.Slot, validator phase0.ValidatorIndex) error {
@@ -422,6 +446,37 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 // 	return nil
 // }
 
+func (n *InMemTracer) populateProposer(round *model.RoundTrace, executorID []byte, subMsg *specqbft.Message) {
+	committeeID := spectypes.CommitteeID(executorID)
+	committee, found := n.validators.Committee(committeeID)
+	if !found {
+		// TODO(me): uncomment
+		// n.logger.Error("could not find committee by id", fields.CommitteeID(committeeID))
+		return
+	}
+
+	operatorIDs := committee.Operators
+
+	if len(operatorIDs) > 0 {
+		mockState := n.toMockState(subMsg, operatorIDs)
+		round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
+	}
+}
+
+func (n *InMemTracer) toMockState(msg *specqbft.Message, operatorIDs []spectypes.OperatorID) *specqbft.State {
+	var mockState = &specqbft.State{}
+	mockState.Height = msg.Height
+	mockState.CommitteeMember = &spectypes.CommitteeMember{
+		Committee: make([]*spectypes.Operator, 0, len(operatorIDs)),
+	}
+	for i := 0; i < len(operatorIDs); i++ {
+		mockState.CommitteeMember.Committee = append(mockState.CommitteeMember.Committee, &spectypes.Operator{
+			OperatorID: operatorIDs[i],
+		})
+	}
+	return mockState
+}
+
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
@@ -432,7 +487,6 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 			switch role := msgID.GetRoleType(); role {
 			case spectypes.RoleCommittee:
-
 				committeeID := executorID[16:]
 				trace := n.getOrCreateCommitteeTrace(slot, committeeID) // committe id
 
@@ -448,12 +502,8 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 				round := trace.getOrCreateRound(uint64(subMsg.Round))
 
-				// TODO is this needed?
-				operatorIDs := getOperators(executorID)
-				if len(operatorIDs) > 0 {
-					mockState := n.toMockState(subMsg, operatorIDs)
-					round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
-				}
+				// TODO(moshe) populate proposer or not?
+				n.populateProposer(round, committeeID, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
@@ -461,7 +511,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				}
 			default:
 				validatorPubKey := string(executorID)
-				trace := n.getOrCreateValidatorTrace(slot, validatorPubKey, role)
+				trace := n.getOrCreateValidatorTrace(slot, role, validatorPubKey)
 
 				if msg.MsgType == spectypes.SSVConsensusMsgType {
 					var qbftMsg specqbft.Message
@@ -484,6 +534,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 							}
 
 							trace.Validator = data.Duty.ValidatorIndex
+							n.updateValidatorMapping(slot, data.Duty.ValidatorIndex, executorID)
 							return false
 						}()
 
@@ -498,12 +549,8 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 				round := trace.getOrCreateRound(uint64(subMsg.Round))
 
-				// populate proposer
-				operatorIDs := getOperators(executorID) // validator pubkey
-				if len(operatorIDs) > 0 {
-					var mockState = n.toMockState(subMsg, operatorIDs)
-					round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
-				}
+				// TODO(moshe) populate proposer or not?
+				n.populateProposer(round, executorID, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
@@ -528,20 +575,18 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 			share, found := n.validators.ValidatorByIndex(msg.ValidatorIndex)
 			if !found {
-				n.logger.Error("could not find share by index", zap.Uint64("validator", uint64(msg.ValidatorIndex)))
+				// TODO(me): uncomment
+				// n.logger.Error("get share by index", zap.Uint64("validator", uint64(msg.ValidatorIndex)))
 				continue
 			}
 
-			signerIndex := slices.IndexFunc(share.Committee, func(e *spectypes.ShareMember) bool {
-				return e.Signer == msg.Signer
-			})
-
-			if signerIndex == -1 {
-				n.logger.Error("operator key share not found", fields.OperatorID(msg.Signer))
-				continue
+			var sharePubkey spectypes.ShareValidatorPK
+			for _, cmt := range share.Committee {
+				if cmt.Signer == msg.Signer {
+					sharePubkey = cmt.SharePubKey
+					break
+				}
 			}
-
-			sharePubkey := share.Committee[signerIndex].SharePubKey
 
 			err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
 			if err != nil {
@@ -595,25 +640,44 @@ func (trace *committeeDutyTrace) getOrCreateRound(rnd uint64) *model.RoundTrace 
 	return trace.Rounds[rnd-1]
 }
 
-func (n *InMemTracer) getValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error) {
-	n.Lock()
-	defer n.Unlock()
-
+func (n *InMemTracer) getValidatorDuty(bnRole spectypes.BeaconRole, slot phase0.Slot, vIndex phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
 	if !n.validatorTraces.Has(uint64(slot)) {
-		return nil, errors.New("slot not found")
+		return n.getValidatorDutyFromDisk(bnRole, slot, vIndex)
 	}
 
+	indexMap := n.validatorMappings.Get(uint64(slot))
+	if indexMap == nil {
+		return n.getValidatorDutyFromDisk(bnRole, slot, vIndex)
+	}
+
+	pubkey := indexMap.Value()[vIndex]
 	m := n.validatorTraces.Get(uint64(slot))
 
-	trace, ok := m.Value()[string(pubkey[:])]
+	traces, ok := m.Value()[string(pubkey[:])]
 	if !ok {
 		return nil, errors.New("validator not found")
 	}
 
-	trace.Lock()
-	defer trace.Unlock()
+	// find the trace for the role
+	for _, trace := range traces {
+		if trace.Role == bnRole {
+			trace.Lock()
+			defer trace.Unlock()
 
-	return &trace.ValidatorDutyTrace, nil
+			return &trace.ValidatorDutyTrace, nil
+		}
+	}
+
+	return nil, errors.New("validator duty not found")
+}
+
+func (n *InMemTracer) getValidatorDutyFromDisk(bnRole spectypes.BeaconRole, slot phase0.Slot, vIndex phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
+	trace, err := n.store.GetValidatorDuty(slot, bnRole, vIndex)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duty from disk: %w", err)
+	}
+
+	return trace, nil
 }
 
 func (n *InMemTracer) getCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {

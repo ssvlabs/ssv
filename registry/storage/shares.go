@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -22,6 +23,8 @@ import (
 // Note, previously gob-encoded Share(s) were stored with `shares/` prefix, this has been
 // changed in migration_5_change_share_format_from_gob_to_ssz.
 var sharesPrefix = []byte("shares_ssz/")
+
+var pubkeyMappingPrefix = []byte("pki") // append only, NO DELETIONS
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
@@ -52,6 +55,9 @@ type Shares interface {
 
 	// UpdateValidatorsMetadata updates the metadata of the given validators
 	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
+
+	// GetValidatorIndexByPubkey collects and returns the validator indices for the given public keys.
+	GetValidatorIndexByPubkey(pubkeys []spectypes.ValidatorPK) ([]phase0.ValidatorIndex, error)
 }
 
 type sharesStorage struct {
@@ -251,7 +257,49 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	return s.saveToDB(rw, shares...)
 }
 
+func uint64ToBytes(n uint64) []byte {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, n)
+	return b
+}
+
+func (s *sharesStorage) GetValidatorIndexByPubkey(vkeys []spectypes.ValidatorPK) (out []phase0.ValidatorIndex, err error) {
+	var pubkeys = make([][]byte, len(vkeys))
+
+	for _, pk := range vkeys {
+		pubkeys = append(pubkeys, pk[:])
+	}
+
+	prefix := append(s.storagePrefix, pubkeyMappingPrefix...)
+
+	err = s.db.GetMany(prefix, pubkeys, func(obj basedb.Obj) error {
+		index := binary.LittleEndian.Uint64(obj.Value)
+		out = append(out, phase0.ValidatorIndex(index))
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get validator index by pubkey: %w", err)
+	}
+
+	return out, nil
+}
+
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
+	// save validator pubkey -> index mapping
+	err := s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (basedb.Obj, error) {
+		s := shares[i]
+		vi := uint64(s.ValidatorIndex)
+		vpk := s.ValidatorPubKey
+
+		key := append(pubkeyMappingPrefix, vpk[:]...)
+		return basedb.Obj{Key: key, Value: uint64ToBytes(vi)}, nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("save validator pubkey to index mapping: %w", err)
+	}
+
 	return s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (basedb.Obj, error) {
 		share := FromSSVShare(shares[i])
 		value, err := share.Encode()

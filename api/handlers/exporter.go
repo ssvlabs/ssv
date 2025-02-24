@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -12,18 +13,27 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
+	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
+
+/*
+TODO
+
+- migration - populate mapping pubkey -> index for existing db data
+	- using the new format we update on every 'saveShare'
+*/
 
 type Exporter struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores
 	TraceStore        DutyTraceStore
+	Storage           nodestorage.Storage
 }
 
 type DutyTraceStore interface {
-	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error)
-	GetCommitteeDutiesByOperator(indexes []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
+	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, vIndex phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
+	GetCommitteeDutiesByOperator(indices []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
 }
@@ -215,36 +225,51 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
-		return api.BadRequestError(fmt.Errorf("either pubkeys or indices is required"))
+		return api.BadRequestError(errors.New("either pubkeys or indices is required"))
+	}
+
+	var (
+		vIndices []phase0.ValidatorIndex
+		pubkeys  []spectypes.ValidatorPK
+	)
+
+	for _, index := range request.Indices {
+		vIndices = append(vIndices, phase0.ValidatorIndex(index))
+	}
+
+	for _, req := range request.PubKeys {
+		var pubkey spectypes.ValidatorPK
+		if len(req) != len(pubkey) {
+			return api.BadRequestError(errors.New("invalid pubkey length"))
+		}
+		copy(pubkey[:], req)
+		pubkeys = append(pubkeys, pubkey)
+	}
+
+	if len(pubkeys) > 0 {
+		indices, err := e.Storage.Shares().GetValidatorIndexByPubkey(pubkeys)
+		if err != nil {
+			return api.Error(fmt.Errorf("map pubkeys to validator indices: %w", err))
+		}
+
+		vIndices = append(vIndices, indices...)
 	}
 
 	var results []*model.ValidatorDutyTrace
 
-	for _, req := range request.PubKeys {
-		// convert to pubkey
-		var pubkey spectypes.ValidatorPK
-		if len(req) != len(pubkey) {
-			return api.BadRequestError(fmt.Errorf("invalid pubkey length"))
-		}
-		copy(pubkey[:], req)
-
+	for _, index := range vIndices {
 		// get for each slot
 		for s := request.From; s <= request.To; s++ {
 			slot := phase0.Slot(s)
 			for _, r := range request.Roles {
 				role := spectypes.BeaconRole(r)
-				duty, err := e.TraceStore.GetValidatorDuty(role, slot, pubkey)
+				duty, err := e.TraceStore.GetValidatorDuty(role, slot, index)
 				if err != nil {
 					return api.Error(fmt.Errorf("error getting duties: %w", err))
 				}
 				results = append(results, duty)
 			}
 		}
-	}
-
-	for _, index := range request.Indices {
-		_ = index // convert to validator pubkey
-		// repeat above
 	}
 
 	return api.Render(w, r, toValidatorTraceResponse(results))
