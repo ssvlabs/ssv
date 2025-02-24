@@ -91,6 +91,11 @@ func NewETHKeyManagerSigner(
 		if err := signerStore.SetEncryptionKey(encKey); err != nil {
 			return nil, err
 		}
+	} else {
+		// TODO: remove this temporary workaround
+		if err := signerStore.SetEncryptionKey("encryptionKey"); err != nil {
+			return nil, err
+		}
 	}
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
