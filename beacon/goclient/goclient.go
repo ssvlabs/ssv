@@ -6,7 +6,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -118,8 +117,6 @@ type GoClient struct {
 	multiClient MultiClient
 	specssv.VersionCalls
 
-	genesisVersion atomic.Pointer[phase0.Version]
-
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
@@ -141,6 +138,7 @@ type GoClient struct {
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
+	genesisForkVersion [4]byte
 	ForkLock           sync.RWMutex
 	ForkEpochElectra   phase0.Epoch
 	ForkEpochDeneb     phase0.Epoch
@@ -179,9 +177,9 @@ func New(
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		commonTimeout: commonTimeout,
-		longTimeout:   longTimeout,
-
+		commonTimeout:      commonTimeout,
+		longTimeout:        longTimeout,
+		genesisForkVersion: opt.Network.ForkVersion(),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
 		ForkEpochBellatrix: math.MaxUint64,
@@ -361,16 +359,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 // To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
 // as they should be same too.
 func (gc *GoClient) assertSameGenesisVersion(genesisVersion phase0.Version) (phase0.Version, error) {
-	if gc.genesisVersion.CompareAndSwap(nil, &genesisVersion) {
-		return genesisVersion, nil
+	currentVersion := phase0.Version(gc.genesisForkVersion)
+	if gc.genesisForkVersion != genesisVersion {
+		return currentVersion, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
 	}
 
-	expected := *gc.genesisVersion.Load()
-	if expected != genesisVersion {
-		return expected, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", expected, genesisVersion)
-	}
-
-	return expected, nil
+	return currentVersion, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
