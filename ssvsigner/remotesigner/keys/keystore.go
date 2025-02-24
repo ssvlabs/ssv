@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	blsu "github.com/protolambda/bls12-381-util"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/ssvlabs/eth2-key-manager/encryptor/keystorev4"
 )
 
@@ -45,29 +45,19 @@ func GenerateShareKeystore(sharePrivateKey []byte, passphrase string) (Keystore,
 		return Keystore{}, fmt.Errorf("could not decode share private key %s: %w", string(sharePrivateKey), err)
 	}
 
-	sharePrivateKeyArr := [32]byte(sharePrivateKeyBytes)
-
-	sharePrivBLS := &blsu.SecretKey{}
-	if err = sharePrivBLS.Deserialize(&sharePrivateKeyArr); err != nil {
-		return Keystore{}, fmt.Errorf("share private key to BLS: %w", err)
-	}
-
-	sharePubKey, err := blsu.SkToPk(sharePrivBLS)
-	if err != nil {
-		return Keystore{}, fmt.Errorf("extract BLS public key: %w", err)
-	}
-
-	serializedSharePubKey := sharePubKey.Serialize()
-	sharePubKeyHex := "0x" + hex.EncodeToString(serializedSharePubKey[:])
-
 	keystoreCrypto, err := keystorev4.New().Encrypt(sharePrivateKeyBytes, passphrase)
 	if err != nil {
 		return Keystore{}, fmt.Errorf("encrypt private key: %w", err)
 	}
 
+	sharePrivBLS := &bls.SecretKey{}
+	if err = sharePrivBLS.Deserialize(sharePrivateKeyBytes); err != nil {
+		return Keystore{}, fmt.Errorf("share private key to BLS: %w", err)
+	}
+
 	keystore := Keystore{
 		"crypto":  keystoreCrypto,
-		"pubkey":  sharePubKeyHex,
+		"pubkey":  "0x" + hex.EncodeToString(sharePrivBLS.GetPublicKey().Serialize()[:]),
 		"version": 4,
 		"uuid":    uuid.New().String(),
 		"path":    "m/12381/3600/0/0/0",
@@ -79,7 +69,7 @@ func GenerateShareKeystore(sharePrivateKey []byte, passphrase string) (Keystore,
 // DecryptKeystore decrypts a keystore JSON file using the provided password.
 func DecryptKeystore(encryptedJSONData []byte, password string) ([]byte, error) {
 	if strings.TrimSpace(password) == "" {
-		return nil, fmt.Errorf("Password required for decrypting keystore")
+		return nil, fmt.Errorf("password required for decrypting keystore")
 	}
 
 	// Unmarshal the JSON-encoded data
