@@ -13,12 +13,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -229,7 +229,7 @@ func (eh *EventHandler) handleShareCreation(
 	selfOperatorID := eh.operatorDataStore.GetOperatorID()
 
 	// TODO: refactor
-	if ssvSignerAdapter, ok := eh.keyManager.(*ekm.SSVSignerKeyManagerAdapter); ok {
+	if ssvSigner, ok := eh.keyManager.(*ssvsigner.SSVSigner); ok {
 		share, err := eh.validatorAddedEventToShareNoSK(
 			txn,
 			validatorEvent,
@@ -259,7 +259,7 @@ func (eh *EventHandler) handleShareCreation(
 				n := 3
 				var multiErr error
 				for i := 1; i <= n; i++ {
-					if err := ssvSignerAdapter.AddShare(encryptedShare); err != nil {
+					if err := ssvSigner.AddShare(encryptedShare); err != nil {
 						var shareDecryptionError ssvsignerclient.ShareDecryptionError
 						if errors.As(err, &shareDecryptionError) {
 							return nil, &MalformedEventError{Err: err}
@@ -548,7 +548,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 
 	// bump slashing protection for operator reactivated validators
 	for _, share := range toReactivate {
-		if err := eh.keyManager.(ekm.StorageProvider).BumpSlashingProtection(share.SharePubKey); err != nil {
+		if err := eh.keyManager.BumpSlashingProtection(share.SharePubKey); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 

@@ -63,6 +63,9 @@ type StorageProvider interface {
 
 type KeyManager interface {
 	spectypes.BeaconSigner
+	UpdateHighestAttestation(pk []byte, attestationData *phase0.AttestationData) error
+	UpdateHighestProposal(pk []byte, slot phase0.Slot) error
+	StorageProvider
 	// AddShare saves a share key
 	// secret differs in different implementations: ekm receives share private key, ssv signer receives encrypted share private key
 	AddShare(secret []byte) error

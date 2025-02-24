@@ -64,6 +64,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -280,13 +281,14 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
 
-			keyManager, err = ekm.NewSSVSignerKeyManagerAdapter(logger, ssvSignerClient, consensusClient, keyManager)
+			ssvSigner, err := ssvsigner.New(logger, ssvSignerClient, consensusClient, keyManager, operatorDataStore.GetOperatorID)
 			if err != nil {
 				logger.Fatal("could not create ssv-signer adapter", zap.Error(err))
 			}
 
-			cfg.P2pNetworkConfig.OperatorSigner = ekm.NewSSVSignerKeysOperatorSignerAdapter(logger, ssvSignerClient)
-			cfg.SSVOptions.ValidatorOptions.OperatorSigner = ekm.NewSSVSignerTypesOperatorSignerAdapter(logger, ssvSignerClient, operatorDataStore.GetOperatorID)
+			keyManager = ssvSigner
+			cfg.P2pNetworkConfig.OperatorSigner = ssvSigner
+			cfg.SSVOptions.ValidatorOptions.OperatorSigner = ssvSigner
 		} else {
 			ekmHashedKey, err := operatorPrivKey.EKMHash()
 			if err != nil {
