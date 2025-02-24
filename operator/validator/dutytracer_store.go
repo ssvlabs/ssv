@@ -13,8 +13,8 @@ type adapter struct {
 	logger *zap.Logger
 }
 
-func (a *adapter) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error) {
-	trace, err := a.tracer.getValidatorDuty(role, slot, pubkey)
+func (a *adapter) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, vIndex phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
+	trace, err := a.tracer.getValidatorDuty(role, slot, vIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (n *noOpTracer) Store() DutyTraceStore {
 
 type noOpStore struct{}
 
-func (n *noOpStore) GetValidatorDuty(spectypes.BeaconRole, phase0.Slot, spectypes.ValidatorPK) (*model.ValidatorDutyTrace, error) {
+func (n *noOpStore) GetValidatorDuty(spectypes.BeaconRole, phase0.Slot, phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
 	panic("not implemented")
 }
 func (n *noOpStore) GetCommitteeDutiesByOperator([]spectypes.OperatorID, phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
