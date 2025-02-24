@@ -164,4 +164,4 @@ mockgen-install:
 
 .PHONY: format
 format:
-	gci write -s standard -s default -s blank -s dot -s localmodule -s "prefix(github.com/ssvlabs/ssv-spec)" $$(find . -type f -name '*.go' -not -path "*mock*" -not -name "*.gen.go")
+	gci write --skip-generated -s standard -s default -s blank -s dot -s localmodule -s "prefix(github.com/ssvlabs/ssv-spec)" $$(find . -type f -name '*.go' -not -path "*mock*")
