@@ -21,7 +21,7 @@ run:
 
 # output configuration options
 output:
-  formats: 
+  formats:
     - format: colored-line-number
 
   # print lines of code with issue, default is true
@@ -39,6 +39,16 @@ output:
 
 # all available settings of specific linters
 linters-settings:
+  gci:
+    sections:
+      - standard
+      - default
+      - blank
+      - dot
+      - localmodule
+      - prefix(github.com/ssvlabs/ssv-spec)
+    # various configuration options are listed here: https://golangci-lint.run/usage/linters/#gci
+    skip-generated: true
   dogsled:
     # checks assignments with too many blank identifiers; default is 2
     max-blank-identifiers: 2
@@ -76,10 +86,6 @@ linters-settings:
   funlen:
     lines: 60
     statements: 40
-  gci:
-    # Custom section: groups all imports with the specified Prefix.
-    sections:
-      - prefix(github.com/ssvlabs/ssv)
   gocognit:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     min-complexity: 10
@@ -180,8 +186,6 @@ linters-settings:
       - return
       - assign
   govet:
-    
-
     # settings per analyzer
     settings:
       printf: # analyzer name, run `go tool vet help` to see all analyzers
@@ -328,6 +332,7 @@ linters:
     - gosec
     - errcheck
     - errorlint
+    - gci
 
   disable-all: false
 
@@ -349,7 +354,7 @@ issues:
     # Exclude some linters from running on tests files.
     - path: _test\.go
       linters:
-#        - gocyclo
+        #        - gocyclo
         - errcheck
         - dupl
         - gosec
@@ -405,4 +410,4 @@ issues:
   #  new-from-patch: path/to/patch/file
 
   # Fix found issues (if it's supported by the linter)
-  fix: true
+  fix: false
