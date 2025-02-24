@@ -19,7 +19,6 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	ssvsignerclient "github.com/ssvlabs/ssv-signer/client"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -64,7 +63,8 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/remotekeymanager"
+	"github.com/ssvlabs/ssv/ssvsigner/ssvsignerclient"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -288,21 +288,21 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if usingSSVSigner {
-			ssvSigner, err := ssvsigner.New(
+			remoteKeyManager, err := remotekeymanager.New(
 				ssvSignerClient,
 				consensusClient,
 				keyManager,
 				operatorDataStore.GetOperatorID,
-				ssvsigner.WithLogger(logger),
-				ssvsigner.WithRetryCount(3),
+				remotekeymanager.WithLogger(logger),
+				remotekeymanager.WithRetryCount(3),
 			)
 			if err != nil {
 				logger.Fatal("could not create ssv-signer", zap.Error(err))
 			}
 
-			keyManager = ssvSigner
-			cfg.P2pNetworkConfig.OperatorSigner = ssvSigner
-			cfg.SSVOptions.ValidatorOptions.OperatorSigner = ssvSigner
+			keyManager = remoteKeyManager
+			cfg.P2pNetworkConfig.OperatorSigner = remoteKeyManager
+			cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
 		} else {
 			cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)

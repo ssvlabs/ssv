@@ -1,4 +1,4 @@
-package ssvsigner
+package remotekeymanager
 
 import (
 	"encoding/hex"
@@ -14,8 +14,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/ssvlabs/eth2-key-manager/core"
-	ssvsignerclient "github.com/ssvlabs/ssv-signer/client"
-	"github.com/ssvlabs/ssv-signer/web3signer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -23,9 +21,11 @@ import (
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/operator/keys"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/web3signer"
+	"github.com/ssvlabs/ssv/ssvsigner/ssvsignerclient"
 )
 
-type SSVSigner struct {
+type KeyManager struct {
 	logger          *zap.Logger
 	client          *ssvsignerclient.SSVSignerClient
 	consensusClient *goclient.GoClient
@@ -40,8 +40,8 @@ func New(
 	keyManager ekm.KeyManager,
 	getOperatorId func() spectypes.OperatorID,
 	options ...Option,
-) (*SSVSigner, error) {
-	s := &SSVSigner{
+) (*KeyManager, error) {
+	s := &KeyManager{
 		client:          client,
 		consensusClient: consensusClient,
 		keyManager:      keyManager,
@@ -55,75 +55,75 @@ func New(
 	return s, nil
 }
 
-type Option func(signer *SSVSigner)
+type Option func(signer *KeyManager)
 
 func WithLogger(logger *zap.Logger) Option {
-	return func(s *SSVSigner) {
-		s.logger = logger.Named("SSVSigner")
+	return func(s *KeyManager) {
+		s.logger = logger.Named("remote_key_manager")
 	}
 }
 
 func WithRetryCount(n int) Option {
-	return func(s *SSVSigner) {
+	return func(s *KeyManager) {
 		s.retryCount = n
 	}
 }
 
-func (s *SSVSigner) ListAccounts() ([]core.ValidatorAccount, error) {
-	return s.keyManager.ListAccounts()
+func (km *KeyManager) ListAccounts() ([]core.ValidatorAccount, error) {
+	return km.keyManager.ListAccounts()
 }
 
-func (s *SSVSigner) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
-	return s.keyManager.RetrieveHighestAttestation(pubKey)
+func (km *KeyManager) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+	return km.keyManager.RetrieveHighestAttestation(pubKey)
 }
 
-func (s *SSVSigner) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
-	return s.keyManager.RetrieveHighestProposal(pubKey)
+func (km *KeyManager) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+	return km.keyManager.RetrieveHighestProposal(pubKey)
 }
 
-func (s *SSVSigner) BumpSlashingProtection(pubKey []byte) error {
-	return s.keyManager.BumpSlashingProtection(pubKey)
+func (km *KeyManager) BumpSlashingProtection(pubKey []byte) error {
+	return km.keyManager.BumpSlashingProtection(pubKey)
 }
 
-func (s *SSVSigner) RemoveHighestAttestation(pubKey []byte) error {
-	return s.keyManager.RemoveHighestAttestation(pubKey)
+func (km *KeyManager) RemoveHighestAttestation(pubKey []byte) error {
+	return km.keyManager.RemoveHighestAttestation(pubKey)
 }
 
-func (s *SSVSigner) RemoveHighestProposal(pubKey []byte) error {
-	return s.keyManager.RemoveHighestProposal(pubKey)
+func (km *KeyManager) RemoveHighestProposal(pubKey []byte) error {
+	return km.keyManager.RemoveHighestProposal(pubKey)
 }
 
-func (s *SSVSigner) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
-	return s.keyManager.IsAttestationSlashable(pk, data)
+func (km *KeyManager) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
+	return km.keyManager.IsAttestationSlashable(pk, data)
 }
 
-func (s *SSVSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
-	return s.keyManager.IsBeaconBlockSlashable(pk, slot)
+func (km *KeyManager) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
+	return km.keyManager.IsBeaconBlockSlashable(pk, slot)
 }
 
-func (s *SSVSigner) UpdateHighestAttestation(pk []byte, attestationData *phase0.AttestationData) error {
-	return s.keyManager.UpdateHighestAttestation(pk, attestationData)
+func (km *KeyManager) UpdateHighestAttestation(pk []byte, attestationData *phase0.AttestationData) error {
+	return km.keyManager.UpdateHighestAttestation(pk, attestationData)
 }
 
-func (s *SSVSigner) UpdateHighestProposal(pk []byte, slot phase0.Slot) error {
-	return s.keyManager.UpdateHighestProposal(pk, slot)
+func (km *KeyManager) UpdateHighestProposal(pk []byte, slot phase0.Slot) error {
+	return km.keyManager.UpdateHighestProposal(pk, slot)
 }
 
-func (s *SSVSigner) AddShare(encryptedShare []byte) error {
+func (km *KeyManager) AddShare(encryptedShare []byte) error {
 	var statuses []ssvsignerclient.Status
 	var publicKeys [][]byte
 	f := func() error {
 		var err error
-		statuses, publicKeys, err = s.client.AddValidators(encryptedShare)
+		statuses, publicKeys, err = km.client.AddValidators(encryptedShare)
 		return err
 	}
-	err := s.retryFunc(f)
+	err := km.retryFunc(f)
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
 
 	if statuses[0] == ssvsignerclient.StatusImported || statuses[0] == ssvsignerclient.StatusDuplicated {
-		if err := s.keyManager.BumpSlashingProtection(publicKeys[0]); err != nil {
+		if err := km.keyManager.BumpSlashingProtection(publicKeys[0]); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 	}
@@ -131,17 +131,17 @@ func (s *SSVSigner) AddShare(encryptedShare []byte) error {
 	return nil
 }
 
-func (s *SSVSigner) RemoveShare(pubKey []byte) error {
-	statuses, err := s.client.RemoveValidators(pubKey)
+func (km *KeyManager) RemoveShare(pubKey []byte) error {
+	statuses, err := km.client.RemoveValidators(pubKey)
 	if err != nil {
 		return fmt.Errorf("remove validator: %w", err)
 	}
 
 	if statuses[0] == ssvsignerclient.StatusDeleted {
-		if err := s.keyManager.RemoveHighestAttestation(pubKey); err != nil {
+		if err := km.keyManager.RemoveHighestAttestation(pubKey); err != nil {
 			return fmt.Errorf("could not remove highest attestation: %w", err)
 		}
-		if err := s.keyManager.RemoveHighestProposal(pubKey); err != nil {
+		if err := km.keyManager.RemoveHighestProposal(pubKey); err != nil {
 			return fmt.Errorf("could not remove highest proposal: %w", err)
 		}
 	}
@@ -149,13 +149,13 @@ func (s *SSVSigner) RemoveShare(pubKey []byte) error {
 	return nil
 }
 
-func (s *SSVSigner) retryFunc(f func() error) error {
-	if s.retryCount < 2 {
+func (km *KeyManager) retryFunc(f func() error) error {
+	if km.retryCount < 2 {
 		return f()
 	}
 
 	var multiErr error
-	for i := 1; i <= s.retryCount; i++ {
+	for i := 1; i <= km.retryCount; i++ {
 		err := f()
 		if err == nil {
 			return nil
@@ -167,16 +167,16 @@ func (s *SSVSigner) retryFunc(f func() error) error {
 		multiErr = errors.Join(multiErr, err)
 	}
 
-	return fmt.Errorf("no successful result after %d attempts: %w", s.retryCount, multiErr)
+	return fmt.Errorf("no successful result after %d attempts: %w", km.retryCount, multiErr)
 }
 
-func (s *SSVSigner) SignBeaconObject(
+func (km *KeyManager) SignBeaconObject(
 	obj ssz.HashRoot,
 	domain phase0.Domain,
 	sharePubkey []byte,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, [32]byte, error) {
-	forkInfo, err := s.getForkInfo()
+	forkInfo, err := km.getForkInfo()
 	if err != nil {
 		return spectypes.Signature{}, [32]byte{}, fmt.Errorf("get fork info: %w", err)
 	}
@@ -192,11 +192,11 @@ func (s *SSVSigner) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to AttestationData")
 		}
 
-		if err := s.keyManager.IsAttestationSlashable(sharePubkey, data); err != nil {
+		if err := km.keyManager.IsAttestationSlashable(sharePubkey, data); err != nil {
 			return nil, [32]byte{}, err
 		}
 
-		if err := s.keyManager.UpdateHighestAttestation(sharePubkey, data); err != nil {
+		if err := km.keyManager.UpdateHighestAttestation(sharePubkey, data); err != nil {
 			return nil, [32]byte{}, err
 		}
 
@@ -215,11 +215,11 @@ func (s *SSVSigner) SignBeaconObject(
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (capella): %w", err)
 			}
 
-			if err := s.keyManager.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
+			if err := km.keyManager.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
 				return nil, [32]byte{}, err
 			}
 
-			if err = s.keyManager.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
+			if err = km.keyManager.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
 				return nil, [32]byte{}, err
 			}
 
@@ -241,11 +241,11 @@ func (s *SSVSigner) SignBeaconObject(
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
 			}
 
-			if err := s.keyManager.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
+			if err := km.keyManager.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
 				return nil, [32]byte{}, err
 			}
 
-			if err = s.keyManager.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
+			if err = km.keyManager.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
 				return nil, [32]byte{}, err
 			}
 
@@ -352,21 +352,21 @@ func (s *SSVSigner) SignBeaconObject(
 
 	req.SigningRoot = hex.EncodeToString(root[:])
 
-	sig, err := s.client.Sign(sharePubkey, req)
+	sig, err := km.client.Sign(sharePubkey, req)
 	if err != nil {
 		return spectypes.Signature{}, [32]byte{}, err
 	}
 	return sig, root, nil
 }
 
-func (s *SSVSigner) getForkInfo() (web3signer.ForkInfo, error) {
+func (km *KeyManager) getForkInfo() (web3signer.ForkInfo, error) {
 	denebForkHolesky := web3signer.ForkType{
 		PreviousVersion: "0x04017000",
 		CurrentVersion:  "0x05017000",
 		Epoch:           29696,
 	}
 
-	genesis := s.consensusClient.Genesis()
+	genesis := km.consensusClient.Genesis()
 	if genesis == nil {
 		return web3signer.ForkInfo{}, fmt.Errorf("genesis is not ready")
 	}
@@ -376,12 +376,12 @@ func (s *SSVSigner) getForkInfo() (web3signer.ForkInfo, error) {
 	}, nil
 }
 
-func (s *SSVSigner) Sign(payload []byte) ([]byte, error) {
-	return s.client.OperatorSign(payload)
+func (km *KeyManager) Sign(payload []byte) ([]byte, error) {
+	return km.client.OperatorSign(payload)
 }
 
-func (s *SSVSigner) Public() keys.OperatorPublicKey {
-	pubkeyString, err := s.client.GetOperatorIdentity()
+func (km *KeyManager) Public() keys.OperatorPublicKey {
+	pubkeyString, err := km.client.GetOperatorIdentity()
 	if err != nil {
 		return nil // TODO: handle, consider changing the interface to return error
 	}
@@ -394,15 +394,15 @@ func (s *SSVSigner) Public() keys.OperatorPublicKey {
 	return pubkey
 }
 
-func (s *SSVSigner) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte, error) {
+func (km *KeyManager) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte, error) {
 	encodedMsg, err := ssvMsg.Encode()
 	if err != nil {
 		return nil, err
 	}
 
-	return s.client.OperatorSign(encodedMsg)
+	return km.client.OperatorSign(encodedMsg)
 }
 
-func (s *SSVSigner) GetOperatorID() spectypes.OperatorID {
-	return s.getOperatorId()
+func (km *KeyManager) GetOperatorID() spectypes.OperatorID {
+	return km.getOperatorId()
 }

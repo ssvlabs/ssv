@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	ssvsignerclient "github.com/ssvlabs/ssv-signer/client"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ssvsignerclient"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
