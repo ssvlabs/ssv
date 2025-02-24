@@ -9,10 +9,12 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -178,6 +180,12 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 				Deneb:   v,
 			}
 			return km.signer.SignBeaconBlock(vBlock, domain, pk)
+		case *electra.BeaconBlock:
+			vBlock := &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionElectra,
+				Electra: v,
+			}
+			return km.signer.SignBeaconBlock(vBlock, domain, pk)
 		case *apiv1capella.BlindedBeaconBlock:
 			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
 				Version: spec.DataVersionCapella,
@@ -188,6 +196,12 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
 				Version: spec.DataVersionDeneb,
 				Deneb:   v,
+			}
+			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
+		case *apiv1electra.BlindedBeaconBlock:
+			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
+				Version: spec.DataVersionElectra,
+				Electra: v,
 			}
 			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 		default:
