@@ -13,8 +13,8 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
-	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 /*
@@ -27,7 +27,7 @@ type Exporter struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores
 	TraceStore        DutyTraceStore
-	Storage           nodestorage.Storage
+	Shares            registrystorage.Shares
 }
 
 type DutyTraceStore interface {
@@ -246,12 +246,16 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	if len(pubkeys) > 0 {
-		indices, err := e.Storage.Shares().GetValidatorIndexByPubkey(pubkeys)
+		indices, err := e.Shares.GetValidatorIndexByPubkey(pubkeys)
 		if err != nil {
 			return api.Error(fmt.Errorf("map pubkeys to validator indices: %w", err))
 		}
 
 		vIndices = append(vIndices, indices...)
+	}
+
+	if len(vIndices) == 0 {
+		return api.BadRequestError(errors.New("none of provided validators were found"))
 	}
 
 	var results []*model.ValidatorDutyTrace

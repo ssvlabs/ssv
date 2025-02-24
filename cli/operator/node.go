@@ -464,7 +464,7 @@ var StartNodeCmd = &cobra.Command{
 					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
 					TraceStore:        tracer.Store(),
-					Storage:           nodeStorage,
+					Shares:            nodeStorage.Shares(),
 				},
 				cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing,
 			)
