@@ -29,7 +29,7 @@ func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentif
 		}
 	}
 
-	headEventSubscriber := &subscriber[*apiv1.HeadEvent]{
+	headEventSubscriber := subscriber[*apiv1.HeadEvent]{
 		Identifier: subscriberIdentifier,
 		Channel:    make(chan *apiv1.HeadEvent, 32),
 	}
