@@ -25,7 +25,7 @@ type Signer interface {
 }
 
 type SsvOperatorSigner struct {
-	Signer         Signer
+	Signer
 	GetOperatorIdF func() spectypes.OperatorID
 }
 
@@ -46,7 +46,7 @@ func (s *SsvOperatorSigner) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte
 		return nil, err
 	}
 
-	return s.Signer.Sign(encodedMsg)
+	return s.Sign(encodedMsg)
 }
 
 func Sign(msg *qbft.Message, operatorID spectypes.OperatorID, operatorSigner OperatorSigner) (*spectypes.SignedSSVMessage, error) {

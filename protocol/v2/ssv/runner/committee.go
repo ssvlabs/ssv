@@ -243,7 +243,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			if err != nil {
 				return errors.Wrap(err, "failed signing attestation data")
 			}
-
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
 			// TODO: revert log
