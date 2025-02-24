@@ -262,13 +262,13 @@ func (eh *EventHandler) handleShareCreation(
 				return nil, fmt.Errorf("could not add share private key to key manager: %w", err)
 			}
 		}
-	}
 
-	// Set the minimum participation epoch to match slashing protection.
-	// Note: The current epoch can differ from the epoch set in slashing protection
-	// due to the passage of time between saving slashing protection data and setting
-	// the minimum participation epoch
-	share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
+		// Set the minimum participation epoch to match slashing protection.
+		// Note: The current epoch can differ from the epoch set in slashing protection
+		// due to the passage of time between saving slashing protection data and setting
+		// the minimum participation epoch
+		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
+	}
 
 	// Save share to DB.
 	if err := eh.nodeStorage.Shares().Save(txn, share); err != nil {
