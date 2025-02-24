@@ -294,7 +294,14 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if usingSSVSigner {
-			ssvSigner, err := ssvsigner.New(logger, ssvSignerClient, consensusClient, keyManager, operatorDataStore.GetOperatorID)
+			ssvSigner, err := ssvsigner.New(
+				ssvSignerClient,
+				consensusClient,
+				keyManager,
+				operatorDataStore.GetOperatorID,
+				ssvsigner.WithLogger(logger),
+				ssvsigner.WithRetryCount(3),
+			)
 			if err != nil {
 				logger.Fatal("could not create ssv-signer", zap.Error(err))
 			}

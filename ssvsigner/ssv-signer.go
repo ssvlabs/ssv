@@ -31,22 +31,42 @@ type SSVSigner struct {
 	consensusClient *goclient.GoClient
 	keyManager      ekm.KeyManager
 	getOperatorId   func() spectypes.OperatorID
+	retryCount      int
 }
 
 func New(
-	logger *zap.Logger,
 	client *ssvsignerclient.SSVSignerClient,
 	consensusClient *goclient.GoClient,
 	keyManager ekm.KeyManager,
 	getOperatorId func() spectypes.OperatorID,
+	options ...Option,
 ) (*SSVSigner, error) {
-	return &SSVSigner{
-		logger:          logger.Named("SSVSigner"),
+	s := &SSVSigner{
 		client:          client,
 		consensusClient: consensusClient,
 		keyManager:      keyManager,
 		getOperatorId:   getOperatorId,
-	}, nil
+	}
+
+	for _, option := range options {
+		option(s)
+	}
+
+	return s, nil
+}
+
+type Option func(signer *SSVSigner)
+
+func WithLogger(logger *zap.Logger) Option {
+	return func(s *SSVSigner) {
+		s.logger = logger.Named("SSVSigner")
+	}
+}
+
+func WithRetryCount(n int) Option {
+	return func(s *SSVSigner) {
+		s.retryCount = n
+	}
 }
 
 func (s *SSVSigner) ListAccounts() ([]core.ValidatorAccount, error) {
@@ -89,9 +109,15 @@ func (s *SSVSigner) UpdateHighestProposal(pk []byte, slot phase0.Slot) error {
 	return s.keyManager.UpdateHighestProposal(pk, slot)
 }
 
-// AddShare is a dummy method to match KeyManager interface. This method panics and should never be called.
 func (s *SSVSigner) AddShare(encryptedShare []byte) error {
-	statuses, publicKeys, err := s.client.AddValidators(encryptedShare)
+	var statuses []ssvsignerclient.Status
+	var publicKeys [][]byte
+	f := func() error {
+		var err error
+		statuses, publicKeys, err = s.client.AddValidators(encryptedShare)
+		return err
+	}
+	err := s.retryFunc(f)
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
@@ -121,6 +147,27 @@ func (s *SSVSigner) RemoveShare(pubKey []byte) error {
 	}
 
 	return nil
+}
+
+func (s *SSVSigner) retryFunc(f func() error) error {
+	if s.retryCount < 2 {
+		return f()
+	}
+
+	var multiErr error
+	for i := 1; i <= s.retryCount; i++ {
+		err := f()
+		if err == nil {
+			return nil
+		}
+		var shareDecryptionError ssvsignerclient.ShareDecryptionError
+		if errors.As(err, &shareDecryptionError) {
+			return shareDecryptionError
+		}
+		multiErr = errors.Join(multiErr, err)
+	}
+
+	return fmt.Errorf("no successful result after %d attempts: %w", s.retryCount, multiErr)
 }
 
 func (s *SSVSigner) SignBeaconObject(
