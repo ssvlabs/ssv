@@ -103,7 +103,7 @@ func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
-		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
+		return mv.handleValidationError(ctx, pmsg.ReceivedFrom, pmsg.GetFrom(), decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage

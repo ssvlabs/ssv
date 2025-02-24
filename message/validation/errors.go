@@ -10,7 +10,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -118,12 +117,13 @@ var (
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(ctx context.Context, receivedFrom, from peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
 		With(loggerFields.AsZapFields()...).
-		With(fields.PeerID(peerID))
+		With(zap.Stringer("received_from", receivedFrom)).
+		With(zap.Stringer("from", from))
 
 	var valErr Error
 	if !errors.As(err, &valErr) {
