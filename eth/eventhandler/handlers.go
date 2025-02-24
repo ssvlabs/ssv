@@ -226,8 +226,6 @@ func (eh *EventHandler) handleShareCreation(
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
-	selfOperatorID := eh.operatorDataStore.GetOperatorID()
-
 	share, encryptedKey, err := eh.validatorAddedEventToShare(
 		txn,
 		validatorEvent,
@@ -238,7 +236,7 @@ func (eh *EventHandler) handleShareCreation(
 		return nil, fmt.Errorf("could not extract validator share from event: %w", err)
 	}
 
-	if share.BelongsToOperator(selfOperatorID) {
+	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		if ssvSigner, ok := eh.keyManager.(*ssvsigner.SSVSigner); ok {
 			if err := ssvSigner.AddShare(encryptedKey); err != nil {
 				var shareDecryptionError ssvsignerclient.ShareDecryptionError
