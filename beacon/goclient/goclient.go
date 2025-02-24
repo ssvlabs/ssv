@@ -110,6 +110,12 @@ type MultiClient interface {
 	eth2client.VoluntaryExitSubmitter
 }
 
+type EventTopic string
+
+const (
+	HeadEventTopic EventTopic = "head"
+)
+
 // GoClient implementing Beacon struct
 type GoClient struct {
 	log         *zap.Logger
@@ -152,6 +158,10 @@ type GoClient struct {
 	longTimeout   time.Duration
 
 	withWeightedAttestationData bool
+
+	subscribersLock      sync.RWMutex
+	headEventSubscribers []*subscriber[*apiv1.HeadEvent]
+	supportedTopics      []EventTopic
 }
 
 // New init new client and go-client instance
@@ -192,6 +202,7 @@ func New(
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
+		supportedTopics:                    []EventTopic{HeadEventTopic},
 	}
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
@@ -221,7 +232,42 @@ func New(
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
+	if err := client.launchEventListener(opt.Context); err != nil {
+		return nil, errors.Wrap(err, "failed to launch head event listener")
+	}
+
 	return client, nil
+}
+
+func (gc *GoClient) launchEventListener(ctx context.Context) error {
+	headChan, err := gc.SubscribeToHeadEvents(ctx, "go_client")
+	if err != nil {
+		return errors.Wrap(err, "failed to subscribe to head events")
+	}
+
+	go func() {
+		for {
+			select {
+			case headEvent := <-headChan:
+				logger := gc.log.
+					With(fields.Slot(headEvent.Slot)).
+					With(fields.BlockRoot(headEvent.Block))
+
+				logger.Info("received head event. Updating cache")
+
+				item := gc.blockRootToSlotCache.Set(headEvent.Block, headEvent.Slot, ttlcache.NoTTL)
+
+				logger.
+					With(zap.Int64("cache_item_version", item.Version())).
+					Info("cache updated")
+			case <-ctx.Done():
+				gc.log.Debug("terminating head event listener")
+				return
+			}
+		}
+	}()
+
+	return nil
 }
 
 func (gc *GoClient) initMultiClient(ctx context.Context) error {
@@ -417,17 +463,4 @@ func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
 	duration := time.Second * casts.DurationFromUint64(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(gc.network.MinGenesisTime(), 0).Add(duration)
 	return startTime
-}
-
-func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
-	if err := gc.multiClient.Events(ctx, topics, handler); err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Events"),
-			zap.Error(err),
-		)
-
-		return err
-	}
-
-	return nil
 }

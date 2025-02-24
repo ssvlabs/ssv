@@ -29,6 +29,7 @@ import (
 type MockbeaconDuties struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconDutiesMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconDutiesMockRecorder is the mock recorder for MockbeaconDuties.
@@ -92,6 +93,21 @@ func (mr *MockbeaconDutiesMockRecorder) ProposerDuties(ctx, epoch, validatorIndi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDuties", reflect.TypeOf((*MockbeaconDuties)(nil).ProposerDuties), ctx, epoch, validatorIndices)
 }
 
+// SubscribeToHeadEvents mocks base method.
+func (m *MockbeaconDuties) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *v1.HeadEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier)
+	ret0, _ := ret[0].(<-chan *v1.HeadEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SubscribeToHeadEvents indicates an expected call of SubscribeToHeadEvents.
+func (mr *MockbeaconDutiesMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockbeaconDuties)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier)
+}
+
 // SyncCommitteeDuties mocks base method.
 func (m *MockbeaconDuties) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 	m.ctrl.T.Helper()
@@ -111,6 +127,7 @@ func (mr *MockbeaconDutiesMockRecorder) SyncCommitteeDuties(ctx, epoch, indices 
 type MockbeaconSubscriber struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconSubscriberMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconSubscriberMockRecorder is the mock recorder for MockbeaconSubscriber.
@@ -162,6 +179,7 @@ func (mr *MockbeaconSubscriberMockRecorder) SubmitSyncCommitteeSubscriptions(ctx
 type MockbeaconValidator struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconValidatorMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconValidatorMockRecorder is the mock recorder for MockbeaconValidator.
@@ -200,6 +218,7 @@ func (mr *MockbeaconValidatorMockRecorder) GetValidatorData(validatorPubKeys any
 type Mockproposer struct {
 	ctrl     *gomock.Controller
 	recorder *MockproposerMockRecorder
+	isgomock struct{}
 }
 
 // MockproposerMockRecorder is the mock recorder for Mockproposer.
@@ -237,6 +256,7 @@ func (mr *MockproposerMockRecorder) SubmitProposalPreparation(feeRecipients any)
 type Mocksigner struct {
 	ctrl     *gomock.Controller
 	recorder *MocksignerMockRecorder
+	isgomock struct{}
 }
 
 // MocksignerMockRecorder is the mock recorder for Mocksigner.
@@ -275,6 +295,7 @@ func (mr *MocksignerMockRecorder) ComputeSigningRoot(object, domain any) *gomock
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNodeMockRecorder
+	isgomock struct{}
 }
 
 // MockBeaconNodeMockRecorder is the mock recorder for MockBeaconNode.
@@ -644,6 +665,21 @@ func (m *MockBeaconNode) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVolunta
 func (mr *MockBeaconNodeMockRecorder) SubmitVoluntaryExit(voluntaryExit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitVoluntaryExit", reflect.TypeOf((*MockBeaconNode)(nil).SubmitVoluntaryExit), voluntaryExit)
+}
+
+// SubscribeToHeadEvents mocks base method.
+func (m *MockBeaconNode) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *v1.HeadEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier)
+	ret0, _ := ret[0].(<-chan *v1.HeadEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SubscribeToHeadEvents indicates an expected call of SubscribeToHeadEvents.
+func (mr *MockBeaconNodeMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockBeaconNode)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier)
 }
 
 // SyncCommitteeDuties mocks base method.

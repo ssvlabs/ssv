@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
@@ -110,7 +111,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	s.indicesChg = make(chan struct{})
 	s.handlers = handlers
 
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler").Return(make(chan *eth2apiv1.HeadEvent), nil)
 
 	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().MinGenesisTime().Return(int64(0)).AnyTimes()
 	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotDurationSec().Return(150 * time.Millisecond).AnyTimes()
@@ -363,7 +364,7 @@ func TestScheduler_Run(t *testing.T) {
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler").Return(make(chan *eth2apiv1.HeadEvent), nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 
 	// setup mock duty handler expectations
@@ -412,7 +413,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler").Return(make(chan *eth2apiv1.HeadEvent), nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 	err := s.Start(ctx, logger)
 	require.NoError(t, err)

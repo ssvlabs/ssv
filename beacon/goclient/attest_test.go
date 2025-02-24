@@ -31,6 +31,7 @@ var (
 	epochs = []phase0.Epoch{318584, 318585, 318586, 318587, 318588}
 
 	defaultHardTimeout = time.Second * 2
+
 	// roots is a bunch of random roots.
 	roots = []string{
 		"0x1662a3d288b0338436d74083b4ce68908a0ece0661aa236acd95c8a4c3f6e8fc",
@@ -41,10 +42,14 @@ var (
 	}
 
 	beaconEndpointResponses = map[string][]byte{
+		"/eth/v1/events": []byte(`{
+			"slot": "4239945",
+			"block": "0xa5e8aca6e7542aeb1cb4a779821880b2f8cc020b56fbe17f94ef949eee295713"
+		}`),
 		"/eth/v1/node/syncing": []byte(`{
 			"data": {
 				"head_slot": "4239945",
-				"sync_distance": "1",
+				"sync_distance": "1", 
 				"is_syncing": false,
 				"is_optimistic": false,
 				"el_offline": false
@@ -66,7 +71,7 @@ var (
 			"data": {
 				"CONFIG_NAME": "holesky",
 				"GENESIS_FORK_VERSION": "0x01017000",
-				"CAPELLA_FORK_VERSION": "0x04017000",
+				"CAPELLA_FORK_VERSION": "0x04017000", 
 				"MIN_GENESIS_TIME": "1695902100",
 				"SECONDS_PER_SLOT": "12",
 				"SLOTS_PER_EPOCH": "32",
