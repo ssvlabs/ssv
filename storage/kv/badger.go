@@ -6,13 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-
 	"github.com/dgraph-io/badger/v4"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 

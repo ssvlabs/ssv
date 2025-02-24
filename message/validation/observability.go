@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/observability"
 )
 

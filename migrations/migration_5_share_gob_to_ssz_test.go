@@ -2,11 +2,14 @@ package migrations
 
 import (
 	"encoding/hex"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestMigration5_shareGOB_Decode(t *testing.T) {

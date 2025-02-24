@@ -10,6 +10,7 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
