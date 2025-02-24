@@ -24,7 +24,6 @@ import (
 	"tailscale.com/util/singleflight"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
@@ -110,6 +109,10 @@ type MultiClient interface {
 	eth2client.VoluntaryExitSubmitter
 }
 
+type operatorDataStore interface {
+	AwaitOperatorID() spectypes.OperatorID
+}
+
 type EventTopic string
 
 const (
@@ -129,7 +132,7 @@ type GoClient struct {
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
-	operatorDataStore operatordatastore.OperatorDataStore
+	operatorDataStore operatorDataStore
 
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
@@ -168,7 +171,7 @@ type GoClient struct {
 func New(
 	logger *zap.Logger,
 	opt beaconprotocol.Options,
-	operatorDataStore operatordatastore.OperatorDataStore,
+	operatorDataStore operatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
@@ -205,11 +208,11 @@ func New(
 		supportedTopics:                    []EventTopic{HeadEventTopic},
 	}
 
-	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
-	if len(beaconAddrList) == 0 {
+	if opt.BeaconNodeAddr == "" {
 		return nil, fmt.Errorf("no beacon node address provided")
 	}
 
+	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	for _, beaconAddr := range beaconAddrList {
 		if err := client.addSingleClient(opt.Context, beaconAddr); err != nil {
 			return nil, err
