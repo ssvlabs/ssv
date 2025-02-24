@@ -3,12 +3,12 @@ package p2pv1
 import (
 	"math"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/commons"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	ssvpeers "github.com/ssvlabs/ssv/network/peers"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )

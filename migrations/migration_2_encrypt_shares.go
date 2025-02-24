@@ -6,11 +6,10 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
-
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 var migration_2_encrypt_shares = Migration{

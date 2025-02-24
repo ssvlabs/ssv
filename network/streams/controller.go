@@ -4,14 +4,13 @@ import (
 	"context"
 	"time"
 
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-	"go.opentelemetry.io/otel/metric"
-
 	"github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 

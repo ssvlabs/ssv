@@ -164,8 +164,4 @@ mockgen-install:
 
 .PHONY: format
 format:
-# both format commands must ignore generated files which are named *mock* or enr_fork_id_encoding.go
-# the argument to gopls format can be a list of files
-	find . -name "*.go" ! -path '*mock*' ! -name 'enr_fork_id_encoding.go' -type f -print0 | xargs -0 -P 1 sh -c 'gopls -v format -w $0'
-# the argument to gopls imports must be a single file so this entire command takes a few mintues to run
-	find . -name "*.go" ! -path '*mock*' ! -name 'enr_fork_id_encoding.go' -type f -print0 | xargs -0 -P 10 -I{} sh -c 'gopls -v imports -w "{}"'
+	gci write -s standard -s default -s blank -s dot -s localmodule -s "prefix(github.com/ssvlabs/ssv-spec)" $$(find . -type f -name '*.go' -not -path "*mock*" -not -name "*.gen.go")

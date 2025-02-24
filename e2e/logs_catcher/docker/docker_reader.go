@@ -3,12 +3,14 @@ package docker
 import (
 	"bufio"
 	"context"
+	"io"
+	"strings"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
+
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/logs"
-	"io"
-	"strings"
 )
 
 type Streamer interface {
