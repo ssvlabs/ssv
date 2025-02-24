@@ -20,12 +20,15 @@ func (a *adapter) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, 
 	}
 
 	return &model.ValidatorDutyTrace{
-		Slot: slot,
+		Slot:      trace.Slot,
+		Role:      trace.Role,
+		Validator: trace.Validator,
 		ConsensusTrace: model.ConsensusTrace{
 			Rounds:   trace.Rounds,
 			Decideds: trace.Decideds,
 		},
 		Post: trace.Post,
+		Pre:  trace.Pre,
 	}, nil
 }
 

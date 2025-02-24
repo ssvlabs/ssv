@@ -19,7 +19,6 @@ import (
 
 /*
 TODO
-
 - migration - populate mapping pubkey -> index for existing db data
 	- using the new format we update on every 'saveShare'
 */

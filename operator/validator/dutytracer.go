@@ -134,32 +134,39 @@ func (n *InMemTracer) Store() DutyTraceStore {
 	}
 }
 
-func (n *InMemTracer) getOrCreateValidatorTrace(slot uint64, role spectypes.RunnerRole, vPubKey string) *validatorDutyTrace {
+func (n *InMemTracer) getOrCreateValidatorTrace(slot uint64, role spectypes.BeaconRole, vPubKey string) *validatorDutyTrace {
 	n.Lock()
 	defer n.Unlock()
 
 	mp, _ := n.validatorTraces.GetOrSet(slot, make(map[string][]*validatorDutyTrace))
 
-	traces, ok := mp.Value()[vPubKey]
-	bnRole := toBNRole(role)
+	traces, found := mp.Value()[vPubKey]
 
-	if !ok || len(traces) == 0 {
-		trace := new(validatorDutyTrace)
-		trace.ValidatorDutyTrace.Role = bnRole
+	if !found {
+		trace := &validatorDutyTrace{
+			ValidatorDutyTrace: model.ValidatorDutyTrace{
+				Slot: phase0.Slot(slot),
+				Role: role,
+			},
+		}
 		mp.Value()[vPubKey] = append(traces, trace)
 		return trace
 	}
 
 	// find the trace for the role
 	for _, trace := range traces {
-		if trace.Role == bnRole {
+		if trace.Role == role {
 			return trace
 		}
 	}
 
 	// create a new trace for the role
-	trace := new(validatorDutyTrace)
-	trace.ValidatorDutyTrace.Role = bnRole
+	trace := &validatorDutyTrace{
+		ValidatorDutyTrace: model.ValidatorDutyTrace{
+			Slot: phase0.Slot(slot),
+			Role: role,
+		},
+	}
 	mp.Value()[vPubKey] = append(traces, trace)
 	return trace
 }
@@ -189,10 +196,14 @@ func (n *InMemTracer) getOrCreateCommitteeTrace(slot uint64, committeeID []byte)
 
 	mp, _ := n.committeeTraces.GetOrSet(slot, make(map[string]*committeeDutyTrace))
 
-	trace, ok := mp.Value()[string(committeeID)]
-	if !ok {
-		trace = new(committeeDutyTrace)
-		trace.CommitteeID = spectypes.CommitteeID(committeeID)
+	trace, found := mp.Value()[string(committeeID)]
+	if !found {
+		trace = &committeeDutyTrace{
+			CommitteeDutyTrace: model.CommitteeDutyTrace{
+				CommitteeID: spectypes.CommitteeID(committeeID),
+				Slot:        phase0.Slot(slot),
+			},
+		}
 		mp.Value()[string(committeeID)] = trace
 	}
 
@@ -324,19 +335,21 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 	runnerRole := ssvMsg.MsgID.GetRoleType()
 	role := toBNRole(runnerRole)
 	slot := uint64(msg.Slot)
-	trace := n.getOrCreateValidatorTrace(slot, runnerRole, string(validatorPubKey))
+	trace := n.getOrCreateValidatorTrace(slot, role, string(validatorPubKey))
 	trace.Lock()
 	defer trace.Unlock()
 
-	trace.Role = role
-	trace.Validator = msg.Messages[0].ValidatorIndex
+	if trace.Validator == 0 {
+		trace.Validator = msg.Messages[0].ValidatorIndex
+	}
+
 	n.updateValidatorMapping(slot, trace.Validator, validatorPubKey)
 
 	fields := []zap.Field{
-		zap.String("pubkey", hex.EncodeToString(validatorPubKey)),
 		zap.Uint64("slot", slot),
 		zap.Uint64("validator", uint64(trace.Validator)),
 		zap.String("type", role.String()),
+		zap.String("pubkey", hex.EncodeToString(validatorPubKey)),
 	}
 
 	n.logger.Info("signed validator", fields...)
@@ -495,7 +508,8 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				}
 			default:
 				validatorPubKey := string(executorID)
-				trace := n.getOrCreateValidatorTrace(slot, role, validatorPubKey)
+				bnRole := toBNRole(role)
+				trace := n.getOrCreateValidatorTrace(slot, bnRole, validatorPubKey)
 
 				if msg.MsgType == spectypes.SSVConsensusMsgType {
 					var qbftMsg specqbft.Message
@@ -517,7 +531,9 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 								return true
 							}
 
-							trace.Validator = data.Duty.ValidatorIndex
+							if trace.Validator == 0 {
+								trace.Validator = data.Duty.ValidatorIndex
+							}
 							n.updateValidatorMapping(slot, data.Duty.ValidatorIndex, executorID)
 							return false
 						}()
