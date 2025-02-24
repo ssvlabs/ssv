@@ -68,8 +68,8 @@ func (s *DutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace)
 }
 
 func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (duty *model.ValidatorDutyTrace, err error) {
-	prefix := s.makeValidatorPrefix(slot, role)
-	obj, found, err := s.db.Get(prefix, uInt64ToByteSlice(uint64(index)))
+	prefix := s.makeValidatorPrefix(slot, role, index)
+	obj, found, err := s.db.Get(prefix, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get validator duty: %w", err)
 	}

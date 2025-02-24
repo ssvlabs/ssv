@@ -15,12 +15,12 @@ type validatorTraceResponse struct {
 
 type validatorTrace struct {
 	Slot      phase0.Slot           `json:"slot"`
+	Role      string                `json:"role"`
+	Validator phase0.ValidatorIndex `json:"validator"`
 	Rounds    []round               `json:"consensus"`
 	Decideds  []decided             `json:"decideds"`
 	Pre       []message             `json:"pre"`
 	Post      []message             `json:"post"`
-	Role      string                `json:"role"`
-	Validator phase0.ValidatorIndex `json:"validator"`
 }
 
 type decided struct {
@@ -68,6 +68,7 @@ func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 		Pre:       toMessageTrace(t.Pre),
 		Post:      toMessageTrace(t.Post),
 		Rounds:    toRounds(t.Rounds),
+		Decideds:  toDecideds(t.Decideds),
 	}
 }
 
@@ -169,7 +170,7 @@ func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 		// consensus trace
 		Slot:          t.Slot,
 		Rounds:        toRounds(t.Rounds),
-		Decideds:      toDecidedTrace(t.Decideds),
+		Decideds:      toDecideds(t.Decideds),
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
 		Attester:      toCommitteePost(t.Attester),
 		CommitteeID:   hex.EncodeToString(t.CommitteeID[:]),
@@ -177,7 +178,7 @@ func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 	}
 }
 
-func toDecidedTrace(d []*model.DecidedTrace) (out []decided) {
+func toDecideds(d []*model.DecidedTrace) (out []decided) {
 	for _, dt := range d {
 		out = append(out, decided{
 			Round:        dt.Round,
