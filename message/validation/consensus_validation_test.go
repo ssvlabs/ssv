@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-
 	"github.com/stretchr/testify/require"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )

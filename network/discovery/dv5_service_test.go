@@ -2,16 +2,19 @@ package discovery
 
 import (
 	"context"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/ssvlabs/ssv/utils/ttl"
 	"net"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
@@ -19,8 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 var TestNetwork = networkconfig.NetworkConfig{

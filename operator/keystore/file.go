@@ -3,8 +3,9 @@ package keystore
 import (
 	"encoding/json"
 	"fmt"
-	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"strings"
+
+	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 )
 
 // DecryptKeystore decrypts a keystore JSON file using the provided password.

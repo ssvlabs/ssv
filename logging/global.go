@@ -7,10 +7,9 @@ import (
 	"runtime/debug"
 	"time"
 
-	"gopkg.in/natefinch/lumberjack.v2"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func parseConfigLevel(levelName string) (zapcore.Level, error) {

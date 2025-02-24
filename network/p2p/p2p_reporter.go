@@ -3,11 +3,13 @@ package p2pv1
 import (
 	"math"
 
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	ssvpeers "github.com/ssvlabs/ssv/network/peers"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"go.uber.org/zap"
 )
 
 // ReportValidation reports the result for the given message

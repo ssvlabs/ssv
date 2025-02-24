@@ -4,9 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv/observability"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/ssvlabs/ssv-spec/qbft"
+
+	"github.com/ssvlabs/ssv/observability"
 )
 
 type metrics struct {

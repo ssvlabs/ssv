@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func TestCommitteeSubnet(t *testing.T) {
