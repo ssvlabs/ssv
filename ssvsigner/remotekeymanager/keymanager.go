@@ -130,7 +130,7 @@ func (km *KeyManager) AddShare(encryptedShare []byte) error {
 		statuses, publicKeys, err = km.client.AddValidators(encryptedShare)
 		return err
 	}
-	err := km.retryFunc(f)
+	err := km.retryFunc(f, "AddValidators")
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
@@ -162,7 +162,7 @@ func (km *KeyManager) RemoveShare(pubKey []byte) error {
 	return nil
 }
 
-func (km *KeyManager) retryFunc(f func() error) error {
+func (km *KeyManager) retryFunc(f func() error, funcName string) error {
 	if km.retryCount < 2 {
 		return f()
 	}
@@ -178,6 +178,7 @@ func (km *KeyManager) retryFunc(f func() error) error {
 			return shareDecryptionError
 		}
 		multiErr = errors.Join(multiErr, err)
+		km.logger.Warn("call failed", zap.Error(err), zap.Int("attempt", i), zap.String("func", funcName))
 	}
 
 	return fmt.Errorf("no successful result after %d attempts: %w", km.retryCount, multiErr)
