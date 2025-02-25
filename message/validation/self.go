@@ -1,10 +1,10 @@
 package validation
 
 import (
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )

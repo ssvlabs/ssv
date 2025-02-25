@@ -2,8 +2,10 @@ package types
 
 import (
 	"github.com/pkg/errors"
+
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/operator/keys"
 )
 

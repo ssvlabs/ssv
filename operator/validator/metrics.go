@@ -1,9 +1,10 @@
 package validator
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 func (c *controller) reportValidatorStatus(share *types.SSVShare) {

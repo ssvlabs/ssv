@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv/logging"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/logging"
 )
 
 func TestExecWithTimeout(t *testing.T) {

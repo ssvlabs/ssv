@@ -3,9 +3,9 @@ package qbft
 import (
 	"testing"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 )
 
