@@ -132,7 +132,7 @@ func TestController_StopValidator(t *testing.T) {
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
 
-	encryptedSharePrivKey, err := operatorPrivateKey.Public().Encrypt(secretKey.Serialize())
+	encryptedSharePrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
 	require.NoError(t, signer.AddShare(encryptedSharePrivKey))
@@ -144,7 +144,12 @@ func TestController_StopValidator(t *testing.T) {
 	root, err := signable{}.GetRoot()
 	require.NoError(t, err)
 
-	_, _, err = signer.SignBeaconObject(spectypes.SSZBytes(root[:]), d, secretKey.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)
+	obj := types.BlockRootWithSlot{
+		SSZBytes: spectypes.SSZBytes(root[:]),
+		Slot:     1,
+	}
+
+	_, _, err = signer.SignBeaconObject(obj, d, secretKey.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 1)
@@ -194,7 +199,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	ctr.validatorStartFunc = validatorStartFunc
 	ctr.indicesChange = make(chan struct{})
 
-	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt(secretKey.Serialize())
+	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
 	require.NoError(t, signer.AddShare(encryptedPrivKey))
@@ -206,7 +211,12 @@ func TestController_ReactivateCluster(t *testing.T) {
 	root, err := signable{}.GetRoot()
 	require.NoError(t, err)
 
-	_, _, err = signer.SignBeaconObject(spectypes.SSZBytes(root[:]), d, secretKey.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)
+	obj := types.BlockRootWithSlot{
+		SSZBytes: spectypes.SSZBytes(root[:]),
+		Slot:     1,
+	}
+
+	_, _, err = signer.SignBeaconObject(obj, d, secretKey.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)

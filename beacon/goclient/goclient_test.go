@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -204,16 +205,20 @@ func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
 		ctx := context.Background()
 		server := mockServer(t, nil)
 		defer server.Close()
+
 		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
 		require.NoError(t, err, "failed to create client")
-		client := c.(*GoClient)
-		forkVersion := phase0.Version{0x01, 0x02, 0x03, 0x04}
-		genesis := &v1.Genesis{
-			GenesisForkVersion: forkVersion,
-		}
 
-		output, err := client.assertSameGenesisVersion(genesis)
-		require.Equal(t, networkVersion, output, "expected genesis version to be %s, got %s", networkVersion, output)
+		client := c.(*GoClient)
+		client.genesis.Store(&v1.Genesis{
+			GenesisForkVersion: network.ForkVersion(),
+		})
+
+		output, err := client.assertSameGenesisVersion(&v1.Genesis{
+			GenesisForkVersion: phase0.Version{0x01, 0x02, 0x03, 0x04},
+		})
+		require.Equal(t, networkVersion, output, "expected genesis version to be %s, got %s",
+			hex.EncodeToString(networkVersion[:]), hex.EncodeToString(output[:]))
 		require.Error(t, err, "expected error when genesis versions are different")
 	})
 }

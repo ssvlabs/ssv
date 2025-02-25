@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/threshold"
@@ -63,10 +64,10 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operator
 	sk2 := &bls.SecretKey{}
 	require.NoError(t, sk2.SetHexString(sk2Str))
 
-	encryptedSK1, err := operatorPrivateKey.Public().Encrypt(sk1.Serialize())
+	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	encryptedSK2, err := operatorPrivateKey.Public().Encrypt(sk2.Serialize())
+	encryptedSK2, err := operatorPrivateKey.Public().Encrypt([]byte(sk2.SerializeToHexStr()))
 	require.NoError(t, err)
 
 	require.NoError(t, km.AddShare(encryptedSK1))
@@ -149,7 +150,7 @@ func TestSlashing(t *testing.T) {
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
 
-	encryptedSK1, err := operatorPrivateKey.Public().Encrypt(sk1.Serialize())
+	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
 	require.NoError(t, km.AddShare(encryptedSK1))
@@ -320,7 +321,7 @@ func TestSignBeaconObject(t *testing.T) {
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
 
-	encryptedSK1, err := operatorPrivateKey.Public().Encrypt(sk1.Serialize())
+	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
 	require.NoError(t, km.AddShare(encryptedSK1))
@@ -505,9 +506,12 @@ func TestSignBeaconObject(t *testing.T) {
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("DomainSyncCommittee", func(t *testing.T) {
-		data := spectypes.SSZBytes{
-			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-			0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+		data := types.BlockRootWithSlot{
+			SSZBytes: spectypes.SSZBytes{
+				0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+				0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+			},
+			Slot: 100,
 		}
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(
 			data,
@@ -720,7 +724,7 @@ func TestRemoveShare(t *testing.T) {
 		// generate random key
 		pk.SetByCSPRNG()
 
-		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt(pk.Serialize())
+		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(pk.SerializeToHexStr()))
 		require.NoError(t, err)
 
 		require.NoError(t, km.AddShare(encryptedPrivKey))
@@ -910,7 +914,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 	// Initialize key manager and add shares for each validator
 	km := testKeyManager(t, nil, operatorPrivateKey)
 	for _, validator := range testValidators {
-		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt(validator.sk.Serialize())
+		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
 
 		require.NoError(t, km.AddShare(encryptedPrivKey))
@@ -1000,7 +1004,10 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 	// Initialize key manager and add shares for each validator
 	km := testKeyManager(t, nil, operatorPrivateKey)
 	for _, validator := range testValidators {
-		require.NoError(t, km.AddShare(validator.sk.Serialize()))
+		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
+		require.NoError(t, err)
+
+		require.NoError(t, km.AddShare(encryptedPrivKey))
 	}
 
 	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
