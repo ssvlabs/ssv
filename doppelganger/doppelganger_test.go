@@ -133,7 +133,6 @@ func TestRemoveValidatorState(t *testing.T) {
 	// Add the validator to the state
 	ds.doppelgangerState[validatorIndex] = &doppelgangerState{
 		remainingEpochs: 1,
-		isLive:          false,
 	}
 
 	// Verify the validator is initially present

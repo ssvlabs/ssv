@@ -59,7 +59,6 @@ The implementation follows a **modular and extendable design**, with:
     ```go
     type doppelgangerState struct {
         remainingEpochs uint64 // The number of epochs that must be checked before it's considered safe.
-        isLive          bool   // The validator's liveness status.
     }
     ```
 - **Beacon node integration**: Uses `ValidatorLiveness()` API for detection.
