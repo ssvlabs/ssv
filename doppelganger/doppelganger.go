@@ -19,13 +19,13 @@ import (
 
 //go:generate mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
 
-// DefaultRemainingDetectionEpochs represents the initial number of epochs
+// defaultRemainingDetectionEpochs represents the initial number of epochs
 // a validator must pass without liveness detection before being considered safe to sign.
-const DefaultRemainingDetectionEpochs uint64 = 2
+const defaultRemainingDetectionEpochs uint64 = 2
 
-// PermanentlyUnsafe is a special flag value used to mark a validator as permanently unsafe for signing.
+// permanentlyUnsafe is a special flag value used to mark a validator as permanently unsafe for signing.
 // It indicates that the validator was detected as live on another node and should not be trusted for signing.
-const PermanentlyUnsafe = ^uint64(0)
+const permanentlyUnsafe = ^uint64(0)
 
 type Provider interface {
 	// Start begins the Doppelganger protection monitoring, periodically checking validator liveness.
@@ -129,11 +129,11 @@ func (ds *Handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorIn
 	// These slices store validator indices for logging purposes
 	var addedValidators, removedValidators []uint64
 
-	// Add new validators with DefaultRemainingDetectionEpochs
+	// Add new validators with defaultRemainingDetectionEpochs
 	for _, idx := range validatorIndices {
 		if _, exists := ds.doppelgangerState[idx]; !exists {
 			ds.doppelgangerState[idx] = &doppelgangerState{
-				remainingEpochs: DefaultRemainingDetectionEpochs,
+				remainingEpochs: defaultRemainingDetectionEpochs,
 			}
 			addedValidators = append(addedValidators, uint64(idx))
 		}
@@ -265,7 +265,7 @@ func (ds *Handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2a
 				fields.ValidatorIndex(response.Index),
 				fields.Epoch(epoch),
 			)
-			state.remainingEpochs = PermanentlyUnsafe // Mark as permanently unsafe
+			state.remainingEpochs = permanentlyUnsafe // Mark as permanently unsafe
 			continue
 		}
 
@@ -273,8 +273,8 @@ func (ds *Handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2a
 		// but is now considered inactive, we reset the detection period to be safer.
 		// Since we just checked for liveness now, we reduce the default detection period by 1
 		// to ensure it gets checked once again in the next epoch before being marked safe.
-		if state.remainingEpochs == PermanentlyUnsafe {
-			state.remainingEpochs = DefaultRemainingDetectionEpochs - 1
+		if state.permanentlyUnsafe() {
+			state.remainingEpochs = defaultRemainingDetectionEpochs - 1
 			ds.logger.Debug("Validator is no longer live but requires further checks",
 				fields.ValidatorIndex(response.Index),
 				zap.Uint64("remaining_epochs", state.remainingEpochs))

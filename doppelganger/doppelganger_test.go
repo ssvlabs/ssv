@@ -77,8 +77,8 @@ func TestCheckLiveness(t *testing.T) {
 
 	ds.checkLiveness(context.Background(), 0, 0)
 
-	require.Equal(t, PermanentlyUnsafe, ds.doppelgangerState[1].remainingEpochs) // Marked as permanently unsafe
-	require.Equal(t, uint64(0), ds.doppelgangerState[2].remainingEpochs)         // Reduced to 0
+	require.Equal(t, true, ds.doppelgangerState[1].permanentlyUnsafe())  // Marked as permanently unsafe
+	require.Equal(t, uint64(0), ds.doppelgangerState[2].remainingEpochs) // Reduced to 0
 
 	require.True(t, ds.doppelgangerState[1].requiresFurtherChecks())
 	require.False(t, ds.doppelgangerState[2].requiresFurtherChecks())
@@ -98,7 +98,7 @@ func TestProcessLivenessData(t *testing.T) {
 		{Index: 2, IsLive: false},
 	})
 
-	require.Equal(t, PermanentlyUnsafe, ds.doppelgangerState[1].remainingEpochs)
+	require.Equal(t, true, ds.doppelgangerState[1].permanentlyUnsafe())
 	require.Equal(t, uint64(1), ds.doppelgangerState[2].remainingEpochs)
 
 	require.True(t, ds.doppelgangerState[1].requiresFurtherChecks())

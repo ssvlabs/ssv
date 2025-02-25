@@ -93,21 +93,21 @@ The implementation follows a **modular and extendable design**, with:
 
 - Introduced constants:
     ```go
-    // DefaultRemainingDetectionEpochs represents the initial number of epochs
+    // defaultRemainingDetectionEpochs represents the initial number of epochs
     // a validator must pass without liveness detection before being considered safe to sign.
-    const DefaultRemainingDetectionEpochs uint64 = 2
+    const defaultRemainingDetectionEpochs uint64 = 2
 
-    // PermanentlyUnsafe is a special flag value used to mark a validator as permanently unsafe for signing.
+    // permanentlyUnsafe is a special flag value used to mark a validator as permanently unsafe for signing.
     // It indicates that the validator was detected as live on another node and should not be trusted for signing.
-    const PermanentlyUnsafe = ^uint64(0)
+    const permanentlyUnsafe = ^uint64(0)
     ```
 
 - Refined safety check logic:
     ```go
     // If previously marked as permanently unsafe but now inactive,  
     // reset detection with one less epoch to ensure revalidation.  
-    if state.remainingEpochs == PermanentlyUnsafe {
-        state.remainingEpochs = DefaultRemainingDetectionEpochs - 1
+    if state.permanentlyUnsafe() {
+        state.remainingEpochs = defaultRemainingDetectionEpochs - 1
     }
     ```
 
@@ -183,13 +183,13 @@ The implementation follows a **modular and extendable design**, with:
 
         if response.IsLive {
             ds.logger.Warn("Doppelganger detected!", fields.ValidatorIndex(response.Index))
-            state.remainingEpochs = PermanentlyUnsafe
+            state.remainingEpochs = permanentlyUnsafe
             continue
         }
 
         // Reset detection if previously unsafe but now inactive
-        if state.remainingEpochs == PermanentlyUnsafe {
-            state.remainingEpochs = DefaultRemainingDetectionEpochs - 1
+        if state.permanentlyUnsafe() {
+            state.remainingEpochs = defaultRemainingDetectionEpochs - 1
             ds.logger.Debug("Validator requires further checks", fields.ValidatorIndex(response.Index))
             continue
         }

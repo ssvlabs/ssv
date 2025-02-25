@@ -16,3 +16,8 @@ func (ds *doppelgangerState) decreaseRemainingEpochs() {
 		ds.remainingEpochs--
 	}
 }
+
+// permanentlyUnsafe returns true if the validator is permanently unsafe.
+func (ds *doppelgangerState) permanentlyUnsafe() bool {
+	return ds.remainingEpochs == permanentlyUnsafe
+}
