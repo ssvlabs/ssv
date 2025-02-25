@@ -163,6 +163,7 @@ func (ds *doppelgangerHandler) Start(ctx context.Context) error {
 
 	firstRun := true
 	ticker := ds.slotTickerProvider()
+	slotsPerEpoch := ds.network.Beacon.SlotsPerEpoch()
 
 	for {
 		select {
@@ -171,7 +172,6 @@ func (ds *doppelgangerHandler) Start(ctx context.Context) error {
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
 			currentEpoch := ds.network.Beacon.EstimatedEpochAtSlot(currentSlot)
-			slotsPerEpoch := ds.network.Beacon.SlotsPerEpoch()
 
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)
 			ds.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
