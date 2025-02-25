@@ -48,7 +48,7 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 				"/eth/v1/config/spec": []byte(`{
 				  "data": {
 					"CONFIG_NAME": "holesky",
-					"GENESIS_FORK_VERSION": "0x01017000",
+					"GENESIS_FORK_VERSION": "0x00000000",
 					"CAPELLA_FORK_VERSION": "0x04017000",
 					"MIN_GENESIS_TIME": "1695902100",
 					"SECONDS_PER_SLOT": "12",
@@ -70,7 +70,7 @@ func TestGoClient_GetAttestationData(t *testing.T) {
 				  "data": {
 					"genesis_time": "1695902400",
 					"genesis_validators_root": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1",
-					"genesis_fork_version": "0x01017000"
+					"genesis_fork_version": "0x00000000"
 				  }
 				}`),
 				"/eth/v1/node/syncing": []byte(`{
