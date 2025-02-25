@@ -22,7 +22,9 @@ func (m MockDataStore) AwaitOperatorID() types.OperatorID {
 	return m.operatorID
 }
 
-func MockServer(t *testing.T, onRequestFn func(w http.ResponseWriter, r *http.Request) error) *httptest.Server {
+type requestCallback = func(r *http.Request, resp json.RawMessage) (json.RawMessage, error)
+
+func MockServer(t *testing.T, onRequestFn requestCallback) *httptest.Server {
 	var mockResponses map[string]json.RawMessage
 	f, err := os.Open("./tests/mock-beacon-responses.json")
 	require.NoError(t, err)
@@ -38,7 +40,12 @@ func MockServer(t *testing.T, onRequestFn func(w http.ResponseWriter, r *http.Re
 			return
 		}
 
-		err := onRequestFn(w, r)
+		var err error
+		if onRequestFn != nil {
+			resp, err = onRequestFn(r, resp)
+			require.NoError(t, err)
+		}
+
 		require.NoError(t, err)
 
 		w.Header().Set("Content-Type", "application/json")

@@ -6,7 +6,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -19,6 +18,7 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
@@ -40,9 +40,10 @@ const (
 
 	BlockRootToSlotCacheCapacityEpochs = 64
 
-	clResponseErrMsg        = "Consensus client returned an error"
-	clNilResponseErrMsg     = "Consensus client returned a nil response"
-	clNilResponseDataErrMsg = "Consensus client returned a nil response data"
+	clResponseErrMsg            = "Consensus client returned an error"
+	clNilResponseErrMsg         = "Consensus client returned a nil response"
+	clNilResponseDataErrMsg     = "Consensus client returned a nil response data"
+	clNilResponseForkDataErrMsg = "Consensus client returned a nil response fork data"
 )
 
 // NodeClient is the type of the Beacon node.
@@ -126,8 +127,7 @@ type GoClient struct {
 	network     beaconprotocol.Network
 	clients     []Client
 	multiClient MultiClient
-
-	genesisVersion atomic.Pointer[phase0.Version]
+	specssv.VersionCalls
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -165,6 +165,14 @@ type GoClient struct {
 	subscribersLock      sync.RWMutex
 	headEventSubscribers []subscriber[*apiv1.HeadEvent]
 	supportedTopics      []EventTopic
+
+	genesisForkVersion phase0.Version
+	ForkLock           sync.RWMutex
+	ForkEpochElectra   phase0.Epoch
+	ForkEpochDeneb     phase0.Epoch
+	ForkEpochCapella   phase0.Epoch
+	ForkEpochBellatrix phase0.Epoch
+	ForkEpochAltair    phase0.Epoch
 }
 
 // New init new client and go-client instance
@@ -206,6 +214,13 @@ func New(
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{HeadEventTopic},
+		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
+		// Initialize forks with FAR_FUTURE_EPOCH.
+		ForkEpochAltair:    math.MaxUint64,
+		ForkEpochBellatrix: math.MaxUint64,
+		ForkEpochCapella:   math.MaxUint64,
+		ForkEpochDeneb:     math.MaxUint64,
+		ForkEpochElectra:   math.MaxUint64,
 	}
 
 	if opt.BeaconNodeAddr == "" {
@@ -304,7 +319,6 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 		eth2clienthttp.WithReducedMemoryUsage(true),
 		eth2clienthttp.WithAllowDelayedStart(true),
 		eth2clienthttp.WithHooks(gc.singleClientHooks()),
-		eth2clienthttp.WithELConnectionCheck(true),
 	)
 	if err != nil {
 		gc.log.Error("Consensus http client initialization failed",
@@ -360,6 +374,33 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				)
 				return // Tests may override Fatal's behavior
 			}
+
+			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			if err != nil {
+				gc.log.Error(clResponseErrMsg,
+					zap.String("address", s.Address()),
+					zap.String("api", "Spec"),
+					zap.Error(err),
+				)
+				return
+			}
+
+			if err := gc.checkForkValues(spec); err != nil {
+				gc.log.Error("failed to check fork values",
+					zap.String("address", s.Address()),
+					zap.Error(err),
+				)
+				return
+			}
+			gc.log.Info("retrieved fork epochs",
+				zap.String("node_addr", s.Address()),
+				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.network.EstimatedCurrentEpoch()))),
+				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
+				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
+				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),
+				zap.Uint64("deneb", uint64(gc.ForkEpochDeneb)),
+				zap.Uint64("electra", uint64(gc.ForkEpochElectra)),
+			)
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",
@@ -388,16 +429,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 // To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
 // as they should be same too.
 func (gc *GoClient) assertSameGenesisVersion(genesisVersion phase0.Version) (phase0.Version, error) {
-	if gc.genesisVersion.CompareAndSwap(nil, &genesisVersion) {
-		return genesisVersion, nil
+	if gc.genesisForkVersion != genesisVersion {
+		fmt.Printf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
+		return gc.genesisForkVersion, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
 	}
 
-	expected := *gc.genesisVersion.Load()
-	if expected != genesisVersion {
-		return expected, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", expected, genesisVersion)
-	}
-
-	return expected, nil
+	return gc.genesisForkVersion, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
@@ -444,10 +481,6 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	if syncState.IsOptimistic {
 		gc.log.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
-	}
-	if syncState.ELOffline {
-		gc.log.Error("Consensus client's EL node is offline")
-		return fmt.Errorf("EL is offline")
 	}
 
 	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())

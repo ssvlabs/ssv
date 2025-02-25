@@ -345,6 +345,20 @@ func (mr *MockBeaconNodeMockRecorder) ComputeSigningRoot(object, domain any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ComputeSigningRoot", reflect.TypeOf((*MockBeaconNode)(nil).ComputeSigningRoot), object, domain)
 }
 
+// DataVersion mocks base method.
+func (m *MockBeaconNode) DataVersion(epoch phase0.Epoch) spec.DataVersion {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DataVersion", epoch)
+	ret0, _ := ret[0].(spec.DataVersion)
+	return ret0
+}
+
+// DataVersion indicates an expected call of DataVersion.
+func (mr *MockBeaconNodeMockRecorder) DataVersion(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DataVersion", reflect.TypeOf((*MockBeaconNode)(nil).DataVersion), epoch)
+}
+
 // DomainData mocks base method.
 func (m *MockBeaconNode) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	m.ctrl.T.Helper()
@@ -375,9 +389,9 @@ func (mr *MockBeaconNodeMockRecorder) Events(ctx, topics, handler any) *gomock.C
 }
 
 // GetAttestationData mocks base method.
-func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
+func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAttestationData", slot, committeeIndex)
+	ret := m.ctrl.Call(m, "GetAttestationData", slot)
 	ret0, _ := ret[0].(*phase0.AttestationData)
 	ret1, _ := ret[1].(spec.DataVersion)
 	ret2, _ := ret[2].(error)
@@ -385,9 +399,9 @@ func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot, committeeIndex pha
 }
 
 // GetAttestationData indicates an expected call of GetAttestationData.
-func (mr *MockBeaconNodeMockRecorder) GetAttestationData(slot, committeeIndex any) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) GetAttestationData(slot any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAttestationData", reflect.TypeOf((*MockBeaconNode)(nil).GetAttestationData), slot, committeeIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAttestationData", reflect.TypeOf((*MockBeaconNode)(nil).GetAttestationData), slot)
 }
 
 // GetBeaconBlock mocks base method.
@@ -514,7 +528,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitAggregateSelectionProof(slot, commit
 }
 
 // SubmitAttestations mocks base method.
-func (m *MockBeaconNode) SubmitAttestations(attestations []*phase0.Attestation) error {
+func (m *MockBeaconNode) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitAttestations", attestations)
 	ret0, _ := ret[0].(error)
@@ -584,7 +598,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitProposalPreparation(feeRecipients an
 }
 
 // SubmitSignedAggregateSelectionProof mocks base method.
-func (m *MockBeaconNode) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
+func (m *MockBeaconNode) SubmitSignedAggregateSelectionProof(msg *spec.VersionedSignedAggregateAndProof) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitSignedAggregateSelectionProof", msg)
 	ret0, _ := ret[0].(error)

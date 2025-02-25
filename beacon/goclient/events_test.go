@@ -2,12 +2,14 @@ package goclient
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/stretchr/testify/assert"
@@ -19,11 +21,11 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	t.Run("Should create subscriber and launch event listener when go client is instantiated", func(t *testing.T) {
 		eventsEndpointSubscribedCh := make(chan any)
 
-		server := tests.MockServer(t, func(_ http.ResponseWriter, r *http.Request) error {
+		server := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if strings.Contains(r.URL.Path, "/eth/v1/events") {
 				eventsEndpointSubscribedCh <- struct{}{}
 			}
-			return nil
+			return resp, nil
 		})
 		defer server.Close()
 
@@ -47,7 +49,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	})
 
 	t.Run("Should create subscriber", func(t *testing.T) {
-		server := tests.MockServer(t, func(_ http.ResponseWriter, r *http.Request) error { return nil })
+		server := tests.MockServer(t, nil)
 		client := eventsTestClient(t, server.URL)
 		defer server.Close()
 
@@ -67,6 +69,7 @@ func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 	server, err := New(zap.NewNop(), beacon.Options{
 		BeaconNodeAddr: serverURL,
 		Context:        context.Background(),
+		Network:        beacon.NewNetwork(types.MainNetwork),
 	},
 		tests.MockDataStore{},
 		tests.MockSlotTickerProvider)
