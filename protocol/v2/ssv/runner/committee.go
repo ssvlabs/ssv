@@ -20,7 +20,6 @@ import (
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -243,8 +242,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		case spectypes.BNRoleAttester:
 			// Doppelganger protection applies only to attester duties since they are slashable.
 			// Sync committee duties are not slashable, so they are always allowed.
-			if cr.doppelgangerHandler.ValidatorStatus(validatorDuty.ValidatorIndex) != doppelganger.SigningEnabled {
-				logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(validatorDuty.ValidatorIndex))
+			if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
+				logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(validatorDuty.ValidatorIndex))
 				continue
 			}
 
@@ -424,14 +423,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 			vlogger.Debug("🧩 reconstructed partial signatures committee",
 				zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
-
-			// Only mark as safe if this is an attester role
-			// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
-			// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
-			if role == spectypes.BNRoleAttester && cr.doppelgangerHandler.ValidatorStatus(validator) == doppelganger.SigningDisabled {
-				cr.doppelgangerHandler.MarkAsSafe(validator)
-			}
-
 			// Get the beacon object related to root
 			validatorObjs, exists := beaconObjects[validator]
 			if !exists {
@@ -453,9 +444,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				syncCommitteeMessagesToSubmit[validator] = syncMsg
 
 			} else if role == spectypes.BNRoleAttester {
-				if cr.doppelgangerHandler.ValidatorStatus(validator) == doppelganger.SigningDisabled {
-					cr.doppelgangerHandler.MarkAsSafe(validator)
-				}
+				// Only mark as safe if this is an attester role
+				// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
+				// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
+				cr.doppelgangerHandler.MarkAsSafe(validator)
 
 				att := sszObject.(*spec.VersionedAttestation)
 				// Insert signature

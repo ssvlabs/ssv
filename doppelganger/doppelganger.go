@@ -28,9 +28,20 @@ const DefaultRemainingDetectionEpochs uint64 = 2
 const PermanentlyUnsafe = ^uint64(0)
 
 type Provider interface {
-	ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status
+	// Start begins the Doppelganger protection monitoring, periodically checking validator liveness.
+	// Returns an error if the process fails to start or encounters a critical issue.
 	Start(ctx context.Context) error
+
+	// CanSign determines whether a validator is safe to sign based on Doppelganger protection status.
+	// Returns true if the validator has passed all required safety checks, false otherwise.
+	CanSign(validatorIndex phase0.ValidatorIndex) bool
+
+	// MarkAsSafe marks a validator as safe for signing, immediately bypassing further Doppelganger checks.
+	// Typically used when a validator successfully completes post-consensus partial sig quorum (attester/proposer).
 	MarkAsSafe(validatorIndex phase0.ValidatorIndex)
+
+	// RemoveValidatorState removes a validator from Doppelganger tracking, clearing its protection status.
+	// Useful when a validator is no longer managed (validator removed or liquidated).
 	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
 }
 
@@ -39,10 +50,12 @@ type ValidatorProvider interface {
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 }
 
+// BeaconNode represents a provider of beacon node data.
 type BeaconNode interface {
 	ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ValidatorLiveness, error)
 }
 
+// Options contains the configuration options for the Doppelgänger protection.
 type Options struct {
 	Network            networkconfig.NetworkConfig
 	BeaconNode         BeaconNode
@@ -51,7 +64,8 @@ type Options struct {
 	Logger             *zap.Logger
 }
 
-type doppelgangerHandler struct {
+// Handler is the main struct for the Doppelgänger protection.
+type Handler struct {
 	// mu synchronizes access to doppelgangerState
 	mu                sync.RWMutex
 	doppelgangerState map[phase0.ValidatorIndex]*doppelgangerState
@@ -65,9 +79,9 @@ type doppelgangerHandler struct {
 	startEpoch phase0.Epoch
 }
 
-// NewDoppelgangerHandler initializes a new instance of the Doppelgänger protection.
-func NewDoppelgangerHandler(opts *Options) Provider {
-	return &doppelgangerHandler{
+// NewHandler initializes a new instance of the Doppelgänger protection.
+func NewHandler(opts *Options) *Handler {
+	return &Handler{
 		network:            opts.Network,
 		beaconNode:         opts.BeaconNode,
 		validatorProvider:  opts.ValidatorProvider,
@@ -77,24 +91,22 @@ func NewDoppelgangerHandler(opts *Options) Provider {
 	}
 }
 
-// ValidatorStatus returns the current status of the validator.
-func (ds *doppelgangerHandler) ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status {
+// CanSign returns true if the validator is safe to sign, otherwise false.
+func (ds *Handler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 
 	state, exists := ds.doppelgangerState[validatorIndex]
 	if !exists {
 		ds.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(validatorIndex))
-		return UnknownToDoppelganger
+		return false
 	}
 
-	if state.requiresFurtherChecks() {
-		return SigningDisabled
-	}
-	return SigningEnabled
+	return !state.requiresFurtherChecks()
 }
 
-func (ds *doppelgangerHandler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
+// MarkAsSafe marks the validator as safe to sign.
+func (ds *Handler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
@@ -104,11 +116,13 @@ func (ds *doppelgangerHandler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) 
 		return
 	}
 
-	ds.logger.Debug("mark validator as doppelganger safe", fields.ValidatorIndex(validatorIndex))
-	state.remainingEpochs = 0
+	if state.requiresFurtherChecks() {
+		state.remainingEpochs = 0
+		ds.logger.Info("Validator marked as safe", fields.ValidatorIndex(validatorIndex))
+	}
 }
 
-func (ds *doppelgangerHandler) updateDoppelgangerState(validatorIndices []phase0.ValidatorIndex) {
+func (ds *Handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorIndex) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
@@ -148,7 +162,8 @@ func (ds *doppelgangerHandler) updateDoppelgangerState(validatorIndices []phase0
 	}
 }
 
-func (ds *doppelgangerHandler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
+// RemoveValidatorState removes the validator from the Doppelganger state.
+func (ds *Handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
@@ -161,7 +176,8 @@ func (ds *doppelgangerHandler) RemoveValidatorState(validatorIndex phase0.Valida
 	ds.logger.Debug("Removed validator from Doppelganger state", fields.ValidatorIndex(validatorIndex))
 }
 
-func (ds *doppelgangerHandler) Start(ctx context.Context) error {
+// Start starts the Doppelganger monitoring.
+func (ds *Handler) Start(ctx context.Context) error {
 	ds.logger.Info("Doppelganger monitoring started")
 
 	firstRun := true
@@ -200,7 +216,7 @@ func (ds *doppelgangerHandler) Start(ctx context.Context) error {
 	}
 }
 
-func (ds *doppelgangerHandler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch phase0.Epoch) {
+func (ds *Handler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch phase0.Epoch) {
 	// Set a deadline until the start of the next slot, with a 100ms safety margin
 	ctx, cancel := context.WithDeadline(ctx, ds.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
@@ -229,7 +245,7 @@ func (ds *doppelgangerHandler) checkLiveness(ctx context.Context, slot phase0.Sl
 	ds.processLivenessData(epoch, livenessData)
 }
 
-func (ds *doppelgangerHandler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2apiv1.ValidatorLiveness) {
+func (ds *Handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2apiv1.ValidatorLiveness) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 

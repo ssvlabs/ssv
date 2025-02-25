@@ -13,7 +13,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -53,7 +52,7 @@ type Runner interface {
 }
 
 type DoppelgangerProvider interface {
-	ValidatorStatus(validatorIndex phase0.ValidatorIndex) doppelganger.Status
+	CanSign(validatorIndex phase0.ValidatorIndex) bool
 	MarkAsSafe(validatorIndex phase0.ValidatorIndex)
 }
 

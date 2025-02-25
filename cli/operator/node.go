@@ -357,7 +357,7 @@ var StartNodeCmd = &cobra.Command{
 
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
-			doppelgangerHandler = doppelganger.NewDoppelgangerHandler(&doppelganger.Options{
+			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
 				Network:            networkConfig,
 				BeaconNode:         consensusClient,
 				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),

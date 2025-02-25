@@ -22,7 +22,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -194,8 +193,8 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	}
 
 	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
-	if r.doppelgangerHandler.ValidatorStatus(duty.ValidatorIndex) == doppelganger.SigningDisabled {
-		logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(duty.ValidatorIndex))
+	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
 		return nil
 	}
 
@@ -274,9 +273,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.Round(r.GetState().RunningInstance.State.Round))
 
-		if r.doppelgangerHandler.ValidatorStatus(r.GetShare().ValidatorIndex) == doppelganger.SigningDisabled {
-			r.doppelgangerHandler.MarkAsSafe(r.GetShare().ValidatorIndex)
-		}
+		r.doppelgangerHandler.MarkAsSafe(r.GetShare().ValidatorIndex)
 
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
 		err = validatorConsensusData.Decode(r.GetState().DecidedValue)
@@ -411,8 +408,8 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	r.measurements.StartPreConsensus()
 
 	proposerDuty := duty.(*spectypes.ValidatorDuty)
-	if r.doppelgangerHandler.ValidatorStatus(proposerDuty.ValidatorIndex) != doppelganger.SigningEnabled {
-		logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
+	if !r.doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
 		return nil
 	}
 

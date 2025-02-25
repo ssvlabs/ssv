@@ -47,10 +47,21 @@ The implementation follows a **modular and extendable design**, with:
 - **`doppelganger.Provider` interface**: Defines required DG operations.
     ```go
     type Provider interface {
-        ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status
-        StartMonitoring(ctx context.Context)
-        MarkAsSafe(validatorIndex phase0.ValidatorIndex)
-        RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
+      // Start begins the Doppelganger protection monitoring, periodically checking validator liveness.
+      // Returns an error if the process fails to start or encounters a critical issue.
+      Start(ctx context.Context) error
+  
+      // CanSign determines whether a validator is safe to sign based on Doppelganger protection status.
+      // Returns true if the validator has passed all required safety checks, false otherwise.
+      CanSign(validatorIndex phase0.ValidatorIndex) bool
+  
+      // MarkAsSafe marks a validator as safe for signing, immediately bypassing further Doppelganger checks.
+      // Typically used when a validator successfully completes post-consensus partial sig quorum (attester/proposer).
+      MarkAsSafe(validatorIndex phase0.ValidatorIndex)
+  
+      // RemoveValidatorState removes a validator from Doppelganger tracking, clearing its protection status.
+      // Useful when a validator is no longer managed (validator removed or liquidated).
+      RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
     }
     ```
 - **`doppelgangerHandler` struct**: Implements liveness tracking and post-consensus validation.
@@ -213,37 +224,34 @@ The implementation follows a **modular and extendable design**, with:
 
 - 🚫 Prevents attestation/proposal signing if Doppelganger check is pending
     ```go
-    if cr.doppelgangerHandler.ValidatorStatus(duty.ValidatorIndex) != doppelganger.SigningEnabled {
-        logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(duty.ValidatorIndex))
-        continue
-    }
+    if !r.doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
+	}
     ```
 
 - ✅ Marks validator as safe after post-consensus partial messages quorum
     ```go
-    if cr.doppelgangerHandler.ValidatorStatus(validator) == doppelganger.SigningDisabled {
-        cr.doppelgangerHandler.MarkAsSafe(validator)
-    }
+    cr.doppelgangerHandler.MarkAsSafe(validator)
     ```
 
 # 6. Doppelganger Protection Log Guide
 
-| 🏷️ **Event** | 🔍 **Description** | 📜 **Example Log** |
-|-------------|------------------|-------------------|
-| **🛡️ Doppelganger Protection Status** | Logs when **Doppelganger protection** is **enabled or disabled** at startup. | `[INFO] Doppelganger protection enabled.` / `[INFO] Doppelganger protection disabled.` |
-| **🟢 Doppelganger Monitoring Started** | Logs when the monitoring loop starts | `[INFO] Doppelganger monitoring started` |
-| **🛠 Ticker Event** | Logs epoch & slot position for tracking | `[DEBUG] 🛠 ticker event epoch_slot_pos="e114562-s3665985-#2"` |
-| **🆕 Validator Added to State** | Logs when a new validator is tracked | `[DEBUG] Added validator to Doppelganger state validator_index=123` |
-| **🗑️ Validator Removed from State** | Logs when a validator is removed | `[DEBUG] Removing validator from Doppelganger state validator_index=123` |
-| **🚫 No Validators for Liveness Check** | Logs when no validators need checking | `[DEBUG] No validators require liveness check` |
-| **⚠️ Failed Liveness Check** | Logs when Beacon Node fails to provide liveness data | `[ERROR] Failed to obtain validator liveness data error="beacon node request failed"` |
-| **🔎 Processing Liveness Data** | Logs when liveness check results are processed | `[DEBUG] Processing liveness data epoch=420 validator_index=123 is_live=true` |
-| **🛑 Doppelganger Detected** | Logs when a validator is active elsewhere | `[WARN] Doppelganger detected live validator validator_index=123 epoch=4567` |
+| 🏷️ **Event**                                            | 🔍 **Description** | 📜 **Example Log** |
+|----------------------------------------------------------|------------------|-------------------|
+| **🛡️ Doppelganger Protection Status**                   | Logs when **Doppelganger protection** is **enabled or disabled** at startup. | `[INFO] Doppelganger protection enabled.` / `[INFO] Doppelganger protection disabled.` |
+| **🟢 Doppelganger Monitoring Started**                   | Logs when the monitoring loop starts | `[INFO] Doppelganger monitoring started` |
+| **🛠 Ticker Event**                                      | Logs epoch & slot position for tracking | `[DEBUG] 🛠 ticker event epoch_slot_pos="e114562-s3665985-#2"` |
+| **🆕 Validator Added to State**                          | Logs when a new validator is tracked | `[DEBUG] Added validator to Doppelganger state validator_index=123` |
+| **🗑️ Validator Removed from State**                     | Logs when a validator is removed | `[DEBUG] Removing validator from Doppelganger state validator_index=123` |
+| **🚫 No Validators for Liveness Check**                  | Logs when no validators need checking | `[DEBUG] No validators require liveness check` |
+| **⚠️ Failed Liveness Check**                             | Logs when Beacon Node fails to provide liveness data | `[ERROR] Failed to obtain validator liveness data error="beacon node request failed"` |
+| **🔎 Processing Liveness Data**                          | Logs when liveness check results are processed | `[DEBUG] Processing liveness data epoch=420 validator_index=123 is_live=true` |
+| **🛑 Doppelganger Detected**                             | Logs when a validator is active elsewhere | `[WARN] Doppelganger detected live validator validator_index=123 epoch=4567` |
 | **🟡 Validator No Longer Live, Requires Further Checks** | Logs when a validator was previously unsafe but is now inactive and under observation again. | `[DEBUG] Validator is no longer live but requires further checks validator_index=123 remaining_epochs=1` |
-| **🟠 Validator Still Under Observation** | Logs when a validator is still under observation and requires more epochs to be marked safe. | `[DEBUG] Validator still requires further checks validator_index=123 remaining_epochs=1` |
-| **✅ Validator Marked as Safe** | Logs when a validator is cleared to sign | `[DEBUG] Validator is now safe to sign validator_index=123` |
-| **✅ Post-Consensus Safe Confirmation** | Logs when post-consensus **marks a validator as safe** after quorum agreement. | `[DEBUG] mark validator as doppelganger safe validator_index=123` |
-| **⛔ Signing Blocked Due to DG Check** | Logs when a validator tries to sign but is still in DG check | `[WARN] Doppelganger check in progress, signing not permitted validator_index=123` |
+| **🟠 Validator Still Under Observation**                 | Logs when a validator is still under observation and requires more epochs to be marked safe. | `[DEBUG] Validator still requires further checks validator_index=123 remaining_epochs=1` |
+| **✅ Validator Marked as Safe**                           | Logs when a validator is cleared to sign | `[DEBUG] Validator marked as safe validator_index=123` |
+| **✅ Post-Consensus Safe Confirmation**                   | Logs when post-consensus **marks a validator as safe** after quorum agreement. | `[DEBUG] mark validator as doppelganger safe validator_index=123` |
+| **⛔ Signing Blocked Due to DG Protection                 | Logs when a validator tries to sign but is not permitted due to Doppelganger protection | `[WARN] Signing not permitted due to Doppelganger protection validator_index=123` |
 
 
 # 7. Summary & Final Thoughts

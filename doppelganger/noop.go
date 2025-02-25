@@ -8,17 +8,16 @@ import (
 
 type NoOpDoppelgangerHandler struct{}
 
-func (NoOpDoppelgangerHandler) ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status {
-	// Always allow signing
-	return SigningEnabled
+func (NoOpDoppelgangerHandler) Start(ctx context.Context) error {
+	return nil
+}
+
+func (NoOpDoppelgangerHandler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
+	return true
 }
 
 func (NoOpDoppelgangerHandler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
 	// No operation
-}
-
-func (NoOpDoppelgangerHandler) Start(ctx context.Context) error {
-	return nil
 }
 
 func (NoOpDoppelgangerHandler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {

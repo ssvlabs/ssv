@@ -13,20 +13,18 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-func newTestDoppelgangerHandler(t *testing.T) *doppelgangerHandler {
+func newTestDoppelgangerHandler(t *testing.T) *Handler {
 	ctrl := gomock.NewController(t)
 	mockBeaconNode := NewMockBeaconNode(ctrl)
 	mockValidatorProvider := NewMockValidatorProvider(ctrl)
 	logger := logging.TestLogger(t)
 
-	handler := NewDoppelgangerHandler(&Options{
+	return NewHandler(&Options{
 		Network:           networkconfig.TestNetwork,
 		BeaconNode:        mockBeaconNode,
 		ValidatorProvider: mockValidatorProvider,
 		Logger:            logger,
 	})
-
-	return handler.(*doppelgangerHandler)
 }
 
 func TestValidatorStatus(t *testing.T) {
@@ -36,9 +34,8 @@ func TestValidatorStatus(t *testing.T) {
 	ds.doppelgangerState[1] = &doppelgangerState{remainingEpochs: 1}
 	ds.doppelgangerState[2] = &doppelgangerState{remainingEpochs: 0}
 
-	require.Equal(t, SigningDisabled, ds.ValidatorStatus(1))
-	require.Equal(t, SigningEnabled, ds.ValidatorStatus(2))
-	require.Equal(t, UnknownToDoppelganger, ds.ValidatorStatus(3))
+	require.Equal(t, false, ds.CanSign(1))
+	require.Equal(t, true, ds.CanSign(2))
 }
 
 func TestMarkAsSafe(t *testing.T) {
@@ -86,8 +83,8 @@ func TestCheckLiveness(t *testing.T) {
 	require.True(t, ds.doppelgangerState[1].requiresFurtherChecks())
 	require.False(t, ds.doppelgangerState[2].requiresFurtherChecks())
 
-	require.Equal(t, SigningDisabled, ds.ValidatorStatus(1))
-	require.Equal(t, SigningEnabled, ds.ValidatorStatus(2))
+	require.Equal(t, false, ds.CanSign(1))
+	require.Equal(t, true, ds.CanSign(2))
 }
 
 func TestProcessLivenessData(t *testing.T) {
@@ -107,8 +104,8 @@ func TestProcessLivenessData(t *testing.T) {
 	require.True(t, ds.doppelgangerState[1].requiresFurtherChecks())
 	require.True(t, ds.doppelgangerState[2].requiresFurtherChecks())
 
-	require.Equal(t, SigningDisabled, ds.ValidatorStatus(1))
-	require.Equal(t, SigningDisabled, ds.ValidatorStatus(2))
+	require.Equal(t, false, ds.CanSign(1))
+	require.Equal(t, false, ds.CanSign(2))
 
 	ds.processLivenessData(1, []*v1.ValidatorLiveness{
 		{Index: 1, IsLive: false},
@@ -121,8 +118,8 @@ func TestProcessLivenessData(t *testing.T) {
 	require.True(t, ds.doppelgangerState[1].requiresFurtherChecks())
 	require.False(t, ds.doppelgangerState[2].requiresFurtherChecks())
 
-	require.Equal(t, SigningDisabled, ds.ValidatorStatus(1))
-	require.Equal(t, SigningEnabled, ds.ValidatorStatus(2))
+	require.Equal(t, false, ds.CanSign(1))
+	require.Equal(t, true, ds.CanSign(2))
 }
 
 func TestRemoveValidatorState(t *testing.T) {

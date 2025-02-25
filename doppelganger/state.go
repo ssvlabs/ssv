@@ -16,12 +16,3 @@ func (ds *doppelgangerState) decreaseRemainingEpochs() {
 		ds.remainingEpochs--
 	}
 }
-
-// Status represents the state of a validator.
-type Status int
-
-const (
-	SigningEnabled        Status = iota // Validator can sign.
-	SigningDisabled                     // Validator is waiting for epochs to pass.
-	UnknownToDoppelganger               // Validator state is unknown (error case).
-)
