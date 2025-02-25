@@ -63,7 +63,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/remotekeymanager"
 	"github.com/ssvlabs/ssv/ssvsigner/ssvsignerclient"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -279,19 +278,17 @@ var StartNodeCmd = &cobra.Command{
 			executionClient = ec
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, operatorPrivKey)
-		if err != nil {
-			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
-		}
+		var keyManager ekm.KeyManager
 
 		if usingSSVSigner {
-			remoteKeyManager, err := remotekeymanager.New(
+			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				ssvSignerClient,
 				consensusClient,
-				keyManager,
+				db,
+				networkConfig,
 				operatorDataStore.GetOperatorID,
-				remotekeymanager.WithLogger(logger),
-				remotekeymanager.WithRetryCount(3),
+				ekm.WithLogger(logger),
+				ekm.WithRetryCount(3),
 			)
 			if err != nil {
 				logger.Fatal("could not create ssv-signer", zap.Error(err))
@@ -301,6 +298,12 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.OperatorSigner = remoteKeyManager
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
 		} else {
+			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig, operatorPrivKey)
+			if err != nil {
+				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
+			}
+
+			keyManager = localKeyManager
 			cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		}

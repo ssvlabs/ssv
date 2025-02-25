@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ssvsignerclient"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -237,10 +236,6 @@ func (eh *EventHandler) handleShareCreation(
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		if err := eh.keyManager.AddShare(encryptedKey); err != nil {
-			var shareDecryptionSSVSignerError ssvsignerclient.ShareDecryptionError
-			if errors.As(err, &shareDecryptionSSVSignerError) {
-				return nil, &MalformedEventError{Err: err}
-			}
 			var shareDecryptionEKMError ekm.ShareDecryptionError
 			if errors.As(err, &shareDecryptionEKMError) {
 				return nil, &MalformedEventError{Err: err}

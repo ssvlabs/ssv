@@ -37,6 +37,7 @@ const (
 )
 
 // Storage represents the interface for ssv node storage
+// TODO: review if we need all of them
 type Storage interface {
 	registry.RegistryStore
 	core.Storage
