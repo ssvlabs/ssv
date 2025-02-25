@@ -13,11 +13,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/server"
-	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/web3signer"
+	"github.com/ssvlabs/ssv/ssvsigner/ssvsignerserver"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-type Status = server.Status
+type Status = ssvsignerserver.Status
 
 const (
 	StatusImported   Status = "imported"
@@ -64,7 +64,7 @@ func (c *SSVSignerClient) AddValidators(encryptedPrivKeys ...[]byte) ([]Status, 
 		privKeyStrs = append(privKeyStrs, hex.EncodeToString(privKey))
 	}
 
-	req := server.AddValidatorRequest{
+	req := ssvsignerserver.AddValidatorRequest{
 		EncryptedSharePrivateKeys: privKeyStrs,
 	}
 
@@ -96,7 +96,7 @@ func (c *SSVSignerClient) AddValidators(encryptedPrivKeys ...[]byte) ([]Status, 
 		return nil, nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(respBytes))
 	}
 
-	var resp server.AddValidatorResponse
+	var resp ssvsignerserver.AddValidatorResponse
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
 		return nil, nil, fmt.Errorf("unmarshal response body: %w", err)
 	}
@@ -127,7 +127,7 @@ func (c *SSVSignerClient) RemoveValidators(sharePubKeys ...[]byte) ([]Status, er
 		pubKeyStrs = append(pubKeyStrs, hex.EncodeToString(pubKey))
 	}
 
-	req := server.RemoveValidatorRequest{
+	req := ssvsignerserver.RemoveValidatorRequest{
 		PublicKeys: pubKeyStrs,
 	}
 
@@ -156,7 +156,7 @@ func (c *SSVSignerClient) RemoveValidators(sharePubKeys ...[]byte) ([]Status, er
 		return nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(respBytes))
 	}
 
-	var resp server.RemoveValidatorResponse
+	var resp ssvsignerserver.RemoveValidatorResponse
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response body: %w", err)
 	}

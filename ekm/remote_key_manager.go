@@ -23,8 +23,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/web3signer"
 	"github.com/ssvlabs/ssv/ssvsigner/ssvsignerclient"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
