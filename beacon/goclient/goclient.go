@@ -362,12 +362,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 // To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
 // as they should be same too.
 func (gc *GoClient) assertSameGenesisVersion(genesis *apiv1.Genesis) (phase0.Version, error) {
-	if gc.genesis.CompareAndSwap(nil, genesis) {
-		return genesis.GenesisForkVersion, nil
-	}
-
 	if genesis == nil {
 		return phase0.Version{}, fmt.Errorf("genesis is nil")
+	}
+
+	if gc.genesis.CompareAndSwap(nil, genesis) {
+		return genesis.GenesisForkVersion, nil
 	}
 
 	expected := *gc.genesis.Load()
