@@ -10,6 +10,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
@@ -99,7 +100,7 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 }
 
 func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.AttestationData, error) {
-	logger := gc.log.With(fields.Slot(slot))
+	logger := gc.log.With(fields.Slot(slot), weightedAttestationDataRequestIDField(uuid.New()))
 	// We have two timeouts: a soft timeout and a hard timeout.
 	// At the soft timeout, we return if we have any responses so far.
 	// At the hard timeout, we return unconditionally.
@@ -117,7 +118,7 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 	errCh := make(chan *attestationDataError, numberOfRequests)
 
 	for _, client := range gc.clients {
-		go gc.fetchWeightedAttestationData(ctx, client, respCh, errCh, slot)
+		go gc.fetchWeightedAttestationData(ctx, client, respCh, errCh, slot, logger)
 	}
 
 	// Wait for all responses (or context done).
@@ -234,7 +235,8 @@ func (gc *GoClient) simpleAttestationData(slot phase0.Slot) (*phase0.Attestation
 	logger := gc.log.With(fields.Slot(slot))
 	attDataReqStart := time.Now()
 	resp, err := gc.multiClient.AttestationData(gc.ctx, &api.AttestationDataOpts{
-		Slot: slot,
+		Slot:           slot,
+		CommitteeIndex: 0,
 	})
 
 	recordRequestDuration(gc.ctx, "AttestationData", gc.multiClient.Address(), http.MethodGet, time.Since(attDataReqStart), err)
@@ -268,15 +270,17 @@ func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
 	respCh chan *attestationDataResponse,
 	errCh chan *attestationDataError,
 	slot phase0.Slot,
+	logger *zap.Logger,
 ) {
 	addr := client.Address()
 	attDataReqStart := time.Now()
 
-	logger := gc.log.With(zap.String("client_addr", addr), fields.Slot(slot))
+	logger = logger.With(zap.String("client_addr", addr))
 
 	logger.Debug("fetching attestation data")
 	response, err := client.AttestationData(ctx, &api.AttestationDataOpts{
-		Slot: slot,
+		Slot:           slot,
+		CommitteeIndex: 0,
 	})
 
 	recordRequestDuration(ctx, "AttestationData", addr, http.MethodGet, time.Since(attDataReqStart), err)
@@ -308,7 +312,7 @@ func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
 	}
 
 	logger.Debug("scoring attestation data")
-	score := gc.scoreAttestationData(ctx, addr, attestationData)
+	score := gc.scoreAttestationData(ctx, attestationData, logger)
 
 	respCh <- &attestationDataResponse{
 		clientAddr:      addr,
@@ -320,18 +324,17 @@ func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
 // scoreAttestationData generates a score for attestation data.
 // The score is relative to the reward expected from the contents of the attestation.
 func (gc *GoClient) scoreAttestationData(ctx context.Context,
-	addr string,
 	attestationData *phase0.AttestationData,
+	logger *zap.Logger,
 ) float64 {
-	logger := gc.log.With(
+	logger = logger.With(
 		fields.BlockRoot(attestationData.BeaconBlockRoot),
-		zap.Uint64("attestation_data_slot", uint64(attestationData.Slot)),
-		zap.String("client_addr", addr))
+		zap.Uint64("attestation_data_slot", uint64(attestationData.Slot)))
 	// Initial score is based on height of source and target epochs.
 	score := float64(attestationData.Source.Epoch + attestationData.Target.Epoch)
 
 	// Increase score based on the nearness of the head slot.
-	slot, err := gc.blockRootToSlot(ctx, attestationData.BeaconBlockRoot)
+	slot, err := gc.blockRootToSlot(ctx, attestationData.BeaconBlockRoot, logger)
 	if err != nil {
 		logger.
 			With(zap.Error(err)).
@@ -350,15 +353,13 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	return score
 }
 
-func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root) (phase0.Slot, error) {
-	logger := gc.log.With(fields.BlockRoot(root))
-
+func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
 	slot, err, _ := gc.blockRootToSlotReqInflight.Do(root, func() (phase0.Slot, error) {
 		cacheResult := gc.blockRootToSlotCache.Get(root)
 		if cacheResult != nil {
 			cachedSlot := cacheResult.Value()
 			logger.
-				With(fields.Slot(cachedSlot), zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
+				With(zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
 				Debug("obtained slot from cache")
 			return cachedSlot, nil
 		}
@@ -390,6 +391,10 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root) (phas
 	})
 
 	return slot, err
+}
+
+func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
+	return zap.String("weighted_data_request_id", id.String())
 }
 
 func isBlockHeaderResponseValid(blockResponse *api.Response[*eth2apiv1.BeaconBlockHeader]) bool {
