@@ -51,13 +51,15 @@ type Options struct {
 }
 
 type doppelgangerHandler struct {
-	mu                 sync.RWMutex
+	// mu synchronizes access to doppelgangerState
+	mu                sync.RWMutex
+	doppelgangerState map[phase0.ValidatorIndex]*doppelgangerState
+
 	network            networkconfig.NetworkConfig
 	beaconNode         BeaconNode
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
 	logger             *zap.Logger
-	doppelgangerState  map[phase0.ValidatorIndex]*doppelgangerState
 
 	startEpoch phase0.Epoch
 }
