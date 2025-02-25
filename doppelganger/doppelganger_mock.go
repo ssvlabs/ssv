@@ -66,16 +66,18 @@ func (mr *MockDoppelgangerProviderMockRecorder) RemoveValidatorState(validatorIn
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveValidatorState", reflect.TypeOf((*MockDoppelgangerProvider)(nil).RemoveValidatorState), validatorIndex)
 }
 
-// StartMonitoring mocks base method.
-func (m *MockDoppelgangerProvider) StartMonitoring(ctx context.Context) {
+// Start mocks base method.
+func (m *MockDoppelgangerProvider) Start(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartMonitoring", ctx)
+	ret := m.ctrl.Call(m, "Start", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// StartMonitoring indicates an expected call of StartMonitoring.
-func (mr *MockDoppelgangerProviderMockRecorder) StartMonitoring(ctx any) *gomock.Call {
+// Start indicates an expected call of Start.
+func (mr *MockDoppelgangerProviderMockRecorder) Start(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartMonitoring", reflect.TypeOf((*MockDoppelgangerProvider)(nil).StartMonitoring), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockDoppelgangerProvider)(nil).Start), ctx)
 }
 
 // ValidatorStatus mocks base method.

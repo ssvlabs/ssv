@@ -141,7 +141,11 @@ func (n *Node) Start(logger *zap.Logger) error {
 	go n.validatorsCtrl.HandleMetadataUpdates(n.context)
 	go n.validatorsCtrl.ReportValidatorStatuses(n.context)
 
-	go n.validatorOptions.DoppelgangerHandler.StartMonitoring(n.context)
+	go func() {
+		if err := n.validatorOptions.DoppelgangerHandler.Start(n.context); err != nil {
+			logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
+		}
+	}()
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))

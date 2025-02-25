@@ -28,7 +28,7 @@ const PermanentlyUnsafe = ^uint64(0)
 
 type DoppelgangerProvider interface {
 	ValidatorStatus(validatorIndex phase0.ValidatorIndex) DoppelgangerStatus
-	StartMonitoring(ctx context.Context)
+	Start(ctx context.Context) error
 	MarkAsSafe(validatorIndex phase0.ValidatorIndex)
 	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
 }
@@ -158,7 +158,7 @@ func (ds *doppelgangerHandler) RemoveValidatorState(validatorIndex phase0.Valida
 	ds.logger.Debug("Removed validator from Doppelganger state", fields.ValidatorIndex(validatorIndex))
 }
 
-func (ds *doppelgangerHandler) StartMonitoring(ctx context.Context) {
+func (ds *doppelgangerHandler) Start(ctx context.Context) error {
 	ds.logger.Info("Doppelganger monitoring started")
 
 	firstRun := true
@@ -167,7 +167,7 @@ func (ds *doppelgangerHandler) StartMonitoring(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
 			currentEpoch := ds.network.Beacon.EstimatedEpochAtSlot(currentSlot)
