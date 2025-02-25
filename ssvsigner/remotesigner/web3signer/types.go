@@ -51,14 +51,8 @@ type SignRequest struct {
 }
 
 type ForkInfo struct {
-	Fork                  ForkType `json:"fork"`
-	GenesisValidatorsRoot string   `json:"genesis_validators_root"`
-}
-
-type ForkType struct {
-	PreviousVersion string `json:"previous_version,omitempty"`
-	CurrentVersion  string `json:"current_version,omitempty"`
-	Epoch           uint64 `json:"epoch,omitempty"`
+	Fork                  *phase0.Fork `json:"fork"`
+	GenesisValidatorsRoot phase0.Root  `json:"genesis_validators_root"`
 }
 
 type SignedObjectType string

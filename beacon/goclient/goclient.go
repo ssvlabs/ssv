@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -138,7 +139,7 @@ type GoClient struct {
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
-	genesisForkVersion phase0.Version
+	genesis            atomic.Pointer[apiv1.Genesis]
 	ForkLock           sync.RWMutex
 	ForkEpochElectra   phase0.Epoch
 	ForkEpochDeneb     phase0.Epoch
@@ -177,9 +178,9 @@ func New(
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		commonTimeout:      commonTimeout,
-		longTimeout:        longTimeout,
-		genesisForkVersion: phase0.Version(opt.Network.ForkVersion()),
+		commonTimeout: commonTimeout,
+		longTimeout:   longTimeout,
+
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
 		ForkEpochBellatrix: math.MaxUint64,
@@ -360,13 +361,21 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 // so we decided that it's best to assert that GenesisForkVersion is the same.
 // To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
 // as they should be same too.
-func (gc *GoClient) assertSameGenesisVersion(genesisVersion phase0.Version) (phase0.Version, error) {
-	if gc.genesisForkVersion != genesisVersion {
-		fmt.Printf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
-		return gc.genesisForkVersion, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
+func (gc *GoClient) assertSameGenesisVersion(genesis *apiv1.Genesis) (phase0.Version, error) {
+	if gc.genesis.CompareAndSwap(nil, genesis) {
+		return genesis.GenesisForkVersion, nil
 	}
 
-	return gc.genesisForkVersion, nil
+	if genesis == nil {
+		return phase0.Version{}, fmt.Errorf("genesis is nil")
+	}
+
+	expected := *gc.genesis.Load()
+	if expected.GenesisForkVersion != genesis.GenesisForkVersion {
+		return expected.GenesisForkVersion, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", expected.GenesisForkVersion, genesis.GenesisForkVersion)
+	}
+
+	return expected.GenesisForkVersion, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
@@ -444,4 +453,43 @@ func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2cli
 	}
 
 	return nil
+}
+
+func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
+	genesis := gc.genesis.Load()
+	if genesis != nil {
+		return genesis, nil
+	}
+
+	genesisResp, err := gc.multiClient.Genesis(ctx, &api.GenesisOpts{})
+	if err != nil {
+		return nil, err
+	}
+	return genesisResp.Data, err
+}
+
+func (gc *GoClient) CurrentFork(ctx context.Context) (*phase0.Fork, error) {
+	provider, ok := gc.multiClient.(eth2client.ForkScheduleProvider)
+	if !ok {
+		return nil, fmt.Errorf("multiClient does not implement ForkScheduleProvider")
+	}
+
+	schedule, err := provider.ForkSchedule(ctx, &api.ForkScheduleOpts{})
+	if err != nil {
+		return nil, err
+	}
+
+	currentEpoch := gc.network.EstimatedCurrentEpoch()
+	var currentFork *phase0.Fork
+	for _, fork := range schedule.Data {
+		if fork.Epoch <= currentEpoch && (currentFork == nil || fork.Epoch > currentFork.Epoch) {
+			currentFork = fork
+		}
+	}
+
+	if currentFork == nil {
+		return nil, fmt.Errorf("could not find current fork")
+	}
+
+	return currentFork, nil
 }

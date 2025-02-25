@@ -1,6 +1,7 @@
 package remotekeymanager
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -32,6 +33,7 @@ type KeyManager struct {
 	keyManager      ekm.KeyManager
 	getOperatorId   func() spectypes.OperatorID
 	retryCount      int
+	operatorPubKey  keys.OperatorPublicKey
 }
 
 func New(
@@ -41,11 +43,22 @@ func New(
 	getOperatorId func() spectypes.OperatorID,
 	options ...Option,
 ) (*KeyManager, error) {
+	operatorPubKeyString, err := client.GetOperatorIdentity()
+	if err != nil {
+		return nil, fmt.Errorf("get operator identity: %w", err)
+	}
+
+	operatorPubKey, err := keys.PublicKeyFromString(operatorPubKeyString)
+	if err != nil {
+		return nil, fmt.Errorf("extract operator public key: %w", err)
+	}
+
 	s := &KeyManager{
 		client:          client,
 		consensusClient: consensusClient,
 		keyManager:      keyManager,
 		getOperatorId:   getOperatorId,
+		operatorPubKey:  operatorPubKey,
 	}
 
 	for _, option := range options {
@@ -176,7 +189,7 @@ func (km *KeyManager) SignBeaconObject(
 	sharePubkey []byte,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, [32]byte, error) {
-	forkInfo, err := km.getForkInfo()
+	forkInfo, err := km.getForkInfo(context.Background()) // TODO: consider passing context
 	if err != nil {
 		return spectypes.Signature{}, [32]byte{}, fmt.Errorf("get fork info: %w", err)
 	}
@@ -359,21 +372,24 @@ func (km *KeyManager) SignBeaconObject(
 	return sig, root, nil
 }
 
-func (km *KeyManager) getForkInfo() (web3signer.ForkInfo, error) {
-	// TODO: find a better way to manage this
-	denebForkHolesky := web3signer.ForkType{ // TODO: electra
-		PreviousVersion: "0x04017000",
-		CurrentVersion:  "0x05017000",
-		Epoch:           29696,
+func (km *KeyManager) getForkInfo(ctx context.Context) (web3signer.ForkInfo, error) {
+	// ForkSchedule result is cached in the client and updated once in a while.
+	currentFork, err := km.consensusClient.CurrentFork(ctx)
+	if err != nil {
+		return web3signer.ForkInfo{}, fmt.Errorf("get current fork: %w", err)
 	}
 
-	genesis := km.consensusClient.Genesis()
+	// Genesis result is cached in the client and updated once in a while.
+	genesis, err := km.consensusClient.Genesis(ctx)
+	if err != nil {
+		return web3signer.ForkInfo{}, fmt.Errorf("get genesis: %w", err)
+	}
 	if genesis == nil {
-		return web3signer.ForkInfo{}, fmt.Errorf("genesis is not ready")
+		return web3signer.ForkInfo{}, fmt.Errorf("genesis is nil")
 	}
 	return web3signer.ForkInfo{
-		Fork:                  denebForkHolesky,
-		GenesisValidatorsRoot: hex.EncodeToString(genesis.GenesisValidatorsRoot[:]),
+		Fork:                  currentFork,
+		GenesisValidatorsRoot: genesis.GenesisValidatorsRoot,
 	}, nil
 }
 
@@ -382,17 +398,7 @@ func (km *KeyManager) Sign(payload []byte) ([]byte, error) {
 }
 
 func (km *KeyManager) Public() keys.OperatorPublicKey {
-	pubkeyString, err := km.client.GetOperatorIdentity() // TODO: cache it
-	if err != nil {
-		return nil // TODO: handle, consider changing the interface to return error
-	}
-
-	pubkey, err := keys.PublicKeyFromString(pubkeyString)
-	if err != nil {
-		return nil // TODO: handle, consider changing the interface to return error
-	}
-
-	return pubkey
+	return km.operatorPubKey
 }
 
 func (km *KeyManager) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte, error) {

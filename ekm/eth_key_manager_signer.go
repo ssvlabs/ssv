@@ -91,12 +91,9 @@ func NewETHKeyManagerSigner(
 		if err := signerStore.SetEncryptionKey(encKey); err != nil {
 			return nil, err
 		}
-	} else {
-		// TODO: remove this temporary workaround
-		if err := signerStore.SetEncryptionKey("encryptionKey"); err != nil {
-			return nil, err
-		}
 	}
+	// TODO: Decide if we need to encrypt the storage with some key if no private key is provided.
+
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
 	options.SetWalletType(core.NDWallet)
