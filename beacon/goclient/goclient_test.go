@@ -175,9 +175,10 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 			return resp, nil
 		}
 
-		undialableServer := tests.MockServer(t, callback)
+		server := mockServer(t, callback)
+		defer server.Close()
 		t.Run(fmt.Sprintf("When genesis versions are the same (%s)", string(network)), func(t *testing.T) {
-			c, err := mockClientWithNetwork(ctx, undialableServer.URL, 100*time.Millisecond, 500*time.Millisecond, network)
+			c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
 			require.NoError(t, err, "failed to create client")
 			client := c.(*GoClient)
 
@@ -194,8 +195,9 @@ func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
 
 	t.Run("When genesis versions are different", func(t *testing.T) {
 		ctx := context.Background()
-		undialableServer := tests.MockServer(t, nil)
-		c, err := mockClientWithNetwork(ctx, undialableServer.URL, 100*time.Millisecond, 500*time.Millisecond, network)
+		server := mockServer(t, nil)
+		defer server.Close()
+		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
 		require.NoError(t, err, "failed to create client")
 		client := c.(*GoClient)
 		forkVersion := phase0.Version{0x01, 0x02, 0x03, 0x04}
