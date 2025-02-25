@@ -182,7 +182,9 @@ func (ds *doppelgangerHandler) Start(ctx context.Context) error {
 			validatorIndices := indicesFromShares(ds.validatorProvider.SelfParticipatingValidators(currentEpoch))
 			ds.updateDoppelgangerState(validatorIndices)
 
-			// Perform liveness checks during the first run or at the last slot of the epoch
+			// Perform liveness checks during the first run or at the last slot of the epoch.
+			// This ensures that the beacon node has had enough time to observe blocks and attestations,
+			// preventing delays in marking a validator as safe.
 			if (!firstRun && uint64(currentSlot)%slotsPerEpoch != slotsPerEpoch-1) || ds.startEpoch == currentEpoch {
 				continue
 			}
