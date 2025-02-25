@@ -10,7 +10,8 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/keys"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/web3signer"
 )
 
@@ -94,7 +95,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			return
 		}
 
-		shareKeystore, err := keys.GenerateShareKeystore(sharePrivKey, r.keystorePasswd)
+		shareKeystore, err := keystore.GenerateShareKeystore(sharePrivKey, r.keystorePasswd)
 		if err != nil {
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 			fmt.Fprintf(ctx, "failed to generate share keystore: %v", err)

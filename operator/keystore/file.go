@@ -1,10 +1,17 @@
 package keystore
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+	"os"
 	"strings"
+
+	"github.com/google/uuid"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+
+	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 // DecryptKeystore decrypts a keystore JSON file using the provided password.
@@ -48,4 +55,58 @@ func EncryptKeystore(privkey []byte, pubKeyBase64, password string) ([]byte, err
 	}
 
 	return encryptedData, nil
+}
+
+func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.OperatorPrivateKey, error) {
+	// nolint: gosec
+	encryptedJSON, err := os.ReadFile(encryptedPrivateKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not read PEM file: %w", err)
+	}
+
+	// nolint: gosec
+	keyStorePassword, err := os.ReadFile(passwordFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not read password file: %w", err)
+	}
+
+	decryptedKeystore, err := DecryptKeystore(encryptedJSON, string(keyStorePassword))
+	if err != nil {
+		return nil, fmt.Errorf("could not decrypt operator private key keystore: %w", err)
+	}
+	operatorPrivKey, err := keys.PrivateKeyFromBytes(decryptedKeystore)
+	if err != nil {
+		return nil, fmt.Errorf("could not extract operator private key from file: %w", err)
+	}
+
+	return operatorPrivKey, nil
+}
+
+type Keystore map[string]any
+
+func GenerateShareKeystore(sharePrivateKey []byte, passphrase string) (Keystore, error) {
+	sharePrivateKeyBytes, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivateKey), "0x"))
+	if err != nil {
+		return Keystore{}, fmt.Errorf("could not decode share private key %s: %w", string(sharePrivateKey), err)
+	}
+
+	keystoreCrypto, err := keystorev4.New().Encrypt(sharePrivateKeyBytes, passphrase)
+	if err != nil {
+		return Keystore{}, fmt.Errorf("encrypt private key: %w", err)
+	}
+
+	sharePrivBLS := &bls.SecretKey{}
+	if err = sharePrivBLS.Deserialize(sharePrivateKeyBytes); err != nil {
+		return Keystore{}, fmt.Errorf("share private key to BLS: %w", err)
+	}
+
+	keystoreData := Keystore{
+		"crypto":  keystoreCrypto,
+		"pubkey":  "0x" + hex.EncodeToString(sharePrivBLS.GetPublicKey().Serialize()[:]),
+		"version": 4,
+		"uuid":    uuid.New().String(),
+		"path":    "m/12381/3600/0/0/0",
+	}
+
+	return keystoreData, nil
 }

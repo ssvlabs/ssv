@@ -7,7 +7,8 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/keys"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/web3signer"
 )
@@ -59,7 +60,7 @@ func main() {
 			logger.Fatal("failed to parse private key", zap.Error(err))
 		}
 	} else {
-		operatorPrivateKey, err = keys.LoadOperatorKeystore(cli.PrivateKeyFile, cli.PasswordFile)
+		operatorPrivateKey, err = keystore.LoadOperatorKeystore(cli.PrivateKeyFile, cli.PasswordFile)
 		if err != nil {
 			logger.Fatal("failed to load operator key from file", zap.Error(err))
 		}
