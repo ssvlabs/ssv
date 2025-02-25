@@ -196,14 +196,14 @@ func (ds *doppelgangerHandler) Start(ctx context.Context) error {
 }
 
 func (ds *doppelgangerHandler) checkLiveness(ctx context.Context, epoch phase0.Epoch) {
-	ds.mu.Lock()
+	ds.mu.RLock()
 	validatorsToCheck := make([]phase0.ValidatorIndex, 0, len(ds.doppelgangerState))
 	for validatorIndex, state := range ds.doppelgangerState {
 		if state.requiresFurtherChecks() {
 			validatorsToCheck = append(validatorsToCheck, validatorIndex)
 		}
 	}
-	ds.mu.Unlock()
+	ds.mu.RUnlock()
 
 	if len(validatorsToCheck) == 0 {
 		ds.logger.Debug("No validators require liveness check")
