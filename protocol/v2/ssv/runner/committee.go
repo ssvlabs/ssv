@@ -228,7 +228,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
-	validDuties := 0
+	validAttesterDuties := 0
+	validSyncCommitteeDuties := 0
 
 	epoch := cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
 	version := cr.beacon.DataVersion(epoch)
@@ -240,12 +241,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		}
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
-			validDuties++
-
 			if cr.doppelgangerHandler.ValidatorStatus(validatorDuty.ValidatorIndex) != doppelganger.SigningEnabled {
 				logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(validatorDuty.ValidatorIndex))
 				continue
 			}
+
+			validAttesterDuties++ // Only count attester duties that are safe to sign
 
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, attestationData, validatorDuty.DutySlot(),
@@ -269,7 +270,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)
 		case spectypes.BNRoleSyncCommittee:
-			validDuties++
+			validSyncCommitteeDuties++ // Sync Committee duties are always valid, even if DG is unsafe
+
 			blockRoot := beaconVote.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, spectypes.SSZBytes(blockRoot[:]), validatorDuty.DutySlot(),
 				spectypes.DomainSyncCommittee)
@@ -281,7 +283,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			return fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}
 	}
-	if validDuties == 0 {
+	if validAttesterDuties == 0 && validSyncCommitteeDuties == 0 {
 		cr.BaseRunner.State.Finished = true
 		return ErrNoValidDuties
 	}
