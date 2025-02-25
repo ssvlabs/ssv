@@ -423,7 +423,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			vlogger.Debug("🧩 reconstructed partial signatures committee",
 				zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 
-			if cr.doppelgangerHandler.ValidatorStatus(validator) == doppelganger.SigningDisabled {
+			// Only mark as safe if this is an attester role
+			// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
+			// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
+			if role == spectypes.BNRoleAttester && cr.doppelgangerHandler.ValidatorStatus(validator) == doppelganger.SigningDisabled {
 				cr.doppelgangerHandler.MarkAsSafe(validator)
 			}
 
@@ -448,6 +451,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				syncCommitteeMessagesToSubmit[validator] = syncMsg
 
 			} else if role == spectypes.BNRoleAttester {
+				if cr.doppelgangerHandler.ValidatorStatus(validator) == doppelganger.SigningDisabled {
+					cr.doppelgangerHandler.MarkAsSafe(validator)
+				}
+
 				att := sszObject.(*spec.VersionedAttestation)
 				// Insert signature
 				att, err = specssv.VersionedAttestationWithSignature(att, specSig)
