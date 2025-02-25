@@ -360,7 +360,8 @@ func (km *KeyManager) SignBeaconObject(
 }
 
 func (km *KeyManager) getForkInfo() (web3signer.ForkInfo, error) {
-	denebForkHolesky := web3signer.ForkType{
+	// TODO: find a better way to manage this
+	denebForkHolesky := web3signer.ForkType{ // TODO: electra
 		PreviousVersion: "0x04017000",
 		CurrentVersion:  "0x05017000",
 		Epoch:           29696,
@@ -381,7 +382,7 @@ func (km *KeyManager) Sign(payload []byte) ([]byte, error) {
 }
 
 func (km *KeyManager) Public() keys.OperatorPublicKey {
-	pubkeyString, err := km.client.GetOperatorIdentity()
+	pubkeyString, err := km.client.GetOperatorIdentity() // TODO: cache it
 	if err != nil {
 		return nil // TODO: handle, consider changing the interface to return error
 	}
