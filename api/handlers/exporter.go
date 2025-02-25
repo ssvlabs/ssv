@@ -27,14 +27,15 @@ type Exporter struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores
 	TraceStore        DutyTraceStore
-	Shares            registrystorage.Shares
+	Validators        registrystorage.ValidatorStore
 }
 
 type DutyTraceStore interface {
-	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, vIndex phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*model.ValidatorDutyTrace, error)
 	GetCommitteeDutiesByOperator(indices []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
+	GetDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) []qbftstorage.ParticipantsRangeEntry
 }
 
 type ParticipantResponse struct {
@@ -99,6 +100,60 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 		// map to API response
 		for _, pr := range participantsRange {
 			response.Data = append(response.Data, transformToParticipantResponse(role, pr))
+		}
+	}
+
+	return api.Render(w, r, response)
+}
+
+func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
+	var request struct {
+		From    uint64        `json:"from"`
+		To      uint64        `json:"to"`
+		Roles   api.RoleSlice `json:"roles"`
+		PubKeys api.HexSlice  `json:"pubkeys"`
+	}
+	var response struct {
+		Data []*ParticipantResponse `json:"data"`
+	}
+
+	if err := api.Bind(r, &request); err != nil {
+		return api.BadRequestError(err)
+	}
+
+	if request.From > request.To {
+		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
+	}
+
+	if len(request.Roles) == 0 {
+		return api.BadRequestError(fmt.Errorf("at least one role is required"))
+	}
+
+	if len(request.PubKeys) == 0 {
+		return api.BadRequestError(fmt.Errorf("at least one pubkey is required"))
+	}
+
+	response.Data = []*ParticipantResponse{}
+
+	var pubkeys []spectypes.ValidatorPK
+	for _, req := range request.PubKeys {
+		var pubkey spectypes.ValidatorPK
+		if len(req) != len(pubkey) {
+			return api.BadRequestError(errors.New("invalid pubkey length"))
+		}
+		copy(pubkey[:], req)
+		pubkeys = append(pubkeys, pubkey)
+	}
+
+	for s := request.From; s <= request.To; s++ {
+		slot := phase0.Slot(s)
+		for _, r := range request.Roles {
+			role := spectypes.BeaconRole(r)
+
+			participantsByPK := e.TraceStore.GetDecideds(role, slot, pubkeys)
+			for _, pr := range participantsByPK {
+				response.Data = append(response.Data, transformToParticipantResponse(role, pr))
+			}
 		}
 	}
 
@@ -227,13 +282,14 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(errors.New("either pubkeys or indices is required"))
 	}
 
-	var (
-		vIndices []phase0.ValidatorIndex
-		pubkeys  []spectypes.ValidatorPK
-	)
+	var pubkeys []spectypes.ValidatorPK
 
 	for _, index := range request.Indices {
-		vIndices = append(vIndices, phase0.ValidatorIndex(index))
+		share, f := e.Validators.ValidatorByIndex(phase0.ValidatorIndex(index))
+		if !f {
+			return api.BadRequestError(fmt.Errorf("validator not found: %d", index))
+		}
+		pubkeys = append(pubkeys, share.ValidatorPubKey)
 	}
 
 	for _, req := range request.PubKeys {
@@ -245,33 +301,17 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		pubkeys = append(pubkeys, pubkey)
 	}
 
-	if len(pubkeys) > 0 {
-		indices, err := e.Shares.GetValidatorIndexByPubkey(pubkeys)
-		if err != nil {
-			return api.Error(fmt.Errorf("map pubkeys to validator indices: %w", err))
-		}
-
-		vIndices = append(vIndices, indices...)
-	}
-
-	if len(vIndices) == 0 {
-		return api.BadRequestError(errors.New("none of provided validators were found"))
-	}
-
 	var results []*model.ValidatorDutyTrace
 
-	for _, index := range vIndices {
-		// get for each slot
-		for s := request.From; s <= request.To; s++ {
-			slot := phase0.Slot(s)
-			for _, r := range request.Roles {
-				role := spectypes.BeaconRole(r)
-				duty, err := e.TraceStore.GetValidatorDuty(role, slot, index)
-				if err != nil {
-					return api.Error(fmt.Errorf("error getting duties: %w", err))
-				}
-				results = append(results, duty)
+	for s := request.From; s <= request.To; s++ {
+		slot := phase0.Slot(s)
+		for _, r := range request.Roles {
+			role := spectypes.BeaconRole(r)
+			duties, err := e.TraceStore.GetValidatorDuties(role, slot, pubkeys)
+			if err != nil {
+				return api.Error(fmt.Errorf("error getting duties: %w", err))
 			}
+			results = append(results, duties...)
 		}
 	}
 

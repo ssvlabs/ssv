@@ -57,12 +57,15 @@ func (s *Server) Run() error {
 	router.Get("/v1/node/health", api.Handler(s.node.Health))
 	router.Get("/v1/validators", api.Handler(s.validators.List))
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
-	router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
-	router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 	if s.enableDutyTracing {
 		router.Get("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
 		router.Get("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
 		router.Get("/v1/exporter/traces/operator", api.Handler(s.exporter.OperatorTraces))
+		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
+		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
+	} else {
+		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 	}
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))

@@ -79,6 +79,7 @@ func TestValidatorStore(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	selfStore := store.WithOperatorID(func() spectypes.OperatorID {
@@ -311,6 +312,7 @@ func TestValidatorStore_DropState(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	shareMap[share1.ValidatorPubKey] = share1
@@ -353,6 +355,7 @@ func TestValidatorStore_Concurrency(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	shareMap[share1.ValidatorPubKey] = share1
@@ -402,6 +405,7 @@ func TestSelfValidatorStore_NilOperatorID(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	shareMap[share1.ValidatorPubKey] = share1
@@ -497,6 +501,7 @@ func BenchmarkValidatorStore_Add(b *testing.B) {
 				}
 				return share, true
 			},
+			nil,
 		)
 		b.StartTimer()
 
@@ -592,6 +597,7 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 			}
 			return share, true
 		},
+		nil,
 	)
 	require.NoError(b, store.handleSharesAdded(maps.Values(shares)...))
 
@@ -622,6 +628,7 @@ func TestValidatorStore_HandleNilAndEmptyStates(t *testing.T) {
 			}
 			return share, true
 		},
+		nil,
 	)
 
 	// Attempt to remove a non-existing share
@@ -671,6 +678,7 @@ func TestValidatorStore_EmptyStoreOperations(t *testing.T) {
 			}
 			return share, true
 		},
+		nil,
 	)
 
 	// Correctly sized pubKey array for testing
@@ -703,6 +711,7 @@ func TestValidatorStore_AddDuplicateShares(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	shareMap[share1.ValidatorPubKey] = share1
@@ -728,6 +737,7 @@ func TestValidatorStore_UpdateNonExistingShare(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	t.Run("update non-existing share", func(t *testing.T) {
@@ -756,6 +766,7 @@ func TestValidatorStore_RemoveNonExistingShare(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	t.Run("remove non-existing share", func(t *testing.T) {
@@ -796,6 +807,7 @@ func TestValidatorStore_HandlingDifferentStatuses(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	shareMap[share3.ValidatorPubKey] = share3
@@ -821,6 +833,7 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	// Create a large number of shares
@@ -876,6 +889,7 @@ func TestValidatorStore_MixedOperations(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	// Initial adds
@@ -909,6 +923,7 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	invalidCommitteeShare := &ssvtypes.SSVShare{
@@ -945,6 +960,7 @@ func TestValidatorStore_BulkAddUpdate(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	// Initial shares to add
@@ -985,6 +1001,7 @@ func TestValidatorStore_ComprehensiveIndex(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	// Share without metadata
@@ -1050,6 +1067,7 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 	)
 
 	// Create a share
