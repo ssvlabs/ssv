@@ -100,8 +100,18 @@ func (s Subnets) String() string {
 	return hex.EncodeToString(subnetsVec.Bytes())
 }
 
+func (s Subnets) Active() int {
+	var active int
+	for _, val := range s {
+		if val > 0 {
+			active++
+		}
+	}
+	return active
+}
+
 // FromString parses a given subnet string
-func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
+func FromString(subnetsStr string) (Subnets, error) {
 	subnetsStr = strings.Replace(subnetsStr, "0x", "", 1)
 	var data []byte
 	for i := 0; i+1 < len(subnetsStr); i += 2 {
@@ -117,16 +127,6 @@ func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 		data = append(data, maskData1...)
 	}
 	return data, nil
-}
-
-func (s Subnets) Active() int {
-	var active int
-	for _, val := range s {
-		if val > 0 {
-			active++
-		}
-	}
-	return active
 }
 
 // SharedSubnets returns the shared subnets
@@ -173,7 +173,7 @@ func getCharMask(str string) ([]byte, error) {
 		return nil, err
 	}
 	mask := fmt.Sprintf("%04b", val)
-	var maskData []byte
+	maskData := make([]byte, 0, 4)
 	for j := 0; j < len(mask); j++ {
 		val, err := strconv.ParseUint(string(mask[len(mask)-1-j]), 2, 8)
 		if err != nil {
