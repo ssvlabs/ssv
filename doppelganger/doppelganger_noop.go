@@ -17,8 +17,8 @@ func (NoOpDoppelgangerHandler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) 
 	// No operation
 }
 
-func (NoOpDoppelgangerHandler) StartMonitoring(ctx context.Context) {
-	// No operation
+func (NoOpDoppelgangerHandler) Start(ctx context.Context) error {
+	return nil
 }
 
 func (NoOpDoppelgangerHandler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
