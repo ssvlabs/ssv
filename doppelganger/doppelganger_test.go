@@ -20,7 +20,7 @@ func newTestDoppelgangerHandler(t *testing.T) *doppelgangerHandler {
 	logger := logging.TestLogger(t)
 
 	handler := NewDoppelgangerHandler(&Options{
-		Network:           networkconfig.NetworkConfig{},
+		Network:           networkconfig.TestNetwork,
 		BeaconNode:        mockBeaconNode,
 		ValidatorProvider: mockValidatorProvider,
 		Logger:            logger,
@@ -78,7 +78,7 @@ func TestCheckLiveness(t *testing.T) {
 		}, nil,
 	)
 
-	ds.checkLiveness(context.Background(), 0)
+	ds.checkLiveness(context.Background(), 0, 0)
 
 	require.Equal(t, PermanentlyUnsafe, ds.doppelgangerState[1].remainingEpochs) // Marked as permanently unsafe
 	require.Equal(t, uint64(0), ds.doppelgangerState[2].remainingEpochs)         // Reduced to 0

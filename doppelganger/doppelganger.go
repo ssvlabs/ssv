@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -194,12 +195,16 @@ func (ds *doppelgangerHandler) Start(ctx context.Context) error {
 				firstRun = false
 			}
 
-			ds.checkLiveness(ctx, currentEpoch-1)
+			ds.checkLiveness(ctx, currentSlot, currentEpoch-1)
 		}
 	}
 }
 
-func (ds *doppelgangerHandler) checkLiveness(ctx context.Context, epoch phase0.Epoch) {
+func (ds *doppelgangerHandler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch phase0.Epoch) {
+	// Set a deadline until the start of the next slot, with a 100ms safety margin
+	ctx, cancel := context.WithDeadline(ctx, ds.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	defer cancel()
+
 	ds.mu.RLock()
 	validatorsToCheck := make([]phase0.ValidatorIndex, 0, len(ds.doppelgangerState))
 	for validatorIndex, state := range ds.doppelgangerState {
