@@ -8,7 +8,11 @@ import (
 	"go.uber.org/zap"
 )
 
-type subscriber[T any] struct {
+type event interface {
+	*apiv1.HeadEvent
+}
+
+type subscriber[T event] struct {
 	Identifier string
 	Channel    chan T
 }
