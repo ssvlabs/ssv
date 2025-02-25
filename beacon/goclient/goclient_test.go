@@ -2,11 +2,8 @@ package goclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -17,10 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/beacon/goclient/tests"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestHealthy(t *testing.T) {
@@ -30,7 +25,7 @@ func TestHealthy(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	undialableServer := mockServer(t, func(r *http.Request) error { return nil })
+	undialableServer := tests.MockServer(t, func(_ http.ResponseWriter, r *http.Request) error { return nil })
 	c, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
 
@@ -83,7 +78,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to dial.
 	{
-		undialableServer := mockServer(t, func(r *http.Request) error {
+		undialableServer := tests.MockServer(t, func(w http.ResponseWriter, r *http.Request) error {
 			time.Sleep(commonTimeout * 2)
 			return nil
 		})
@@ -93,7 +88,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to the Validators request.
 	{
-		unresponsiveServer := mockServer(t, func(r *http.Request) error {
+		unresponsiveServer := tests.MockServer(t, func(w http.ResponseWriter, r *http.Request) error {
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
 				time.Sleep(longTimeout / 2)
@@ -123,7 +118,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to proposer duties request.
 	{
-		unresponsiveServer := mockServer(t, func(r *http.Request) error {
+		unresponsiveServer := tests.MockServer(t, func(w http.ResponseWriter, r *http.Request) error {
 			switch r.URL.Path {
 			case "/eth/v1/validator/duties/proposer/" + fmt.Sprint(mockServerEpoch):
 				time.Sleep(longTimeout * 2)
@@ -139,7 +134,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Fast enough.
 	{
-		fastServer := mockServer(t, func(r *http.Request) error {
+		fastServer := tests.MockServer(t, func(w http.ResponseWriter, r *http.Request) error {
 			time.Sleep(commonTimeout / 2)
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
@@ -170,39 +165,7 @@ func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeou
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		},
-		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
-		func() slotticker.SlotTicker {
-			return slotticker.New(zap.NewNop(), slotticker.Config{
-				SlotDuration: 12 * time.Second,
-				GenesisTime:  time.Now(),
-			})
-		},
+		tests.MockDataStore{},
+		tests.MockSlotTickerProvider,
 	)
-}
-
-func mockServer(t *testing.T, onRequestFn func(r *http.Request) error) *httptest.Server {
-	var mockResponses map[string]json.RawMessage
-	f, err := os.Open("testdata/mock-beacon-responses.json")
-	require.NoError(t, err)
-	require.NoError(t, json.NewDecoder(f).Decode(&mockResponses))
-
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Logf("mock server handling request: %s", r.URL.Path)
-
-		resp, ok := mockResponses[r.URL.Path]
-		if !ok {
-			require.FailNowf(t, "unexpected request", "unexpected request: %s", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		err := onRequestFn(r)
-		require.NoError(t, err)
-
-		w.Header().Set("Content-Type", "application/json")
-		if _, err := w.Write(resp); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-	}))
 }

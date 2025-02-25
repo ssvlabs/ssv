@@ -701,7 +701,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -723,7 +723,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 64
@@ -806,7 +806,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -828,7 +828,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 64
@@ -912,7 +912,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -934,7 +934,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 33
@@ -1019,7 +1019,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 			Slot: currentSlot.Get(),
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
 
@@ -1093,7 +1093,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 			Slot: currentSlot.Get(),
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e)
+	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
 
