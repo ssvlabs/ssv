@@ -109,11 +109,8 @@ func (ds *doppelgangerHandler) updateDoppelgangerState(validatorIndices []phase0
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 
-	// Create a set for current validators
-	currentValidatorSet := make(map[phase0.ValidatorIndex]struct{}, len(validatorIndices))
-	for _, idx := range validatorIndices {
-		currentValidatorSet[idx] = struct{}{}
-	}
+	// These slices store validator indices for logging purposes
+	var addedValidators, removedValidators []uint64
 
 	// Add new validators with DefaultRemainingDetectionEpochs
 	for _, idx := range validatorIndices {
@@ -121,16 +118,30 @@ func (ds *doppelgangerHandler) updateDoppelgangerState(validatorIndices []phase0
 			ds.doppelgangerState[idx] = &doppelgangerState{
 				remainingEpochs: DefaultRemainingDetectionEpochs,
 			}
-			ds.logger.Debug("Added validator to Doppelganger state", fields.ValidatorIndex(idx))
+			addedValidators = append(addedValidators, uint64(idx))
 		}
+	}
+
+	// Create a set for current validators
+	currentValidatorSet := make(map[phase0.ValidatorIndex]struct{}, len(validatorIndices))
+	for _, idx := range validatorIndices {
+		currentValidatorSet[idx] = struct{}{}
 	}
 
 	// Remove validators that are no longer in the current set
 	for idx := range ds.doppelgangerState {
 		if _, exists := currentValidatorSet[idx]; !exists {
-			ds.logger.Debug("Removing validator from Doppelganger state", fields.ValidatorIndex(idx))
+			removedValidators = append(removedValidators, uint64(idx))
 			delete(ds.doppelgangerState, idx)
 		}
+	}
+
+	if len(addedValidators) > 0 {
+		ds.logger.Debug("Added validators to Doppelganger state", zap.Uint64s("validator_indices", addedValidators))
+	}
+
+	if len(removedValidators) > 0 {
+		ds.logger.Debug("Removed validators from Doppelganger state", zap.Uint64s("validator_indices", removedValidators))
 	}
 }
 
