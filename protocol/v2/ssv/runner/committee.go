@@ -241,6 +241,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		}
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
+			// Doppelganger protection applies only to attester duties since they are slashable.
+			// Sync committee duties are not slashable, so they are always allowed.
 			if cr.doppelgangerHandler.ValidatorStatus(validatorDuty.ValidatorIndex) != doppelganger.SigningEnabled {
 				logger.Warn("Doppelganger check in progress, signing not permitted", fields.ValidatorIndex(validatorDuty.ValidatorIndex))
 				continue
