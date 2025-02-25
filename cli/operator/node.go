@@ -355,9 +355,9 @@ var StartNodeCmd = &cobra.Command{
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
-		var doppelgangerHandler doppelganger.DoppelgangerProvider
+		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
-			doppelgangerHandler = doppelganger.NewDoppelgangerHandler(&doppelganger.DoppelgangerOptions{
+			doppelgangerHandler = doppelganger.NewDoppelgangerHandler(&doppelganger.Options{
 				Network:            networkConfig,
 				BeaconNode:         consensusClient,
 				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),

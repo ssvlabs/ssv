@@ -8,7 +8,7 @@ import (
 
 type NoOpDoppelgangerHandler struct{}
 
-func (NoOpDoppelgangerHandler) ValidatorStatus(validatorIndex phase0.ValidatorIndex) DoppelgangerStatus {
+func (NoOpDoppelgangerHandler) ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status {
 	// Always allow signing
 	return SigningEnabled
 }

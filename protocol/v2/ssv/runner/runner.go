@@ -53,7 +53,7 @@ type Runner interface {
 }
 
 type DoppelgangerProvider interface {
-	ValidatorStatus(validatorIndex phase0.ValidatorIndex) doppelganger.DoppelgangerStatus
+	ValidatorStatus(validatorIndex phase0.ValidatorIndex) doppelganger.Status
 	MarkAsSafe(validatorIndex phase0.ValidatorIndex)
 }
 

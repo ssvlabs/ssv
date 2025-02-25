@@ -16,7 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate mockgen -package=doppelganger -destination=./doppelganger_mock.go -source=./doppelganger.go
+//go:generate mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
 
 // DefaultRemainingDetectionEpochs represents the initial number of epochs
 // a validator must pass without liveness detection before being considered safe to sign.
@@ -26,8 +26,8 @@ const DefaultRemainingDetectionEpochs uint64 = 2
 // It indicates that the validator was detected as live on another node and should not be trusted for signing.
 const PermanentlyUnsafe = ^uint64(0)
 
-type DoppelgangerProvider interface {
-	ValidatorStatus(validatorIndex phase0.ValidatorIndex) DoppelgangerStatus
+type Provider interface {
+	ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status
 	Start(ctx context.Context) error
 	MarkAsSafe(validatorIndex phase0.ValidatorIndex)
 	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
@@ -42,7 +42,7 @@ type BeaconNode interface {
 	ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ValidatorLiveness, error)
 }
 
-type DoppelgangerOptions struct {
+type Options struct {
 	Network            networkconfig.NetworkConfig
 	BeaconNode         BeaconNode
 	ValidatorProvider  ValidatorProvider
@@ -63,7 +63,7 @@ type doppelgangerHandler struct {
 }
 
 // NewDoppelgangerHandler initializes a new instance of the Doppelgänger protection.
-func NewDoppelgangerHandler(opts *DoppelgangerOptions) DoppelgangerProvider {
+func NewDoppelgangerHandler(opts *Options) Provider {
 	return &doppelgangerHandler{
 		network:            opts.Network,
 		beaconNode:         opts.BeaconNode,
@@ -75,7 +75,7 @@ func NewDoppelgangerHandler(opts *DoppelgangerOptions) DoppelgangerProvider {
 }
 
 // ValidatorStatus returns the current status of the validator.
-func (ds *doppelgangerHandler) ValidatorStatus(validatorIndex phase0.ValidatorIndex) DoppelgangerStatus {
+func (ds *doppelgangerHandler) ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status {
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 

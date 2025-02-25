@@ -83,7 +83,7 @@ type ControllerOptions struct {
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
-	DoppelgangerHandler        doppelganger.DoppelgangerProvider
+	DoppelgangerHandler        doppelganger.Provider
 	NetworkConfig              networkconfig.NetworkConfig
 	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte

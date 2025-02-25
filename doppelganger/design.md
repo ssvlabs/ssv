@@ -44,10 +44,10 @@ A validator is **considered safe to sign** when:
 
 # 5. Implementation in `ssv.network`
 The implementation follows a **modular and extendable design**, with:
-- **`doppelganger.DoppelgangerProvider` interface**: Defines required DG operations.
+- **`doppelganger.Provider` interface**: Defines required DG operations.
     ```go
-    type DoppelgangerProvider interface {
-        ValidatorStatus(validatorIndex phase0.ValidatorIndex) DoppelgangerStatus
+    type Provider interface {
+        ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status
         StartMonitoring(ctx context.Context)
         MarkAsSafe(validatorIndex phase0.ValidatorIndex)
         RemoveValidatorState(validatorIndex phase0.ValidatorIndex)

@@ -19,55 +19,55 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockDoppelgangerProvider is a mock of DoppelgangerProvider interface.
-type MockDoppelgangerProvider struct {
+// MockProvider is a mock of Provider interface.
+type MockProvider struct {
 	ctrl     *gomock.Controller
-	recorder *MockDoppelgangerProviderMockRecorder
+	recorder *MockProviderMockRecorder
 }
 
-// MockDoppelgangerProviderMockRecorder is the mock recorder for MockDoppelgangerProvider.
-type MockDoppelgangerProviderMockRecorder struct {
-	mock *MockDoppelgangerProvider
+// MockProviderMockRecorder is the mock recorder for MockProvider.
+type MockProviderMockRecorder struct {
+	mock *MockProvider
 }
 
-// NewMockDoppelgangerProvider creates a new mock instance.
-func NewMockDoppelgangerProvider(ctrl *gomock.Controller) *MockDoppelgangerProvider {
-	mock := &MockDoppelgangerProvider{ctrl: ctrl}
-	mock.recorder = &MockDoppelgangerProviderMockRecorder{mock}
+// NewMockProvider creates a new mock instance.
+func NewMockProvider(ctrl *gomock.Controller) *MockProvider {
+	mock := &MockProvider{ctrl: ctrl}
+	mock.recorder = &MockProviderMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDoppelgangerProvider) EXPECT() *MockDoppelgangerProviderMockRecorder {
+func (m *MockProvider) EXPECT() *MockProviderMockRecorder {
 	return m.recorder
 }
 
 // MarkAsSafe mocks base method.
-func (m *MockDoppelgangerProvider) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
+func (m *MockProvider) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "MarkAsSafe", validatorIndex)
 }
 
 // MarkAsSafe indicates an expected call of MarkAsSafe.
-func (mr *MockDoppelgangerProviderMockRecorder) MarkAsSafe(validatorIndex any) *gomock.Call {
+func (mr *MockProviderMockRecorder) MarkAsSafe(validatorIndex any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAsSafe", reflect.TypeOf((*MockDoppelgangerProvider)(nil).MarkAsSafe), validatorIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAsSafe", reflect.TypeOf((*MockProvider)(nil).MarkAsSafe), validatorIndex)
 }
 
 // RemoveValidatorState mocks base method.
-func (m *MockDoppelgangerProvider) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
+func (m *MockProvider) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RemoveValidatorState", validatorIndex)
 }
 
 // RemoveValidatorState indicates an expected call of RemoveValidatorState.
-func (mr *MockDoppelgangerProviderMockRecorder) RemoveValidatorState(validatorIndex any) *gomock.Call {
+func (mr *MockProviderMockRecorder) RemoveValidatorState(validatorIndex any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveValidatorState", reflect.TypeOf((*MockDoppelgangerProvider)(nil).RemoveValidatorState), validatorIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveValidatorState", reflect.TypeOf((*MockProvider)(nil).RemoveValidatorState), validatorIndex)
 }
 
 // Start mocks base method.
-func (m *MockDoppelgangerProvider) Start(ctx context.Context) error {
+func (m *MockProvider) Start(ctx context.Context) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Start", ctx)
 	ret0, _ := ret[0].(error)
@@ -75,23 +75,23 @@ func (m *MockDoppelgangerProvider) Start(ctx context.Context) error {
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockDoppelgangerProviderMockRecorder) Start(ctx any) *gomock.Call {
+func (mr *MockProviderMockRecorder) Start(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockDoppelgangerProvider)(nil).Start), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockProvider)(nil).Start), ctx)
 }
 
 // ValidatorStatus mocks base method.
-func (m *MockDoppelgangerProvider) ValidatorStatus(validatorIndex phase0.ValidatorIndex) DoppelgangerStatus {
+func (m *MockProvider) ValidatorStatus(validatorIndex phase0.ValidatorIndex) Status {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatorStatus", validatorIndex)
-	ret0, _ := ret[0].(DoppelgangerStatus)
+	ret0, _ := ret[0].(Status)
 	return ret0
 }
 
 // ValidatorStatus indicates an expected call of ValidatorStatus.
-func (mr *MockDoppelgangerProviderMockRecorder) ValidatorStatus(validatorIndex any) *gomock.Call {
+func (mr *MockProviderMockRecorder) ValidatorStatus(validatorIndex any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorStatus", reflect.TypeOf((*MockDoppelgangerProvider)(nil).ValidatorStatus), validatorIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorStatus", reflect.TypeOf((*MockProvider)(nil).ValidatorStatus), validatorIndex)
 }
 
 // MockValidatorProvider is a mock of ValidatorProvider interface.
