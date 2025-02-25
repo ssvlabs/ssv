@@ -61,7 +61,11 @@ func (c *Web3Signer) ImportKeystore(keystoreList, keystorePasswordList []string)
 		logger.Error("failed to send http request", zap.Error(err))
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() {
+		if err := httpResp.Body.Close(); err != nil {
+			logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
 
 	respBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
@@ -118,7 +122,11 @@ func (c *Web3Signer) DeleteKeystore(sharePubKeyList []string) ([]Status, error) 
 		logger.Error("failed to send http request", zap.Error(err))
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() {
+		if err := httpResp.Body.Close(); err != nil {
+			logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
 
 	respBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
@@ -176,7 +184,11 @@ func (c *Web3Signer) Sign(sharePubKey []byte, payload SignRequest) ([]byte, erro
 		logger.Error("failed to send http request", zap.Error(err))
 		return nil, fmt.Errorf("sign request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
 
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {

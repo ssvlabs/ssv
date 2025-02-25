@@ -39,7 +39,7 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManager {
+func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operatorPrivateKey keys.OperatorPrivateKey) KeyManager {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -54,7 +54,7 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 		}
 	}
 
-	km, err := NewETHKeyManagerSigner(logger, db, *network, "")
+	km, err := NewETHKeyManagerSigner(logger, db, *network, operatorPrivateKey)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -63,8 +63,14 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 	sk2 := &bls.SecretKey{}
 	require.NoError(t, sk2.SetHexString(sk2Str))
 
-	require.NoError(t, km.AddShare(sk1.Serialize()))
-	require.NoError(t, km.AddShare(sk2.Serialize()))
+	encryptedSK1, err := operatorPrivateKey.Public().Encrypt(sk1.Serialize())
+	require.NoError(t, err)
+
+	encryptedSK2, err := operatorPrivateKey.Public().Encrypt(sk2.Serialize())
+	require.NoError(t, err)
+
+	require.NoError(t, km.AddShare(encryptedSK1))
+	require.NoError(t, km.AddShare(encryptedSK2))
 
 	return km
 }
@@ -135,11 +141,18 @@ func TestEncryptedKeyManager(t *testing.T) {
 }
 
 func TestSlashing(t *testing.T) {
-	km := testKeyManager(t, nil)
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km := testKeyManager(t, nil, operatorPrivateKey)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
-	require.NoError(t, km.AddShare(sk1.Serialize()))
+
+	encryptedSK1, err := operatorPrivateKey.Public().Encrypt(sk1.Serialize())
+	require.NoError(t, err)
+
+	require.NoError(t, km.AddShare(encryptedSK1))
 
 	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
 	currentEpoch := km.(*ethKeyManagerSigner).storage.Network().EstimatedEpochAtSlot(currentSlot)
@@ -291,7 +304,7 @@ func TestSlashing(t *testing.T) {
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 	})
 	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
-		require.NoError(t, km.AddShare(sk1.Serialize()))
+		require.NoError(t, km.AddShare(encryptedSK1))
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
@@ -299,11 +312,18 @@ func TestSlashing(t *testing.T) {
 }
 
 func TestSignBeaconObject(t *testing.T) {
-	km := testKeyManager(t, nil)
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km := testKeyManager(t, nil, operatorPrivateKey)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
-	require.NoError(t, km.AddShare(sk1.Serialize()))
+
+	encryptedSK1, err := operatorPrivateKey.Public().Encrypt(sk1.Serialize())
+	require.NoError(t, err)
+
+	require.NoError(t, km.AddShare(encryptedSK1))
 
 	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
@@ -577,7 +597,10 @@ func TestSignBeaconObject(t *testing.T) {
 }
 
 func TestSlashing_Attestation(t *testing.T) {
-	km := testKeyManager(t, nil)
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km := testKeyManager(t, nil, operatorPrivateKey)
 
 	var secretKeys [4]*bls.SecretKey
 	for i := range secretKeys {
@@ -688,19 +711,24 @@ func TestSlashing_Attestation(t *testing.T) {
 func TestRemoveShare(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
 	t.Run("key exists", func(t *testing.T) {
-		km := testKeyManager(t, nil)
+		km := testKeyManager(t, nil, operatorPrivateKey)
 		pk := &bls.SecretKey{}
 		// generate random key
 		pk.SetByCSPRNG()
-		err := km.AddShare(pk.Serialize())
+
+		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt(pk.Serialize())
 		require.NoError(t, err)
-		err = km.RemoveShare(pk.GetPublicKey().Serialize())
-		require.NoError(t, err)
+
+		require.NoError(t, km.AddShare(encryptedPrivKey))
+		require.NoError(t, km.RemoveShare(pk.GetPublicKey().Serialize()))
 	})
 
 	t.Run("key doesn't exist", func(t *testing.T) {
-		km := testKeyManager(t, nil)
+		km := testKeyManager(t, nil, operatorPrivateKey)
 
 		pk := &bls.SecretKey{}
 		pk.SetByCSPRNG()
@@ -713,7 +741,10 @@ func TestRemoveShare(t *testing.T) {
 func TestEkmListAccounts(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
-	km := testKeyManager(t, nil)
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km := testKeyManager(t, nil, operatorPrivateKey)
 	accounts, err := km.(*ethKeyManagerSigner).ListAccounts()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(accounts))
@@ -722,7 +753,10 @@ func TestEkmListAccounts(t *testing.T) {
 func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
-	km := testKeyManager(t, nil)
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km := testKeyManager(t, nil, operatorPrivateKey)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -789,7 +823,10 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
-	km := testKeyManager(t, nil)
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km := testKeyManager(t, nil, operatorPrivateKey)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -855,6 +892,9 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
 	type testValidator struct {
 		sk *bls.SecretKey
 		pk *bls.PublicKey
@@ -868,9 +908,12 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 	}
 
 	// Initialize key manager and add shares for each validator
-	km := testKeyManager(t, nil)
+	km := testKeyManager(t, nil, operatorPrivateKey)
 	for _, validator := range testValidators {
-		require.NoError(t, km.AddShare(validator.sk.Serialize()))
+		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt(validator.sk.Serialize())
+		require.NoError(t, err)
+
+		require.NoError(t, km.AddShare(encryptedPrivKey))
 	}
 
 	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
@@ -939,6 +982,9 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
 	type testValidator struct {
 		sk *bls.SecretKey
 		pk *bls.PublicKey
@@ -952,7 +998,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 	}
 
 	// Initialize key manager and add shares for each validator
-	km := testKeyManager(t, nil)
+	km := testKeyManager(t, nil, operatorPrivateKey)
 	for _, validator := range testValidators {
 		require.NoError(t, km.AddShare(validator.sk.Serialize()))
 	}

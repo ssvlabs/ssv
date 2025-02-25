@@ -44,6 +44,8 @@ const (
 	minSPProposalSlotGap = phase0.Slot(0)
 )
 
+type ShareDecryptionError error
+
 type ethKeyManagerSigner struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
@@ -300,8 +302,6 @@ func (km *ethKeyManagerSigner) UpdateHighestAttestation(pubKey []byte, attestati
 func (km *ethKeyManagerSigner) UpdateHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	return km.slashingProtector.UpdateHighestProposal(pubKey, slot)
 }
-
-type ShareDecryptionError error
 
 func (km *ethKeyManagerSigner) AddShare(encryptedSharePrivKey []byte) error {
 	km.walletLock.Lock()

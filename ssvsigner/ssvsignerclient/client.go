@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/remotesigner/web3signer"
 )
@@ -26,18 +28,33 @@ const (
 type ShareDecryptionError error
 
 type SSVSignerClient struct {
+	logger     *zap.Logger
 	baseURL    string
 	httpClient *http.Client
 }
 
-func New(baseURL string) *SSVSignerClient {
+func New(baseURL string, opts ...Option) *SSVSignerClient {
 	baseURL = strings.TrimRight(baseURL, "/")
 
-	return &SSVSignerClient{
+	c := &SSVSignerClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c
+}
+
+type Option func(*SSVSignerClient)
+
+func WithLogger(logger *zap.Logger) Option {
+	return func(client *SSVSignerClient) {
+		client.logger = logger
 	}
 }
 
@@ -61,7 +78,11 @@ func (c *SSVSignerClient) AddValidators(encryptedPrivKeys ...[]byte) ([]Status, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() {
+		if err := httpResp.Body.Close(); err != nil {
+			c.logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
 
 	respBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
@@ -120,7 +141,11 @@ func (c *SSVSignerClient) RemoveValidators(sharePubKeys ...[]byte) ([]Status, er
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer func() {
+		if err := httpResp.Body.Close(); err != nil {
+			c.logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
 
 	respBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
@@ -155,7 +180,11 @@ func (c *SSVSignerClient) Sign(sharePubKey []byte, payload web3signer.SignReques
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		respBytes, _ := io.ReadAll(resp.Body)
@@ -177,7 +206,11 @@ func (c *SSVSignerClient) GetOperatorIdentity() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		respBytes, _ := io.ReadAll(resp.Body)
@@ -199,7 +232,11 @@ func (c *SSVSignerClient) OperatorSign(payload []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			c.logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		respBytes, _ := io.ReadAll(resp.Body)

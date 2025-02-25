@@ -165,6 +165,9 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 
 	for _, network := range networks {
 		forkVersion := phase0.Version(beacon.NewNetwork(network).ForkVersion())
+		genesis := &v1.Genesis{
+			GenesisForkVersion: forkVersion,
+		}
 
 		ctx := context.Background()
 		callback := func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
@@ -186,7 +189,7 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 			require.NoError(t, err, "failed to create client")
 			client := c.(*GoClient)
 
-			output, err := client.assertSameGenesisVersion(forkVersion)
+			output, err := client.assertSameGenesisVersion(genesis)
 			require.Equal(t, forkVersion, output)
 			require.NoError(t, err, "failed to assert same genesis version: %s", err)
 		})
@@ -205,8 +208,11 @@ func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
 		require.NoError(t, err, "failed to create client")
 		client := c.(*GoClient)
 		forkVersion := phase0.Version{0x01, 0x02, 0x03, 0x04}
+		genesis := &v1.Genesis{
+			GenesisForkVersion: forkVersion,
+		}
 
-		output, err := client.assertSameGenesisVersion(forkVersion)
+		output, err := client.assertSameGenesisVersion(genesis)
 		require.Equal(t, networkVersion, output, "expected genesis version to be %s, got %s", networkVersion, output)
 		require.Error(t, err, "expected error when genesis versions are different")
 	})

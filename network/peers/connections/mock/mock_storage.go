@@ -18,6 +18,7 @@ var _ storage.Storage = NodeStorage{}
 
 type NodeStorage struct {
 	MockPrivateKeyHash              string
+	MockPublicKey                   string
 	RegisteredOperatorPublicKeyPEMs []string
 }
 
@@ -155,6 +156,19 @@ func (m NodeStorage) GetPrivateKeyHash() (string, bool, error) {
 }
 
 func (m NodeStorage) SavePrivateKeyHash(privKeyHash string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) GetPublicKey() (string, bool, error) {
+	if m.MockPublicKey != "" {
+		return m.MockPublicKey, true, nil
+	} else {
+		return "", false, errors.New("error")
+	}
+}
+
+func (m NodeStorage) SavePublicKey(publicKey string) error {
 	//TODO implement me
 	panic("implement me")
 }

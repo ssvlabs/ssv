@@ -8,7 +8,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -320,32 +319,6 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	validatorShare.Committee = shareMembers
 
 	return &validatorShare, encryptedKey, nil
-}
-
-func (eh *EventHandler) decryptSharePrivKey(
-	sharePublicKey []byte,
-	encryptedKey []byte,
-) (*bls.SecretKey, error) {
-	var shareSecret *bls.SecretKey
-	decryptedSharePrivateKey, err := eh.operatorDecrypter.Decrypt(encryptedKey)
-	if err != nil {
-		return nil, &MalformedEventError{
-			Err: fmt.Errorf("could not decrypt share private key: %w", err),
-		}
-	}
-	shareSecret = &bls.SecretKey{}
-	if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-		return nil, &MalformedEventError{
-			Err: fmt.Errorf("could not set decrypted share private key: %w", err),
-		}
-	}
-	if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), sharePublicKey) {
-		return nil, &MalformedEventError{
-			Err: errors.New("share private key does not match public key"),
-		}
-	}
-
-	return shareSecret, nil
 }
 
 var emptyPK = [48]byte{}

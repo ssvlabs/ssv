@@ -1362,7 +1362,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		}
 	}
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, *network, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, *network, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}

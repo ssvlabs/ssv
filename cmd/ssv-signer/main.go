@@ -30,7 +30,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer logger.Sync()
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			log.Println("failed to sync logger", zap.Error(err))
+		}
+	}()
 
 	logger.Debug("Starting ssv-signer",
 		zap.String("listen_addr", cli.ListenAddr),

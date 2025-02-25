@@ -149,7 +149,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var operatorPrivKey keys.OperatorPrivateKey
-		var operatorPrivKeyPEM string
 		var ssvSignerClient *ssvsignerclient.SSVSignerClient
 		var operatorPubKeyBase64 []byte
 
@@ -157,7 +156,7 @@ var StartNodeCmd = &cobra.Command{
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
 			logger.Info("using ssv-signer for signing")
 
-			ssvSignerClient = ssvsignerclient.New(cfg.SSVSignerEndpoint)
+			ssvSignerClient = ssvsignerclient.New(cfg.SSVSignerEndpoint, ssvsignerclient.WithLogger(logger))
 			operatorPubKeyString, err := ssvSignerClient.GetOperatorIdentity()
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
@@ -189,7 +188,7 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not extract private key from keystore", zap.Error(err))
 				}
 
-				operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
+				operatorPrivKeyPEM := base64.StdEncoding.EncodeToString(decryptedKeystore)
 				if err := saveOperatorPrivKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
 					logger.Fatal("could not save operator private key", zap.Error(err))
 				}
@@ -205,8 +204,6 @@ var StartNodeCmd = &cobra.Command{
 				if err := saveOperatorPrivKey(nodeStorage, operatorPrivKey, cfg.OperatorPrivateKey); err != nil {
 					logger.Fatal("could not save operator private key", zap.Error(err))
 				}
-
-				operatorPrivKeyPEM = cfg.OperatorPrivateKey
 			}
 
 			operatorPubKeyBase64, err = operatorPrivKey.Public().Base64()
