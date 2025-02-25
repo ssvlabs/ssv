@@ -238,7 +238,7 @@ func (ds *doppelgangerHandler) processLivenessData(epoch phase0.Epoch, livenessD
 		}
 
 		if response.IsLive {
-			ds.logger.Warn("Doppelganger detected for validator",
+			ds.logger.Warn("Doppelganger detected live validator",
 				fields.ValidatorIndex(response.Index),
 				fields.Epoch(epoch),
 			)

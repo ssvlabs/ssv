@@ -238,7 +238,7 @@ The implementation follows a **modular and extendable design**, with:
 | **🚫 No Validators for Liveness Check** | Logs when no validators need checking | `[DEBUG] No validators require liveness check` |
 | **⚠️ Failed Liveness Check** | Logs when Beacon Node fails to provide liveness data | `[ERROR] Failed to obtain validator liveness data error="beacon node request failed"` |
 | **🔎 Processing Liveness Data** | Logs when liveness check results are processed | `[DEBUG] Processing liveness data epoch=420 validator_index=123 is_live=true` |
-| **🛑 Doppelganger Detected** | Logs when a validator is active elsewhere | `[WARN] Doppelganger detected for validator validator_index=123 epoch=4567` |
+| **🛑 Doppelganger Detected** | Logs when a validator is active elsewhere | `[WARN] Doppelganger detected live validator validator_index=123 epoch=4567` |
 | **🟡 Validator No Longer Live, Requires Further Checks** | Logs when a validator was previously unsafe but is now inactive and under observation again. | `[DEBUG] Validator is no longer live but requires further checks validator_index=123 remaining_epochs=1` |
 | **🟠 Validator Still Under Observation** | Logs when a validator is still under observation and requires more epochs to be marked safe. | `[DEBUG] Validator still requires further checks validator_index=123 remaining_epochs=1` |
 | **✅ Validator Marked as Safe** | Logs when a validator is cleared to sign | `[DEBUG] Validator is now safe to sign validator_index=123` |
