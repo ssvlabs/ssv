@@ -9,7 +9,7 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/keystore"
-	"github.com/ssvlabs/ssv/ssvsigner/ssvsignerserver"
+	"github.com/ssvlabs/ssv/ssvsigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -77,7 +77,7 @@ func main() {
 
 	logger.Info("Starting ssv-signer server", zap.String("addr", cli.ListenAddr))
 
-	srv := ssvsignerserver.New(logger, operatorPrivateKey, web3SignerClient, cli.ShareKeystorePassphrase)
+	srv := server.New(logger, operatorPrivateKey, web3SignerClient, cli.ShareKeystorePassphrase)
 	if err := fasthttp.ListenAndServe(cli.ListenAddr, srv.Handler()); err != nil {
 		logger.Fatal("failed to start server", zap.Error(err))
 	}

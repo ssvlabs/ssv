@@ -3,7 +3,6 @@ module github.com/ssvlabs/ssv
 go 1.22.6
 
 require (
-	github.com/alecthomas/kong v1.8.1
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.24.0
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
@@ -11,7 +10,6 @@ require (
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/ethereum/go-ethereum v1.14.8
-	github.com/fasthttp/router v1.5.4
 	github.com/ferranbt/fastssz v0.1.4
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/go-chi/render v1.0.2
@@ -40,9 +38,9 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.0
 	github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c
+	github.com/ssvlabs/ssv/ssvsigner v1.2.1-0.20250225132028-13fbc8461e4e
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.10.0
-	github.com/valyala/fasthttp v1.58.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
 	github.com/wealdtech/go-eth2-util v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
@@ -63,8 +61,10 @@ require (
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/emicklei/dot v1.6.4 // indirect
+	github.com/fasthttp/router v1.5.4 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.58.0 // indirect
 )
 
 require (
@@ -260,3 +260,5 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
+
+replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner

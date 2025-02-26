@@ -1,4 +1,4 @@
-package ssvsignerserver
+package server
 
 import (
 	"encoding/hex"
@@ -12,13 +12,13 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/keystore"
-	web3signer2 "github.com/ssvlabs/ssv/ssvsigner/web3signer"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
-	web3Signer      *web3signer2.Web3Signer
+	web3Signer      *web3signer.Web3Signer
 	router          *router.Router
 	keystorePasswd  string
 }
@@ -26,7 +26,7 @@ type Server struct {
 func New(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
-	web3Signer *web3signer2.Web3Signer,
+	web3Signer *web3signer.Web3Signer,
 	keystorePasswd string,
 ) *Server {
 	r := router.New()
@@ -53,7 +53,7 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 	return r.router.Handler
 }
 
-type Status = web3signer2.Status
+type Status = web3signer.Status
 
 type AddValidatorRequest struct {
 	EncryptedSharePrivateKeys []string `json:"encrypted_share_private_keys"`
@@ -192,7 +192,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 }
 
 func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
-	var req web3signer2.SignRequest
+	var req web3signer.SignRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeErr(ctx, fmt.Errorf("invalid request body: %w", err))
