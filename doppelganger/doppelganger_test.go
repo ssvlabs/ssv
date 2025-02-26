@@ -148,3 +148,19 @@ func TestRemoveValidatorState(t *testing.T) {
 		dg.RemoveValidatorState(phase0.ValidatorIndex(456))
 	}, "Removing a non-existent validator should not panic")
 }
+
+func TestEpochSkipReset(t *testing.T) {
+	dg := newTestDoppelgangerHandler(t)
+
+	// Add test validator states with non-default remainingEpochs
+	dg.validatorsState[1] = &doppelgangerState{remainingEpochs: 5}
+	dg.validatorsState[2] = &doppelgangerState{remainingEpochs: 3}
+
+	// Call the reset method directly
+	dg.resetDoppelgangerStates()
+
+	// Verify that all validators have been reset
+	for _, state := range dg.validatorsState {
+		require.Equal(t, initialRemainingDetectionEpochs, state.remainingEpochs)
+	}
+}
