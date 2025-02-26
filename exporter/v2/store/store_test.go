@@ -41,7 +41,7 @@ func TestSaveCommitteeDuties(t *testing.T) {
 	traces := []*model.CommitteeDutyTrace{makeCTrace(1, 'a'), makeCTrace(1, 'b')}
 
 	store := store.New(db)
-	require.NoError(t, store.SaveCommiteeDuties(phase0.Slot(1), traces))
+	require.NoError(t, store.SaveCommitteeDuties(phase0.Slot(1), traces))
 
 	duty, err := store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'a'})
 	require.NoError(t, err)

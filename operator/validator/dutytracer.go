@@ -41,6 +41,9 @@ if bad perf - for performance we can use map/mutex instead of ttlcache
 type InMemTracer struct {
 	logger *zap.Logger
 
+	validatorCommitteeMappingMu sync.Mutex
+	validatorCommitteeMapping   *ttlcache.Cache[phase0.Slot, map[phase0.ValidatorIndex]spectypes.CommitteeID]
+
 	validatorTracesMu sync.Mutex
 	validatorTraces   *ttlcache.Cache[uint64, map[spectypes.ValidatorPK][]*validatorDutyTrace] // /traces/validator
 
@@ -63,6 +66,9 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 		committeeTraces: ttlcache.New(
 			ttlcache.WithTTL[uint64, map[spectypes.CommitteeID]*committeeDutyTrace](flushToDisk),
 		),
+		validatorCommitteeMapping: ttlcache.New(
+			ttlcache.WithTTL[phase0.Slot, map[phase0.ValidatorIndex]spectypes.CommitteeID](flushToDisk),
+		),
 		store:      store,
 		client:     client,
 		validators: validators,
@@ -77,11 +83,25 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 			case <-ctx.Done():
 				return
 			case <-ticker.Next():
-				tracer.committeeTraces.DeleteExpired()
+				tracer.validatorCommitteeMapping.DeleteExpired()
 				tracer.validatorTraces.DeleteExpired()
+				tracer.committeeTraces.DeleteExpired()
 			}
 		}
 	}()
+
+	tracer.validatorCommitteeMapping.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[phase0.Slot, map[phase0.ValidatorIndex]spectypes.CommitteeID]) {
+		tracer.validatorCommitteeMappingMu.Lock()
+		defer tracer.validatorCommitteeMappingMu.Unlock()
+
+		err := store.SaveCommitteeDutyLinks(item.Key(), item.Value())
+		if err != nil {
+			logger.Error("save committee duty links to disk", zap.Error(err))
+			return
+		}
+
+		logger.Info("save committee duty links to disk", fields.Slot(item.Key()), zap.Int("items", len(item.Value())))
+	})
 
 	tracer.committeeTraces.OnEviction(func(_ context.Context, _ ttlcache.EvictionReason, item *ttlcache.Item[uint64, map[spectypes.CommitteeID]*committeeDutyTrace]) {
 		tracer.committeeTracesMu.Lock()
@@ -91,12 +111,12 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 		for _, d := range item.Value() {
 			duties = append(duties, &d.CommitteeDutyTrace)
 		}
-		err := store.SaveCommiteeDuties(phase0.Slot(item.Key()), duties)
+		err := store.SaveCommitteeDuties(phase0.Slot(item.Key()), duties)
 		if err != nil {
-			logger.Error("save committees duties to disk", zap.Uint64("slot", item.Key()), zap.Int("items", len(duties)))
+			logger.Error("save committee duties to disk", zap.Uint64("slot", item.Key()), zap.Int("items", len(duties)))
 			return
 		}
-		logger.Info("save committees duties to disk", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
+		logger.Info("save committee duties to disk", zap.Uint64("slot", item.Key()), zap.Int("len", len(item.Value())))
 	})
 
 	tracer.committeeTraces.OnInsertion(func(ctx context.Context, i *ttlcache.Item[uint64, map[spectypes.CommitteeID]*committeeDutyTrace]) {
@@ -114,7 +134,8 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 		var duties []*model.ValidatorDutyTrace
 		for pk, traces := range item.Value() {
 			for _, trace := range traces {
-				// some duties do not have the validator index set
+				// TODO: confirm it makes sense
+				// in case some duties do not have the validator index set
 				if trace.Validator == 0 {
 					index, found := tracer.validators.ValidatorIndex(pk)
 					if !found {
@@ -123,6 +144,7 @@ func NewTracer(ctx context.Context, logger *zap.Logger, ticker slotticker.SlotTi
 					}
 					trace.Validator = index
 				}
+				logger.Info("validator", zap.Uint64("slot", item.Key()), zap.Uint64("index", uint64(trace.Validator)), fields.BeaconRole(trace.Role), fields.Validator(pk[:]))
 				duties = append(duties, &trace.ValidatorDutyTrace)
 			}
 		}
@@ -359,15 +381,6 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 		trace.Validator = msg.Messages[0].ValidatorIndex
 	}
 
-	fields := []zap.Field{
-		zap.Uint64("slot", slot),
-		zap.Uint64("validatorIndex", uint64(trace.Validator)),
-		zap.String("type", role.String()),
-		fields.Validator(pubkey[:]),
-	}
-
-	n.logger.Info("signed validator", fields...)
-
 	var tr model.PartialSigTrace
 	tr.Type = msg.Type
 	tr.BeaconRoot = msg.Messages[0].SigningRoot
@@ -397,6 +410,9 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 		}
 	}
 
+	// store the link between validator index and committee id
+	n.saveValidatorToCommitteeLink(phase0.Slot(slot), msg, committeeID)
+
 	for _, partialSigMsg := range msg.Messages {
 		var tr model.SignerData
 		tr.Signers = append(tr.Signers, partialSigMsg.Signer)
@@ -409,6 +425,21 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 
 		// TODO:me (electra) - implement a check for: attestation is correct instead of assuming
 		trace.Attester = append(trace.Attester, &tr)
+	}
+}
+
+func (n *InMemTracer) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
+	n.validatorCommitteeMappingMu.Lock()
+	defer n.validatorCommitteeMappingMu.Unlock()
+
+	cacheItem, _ := n.validatorCommitteeMapping.GetOrSet(slot, make(map[phase0.ValidatorIndex]spectypes.CommitteeID))
+	for _, msg := range msg.Messages {
+		cacheItem.Value()[msg.ValidatorIndex] = committeeID
+		s, f := n.validators.ValidatorByIndex(msg.ValidatorIndex)
+		if !f {
+			continue
+		}
+		n.logger.Info("store link for", fields.Slot(slot), zap.Uint64("index", uint64(msg.ValidatorIndex)), fields.CommitteeID(committeeID), fields.Validator(s.ValidatorPubKey[:]))
 	}
 }
 
@@ -502,13 +533,14 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				// 	n.logger.Error("fill sync committee roots", zap.Error(err))
 				// }
 
-				round := trace.getOrCreateRound(uint64(subMsg.Round))
+				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
 				// TODO(moshe) populate proposer or not?
 				n.populateProposer(round, committeeID, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
+					n.logger.Info("committee decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.CommitteeID(committeeID))
 					trace.Decideds = append(trace.Decideds, decided)
 				}
 			default:
@@ -555,14 +587,14 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				trace.Lock()
 				defer trace.Unlock()
 
-				round := trace.getOrCreateRound(uint64(subMsg.Round))
+				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
 				// TODO(moshe) populate proposer or not?
 				// n.populateProposer(round, validatorPK, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
-					n.logger.Info("got decideds for", fields.Slot(phase0.Slot(subMsg.Height)), fields.Validator(validatorPK[:]))
+					n.logger.Info("validator decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.Validator(validatorPK[:]))
 					trace.Decideds = append(trace.Decideds, decided)
 				}
 			}
@@ -627,25 +659,14 @@ type validatorDutyTrace struct {
 	model.ValidatorDutyTrace
 }
 
-func (trace *validatorDutyTrace) getOrCreateRound(rnd uint64) *model.RoundTrace {
-	var count = len(trace.Rounds)
-	for rnd > uint64(count) { //nolint:gosec
-		trace.Rounds = append(trace.Rounds, &model.RoundTrace{})
-		count = len(trace.Rounds)
-	}
-
-	return trace.Rounds[rnd-1]
-}
-
-// committee
-
 type committeeDutyTrace struct {
 	sync.Mutex
 	syncCommitteeRoot phase0.Root
 	model.CommitteeDutyTrace
 }
 
-func (trace *committeeDutyTrace) getOrCreateRound(rnd uint64) *model.RoundTrace {
+// must be called under parent trace lock
+func getOrCreateRound(trace *model.ConsensusTrace, rnd uint64) *model.RoundTrace {
 	var count = len(trace.Rounds)
 	for rnd > uint64(count) { //nolint:gosec
 		trace.Rounds = append(trace.Rounds, &model.RoundTrace{})

@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	validatorDutyTraceKey    = "vd"
-	commiteeDutyTraceKey     = "cd"
-	commiteeOperatorIndexKey = "ci"
+	validatorDutyTraceKey      = "vd"
+	commiteeDutyTraceKey       = "cd"
+	commiteeOperatorIndexKey   = "ci"
+	validatorCommitteeIndexKey = "vc"
 )
 
 type DutyTraceStore struct {
@@ -102,7 +103,38 @@ func (s *DutyTraceStore) GetAllValidatorDuties(role spectypes.BeaconRole, slot p
 	return
 }
 
-func (s *DutyTraceStore) SaveCommiteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
+func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (id spectypes.CommitteeID, err error) {
+	prefix := s.makeValidatorCommitteePrefix(slot, index)
+	obj, found, err := s.db.Get(prefix, nil)
+	if err != nil {
+		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link: %w", err)
+	}
+	if !found {
+		return spectypes.CommitteeID{}, fmt.Errorf("committee duty link not found")
+	}
+
+	return spectypes.CommitteeID(obj.Value), nil
+}
+
+func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, mappings map[phase0.ValidatorIndex]spectypes.CommitteeID) error {
+	tx := s.db.Begin()
+	defer tx.Discard()
+
+	for index, id := range mappings {
+		prefix := s.makeValidatorCommitteePrefix(slot, index)
+		if err := s.db.Using(tx).Set(prefix, nil, id[:]); err != nil {
+			return fmt.Errorf("save committee duty link: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteeSlotPrefix(slot)
 
 	return s.db.SetMany(prefix, len(duties), func(i int) (basedb.Obj, error) {
@@ -230,7 +262,7 @@ func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.Comm
 // slot + index
 func (s *DutyTraceStore) makeCommiteeOperatorPrefixes(ii []spectypes.OperatorID, slot phase0.Slot) (keys [][]byte) {
 	for _, index := range ii {
-		prefix := make([]byte, 0, len(commiteeOperatorIndexKey)+4+32)
+		prefix := make([]byte, 0, len(commiteeOperatorIndexKey)+4+8)
 		prefix = append(prefix, []byte(commiteeOperatorIndexKey)...)
 		prefix = append(prefix, slotToByteSlice(slot)...)
 		prefix = append(prefix, uInt64ToByteSlice(index)...)
@@ -238,6 +270,15 @@ func (s *DutyTraceStore) makeCommiteeOperatorPrefixes(ii []spectypes.OperatorID,
 	}
 
 	return
+}
+
+// slot + index
+func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot, index phase0.ValidatorIndex) []byte {
+	prefix := make([]byte, 0, len(validatorCommitteeIndexKey)+4+8)
+	prefix = append(prefix, []byte(validatorCommitteeIndexKey)...)
+	prefix = append(prefix, slotToByteSlice(slot)...)
+	prefix = append(prefix, uInt64ToByteSlice(uint64(index))...)
+	return prefix
 }
 
 // helpers
