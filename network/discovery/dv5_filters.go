@@ -5,7 +5,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
 )
@@ -66,7 +65,7 @@ func (dvs *DiscV5Service) recentlyTrimmedFilter() func(node *enode.Node) bool {
 		if err != nil {
 			return false
 		}
-		return !peers.TrimmedRecently.Has(pid)
+		return !dvs.trimmedRecently.Has(pid)
 	}
 }
 
@@ -117,7 +116,7 @@ func (dvs *DiscV5Service) alreadyDiscoveredFilter(logger *zap.Logger) func(node 
 			logger.Warn("could not get peer ID from node record", zap.Error(err))
 			return false
 		}
-		if peers.DiscoveredPeersPool.Has(pID) {
+		if dvs.discoveredPeersPool.Has(pID) {
 			// this log line is commented out as it is too spammy
 			//n.interfaceLogger.Debug(
 			//	"discovery proposed peer, this proposal is already in proposal-pool",

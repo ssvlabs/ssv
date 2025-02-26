@@ -135,7 +135,14 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer, n.atInboundLimit)
+	n.connGater = connections.NewConnectionGater(
+		logger,
+		n.cfg.DisableIPRateLimit,
+		n.connectionsAtLimit,
+		n.IsBadPeer,
+		n.atInboundLimit,
+		n.trimmedRecently,
+	)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -235,7 +242,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
@@ -277,13 +284,14 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
-		Host:          n.host,
-		DiscV5Opts:    discV5Opts,
-		ConnIndex:     n.idx,
-		SubnetsIdx:    n.idx,
-		HostAddress:   n.cfg.HostAddress,
-		HostDNS:       n.cfg.HostDNS,
-		NetworkConfig: n.cfg.Network,
+		Host:                n.host,
+		DiscV5Opts:          discV5Opts,
+		ConnIndex:           n.idx,
+		SubnetsIdx:          n.idx,
+		HostAddress:         n.cfg.HostAddress,
+		HostDNS:             n.cfg.HostDNS,
+		NetworkConfig:       n.cfg.Network,
+		DiscoveredPeersPool: n.discoveredPeersPool,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {

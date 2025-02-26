@@ -2,6 +2,8 @@ package connections
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"sync"
 	"time"
 
@@ -25,11 +27,12 @@ type ConnHandler interface {
 type connHandler struct {
 	ctx context.Context
 
-	handshaker      Handshaker
-	subnetsProvider SubnetsProvider
-	subnetsIndex    peers.SubnetsIndex
-	connIdx         peers.ConnectionIndex
-	peerInfos       peers.PeerInfoIndex
+	handshaker          Handshaker
+	subnetsProvider     SubnetsProvider
+	subnetsIndex        peers.SubnetsIndex
+	connIdx             peers.ConnectionIndex
+	peerInfos           peers.PeerInfoIndex
+	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
 }
 
 // NewConnHandler creates a new connection handler
@@ -40,14 +43,16 @@ func NewConnHandler(
 	subnetsIndex peers.SubnetsIndex,
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
+	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
 ) ConnHandler {
 	return &connHandler{
-		ctx:             ctx,
-		handshaker:      handshaker,
-		subnetsProvider: subnetsProvider,
-		subnetsIndex:    subnetsIndex,
-		connIdx:         connIdx,
-		peerInfos:       peerInfos,
+		ctx:                 ctx,
+		handshaker:          handshaker,
+		subnetsProvider:     subnetsProvider,
+		subnetsIndex:        subnetsIndex,
+		connIdx:             connIdx,
+		peerInfos:           peerInfos,
+		discoveredPeersPool: discoveredPeersPool,
 	}
 }
 
@@ -191,13 +196,13 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
 
-				// if this connection is the one we found through discovery - remove it from DiscoveredPeersPool
+				// if this connection is the one we found through discovery - remove it from discoveredPeersPool
 				// so we won't be retrying connecting that same peer again until discovery stumbles upon it again
 				// (discovery also filters out peers we are already connected to, meaning it should re-discover
 				// that same peer only after we'll disconnect him). Note, this is best-effort solution meaning
 				// we still might try connecting to this peer even though we've connected him here - this is
 				// because it would be hard to implement the prevention for this that works atomically
-				peers.DiscoveredPeersPool.Delete(conn.RemotePeer())
+				ch.discoveredPeersPool.Delete(conn.RemotePeer())
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
