@@ -58,7 +58,7 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		eventHandler:    eventHandler,
 
 		logger:             zap.NewNop(),
-		stalenessThreshold: 150 * time.Second,
+		stalenessThreshold: 3600 * time.Second, // TODO: REVERT
 	}
 
 	for _, opt := range opts {
