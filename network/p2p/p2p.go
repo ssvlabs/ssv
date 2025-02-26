@@ -358,8 +358,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 
 		// peersToConnect is a final set of peers we are gonna try to connect with
 		peersToConnect := make(map[peer.ID]peers.DiscoveredPeer)
-		// minScore and maxScore are used for printing additional debugging info
-		minScore, maxScore := math.MaxFloat64, 0.0
 		// ownSubnetSum represents subnet-sum of peers we already have open connections with
 		ownSubnetSum := SubnetSum{}
 		allPeerIDs, err := n.topicsCtrl.Peers("")
@@ -386,6 +384,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			}
 			// peersByPriority keeps track of best peers (by their peer score)
 			peersByPriority := lane.NewMaxPriorityQueue[peerWithSubnetSum, float64]()
+			// minScore and maxScore are used for printing additional debugging info
+			minScore, maxScore := math.MaxFloat64, 0.0
 			peers.DiscoveredPeersPool.Range(func(key peer.ID, value peers.DiscoveredPeer) bool {
 				const retryLimit = 2
 				if value.ConnectRetries >= retryLimit {
@@ -415,21 +415,31 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 					p:         value,
 					subnetSum: pSubnetSum,
 				}, peerScore)
+
+				if minScore > peerScore {
+					minScore = peerScore
+				}
+				if maxScore < peerScore {
+					maxScore = peerScore
+				}
+
 				return true
 			})
 
-			bestPeer, priority, ok := peersByPriority.Pop()
+			bestPeer, _, ok := peersByPriority.Pop()
 			if !ok {
 				break // there is no point in trying to find more of best peers
 			}
-			if minScore > priority {
-				minScore = priority
-			}
-			if maxScore < priority {
-				maxScore = priority
-			}
+
 			peersToConnectSubnetSum = addSubnetSums(peersToConnectSubnetSum, bestPeer.subnetSum)
 			peersToConnect[bestPeer.p.ID] = bestPeer.p
+
+			n.interfaceLogger.Debug(
+				fmt.Sprintf("Found the best peer (iteration %d of %d) to try to connect to", i, peersToConnectMaxCnt),
+				zap.Uint("peers_scored_total", peersByPriority.Size()),
+				zap.Float64("min_score", minScore),
+				zap.Float64("max_score", maxScore),
+			)
 		}
 
 		// finally, offer the best peers we've picked to connector so it tries to connect these
@@ -444,8 +454,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		n.interfaceLogger.Info(
 			"Proposed discovered peers to try connect to",
 			zap.Int("count", len(peersToConnect)),
-			zap.Float64("min_score", minScore),
-			zap.Float64("max_score", maxScore),
 		)
 	})
 
