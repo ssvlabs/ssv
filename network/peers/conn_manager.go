@@ -2,8 +2,6 @@ package peers
 
 import (
 	"context"
-	"time"
-
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -15,19 +13,6 @@ import (
 
 const (
 	ProtectedTag = "ssv/subnets"
-)
-
-type DiscoveredPeer struct {
-	peer.AddrInfo
-	// ConnectRetries keeps track of how many times we tried to connect to this peer.
-	ConnectRetries int
-}
-
-var (
-	// DiscoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
-	// the best candidates to connect to.
-	DiscoveredPeersPool = ttl.New[peer.ID, DiscoveredPeer](15*time.Minute, 5*time.Minute)
-	TrimmedRecently     = ttl.New[peer.ID, struct{}](30*time.Minute, 5*time.Minute)
 )
 
 // ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.
@@ -48,6 +33,7 @@ type connManager struct {
 	connManager      connmgrcore.ConnManager
 	subnetsIdx       SubnetsIndex
 	gossipScoreIndex GossipScoreIndex
+	trimmedRecently  *ttl.Map[peer.ID, struct{}]
 }
 
 // NewConnManager creates a new conn manager.
@@ -76,7 +62,7 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 			if err := c.disconnect(pid, net); err != nil {
 				logger.Debug("error closing peer", fields.PeerID(pid), zap.Error(err))
 			}
-			TrimmedRecently.Set(pid, struct{}{}) // record stats
+			c.trimmedRecently.Set(pid, struct{}{}) // record stats
 			trimmed = append(trimmed, pid)
 			if len(trimmed) >= maxTrims {
 				break

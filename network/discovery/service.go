@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"io"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -33,13 +34,14 @@ type HandleNewPeer func(e PeerEvent)
 
 // Options represents the options passed to create a service
 type Options struct {
-	Host          host.Host
-	DiscV5Opts    *DiscV5Options
-	ConnIndex     peers.ConnectionIndex
-	SubnetsIdx    peers.SubnetsIndex
-	HostAddress   string
-	HostDNS       string
-	NetworkConfig networkconfig.NetworkConfig
+	Host                host.Host
+	DiscV5Opts          *DiscV5Options
+	ConnIndex           peers.ConnectionIndex
+	SubnetsIdx          peers.SubnetsIndex
+	HostAddress         string
+	HostDNS             string
+	NetworkConfig       networkconfig.NetworkConfig
+	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
 }
 
 // Service is the interface for discovery
@@ -58,4 +60,10 @@ func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service,
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}
 	return newDiscV5Service(ctx, logger, &opts)
+}
+
+type DiscoveredPeer struct {
+	peer.AddrInfo
+	// ConnectRetries keeps track of how many times we tried to connect to this peer.
+	ConnectRetries int
 }

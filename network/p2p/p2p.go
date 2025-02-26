@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"math"
 	"math/rand"
 	"os"
@@ -107,10 +108,21 @@ type p2pNetwork struct {
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
 	operatorSigner          keys.OperatorSigner
 	operatorDataStore       operatordatastore.OperatorDataStore
+
+	// discoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
+	// the best candidates to connect to.
+	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
+	// trimmedRecently keeps track of recently trimmed peers so we don't try to connect to these
+	// shortly after we've trimmed these (we still might consider connecting to these once they
+	// are removed from this map after some time passes)
+	trimmedRecently *ttl.Map[peer.ID, struct{}]
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config) (*p2pNetwork, error) {
+func New(
+	logger *zap.Logger,
+	cfg *Config,
+) (*p2pNetwork, error) {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
@@ -129,6 +141,8 @@ func New(logger *zap.Logger, cfg *Config) (*p2pNetwork, error) {
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
+		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](15*time.Minute, 5*time.Minute),
+		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 5*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err
@@ -264,11 +278,11 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go func() {
 		// keep discovered peers in a pool so we can choose the best ones
 		for proposal := range connectorProposals {
-			discoveredPeer := peers.DiscoveredPeer{
+			discoveredPeer := discovery.DiscoveredPeer{
 				AddrInfo:       proposal,
 				ConnectRetries: 0,
 			}
-			peers.DiscoveredPeersPool.Set(proposal.ID, discoveredPeer)
+			n.discoveredPeersPool.Set(proposal.ID, discoveredPeer)
 
 			n.interfaceLogger.Debug(
 				"discovery proposed peer, adding it to the pool",
@@ -357,7 +371,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 
 		// peersToConnect is a final set of peers we are gonna try to connect with
-		peersToConnect := make(map[peer.ID]peers.DiscoveredPeer)
+		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
 		// ownSubnetSum represents subnet-sum of peers we already have open connections with
 		ownSubnetSum := SubnetSum{}
 		allPeerIDs, err := n.topicsCtrl.Peers("")
@@ -379,20 +393,20 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			currentSubnetSum := addSubnetSums(ownSubnetSum, peersToConnectSubnetSum)
 
 			type peerWithSubnetSum struct {
-				p         peers.DiscoveredPeer
+				p         discovery.DiscoveredPeer
 				subnetSum SubnetSum
 			}
 			// peersByPriority keeps track of best peers (by their peer score)
 			peersByPriority := lane.NewMaxPriorityQueue[peerWithSubnetSum, float64]()
 			// minScore and maxScore are used for printing additional debugging info
 			minScore, maxScore := math.MaxFloat64, 0.0
-			peers.DiscoveredPeersPool.Range(func(key peer.ID, value peers.DiscoveredPeer) bool {
+			n.discoveredPeersPool.Range(func(key peer.ID, value discovery.DiscoveredPeer) bool {
 				const retryLimit = 2
 				if value.ConnectRetries >= retryLimit {
 					// this discovered peer has been tried many times already, we'll ignore him but won't
-					// remove him from DiscoveredPeersPool (since if we do - discovery might suggest this
+					// remove him from discoveredPeersPool (since if we do - discovery might suggest this
 					// peer again essentially resetting this peer's retry attempts counter to 0), eventually
-					// (after some time passes) this peer will automatically get removed from DiscoveredPeersPool
+					// (after some time passes) this peer will automatically get removed from discoveredPeersPool
 					// so it can be discovered again (effectively resetting peer's retry attempts counter to 0)
 
 					// this log line is commented out as it is too spammy
@@ -447,7 +461,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// finally, offer the best peers we've picked to connector so it tries to connect these
 		for _, p := range peersToConnect {
 			// update retry counter for this peer so we eventually skip it after certain number of retries
-			peers.DiscoveredPeersPool.Set(p.ID, peers.DiscoveredPeer{
+			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
 				AddrInfo:       p.AddrInfo,
 				ConnectRetries: p.ConnectRetries + 1,
 			})

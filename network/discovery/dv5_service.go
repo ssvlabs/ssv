@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"net"
 	"time"
 
@@ -58,6 +59,14 @@ type DiscV5Service struct {
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
 
+	// discoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
+	// the best candidates to connect to.
+	discoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
+	// trimmedRecently keeps track of recently trimmed peers so we don't try to connect to these
+	// shortly after we've trimmed these (we still might consider connecting to these once they
+	// are removed from this map after some time passes)
+	trimmedRecently *ttl.Map[peer.ID, struct{}]
+
 	conn       *net.UDPConn
 	sharedConn *SharedUDPConn
 
@@ -70,13 +79,14 @@ type DiscV5Service struct {
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:           ctx,
-		cancel:        cancel,
-		conns:         opts.ConnIndex,
-		subnetsIdx:    opts.SubnetsIdx,
-		networkConfig: opts.NetworkConfig,
-		subnets:       opts.DiscV5Opts.Subnets,
-		publishLock:   make(chan struct{}, 1),
+		ctx:                 ctx,
+		cancel:              cancel,
+		conns:               opts.ConnIndex,
+		subnetsIdx:          opts.SubnetsIdx,
+		networkConfig:       opts.NetworkConfig,
+		subnets:             opts.DiscV5Opts.Subnets,
+		publishLock:         make(chan struct{}, 1),
+		discoveredPeersPool: opts.DiscoveredPeersPool,
 	}
 
 	logger.Debug(

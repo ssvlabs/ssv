@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"runtime"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/peers"
 	"go.uber.org/zap"
 )
 
@@ -36,10 +36,18 @@ type connGater struct {
 	ipLimiter       *leakybucket.Collector
 	isBadPeer       IsBadPeerF
 	atInboundLimit  AtInboundLimitF
+	trimmedRecently *ttl.Map[peer.ID, struct{}]
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, isBadPeer IsBadPeerF, atInboundLimit AtInboundLimitF) connmgr.ConnectionGater {
+func NewConnectionGater(
+	logger *zap.Logger,
+	disable bool,
+	atLimit func() bool,
+	isBadPeer IsBadPeerF,
+	atInboundLimit AtInboundLimitF,
+	trimmedRecently *ttl.Map[peer.ID, struct{}],
+) connmgr.ConnectionGater {
 	return &connGater{
 		logger:          logger,
 		disable:         disable,
@@ -47,6 +55,7 @@ func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool, i
 		ipLimiter:       leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
 		isBadPeer:       isBadPeer,
 		atInboundLimit:  atInboundLimit,
+		trimmedRecently: trimmedRecently,
 	}
 }
 
@@ -94,7 +103,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	if peers.TrimmedRecently.Has(id) {
+	if n.trimmedRecently.Has(id) {
 		n.logger.Debug(
 			"InterceptSecured: trying to connect a peer we've recently trimmed",
 			zap.String("conn_direction", direction.String()),
