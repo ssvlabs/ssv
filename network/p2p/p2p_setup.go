@@ -103,6 +103,10 @@ func (n *p2pNetwork) initCfg() error {
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer
 	}
+
+	// TODO - override config value for testing
+	n.cfg.MaxPeers = 90
+
 	if n.cfg.TopicMaxPeers <= 0 {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
 	}
@@ -110,7 +114,7 @@ func (n *p2pNetwork) initCfg() error {
 	return nil
 }
 
-// Returns whetehr a peer is bad
+// IsBadPeer returns whether a peer is bad
 func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
 	if n.idx == nil {
 		return false

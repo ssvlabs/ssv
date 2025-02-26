@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -455,6 +456,13 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
 
 	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl, 2))
+
+	// TODO - used for testing (to gather more stats on how logs node takes to resolve dead
+	// subnets at node-start)
+	async.Interval(n.ctx, 2*time.Hour, func() {
+		n.interfaceLogger.Info("FORCE-restarting SSV node")
+		os.Exit(0)
+	})
 
 	if err := n.subscribeToFixedSubnets(logger); err != nil {
 		return err
