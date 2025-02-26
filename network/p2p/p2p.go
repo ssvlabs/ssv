@@ -391,7 +391,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				if value.ConnectRetries >= retryLimit {
 					// this discovered peer has been tried many times already, we'll ignore him but won't
 					// remove him from DiscoveredPeersPool (since if we do - discovery might suggest this
-					// peer again essentially resetting this peer's retry attempts counter to 0)
+					// peer again essentially resetting this peer's retry attempts counter to 0), eventually
+					// (after some time passes) this peer will automatically get removed from DiscoveredPeersPool
+					// so it can be discovered again (effectively resetting peer's retry attempts counter to 0)
 
 					// this log line is commented out as it is too spammy
 					//n.interfaceLogger.Debug(
