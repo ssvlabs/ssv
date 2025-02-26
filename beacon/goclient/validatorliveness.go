@@ -3,6 +3,8 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -11,29 +13,27 @@ import (
 )
 
 func (gc *GoClient) ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*apiv1.ValidatorLiveness, error) {
+	start := time.Now()
 	resp, err := gc.multiClient.ValidatorLiveness(ctx, &api.ValidatorLivenessOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
+	recordRequestDuration(gc.ctx, "ValidatorLiveness", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+
+	logger := gc.log.With(zap.String("api", "ValidatorLiveness"))
+
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "ValidatorLiveness"),
-			zap.Error(err),
-		)
+		logger.Error(clResponseErrMsg, zap.Error(err))
 		return nil, err
 	}
 
 	if resp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "ValidatorLiveness"),
-		)
+		logger.Error(clNilResponseErrMsg)
 		return nil, fmt.Errorf("validator liveness response is nil")
 	}
 
 	if resp.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "ValidatorLiveness"),
-		)
+		gc.log.Error(clNilResponseDataErrMsg)
 		return nil, fmt.Errorf("validator liveness data is nil")
 	}
 
