@@ -49,7 +49,7 @@ func GetTopicFullName(baseName string) string {
 
 // GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
 func GetTopicBaseName(topicName string) string {
-	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
+	return strings.TrimPrefix(topicName, topicPrefix+".")
 }
 
 // CommitteeSubnet returns the subnet for the given committee
