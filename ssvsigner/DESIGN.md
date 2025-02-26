@@ -26,7 +26,7 @@ ssv-signer is a lightweight remote signing service inspired by Web3Signer. It wi
 
 #### API Endpoints
 
-- `/v1/validators/add` - Receives an encrypted validator share and a corresponding validator public key. Verifies the validity of the provided keys.Decrypts the share and stores it in the configured Web3Signer instance. Adds the decrypted shares directly into the Web3Signer instance, leveraging its built-in capabilities, including the slashing protection database.
+- `/v1/validators/add` - Receives an encrypted validator share and a corresponding validator public key. Verifies the validity of the provided keys. Decrypts the share and stores it in the configured Web3Signer instance. Adds the decrypted shares directly into the Web3Signer instance, leveraging its built-in capabilities, including the slashing protection database.
     - Calls https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT
     - Requires creating a keystore for the SSV share (search `keystorev4` package)
     - Note: keystore private key is the share private key, so accordingly the public key should be share public key
