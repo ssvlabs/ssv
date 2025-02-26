@@ -92,8 +92,7 @@ func (n *p2pNetwork) initCfg() error {
 		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
 	}
 	if len(n.cfg.Subnets) > 0 {
-		s := make(p2pcommons.Subnets, 0)
-		subnets, err := s.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
+		subnets, err := p2pcommons.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
 		if err != nil {
 			return fmt.Errorf("parse subnet: %w", err)
 		}

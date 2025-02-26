@@ -176,7 +176,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	return nil
 }
 
-var zeroSubnets, _ = commons.Subnets{}.FromString(commons.ZeroSubnets)
+var zeroSubnets, _ = commons.FromString(commons.ZeroSubnets)
 
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.

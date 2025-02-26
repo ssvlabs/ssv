@@ -122,7 +122,7 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) commons.Subnets {
 func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets commons.Subnets, topicMaxPeers int) []float64 {
 	const activeSubnetBoost = 0.2
 
-	allSubs, _ := commons.Subnets{}.FromString(commons.AllSubnets)
+	allSubs, _ := commons.FromString(commons.AllSubnets)
 	activeSubnets := commons.SharedSubnets(allSubs, mySubnets, 0)
 
 	scores := make([]float64, len(allSubs))
