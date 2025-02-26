@@ -283,12 +283,12 @@ var StartNodeCmd = &cobra.Command{
 
 		if usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
+				logger,
 				ssvSignerClient,
 				consensusClient,
 				db,
 				networkConfig,
 				operatorDataStore.GetOperatorID,
-				ekm.WithLogger(logger),
 				ekm.WithRetryCount(3),
 			)
 			if err != nil {

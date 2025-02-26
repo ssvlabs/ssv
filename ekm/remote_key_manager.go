@@ -40,6 +40,7 @@ type RemoteKeyManager struct {
 }
 
 func NewRemoteKeyManager(
+	logger *zap.Logger,
 	client *ssvsignerclient.SSVSignerClient,
 	consensusClient *goclient.GoClient,
 	db basedb.Database,
@@ -47,17 +48,13 @@ func NewRemoteKeyManager(
 	getOperatorId func() spectypes.OperatorID,
 	options ...Option,
 ) (*RemoteKeyManager, error) {
-	s := &RemoteKeyManager{}
-	for _, option := range options {
-		option(s)
-	}
 
-	signerStore := NewSignerStorage(db, networkConfig.Beacon, s.logger)
+	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	sp, err := NewSlashingProtector(s.logger, signerStore, protection)
+	sp, err := NewSlashingProtector(logger, signerStore, protection)
 	if err != nil {
-		s.logger.Fatal("could not create new slashing protector", zap.Error(err))
+		logger.Fatal("could not create new slashing protector", zap.Error(err))
 	}
 
 	operatorPubKeyString, err := client.GetOperatorIdentity()
@@ -70,11 +67,18 @@ func NewRemoteKeyManager(
 		return nil, fmt.Errorf("extract operator public key: %w", err)
 	}
 
-	s.client = client
-	s.consensusClient = consensusClient
-	s.SlashingProtector = sp
-	s.getOperatorId = getOperatorId
-	s.operatorPubKey = operatorPubKey
+	s := &RemoteKeyManager{
+		logger:            logger,
+		client:            client,
+		consensusClient:   consensusClient,
+		SlashingProtector: sp,
+		getOperatorId:     getOperatorId,
+		operatorPubKey:    operatorPubKey,
+	}
+
+	for _, option := range options {
+		option(s)
+	}
 
 	return s, nil
 }
