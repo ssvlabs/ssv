@@ -71,8 +71,6 @@ type handler struct {
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
 	logger             *zap.Logger
-
-	startEpoch phase0.Epoch
 }
 
 // NewHandler initializes a new instance of the Doppelgänger protection.
@@ -176,6 +174,7 @@ func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 func (h *handler) Start(ctx context.Context) error {
 	h.logger.Info("Doppelganger monitoring started")
 
+	var startEpoch, previousEpoch phase0.Epoch
 	firstRun := true
 	ticker := h.slotTickerProvider()
 	slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
@@ -198,16 +197,30 @@ func (h *handler) Start(ctx context.Context) error {
 			// Perform liveness checks during the first run or at the last slot of the epoch.
 			// This ensures that the beacon node has had enough time to observe blocks and attestations,
 			// preventing delays in marking a validator as safe.
-			if (!firstRun && uint64(currentSlot)%slotsPerEpoch != slotsPerEpoch-1) || h.startEpoch == currentEpoch {
+			if (!firstRun && uint64(currentSlot)%slotsPerEpoch != slotsPerEpoch-1) || startEpoch == currentEpoch {
 				continue
 			}
 
 			if firstRun {
-				h.startEpoch = currentEpoch
+				startEpoch = currentEpoch
 				firstRun = false
 			}
 
+			// Detect if an unexpected gap in epochs occurred (e.g., due to system sleep or clock drift).
+			// If we detect a skipped epoch, we reset all doppelganger states to avoid unsafe signing.
+			if previousEpoch > 0 && currentEpoch != previousEpoch+1 {
+				h.logger.Warn("Epoch skipped unexpectedly, resetting all Doppelganger states",
+					zap.Uint64("previous_epoch", uint64(previousEpoch)),
+					zap.Uint64("current_epoch", uint64(currentEpoch)),
+				)
+
+				h.resetDoppelgangerStates()
+			}
+
 			h.checkLiveness(ctx, currentSlot, currentEpoch-1)
+
+			// Update the previous epoch tracker to detect potential future skips.
+			previousEpoch = currentEpoch
 		}
 	}
 }
@@ -289,6 +302,18 @@ func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2ap
 			h.logger.Debug("Validator is now safe to sign", fields.ValidatorIndex(response.Index))
 		}
 	}
+}
+
+// resetDoppelgangerStates resets all validator states back to the default remaining epochs.
+func (h *handler) resetDoppelgangerStates() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for _, state := range h.validatorsState {
+		state.remainingEpochs = initialRemainingDetectionEpochs
+	}
+
+	h.logger.Info("All Doppelganger states reset to initial detection epochs")
 }
 
 func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {
