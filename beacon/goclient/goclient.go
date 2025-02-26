@@ -6,7 +6,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -119,8 +118,6 @@ type GoClient struct {
 	multiClient MultiClient
 	specssv.VersionCalls
 
-	genesisVersion atomic.Pointer[phase0.Version]
-
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
@@ -142,6 +139,7 @@ type GoClient struct {
 	commonTimeout time.Duration
 	longTimeout   time.Duration
 
+	genesisForkVersion phase0.Version
 	ForkLock           sync.RWMutex
 	ForkEpochElectra   phase0.Epoch
 	ForkEpochDeneb     phase0.Epoch
@@ -180,9 +178,9 @@ func New(
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		commonTimeout: commonTimeout,
-		longTimeout:   longTimeout,
-
+		commonTimeout:      commonTimeout,
+		longTimeout:        longTimeout,
+		genesisForkVersion: phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
 		ForkEpochBellatrix: math.MaxUint64,
@@ -325,6 +323,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				)
 				return
 			}
+			gc.ForkLock.RLock()
 			gc.log.Info("retrieved fork epochs",
 				zap.String("node_addr", s.Address()),
 				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.network.EstimatedCurrentEpoch()))),
@@ -334,6 +333,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				zap.Uint64("deneb", uint64(gc.ForkEpochDeneb)),
 				zap.Uint64("electra", uint64(gc.ForkEpochElectra)),
 			)
+			gc.ForkLock.RUnlock()
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",
@@ -362,16 +362,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 // To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
 // as they should be same too.
 func (gc *GoClient) assertSameGenesisVersion(genesisVersion phase0.Version) (phase0.Version, error) {
-	if gc.genesisVersion.CompareAndSwap(nil, &genesisVersion) {
-		return genesisVersion, nil
+	if gc.genesisForkVersion != genesisVersion {
+		fmt.Printf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
+		return gc.genesisForkVersion, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
 	}
 
-	expected := *gc.genesisVersion.Load()
-	if expected != genesisVersion {
-		return expected, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", expected, genesisVersion)
-	}
-
-	return expected, nil
+	return gc.genesisForkVersion, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
