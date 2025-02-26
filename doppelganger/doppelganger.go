@@ -90,8 +90,8 @@ func (h *handler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	state, exists := h.validatorsState[validatorIndex]
-	if !exists {
+	state := h.validatorsState[validatorIndex]
+	if state == nil {
 		h.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(validatorIndex))
 		return false
 	}
@@ -104,8 +104,8 @@ func (h *handler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	state, exists := h.validatorsState[validatorIndex]
-	if !exists {
+	state := h.validatorsState[validatorIndex]
+	if state == nil {
 		h.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(validatorIndex))
 		return
 	}
@@ -122,10 +122,13 @@ func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorInd
 
 	// These slices store validator indices for logging purposes
 	var addedValidators, removedValidators []uint64
+	retrievedValidatorsSet := make(map[phase0.ValidatorIndex]struct{}, len(validatorIndices))
 
-	// Add new validators with initialRemainingDetectionEpochs
+	// Add new validators with initialRemainingDetectionEpochs and build the retrieved set
 	for _, idx := range validatorIndices {
-		if _, exists := h.validatorsState[idx]; !exists {
+		retrievedValidatorsSet[idx] = struct{}{}
+
+		if h.validatorsState[idx] == nil {
 			h.validatorsState[idx] = &doppelgangerState{
 				remainingEpochs: initialRemainingDetectionEpochs,
 			}
@@ -133,13 +136,7 @@ func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorInd
 		}
 	}
 
-	// Use a set to track retrieved validators
-	retrievedValidatorsSet := make(map[phase0.ValidatorIndex]struct{}, len(validatorIndices))
-	for _, idx := range validatorIndices {
-		retrievedValidatorsSet[idx] = struct{}{}
-	}
-
-	// Remove validators that are no longer in the current set
+	// Remove validators that are no longer in the retrieved set
 	for idx := range h.validatorsState {
 		if _, exists := retrievedValidatorsSet[idx]; !exists {
 			removedValidators = append(removedValidators, uint64(idx))
@@ -161,7 +158,7 @@ func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if _, exists := h.validatorsState[validatorIndex]; !exists {
+	if h.validatorsState[validatorIndex] == nil {
 		h.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(validatorIndex))
 		return
 	}
@@ -263,8 +260,8 @@ func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2ap
 			fields.Epoch(epoch),
 			fields.ValidatorIndex(response.Index),
 			zap.Bool("is_live", response.IsLive))
-		state, exists := h.validatorsState[response.Index]
-		if !exists {
+		state := h.validatorsState[response.Index]
+		if state == nil {
 			h.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(response.Index))
 			continue
 		}
