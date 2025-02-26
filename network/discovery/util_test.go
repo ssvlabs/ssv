@@ -60,7 +60,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	}
 
 	// Discovery options
-	allSubs, _ := commons.Subnets{}.FromString(commons.AllSubnets)
+	allSubs, _ := commons.FromString(commons.AllSubnets)
 	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
 	connectionIndex := NewMockConnection()
 

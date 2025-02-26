@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/bits"
 	"math/rand"
 	"slices"
 	"strconv"
@@ -277,11 +276,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 	}()
 	// start go-routine to choose the best peer(s) from the pool of discovered peers to propose
-	// these as outbound connections, all discovered peers are pooled so we can choose to propose
-	// the best ones (instead of the ones we've discovered first, for example), additionally when
-	// choosing a batch of peers to propose we evaluate "peer synergy" between them - which is a way
-	// to pick peers such that they don't have too many overlapping subnets and instead cover a
-	// wider range of dead/solo subnets for us
+	// these as outbound connections, all discovered peers are kept in a pooled so we can choose
+	// from that same pool across different runs of this interval-func
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// give discovery some time to find the best peers right after node start, the exact
 		// best time to wait is arrived at experimentally
@@ -297,7 +293,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		vacantOutboundSlotCnt := n.cfg.MaxPeers - (inbound + outbound)
 		if vacantOutboundSlotCnt <= 0 {
 			n.interfaceLogger.Debug(
-				"Not gonna propose discovered peers: ran out of vacant peer slots",
+				"Not gonna try to connect discovered peers: ran out of vacant peer slots",
 				zap.Int("inbound_peers", inbound),
 				zap.Int("outbound_peers", outbound),
 				zap.Int("max_peers", n.cfg.MaxPeers),
@@ -305,80 +301,65 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			return
 		}
 
-		// peersByPriority keeps track of best peers (by their peer score)
-		peersByPriority := lane.NewMaxPriorityQueue[peers.DiscoveredPeer, float64]()
-		peers.DiscoveredPeersPool.Range(func(key peer.ID, value peers.DiscoveredPeer) bool {
-			const retryLimit = 2
-			if value.ConnectRetries >= retryLimit {
-				// this discovered peer has been tried many times already, we'll ignore him but won't
-				// remove him from DiscoveredPeersPool since if we do - discovery might suggest this
-				// peer again (essentially resetting this peer's retry attempts counter to 0)
-
-				// TODO - comment out
-				// this log line is commented out as it is too spammy
-				//n.interfaceLogger.Debug(
-				//	"Not gonna propose discovered peer: ran out of retries",
-				//	zap.String("peer_id", string(key)),
-				//)
-				return true
-			}
-			proposalScore := n.peerScore(key)
-			if proposalScore <= 0 {
-				return true // we are not interested in this peer at all
-			}
-			peersByPriority.Push(value, proposalScore)
-			return true
-		})
-
-		// propose only half as many peers as we have outbound slots available because this
-		// leaves some vacant slots for the next iteration - on the next iteration better
-		// peers might show up (so we don't want to "spend" all of these vacant slots at once)
-		peersToProposeCnt := max(vacantOutboundSlotCnt/2, 1)
-		// also limit how many peers we want to propose with respect to "peer synergy" (this
-		// value can't be too high for performance reasons, 12 seems like a good middle-ground)
-		const peersToProposeMaxWithSynergy = 12
-		peersToProposeCnt = min(peersToProposeCnt, peersToProposeMaxWithSynergy)
-		// peersToProposePoolCnt is a size of candidate-peers pool we'll be choosing exactly
-		// peersToProposeCnt peers from
-		peersToProposePoolCnt := 2 * peersToProposeCnt
-
-		// additionally, make sure we don't exceed peersByPriority queue size
-		peersToProposeCnt = min(peersToProposeCnt, int(peersByPriority.Size()))         // nolint: gosec
-		peersToProposePoolCnt = min(peersToProposePoolCnt, int(peersByPriority.Size())) // nolint: gosec
-
-		// terminate early if there is no peers to propose
-		if peersToProposeCnt < 1 {
-			n.interfaceLogger.Info("Not gonna propose discovered peers: no suitable peer candidates")
-			return
-		}
-
-		// prepare a pool of peers we'll be choosing best-synergy-peers from
-		peersToProposePoolDesc := make([]peers.DiscoveredPeer, 0, peersToProposePoolCnt)
-		minScore, maxScore := math.MaxFloat64, 0.0 // used for printing debugging info
-		for i := 0; i < peersToProposePoolCnt; i++ {
-			peerCandidate, priority, _ := peersByPriority.Pop()
-			if minScore > priority {
-				minScore = priority
-			}
-			if maxScore < priority {
-				maxScore = priority
-			}
-			peersToProposePoolDesc = append(peersToProposePoolDesc, peerCandidate)
-		}
-
 		// SubnetSum represents a sum of 0 or more subnets, each byte at index K counts how many
 		// of that particular subnet at index K the summed subnet-sets have
 		type SubnetSum [commons.SubnetsCount]byte
-		// addSubnets combines two sums to calculate the resulting subnet sum
-		addSubnets := func(a SubnetSum, b SubnetSum) SubnetSum {
+		// addSubnetSums combines two subnet-sums to calculate the resulting subnet-sum, for example:
+		// [1, 2, 3, ...] + [4, 5, 6, ...] = [5, 7, 9, ...]
+		addSubnetSums := func(a SubnetSum, b SubnetSum) SubnetSum {
 			result := SubnetSum{}
 			for i := 0; i < commons.SubnetsCount; i++ {
 				result[i] = a[i] + b[i]
 			}
 			return result
 		}
+		// scoreSubnetSum estimates how good/bad a subnet-sum is based on how many unhealthy
+		// (we are mostly really interested in dead/solo/duo subnets) that subnet-sum has -
+		// higher score is better
+		scoreSubnetSum := func(s SubnetSum) (score float64) {
+			const (
+				// duoSubnetPriority is baseline priority other priorities are measured against
+				duoSubnetPriority = 1
+				// soloSubnetPriority is relative to duoSubnetPriority
+				soloSubnetPriority = 2
+				// deadSubnetPriority is relative to duoSubnetPriority
+				deadSubnetPriority = 5
 
-		// ownSubnetSum represents subnet sum of peers we already have open connections with
+				// maxPossibleScore is a score subnet-sum will get if it has only duo subnets or better
+				// (meaning there are no dead/solo subnets in subnet-sum)
+				maxPossibleScore = commons.SubnetsCount * deadSubnetPriority
+			)
+
+			deadSubnetCnt := 0 // how many dead subnets SubnetSum has
+			soloSubnetCnt := 0 // how many solo subnets SubnetSum has
+			duoSubnetCnt := 0  // how many duo subnets SubnetSum has
+			for i := 0; i < commons.SubnetsCount; i++ {
+				if s[i] == 0 {
+					deadSubnetCnt++
+				}
+				if s[i] == 1 {
+					soloSubnetCnt++
+				}
+				if s[i] == 2 {
+					duoSubnetCnt++
+				}
+			}
+			return float64(maxPossibleScore - (deadSubnetPriority*deadSubnetCnt + soloSubnetPriority*soloSubnetCnt + duoSubnetPriority*duoSubnetCnt))
+		}
+
+		// try to connect only half as many peers as we have outbound slots available because this
+		// leaves some vacant slots for the next iteration - on the next iteration better peers
+		// might show up (so we don't want to "spend" all of these vacant slots at once)
+		peersToConnectMaxCnt := vacantOutboundSlotCnt / 2
+		if peersToConnectMaxCnt == 0 {
+			peersToConnectMaxCnt = 1 // always try to connect at least 1 peer
+		}
+
+		// peersToConnect is a final set of peers we are gonna try to connect with
+		peersToConnect := make(map[peer.ID]peers.DiscoveredPeer)
+		// minScore and maxScore are used for printing additional debugging info
+		minScore, maxScore := math.MaxFloat64, 0.0
+		// ownSubnetSum represents subnet-sum of peers we already have open connections with
 		ownSubnetSum := SubnetSum{}
 		allPeerIDs, err := n.topicsCtrl.Peers("")
 		if err != nil {
@@ -387,106 +368,72 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 		for _, pID := range allPeerIDs {
 			pSubnets := n.idx.GetPeerSubnets(pID)
-			ownSubnetSum = addSubnets(ownSubnetSum, SubnetSum(pSubnets))
+			ownSubnetSum = addSubnetSums(ownSubnetSum, SubnetSum(pSubnets))
 		}
-		// scoreSubnetSumSynergy is same as scorePeerSet but for subnet sum
-		scoreSubnetSumSynergy := func(s SubnetSum) (score float64, highestPossible bool) {
-			const deadPriorityMultiplier = 5 // we value resolving dead subnets 5x higher over resolving solo subnets
-			const maxPossibleScore = commons.SubnetsCount * deadPriorityMultiplier
+		// peersToConnectSubnetSum represents subnet-sum of peers we are about to connect with
+		peersToConnectSubnetSum := SubnetSum{}
 
-			highestPossible = true
-			deadSubnetCnt := 0 // how many dead subnets SubnetSum has
-			soloSubnetCnt := 0 // how many solo subnets SubnetSum has
-			for i := 0; i < commons.SubnetsCount; i++ {
-				if s[i] == 0 {
-					deadSubnetCnt++
-					highestPossible = false
-				}
-				if s[i] == 1 {
-					soloSubnetCnt++
-					highestPossible = false
-				}
-			}
-			score = float64(maxPossibleScore - (deadPriorityMultiplier*deadSubnetCnt + soloSubnetCnt))
-			return score, highestPossible
-		}
-		// scorePeerSet estimates how good/bad a peerSet is based on how many unhealthy
-		// (we are mostly really interested in dead and solo subnets) subnets we still have
-		// once we've connected this set of peers
-		scorePeerSet := func(peerSet uint64, allPeersDesc []peers.DiscoveredPeer) (score float64, highestPossible bool) {
-			// totalSubnetSum will represent a subnet sum of our own subnets + all the subnets in this candidate
-			// peer-set, it will be used to estimate how "valuable" this candidate peer-set is to us (so we can
-			// find the best peer-set)
-			totalSubnetSum := ownSubnetSum
-			for peerIdx, peerMask := 0, uint64(1); peerIdx < len(allPeersDesc); peerIdx, peerMask = peerIdx+1, peerMask<<1 {
-				peerPresentInCandidateSet := peerSet & peerMask
-				if peerPresentInCandidateSet == uint64(0) {
-					continue // this peerIdx isn't part of candidate peer-set
-				}
-				p := allPeersDesc[peerIdx]
-				pSubnets := n.idx.GetPeerSubnets(p.ID)
-				totalSubnetSum = addSubnets(totalSubnetSum, SubnetSum(pSubnets))
-			}
-			return scoreSubnetSumSynergy(totalSubnetSum)
-		}
-		// peerSetToPeerList picks peers peerSet describes out of allPeers compiling them into new slice
-		peerSetToPeerList := func(peerSet uint64, allPeers []peers.DiscoveredPeer) []peers.DiscoveredPeer {
-			result := make([]peers.DiscoveredPeer, 0, peersToProposeCnt)
-			for peerIdx, peerMask := 0, uint64(1); peerIdx < len(allPeers); peerIdx, peerMask = peerIdx+1, peerMask<<1 {
-				peerPresentInCandidateSet := peerSet & peerMask
-				if peerPresentInCandidateSet == uint64(0) {
-					continue // this peerIdx isn't part of candidate peer-set
-				}
-				p := allPeers[peerIdx]
-				result = append(result, p)
-			}
-			return result
-		}
+		// to find best set of peersToConnect choose exactly 1 (best) peer on each iteration doing
+		// peersToConnectMaxCnt at most (note, we can terminate sooner if there aren't enough of
+		// newly discovered peers for us to keep choosing from)
+		for i := 0; i < peersToConnectMaxCnt; i++ {
+			currentSubnetSum := addSubnetSums(ownSubnetSum, peersToConnectSubnetSum)
 
-		// now we can identify the best synergy peer-set, but first check if we even need to
-		// brute-force search for it - we don't if top peersToProposeCnt peers already give us
-		// the highest possible score
-		topPeerSet := uint64(0)
-		for peerIdx, peerMask := 0, uint64(1); peerIdx < peersToProposeCnt; peerIdx, peerMask = peerIdx+1, peerMask<<1 {
-			topPeerSet |= peerMask
-		}
-		var (
-			bestSynergyScore     float64
-			bestSynergyPeers     []peers.DiscoveredPeer
-			skipBruteForceSearch bool
-		)
-		topSynergyScore, highestPossibleScore := scorePeerSet(topPeerSet, peersToProposePoolDesc)
-		if highestPossibleScore {
-			bestSynergyScore = topSynergyScore
-			bestSynergyPeers = peerSetToPeerList(topPeerSet, peersToProposePoolDesc)
-			skipBruteForceSearch = true // no reason to brute-force search
-		}
-		// iterate over all possible peer-sets of size peersToProposePoolCnt that can be generated from
-		// peersToProposePoolDesc (a peer-set is represented by uint64 number, each 1-value bit represents
-		// peer presence while each 0-bit represents peer absence in such peer-set) and find a peer-set
-		// of size peersToProposeCnt that has peers with the best synergy
-		//
-		// peersToProposePoolLastSet is the last peer-set represented by 2^peersToProposePoolCnt
-		peersToProposePoolLastSet := uint64(1) << peersToProposePoolCnt
-		for candidateSet := uint64(0); !skipBruteForceSearch && candidateSet < peersToProposePoolLastSet; candidateSet++ {
-			// we are only interested in peer-set that have exactly peersToProposeCnt peers in them
-			candidateSetSize := bits.OnesCount64(candidateSet)
-			if candidateSetSize != peersToProposeCnt {
-				continue // not interested in this peer-set
+			type peerWithSubnetSum struct {
+				p         peers.DiscoveredPeer
+				subnetSum SubnetSum
 			}
-			tmpSynergyScore, highestPossibleScore := scorePeerSet(candidateSet, peersToProposePoolDesc)
-			if highestPossibleScore || tmpSynergyScore > bestSynergyScore {
-				bestSynergyScore = tmpSynergyScore
-				bestSynergyPeers = peerSetToPeerList(candidateSet, peersToProposePoolDesc)
+			// peersByPriority keeps track of best peers (by their peer score)
+			peersByPriority := lane.NewMaxPriorityQueue[peerWithSubnetSum, float64]()
+			peers.DiscoveredPeersPool.Range(func(key peer.ID, value peers.DiscoveredPeer) bool {
+				const retryLimit = 2
+				if value.ConnectRetries >= retryLimit {
+					// this discovered peer has been tried many times already, we'll ignore him but won't
+					// remove him from DiscoveredPeersPool (since if we do - discovery might suggest this
+					// peer again essentially resetting this peer's retry attempts counter to 0)
+
+					// this log line is commented out as it is too spammy
+					//n.interfaceLogger.Debug(
+					//	"Not gonna try to connect discovered peer: ran out of retries",
+					//	zap.String("peer_id", string(key)),
+					//)
+					return true
+				}
+
+				if _, ok := peersToConnect[key]; ok {
+					// we've already decided to connect this peer, hence we skip it now
+					return true
+				}
+
+				pSubnets := n.idx.GetPeerSubnets(key)
+				pSubnetSum := SubnetSum(pSubnets)
+				totalPlusPSubnetSum := addSubnetSums(currentSubnetSum, pSubnetSum)
+				peerScore := scoreSubnetSum(totalPlusPSubnetSum)
+
+				peersByPriority.Push(peerWithSubnetSum{
+					p:         value,
+					subnetSum: pSubnetSum,
+				}, peerScore)
+				return true
+			})
+
+			bestPeer, priority, ok := peersByPriority.Pop()
+			if !ok {
+				break // there is no point in trying to find more of best peers
 			}
-			if highestPossibleScore {
-				break // no reason to search further
+			if minScore > priority {
+				minScore = priority
 			}
+			if maxScore < priority {
+				maxScore = priority
+			}
+			peersToConnectSubnetSum = addSubnetSums(peersToConnectSubnetSum, bestPeer.subnetSum)
+			peersToConnect[bestPeer.p.ID] = bestPeer.p
 		}
 
-		// finally, offer best-synergy peers we came up with to connector so it tries to connect these
-		for _, p := range bestSynergyPeers {
-			// update retry counter for this peer (so we eventually skip it after certain number of retries)
+		// finally, offer the best peers we've picked to connector so it tries to connect these
+		for _, p := range peersToConnect {
+			// update retry counter for this peer so we eventually skip it after certain number of retries
 			peers.DiscoveredPeersPool.Set(p.ID, peers.DiscoveredPeer{
 				AddrInfo:       p.AddrInfo,
 				ConnectRetries: p.ConnectRetries + 1,
@@ -494,8 +441,8 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			connector <- p.AddrInfo
 		}
 		n.interfaceLogger.Info(
-			"Proposed discovered peers",
-			zap.Int("count", peersToProposeCnt),
+			"Proposed discovered peers to try connect to",
+			zap.Int("count", len(peersToConnect)),
 			zap.Float64("min_score", minScore),
 			zap.Float64("max_score", maxScore),
 		)
@@ -790,7 +737,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
 		}
 
-		allSubs, _ := commons.Subnets{}.FromString(commons.AllSubnets)
+		allSubs, _ := commons.FromString(commons.AllSubnets)
 		subnetsList := commons.SharedSubnets(allSubs, n.activeSubnets, 0)
 		logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
