@@ -8,6 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -17,6 +18,7 @@ var SupportedConfigs = map[string]NetworkConfig{
 	HoleskyStage.Name: HoleskyStage,
 	LocalTestnet.Name: LocalTestnet,
 	HoleskyE2E.Name:   HoleskyE2E,
+	Mekong.Name:       Mekong,
 }
 
 const forkName = "alan"
