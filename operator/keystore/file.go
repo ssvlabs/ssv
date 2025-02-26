@@ -1,6 +1,7 @@
 package keystore
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -68,6 +69,10 @@ func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.Op
 	keyStorePassword, err := os.ReadFile(passwordFile)
 	if err != nil {
 		return nil, fmt.Errorf("could not read password file: %w", err)
+	}
+
+	if len(bytes.TrimSpace(keyStorePassword)) == 0 {
+		return nil, fmt.Errorf("password file is empty")
 	}
 
 	decryptedKeystore, err := DecryptKeystore(encryptedJSON, string(keyStorePassword))
