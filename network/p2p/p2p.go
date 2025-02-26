@@ -278,7 +278,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		}
 	}()
 	// start go-routine to choose the best peer(s) from the pool of discovered peers to propose
-	// these as outbound connections, all discovered peers are kept in a pooled so we can choose
+	// these as outbound connections, all discovered peers are kept in a pool so we can choose
 	// from that same pool across different runs of this interval-func
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// give discovery some time to find the best peers right after node start, the exact
