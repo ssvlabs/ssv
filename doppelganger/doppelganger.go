@@ -122,6 +122,12 @@ func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorInd
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	// Use a set to track retrieved validators
+	retrievedValidatorsSet := make(map[phase0.ValidatorIndex]struct{}, len(validatorIndices))
+	for _, idx := range validatorIndices {
+		retrievedValidatorsSet[idx] = struct{}{}
+	}
+
 	// These slices store validator indices for logging purposes
 	var addedValidators, removedValidators []uint64
 
@@ -135,15 +141,9 @@ func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorInd
 		}
 	}
 
-	// Create a set for current validators
-	currentValidatorSet := make(map[phase0.ValidatorIndex]struct{}, len(validatorIndices))
-	for _, idx := range validatorIndices {
-		currentValidatorSet[idx] = struct{}{}
-	}
-
 	// Remove validators that are no longer in the current set
 	for idx := range h.validatorsState {
-		if _, exists := currentValidatorSet[idx]; !exists {
+		if _, exists := retrievedValidatorsSet[idx]; !exists {
 			removedValidators = append(removedValidators, uint64(idx))
 			delete(h.validatorsState, idx)
 		}
