@@ -322,9 +322,9 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 				// duoSubnetPriority is baseline priority other priorities are measured against
 				duoSubnetPriority = 1
 				// soloSubnetPriority is relative to duoSubnetPriority
-				soloSubnetPriority = 2
+				soloSubnetPriority = 3
 				// deadSubnetPriority is relative to duoSubnetPriority
-				deadSubnetPriority = 5
+				deadSubnetPriority = 9
 
 				// maxPossibleScore is a score subnet-sum will get if it has only duo subnets or better
 				// (meaning there are no dead/solo subnets in subnet-sum)
