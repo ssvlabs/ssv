@@ -20,8 +20,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -67,6 +65,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"go.uber.org/zap"
 )
 
 type KeyStore struct {
@@ -330,12 +329,12 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 
-		fixedSubnets, err := records.Subnets{}.FromString(cfg.P2pNetworkConfig.Subnets)
+		fixedSubnets, err := networkcommons.FromString(cfg.P2pNetworkConfig.Subnets)
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
-			fixedSubnets, err = records.Subnets{}.FromString(records.AllSubnets)
+			fixedSubnets, err = networkcommons.FromString(networkcommons.AllSubnets)
 			if err != nil {
 				logger.Fatal("failed to parse all fixed subnets", zap.Error(err))
 			}

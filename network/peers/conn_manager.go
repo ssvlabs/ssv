@@ -2,13 +2,13 @@ package peers
 
 import (
 	"context"
-	"github.com/ssvlabs/ssv/network/commons"
 	"time"
 
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/utils/ttl"
 	"go.uber.org/zap"
 )

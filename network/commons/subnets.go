@@ -3,12 +3,13 @@ package commons
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/prysmaticlabs/go-bitfield"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"math"
 	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/prysmaticlabs/go-bitfield"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 const (

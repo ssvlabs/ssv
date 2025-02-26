@@ -2,7 +2,6 @@ package connections
 
 import (
 	"context"
-	"github.com/ssvlabs/ssv/network/commons"
 	"sync"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"go.uber.org/zap"
 )

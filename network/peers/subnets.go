@@ -1,10 +1,10 @@
 package peers
 
 import (
-	"github.com/ssvlabs/ssv/network/commons"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 // subnetsIndex implements SubnetsIndex

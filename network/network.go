@@ -2,10 +2,10 @@ package network
 
 import (
 	"context"
-	"github.com/ssvlabs/ssv/network/commons"
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/network/commons"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"go.uber.org/zap"
 )

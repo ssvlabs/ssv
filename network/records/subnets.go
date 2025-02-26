@@ -2,6 +2,7 @@ package records
 
 import (
 	"bytes"
+
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
 )

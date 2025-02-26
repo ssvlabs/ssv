@@ -2,11 +2,11 @@ package records
 
 import (
 	crand "crypto/rand"
-	"github.com/ssvlabs/ssv/network/commons"
 	"reflect"
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/stretchr/testify/require"
 )
 

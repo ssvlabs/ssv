@@ -2,11 +2,12 @@ package commons
 
 import (
 	crand "crypto/rand"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
 	"math/big"
 	"strings"
 	"testing"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCommitteeSubnet(t *testing.T) {
