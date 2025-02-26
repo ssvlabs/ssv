@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.24.0
 	github.com/fasthttp/router v1.5.4
-	github.com/ssvlabs/ssv v1.2.1-0.20250226151358-8ee7e2141fd8
+	github.com/ssvlabs/ssv 19bf388778d0ab1bb05fc63211d05c54d11b56a8
 	github.com/valyala/fasthttp v1.58.0
 	go.uber.org/zap v1.27.0
 )
