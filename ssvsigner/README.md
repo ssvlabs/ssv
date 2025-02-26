@@ -1,14 +1,18 @@
-[TODO]
+# SSV Remote Signer
 
-# Setup ssv-signer
+## Overview
+
+For SSV Remote signer overview, check [design documentation](./DESIGN.md).
+
+## Setup ssv-signer
 
 To set up ssv-signer, we need to set up web3signer with a slashing protection DB.  
 
-## Setup slashing protection DB
+### Setup slashing protection DB
 
 Consensys tutorial: https://docs.web3signer.consensys.io/how-to/configure-slashing-protection
 
-### Short summary
+#### Short summary
 
 - Run `postrgresql` (either Docker or install it) and create DB named `web3signer`
 
@@ -35,11 +39,11 @@ Flyway example (adjust variables):
   flyway migrate -url="jdbc:postgresql://localhost/web3signer" -locations="filesystem:/web3signer/migrations/postgresql"
 ```
 
-## Run `web3signer`
+### Run `web3signer`
 
 Consensys tutorial: https://docs.web3signer.consensys.io/get-started/start-web3signer
 
-### Short summary
+#### Short summary
 
 - Run `web3signer` with the arguments in the example. You might need to change HTTP port, Ethereum network, PostgreSQL address
   - Either download and unpack `web3signer` from https://github.com/Consensys/web3signer/releases
@@ -57,7 +61,7 @@ Release file example:
   web3signer --http-listen-port=9000 eth2 --network=holesky --slashing-protection-db-url="jdbc:postgresql://${POSTGRES_HOST}/web3signer" --slashing-protection-db-username=postgres --slashing-protection-db-password=password --key-manager-api-enabled=true
 ```
 
-## Run `ssv-signer`
+### Run `ssv-signer`
 
 - Run `./cmd/ssv-signer` passing the following arguments:
   - `LISTEN_ADDR` - address to listen on (`:8080` by default [TODO: needs changing?])
