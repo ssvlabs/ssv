@@ -6,7 +6,7 @@ require (
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.24.0
 	github.com/fasthttp/router v1.5.4
-	github.com/ssvlabs/ssv v1.2.1-0.20250225132028-13fbc8461e4e
+	github.com/ssvlabs/ssv v1.2.1-0.20250226151358-8ee7e2141fd8
 	github.com/valyala/fasthttp v1.58.0
 	go.uber.org/zap v1.27.0
 )
@@ -17,6 +17,8 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/ferranbt/fastssz v0.1.4 // indirect
 	github.com/goccy/go-yaml v1.12.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/herumi/bls-eth-go-binary v1.29.1 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
