@@ -211,6 +211,9 @@ func (h *handler) Start(ctx context.Context) error {
 					zap.Uint64("current_epoch", uint64(currentEpoch)),
 				)
 
+				// Resetting all Doppelganger states ensures safety, but it also means
+				// our operator will likely skip signing for at least a few epochs
+				// or until there is a post-consensus partial sig quorum.
 				h.resetDoppelgangerStates()
 			}
 
