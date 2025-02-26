@@ -293,7 +293,13 @@ func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2ap
 			continue
 		}
 
-		state.decreaseRemainingEpochs()
+		// Log an error if decreaseRemainingEpochs fails, as it indicates an unexpected bug where
+		// the function is called despite remainingEpochs already being at 0.
+		if err := state.decreaseRemainingEpochs(); err != nil {
+			h.logger.Error("Failed to decrease remaining epochs", zap.Error(err))
+			continue
+		}
+
 		if state.requiresFurtherChecks() {
 			h.logger.Debug("Validator still requires further checks",
 				fields.ValidatorIndex(response.Index),

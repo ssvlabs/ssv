@@ -1,6 +1,8 @@
 package doppelganger
 
 import (
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -17,10 +19,12 @@ func (ds *doppelgangerState) requiresFurtherChecks() bool {
 }
 
 // decreaseRemainingEpochs decreases remaining epochs.
-func (ds *doppelgangerState) decreaseRemainingEpochs() {
-	if ds.remainingEpochs > 0 {
-		ds.remainingEpochs--
+func (ds *doppelgangerState) decreaseRemainingEpochs() error {
+	if ds.remainingEpochs == 0 {
+		return fmt.Errorf("attempted to decrease remaining epochs at 0")
 	}
+	ds.remainingEpochs--
+	return nil
 }
 
 // detectedAsLive returns true if the validator was previously marked as live on another node via liveness checks.

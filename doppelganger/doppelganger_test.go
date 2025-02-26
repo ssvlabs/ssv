@@ -164,3 +164,12 @@ func TestEpochSkipReset(t *testing.T) {
 		require.Equal(t, initialRemainingDetectionEpochs, state.remainingEpochs)
 	}
 }
+
+func TestDecreaseRemainingEpochs_ErrorOnZero(t *testing.T) {
+	state := &doppelgangerState{remainingEpochs: 0}
+
+	err := state.decreaseRemainingEpochs()
+
+	require.Error(t, err, "Expected error when attempting to decrease remaining epochs at 0")
+	require.Equal(t, phase0.Epoch(0), state.remainingEpochs, "remainingEpochs should still be 0")
+}
