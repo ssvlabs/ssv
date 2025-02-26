@@ -6,20 +6,20 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-type NoOpDoppelgangerHandler struct{}
+type NoOpHandler struct{}
 
-func (NoOpDoppelgangerHandler) Start(ctx context.Context) error {
+func (NoOpHandler) Start(ctx context.Context) error {
 	return nil
 }
 
-func (NoOpDoppelgangerHandler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
+func (NoOpHandler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
 	return true
 }
 
-func (NoOpDoppelgangerHandler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
+func (NoOpHandler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
 	// No operation
 }
 
-func (NoOpDoppelgangerHandler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
+func (NoOpHandler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	// No operation
 }

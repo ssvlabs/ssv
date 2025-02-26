@@ -178,7 +178,7 @@ func setupEventHandler(
 
 	parser := eventparser.New(contractFilterer)
 
-	dgHandler := doppelganger.NoOpDoppelgangerHandler{}
+	dgHandler := doppelganger.NoOpHandler{}
 
 	eh, err := eventhandler.New(
 		nodeStorage,

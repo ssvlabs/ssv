@@ -64,12 +64,12 @@ The implementation follows a **modular and extendable design**, with:
       RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
     }
     ```
-- **`doppelgangerHandler` struct**: Implements liveness tracking and post-consensus validation.
-- **`NoOpDoppelgangerHandler`**: A **noop implementation** when the feature is disabled.
+- **`handler` struct**: Implements liveness tracking and post-consensus validation.
+- **`NoOpHandler`**: A **noop implementation** when the feature is disabled.
 - **`doppelgangerState` struct**: Tracks each validator’s safety status.
     ```go
     type doppelgangerState struct {
-        remainingEpochs uint64 // The number of epochs that must be checked before it's considered safe.
+        remainingEpochs phase0.Epoch // The number of epochs that must be checked before it's considered safe.
     }
     ```
 - **Beacon node integration**: Uses `ValidatorLiveness()` API for detection.
@@ -93,21 +93,24 @@ The implementation follows a **modular and extendable design**, with:
 
 - Introduced constants:
     ```go
-    // defaultRemainingDetectionEpochs represents the initial number of epochs
+    // initialRemainingDetectionEpochs represents the starting number of epochs
     // a validator must pass without liveness detection before being considered safe to sign.
-    const defaultRemainingDetectionEpochs uint64 = 2
-
-    // permanentlyUnsafe is a special flag value used to mark a validator as permanently unsafe for signing.
-    // It indicates that the validator was detected as live on another node and should not be trusted for signing.
-    const permanentlyUnsafe = ^uint64(0)
+    const initialRemainingDetectionEpochs phase0.Epoch = 2
     ```
 
 - Refined safety check logic:
     ```go
-    // If previously marked as permanently unsafe but now inactive,  
-    // reset detection with one less epoch to ensure revalidation.  
-    if state.permanentlyUnsafe() {
-        state.remainingEpochs = defaultRemainingDetectionEpochs - 1
+    // detectedAsLive returns true if the validator was previously marked as live on another node via liveness checks.
+    // This means the validator should not be trusted for signing, as it indicates potential duplication.
+    func (ds *doppelgangerState) detectedAsLive() bool {
+        return ds.remainingEpochs == goclient.FarFutureEpoch
+    }
+  
+    // markAsLive marks the validator as detected live on another node via liveness checks.
+    // This means the validator should not be trusted for signing, as it indicates potential duplication.
+    // The remaining epochs are set to FarFutureEpoch to ensure it is not considered safe until explicitly reset.
+    func (ds *doppelgangerState) markAsLive() {
+      ds.remainingEpochs = goclient.FarFutureEpoch
     }
     ```
 
@@ -118,26 +121,26 @@ The implementation follows a **modular and extendable design**, with:
 - 🔄 Liveness Monitoring & State Tracking
   The Doppelganger Monitoring Process is a crucial mechanism that runs every slot to keep the Doppelganger state map (doppelgangerState) up-to-date.
 
-    1. The `doppelgangerHandler` continuously monitors validators by running every slot.
+    1. The `handler` continuously monitors validators by running every slot.
     2. it queries the `ValidatorProvider` to fetch currently participating validators for the operator.
     3. The `Doppelganger` state map is updated accordingly.
     ```go
-    doppelgangerState:  make(map[phase0.ValidatorIndex]*doppelgangerState)
+    validatorsState:  make(map[phase0.ValidatorIndex]*doppelgangerState)
     ```
     4. The map acts as the backbone for the DG protection mechanism, meaning
        If a validator is not found in the map, it is not safe to sign
 
     ```go
-    func (ds *doppelgangerHandler) StartMonitoring(ctx context.Context) {
-      ds.logger.Info("Doppelganger monitoring started")
-      ticker := ds.slotTickerProvider()
+    func (h *handler) Start(ctx context.Context) {
+      h.logger.Info("Doppelganger monitoring started")
+      ticker := h.slotTickerProvider()
 
       for {
           select {
           case <-ctx.Done():
               return
           case <-ticker.Next():
-              ds.checkLiveness(ctx)
+              h.checkLiveness(ctx)
           }
       }
     }
@@ -145,66 +148,62 @@ The implementation follows a **modular and extendable design**, with:
 
 - **Liveness check before allowing signing:**
     ```go
-    func (ds *doppelgangerHandler) checkLiveness(ctx context.Context) {
-        ds.mu.Lock()
-        validatorsToCheck := make([]phase0.ValidatorIndex, 0, len(ds.doppelgangerState))
-        for validatorIndex, state := range ds.doppelgangerState {
+    func (h *handler) checkLiveness(ctx context.Context) {
+        validatorsToCheck := make([]phase0.ValidatorIndex, 0, len(h.validatorsState))
+        for validatorIndex, state := range h.doppelgangerState {
             if state.requiresFurtherChecks() {
                 validatorsToCheck = append(validatorsToCheck, validatorIndex)
             }
         }
-        ds.mu.Unlock()
 
         if len(validatorsToCheck) == 0 {
-            ds.logger.Debug("No validators require liveness check")
+            h.logger.Debug("No validators require liveness check")
             return
         }
 
-        livenessData, err := ds.beaconNode.ValidatorLiveness(ctx, epoch, validatorsToCheck)
+        livenessData, err := h.beaconNode.ValidatorLiveness(ctx, epoch, validatorsToCheck)
         if err != nil {
-            ds.logger.Error("Failed to obtain validator liveness data", zap.Error(err))
+            h.logger.Error("Failed to obtain validator liveness data", zap.Error(err))
             return
         }
 
-        ds.processLivenessData(livenessData)
+        h.processLivenessData(livenessData)
     }
     ```
 
 - **Processing Liveness Data in doppelgangerHandler**
   One of the most critical parts of Doppelganger Protection in `ssv.network` is the **processing of validator liveness data**. This ensures that validators transition safely from a potentially unsafe state to a safe signing state.
-
     ```go
     for _, response := range livenessData {
-        state, exists := ds.doppelgangerState[response.Index]
+        state, exists := h.validatorsState[response.Index]
         if !exists {
-            ds.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(response.Index))
             continue
         }
 
         if response.IsLive {
-            ds.logger.Warn("Doppelganger detected!", fields.ValidatorIndex(response.Index))
-            state.remainingEpochs = permanentlyUnsafe
+            // Mark the validator as live since it was detected producing messages on another node.
+            // This ensures it remains unsafe for signing until explicitly reset.
+            state.markAsLive()
             continue
         }
 
-        // Reset detection if previously unsafe but now inactive
-        if state.permanentlyUnsafe() {
-            state.remainingEpochs = defaultRemainingDetectionEpochs - 1
-            ds.logger.Debug("Validator requires further checks", fields.ValidatorIndex(response.Index))
+        // If the validator was previously marked as live (detected as active on another node),
+        // but is now considered inactive, we reset the detection period to ensure safety.
+        // Since we just checked for liveness and found it inactive, we reduce the detection period by 1
+        // so that it gets checked again in the next epoch before being marked safe.
+        if state.detectedAsLive() {
+            state.remainingEpochs = initialRemainingDetectionEpochs - 1
             continue
         }
 
-        // Decrease the detection period until the validator is safe to sign again
         state.decreaseRemainingEpochs()
         if state.requiresFurtherChecks() {
-            ds.logger.Debug("Validator still requires further checks", fields.ValidatorIndex(response.Index))
+            h.logger.Debug("Validator still requires further checks")
         } else {
-            ds.logger.Debug("Validator is now safe to sign", fields.ValidatorIndex(response.Index))
+            h.logger.Debug("Validator is now safe to sign", fields.ValidatorIndex(response.Index))
         }
     }
     ```
-
-
 
 ### 5. Event Handling (`eth/eventhandler/handlers.go`)
 - **Removes validators from the state when they are removed/liquidated:**
@@ -224,14 +223,14 @@ The implementation follows a **modular and extendable design**, with:
 
 - 🚫 Prevents attestation/proposal signing if Doppelganger check is pending
     ```go
-    if !r.doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
+    if !doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
 		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
 	}
     ```
 
 - ✅ Marks validator as safe after post-consensus partial messages quorum
     ```go
-    cr.doppelgangerHandler.MarkAsSafe(validator)
+    doppelgangerHandler.MarkAsSafe(validator)
     ```
 
 # 6. Doppelganger Protection Log Guide

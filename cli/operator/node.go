@@ -366,7 +366,7 @@ var StartNodeCmd = &cobra.Command{
 			})
 			logger.Info("Doppelganger protection enabled.")
 		} else {
-			doppelgangerHandler = doppelganger.NoOpDoppelgangerHandler{}
+			doppelgangerHandler = doppelganger.NoOpHandler{}
 			logger.Info("Doppelganger protection disabled.")
 		}
 		cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler

@@ -1368,7 +1368,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		return nil, nil, err
 	}
 
-	dgHandler := doppelganger.NoOpDoppelgangerHandler{}
+	dgHandler := doppelganger.NoOpHandler{}
 
 	if useMockCtrl {
 		ctrl := gomock.NewController(t)

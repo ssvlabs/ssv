@@ -78,7 +78,7 @@ var ConstructBaseRunner = func(
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
-	dgHandler := doppelganger.NoOpDoppelgangerHandler{}
+	dgHandler := doppelganger.NoOpHandler{}
 
 	var valCheck specqbft.ProposedValueCheckF
 	switch role {
@@ -305,7 +305,7 @@ var ConstructBaseRunnerWithShareMap = func(
 
 	km := spectestingutils.NewTestingKeyManager()
 	dutyGuard := validator.NewCommitteeDutyGuard()
-	dgHandler := doppelganger.NoOpDoppelgangerHandler{}
+	dgHandler := doppelganger.NoOpHandler{}
 
 	if len(shareMap) > 0 {
 		var keySetInstance *spectestingutils.TestKeySet

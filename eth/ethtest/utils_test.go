@@ -178,7 +178,7 @@ func setupEventHandler(
 		return nil, nil, nil, nil, err
 	}
 
-	dgHandler := doppelganger.NoOpDoppelgangerHandler{}
+	dgHandler := doppelganger.NoOpHandler{}
 
 	if useMockCtrl {
 		validatorCtrl := mocks.NewMockController(ctrl)
