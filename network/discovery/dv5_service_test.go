@@ -9,9 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
@@ -19,6 +16,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 var TestNetwork = networkconfig.NetworkConfig{

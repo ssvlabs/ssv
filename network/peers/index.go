@@ -1,7 +1,6 @@
 package peers
 
 import (
-	"github.com/ssvlabs/ssv/network/commons"
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -9,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
 )

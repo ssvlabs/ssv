@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"github.com/cespare/xxhash/v2"
 	"sync"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"go.uber.org/zap"
 )
 
 const (

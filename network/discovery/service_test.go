@@ -2,13 +2,13 @@ package discovery
 
 import (
 	"context"
-	"github.com/ssvlabs/ssv/network/commons"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/stretchr/testify/assert"
