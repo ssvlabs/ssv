@@ -24,11 +24,7 @@ const (
 )
 
 // BigIntSubnetsCount is the big.Int representation of SubnetsCount
-var bigIntSubnetsCount *big.Int
-
-func init() {
-	bigIntSubnetsCount = new(big.Int).SetUint64(SubnetsCount)
-}
+var bigIntSubnetsCount = new(big.Int).SetUint64(SubnetsCount)
 
 // SubnetTopicID returns the topic to use for the given subnet
 func SubnetTopicID(subnet uint64) string {
