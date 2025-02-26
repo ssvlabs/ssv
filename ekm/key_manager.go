@@ -6,7 +6,7 @@ import (
 
 type KeyManager interface {
 	spectypes.BeaconSigner
-	Provider
+	SlashingProtector
 	// AddShare decrypts and saves an encrypted share private key
 	AddShare(encryptedSharePrivKey []byte) error
 	// RemoveShare removes a share key

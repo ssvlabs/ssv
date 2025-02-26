@@ -39,7 +39,7 @@ type LocalKeyManager struct {
 	signer            signer.ValidatorSigner
 	domain            spectypes.DomainType
 	operatorDecrypter keys.OperatorDecrypter
-	Provider
+	SlashingProtector
 }
 
 // NewLocalKeyManager returns a new instance of LocalKeyManager
@@ -91,7 +91,7 @@ func NewLocalKeyManager(
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		domain:            network.DomainType,
-		Provider:          slashingProtector,
+		SlashingProtector: slashingProtector,
 		operatorDecrypter: operatorPrivKey,
 	}, nil
 }

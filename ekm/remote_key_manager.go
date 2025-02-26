@@ -19,12 +19,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
-	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -35,7 +36,7 @@ type RemoteKeyManager struct {
 	getOperatorId   func() spectypes.OperatorID
 	retryCount      int
 	operatorPubKey  keys.OperatorPublicKey
-	Provider
+	SlashingProtector
 }
 
 func NewRemoteKeyManager(
@@ -71,7 +72,7 @@ func NewRemoteKeyManager(
 
 	s.client = client
 	s.consensusClient = consensusClient
-	s.Provider = slashingProtector
+	s.SlashingProtector = slashingProtector
 	s.getOperatorId = getOperatorId
 	s.operatorPubKey = operatorPubKey
 

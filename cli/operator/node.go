@@ -22,6 +22,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -63,7 +65,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -291,7 +292,7 @@ var StartNodeCmd = &cobra.Command{
 				ekm.WithRetryCount(3),
 			)
 			if err != nil {
-				logger.Fatal("could not create ssv-signer", zap.Error(err))
+				logger.Fatal("could not create remote key manager", zap.Error(err))
 			}
 
 			keyManager = remoteKeyManager

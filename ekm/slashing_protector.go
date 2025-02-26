@@ -21,7 +21,7 @@ const (
 	MinSPProposalSlotGap = phase0.Slot(0)
 )
 
-type Provider interface {
+type SlashingProtector interface {
 	ListAccounts() ([]core.ValidatorAccount, error)
 	RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error)
 	RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error)
@@ -34,7 +34,7 @@ type Provider interface {
 	BumpSlashingProtection(pubKey []byte) error
 }
 
-type SlashingProtector struct {
+type slashingProtector struct {
 	logger      *zap.Logger
 	signerStore Storage
 	protection  *slashingprotection.NormalProtection
@@ -44,35 +44,35 @@ func NewSlashingProtector(
 	logger *zap.Logger,
 	signerStore Storage,
 	protection *slashingprotection.NormalProtection,
-) (*SlashingProtector, error) {
-	return &SlashingProtector{
+) (SlashingProtector, error) {
+	return &slashingProtector{
 		logger:      logger,
 		signerStore: signerStore,
 		protection:  protection,
 	}, nil
 }
 
-func (sp *SlashingProtector) ListAccounts() ([]core.ValidatorAccount, error) {
+func (sp *slashingProtector) ListAccounts() ([]core.ValidatorAccount, error) {
 	return sp.signerStore.ListAccounts()
 }
 
-func (sp *SlashingProtector) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+func (sp *slashingProtector) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
 	return sp.signerStore.RetrieveHighestAttestation(pubKey)
 }
 
-func (sp *SlashingProtector) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+func (sp *slashingProtector) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
 	return sp.signerStore.RetrieveHighestProposal(pubKey)
 }
 
-func (sp *SlashingProtector) RemoveHighestAttestation(pubKey []byte) error {
+func (sp *slashingProtector) RemoveHighestAttestation(pubKey []byte) error {
 	return sp.signerStore.RemoveHighestAttestation(pubKey)
 }
 
-func (sp *SlashingProtector) RemoveHighestProposal(pubKey []byte) error {
+func (sp *slashingProtector) RemoveHighestProposal(pubKey []byte) error {
 	return sp.signerStore.RemoveHighestProposal(pubKey)
 }
 
-func (sp *SlashingProtector) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
+func (sp *slashingProtector) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
 	if val, err := sp.protection.IsSlashableAttestation(pk, data); err != nil || val != nil {
 		if err != nil {
 			return err
@@ -82,7 +82,7 @@ func (sp *SlashingProtector) IsAttestationSlashable(pk spectypes.ShareValidatorP
 	return nil
 }
 
-func (sp *SlashingProtector) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
+func (sp *slashingProtector) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
 	status, err := sp.protection.IsSlashableProposal(pk, slot)
 	if err != nil {
 		return err
@@ -94,16 +94,16 @@ func (sp *SlashingProtector) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot)
 	return nil
 }
 
-func (sp *SlashingProtector) UpdateHighestAttestation(pubKey []byte, attestation *phase0.AttestationData) error {
+func (sp *slashingProtector) UpdateHighestAttestation(pubKey []byte, attestation *phase0.AttestationData) error {
 	return sp.protection.UpdateHighestAttestation(pubKey, attestation)
 }
 
-func (sp *SlashingProtector) UpdateHighestProposal(pubKey []byte, slot phase0.Slot) error {
+func (sp *slashingProtector) UpdateHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	return sp.protection.UpdateHighestProposal(pubKey, slot)
 }
 
 // BumpSlashingProtection updates the slashing protection data for a given public key.
-func (sp *SlashingProtector) BumpSlashingProtection(pubKey []byte) error {
+func (sp *slashingProtector) BumpSlashingProtection(pubKey []byte) error {
 	currentSlot := sp.signerStore.BeaconNetwork().EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
@@ -120,7 +120,7 @@ func (sp *SlashingProtector) BumpSlashingProtection(pubKey []byte) error {
 }
 
 // updateHighestAttestation updates the highest attestation data for slashing protection.
-func (sp *SlashingProtector) updateHighestAttestation(pubKey []byte, slot phase0.Slot) error {
+func (sp *slashingProtector) updateHighestAttestation(pubKey []byte, slot phase0.Slot) error {
 	// Retrieve the highest attestation data stored for the given public key.
 	retrievedHighAtt, found, err := sp.RetrieveHighestAttestation(pubKey)
 	if err != nil {
@@ -147,7 +147,7 @@ func (sp *SlashingProtector) updateHighestAttestation(pubKey []byte, slot phase0
 }
 
 // updateHighestProposal updates the highest proposal slot for slashing protection.
-func (sp *SlashingProtector) updateHighestProposal(pubKey []byte, slot phase0.Slot) error {
+func (sp *slashingProtector) updateHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	// Retrieve the highest proposal slot stored for the given public key.
 	retrievedHighProp, found, err := sp.RetrieveHighestProposal(pubKey)
 	if err != nil {
@@ -174,7 +174,7 @@ func (sp *SlashingProtector) updateHighestProposal(pubKey []byte, slot phase0.Sl
 
 // computeMinimalAttestationSP calculates the minimal safe attestation data for slashing protection.
 // It takes the current epoch as an argument and returns an AttestationData object with the minimal safe source and target epochs.
-func (sp *SlashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) *phase0.AttestationData {
+func (sp *slashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) *phase0.AttestationData {
 	// Calculate the highest safe target epoch based on the current epoch and a predefined minimum distance.
 	highestTarget := epoch + MinSPAttestationEpochGap
 	// The highest safe source epoch is one less than the highest target epoch.
@@ -193,7 +193,7 @@ func (sp *SlashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) *ph
 
 // computeMinimalProposerSP calculates the minimal safe slot for a block proposal to avoid slashing.
 // It takes the current slot as an argument and returns the minimal safe slot.
-func (sp *SlashingProtector) computeMinimalProposerSP(slot phase0.Slot) phase0.Slot {
+func (sp *slashingProtector) computeMinimalProposerSP(slot phase0.Slot) phase0.Slot {
 	// Calculate the highest safe proposal slot based on the current slot and a predefined minimum distance.
 	return slot + MinSPProposalSlotGap
 }
