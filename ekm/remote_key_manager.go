@@ -55,7 +55,7 @@ func NewRemoteKeyManager(
 	signerStore := NewSignerStorage(db, networkConfig.Beacon, s.logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	slashingProtector, err := NewSlashingProtector(s.logger, signerStore, protection)
+	sp, err := NewSlashingProtector(s.logger, signerStore, protection)
 	if err != nil {
 		s.logger.Fatal("could not create new slashing protector", zap.Error(err))
 	}
@@ -72,7 +72,7 @@ func NewRemoteKeyManager(
 
 	s.client = client
 	s.consensusClient = consensusClient
-	s.SlashingProtector = slashingProtector
+	s.SlashingProtector = sp
 	s.getOperatorId = getOperatorId
 	s.operatorPubKey = operatorPubKey
 
