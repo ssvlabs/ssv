@@ -560,25 +560,28 @@ func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPriv
 }
 
 func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usingPrivKey bool) {
-	providedCount := 0
 	if cfg.SSVSignerEndpoint != "" {
-		providedCount++
 		usingSSVSigner = true
 	}
 	if cfg.KeyStore.PrivateKeyFile != "" || cfg.KeyStore.PasswordFile != "" {
 		if cfg.KeyStore.PrivateKeyFile == "" || cfg.KeyStore.PasswordFile == "" {
 			logger.Fatal("both keystore and password files must be provided if using keystore")
 		}
-		providedCount++
 		usingKeystore = true
 	}
 	if cfg.OperatorPrivateKey != "" {
-		providedCount++
 		usingPrivKey = true
 	}
 
-	if providedCount != 1 {
-		logger.Fatal("expected only one signing method to be configured",
+	var errorMsg string
+	if usingSSVSigner && (usingKeystore || usingPrivKey) {
+		errorMsg = "cannot enable both remote signing (SSVSignerEndpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)"
+	} else if usingKeystore && usingPrivKey {
+		errorMsg = "cannot enable both OperatorPrivateKey and PrivateKeyFile"
+	}
+
+	if errorMsg != "" {
+		logger.Fatal(errorMsg,
 			zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint),
 			zap.String("private_key_file", cfg.KeyStore.PrivateKeyFile),
 			zap.String("password_file", cfg.KeyStore.PasswordFile),
