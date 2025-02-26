@@ -95,7 +95,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			noSubnets, err := commons.Subnets{}.FromString("0x00000000000000000000000000000000")
+			noSubnets, err := commons.FromString("0x00000000000000000000000000000000")
 			require.NoError(t, err)
 
 			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork.Beacon, beaconNode, noSubnets)
@@ -663,7 +663,7 @@ func TestWithUpdateInterval(t *testing.T) {
 	// Define the interval we want to set
 	interval := testSyncInterval * 2
 
-	noSubnets, err := commons.Subnets{}.FromString("0x00000000000000000000000000000000")
+	noSubnets, err := commons.FromString("0x00000000000000000000000000000000")
 	require.NoError(t, err)
 
 	// Create an Syncer with the WithSyncInterval option

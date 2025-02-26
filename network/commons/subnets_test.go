@@ -61,7 +61,7 @@ func TestSubnetsParsing(t *testing.T) {
 	for _, subtest := range subtests {
 		subtest := subtest
 		t.Run(subtest.name, func(t *testing.T) {
-			s, err := Subnets{}.FromString(subtest.str)
+			s, err := FromString(subtest.str)
 			if subtest.shouldError {
 				require.Error(t, err)
 			} else {
@@ -73,9 +73,9 @@ func TestSubnetsParsing(t *testing.T) {
 }
 
 func TestSharedSubnets(t *testing.T) {
-	s1, err := Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
+	s1, err := FromString("0xffffffffffffffffffffffffffffffff")
 	require.NoError(t, err)
-	s2, err := Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
+	s2, err := FromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
 	var expectedShared []int
@@ -89,9 +89,9 @@ func TestSharedSubnets(t *testing.T) {
 }
 
 func TestDiffSubnets(t *testing.T) {
-	s1, err := Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
+	s1, err := FromString("0xffffffffffffffffffffffffffffffff")
 	require.NoError(t, err)
-	s2, err := Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
+	s2, err := FromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
 	diff := DiffSubnets(s1, s2)
