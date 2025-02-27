@@ -57,9 +57,7 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		CurrentVersion: forkVersion,
 	}
 
-	start = time.Now()
 	genesis, err := gc.Genesis(ctx)
-	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Genesis"),

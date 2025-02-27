@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -501,7 +502,9 @@ func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
 		return genesis, nil
 	}
 
+	start := time.Now()
 	genesisResp, err := gc.multiClient.Genesis(ctx, &api.GenesisOpts{})
+	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		return nil, err
 	}
