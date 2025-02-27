@@ -227,8 +227,9 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
-	validAttesterDuties := 0
-	validSyncCommitteeDuties := 0
+	totalAttesterDuties := 0
+	totalSyncCommitteeDuties := 0
+	blockedAttesterDuties := 0
 
 	epoch := cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
 	version := cr.beacon.DataVersion(epoch)
@@ -238,16 +239,18 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			logger.Warn("duty is no longer valid", fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
 			continue
 		}
+
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
+			totalAttesterDuties++
+
 			// Doppelganger protection applies only to attester duties since they are slashable.
 			// Sync committee duties are not slashable, so they are always allowed.
 			if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
 				logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(validatorDuty.ValidatorIndex))
+				blockedAttesterDuties++
 				continue
 			}
-
-			validAttesterDuties++ // Only count attester duties that are safe to sign
 
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, attestationData, validatorDuty.DutySlot(),
@@ -271,7 +274,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)
 		case spectypes.BNRoleSyncCommittee:
-			validSyncCommitteeDuties++ // Sync Committee duties are always valid, even if DG is unsafe
+			totalSyncCommitteeDuties++
 
 			blockRoot := beaconVote.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, spectypes.SSZBytes(blockRoot[:]), validatorDuty.DutySlot(),
@@ -284,9 +287,22 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			return fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}
 	}
-	if validAttesterDuties == 0 && validSyncCommitteeDuties == 0 {
+
+	if totalAttesterDuties == 0 && totalSyncCommitteeDuties == 0 {
 		cr.BaseRunner.State.Finished = true
 		return ErrNoValidDuties
+	}
+
+	// Avoid sending an empty message if all attester duties were blocked due to Doppelganger protection
+	// and no sync committee duties exist.
+	//
+	// We do not mark the state as finished here because post-consensus messages must still be processed,
+	// allowing validators to be marked as safe once sufficient consensus is reached.
+	if totalAttesterDuties == blockedAttesterDuties && totalSyncCommitteeDuties == 0 {
+		logger.Warn("Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties.",
+			zap.Int("attester_duties", totalAttesterDuties),
+			zap.Int("blocked_attesters", blockedAttesterDuties))
+		return nil
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -316,8 +332,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	return nil
 
+	return nil
 }
 
 // TODO finish edge case where some roots may be missing
