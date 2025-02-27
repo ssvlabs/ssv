@@ -19,10 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// MinConnectivitySubnets is the minimum number of subnets a node should subscribe to.
-// This parameter can help increase overall p2p network connectivity somewhat "artificially".
-const MinConnectivitySubnets = 0
-
 type validatorStatus int
 
 const (
@@ -146,22 +142,6 @@ func (n *p2pNetwork) SubscribedSubnets() []byte {
 	})
 
 	return updatedSubnets
-}
-
-// SubscribeFillerSubnets subscribes to random subnets to reach the minimum connectivity requirement.
-func (n *p2pNetwork) SubscribeFillerSubnets(logger *zap.Logger) error {
-	if !n.isReady() {
-		return p2pprotocol.ErrNetworkIsNotReady
-	}
-
-	actv := commons.Subnets(n.SubscribedSubnets()).Active()
-
-	if actv < MinConnectivitySubnets {
-		// Subscribe to random subnets.
-		return n.SubscribeRandoms(logger, MinConnectivitySubnets-actv)
-	}
-
-	return nil
 }
 
 // Subscribe subscribes to validator subnet
