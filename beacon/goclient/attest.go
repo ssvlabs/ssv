@@ -359,35 +359,15 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root, logge
 		if cacheResult != nil {
 			cachedSlot := cacheResult.Value()
 			logger.
+				With(zap.Uint64("cached_slot", uint64(cachedSlot))).
 				With(zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
 				Debug("obtained slot from cache")
 			return cachedSlot, nil
 		}
 
-		logger.Debug("slot was not found in cache, fetching from Consensus Client")
+		logger.Debug("slot was not found in cache, returning: '0'")
 
-		timeoutCtx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
-		defer cancel()
-
-		blockResponse, err := gc.multiClient.BeaconBlockHeader(timeoutCtx, &api.BeaconBlockHeaderOpts{
-			Block: root.String(),
-		})
-		if err != nil {
-			return 0, fmt.Errorf("failed to obtain block header: %w", err)
-		}
-
-		if isBlockHeaderResponseValid(blockResponse) {
-			fetchedSlot := blockResponse.Data.Header.Message.Slot
-			logger.
-				With(fields.Slot(fetchedSlot)).
-				Debug("slot was fetched from Consensus Client")
-
-			gc.blockRootToSlotCache.Set(root, fetchedSlot, ttlcache.NoTTL)
-
-			return fetchedSlot, nil
-		}
-
-		return 0, fmt.Errorf("failed to fetch slot via 'BeaconBlockHeader' call for root: '%s'", root.String())
+		return 0, nil
 	})
 
 	return slot, err
@@ -395,13 +375,6 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root, logge
 
 func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 	return zap.String("weighted_data_request_id", id.String())
-}
-
-func isBlockHeaderResponseValid(blockResponse *api.Response[*eth2apiv1.BeaconBlockHeader]) bool {
-	return blockResponse != nil &&
-		blockResponse.Data != nil &&
-		blockResponse.Data.Header != nil &&
-		blockResponse.Data.Header.Message != nil
 }
 
 // SubmitAttestations implements Beacon interface
