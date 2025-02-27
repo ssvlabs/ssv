@@ -360,25 +360,26 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			}
 			return result
 		}
-		scoreSubnetPeers := func(s SubnetPeers) (score float64) {
+		scoreSubnetPeers := func(current SubnetPeers, proposed SubnetPeers) (score uint64) {
 			const (
 				duoSubnetPriority  = 1
 				soloSubnetPriority = 3
 				deadSubnetPriority = 90
-				maxPossibleScore   = commons.SubnetsCount * deadSubnetPriority
 			)
-			v := 0
+			v := uint64(0)
 			for i := 0; i < commons.SubnetsCount; i++ {
-				switch s[i] {
-				case 0:
-					v += deadSubnetPriority
-				case 1:
-					v += soloSubnetPriority
-				case 2:
-					v += duoSubnetPriority
+				if proposed[i] > 0 {
+					switch current[i] {
+					case 0:
+						v += deadSubnetPriority
+					case 1:
+						v += soloSubnetPriority
+					case 2:
+						v += duoSubnetPriority
+					}
 				}
 			}
-			return float64(maxPossibleScore - v)
+			return v
 		}
 
 		// Compute number of peers we're connected to for each subnet.
@@ -409,8 +410,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
 		for i := 0; i < maxPeersToConnect; i++ {
 			currentSubnetPeers := addSubnetPeers(ownSubnetPeers, pendingSubnetPeers)
-			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, float64]()
-			minScore, maxScore := math.MaxFloat64, 0.0
+			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, uint64]()
+			minScore, maxScore := uint64(math.MaxUint64), uint64(0)
 			n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
 				const retryLimit = 2
 				if discoveredPeer.ConnectRetries >= retryLimit {
@@ -433,8 +434,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				for subnet, v := range n.PeersIndex().GetPeerSubnets(peerID) {
 					discPeerSubnetPeer[subnet] = uint16(v)
 				}
-				predictedSubnetPeers := addSubnetPeers(currentSubnetPeers, discPeerSubnetPeer)
-				peerScore := scoreSubnetPeers(predictedSubnetPeers)
+				peerScore := scoreSubnetPeers(currentSubnetPeers, discPeerSubnetPeer)
 				peersByPriority.Push(discoveredPeer, peerScore)
 
 				if minScore > peerScore {
@@ -464,8 +464,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			n.interfaceLogger.Debug(
 				"found the best peer to connect to",
 				zap.Uint("sample_size", peersByPriority.Size()),
-				zap.Float64("min_score", minScore),
-				zap.Float64("max_score", maxScore),
+				zap.Uint64("min_score", minScore),
+				zap.Uint64("max_score", maxScore),
 				zap.String("iteration", fmt.Sprintf("%d of %d", i, maxPeersToConnect)),
 			)
 		}
