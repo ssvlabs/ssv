@@ -38,12 +38,19 @@ type connManager struct {
 
 // NewConnManager creates a new conn manager.
 // multiple instances can be created, but concurrency is not supported.
-func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex, gossipScoreIndex GossipScoreIndex) ConnManager {
+func NewConnManager(
+	logger *zap.Logger,
+	connMgr connmgrcore.ConnManager,
+	subnetsIdx SubnetsIndex,
+	gossipScoreIndex GossipScoreIndex,
+	trimmedRecently *ttl.Map[peer.ID, struct{}],
+) ConnManager {
 	return &connManager{
 		logger:           logger,
 		connManager:      connMgr,
 		subnetsIdx:       subnetsIdx,
 		gossipScoreIndex: gossipScoreIndex,
+		trimmedRecently:  trimmedRecently,
 	}
 }
 
