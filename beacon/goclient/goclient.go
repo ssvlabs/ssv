@@ -508,6 +508,13 @@ func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
 	if err != nil {
 		return nil, err
 	}
+	if genesisResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "Genesis"),
+		)
+		return nil, fmt.Errorf("genesis response data is nil")
+	}
+
 	return genesisResp.Data, err
 }
 

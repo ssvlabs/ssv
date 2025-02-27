@@ -386,9 +386,7 @@ func (km *RemoteKeyManager) getForkInfo(ctx context.Context) (web3signer.ForkInf
 	if err != nil {
 		return web3signer.ForkInfo{}, fmt.Errorf("get genesis: %w", err)
 	}
-	if genesis == nil {
-		return web3signer.ForkInfo{}, fmt.Errorf("genesis is nil")
-	}
+
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
 		GenesisValidatorsRoot: genesis.GenesisValidatorsRoot,
