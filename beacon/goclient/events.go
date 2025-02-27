@@ -23,7 +23,7 @@ type subscriber[T event] struct {
 func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *apiv1.HeadEvent) error {
 	logger := gc.log.With(zap.String("subscriber_identifier", subscriberIdentifier))
 
-	if !slices.Contains(gc.supportedTopics, HeadEventTopic) {
+	if !slices.Contains(gc.supportedTopics, EventTopicHeadEvent) {
 		logger.Warn("the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber")
 		return fmt.Errorf("the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber")
 	}
@@ -75,7 +75,7 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 	}
 
 	switch EventTopic(e.Topic) {
-	case HeadEventTopic:
+	case EventTopicHeadEvent:
 		logger := gc.log.
 			With(zap.String("topic", e.Topic))
 		if e.Data == nil {
@@ -88,11 +88,13 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 			return
 		}
 
-		if uint64(headEventData.Slot) <= gc.lastProcessedHeadEventSlot.Load() {
+		gc.lastProcessedHeadEventSlotLock.Lock()
+		if headEventData.Slot <= gc.lastProcessedHeadEventSlot {
 			return
 		}
 
-		gc.lastProcessedHeadEventSlot.Store(uint64(headEventData.Slot))
+		gc.lastProcessedHeadEventSlot = headEventData.Slot
+		gc.lastProcessedHeadEventSlotLock.Unlock()
 
 		cacheItem := gc.blockRootToSlotCache.Set(headEventData.Block, headEventData.Slot, ttlcache.NoTTL)
 		logger.

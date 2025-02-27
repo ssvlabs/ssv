@@ -6,7 +6,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -118,7 +117,7 @@ type operatorDataStore interface {
 type EventTopic string
 
 const (
-	HeadEventTopic EventTopic = "head"
+	EventTopicHeadEvent EventTopic = "head"
 )
 
 // GoClient implementing Beacon struct
@@ -163,10 +162,12 @@ type GoClient struct {
 
 	withWeightedAttestationData bool
 
-	subscribersLock            sync.RWMutex
-	headEventSubscribers       []subscriber[*apiv1.HeadEvent]
-	supportedTopics            []EventTopic
-	lastProcessedHeadEventSlot atomic.Uint64
+	subscribersLock                sync.RWMutex
+	headEventSubscribers           []subscriber[*apiv1.HeadEvent]
+	supportedTopics                []EventTopic
+	
+	lastProcessedHeadEventSlotLock sync.Mutex
+	lastProcessedHeadEventSlot     phase0.Slot
 
 	genesisForkVersion phase0.Version
 	ForkLock           sync.RWMutex
@@ -215,7 +216,7 @@ func New(
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{HeadEventTopic},
+		supportedTopics:                    []EventTopic{EventTopicHeadEvent},
 		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
