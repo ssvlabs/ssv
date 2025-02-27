@@ -21,7 +21,7 @@ const (
 )
 
 type TopicIndex interface {
-	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
+	PeersByTopic() map[string][]peer.ID
 }
 
 type AllPeersAndTopicsJSON struct {
@@ -115,10 +115,11 @@ func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
-	peers, byTopic := h.TopicIndex.PeersByTopic()
-
+	byTopic := h.TopicIndex.PeersByTopic()
+	peers := h.Network.Peers()
 	resp := AllPeersAndTopicsJSON{
-		AllPeers: peers,
+		AllPeers:     peers,
+		PeersByTopic: make([]topicIndexJSON, 0, len(byTopic)),
 	}
 	for topic, peers := range byTopic {
 		resp.PeersByTopic = append(resp.PeersByTopic, topicIndexJSON{TopicName: topic, Peers: peers})
