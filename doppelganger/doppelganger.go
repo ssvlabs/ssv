@@ -258,11 +258,9 @@ func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2ap
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	h.logger.Debug("Processing liveness data", fields.Epoch(epoch), zap.Any("liveness_data", livenessData))
+
 	for _, response := range livenessData {
-		h.logger.Debug("Processing liveness data",
-			fields.Epoch(epoch),
-			fields.ValidatorIndex(response.Index),
-			zap.Bool("is_live", response.IsLive))
 		state := h.validatorsState[response.Index]
 		if state == nil {
 			h.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(response.Index))
