@@ -76,7 +76,7 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (Service, error) {
+func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		ctx:                 ctx,
@@ -87,6 +87,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (
 		subnets:             opts.DiscV5Opts.Subnets,
 		publishLock:         make(chan struct{}, 1),
 		discoveredPeersPool: opts.DiscoveredPeersPool,
+		trimmedRecently:     opts.TrimmedRecently,
 	}
 
 	logger.Debug(

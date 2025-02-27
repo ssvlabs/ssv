@@ -145,9 +145,8 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	defer cancel()
 
 	opts := testingDiscoveryOptions(t, testNetConfig)
-	service, err := newDiscV5Service(ctx, testLogger, opts)
+	dvs, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
-	dvs := service.(*DiscV5Service)
 
 	// Replace listener
 	localNode := dvs.Self()
@@ -174,10 +173,8 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 
 	opts := testingDiscoveryOptions(t, testNetConfig)
 
-	service, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
-
-	dvs := service.(*DiscV5Service)
 
 	// Replace listener
 	err = dvs.conn.Close()

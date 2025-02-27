@@ -292,6 +292,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		HostDNS:             n.cfg.HostDNS,
 		NetworkConfig:       n.cfg.Network,
 		DiscoveredPeersPool: n.discoveredPeersPool,
+		TrimmedRecently:     n.trimmedRecently,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {

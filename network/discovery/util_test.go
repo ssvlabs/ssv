@@ -7,10 +7,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net"
-	"sync"
-	"testing"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -24,8 +20,13 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"net"
+	"sync"
+	"testing"
+	"time"
 )
 
 var (
@@ -65,23 +66,21 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	connectionIndex := NewMockConnection()
 
 	return &Options{
-		DiscV5Opts:    discV5Opts,
-		ConnIndex:     connectionIndex,
-		SubnetsIdx:    subnetsIndex,
-		NetworkConfig: networkConfig,
+		DiscV5Opts:          discV5Opts,
+		ConnIndex:           connectionIndex,
+		SubnetsIdx:          subnetsIndex,
+		NetworkConfig:       networkConfig,
+		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
+		TrimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 }
 
 // Testing discovery with a given NetworkConfig
 func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, netConfig)
-	service, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
-	require.NotNil(t, service)
-
-	dvs, ok := service.(*DiscV5Service)
-	require.True(t, ok)
-
+	require.NotNil(t, dvs)
 	return dvs
 }
 
