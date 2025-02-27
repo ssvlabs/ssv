@@ -65,6 +65,10 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		}
 	}
 
+	gc.log.
+		With(zap.Int("clients_len", len(gc.clients))).
+		Debug("subscribed to events")
+
 	return nil
 }
 
@@ -78,6 +82,8 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 	case EventTopicHead:
 		logger := gc.log.
 			With(zap.String("topic", e.Topic))
+		logger.Debug("event received")
+
 		if e.Data == nil {
 			logger.Warn("event data is nil")
 			return
