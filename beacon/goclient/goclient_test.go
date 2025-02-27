@@ -26,7 +26,7 @@ func TestHealthy(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	undialableServer := tests.MockServer(t, nil)
+	undialableServer := tests.MockServer(nil)
 	c, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
 
@@ -79,7 +79,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to dial.
 	{
-		undialableServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		undialableServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
@@ -89,7 +89,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to the Validators request.
 	{
-		unresponsiveServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		unresponsiveServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
 				time.Sleep(longTimeout / 2)
@@ -119,7 +119,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to proposer duties request.
 	{
-		unresponsiveServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		unresponsiveServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v1/validator/duties/proposer/" + fmt.Sprint(mockServerEpoch):
 				time.Sleep(longTimeout * 2)
@@ -135,7 +135,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Fast enough.
 	{
-		fastServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		fastServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout / 2)
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
@@ -175,7 +175,7 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 			return resp, nil
 		}
 
-		server := tests.MockServer(t, callback)
+		server := tests.MockServer(callback)
 		defer server.Close()
 		t.Run(fmt.Sprintf("When genesis versions are the same (%s)", string(network)), func(t *testing.T) {
 			c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
@@ -195,7 +195,7 @@ func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
 
 	t.Run("When genesis versions are different", func(t *testing.T) {
 		ctx := context.Background()
-		server := tests.MockServer(t, nil)
+		server := tests.MockServer(nil)
 		defer server.Close()
 		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
 		require.NoError(t, err, "failed to create client")
