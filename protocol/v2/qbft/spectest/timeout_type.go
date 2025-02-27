@@ -26,7 +26,11 @@ type SpecTest struct {
 func RunTimeout(t *testing.T, test *SpecTest) {
 	logger := logging.TestLogger(t)
 	err := test.Pre.UponRoundTimeout(context.TODO(), logger)
-	validateError(t, err, test.Name, test.ExpectedError)
+	if test.ExpectedError != "" {
+		require.EqualError(t, err, test.ExpectedError)
+	} else {
+		require.NoError(t, err)
+	}
 
 	// test calling timeout
 	timer, ok := test.Pre.GetConfig().GetTimer().(*roundtimer.TestQBFTTimer)

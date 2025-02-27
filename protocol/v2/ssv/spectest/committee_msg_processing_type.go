@@ -48,7 +48,11 @@ func (test *CommitteeSpecTest) FullName() string {
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	logger := logging.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
-	validateError(t, lastErr, test.FullName(), test.ExpectedError)
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
+	} else {
+		require.NoError(t, lastErr)
+	}
 
 	broadcastedMsgs := make([]*types.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)

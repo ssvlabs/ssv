@@ -35,5 +35,9 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 			require.EqualValues(t, test.ExpectedRoots[i], r)
 		}
 	}
-	validateError(t, lastErr, test.Name, test.ExpectedError)
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
+	} else {
+		require.NoError(t, lastErr)
+	}
 }

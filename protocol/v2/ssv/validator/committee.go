@@ -92,7 +92,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	r, runnableDuty, err := c.prepareDutyAndRunner(logger, duty)
 	if err != nil {
-		return fmt.Errorf("could not prepare duty runner: %w", err)
+		return err
 	}
 
 	logger.Info("ℹ️ starting duty processing")
@@ -117,7 +117,7 @@ func (c *Committee) prepareDutyAndRunner(logger *zap.Logger, duty *spectypes.Com
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
-		return nil, nil, fmt.Errorf("prepare duty: %w", err)
+		return nil, nil, err
 	}
 
 	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
@@ -222,7 +222,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.RUnlock()
 		if !exists {
-			return fmt.Errorf("no runner found for slot %d", qbftMsg.Height)
+			return fmt.Errorf("no runner found for message's slot")
 		}
 		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
@@ -245,7 +245,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
 			if !exists {
-				return fmt.Errorf("no runner found for post consensus partial-sig message's slot %d", pSigMessages.Slot)
+				return fmt.Errorf("no runner found for message's slot")
 			}
 			return r.ProcessPostConsensus(ctx, logger, pSigMessages)
 		}

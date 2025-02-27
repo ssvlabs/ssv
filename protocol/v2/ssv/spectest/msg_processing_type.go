@@ -151,7 +151,11 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-	validateError(t, lastErr, test.FullName(), test.ExpectedError)
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
+	} else {
+		require.NoError(t, lastErr)
+	}
 
 	network := &spectestingutils.TestingNetwork{}
 	var beaconNetwork *tests.TestingBeaconNodeWrapped

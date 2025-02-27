@@ -56,7 +56,11 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 			lastErr = err
 		}
 	}
-	validateError(t, lastErr, test.Name, test.ExpectedError)
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
+	} else {
+		require.NoError(t, lastErr)
+	}
 
 	postRoot, err := preInstance.State.GetRoot()
 	require.NoError(t, err)

@@ -47,7 +47,11 @@ func (test *CreateMsgSpecTest) RunCreateMsg(t *testing.T) {
 	default:
 		t.Fail()
 	}
-	validateError(t, err, test.Name, test.ExpectedError)
+	if test.ExpectedError != "" {
+		require.EqualError(t, err, test.ExpectedError)
+	} else {
+		require.NoError(t, err)
+	}
 
 	r, err := msg.GetRoot()
 	require.NoError(t, err)

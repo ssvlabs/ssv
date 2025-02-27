@@ -48,7 +48,11 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 		height++
 	}
-	validateError(t, lastErr, test.Name, test.ExpectedError)
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
+	} else {
+		require.NoError(t, lastErr)
+	}
 }
 
 func generateController(logger *zap.Logger) *controller.Controller {

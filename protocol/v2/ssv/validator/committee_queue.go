@@ -77,7 +77,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
-		return fmt.Errorf("no runner found for slot %d", duty.Slot)
+		return fmt.Errorf("no runner found for message's slot")
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler

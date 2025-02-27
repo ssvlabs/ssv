@@ -43,7 +43,11 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 			lastErr = err
 		}
 	}
-	validateError(t, lastErr, test.Name, test.ExpectedError)
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
+	} else {
+		require.NoError(t, lastErr)
+	}
 
 	// post root
 	postRoot, err := r.GetBaseRunner().State.GetRoot()
