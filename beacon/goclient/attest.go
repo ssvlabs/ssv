@@ -334,7 +334,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	score := float64(attestationData.Source.Epoch + attestationData.Target.Epoch)
 
 	// Increase score based on the nearness of the head slot.
-	slot, err := gc.blockRootToSlot(ctx, attestationData.BeaconBlockRoot, logger)
+	slot, err := gc.blockRootToSlot(attestationData.BeaconBlockRoot, logger)
 	if err != nil {
 		logger.
 			With(zap.Error(err)).
@@ -353,7 +353,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	return score
 }
 
-func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
+func (gc *GoClient) blockRootToSlot(root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
 	slot, err, _ := gc.blockRootToSlotReqInflight.Do(root, func() (phase0.Slot, error) {
 		cacheResult := gc.blockRootToSlotCache.Get(root)
 		if cacheResult != nil {
