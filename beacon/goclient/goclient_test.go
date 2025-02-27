@@ -245,24 +245,21 @@ func mockServer(t *testing.T, onRequestFn requestCallback) *httptest.Server {
 	require.NoError(t, json.NewDecoder(f).Decode(&mockResponses))
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Logf("mock server handling request: %s", r.URL.Path)
-
 		resp, ok := mockResponses[r.URL.Path]
 		if !ok {
-			require.FailNowf(t, "unexpected request", "unexpected request: %s", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
+			panic(fmt.Sprintf("unexpected request: %s", r.URL.Path))
 		}
 		var err error
 		if onRequestFn != nil {
 			resp, err = onRequestFn(r, resp)
-			require.NoError(t, err)
+			if err != nil {
+				panic(fmt.Sprintf("onRequestFn returned error: %v", err))
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := w.Write(resp); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			panic(fmt.Sprintf("got error writing response: %v", err))
 		}
 	}))
 }
