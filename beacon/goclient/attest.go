@@ -364,7 +364,7 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, root phase0.Root, logge
 			return cachedSlot, nil
 		}
 
-		logger.Debug("slot was not found in cache. Fetching from Consensus Client")
+		logger.Debug("slot was not found in cache, fetching from Consensus Client")
 
 		timeoutCtx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
 		defer cancel()
