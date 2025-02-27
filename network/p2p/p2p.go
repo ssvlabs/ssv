@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ssvlabs/ssv/utils/ttl"
 	"math"
 	"math/rand"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/ssvlabs/ssv/utils/ttl"
 
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
@@ -301,6 +302,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		return err
 	}
 
+	// Spawn a goroutine to deduplicate discovered peers by peer ID.
 	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
 	go n.bootstrapDiscovery(logger, connectorProposals)
 	go func() {
@@ -319,25 +321,23 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 	}()
 
-	// start go-routine to choose the best peer(s) from the pool of discovered peers to propose
-	// these as outbound connections, all discovered peers are kept in a pool so we can choose
-	// from that same pool across different runs of this interval-func
+	// Spawn a goroutine to repeatedly select & connect to the best peers.
+	// TODO: insert description of the mechanism here below
 	async.Interval(n.ctx, 15*time.Second, func() {
-		// give discovery some time to find the best peers right after node start, the exact
-		// best time to wait is arrived at experimentally
-		if time.Since(startTime) < 1*time.Minute {
+		// Collect enough peers first to increase the quality of peer selection.
+		const minDiscoveredPeers = 100
+		const minDiscoveryTime = 1 * time.Minute
+		if time.Since(startTime) < minDiscoveryTime &&
+			n.discoveredPeersPool.SlowLen() < minDiscoveredPeers {
 			return
 		}
 
-		// see how many vacant slots (for outbound connections) we have, note that we always
-		// prefer outbound connections over inbound and hence we check against MaxPeers and
-		// not some outbound-specific limit value (we don't even define any outbound-specific
-		// limit)
+		// Avoid connecting to more peers if we're already at the limit.
 		inbound, outbound := n.connectionStats()
-		vacantOutboundSlotCnt := n.cfg.MaxPeers - (inbound + outbound)
-		if vacantOutboundSlotCnt <= 0 {
+		vacantOutboundSlots := n.cfg.MaxPeers - (inbound + outbound)
+		if vacantOutboundSlots <= 0 {
 			n.interfaceLogger.Debug(
-				"Not gonna try to connect discovered peers: ran out of vacant peer slots",
+				"no vacant outbound slots, skipping peer selection",
 				zap.Int("inbound_peers", inbound),
 				zap.Int("outbound_peers", outbound),
 				zap.Int("max_peers", n.cfg.MaxPeers),
@@ -853,11 +853,11 @@ func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
 		return 0.0
 	}
 	subnetPeersExcluding := 0
-    for _, p := range subnetPeers {
-        if p != peerID {
-            subnetPeersExcluding++
-        }
-    }
+	for _, p := range subnetPeers {
+		if p != peerID {
+			subnetPeersExcluding++
+		}
+	}
 
 	const targetPeersPerSubnet = 3
 	return score(targetPeersPerSubnet, subnetPeersExcluding)
