@@ -529,16 +529,16 @@ func (gc *GoClient) CurrentFork(ctx context.Context) (*phase0.Fork, error) {
 	recordRequestDuration(gc.ctx, "ForkSchedule", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "CurrentFork"),
+			zap.String("api", "ForkSchedule"),
 			zap.Error(err),
 		)
 		return nil, err
 	}
 	if schedule.Data == nil {
 		gc.log.Error(clNilResponseForkDataErrMsg,
-			zap.String("api", "CurrentFork"),
+			zap.String("api", "ForkSchedule"),
 		)
-		return nil, fmt.Errorf("current fork response data is nil")
+		return nil, fmt.Errorf("fork schedule response data is nil")
 	}
 
 	currentEpoch := gc.network.EstimatedCurrentEpoch()
