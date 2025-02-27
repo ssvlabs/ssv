@@ -381,11 +381,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			return float64(maxPossibleScore - v)
 		}
 
-		// Select up to half of the vacant outbound slots to connect to,
-		// leaving the rest for the next iteration.
-		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
-		peersToConnectMaxCnt := max(vacantOutboundSlots/2, 1)
-
 		// Compute number of peers we're connected to for each subnet.
 		ownSubnetPeers := SubnetPeers{}
 		peersByTopic := n.PeersByTopic()
@@ -411,17 +406,17 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			}
 		}
 
-		// peersToConnectSubnetSum represents subnet-sum of peers we are about to connect with
-		pendingSubnetPeers := SubnetPeers{}
+		// Limit new connections to half of the remaining outbound slots.
+		maxPeersToConnect := max(vacantOutboundSlots/2, 1)
 
-		// to find best set of peersToConnect choose exactly 1 (best) peer on each iteration doing
-		// peersToConnectMaxCnt at most (note, we can terminate sooner if there aren't enough of
-		// newly discovered peers for us to keep choosing from)
-		for i := 0; i < peersToConnectMaxCnt; i++ {
+		// Repeatedly select the next best peer to connect to,
+		// adding their subnets to pendingSubnetPeers so that the next selection
+		// is scored assuming the previous peers are already connected.
+		pendingSubnetPeers := SubnetPeers{}
+		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
+		for i := 0; i < maxPeersToConnect; i++ {
 			currentSubnetPeers := addSubnetPeers(ownSubnetPeers, pendingSubnetPeers)
-			// peersByPriority keeps track of best peers (by their peer score)
 			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, float64]()
-			// minScore and maxScore are used for printing additional debugging info
 			minScore, maxScore := math.MaxFloat64, 0.0
 			n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
 				const retryLimit = 2
@@ -435,11 +430,12 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				}
 
 				if _, ok := peersToConnect[peerID]; ok {
-					// we've already decided to connect this peer, hence we skip it now
+					// This peer was already selected.
 					return true
 				}
 
-				// Add OwnSubnets + PeerSubnets to predict this peer's score.
+				// Predict this peer's score by adding its subnets to pendingSubnetPeers
+				// and then scoring the total.
 				predictedSubnetPeers := addSubnetPeers(currentSubnetPeers, peerSubnets[peerID])
 				peerScore := scoreSubnetPeers(predictedSubnetPeers)
 				peersByPriority.Push(discoveredPeer, peerScore)
@@ -465,10 +461,11 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			peersToConnect[bestPeer.ID] = bestPeer
 
 			n.interfaceLogger.Debug(
-				fmt.Sprintf("Found the best peer (iteration %d of %d) to try to connect to", i, peersToConnectMaxCnt),
-				zap.Uint("peers_scored_total", peersByPriority.Size()),
+				"found the best peer to connect to",
+				zap.Uint("sample_size", peersByPriority.Size()),
 				zap.Float64("min_score", minScore),
 				zap.Float64("max_score", maxScore),
+				zap.String("iteration", fmt.Sprintf("%d of %d", i, maxPeersToConnect)),
 			)
 		}
 
