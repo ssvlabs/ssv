@@ -2,9 +2,12 @@ package discovery
 
 import (
 	"context"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
@@ -114,11 +117,13 @@ func TestCheckPeer(t *testing.T) {
 	// Run the tests.
 	subnetIndex := peers.NewSubnetsIndex(commons.SubnetsCount)
 	dvs := &DiscV5Service{
-		ctx:           ctx,
-		conns:         &mock.MockConnectionIndex{LimitValue: false},
-		subnetsIdx:    subnetIndex,
-		networkConfig: TestNetwork,
-		subnets:       mySubnets,
+		ctx:                 ctx,
+		conns:               &mock.MockConnectionIndex{LimitValue: false},
+		subnetsIdx:          subnetIndex,
+		networkConfig:       TestNetwork,
+		subnets:             mySubnets,
+		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
+		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 
 	for _, test := range tests {

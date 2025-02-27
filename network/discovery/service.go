@@ -42,6 +42,7 @@ type Options struct {
 	HostDNS             string
 	NetworkConfig       networkconfig.NetworkConfig
 	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
+	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
 }
 
 // Service is the interface for discovery
