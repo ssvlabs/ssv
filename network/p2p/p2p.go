@@ -585,19 +585,16 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 // disregarding immunityQuota entirely (when it comes to outbound connections).
 func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool) map[peer.ID]struct{} {
 	myPeersSet := make(map[peer.ID]struct{})
-	for _, tpc := range n.topicsCtrl.Topics() {
-		peerz, err := n.topicsCtrl.Peers(tpc)
-		if err != nil {
-			n.interfaceLogger.Error(
-				"Cant get peers for topic, skipping to keep the network running",
-				zap.String("topic", tpc),
-				zap.Error(err),
-			)
-			continue
-		}
-		for _, p := range peerz {
-			myPeersSet[p] = struct{}{}
-		}
+	peerz, err := n.topicsCtrl.Peers("")
+	if err != nil {
+		n.interfaceLogger.Error(
+			"Cant get all peers, skipping to keep the network running",
+			zap.Error(err),
+		)
+		return make(map[peer.ID]struct{})
+	}
+	for _, p := range peerz {
+		myPeersSet[p] = struct{}{}
 	}
 
 	myPeers := maps.Keys(myPeersSet)
