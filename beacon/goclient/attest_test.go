@@ -317,23 +317,6 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("single beacon client: populates boolRootToSlot cache", func(t *testing.T) {
-		expectedCachedSlot := phase0.Slot(500)
-		beaconServer, _ := createBeaconServer(t, beaconServerResponseOptions{
-			SlotReturnedFromHeaderEndpoint: expectedCachedSlot,
-		})
-		client, err := createClient(ctx, beaconServer.URL, withWeightedAttestationData)
-		require.NoError(t, err)
-
-		client.GetAttestationData(phase0.Slot(100))
-
-		require.Equal(t, 1, client.blockRootToSlotCache.Len())
-		for root, item := range client.blockRootToSlotCache.Items() {
-			require.Contains(t, roots, "0x"+hex.EncodeToString(root[:]))
-			require.Equal(t, expectedCachedSlot, item.Value())
-		}
-	})
-
 	t.Run("multiple beacon clients: does not await for soft timeout when all servers respond", func(t *testing.T) {
 		const numberOfBeaconServers = 3
 		var beaconServersURLs []string
@@ -493,16 +476,12 @@ type beaconServerResponseOptions struct {
 	BeaconHeadersResponseDuration,
 	// AttestationDataResponseDuration helps configure scenarios where the '/eth/v1/validator/attestation_data' Beacon endpoint responds with a delay specified by this variable.
 	AttestationDataResponseDuration time.Duration
-	SlotReturnedFromHeaderEndpoint phase0.Slot
-	AttestationDataResponse        []byte
+	AttestationDataResponse []byte
 }
 
 func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*httptest.Server, *hashmap.Map[phase0.Slot, int]) {
 	// serverGotRequests keeps track of server requests made (in thread-safe manner).
 	serverGotRequests := hashmap.New[phase0.Slot, int]()
-	if options.SlotReturnedFromHeaderEndpoint == 0 {
-		options.SlotReturnedFromHeaderEndpoint = phase0.Slot(rand.Uint64())
-	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -514,39 +493,6 @@ func createBeaconServer(t *testing.T, options beaconServerResponseOptions) (*htt
 				}
 				return
 			}
-		}
-
-		//this endpoint is not called for simple attestation data
-		if strings.HasPrefix(r.URL.Path, "/eth/v1/beacon/headers") {
-			//setup scenario when the endpoint responds with the pre-configured delay (tests related to timeouts)
-			time.Sleep(options.BeaconHeadersResponseDuration)
-			if options.WithHeaderEndpointError {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			resp := []byte(fmt.Sprintf(`{
-				"execution_optimistic": false,
-				"finalized": false,
-				"data": {
-					"header": {
-						"message": {
-							"slot": "%d",
-							"proposer_index": "595427",
-							"parent_root": "0xba8c80a13eecced00fe61d628d15d471694a2d253c0a9d9157055a6f19941fee",
-							"state_root": "0x9689b331f33a227d54ad7c4c17e2b7c8e2e3fec9c925e6f212fe9e3941e4f6f9",
-							"body_root": "0x6be1346b5e812847696c6f18d86754b930ebe4421a1d108b3ae14d02e19a7cef"
-						},
-						"signature": "0xb4edd7ffa8cba8e976dfcb5d375f4715fb2993fd27677776805733d454895e76f2d249b81a34a0ae6a37c1072d713bcd0fbc5617b13a51e36807bc17d8de1dd18d670a8bc8e8f9481e888822d08dba067e58844d8796653536cd450ad01acf90"
-					},
-					"root": "0x2922d4d36529c39ae7c463bc0a18f434d616954bdc0a38f7c24e0847a181de15",
-					"canonical": true
-				}
-			}`, options.SlotReturnedFromHeaderEndpoint))
-			if _, err := w.Write(resp); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			return
 		}
 
 		require.Equal(t, http.MethodGet, r.Method)
