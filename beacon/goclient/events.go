@@ -24,8 +24,8 @@ func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentif
 	logger := gc.log.With(zap.String("subscriber_identifier", subscriberIdentifier))
 
 	if !slices.Contains(gc.supportedTopics, HeadEventTopic) {
-		logger.Warn("the list of supported topics was empty, cannot add new subscriber")
-		return fmt.Errorf("the list of supported topics was empty, cannot add new subscriber")
+		logger.Warn("the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber")
+		return fmt.Errorf("the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber")
 	}
 
 	logger.Info("adding 'head' event subscriber")

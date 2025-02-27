@@ -18,7 +18,7 @@ import (
 )
 
 func TestSubscribeToHeadEvents(t *testing.T) {
-	t.Run("Should create subscriber and launch event listener when go client is instantiated", func(t *testing.T) {
+	t.Run("Should launch event listener when go client is instantiated", func(t *testing.T) {
 		eventsEndpointSubscribedCh := make(chan any)
 
 		server := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
@@ -32,11 +32,6 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 		client := eventsTestClient(t, server.URL)
 
 		assert.NotNil(t, client)
-		assert.Len(t, client.headEventSubscribers, 1)
-		sub := client.headEventSubscribers[0]
-		assert.Equal(t, "go_client", sub.Identifier)
-		assert.NotNil(t, sub.Channel)
-		assert.IsType(t, make(chan *apiv1.HeadEvent, 32), sub.Channel)
 
 		for {
 			select {
@@ -53,16 +48,26 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 		client := eventsTestClient(t, server.URL)
 		defer server.Close()
 
-		ch := make(chan<- *apiv1.HeadEvent)
-		err := client.SubscribeToHeadEvents(context.Background(), "test_caller", ch)
+		err := client.SubscribeToHeadEvents(context.Background(), "test_caller", make(chan<- *apiv1.HeadEvent))
 
 		assert.NoError(t, err)
-		assert.Len(t, client.headEventSubscribers, 2)
-		sub := client.headEventSubscribers[1]
+		assert.Len(t, client.headEventSubscribers, 1)
+		sub := client.headEventSubscribers[0]
 		assert.Equal(t, "test_caller", sub.Identifier)
 		assert.NotNil(t, sub.Channel)
-		assert.IsType(t, make(chan *apiv1.HeadEvent, 32), sub.Channel)
-		assert.IsType(t, make(<-chan *apiv1.HeadEvent, 32), ch)
+	})
+
+	t.Run("Should not create subscriber and return error when supported topics does not contain HeadEventTopic", func(t *testing.T) {
+		server := tests.MockServer(t, nil)
+		client := eventsTestClient(t, server.URL)
+		client.supportedTopics = []EventTopic{}
+		defer server.Close()
+
+		err := client.SubscribeToHeadEvents(context.Background(), "test_caller", make(chan<- *apiv1.HeadEvent))
+
+		assert.Error(t, err)
+		assert.Equal(t, "the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber", err.Error())
+		assert.Empty(t, client.headEventSubscribers)
 	})
 }
 
