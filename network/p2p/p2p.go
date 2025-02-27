@@ -244,18 +244,11 @@ func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start(logger *zap.Logger) error {
-	p2pStartTime := time.Now()
-
 	logger = logger.Named(logging.NameP2PNetwork)
 
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")
 		return nil
-	}
-
-	connector, err := n.getConnector()
-	if err != nil {
-		return err
 	}
 
 	pAddrs, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{
@@ -274,8 +267,43 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		zap.Int("trusted_peers", len(n.trustedPeers)),
 	)
 
+	err = n.startDiscovery(logger)
+	if err != nil {
+		return fmt.Errorf("could not start discovery: %w", err)
+	}
+
+	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming(logger))
+
+	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, logger, n.host))
+
+	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
+
+	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl, 2))
+
+	// TODO - used for testing (to gather more stats on how logs node takes to resolve dead
+	// subnets at node-start)
+	async.Interval(n.ctx, 2*time.Hour, func() {
+		n.interfaceLogger.Info("FORCE-restarting SSV node")
+		os.Exit(0)
+	})
+
+	if err := n.subscribeToFixedSubnets(logger); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
+	startTime := time.Now()
+
+	connector, err := n.getConnector()
+	if err != nil {
+		return err
+	}
+
 	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
-	go n.startDiscovery(logger, connectorProposals)
+	go n.bootstrapDiscovery(logger, connectorProposals)
 	go func() {
 		// keep discovered peers in a pool so we can choose the best ones
 		for proposal := range connectorProposals {
@@ -291,13 +319,14 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			)
 		}
 	}()
+
 	// start go-routine to choose the best peer(s) from the pool of discovered peers to propose
 	// these as outbound connections, all discovered peers are kept in a pool so we can choose
 	// from that same pool across different runs of this interval-func
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// give discovery some time to find the best peers right after node start, the exact
 		// best time to wait is arrived at experimentally
-		if time.Since(p2pStartTime) < 1*time.Minute {
+		if time.Since(startTime) < 1*time.Minute {
 			return
 		}
 
@@ -366,7 +395,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			peersToConnectMaxCnt = 1 // always try to connect at least 1 peer
 		}
 
-		// peersToConnect is a final set of peers we are gonna try to connect with
+		// peersToConnect is the final set of peers we are gonna try to connect with
 		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
 		// ownSubnetSum represents subnet-sum of peers we already have open connections with
 		ownSubnetSum := SubnetSum{}
@@ -404,12 +433,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 					// peer again essentially resetting this peer's retry attempts counter to 0), eventually
 					// (after some time passes) this peer will automatically get removed from discoveredPeersPool
 					// so it can be discovered again (effectively resetting peer's retry attempts counter to 0)
-
-					// this log line is commented out as it is too spammy
-					//n.interfaceLogger.Debug(
-					//	"Not gonna try to connect discovered peer: ran out of retries",
-					//	zap.String("peer_id", string(key)),
-					//)
 					return true
 				}
 
@@ -468,25 +491,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 			zap.Int("count", len(peersToConnect)),
 		)
 	})
-
-	async.Interval(n.ctx, peersTrimmingInterval, n.peersTrimming(logger))
-
-	async.Interval(n.ctx, peersReportingInterval, recordPeerCount(n.ctx, logger, n.host))
-
-	async.Interval(n.ctx, peerIdentitiesReportingInterval, recordPeerIdentities(n.ctx, n.host, n.idx))
-
-	async.Interval(n.ctx, topicsReportingInterval, recordPeerCountPerTopic(n.ctx, logger, n.topicsCtrl, 2))
-
-	// TODO - used for testing (to gather more stats on how logs node takes to resolve dead
-	// subnets at node-start)
-	async.Interval(n.ctx, 2*time.Hour, func() {
-		n.interfaceLogger.Info("FORCE-restarting SSV node")
-		os.Exit(0)
-	})
-
-	if err := n.subscribeToFixedSubnets(logger); err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -662,10 +666,10 @@ func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool
 	return protectedPeers
 }
 
-// startDiscovery starts the required services
+// bootstrapDiscovery starts the required services
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
-func (n *p2pNetwork) startDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
+func (n *p2pNetwork) bootstrapDiscovery(logger *zap.Logger, connector chan peer.AddrInfo) {
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(logger, func(e discovery.PeerEvent) {
 			if err := n.idx.CanConnect(e.AddrInfo.ID); err != nil {
