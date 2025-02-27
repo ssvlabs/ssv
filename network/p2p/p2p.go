@@ -331,12 +331,13 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 	// TODO: insert description of the mechanism here below
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// Collect enough peers first to increase the quality of peer selection.
-		const minDiscoveredPeers = 100
-		const minDiscoveryTime = 30 * time.Second
-		if time.Since(startTime) < minDiscoveryTime &&
-			n.discoveredPeersPool.SlowLen() < minDiscoveredPeers {
+		const minDiscoveryTime = 1 * time.Minute
+		if time.Since(startTime) < minDiscoveryTime {
+			n.discoveredPeersPool.SlowLen()
 			return
 		}
+
+		n.interfaceLogger.Debug("starting selecting peers", zap.Int("pool_size", n.discoveredPeersPool.SlowLen()))
 
 		// Avoid connecting to more peers if we're already at the limit.
 		inbound, outbound := n.connectionStats()
