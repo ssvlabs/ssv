@@ -384,7 +384,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		// Compute number of peers we're connected to for each subnet.
 		ownSubnetPeers := SubnetPeers{}
 		peersByTopic := n.PeersByTopic()
-		peerSubnets := make(map[peer.ID]SubnetPeers)
 		for topic, peers := range peersByTopic {
 			subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
 			if err != nil {
@@ -398,12 +397,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				continue
 			}
 			ownSubnetPeers[subnet] = uint16(len(peers))
-
-			for _, peer := range peers {
-				subnets := peerSubnets[peer]
-				subnets[subnet] = uint16(len(peers))
-				peerSubnets[peer] = subnets
-			}
 		}
 
 		// Limit new connections to half of the remaining outbound slots.
@@ -436,7 +429,11 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 				// Predict this peer's score by adding its subnets to pendingSubnetPeers
 				// and then scoring the total.
-				predictedSubnetPeers := addSubnetPeers(currentSubnetPeers, peerSubnets[peerID])
+				discPeerSubnetPeer := SubnetPeers{}
+				for subnet, v := range n.PeersIndex().GetPeerSubnets(peerID) {
+					discPeerSubnetPeer[subnet] = uint16(v)
+				}
+				predictedSubnetPeers := addSubnetPeers(currentSubnetPeers, discPeerSubnetPeer)
 				peerScore := scoreSubnetPeers(predictedSubnetPeers)
 				peersByPriority.Push(discoveredPeer, peerScore)
 
@@ -457,7 +454,11 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 			// Add the selected peer's subnets to pendingSubnetPeers,
 			// to be used in the next iteration.
-			pendingSubnetPeers = addSubnetPeers(pendingSubnetPeers, peerSubnets[bestPeer.ID])
+			bestPeerSubnetPeer := SubnetPeers{}
+			for subnet, v := range n.PeersIndex().GetPeerSubnets(bestPeer.ID) {
+				bestPeerSubnetPeer[subnet] = uint16(v)
+			}
+			pendingSubnetPeers = addSubnetPeers(pendingSubnetPeers, bestPeerSubnetPeer)
 			peersToConnect[bestPeer.ID] = bestPeer
 
 			n.interfaceLogger.Debug(
