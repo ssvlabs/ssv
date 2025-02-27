@@ -223,6 +223,10 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context, logger *zap.Logger) 
 			case <-ctx.Done():
 				return
 			case headEvent := <-headEventChan:
+				if headEvent == nil {
+					logger.Warn("head event was nil, skipping")
+					continue
+				}
 				logger.
 					With(fields.Slot(headEvent.Slot)).
 					With(fields.BlockRoot(headEvent.Block)).
