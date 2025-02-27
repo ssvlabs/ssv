@@ -137,7 +137,6 @@ type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
-	SubscribeFillerSubnets(logger *zap.Logger) error
 	ActiveSubnets() commons.Subnets
 	FixedSubnets() commons.Subnets
 }
@@ -468,10 +467,6 @@ func (c *controller) StartValidators(ctx context.Context) {
 
 		// Start validators.
 		c.startValidators(inited, committees)
-
-		if err := c.network.SubscribeFillerSubnets(c.logger); err != nil {
-			c.logger.Error("failed to subscribe to filler subnets", zap.Error(err))
-		}
 	}
 }
 

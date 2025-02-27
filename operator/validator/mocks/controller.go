@@ -439,20 +439,6 @@ func (mr *MockP2PNetworkMockRecorder) FixedSubnets() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FixedSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).FixedSubnets))
 }
 
-// SubscribeFillerSubnets mocks base method.
-func (m *MockP2PNetwork) SubscribeFillerSubnets(logger *zap.Logger) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeFillerSubnets", logger)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubscribeFillerSubnets indicates an expected call of SubscribeFillerSubnets.
-func (mr *MockP2PNetworkMockRecorder) SubscribeFillerSubnets(logger any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeFillerSubnets", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeFillerSubnets), logger)
-}
-
 // SubscribeRandoms mocks base method.
 func (m *MockP2PNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
 	m.ctrl.T.Helper()
