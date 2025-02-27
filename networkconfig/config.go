@@ -19,6 +19,7 @@ var SupportedConfigs = map[string]NetworkConfig{
 	HoleskyE2E.Name:   HoleskyE2E,
 	Hoodi.Name:        Hoodi,
 	HoodiStage.Name:   HoodiStage,
+	Sepolia.Name:      Sepolia,
 }
 
 const forkName = "alan"
