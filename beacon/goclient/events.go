@@ -58,9 +58,11 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		strTopics = append(strTopics, string(topic))
 	}
 
-	if err := gc.multiClient.Events(ctx, strTopics, gc.eventHandler); err != nil {
-		gc.log.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
-		return err
+	for _, client := range gc.clients {
+		if err := client.Events(ctx, strTopics, gc.eventHandler); err != nil {
+			gc.log.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
+			return err
+		}
 	}
 
 	return nil
@@ -85,6 +87,12 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 			logger.Warn("could not type assert")
 			return
 		}
+
+		if uint64(headEventData.Slot) <= gc.lastProcessedHeadEventSlot.Load() {
+			return
+		}
+
+		gc.lastProcessedHeadEventSlot.Store(uint64(headEventData.Slot))
 
 		cacheItem := gc.blockRootToSlotCache.Set(headEventData.Block, headEventData.Slot, ttlcache.NoTTL)
 		logger.

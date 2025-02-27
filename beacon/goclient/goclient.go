@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -162,9 +163,10 @@ type GoClient struct {
 
 	withWeightedAttestationData bool
 
-	subscribersLock      sync.RWMutex
-	headEventSubscribers []subscriber[*apiv1.HeadEvent]
-	supportedTopics      []EventTopic
+	subscribersLock            sync.RWMutex
+	headEventSubscribers       []subscriber[*apiv1.HeadEvent]
+	supportedTopics            []EventTopic
+	lastProcessedHeadEventSlot atomic.Uint64
 
 	genesisForkVersion phase0.Version
 	ForkLock           sync.RWMutex
