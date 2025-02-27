@@ -585,7 +585,7 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 			zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint),
 			zap.String("private_key_file", cfg.KeyStore.PrivateKeyFile),
 			zap.String("password_file", cfg.KeyStore.PasswordFile),
-			zap.Bool("has_operator_private_key", cfg.OperatorPrivateKey != ""),
+			zap.Int("operator_private_key_len", len(cfg.OperatorPrivateKey)), // not exposing the private key
 		)
 	}
 
