@@ -410,7 +410,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		maxPeersToConnect := max(vacantOutboundSlots/2, 1)
 
 		// Repeatedly select the next best peer to connect to,
-		// adding their subnets to pendingSubnetPeers so that the next selection
+		// adding its subnets to pendingSubnetPeers so that the next selection
 		// is scored assuming the previous peers are already connected.
 		pendingSubnetPeers := SubnetPeers{}
 		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
@@ -469,7 +469,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			)
 		}
 
-		// finally, offer the best peers we've picked to connector so it tries to connect these
+		// Forward the selected peers to the connector.
 		for _, p := range peersToConnect {
 			// update retry counter for this peer so we eventually skip it after certain number of retries
 			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
@@ -479,7 +479,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			connector <- p.AddrInfo
 		}
 		n.interfaceLogger.Info(
-			"Proposed discovered peers to try connect to",
+			"proposed discovered peers to try connect to",
 			zap.Int("count", len(peersToConnect)),
 		)
 	})
