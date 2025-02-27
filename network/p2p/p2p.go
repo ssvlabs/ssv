@@ -509,7 +509,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			_ = n.idx.GetSubnetsStats() // collect metrics
 		}()
 
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx, n.trimmedRecently)
 
 		disconnectedCnt := connMgr.DisconnectFromBadPeers(logger, n.host.Network(), n.host.Network().Peers())
 		if disconnectedCnt > 0 {
