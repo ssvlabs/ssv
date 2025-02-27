@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -196,13 +197,12 @@ type controller struct {
 type DutyTracer interface {
 	Trace(*queue.SSVMessage)
 	Store() DutyTraceStore
+	StartEvictionJob(context.Context, slotticker.Provider)
 }
 
 type DutyTraceStore interface {
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*model.ValidatorDutyTrace, error)
-	GetCommitteeDutiesByOperator(indices []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
-	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
 	GetDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) []qbftstorage.ParticipantsRangeEntry
 }
 

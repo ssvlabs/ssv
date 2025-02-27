@@ -32,9 +32,7 @@ type Exporter struct {
 
 type DutyTraceStore interface {
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*model.ValidatorDutyTrace, error)
-	GetCommitteeDutiesByOperator(indices []spectypes.OperatorID, slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
-	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
 	GetDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) []qbftstorage.ParticipantsRangeEntry
 }
 
@@ -169,33 +167,6 @@ func transformToParticipantResponse(role spectypes.BeaconRole, entry qbftstorage
 	response.Message.Signers = entry.Signers
 
 	return response
-}
-
-func (e *Exporter) OperatorTraces(w http.ResponseWriter, r *http.Request) error {
-	var request struct {
-		From       uint64          `json:"from"`
-		To         uint64          `json:"to"`
-		OperatorID api.Uint64Slice `json:"operatorID"`
-	}
-
-	if err := api.Bind(r, &request); err != nil {
-		return api.BadRequestError(err)
-	}
-
-	var indexes []spectypes.OperatorID
-	indexes = append(indexes, request.OperatorID...)
-
-	var duties []*model.CommitteeDutyTrace
-	for s := request.From; s <= request.To; s++ {
-		slot := phase0.Slot(s)
-		dd, err := e.TraceStore.GetCommitteeDutiesByOperator(indexes, slot)
-		if err != nil {
-			return api.Error(fmt.Errorf("error getting duties: %w", err))
-		}
-		duties = append(duties, dd...)
-	}
-
-	return api.Render(w, r, toCommitteeTraceResponse(duties))
 }
 
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {

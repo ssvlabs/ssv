@@ -149,7 +149,7 @@ func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.C
 	})
 }
 
-func (s *DutyTraceStore) SaveCommiteeDuty(duty *model.CommitteeDutyTrace) error {
+func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteePrefix(duty.Slot, duty.CommitteeID)
 
 	value, err := duty.MarshalSSZ()
@@ -164,7 +164,7 @@ func (s *DutyTraceStore) SaveCommiteeDuty(duty *model.CommitteeDutyTrace) error 
 		return fmt.Errorf("save committee duty: %w", err)
 	}
 
-	prefixes := s.makeCommiteeOperatorPrefixes(duty.OperatorIDs, duty.Slot)
+	prefixes := s.makeCommiteeOperatorPrefixes(duty.Slot, duty.OperatorIDs)
 
 	for _, ref := range prefixes {
 		if err = s.db.Using(tx).Set(ref, nil, prefix); err != nil {
@@ -198,7 +198,7 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 }
 
 func (s *DutyTraceStore) GetCommitteeDutiesByOperator(indices []spectypes.OperatorID, slot phase0.Slot) (out []*model.CommitteeDutyTrace, err error) {
-	prefixes := s.makeCommiteeOperatorPrefixes(indices, slot)
+	prefixes := s.makeCommiteeOperatorPrefixes(slot, indices)
 	keys := make([][]byte, 0)
 
 	tx := s.db.BeginRead()
@@ -260,7 +260,7 @@ func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.Comm
 }
 
 // slot + index
-func (s *DutyTraceStore) makeCommiteeOperatorPrefixes(ii []spectypes.OperatorID, slot phase0.Slot) (keys [][]byte) {
+func (s *DutyTraceStore) makeCommiteeOperatorPrefixes(slot phase0.Slot, ii []spectypes.OperatorID) (keys [][]byte) {
 	for _, index := range ii {
 		prefix := make([]byte, 0, len(commiteeOperatorIndexKey)+4+8)
 		prefix = append(prefix, []byte(commiteeOperatorIndexKey)...)

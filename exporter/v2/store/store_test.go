@@ -24,8 +24,8 @@ func TestSaveCommitteeDutyTrace(t *testing.T) {
 	trace2 := makeCTrace(2, 'b')
 
 	store := store.New(db)
-	require.NoError(t, store.SaveCommiteeDuty(trace1))
-	require.NoError(t, store.SaveCommiteeDuty(trace2))
+	require.NoError(t, store.SaveCommitteeDuty(trace1))
+	require.NoError(t, store.SaveCommitteeDuty(trace2))
 
 	duty, err := store.GetCommitteeDuty(phase0.Slot(1), [32]byte{'a'})
 	require.NoError(t, err)

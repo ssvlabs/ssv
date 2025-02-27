@@ -60,7 +60,6 @@ func (s *Server) Run() error {
 	if s.enableDutyTracing {
 		router.Get("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
 		router.Get("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
-		router.Get("/v1/exporter/traces/operator", api.Handler(s.exporter.OperatorTraces))
 		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
 		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
 	} else {
