@@ -842,20 +842,6 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 // score assesses how valuable the contribution of peerID to specified subnet is by calculating
 // how valuable this peer would have been if we didn't have him, but then connected with.
 func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
-	filterOutPeer := func(peerID peer.ID, peerIDs []peer.ID) []peer.ID {
-		if len(peerIDs) == 0 {
-			return nil
-		}
-		result := make([]peer.ID, 0, len(peerIDs))
-		for _, elem := range peerIDs {
-			if elem == peerID {
-				continue
-			}
-			result = append(result, elem)
-		}
-		return result
-	}
-
 	topic := strconv.Itoa(subnet)
 	subnetPeers, err := n.topicsCtrl.Peers(topic)
 	if err != nil {
@@ -866,7 +852,12 @@ func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
 		)
 		return 0.0
 	}
-	subnetPeersExcluding := len(filterOutPeer(peerID, subnetPeers))
+	subnetPeersExcluding := 0
+    for _, p := range subnetPeers {
+        if p != peerID {
+            subnetPeersExcluding++
+        }
+    }
 
 	const targetPeersPerSubnet = 3
 	return score(targetPeersPerSubnet, subnetPeersExcluding)
