@@ -530,6 +530,10 @@ func (gc *GoClient) CurrentFork(ctx context.Context) (*phase0.Fork, error) {
 
 	schedule, err := provider.ForkSchedule(ctx, &api.ForkScheduleOpts{})
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "CurrentFork"),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 	if schedule.Data == nil {
