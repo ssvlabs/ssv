@@ -96,6 +96,11 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 
 		gc.lastProcessedHeadEventSlotLock.Lock()
 		if headEventData.Slot <= gc.lastProcessedHeadEventSlot {
+			logger.
+				With(zap.Uint64("event_slot", uint64(headEventData.Slot))).
+				With(zap.Uint64("last_processed_slot", uint64(gc.lastProcessedHeadEventSlot))).
+				Debug("event slot is lower or equal than last processed slot")
+			gc.lastProcessedHeadEventSlotLock.Unlock()
 			return
 		}
 
