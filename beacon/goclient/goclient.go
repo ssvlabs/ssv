@@ -528,6 +528,12 @@ func (gc *GoClient) CurrentFork(ctx context.Context) (*phase0.Fork, error) {
 	if err != nil {
 		return nil, err
 	}
+	if schedule.Data == nil {
+		gc.log.Error(clNilResponseForkDataErrMsg,
+			zap.String("api", "CurrentFork"),
+		)
+		return nil, fmt.Errorf("current fork response data is nil")
+	}
 
 	currentEpoch := gc.network.EstimatedCurrentEpoch()
 	var currentFork *phase0.Fork
