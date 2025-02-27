@@ -299,7 +299,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	// We do not mark the state as finished here because post-consensus messages must still be processed,
 	// allowing validators to be marked as safe once sufficient consensus is reached.
 	if totalAttesterDuties == blockedAttesterDuties && totalSyncCommitteeDuties == 0 {
-		logger.Warn("Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties.",
+		logger.Debug("Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties.",
 			zap.Int("attester_duties", totalAttesterDuties),
 			zap.Int("blocked_attesters", blockedAttesterDuties))
 		return nil
