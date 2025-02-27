@@ -117,11 +117,6 @@ func (dvs *DiscV5Service) alreadyDiscoveredFilter(logger *zap.Logger) func(node 
 			return false
 		}
 		if dvs.discoveredPeersPool.Has(pID) {
-			// this log line is commented out as it is too spammy
-			//n.interfaceLogger.Debug(
-			//	"discovery proposed peer, this proposal is already in proposal-pool",
-			//	zap.String("peer_id", string(proposal.ID)),
-			//)
 			return false // this peer is already being considered
 		}
 		return true
