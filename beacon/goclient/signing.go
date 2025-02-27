@@ -59,10 +59,6 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 
 	genesis, err := gc.Genesis(ctx)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Genesis"),
-			zap.Error(err),
-		)
 		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
 

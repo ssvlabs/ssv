@@ -506,6 +506,10 @@ func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
 	genesisResp, err := gc.multiClient.Genesis(ctx, &api.GenesisOpts{})
 	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Genesis"),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 	if genesisResp.Data == nil {
