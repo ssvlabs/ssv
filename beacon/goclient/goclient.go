@@ -110,6 +110,7 @@ type MultiClient interface {
 	eth2client.EventsProvider
 	eth2client.ValidatorRegistrationsSubmitter
 	eth2client.VoluntaryExitSubmitter
+	eth2client.ForkScheduleProvider
 }
 
 type operatorDataStore interface {
@@ -523,12 +524,9 @@ func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
 }
 
 func (gc *GoClient) CurrentFork(ctx context.Context) (*phase0.Fork, error) {
-	provider, ok := gc.multiClient.(eth2client.ForkScheduleProvider)
-	if !ok {
-		return nil, fmt.Errorf("multiClient does not implement ForkScheduleProvider")
-	}
-
-	schedule, err := provider.ForkSchedule(ctx, &api.ForkScheduleOpts{})
+	start := time.Now()
+	schedule, err := gc.multiClient.ForkSchedule(ctx, &api.ForkScheduleOpts{})
+	recordRequestDuration(gc.ctx, "ForkSchedule", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "CurrentFork"),
