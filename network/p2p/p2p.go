@@ -364,7 +364,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			const (
 				duoSubnetPriority  = 1
 				soloSubnetPriority = 3
-				deadSubnetPriority = 9
+				deadSubnetPriority = 90
 				maxPossibleScore   = commons.SubnetsCount * deadSubnetPriority
 			)
 			v := 0
