@@ -2,9 +2,12 @@ package goclient
 
 import (
 	"context"
+	"fmt"
+	"slices"
 
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/pkg/errors"
+	"github.com/jellydator/ttlcache/v3"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 )
 
@@ -14,39 +17,42 @@ type event interface {
 
 type subscriber[T event] struct {
 	Identifier string
-	Channel    chan T
+	Channel    chan<- T
 }
 
-func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *apiv1.HeadEvent, error) {
-	gc.subscribersLock.Lock()
-	defer gc.subscribersLock.Unlock()
+func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *apiv1.HeadEvent) error {
 	logger := gc.log.With(zap.String("subscriber_identifier", subscriberIdentifier))
+
+	if !slices.Contains(gc.supportedTopics, HeadEventTopic) {
+		logger.Warn("the list of supported topics was empty, cannot add new subscriber")
+		return fmt.Errorf("the list of supported topics was empty, cannot add new subscriber")
+	}
 
 	logger.Info("adding 'head' event subscriber")
 
-	if len(gc.headEventSubscribers) == 0 {
-		logger.Info("launching event listener")
-		if err := gc.startEventListener(ctx); err != nil {
-			const errMsg = "failed to start event listener"
-			logger.Error(errMsg, zap.Error(err))
-			return nil, errors.Wrap(err, errMsg)
-		}
-	}
-
 	headEventSubscriber := subscriber[*apiv1.HeadEvent]{
 		Identifier: subscriberIdentifier,
-		Channel:    make(chan *apiv1.HeadEvent, 32),
+		Channel:    ch,
 	}
+
+	gc.subscribersLock.Lock()
+	defer gc.subscribersLock.Unlock()
+
 	gc.headEventSubscribers = append(gc.headEventSubscribers, headEventSubscriber)
 
 	logger.
 		With(zap.Int("head_event_subscribers_len", len(gc.headEventSubscribers))).
 		Info("subscribed to head events")
 
-	return headEventSubscriber.Channel, nil
+	return nil
 }
 
 func (gc *GoClient) startEventListener(ctx context.Context) error {
+	if len(gc.supportedTopics) == 0 {
+		gc.log.Warn("the list of supported topics was empty, won't launch event listener")
+		return nil
+	}
+
 	var strTopics []string
 	for _, topic := range gc.supportedTopics {
 		strTopics = append(strTopics, string(topic))
@@ -61,28 +67,48 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 }
 
 func (gc *GoClient) eventHandler(e *apiv1.Event) {
+	if e == nil {
+		gc.log.Warn("event was nil, skipping")
+		return
+	}
+
 	switch EventTopic(e.Topic) {
 	case HeadEventTopic:
+		logger := gc.log.
+			With(zap.String("topic", e.Topic))
 		if e.Data == nil {
-			gc.log.
-				With(zap.String("topic", e.Topic)).
-				Error("event data is nil")
+			logger.Warn("event data is nil")
 			return
 		}
-		headEventData := e.Data.(*apiv1.HeadEvent)
+		headEventData, ok := e.Data.(*apiv1.HeadEvent)
+		if !ok {
+			logger.Warn("could not type assert")
+			return
+		}
+
+		cacheItem := gc.blockRootToSlotCache.Set(headEventData.Block, headEventData.Slot, ttlcache.NoTTL)
+		logger.
+			With(zap.Int64("cache_item_version", cacheItem.Version())).
+			With(fields.Slot(headEventData.Slot)).
+			With(fields.BlockRoot(headEventData.Block)).
+			Info("block root to slot cache updated")
+
+		gc.subscribersLock.RLock()
+		defer gc.subscribersLock.RUnlock()
+
 		for _, sub := range gc.headEventSubscribers {
+			logger = logger.With(zap.String("subscriber_identifier", sub.Identifier))
+
 			select {
 			case sub.Channel <- headEventData:
+				logger.Info("event broadcasted")
 			default:
-				gc.log.
-					With(zap.String("topic", e.Topic)).
-					With(zap.String("subscriber_identifier", sub.Identifier)).
-					Error("subscriber channel full, dropping the message")
+				logger.Warn("subscriber channel full, dropping the message")
 			}
 		}
 	default:
 		gc.log.
 			With(zap.String("topic", e.Topic)).
-			Error("unsupported event topic")
+			Warn("unsupported event topic")
 	}
 }

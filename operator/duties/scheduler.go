@@ -53,7 +53,7 @@ type BeaconNode interface {
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
 	SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error
 	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
-	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *eth2apiv1.HeadEvent, error)
+	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error
 }
 
 type ExecutionClient interface {
@@ -212,7 +212,8 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context, logger *zap.Logger) 
 
 	// Subscribe to head events. This allows us to go early for attestations & sync committees if a block arrives,
 	// as well as re-request duties if there is a change in beacon block.
-	headEventChan, err := s.beaconNode.SubscribeToHeadEvents(ctx, "duty_scheduler")
+	ch := make(chan *eth2apiv1.HeadEvent, 32)
+	err := s.beaconNode.SubscribeToHeadEvents(ctx, "duty_scheduler", ch)
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to head events: %w", err)
 	}
@@ -222,7 +223,7 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context, logger *zap.Logger) 
 			select {
 			case <-ctx.Done():
 				return
-			case headEvent := <-headEventChan:
+			case headEvent := <-ch:
 				if headEvent == nil {
 					logger.Warn("head event was nil, skipping")
 					continue

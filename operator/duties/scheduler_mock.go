@@ -202,18 +202,17 @@ func (mr *MockBeaconNodeMockRecorder) SubmitSyncCommitteeSubscriptions(ctx, subs
 }
 
 // SubscribeToHeadEvents mocks base method.
-func (m *MockBeaconNode) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *v1.HeadEvent, error) {
+func (m *MockBeaconNode) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *v1.HeadEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier)
-	ret0, _ := ret[0].(<-chan *v1.HeadEvent)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier, ch)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SubscribeToHeadEvents indicates an expected call of SubscribeToHeadEvents.
-func (mr *MockBeaconNodeMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier any) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier, ch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockBeaconNode)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockBeaconNode)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier, ch)
 }
 
 // SyncCommitteeDuties mocks base method.

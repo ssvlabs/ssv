@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec"
@@ -64,20 +63,6 @@ func (mr *MockbeaconDutiesMockRecorder) AttesterDuties(ctx, epoch, validatorIndi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttesterDuties", reflect.TypeOf((*MockbeaconDuties)(nil).AttesterDuties), ctx, epoch, validatorIndices)
 }
 
-// Events mocks base method.
-func (m *MockbeaconDuties) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Events indicates an expected call of Events.
-func (mr *MockbeaconDutiesMockRecorder) Events(ctx, topics, handler any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockbeaconDuties)(nil).Events), ctx, topics, handler)
-}
-
 // ProposerDuties mocks base method.
 func (m *MockbeaconDuties) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*v1.ProposerDuty, error) {
 	m.ctrl.T.Helper()
@@ -94,18 +79,17 @@ func (mr *MockbeaconDutiesMockRecorder) ProposerDuties(ctx, epoch, validatorIndi
 }
 
 // SubscribeToHeadEvents mocks base method.
-func (m *MockbeaconDuties) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *v1.HeadEvent, error) {
+func (m *MockbeaconDuties) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *v1.HeadEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier)
-	ret0, _ := ret[0].(<-chan *v1.HeadEvent)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier, ch)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SubscribeToHeadEvents indicates an expected call of SubscribeToHeadEvents.
-func (mr *MockbeaconDutiesMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier any) *gomock.Call {
+func (mr *MockbeaconDutiesMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier, ch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockbeaconDuties)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockbeaconDuties)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier, ch)
 }
 
 // SyncCommitteeDuties mocks base method.
@@ -372,20 +356,6 @@ func (m *MockBeaconNode) DomainData(epoch phase0.Epoch, domain phase0.DomainType
 func (mr *MockBeaconNodeMockRecorder) DomainData(epoch, domain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainData", reflect.TypeOf((*MockBeaconNode)(nil).DomainData), epoch, domain)
-}
-
-// Events mocks base method.
-func (m *MockBeaconNode) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Events indicates an expected call of Events.
-func (mr *MockBeaconNodeMockRecorder) Events(ctx, topics, handler any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockBeaconNode)(nil).Events), ctx, topics, handler)
 }
 
 // GetAttestationData mocks base method.
@@ -682,18 +652,17 @@ func (mr *MockBeaconNodeMockRecorder) SubmitVoluntaryExit(voluntaryExit any) *go
 }
 
 // SubscribeToHeadEvents mocks base method.
-func (m *MockBeaconNode) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *v1.HeadEvent, error) {
+func (m *MockBeaconNode) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *v1.HeadEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier)
-	ret0, _ := ret[0].(<-chan *v1.HeadEvent)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier, ch)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // SubscribeToHeadEvents indicates an expected call of SubscribeToHeadEvents.
-func (mr *MockBeaconNodeMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier any) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier, ch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockBeaconNode)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockBeaconNode)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier, ch)
 }
 
 // SyncCommitteeDuties mocks base method.

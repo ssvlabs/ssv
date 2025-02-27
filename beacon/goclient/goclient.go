@@ -250,42 +250,11 @@ func New(
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
-	if err := client.launchEventListener(opt.Context); err != nil {
-		return nil, errors.Wrap(err, "failed to launch head event listener")
+	if err := client.startEventListener(opt.Context); err != nil {
+		return nil, errors.Wrap(err, "failed to launch event listener")
 	}
 
 	return client, nil
-}
-
-func (gc *GoClient) launchEventListener(ctx context.Context) error {
-	headChan, err := gc.SubscribeToHeadEvents(ctx, "go_client")
-	if err != nil {
-		return errors.Wrap(err, "failed to subscribe to head events")
-	}
-
-	go func() {
-		for {
-			select {
-			case headEvent := <-headChan:
-				logger := gc.log.
-					With(fields.Slot(headEvent.Slot)).
-					With(fields.BlockRoot(headEvent.Block))
-
-				logger.Info("received head event. Updating cache")
-
-				item := gc.blockRootToSlotCache.Set(headEvent.Block, headEvent.Slot, ttlcache.NoTTL)
-
-				logger.
-					With(zap.Int64("cache_item_version", item.Version())).
-					Info("cache updated")
-			case <-ctx.Done():
-				gc.log.Debug("terminating head event listener")
-				return
-			}
-		}
-	}()
-
-	return nil
 }
 
 func (gc *GoClient) initMultiClient(ctx context.Context) error {

@@ -53,7 +53,8 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 		client := eventsTestClient(t, server.URL)
 		defer server.Close()
 
-		ch, err := client.SubscribeToHeadEvents(context.Background(), "test_caller")
+		ch := make(chan<- *apiv1.HeadEvent)
+		err := client.SubscribeToHeadEvents(context.Background(), "test_caller", ch)
 
 		assert.NoError(t, err)
 		assert.Len(t, client.headEventSubscribers, 2)

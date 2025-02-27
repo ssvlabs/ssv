@@ -20,7 +20,7 @@ type beaconDuties interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
 	ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error)
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
-	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string) (<-chan *eth2apiv1.HeadEvent, error)
+	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error
 }
 
 // beaconSubscriber interface serves all committee subscribe to subnet (p2p topic)
