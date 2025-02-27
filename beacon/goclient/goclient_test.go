@@ -30,7 +30,7 @@ func TestHealthy(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	undialableServer := mockServer(t, nil)
+	undialableServer := mockServer(nil)
 	c, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
 
@@ -83,7 +83,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to dial.
 	{
-		undialableServer := mockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		undialableServer := mockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
@@ -93,7 +93,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to the Validators request.
 	{
-		unresponsiveServer := mockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		unresponsiveServer := mockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
 				time.Sleep(longTimeout / 2)
@@ -123,7 +123,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to proposer duties request.
 	{
-		unresponsiveServer := mockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		unresponsiveServer := mockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v1/validator/duties/proposer/" + fmt.Sprint(mockServerEpoch):
 				time.Sleep(longTimeout * 2)
@@ -139,7 +139,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Fast enough.
 	{
-		fastServer := mockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		fastServer := mockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout / 2)
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
@@ -179,7 +179,7 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 			return resp, nil
 		}
 
-		server := mockServer(t, callback)
+		server := mockServer(callback)
 		defer server.Close()
 		t.Run(fmt.Sprintf("When genesis versions are the same (%s)", string(network)), func(t *testing.T) {
 			c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
@@ -199,7 +199,7 @@ func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
 
 	t.Run("When genesis versions are different", func(t *testing.T) {
 		ctx := context.Background()
-		server := mockServer(t, nil)
+		server := mockServer(nil)
 		defer server.Close()
 		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
 		require.NoError(t, err, "failed to create client")
@@ -238,31 +238,33 @@ func mockClientWithNetwork(ctx context.Context, serverURL string, commonTimeout,
 
 type requestCallback = func(r *http.Request, resp json.RawMessage) (json.RawMessage, error)
 
-func mockServer(t *testing.T, onRequestFn requestCallback) *httptest.Server {
+func mockServer(onRequestFn requestCallback) *httptest.Server {
 	var mockResponses map[string]json.RawMessage
 	f, err := os.Open("testdata/mock-beacon-responses.json")
-	require.NoError(t, err)
-	require.NoError(t, json.NewDecoder(f).Decode(&mockResponses))
+	if err != nil {
+		panic(fmt.Sprintf("os.Open returned error: %v", err))
+	}
+	err = json.NewDecoder(f).Decode(&mockResponses)
+	if err != nil {
+		panic(fmt.Sprintf("couldn't decode json file: %v", err))
+	}
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Logf("mock server handling request: %s", r.URL.Path)
-
 		resp, ok := mockResponses[r.URL.Path]
 		if !ok {
-			require.FailNowf(t, "unexpected request", "unexpected request: %s", r.URL.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
+			panic(fmt.Sprintf("unexpected request: %s", r.URL.Path))
 		}
 		var err error
 		if onRequestFn != nil {
 			resp, err = onRequestFn(r, resp)
-			require.NoError(t, err)
+			if err != nil {
+				panic(fmt.Sprintf("onRequestFn returned error: %v", err))
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := w.Write(resp); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			panic(fmt.Sprintf("got error writing response: %v", err))
 		}
 	}))
 }
