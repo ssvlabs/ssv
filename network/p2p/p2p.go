@@ -321,8 +321,17 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 	}()
 
-	// Spawn a goroutine to repeatedly select & connect to the best peers.
-	// TODO: insert description of the mechanism here below
+	// Spawn a goroutine to repeatedly select & connect to the best peers discovery offers.
+	// Try to connect only half as many peers as we have outbound slots available because this
+	// leaves some vacant slots for the next iteration - on the next iteration better peers
+	// might show up (so we don't want to "spend" all of these vacant slots at once).
+	// To find the best set of peers to connect we'll:
+	// - iterate over all available candidate-peers (peers discovered so far) and choose the best one
+	//   scoring peers based on how many dead/solo/duo subnets they resolve for us
+	// - add the best peer to "connecting" set assuming (optimistically) we are gonna successfully
+	//   connect with this peer
+	// - repeat those steps from above N times (depending on how many connection slots we have available),
+	//   also taking into account "connecting" set of peers
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// Collect enough peers first to increase the quality of peer selection.
 		const minDiscoveredPeers = 100
@@ -348,8 +357,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		// SubnetSum represents a sum of 0 or more subnets, each byte at index K counts how many
 		// of that particular subnet at index K the summed subnet-sets have
 		type SubnetSum [commons.SubnetsCount]byte
-		// addSubnetSums combines two subnet-sums to calculate the resulting subnet-sum, for example:
-		// [1, 2, 3, ...] + [4, 5, 6, ...] = [5, 7, 9, ...]
 		addSubnetSums := func(a SubnetSum, b SubnetSum) SubnetSum {
 			result := SubnetSum{}
 			for i := 0; i < commons.SubnetsCount; i++ {
@@ -357,10 +364,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			}
 			return result
 		}
-		// scoreSubnetSum estimates how good/bad a subnet-sum is based on how many unhealthy
-		// (we are mostly really interested in dead/solo/duo subnets) that subnet-sum has -
-		// higher score is better
-		scoreSubnetSum := func(s SubnetSum) (score float64) {
+		scoreSubnetSum := func(s SubnetSum) (score float64) { // higher score is better
 			const (
 				duoSubnetPriority  = 1
 				soloSubnetPriority = 3
@@ -386,16 +390,11 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			return float64(maxPossibleScore - (deadSubnetPriority*deadSubnetCnt + soloSubnetPriority*soloSubnetCnt + duoSubnetPriority*duoSubnetCnt))
 		}
 
-		// try to connect only half as many peers as we have outbound slots available because this
-		// leaves some vacant slots for the next iteration - on the next iteration better peers
-		// might show up (so we don't want to "spend" all of these vacant slots at once)
-		peersToConnectMaxCnt := vacantOutboundSlotCnt / 2
+		peersToConnectMaxCnt := vacantOutboundSlots / 2
 		if peersToConnectMaxCnt == 0 {
-			peersToConnectMaxCnt = 1 // always try to connect at least 1 peer
+			peersToConnectMaxCnt = 1
 		}
 
-		// peersToConnect is the final set of peers we are gonna try to connect with
-		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
 		// ownSubnetSum represents subnet-sum of peers we already have open connections with
 		ownSubnetSum := SubnetSum{}
 		allPeerIDs, err := n.topicsCtrl.Peers("")
@@ -410,9 +409,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		// peersToConnectSubnetSum represents subnet-sum of peers we are about to connect with
 		peersToConnectSubnetSum := SubnetSum{}
 
-		// to find best set of peersToConnect choose exactly 1 (best) peer on each iteration doing
-		// peersToConnectMaxCnt at most (note, we can terminate sooner if there aren't enough of
-		// newly discovered peers for us to keep choosing from)
+		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
 		for i := 0; i < peersToConnectMaxCnt; i++ {
 			currentSubnetSum := addSubnetSums(ownSubnetSum, peersToConnectSubnetSum)
 
@@ -420,9 +417,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				p         discovery.DiscoveredPeer
 				subnetSum SubnetSum
 			}
-			// peersByPriority keeps track of best peers (by their peer score)
 			peersByPriority := lane.NewMaxPriorityQueue[peerWithSubnetSum, float64]()
-			// minScore and maxScore are used for printing additional debugging info
 			minScore, maxScore := math.MaxFloat64, 0.0
 			n.discoveredPeersPool.Range(func(key peer.ID, value discovery.DiscoveredPeer) bool {
 				const retryLimit = 2
@@ -436,8 +431,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				}
 
 				if _, ok := peersToConnect[key]; ok {
-					// we've already decided to connect this peer, hence we skip it now
-					return true
+					return true // we've already decided to connect this peer, hence we skip it now
 				}
 
 				pSubnets := n.idx.GetPeerSubnets(key)
@@ -462,7 +456,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 			bestPeer, _, ok := peersByPriority.Pop()
 			if !ok {
-				break // there is no point in trying to find more of best peers
+				break // means discoveredPeersPool is exhausted, no point in trying to find more of best peers
 			}
 
 			peersToConnectSubnetSum = addSubnetSums(peersToConnectSubnetSum, bestPeer.subnetSum)
@@ -476,9 +470,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			)
 		}
 
-		// finally, offer the best peers we've picked to connector so it tries to connect these
 		for _, p := range peersToConnect {
-			// update retry counter for this peer so we eventually skip it after certain number of retries
+			// updating retry counter for this peer so we eventually skip it after certain number of retries
 			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
 				AddrInfo:       p.AddrInfo,
 				ConnectRetries: p.ConnectRetries + 1,
