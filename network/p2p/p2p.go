@@ -332,7 +332,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 	// - add the best peer to "connecting" set assuming (optimistically) we are gonna successfully
 	//   connect with this peer
 	// - repeat those steps from above N times (depending on how many connection slots we have available),
-	//   also taking into account "connecting" set of peers
+	//   also taking into account "connecting" set of peers on each consecutive iteration
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// Collect enough peers first to increase the quality of peer selection.
 		const minDiscoveredPeers = 100
