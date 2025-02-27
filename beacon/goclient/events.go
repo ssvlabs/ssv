@@ -23,7 +23,7 @@ type subscriber[T event] struct {
 func (gc *GoClient) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *apiv1.HeadEvent) error {
 	logger := gc.log.With(zap.String("subscriber_identifier", subscriberIdentifier))
 
-	if !slices.Contains(gc.supportedTopics, EventTopicHeadEvent) {
+	if !slices.Contains(gc.supportedTopics, EventTopicHead) {
 		logger.Warn("the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber")
 		return fmt.Errorf("the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber")
 	}
@@ -75,7 +75,7 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 	}
 
 	switch EventTopic(e.Topic) {
-	case EventTopicHeadEvent:
+	case EventTopicHead:
 		logger := gc.log.
 			With(zap.String("topic", e.Topic))
 		if e.Data == nil {

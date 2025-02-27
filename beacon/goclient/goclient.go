@@ -117,7 +117,7 @@ type operatorDataStore interface {
 type EventTopic string
 
 const (
-	EventTopicHeadEvent EventTopic = "head"
+	EventTopicHead EventTopic = "head"
 )
 
 // GoClient implementing Beacon struct
@@ -216,7 +216,7 @@ func New(
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHeadEvent},
+		supportedTopics:                    []EventTopic{EventTopicHead},
 		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
