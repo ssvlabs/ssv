@@ -162,10 +162,10 @@ type GoClient struct {
 
 	withWeightedAttestationData bool
 
-	subscribersLock                sync.RWMutex
-	headEventSubscribers           []subscriber[*apiv1.HeadEvent]
-	supportedTopics                []EventTopic
-	
+	subscribersLock      sync.RWMutex
+	headEventSubscribers []subscriber[*apiv1.HeadEvent]
+	supportedTopics      []EventTopic
+
 	lastProcessedHeadEventSlotLock sync.Mutex
 	lastProcessedHeadEventSlot     phase0.Slot
 
