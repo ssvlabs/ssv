@@ -333,21 +333,16 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		// higher score is better
 		scoreSubnetSum := func(s SubnetSum) (score float64) {
 			const (
-				// duoSubnetPriority is baseline priority other priorities are measured against
-				duoSubnetPriority = 1
-				// soloSubnetPriority is relative to duoSubnetPriority
+				duoSubnetPriority  = 1
 				soloSubnetPriority = 3
-				// deadSubnetPriority is relative to duoSubnetPriority
 				deadSubnetPriority = 9
 
-				// maxPossibleScore is a score subnet-sum will get if it has only duo subnets or better
-				// (meaning there are no dead/solo subnets in subnet-sum)
 				maxPossibleScore = commons.SubnetsCount * deadSubnetPriority
 			)
 
-			deadSubnetCnt := 0 // how many dead subnets SubnetSum has
-			soloSubnetCnt := 0 // how many solo subnets SubnetSum has
-			duoSubnetCnt := 0  // how many duo subnets SubnetSum has
+			deadSubnetCnt := 0
+			soloSubnetCnt := 0
+			duoSubnetCnt := 0
 			for i := 0; i < commons.SubnetsCount; i++ {
 				if s[i] == 0 {
 					deadSubnetCnt++
