@@ -11,10 +11,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -160,7 +160,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), aggregateAndProofHashRoot, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
 	if err != nil {
-		return errors.Wrap(err, "failed signing attestation data")
+		return errors.Wrap(err, "failed signing aggregate and proof")
 	}
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
