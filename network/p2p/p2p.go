@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/sanity-io/litter"
 	"math"
 	"math/rand"
 	"os"
@@ -327,6 +328,29 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 	}()
 
+	// TODO
+	subscribedTopicsCnt := len(n.topicsCtrl.Topics())
+	n.interfaceLogger.Debug(
+		"SUBSCRIBED TOPICS",
+		zap.Strings("topics", n.topicsCtrl.Topics()),
+		zap.Int("topics_cnt", subscribedTopicsCnt),
+	)
+	// TODO
+	for _, topic := range n.topicsCtrl.Topics() {
+		subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
+		if err != nil {
+			n.interfaceLogger.Error("cant parse topic",
+				zap.String("topic", topic), zap.Error(err))
+			continue
+		}
+		if subnet < 0 || subnet >= commons.SubnetsCount {
+			n.interfaceLogger.Error("invalid topic",
+				zap.String("topic", topic), zap.Int("subnet", int(subnet)))
+			continue
+		}
+	}
+	discoveredTopicsFirstTime := hashmap.New[int, time.Duration]()
+
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
 	// TODO: insert description of the mechanism here below
 	async.Interval(n.ctx, 15*time.Second, func() {
@@ -338,6 +362,34 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 
 		n.interfaceLogger.Debug("starting selecting peers", zap.Int("pool_size", n.discoveredPeersPool.SlowLen()))
+
+		// TODO
+		n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
+			// TODO: Ignoring peers that exhausted their retry attempts for now
+			//const retryLimit = 2
+			//if discoveredPeer.ConnectRetries >= retryLimit {
+			//	// TODO - maybe register this peer with discoveredTopicsFirstTime if he is subscribed
+			//	// to the desired topic
+			//	return true
+			//}
+
+			for subnet, v := range n.PeersIndex().GetPeerSubnets(peerID) {
+				if v > 0 {
+					_, ok := discoveredTopicsFirstTime.Get(subnet)
+					if !ok {
+						discoveredTopicsFirstTime.Set(subnet, time.Since(startTime))
+					}
+				}
+			}
+
+			return true
+		})
+		if discoveredTopicsFirstTime.SlowLen() >= subscribedTopicsCnt {
+			n.interfaceLogger.Debug(
+				"ALL SUBSCRIBED TOPICS have been discovered",
+				zap.String("times_since_node_start", litter.Sdump(discoveredTopicsFirstTime)),
+			)
+		}
 
 		// Avoid connecting to more peers if we're already at the limit.
 		inbound, outbound := n.connectionStats()
@@ -398,7 +450,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					zap.String("topic", topic), zap.Int("subnet", int(subnet)))
 				continue
 			}
-			ownSubnetPeers[subnet] = uint16(len(peers))
+			ownSubnetPeers[subnet] = uint16(len(peers)) // nolint: gosec
 		}
 
 		// Limit new connections to half of the remaining outbound slots.
