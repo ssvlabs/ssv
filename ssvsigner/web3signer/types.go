@@ -4,7 +4,6 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/prysmaticlabs/go-bitfield"
 )
 
 type ImportKeystoreRequest struct {
@@ -85,10 +84,10 @@ type AggregateAndProofData struct {
 }
 
 type AttestationData struct {
-	AggregationBits bitfield.Bitlist        `json:"aggregation_bits"`
+	AggregationBits string                  `json:"aggregation_bits"`
 	Data            *phase0.AttestationData `json:"data"`
 	Signature       phase0.BLSSignature     `json:"signature"`
-	CommitteeBits   bitfield.Bitvector64    `json:"committee_bits,omitempty"`
+	CommitteeBits   string                  `json:"committee_bits,omitempty"`
 }
 
 type AggregationSlotData struct {
