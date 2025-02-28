@@ -4,6 +4,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/prysmaticlabs/go-bitfield"
 )
 
 type ImportKeystoreRequest struct {
@@ -41,7 +42,7 @@ type SignRequest struct {
 	Attestation                 *phase0.AttestationData               `json:"attestation,omitempty"`
 	BeaconBlock                 *BeaconBlockData                      `json:"beacon_block,omitempty"`
 	VoluntaryExit               *phase0.VoluntaryExit                 `json:"voluntary_exit,omitempty"`
-	AggregateAndProof           *phase0.AggregateAndProof             `json:"aggregate_and_proof,omitempty"`
+	AggregateAndProof           *AggregateAndProofData                `json:"aggregate_and_proof,omitempty"`
 	AggregationSlot             *AggregationSlotData                  `json:"aggregation_slot,omitempty"`
 	RandaoReveal                *RandaoRevealData                     `json:"randao_reveal,omitempty"`
 	SyncCommitteeMessage        *SyncCommitteeMessageData             `json:"sync_committee_message,omitempty"`
@@ -75,6 +76,19 @@ const (
 type BeaconBlockData struct {
 	Version     string                    `json:"version"`
 	BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
+}
+
+type AggregateAndProofData struct {
+	AggregatorIndex phase0.ValidatorIndex `json:"aggregator_index"`
+	Aggregate       *AttestationData      `json:"aggregate"`
+	SelectionProof  phase0.BLSSignature   `json:"selection_proof"`
+}
+
+type AttestationData struct {
+	AggregationBits bitfield.Bitlist        `json:"aggregation_bits"`
+	Data            *phase0.AttestationData `json:"data"`
+	Signature       phase0.BLSSignature     `json:"signature"`
+	CommitteeBits   bitfield.Bitvector64    `json:"committee_bits"`
 }
 
 type AggregationSlotData struct {
