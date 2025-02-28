@@ -570,7 +570,7 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 		usingKeystore = true
 	}
 	if cfg.OperatorPrivateKey != "" {
-		usingPrivKey = true
+		// usingPrivKey = true // TODO: uncomment
 	}
 
 	var errorMsg string
