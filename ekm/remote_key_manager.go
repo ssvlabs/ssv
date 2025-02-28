@@ -299,7 +299,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 			if v.Aggregate != nil {
 				req.AggregateAndProof.Aggregate = &web3signer.AttestationData{
-					AggregationBits: v.Aggregate.AggregationBits,
+					AggregationBits: fmt.Sprintf("%#x", v.Aggregate.AggregationBits),
 					Data:            v.Aggregate.Data,
 					Signature:       v.Aggregate.Signature,
 				}
@@ -311,10 +311,10 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 			if v.Aggregate != nil {
 				req.AggregateAndProof.Aggregate = &web3signer.AttestationData{
-					AggregationBits: v.Aggregate.AggregationBits,
+					AggregationBits: fmt.Sprintf("%#x", []byte(v.Aggregate.AggregationBits)),
 					Data:            v.Aggregate.Data,
 					Signature:       v.Aggregate.Signature,
-					CommitteeBits:   v.Aggregate.CommitteeBits,
+					CommitteeBits:   fmt.Sprintf("%#x", v.Aggregate.CommitteeBits),
 				}
 			}
 		default:
