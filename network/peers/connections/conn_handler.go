@@ -2,6 +2,8 @@ package connections
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"sync"
 	"time"
 
@@ -9,12 +11,11 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
-	"github.com/ssvlabs/ssv/network/records"
+	"go.uber.org/zap"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
@@ -26,11 +27,12 @@ type ConnHandler interface {
 type connHandler struct {
 	ctx context.Context
 
-	handshaker      Handshaker
-	subnetsProvider SubnetsProvider
-	subnetsIndex    peers.SubnetsIndex
-	connIdx         peers.ConnectionIndex
-	peerInfos       peers.PeerInfoIndex
+	handshaker          Handshaker
+	subnetsProvider     SubnetsProvider
+	subnetsIndex        peers.SubnetsIndex
+	connIdx             peers.ConnectionIndex
+	peerInfos           peers.PeerInfoIndex
+	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
 }
 
 // NewConnHandler creates a new connection handler
@@ -41,14 +43,16 @@ func NewConnHandler(
 	subnetsIndex peers.SubnetsIndex,
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
+	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
 ) ConnHandler {
 	return &connHandler{
-		ctx:             ctx,
-		handshaker:      handshaker,
-		subnetsProvider: subnetsProvider,
-		subnetsIndex:    subnetsIndex,
-		connIdx:         connIdx,
-		peerInfos:       peerInfos,
+		ctx:                 ctx,
+		handshaker:          handshaker,
+		subnetsProvider:     subnetsProvider,
+		subnetsIndex:        subnetsIndex,
+		connIdx:             connIdx,
+		peerInfos:           peerInfos,
+		discoveredPeersPool: discoveredPeersPool,
 	}
 }
 
@@ -141,6 +145,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if !ch.sharesEnoughSubnets(logger, conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
+
 			return nil
 		}
 
@@ -167,13 +172,13 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				return
 			}
 
-			// Handle the connection without blocking.
+			// Handle the connection (could be either incoming or outgoing) without blocking.
 			go func() {
 				logger := connLogger(conn)
 				err := acceptConnection(logger, net, conn)
 				if err == nil {
 					if ch.connIdx.AtLimit(conn.Stat().Direction) {
-						err = errors.New("reached peers limit")
+						err = errors.New("reached total connected peers limit")
 					}
 				}
 				if errors.Is(err, ignoredConnection) {
@@ -181,7 +186,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				}
 				if err != nil {
 					disconnect(logger, net, conn)
-					logger.Debug("failed to accept connection", zap.Error(err))
+					logger.Debug("not gonna connect this peer", zap.Error(err))
 					return
 				}
 
@@ -190,6 +195,14 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
+
+				// if this connection is the one we found through discovery - remove it from discoveredPeersPool
+				// so we won't be retrying connecting that same peer again until discovery stumbles upon it again
+				// (discovery also filters out peers we are already connected to, meaning it should re-discover
+				// that same peer only after we'll disconnect him). Note, this is best-effort solution meaning
+				// we still might try connecting to this peer even though we've connected him here - this is
+				// because it would be hard to implement the prevention for this that works atomically
+				ch.discoveredPeersPool.Delete(conn.RemotePeer())
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
@@ -223,10 +236,10 @@ func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwor
 
 	logger = logger.With(fields.Subnets(subnets), zap.String("my_subnets", mySubnets.String()))
 
-	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets
+	if mySubnets.String() == commons.ZeroSubnets { // this node has no subnets
 		return true
 	}
-	shared := records.SharedSubnets(mySubnets, subnets, 1)
+	shared := commons.SharedSubnets(mySubnets, subnets, 1)
 	logger.Debug("checking subnets", zap.Ints("shared", shared))
 
 	return len(shared) == 1

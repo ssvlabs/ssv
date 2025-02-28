@@ -26,6 +26,13 @@ const (
 )
 
 const (
+	signatureSize    = 256
+	signatureOffset  = 0
+	operatorIDOffset = signatureOffset + signatureSize
+	MessageOffset    = operatorIDOffset + operatorIDSize
+)
+
+const (
 	qbftMsgTypeSize            = 8     // uint64
 	heightSize                 = 8     // uint64
 	roundSize                  = 8     // uint64

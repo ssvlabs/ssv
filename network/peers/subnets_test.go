@@ -8,11 +8,9 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
 	nettesting "github.com/ssvlabs/ssv/network/testing"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSubnetsIndex(t *testing.T) {
@@ -28,11 +26,11 @@ func TestSubnetsIndex(t *testing.T) {
 		pids = append(pids, pid)
 	}
 
-	sAll, err := records.Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
+	sAll, err := commons.FromString("0xffffffffffffffffffffffffffffffff")
 	require.NoError(t, err)
-	sNone, err := records.Subnets{}.FromString("0x00000000000000000000000000000000")
+	sNone, err := commons.FromString("0x00000000000000000000000000000000")
 	require.NoError(t, err)
-	sPartial, err := records.Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
+	sPartial, err := commons.FromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
 	subnetsIdx := NewSubnetsIndex(128)
@@ -63,8 +61,8 @@ func TestSubnetsIndex(t *testing.T) {
 
 func TestSubnetsDistributionScores(t *testing.T) {
 	nsubnets := 128
-	mysubnets := make(records.Subnets, nsubnets)
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	mysubnets := make(commons.Subnets, nsubnets)
+	allSubs, _ := commons.FromString(commons.AllSubnets)
 	for sub := range allSubs {
 		if sub%2 == 0 {
 			mysubnets[sub] = byte(0)
@@ -139,9 +137,9 @@ func TestUpdatePeerSubnets_Removal(t *testing.T) {
 		return pids
 	}
 
-	getSubnet := func(t *testing.T, subnetHex string) records.Subnets {
+	getSubnet := func(t *testing.T, subnetHex string) commons.Subnets {
 		require.Len(t, subnetHex, 32, "subnetHex must be 32 characters long, got %d", len(subnetHex))
-		s, err := records.Subnets{}.FromString(subnetHex)
+		s, err := commons.FromString(subnetHex)
 		require.NoError(t, err)
 		return s
 	}

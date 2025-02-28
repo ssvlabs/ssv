@@ -6,14 +6,13 @@ import (
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/stretchr/testify/require"
 )
 
 type TestData struct {
@@ -49,7 +48,7 @@ func getTestingData(t *testing.T) TestData {
 			NodeVersion:   "some-node-version",
 			ExecutionNode: "some-execution-node",
 			ConsensusNode: "some-consensus-node",
-			Subnets:       records.AllSubnets,
+			Subnets:       commons.AllSubnets,
 		},
 	}
 
@@ -60,7 +59,7 @@ func getTestingData(t *testing.T) TestData {
 				NodeVersion:   "test-node-version",
 				ExecutionNode: "test-execution-node",
 				ConsensusNode: "test-consensus-node",
-				Subnets:       records.AllSubnets,
+				Subnets:       commons.AllSubnets,
 			},
 		},
 		MockSelfSealed: []byte("something"),
@@ -93,7 +92,7 @@ func getTestingData(t *testing.T) TestData {
 		ctx:        context.Background(),
 		nodeInfos:  nii,
 		peerInfos:  ns,
-		subnetsIdx: peers.NewSubnetsIndex(commons.Subnets()),
+		subnetsIdx: peers.NewSubnetsIndex(commons.SubnetsCount),
 		ids:        ids,
 		net:        net,
 		streams:    sc,
