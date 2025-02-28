@@ -57,30 +57,12 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		CurrentVersion: forkVersion,
 	}
 
-	start = time.Now()
-	genesisResponse, err := gc.multiClient.Genesis(ctx, &api.GenesisOpts{})
-	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	genesis, err := gc.Genesis(ctx)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Genesis"),
-			zap.Error(err),
-		)
 		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
-	if genesisResponse == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "Genesis"),
-		)
-		return phase0.Domain{}, fmt.Errorf("genesis response is nil")
-	}
-	if genesisResponse.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "Genesis"),
-		)
-		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
-	}
 
-	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
+	forkData.GenesisValidatorsRoot = genesis.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
 	if err != nil {

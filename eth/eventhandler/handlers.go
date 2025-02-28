@@ -8,8 +8,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -17,7 +18,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 // b64 encrypted key length is 256
@@ -224,7 +224,7 @@ func (eh *EventHandler) handleShareCreation(
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
-	share, shareSecret, err := eh.validatorAddedEventToShare(
+	share, encryptedKey, err := eh.validatorAddedEventToShare(
 		txn,
 		validatorEvent,
 		sharePublicKeys,
@@ -235,13 +235,12 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if shareSecret == nil {
-			return nil, errors.New("could not decode shareSecret")
-		}
-
-		// Save secret key into BeaconSigner.
-		if err := eh.keyManager.AddShare(shareSecret); err != nil {
-			return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
+		if err := eh.keyManager.AddShare(encryptedKey); err != nil {
+			var shareDecryptionEKMError ekm.ShareDecryptionError
+			if errors.As(err, &shareDecryptionEKMError) {
+				return nil, &MalformedEventError{Err: err}
+			}
+			return nil, fmt.Errorf("could not add share encrypted key: %w", err)
 		}
 
 		// Set the minimum participation epoch to match slashing protection.
@@ -264,7 +263,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	event *contract.ContractValidatorAdded,
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
-) (*ssvtypes.SSVShare, *bls.SecretKey, error) {
+) (*ssvtypes.SSVShare, []byte, error) {
 	validatorShare := ssvtypes.SSVShare{}
 
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(event.PublicKey)
@@ -281,7 +280,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	validatorShare.OwnerAddress = event.Owner
 
 	selfOperatorID := eh.operatorDataStore.GetOperatorID()
-	var shareSecret *bls.SecretKey
+	var encryptedKey []byte
 
 	shareMembers := make([]*spectypes.ShareMember, 0)
 
@@ -308,30 +307,13 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 		//validatorShare.OperatorID = operatorID
 		validatorShare.SharePubKey = sharePublicKeys[i]
-
-		shareSecret = &bls.SecretKey{}
-		decryptedSharePrivateKey, err := eh.operatorDecrypter.Decrypt(encryptedKeys[i])
-		if err != nil {
-			return nil, nil, &MalformedEventError{
-				Err: fmt.Errorf("could not decrypt share private key: %w", err),
-			}
-		}
-		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-			return nil, nil, &MalformedEventError{
-				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
-			}
-		}
-		if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
-			return nil, nil, &MalformedEventError{
-				Err: errors.New("share private key does not match public key"),
-			}
-		}
+		encryptedKey = encryptedKeys[i]
 	}
 
 	validatorShare.DomainType = eh.networkConfig.DomainType
 	validatorShare.Committee = shareMembers
 
-	return &validatorShare, shareSecret, nil
+	return &validatorShare, encryptedKey, nil
 }
 
 var emptyPK = [48]byte{}
@@ -375,7 +357,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(share.SharePubKey)
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
@@ -426,7 +408,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 
 	// bump slashing protection for operator reactivated validators
 	for _, share := range toReactivate {
-		if err := eh.keyManager.(ekm.StorageProvider).BumpSlashingProtection(share.SharePubKey); err != nil {
+		if err := eh.keyManager.BumpSlashingProtection(share.SharePubKey); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 

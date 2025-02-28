@@ -25,7 +25,7 @@ func TestDecodeKey(t *testing.T) {
 	hash, err := base64.StdEncoding.DecodeString(testingspace.EncryptedKeyBase64)
 	require.NoError(t, err)
 
-	key, err := DecodeKey(sk, hash)
+	key, err := DecryptKey(sk, hash)
 	require.NoError(t, err)
 	require.Equal(t, "626d6a13ae5b1458c310700941764f3841f279f9c8de5f4ba94abd01dc082517", string(key))
 }

@@ -260,13 +260,17 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			)
 		case spectypes.BNRoleSyncCommittee:
 			validDuties++
-			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, spectypes.SSZBytes(blockRoot[:]), validatorDuty.DutySlot(),
+			blockRootWithSlot := ssvtypes.BlockRootWithSlot{ // ssv-signer needs slot but cannot use slot passed to signBeaconObject to avoid breaking spec interface
+				SSZBytes: spectypes.SSZBytes(beaconVote.BlockRoot[:]),
+				Slot:     duty.DutySlot(),
+			}
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, blockRootWithSlot, validatorDuty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
 				return errors.Wrap(err, "failed signing sync committee message")
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+
 		default:
 			return fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}

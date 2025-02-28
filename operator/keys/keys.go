@@ -87,7 +87,7 @@ func (p *privateKey) Public() OperatorPublicKey {
 }
 
 func (p *privateKey) Decrypt(data []byte) ([]byte, error) {
-	return rsaencryption.DecodeKey(p.privKey, data)
+	return rsaencryption.DecryptKey(p.privKey, data)
 }
 
 func (p *privateKey) Bytes() []byte {
