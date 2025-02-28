@@ -75,7 +75,7 @@ type p2pNetwork struct {
 	host         host.Host
 	streamCtrl   streams.StreamController
 	idx          peers.Index
-	isIdxSet     int32
+	isIdxSet     atomic.Bool
 	disc         discovery.Service
 	topicsCtrl   topics.Controller
 	msgRouter    network.MessageRouter

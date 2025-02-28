@@ -110,7 +110,7 @@ func (n *p2pNetwork) initCfg() error {
 
 // Returns whetehr a peer is bad
 func (n *p2pNetwork) IsBadPeer(logger *zap.Logger, peerID peer.ID) bool {
-	if atomic.LoadInt32(&n.isIdxSet) == 0 {
+	if !n.isIdxSet.Load() {
 		return false
 	}
 	return n.idx.IsBad(logger, peerID)
@@ -189,7 +189,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute, peers.NewGossipScoreIndex())
-	atomic.StoreInt32(&n.isIdxSet, 1)
+	n.isIdxSet.Store(true)
 
 	logger.Debug("peers index is ready")
 
@@ -334,7 +334,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) connectionsAtLimit() bool {
-	if atomic.LoadInt32(&n.isIdxSet) == 0 {
+	if !n.isIdxSet.Load() {
 		return false
 	}
 	return n.idx.AtLimit(network.DirOutbound)
