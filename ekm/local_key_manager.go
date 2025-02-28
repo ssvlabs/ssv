@@ -166,11 +166,7 @@ func (km *LocalKeyManager) signBeaconObject(obj ssz.HashRoot, domain phase0.Doma
 		}
 		return km.signer.SignVoluntaryExit(data, domain, pk)
 	case spectypes.DomainAggregateAndProof:
-		data, ok := obj.(ssz.HashRoot)
-		if !ok {
-			return nil, nil, errors.New("could not cast obj to HashRoot")
-		}
-		return km.signer.SignAggregateAndProof(data, domain, pk)
+		return km.signer.SignAggregateAndProof(obj, domain, pk)
 	case spectypes.DomainSelectionProof:
 		data, ok := obj.(spectypes.SSZUint64)
 		if !ok {
