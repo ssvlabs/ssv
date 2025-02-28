@@ -354,42 +354,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			return
 		}
 
-		// SubnetSum represents a sum of 0 or more subnets, each byte at index K counts how many
-		// of that particular subnet at index K the summed subnet-sets have
-		type SubnetSum [commons.SubnetsCount]byte
-		addSubnetSums := func(a SubnetSum, b SubnetSum) SubnetSum {
-			result := SubnetSum{}
-			for i := 0; i < commons.SubnetsCount; i++ {
-				result[i] = a[i] + b[i]
-			}
-			return result
-		}
-		scoreSubnetSum := func(s SubnetSum) (score float64) { // higher score is better
-			const (
-				duoSubnetPriority  = 1
-				soloSubnetPriority = 3
-				deadSubnetPriority = 9
-
-				maxPossibleScore = commons.SubnetsCount * deadSubnetPriority
-			)
-
-			deadSubnetCnt := 0
-			soloSubnetCnt := 0
-			duoSubnetCnt := 0
-			for i := 0; i < commons.SubnetsCount; i++ {
-				if s[i] == 0 {
-					deadSubnetCnt++
-				}
-				if s[i] == 1 {
-					soloSubnetCnt++
-				}
-				if s[i] == 2 {
-					duoSubnetCnt++
-				}
-			}
-			return float64(maxPossibleScore - (deadSubnetPriority*deadSubnetCnt + soloSubnetPriority*soloSubnetCnt + duoSubnetPriority*duoSubnetCnt))
-		}
-
 		peersToConnectMaxCnt := vacantOutboundSlots / 2
 		if peersToConnectMaxCnt == 0 {
 			peersToConnectMaxCnt = 1
@@ -404,19 +368,13 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 		for _, pID := range allPeerIDs {
 			pSubnets := n.idx.GetPeerSubnets(pID)
-			ownSubnetSum = addSubnetSums(ownSubnetSum, SubnetSum(pSubnets))
+			ownSubnetSum.addSubnetVector(pSubnets)
 		}
-		// peersToConnectSubnetSum represents subnet-sum of peers we are about to connect with
-		peersToConnectSubnetSum := SubnetSum{}
+		// currentSubnetSum represents subnet-sum of our own peers + peers we are about to connect with
+		currentSubnetSum := ownSubnetSum
 
 		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
 		for i := 0; i < peersToConnectMaxCnt; i++ {
-			currentSubnetSum := addSubnetSums(ownSubnetSum, peersToConnectSubnetSum)
-
-			type peerWithSubnetSum struct {
-				p         discovery.DiscoveredPeer
-				subnetSum SubnetSum
-			}
 			peersByPriority := lane.NewMaxPriorityQueue[peerWithSubnetSum, float64]()
 			minScore, maxScore := math.MaxFloat64, 0.0
 			n.discoveredPeersPool.Range(func(key peer.ID, value discovery.DiscoveredPeer) bool {
@@ -435,13 +393,11 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				}
 
 				pSubnets := n.idx.GetPeerSubnets(key)
-				pSubnetSum := SubnetSum(pSubnets)
-				totalPlusPSubnetSum := addSubnetSums(currentSubnetSum, pSubnetSum)
-				peerScore := scoreSubnetSum(totalPlusPSubnetSum)
+				peerScore := currentSubnetSum.scoreSubnetVector(pSubnets)
 
 				peersByPriority.Push(peerWithSubnetSum{
 					p:         value,
-					subnetSum: pSubnetSum,
+					subnetSum: pSubnets,
 				}, peerScore)
 
 				if minScore > peerScore {
@@ -459,7 +415,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				break // means discoveredPeersPool is exhausted, no point in trying to find more of best peers
 			}
 
-			peersToConnectSubnetSum = addSubnetSums(peersToConnectSubnetSum, bestPeer.subnetSum)
+			currentSubnetSum.addSubnetVector(bestPeer.subnetSum)
 			peersToConnect[bestPeer.p.ID] = bestPeer.p
 
 			n.interfaceLogger.Debug(
@@ -868,4 +824,47 @@ func score(desired, actual int) float64 {
 		result *= float64(2.0 + i)
 	}
 	return result
+}
+
+// SubnetSum represents a sum of 0 or more subnets, each byte at index K counts how many of
+// that particular subnet at index K the sum has
+type SubnetSum [commons.SubnetsCount]byte
+
+// addSubnetVector adds subnets contributed by subnet-vector v (each byte in v is 0 or 1) to
+// this subnet-sum
+func (s *SubnetSum) addSubnetVector(v commons.Subnets) {
+	for i := 0; i < commons.SubnetsCount; i++ {
+		s[i] = s[i] + v[i]
+	}
+}
+
+// scoreSubnetVector estimates the score of subnet-vector v (each byte in v is 0 or 1) based on
+// how many dead/solo/duo subnets it contributes to the current subnet-sum (higher score is better)
+func (s *SubnetSum) scoreSubnetVector(v commons.Subnets) (score float64) {
+	const (
+		duoSubnetPriority  = 1
+		soloSubnetPriority = 3
+		deadSubnetPriority = 9
+	)
+
+	for i := 0; i < commons.SubnetsCount; i++ {
+		if v[i] != 1 {
+			continue
+		}
+		if s[i] == 0 {
+			score += deadSubnetPriority
+		}
+		if s[i] == 1 {
+			score += soloSubnetPriority
+		}
+		if s[i] == 2 {
+			score += duoSubnetPriority
+		}
+	}
+	return score
+}
+
+type peerWithSubnetSum struct {
+	p         discovery.DiscoveredPeer
+	subnetSum commons.Subnets
 }
