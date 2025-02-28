@@ -92,6 +92,7 @@ type config struct {
 	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
 	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	AllowSigningSlashable      bool                             `yaml:"AllowSigningSlashableAttestations" env:"CAN_SIGN_SLASHABLE_ATTESTATIONS" env-description:"allow the node to sign slashable attestations"`
 }
 
 var cfg config
@@ -186,7 +187,14 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not get operator private key hash", zap.Error(err))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
+		if cfg.AllowSigningSlashable {
+			logger.Warn("    --------------------- ! WARNING ! ---------------------")
+			logger.Warn("This node is configured to allow signing slashable attesations.")
+			logger.Warn("          DO NOT RUN THIS IN A PRODUCTION ENVIRONMENT")
+			logger.Warn("    --------------------- ! WARNING ! ---------------------")
+		}
+
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey, cfg.AllowSigningSlashable)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
