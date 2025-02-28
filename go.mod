@@ -36,7 +36,7 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.5.1-0.20250227094449-70b3414263ce
+	github.com/ssvlabs/eth2-key-manager v1.5.1-0.20250228065425-921d52454e2d
 	github.com/ssvlabs/ssv-spec v0.0.0-20250227094513-58afe08eee2f
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
@@ -252,3 +252,5 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
+
+replace github.com/ssvlabs/eth2-key-manager => github.com/ssvlabs/eth2-key-manager v1.5.1-0.20250228021238-46519df1ff6e // https://github.com/ssvlabs/eth2-key-manager/pull/112
