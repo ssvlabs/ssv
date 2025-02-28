@@ -741,8 +741,8 @@ github.com/spf13/pflag v1.0.1-0.20170901120850-7aff26db30c1/go.mod h1:DYY7MBk1bd
 github.com/spf13/pflag v1.0.5 h1:iy+VFUOCP1a+8yFto/drg2CJ5u0yRoB7fZw3DKv/JXA=
 github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/spf13/viper v1.0.0/go.mod h1:A8kyI5cUJhb8N+3pkfONlcEcZbueH6nhAm0Fq7SrnBM=
-github.com/ssvlabs/eth2-key-manager v1.5.1-0.20250228021238-46519df1ff6e h1:9HQNNkaRLSk7DjPaULlNO8+0DhR9+OM5oBoagXpj/j4=
-github.com/ssvlabs/eth2-key-manager v1.5.1-0.20250228021238-46519df1ff6e/go.mod h1:yeUzAP+SBJXgeXPiGBrLeLuHIQCpeJZV7Jz3Fwzm/zk=
+github.com/ssvlabs/eth2-key-manager v1.5.1-0.20250228065425-921d52454e2d h1:eBgXweHjyCadEKUd0kp8I/PDuL89qHLTdcJhyv6OcaY=
+github.com/ssvlabs/eth2-key-manager v1.5.1-0.20250228065425-921d52454e2d/go.mod h1:yeUzAP+SBJXgeXPiGBrLeLuHIQCpeJZV7Jz3Fwzm/zk=
 github.com/ssvlabs/ssv-spec v0.0.0-20250227094513-58afe08eee2f h1:+MN92zKOYzy/s1vJQUhhEjoGX6fnLw+wD3YkQCtOIVM=
 github.com/ssvlabs/ssv-spec v0.0.0-20250227094513-58afe08eee2f/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
