@@ -163,7 +163,7 @@ func (c *Web3Signer) Sign(sharePubKey []byte, payload SignRequest) ([]byte, erro
 		zap.String("share_pubkey", sharePubKeyHex),
 		zap.String("type", string(payload.Type)),
 	)
-	logger.Info("signing keystore")
+	logger.Info("signing")
 
 	body, err := json.Marshal(payload)
 	if err != nil {
