@@ -88,7 +88,7 @@ type AttestationData struct {
 	AggregationBits bitfield.Bitlist        `json:"aggregation_bits"`
 	Data            *phase0.AttestationData `json:"data"`
 	Signature       phase0.BLSSignature     `json:"signature"`
-	CommitteeBits   bitfield.Bitvector64    `json:"committee_bits"`
+	CommitteeBits   bitfield.Bitvector64    `json:"committee_bits,omitempty"`
 }
 
 type AggregationSlotData struct {
