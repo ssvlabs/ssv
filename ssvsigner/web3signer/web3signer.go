@@ -202,7 +202,7 @@ func (c *Web3Signer) Sign(sharePubKey []byte, payload SignRequest) ([]byte, erro
 			zap.Any("response", string(respData)),
 			zap.Any("request", string(body)),
 			zap.Any("url", url))
-		return nil, fmt.Errorf("unexpected status code %d", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status %d: %v", resp.StatusCode, respData)
 	}
 
 	sigBytes, err := hex.DecodeString(strings.TrimPrefix(string(respData), "0x"))
