@@ -13,14 +13,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -289,13 +289,37 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		req.VoluntaryExit = data
 
 	case spectypes.DomainAggregateAndProof:
-		data, ok := obj.(*phase0.AggregateAndProof)
-		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to AggregateAndProof")
-		}
-
 		req.Type = web3signer.AggregateAndProof
-		req.AggregateAndProof = data
+
+		switch v := obj.(type) {
+		case *phase0.AggregateAndProof:
+			req.AggregateAndProof = &web3signer.AggregateAndProofData{
+				AggregatorIndex: v.AggregatorIndex,
+				SelectionProof:  v.SelectionProof,
+			}
+			if v.Aggregate != nil {
+				req.AggregateAndProof.Aggregate = &web3signer.AttestationData{
+					AggregationBits: v.Aggregate.AggregationBits,
+					Data:            v.Aggregate.Data,
+					Signature:       v.Aggregate.Signature,
+				}
+			}
+		case *electra.AggregateAndProof:
+			req.AggregateAndProof = &web3signer.AggregateAndProofData{
+				AggregatorIndex: v.AggregatorIndex,
+				SelectionProof:  v.SelectionProof,
+			}
+			if v.Aggregate != nil {
+				req.AggregateAndProof.Aggregate = &web3signer.AttestationData{
+					AggregationBits: v.Aggregate.AggregationBits,
+					Data:            v.Aggregate.Data,
+					Signature:       v.Aggregate.Signature,
+					CommitteeBits:   v.Aggregate.CommitteeBits,
+				}
+			}
+		default:
+			return nil, [32]byte{}, fmt.Errorf("obj type is unknown: %T", obj)
+		}
 
 	case spectypes.DomainSelectionProof:
 		data, ok := obj.(spectypes.SSZUint64)
