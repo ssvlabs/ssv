@@ -32,7 +32,7 @@ var migration_6_share_exit_epoch = Migration{
 
 		err := opt.Db.GetAll(storagePrefix, func(i int, obj basedb.Obj) error {
 			oldShare := &migration_6_OldStorageShare{}
-			if err := oldShare.UnmarshalSSZ(obj.Value); err != nil {
+			if err := oldShare.Decode(obj.Value); err != nil {
 				return fmt.Errorf("error: '%w' decoding share: %v", err, obj.Value)
 			}
 

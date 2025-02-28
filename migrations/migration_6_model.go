@@ -1,5 +1,11 @@
 package migrations
 
+import (
+	"fmt"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+)
+
 //go:generate sszgen -path ./migration_6_model.go --objs migration_6_OldStorageShare
 
 const addressLength = 20
@@ -23,4 +29,25 @@ type migration_6_OldStorageShare struct {
 	ActivationEpoch uint64
 	OwnerAddress    [addressLength]byte
 	Liquidated      bool
+}
+
+// Encode encodes Share using ssz.
+func (s *migration_6_OldStorageShare) Encode() ([]byte, error) {
+	result, err := s.MarshalSSZ()
+	if err != nil {
+		return nil, fmt.Errorf("marshal ssz: %w", err)
+	}
+	return result, nil
+}
+
+// Decode decodes Share using ssz.
+func (s *migration_6_OldStorageShare) Decode(data []byte) error {
+	if len(data) > types.MaxAllowedShareSize {
+		return fmt.Errorf("share size is too big, got %v, max allowed %v", len(data), types.MaxAllowedShareSize)
+	}
+	if err := s.UnmarshalSSZ(data); err != nil {
+		return fmt.Errorf("decode Share: %w", err)
+	}
+	s.Quorum, s.PartialQuorum = types.ComputeQuorumAndPartialQuorum(uint64(len(s.Committee)))
+	return nil
 }
