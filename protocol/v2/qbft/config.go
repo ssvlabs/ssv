@@ -6,7 +6,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
-var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
+var CutOffRound = specqbft.Round(specqbft.CutoffRound)
 
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
@@ -69,6 +69,7 @@ func (c *Config) GetTimer() roundtimer.Timer {
 	return c.Timer
 }
 
+// GetCutOffRound returns the round cut off
 func (c *Config) GetCutOffRound() specqbft.Round {
 	return c.CutOffRound
 }
