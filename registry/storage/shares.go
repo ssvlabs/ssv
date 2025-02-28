@@ -75,15 +75,19 @@ const addressLength = 20
 // Note, SSZ encodings generator has some limitations in terms of what types it supports, hence
 // we define a bunch of own types here to satisfy it, see more on this here:
 // https://github.com/ferranbt/fastssz/issues/179#issuecomment-2454371820
+// Note, SSZ encodings generator has a bug that affects all inline field declarations(inline fields are ignored),
+// meaning structs should NOT use inline fields, example: 'Name, Address string'. Issue:
+// https://github.com/ferranbt/fastssz/issues/188
 type Share struct {
-	ValidatorIndex        uint64
-	ValidatorPubKey       []byte             `ssz-size:"48"`
-	SharePubKey           []byte             `ssz-max:"48"` // empty for not own shares
-	Committee             []*storageOperator `ssz-max:"13"`
-	Quorum, PartialQuorum uint64
-	DomainType            [4]byte `ssz-size:"4"`
-	FeeRecipientAddress   [addressLength]byte
-	Graffiti              []byte `ssz-max:"32"`
+	ValidatorIndex      uint64
+	ValidatorPubKey     []byte             `ssz-size:"48"`
+	SharePubKey         []byte             `ssz-max:"48"` // empty for not own shares
+	Committee           []*storageOperator `ssz-max:"13"`
+	Quorum              uint64
+	PartialQuorum       uint64
+	DomainType          [4]byte `ssz-size:"4"`
+	FeeRecipientAddress [addressLength]byte
+	Graffiti            []byte `ssz-max:"32"`
 
 	Status          uint64
 	ActivationEpoch uint64
