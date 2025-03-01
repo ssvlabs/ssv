@@ -24,7 +24,6 @@ import (
 type MockProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockProviderMockRecorder
-	isgomock struct{}
 }
 
 // MockProviderMockRecorder is the mock recorder for MockProvider.
@@ -196,7 +195,6 @@ func (mr *MockProviderMockRecorder) SubscribeFilterLogs(ctx, q, ch any) *gomock.
 type MockSingleClientProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockSingleClientProviderMockRecorder
-	isgomock struct{}
 }
 
 // MockSingleClientProviderMockRecorder is the mock recorder for MockSingleClientProvider.
