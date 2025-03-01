@@ -275,9 +275,9 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 		}
 
 		commit := &model.QBFTTrace{
-			Round:        uint64(msg.Round),
-			BeaconRoot:   msg.Root,
-			Signer:       signedMsg.OperatorIDs[0],
+			Round:      uint64(msg.Round),
+			BeaconRoot: msg.Root,
+			// Signer:       signedMsg.OperatorIDs[0], TODO (Matheus) - need to get the signer from the message?
 			ReceivedTime: time.Now(),
 		}
 
