@@ -8,11 +8,9 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,8 +26,7 @@ type SpecTest struct {
 func RunTimeout(t *testing.T, test *SpecTest) {
 	logger := logging.TestLogger(t)
 	err := test.Pre.UponRoundTimeout(context.TODO(), logger)
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, err, test.ExpectedError)
 	} else {
 		require.NoError(t, err)

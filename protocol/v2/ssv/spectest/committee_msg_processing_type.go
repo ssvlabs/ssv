@@ -10,9 +10,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -23,10 +20,13 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type CommitteeSpecTest struct {
 	Name                   string
+	ParentName             string
 	Committee              *validator.Committee
 	Input                  []interface{} // Can be a types.Duty or a *types.SignedSSVMessage
 	PostDutyCommitteeRoot  string
@@ -40,12 +40,15 @@ func (test *CommitteeSpecTest) TestName() string {
 	return test.Name
 }
 
+func (test *CommitteeSpecTest) FullName() string {
+	return strings.Replace(test.ParentName+"_"+test.Name, " ", "_", -1)
+}
+
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
 func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 	logger := logging.TestLogger(t)
 	lastErr := test.runPreTesting(logger)
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
@@ -141,6 +144,7 @@ func (tests *MultiCommitteeSpecTest) Run(t *testing.T) {
 
 	for _, test := range tests.Tests {
 		t.Run(test.TestName(), func(t *testing.T) {
+			test.ParentName = tests.Name
 			test.RunAsPartOfMultiTest(t)
 		})
 	}
