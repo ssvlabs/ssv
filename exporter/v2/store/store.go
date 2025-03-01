@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -75,7 +76,7 @@ func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.Beaco
 		return nil, fmt.Errorf("get validator duty: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("validator duty not found")
+		return nil, fmt.Errorf("get validator duty from disk: %w", ErrNotFound)
 	}
 
 	duty = new(model.ValidatorDutyTrace)
@@ -110,7 +111,7 @@ func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.Val
 		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link: %w", err)
 	}
 	if !found {
-		return spectypes.CommitteeID{}, fmt.Errorf("committee duty link not found")
+		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link from disk: %w", ErrNotFound)
 	}
 
 	return spectypes.CommitteeID(obj.Value), nil
@@ -129,6 +130,15 @@ func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, mappings map[p
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (s *DutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
+	prefix := s.makeValidatorCommitteePrefix(slot, index)
+	if err := s.db.Set(prefix, nil, id[:]); err != nil {
+		return fmt.Errorf("save committee duty link: %w", err)
 	}
 
 	return nil
@@ -179,6 +189,8 @@ func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
 	return nil
 }
 
+var ErrNotFound = errors.New("duty not found")
+
 func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *model.CommitteeDutyTrace, err error) {
 	prefix := s.makeCommitteePrefix(slot, committeeID)
 	obj, found, err := s.db.Get(prefix, nil)
@@ -186,7 +198,7 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 		return nil, fmt.Errorf("get committee duty: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("committee duty not found")
+		return nil, fmt.Errorf("get committee duty from db: %w", ErrNotFound)
 	}
 
 	duty = new(model.CommitteeDutyTrace)

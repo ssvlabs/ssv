@@ -32,47 +32,37 @@ func getTTL(role spectypes.BeaconRole) phase0.Slot {
 }
 
 func (tracer *InMemTracer) evictValidatorCommitteeMapping(slot phase0.Slot) {
-	mappings := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
-	tracer.valToComMapping.Range(func(index phase0.ValidatorIndex, slotToCommittee *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]) bool {
-		// collect all slots to delete
-		var slotsToDelete []phase0.Slot
+	threshold := slot - getTTL(ttlMapping)
 
-		threshold := slot - getTTL(ttlMapping)
-
-		slotToCommittee.Range(func(slot phase0.Slot, committeeID spectypes.CommitteeID) bool {
-			if slot > threshold {
+	tracer.validatorIndexToCommitteeMapping.Range(func(index phase0.ValidatorIndex, slotToCommittee *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]) bool {
+		for slot := threshold; ; slot-- {
+			committeeID, found := slotToCommittee.Load(slot)
+			if !found {
+				break
+			}
+			if err := tracer.store.SaveCommitteeDutyLink(slot, index, committeeID); err != nil {
+				tracer.logger.Error("save validator to committee relations to disk", zap.Error(err))
 				return true
 			}
-			mappings[index] = committeeID
-			slotsToDelete = append(slotsToDelete, slot)
-			return true
-		})
 
-		for _, slot := range slotsToDelete {
 			slotToCommittee.Delete(slot)
 		}
 
 		return true
 	})
-
-	if err := tracer.store.SaveCommitteeDutyLinks(slot, mappings); err != nil {
-		tracer.logger.Error("save validator to committee relations to disk", zap.Error(err))
-	}
 }
 
-func (tracer *InMemTracer) evictCommitteeTraces(currentSlot phase0.Slot) {
+func (tracer *InMemTracer) evictCommitteeTraces(slot phase0.Slot) {
 	stats := make(map[phase0.Slot]uint) // TODO(me): replace by proper observability
-	tracer.logger.Info("evicting committee traces", zap.Uint64("current slot", uint64(currentSlot)))
+	tracer.logger.Info("evicting committee traces", zap.Uint64("current slot", uint64(slot)))
 
-	threshold := currentSlot - getTTL(ttlCommittee)
+	threshold := slot - getTTL(ttlCommittee)
 
 	tracer.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *TypedSyncMap[phase0.Slot, *committeeDutyTrace]) bool {
-		// collect all slots to delete
-		var slotsToDelete []phase0.Slot
-
-		slotToTraceMap.Range(func(slot phase0.Slot, trace *committeeDutyTrace) bool {
-			if slot > threshold {
-				return true
+		for slot := threshold; ; slot-- {
+			trace, found := slotToTraceMap.Load(slot)
+			if !found {
+				break
 			}
 
 			trace.Lock()
@@ -80,16 +70,9 @@ func (tracer *InMemTracer) evictCommitteeTraces(currentSlot phase0.Slot) {
 
 			if err := tracer.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace); err != nil {
 				tracer.logger.Error("save committee duty to disk", zap.Error(err))
-				return true // continue?
+				continue
 			}
 
-			slotsToDelete = append(slotsToDelete, slot)
-
-			return true
-		})
-
-		// once we moved all slot traces to disk, delete them from memory
-		for _, slot := range slotsToDelete {
 			stats[slot]++
 			slotToTraceMap.Delete(slot)
 		}
@@ -102,58 +85,43 @@ func (tracer *InMemTracer) evictCommitteeTraces(currentSlot phase0.Slot) {
 	}
 }
 
-func (tracer *InMemTracer) evictValidatorTraces(currentSlot phase0.Slot) {
+func (tracer *InMemTracer) evictValidatorTraces(slot phase0.Slot) {
 	tracer.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *TypedSyncMap[phase0.Slot, *validatorDutyTrace]) bool {
-		// collect all slots to delete
-		var slotsToDelete []phase0.Slot
+		threshold := slot - getTTL(ttlCommittee)
+		for slot := threshold; ; slot-- {
+			trace, found := slotToTraceMap.Load(slot)
+			if !found {
+				break
+			}
 
-		slotToTraceMap.Range(func(slot phase0.Slot, trace *validatorDutyTrace) bool {
 			trace.Lock()
 			defer trace.Unlock()
 
-			for _, duty := range trace.Roles {
-				threshold := currentSlot - getTTL(duty.Role)
-				if slot > threshold {
-					return true
-				}
+			var savedCount int
 
-				// move to disk
-				trace.Lock()
-				defer trace.Unlock()
-
-				var allSaved bool
-
-				for _, trace := range trace.Roles {
-					// TODO: confirm it makes sense
-					// in case some duties do not have the validator index set
-					if trace.Validator == 0 {
-						index, found := tracer.validators.ValidatorIndex(pk)
-						if !found {
-							tracer.logger.Error("no validator index", fields.Validator(pk[:]))
-							continue
-						}
-						trace.Validator = index
-					}
-
-					if err := tracer.store.SaveValidatorDuty(trace); err != nil {
-						tracer.logger.Error("save validator duties to disk", zap.Error(err))
+			for _, trace := range trace.Roles {
+				// TODO: confirm it makes sense
+				// in case some duties do not have the validator index set
+				if trace.Validator == 0 {
+					index, found := tracer.validators.ValidatorIndex(pk)
+					if !found {
+						tracer.logger.Error("no validator index", fields.Validator(pk[:]))
 						continue
 					}
-
-					allSaved = true
+					trace.Validator = index
 				}
 
-				if allSaved {
-					slotsToDelete = append(slotsToDelete, slot)
+				if err := tracer.store.SaveValidatorDuty(trace); err != nil {
+					tracer.logger.Error("save validator duties to disk", zap.Error(err))
+					continue
 				}
+
+				savedCount++
 			}
 
-			return true
-		})
-
-		// once we moved all slot traces to disk, delete them from memory
-		for _, slot := range slotsToDelete {
-			slotToTraceMap.Delete(slot)
+			if savedCount == len(trace.Roles) {
+				slotToTraceMap.Delete(slot)
+			}
 		}
 
 		return true

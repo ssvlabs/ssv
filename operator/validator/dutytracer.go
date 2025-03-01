@@ -33,8 +33,8 @@ type InMemTracer struct {
 	// validatorPubKey:slot:validatorDutyTrace
 	validatorTraces *TypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]]
 
-	// validatorIndex:committeeID
-	valToComMapping *TypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]]
+	// validatorIndex:slot:committeeID
+	validatorIndexToCommitteeMapping *TypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]]
 
 	beaconNetwork spectypes.BeaconNetwork
 
@@ -51,14 +51,14 @@ func NewTracer(ctx context.Context,
 	beaconNetwork spectypes.BeaconNetwork) *InMemTracer {
 
 	return &InMemTracer{
-		logger:          logger,
-		store:           store,
-		client:          client,
-		beaconNetwork:   beaconNetwork,
-		committeeTraces: NewTypedSyncMap[spectypes.CommitteeID, *TypedSyncMap[phase0.Slot, *committeeDutyTrace]](),
-		validatorTraces: NewTypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]](),
-		valToComMapping: NewTypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]](),
-		validators:      validators,
+		logger:                           logger,
+		store:                            store,
+		client:                           client,
+		beaconNetwork:                    beaconNetwork,
+		committeeTraces:                  NewTypedSyncMap[spectypes.CommitteeID, *TypedSyncMap[phase0.Slot, *committeeDutyTrace]](),
+		validatorTraces:                  NewTypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]](),
+		validatorIndexToCommitteeMapping: NewTypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]](),
+		validators:                       validators,
 	}
 }
 
@@ -71,11 +71,11 @@ func (n *InMemTracer) StartEvictionJob(ctx context.Context, tickerProvider slott
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
-			currentSlot := ticker.Slot() + 3707879
+			currentSlot := ticker.Slot()
 			n.evictCommitteeTraces(currentSlot)
 			n.evictValidatorTraces(currentSlot)
 			// TODO: do we evict validator committee mapping?
-			// Do we store them against a slot?
+			// CONFIRM: we store them against a slot?
 			n.evictValidatorCommitteeMapping(currentSlot)
 		}
 	}
@@ -184,10 +184,13 @@ func (n *InMemTracer) decodeJustificationWithPrepares(justifications [][]byte) [
 			continue
 		}
 
-		var justificationTrace model.QBFTTrace
-		justificationTrace.Round = uint64(qbftMsg.Round)
-		justificationTrace.BeaconRoot = qbftMsg.Root
-		justificationTrace.Signer = signedMsg.OperatorIDs[0]
+		justificationTrace := model.QBFTTrace{
+			Round:        uint64(qbftMsg.Round),
+			BeaconRoot:   qbftMsg.Root,
+			Signer:       signedMsg.OperatorIDs[0],
+			ReceivedTime: time.Now(),
+		}
+
 		traces = append(traces, &justificationTrace)
 	}
 
@@ -221,29 +224,29 @@ func (n *InMemTracer) decodeJustificationWithRoundChanges(justifications [][]byt
 }
 
 func (n *InMemTracer) createRoundChangeTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, receivedTime time.Time) *model.RoundChangeTrace {
-	var roundChangeTrace = new(model.RoundChangeTrace)
-	roundChangeTrace.PreparedRound = uint64(msg.DataRound)
-	roundChangeTrace.Round = uint64(msg.Round)
-	roundChangeTrace.BeaconRoot = msg.Root
-	roundChangeTrace.Signer = signedMsg.OperatorIDs[0]
-	roundChangeTrace.ReceivedTime = receivedTime
-
-	roundChangeTrace.PrepareMessages = n.decodeJustificationWithPrepares(msg.RoundChangeJustification)
-
-	return roundChangeTrace
+	return &model.RoundChangeTrace{
+		QBFTTrace: model.QBFTTrace{
+			Round:        uint64(msg.Round),
+			BeaconRoot:   msg.Root,
+			Signer:       signedMsg.OperatorIDs[0],
+			ReceivedTime: receivedTime,
+		},
+		PreparedRound:   uint64(msg.DataRound),
+		PrepareMessages: n.decodeJustificationWithPrepares(msg.RoundChangeJustification),
+	}
 }
 
 func (n *InMemTracer) createProposalTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.ProposalTrace {
-	var proposalTrace = new(model.ProposalTrace)
-	proposalTrace.Round = uint64(msg.Round)
-	proposalTrace.BeaconRoot = msg.Root
-	proposalTrace.Signer = signedMsg.OperatorIDs[0]
-	proposalTrace.ReceivedTime = time.Now() // correct
-
-	proposalTrace.RoundChanges = n.decodeJustificationWithRoundChanges(msg.RoundChangeJustification)
-	proposalTrace.PrepareMessages = n.decodeJustificationWithPrepares(msg.PrepareJustification)
-
-	return proposalTrace
+	return &model.ProposalTrace{
+		QBFTTrace: model.QBFTTrace{
+			Round:        uint64(msg.Round),
+			BeaconRoot:   msg.Root,
+			Signer:       signedMsg.OperatorIDs[0],
+			ReceivedTime: time.Now(), // correct
+		},
+		RoundChanges:    n.decodeJustificationWithRoundChanges(msg.RoundChangeJustification),
+		PrepareMessages: n.decodeJustificationWithPrepares(msg.PrepareJustification),
+	}
 }
 
 func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) *model.DecidedTrace {
@@ -252,13 +255,14 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 		round.ProposalTrace = n.createProposalTrace(msg, signedMsg)
 
 	case specqbft.PrepareMsgType:
-		var m = new(model.QBFTTrace)
-		m.Round = uint64(msg.Round)
-		m.BeaconRoot = msg.Root
-		m.Signer = signedMsg.OperatorIDs[0]
-		m.ReceivedTime = time.Now()
+		prepare := &model.QBFTTrace{
+			Round:        uint64(msg.Round),
+			BeaconRoot:   msg.Root,
+			Signer:       signedMsg.OperatorIDs[0],
+			ReceivedTime: time.Now(),
+		}
 
-		round.Prepares = append(round.Prepares, m)
+		round.Prepares = append(round.Prepares, prepare)
 
 	case specqbft.CommitMsgType:
 		if len(signedMsg.OperatorIDs) > 1 {
@@ -270,13 +274,14 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 			}
 		}
 
-		var m = new(model.QBFTTrace)
-		m.Round = uint64(msg.Round)
-		m.BeaconRoot = msg.Root
-		m.Signer = signedMsg.OperatorIDs[0]
-		m.ReceivedTime = time.Now()
+		commit := &model.QBFTTrace{
+			Round:        uint64(msg.Round),
+			BeaconRoot:   msg.Root,
+			Signer:       signedMsg.OperatorIDs[0],
+			ReceivedTime: time.Now(),
+		}
 
-		round.Commits = append(round.Commits, m)
+		round.Commits = append(round.Commits, commit)
 
 	case specqbft.RoundChangeMsgType:
 		now := time.Now()
@@ -303,18 +308,19 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 		roleDutyTrace.Validator = msg.Messages[0].ValidatorIndex
 	}
 
-	var tr model.PartialSigTrace
-	tr.Type = msg.Type
-	tr.BeaconRoot = msg.Messages[0].SigningRoot
-	tr.Signer = msg.Messages[0].Signer
-	tr.ReceivedTime = time.Now()
+	tr := &model.PartialSigTrace{
+		Type:         msg.Type,
+		BeaconRoot:   msg.Messages[0].SigningRoot,
+		Signer:       msg.Messages[0].Signer,
+		ReceivedTime: time.Now(),
+	}
 
 	if msg.Type == spectypes.PostConsensusPartialSig {
-		roleDutyTrace.Post = append(roleDutyTrace.Post, &tr)
+		roleDutyTrace.Post = append(roleDutyTrace.Post, tr)
 		return
 	}
 
-	roleDutyTrace.Pre = append(roleDutyTrace.Pre, &tr)
+	roleDutyTrace.Pre = append(roleDutyTrace.Pre, tr)
 }
 
 func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
@@ -352,9 +358,9 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 
 func (n *InMemTracer) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
 	for _, msg := range msg.Messages {
-		slotToCommittee, found := n.valToComMapping.Load(msg.ValidatorIndex)
+		slotToCommittee, found := n.validatorIndexToCommitteeMapping.Load(msg.ValidatorIndex)
 		if !found {
-			slotToCommittee, _ = n.valToComMapping.LoadOrStore(msg.ValidatorIndex, NewTypedSyncMap[phase0.Slot, spectypes.CommitteeID]())
+			slotToCommittee, _ = n.validatorIndexToCommitteeMapping.LoadOrStore(msg.ValidatorIndex, NewTypedSyncMap[phase0.Slot, spectypes.CommitteeID]())
 		}
 
 		slotToCommittee.Store(slot, committeeID)
@@ -467,29 +473,29 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 					err := qbftMsg.Decode(msg.Data)
 					if err != nil {
 						n.logger.Error("decode validator consensus data", zap.Error(err))
-						return
-					}
+					} else {
+						if qbftMsg.MsgType == specqbft.ProposalMsgType {
+							stop := func() bool {
+								var data = new(spectypes.ValidatorConsensusData)
+								err := data.Decode(msg.SignedSSVMessage.FullData)
+								if err != nil {
+									n.logger.Error("decode validator proposal data", zap.Error(err))
+									return true
+								}
 
-					if qbftMsg.MsgType == specqbft.ProposalMsgType {
-						stop := func() bool {
-							var data = new(spectypes.ValidatorConsensusData)
-							err := data.Decode(msg.SignedSSVMessage.FullData)
-							if err != nil {
-								n.logger.Error("decode validator proposal data", zap.Error(err))
-								return true
+								trace.Lock()
+								defer trace.Unlock()
+								if roleDutyTrace.Validator == 0 {
+									roleDutyTrace.Validator = data.Duty.ValidatorIndex
+								}
+
+								return false
+							}()
+
+							// TODO (moshe/matheus): do we stop really here
+							if stop {
+								return
 							}
-
-							trace.Lock()
-							defer trace.Unlock()
-							if roleDutyTrace.Validator == 0 {
-								roleDutyTrace.Validator = data.Duty.ValidatorIndex
-							}
-
-							return false
-						}()
-
-						if stop {
-							return
 						}
 					}
 				}
@@ -655,7 +661,7 @@ func (n *InMemTracer) getCommitteeDuty(slot phase0.Slot, committeeID spectypes.C
 }
 
 func (n *InMemTracer) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
-	slotToCommittee, found := n.valToComMapping.Load(index)
+	slotToCommittee, found := n.validatorIndexToCommitteeMapping.Load(index)
 	if !found {
 		return spectypes.CommitteeID{}, fmt.Errorf("committee not found by index: %d", index)
 	}
@@ -724,6 +730,10 @@ func deepCopyRound(round *model.RoundTrace) *model.RoundTrace {
 }
 
 func deepCopyProposalTrace(trace *model.ProposalTrace) *model.ProposalTrace {
+	if trace == nil {
+		return nil
+	}
+
 	return &model.ProposalTrace{
 		QBFTTrace: model.QBFTTrace{
 			Round:        trace.Round,
@@ -778,6 +788,7 @@ func deepCopyQBFTTrace(trace *model.QBFTTrace) *model.QBFTTrace {
 		Round:        trace.Round,
 		Signer:       trace.Signer,
 		ReceivedTime: trace.ReceivedTime,
+		BeaconRoot:   trace.BeaconRoot,
 	}
 }
 
@@ -797,7 +808,7 @@ func deepCopySignerData(data *model.SignerData) *model.SignerData {
 }
 
 func deepCopyOperatorIDs(ids []spectypes.OperatorID) []spectypes.OperatorID {
-	copy := make([]spectypes.OperatorID, len(ids))
+	copy := make([]spectypes.OperatorID, 0, len(ids))
 	copy = append(copy, ids...)
 	return copy
 }
