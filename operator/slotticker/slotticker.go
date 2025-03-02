@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
 
 type Provider func() SlotTicker
 

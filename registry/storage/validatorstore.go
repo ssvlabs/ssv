@@ -12,7 +12,7 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
 
 type BaseValidatorStore interface {
 	Validator(pubKey []byte) (*types.SSVShare, bool)
