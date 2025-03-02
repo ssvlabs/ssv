@@ -75,8 +75,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 	go func() {
 		for proposal := range connectorProposals {
 			discoveredPeer := discovery.DiscoveredPeer{
-				AddrInfo:       proposal,
-				ConnectRetries: 0,
+				AddrInfo: proposal,
+				Tries:    0,
 			}
 			n.discoveredPeersPool.Set(proposal.ID, discoveredPeer)
 		}
@@ -88,7 +88,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		// Collect enough peers first to increase the quality of peer selection.
 		const minDiscoveryTime = 1 * time.Minute
 		if time.Since(startTime) < minDiscoveryTime {
-			n.discoveredPeersPool.SlowLen()
 			return
 		}
 
@@ -141,6 +140,27 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, uint64]()
 			minScore, maxScore := uint64(math.MaxUint64), uint64(0)
 			n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
+				if _, ok := peersToConnect[peerID]; ok {
+					// This peer was already selected.
+					// n.logger.Debug(
+					// 	"TODO: peer already selected, skipping",
+					// 	fields.PeerID(peerID),
+					// )
+					return true
+				}
+
+				const retryLimit = 5
+				const retryCooldown = 1 * time.Minute
+				if discoveredPeer.Tries >= retryLimit ||
+					time.Since(discoveredPeer.LastTry) < retryCooldown {
+					// We've exhausted retry attempts for this peer.
+					// n.logger.Debug(
+					// 	"TODO: peer already tried max number of times, skipping",
+					// 	fields.PeerID(peerID),
+					// )
+					return true
+				}
+
 				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
 				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
 				// n.logger.Debug(
@@ -151,35 +171,11 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				// 	zap.Uint64("peer_score", peerScore),
 				// )
 
-				const retryLimit = 3
-				if discoveredPeer.ConnectRetries >= retryLimit {
-					// We've exhausted retry attempts for this peer.
-					// n.logger.Debug(
-					// 	"TODO: peer already tried max number of times, skipping",
-					// 	fields.PeerID(peerID),
-					// )
-					return true
-				}
-
-				if _, ok := peersToConnect[peerID]; ok {
-					// This peer was already selected.
-					// n.logger.Debug(
-					// 	"TODO: peer already selected, skipping",
-					// 	fields.PeerID(peerID),
-					// )
-					return true
-				}
-
 				// Predict this peer's score by adding its subnets to pendingSubnetPeers
 				// and then scoring the total.
 				peersByPriority.Push(discoveredPeer, peerScore)
-
-				if minScore > peerScore {
-					minScore = peerScore
-				}
-				if maxScore < peerScore {
-					maxScore = peerScore
-				}
+				minScore = min(minScore, peerScore)
+				maxScore = max(maxScore, peerScore)
 
 				return true
 			})
@@ -213,8 +209,9 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		// Forward the selected peers for connection, incrementing the retry counter.
 		for _, p := range peersToConnect {
 			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
-				AddrInfo:       p.AddrInfo,
-				ConnectRetries: p.ConnectRetries + 1,
+				AddrInfo: p.AddrInfo,
+				Tries:    p.Tries + 1,
+				LastTry:  time.Now(),
 			})
 			connector <- p.AddrInfo
 		}

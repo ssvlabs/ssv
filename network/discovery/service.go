@@ -2,8 +2,10 @@ package discovery
 
 import (
 	"context"
-	"github.com/ssvlabs/ssv/utils/ttl"
 	"io"
+	"time"
+
+	"github.com/ssvlabs/ssv/utils/ttl"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -65,6 +67,10 @@ func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service,
 
 type DiscoveredPeer struct {
 	peer.AddrInfo
-	// ConnectRetries keeps track of how many times we tried to connect to this peer.
-	ConnectRetries int
+
+	// Tries keeps track of how many times we tried to connect to this peer.
+	Tries int
+
+	// LastTry is the last time we tried to connect to this peer.
+	LastTry time.Time
 }
