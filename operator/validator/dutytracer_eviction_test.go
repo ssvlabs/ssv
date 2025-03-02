@@ -267,10 +267,10 @@ func TestEvictValidatorCommitteeMapping(t *testing.T) {
 
 	// evict validator committee mapping for slot 6 - meaning that slot 3 and 4 should be evicted
 	thresholdSlot := phase0.Slot(4 + ttlMapping)
-	tracer.evictValidatorCommitteeMapping(thresholdSlot)
+	tracer.evictValidatorCommitteeLinks(thresholdSlot)
 
 	// check that slot 3 and 4 are evicted from cache
-	indexToSlotMap, found := tracer.validatorIndexToCommitteeMapping.Load(1)
+	indexToSlotMap, found := tracer.validatorIndexToCommitteeLinks.Load(1)
 	require.True(t, found)
 
 	assert.False(t, indexToSlotMap.Has(slot3))

@@ -13,6 +13,7 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
+	validator "github.com/ssvlabs/ssv/operator/validator"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
@@ -31,9 +32,10 @@ type Exporter struct {
 }
 
 type DutyTraceStore interface {
-	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*model.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*validator.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
-	GetDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) []qbftstorage.ParticipantsRangeEntry
+	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetCommitteeDecideds(slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 }
 
 type ParticipantResponse struct {
@@ -143,14 +145,33 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		pubkeys = append(pubkeys, pubkey)
 	}
 
-	for s := request.From; s <= request.To; s++ {
-		slot := phase0.Slot(s)
-		for _, r := range request.Roles {
-			role := spectypes.BeaconRole(r)
-
-			participantsByPK := e.TraceStore.GetDecideds(role, slot, pubkeys)
-			for _, pr := range participantsByPK {
-				response.Data = append(response.Data, transformToParticipantResponse(role, pr))
+	for _, r := range request.Roles {
+		role := spectypes.BeaconRole(r)
+		switch role {
+		case spectypes.BNRoleAttester:
+			fallthrough
+		case spectypes.BNRoleSyncCommittee:
+			for s := request.From; s <= request.To; s++ {
+				slot := phase0.Slot(s)
+				// TODO(Moshe): do we need role for committee decideds?
+				participantsByPK, err := e.TraceStore.GetCommitteeDecideds(slot, pubkeys)
+				if err != nil {
+					return api.Error(fmt.Errorf("get committee participants: %w", err))
+				}
+				for _, pr := range participantsByPK {
+					response.Data = append(response.Data, transformToParticipantResponse(role, pr))
+				}
+			}
+		default:
+			for s := request.From; s <= request.To; s++ {
+				slot := phase0.Slot(s)
+				participantsByPK, err := e.TraceStore.GetValidatorDecideds(role, slot, pubkeys)
+				if err != nil {
+					return api.Error(fmt.Errorf("get validator participants: %w", err))
+				}
+				for _, pr := range participantsByPK {
+					response.Data = append(response.Data, transformToParticipantResponse(role, pr))
+				}
 			}
 		}
 	}
@@ -256,8 +277,8 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	var pubkeys []spectypes.ValidatorPK
 
 	for _, index := range request.Indices {
-		share, f := e.Validators.ValidatorByIndex(phase0.ValidatorIndex(index))
-		if !f {
+		share, found := e.Validators.ValidatorByIndex(phase0.ValidatorIndex(index))
+		if !found {
 			return api.BadRequestError(fmt.Errorf("validator not found: %d", index))
 		}
 		pubkeys = append(pubkeys, share.ValidatorPubKey)
@@ -272,7 +293,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		pubkeys = append(pubkeys, pubkey)
 	}
 
-	var results []*model.ValidatorDutyTrace
+	var results []*validator.ValidatorDutyTrace
 
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
@@ -289,10 +310,10 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	return api.Render(w, r, toValidatorTraceResponse(results))
 }
 
-func toValidatorTraceResponse(duties []*model.ValidatorDutyTrace) *validatorTraceResponse {
+func toValidatorTraceResponse(duties []*validator.ValidatorDutyTrace) *validatorTraceResponse {
 	r := new(validatorTraceResponse)
 	for _, t := range duties {
-		r.Data = append(r.Data, toValidatorTrace(t))
+		r.Data = append(r.Data, toValidatorTrace(&t.ValidatorDutyTrace))
 	}
 	return r
 }

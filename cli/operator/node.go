@@ -357,7 +357,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
 		// Validator duty tracing
-		var tracer validator.DutyTracer = validator.NoOp()
+		var tracer validator.DutyTracer
 		if cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
 			logger.Info("exporter duty tracing enabled")
 			tracer = validator.NewTracer(cmd.Context(), logger,
@@ -476,7 +476,7 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Exporter{
 					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
-					TraceStore:        tracer.Store(),
+					TraceStore:        tracer,
 					Validators:        nodeStorage.ValidatorStore(),
 				},
 				cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing,

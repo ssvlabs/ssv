@@ -31,10 +31,10 @@ func getTTL(role spectypes.BeaconRole) phase0.Slot {
 	return ttlProposer
 }
 
-func (tracer *InMemTracer) evictValidatorCommitteeMapping(slot phase0.Slot) {
+func (tracer *InMemTracer) evictValidatorCommitteeLinks(slot phase0.Slot) {
 	threshold := slot - getTTL(ttlMapping)
 
-	tracer.validatorIndexToCommitteeMapping.Range(func(index phase0.ValidatorIndex, slotToCommittee *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]) bool {
+	tracer.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]) bool {
 		for slot := threshold; ; slot-- {
 			committeeID, found := slotToCommittee.Load(slot)
 			if !found {
@@ -52,11 +52,10 @@ func (tracer *InMemTracer) evictValidatorCommitteeMapping(slot phase0.Slot) {
 	})
 }
 
-func (tracer *InMemTracer) evictCommitteeTraces(slot phase0.Slot) {
+func (tracer *InMemTracer) evictCommitteeTraces(currentSlot phase0.Slot) {
 	stats := make(map[phase0.Slot]uint) // TODO(me): replace by proper observability
-	tracer.logger.Info("evicting committee traces", zap.Uint64("current slot", uint64(slot)))
 
-	threshold := slot - getTTL(ttlCommittee)
+	threshold := currentSlot - getTTL(ttlCommittee)
 
 	tracer.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *TypedSyncMap[phase0.Slot, *committeeDutyTrace]) bool {
 		for slot := threshold; ; slot-- {
@@ -86,6 +85,7 @@ func (tracer *InMemTracer) evictCommitteeTraces(slot phase0.Slot) {
 }
 
 func (tracer *InMemTracer) evictValidatorTraces(slot phase0.Slot) {
+	stats := make(map[phase0.Slot]uint) // TODO(me): replace by proper observability
 	tracer.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *TypedSyncMap[phase0.Slot, *validatorDutyTrace]) bool {
 		threshold := slot - getTTL(ttlCommittee)
 		for slot := threshold; ; slot-- {
@@ -116,6 +116,8 @@ func (tracer *InMemTracer) evictValidatorTraces(slot phase0.Slot) {
 					continue
 				}
 
+				stats[slot]++
+
 				savedCount++
 			}
 
@@ -126,4 +128,8 @@ func (tracer *InMemTracer) evictValidatorTraces(slot phase0.Slot) {
 
 		return true
 	})
+
+	for slot, count := range stats {
+		tracer.logger.Info("evicted validator trace", zap.Uint64("slot", uint64(slot)), zap.Uint("count", count))
+	}
 }

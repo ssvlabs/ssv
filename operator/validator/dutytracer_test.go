@@ -69,7 +69,7 @@ func TestValidatorDuty(t *testing.T) {
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
 		tracer.Trace(partSigMsg)
 
-		duties, err := tracer.Store().GetValidatorDuties(bnRole, slot, pubkeys)
+		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
 
@@ -95,7 +95,7 @@ func TestValidatorDuty(t *testing.T) {
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
 		tracer.Trace(partSigMsg)
 
-		duties, err := tracer.Store().GetValidatorDuties(bnRole, slot, pubkeys)
+		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)
@@ -123,7 +123,7 @@ func TestValidatorDuty(t *testing.T) {
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
 		tracer.Trace(proposalMsg)
 
-		duties, err := tracer.Store().GetValidatorDuties(bnRole, slot, pubkeys)
+		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)
@@ -173,7 +173,7 @@ func TestValidatorDuty(t *testing.T) {
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
 		tracer.Trace(prepareMsg)
 
-		duties, err := tracer.Store().GetValidatorDuties(bnRole, slot, pubkeys)
+		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)
@@ -202,7 +202,7 @@ func TestValidatorDuty(t *testing.T) {
 		decidedMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
 		tracer.Trace(decidedMsg)
 
-		duties, err := tracer.Store().GetValidatorDuties(bnRole, slot, pubkeys)
+		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)
@@ -235,7 +235,7 @@ func TestValidatorDuty(t *testing.T) {
 		commitMsg.SignedSSVMessage.OperatorIDs = nil
 		tracer.Trace(commitMsg)
 
-		duties, err := tracer.Store().GetValidatorDuties(bnRole, slot, pubkeys)
+		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)
@@ -264,7 +264,7 @@ func TestValidatorDuty(t *testing.T) {
 		roundChangeMsg := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		tracer.Trace(roundChangeMsg)
 
-		duties, err := tracer.Store().GetValidatorDuties(bnRole, slot, pubkeys)
+		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)
@@ -295,7 +295,7 @@ func TestValidatorDuty(t *testing.T) {
 		roundChangeMsg.Body.(*specqbft.Message).Round = 2
 		tracer.Trace(roundChangeMsg)
 
-		duties, err := tracer.Store().GetValidatorDuties(bnRole, slot, pubkeys)
+		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
 		require.NotNil(t, duties)
 		require.Len(t, duties, 1)
@@ -371,7 +371,7 @@ func TestCommitteeDuty(t *testing.T) {
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
 		tracer.Trace(partSigMsg)
 
-		duty, err := tracer.Store().GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -403,7 +403,7 @@ func TestCommitteeDuty(t *testing.T) {
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
 		tracer.Trace(proposalMsg)
 
-		duty, err := tracer.Store().GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -431,7 +431,7 @@ func TestCommitteeDuty(t *testing.T) {
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
 		tracer.Trace(prepareMsg)
 
-		duty, err := tracer.Store().GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -459,7 +459,7 @@ func TestCommitteeDuty(t *testing.T) {
 		decided := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, generateDecidedMessage(t, identifier))
 		tracer.Trace(decided)
 
-		duty, err := tracer.Store().GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -502,7 +502,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 		tracer.Trace(commitMsg)
 
-		duty, err := tracer.Store().GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -517,7 +517,7 @@ func TestCommitteeDuty(t *testing.T) {
 		require.NotNil(t, commit0)
 		assert.Equal(t, uint64(1), commit0.Round)
 		assert.Equal(t, wantBeaconRoot, commit0.BeaconRoot)
-		assert.Zero(t, commit0.Signer) // TODO (Moshe)?
+		assert.Zero(t, commit0.Signer) //TODO(Moshe)?
 		require.NotNil(t, commit0.ReceivedTime)
 
 		require.Empty(t, round0.RoundChanges)
@@ -531,7 +531,7 @@ func TestCommitteeDuty(t *testing.T) {
 		roundChangeMsg1 := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		tracer.Trace(roundChangeMsg1)
 
-		duty, err := tracer.Store().GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)
@@ -561,7 +561,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 		tracer.Trace(roundChangeMsg2)
 
-		duty, err := tracer.Store().GetCommitteeDuty(slot, committeeID)
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 		assert.Equal(t, slot, duty.Slot)

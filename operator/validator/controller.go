@@ -196,14 +196,11 @@ type controller struct {
 
 type DutyTracer interface {
 	Trace(*queue.SSVMessage)
-	Store() DutyTraceStore
 	StartEvictionJob(context.Context, slotticker.Provider)
-}
-
-type DutyTraceStore interface {
-	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*model.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
-	GetDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) []qbftstorage.ParticipantsRangeEntry
+	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetCommitteeDecideds(slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 }
 
 // NewController creates a new validator controller instance
