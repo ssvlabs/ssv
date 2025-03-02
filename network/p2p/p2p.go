@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"slices"
@@ -22,7 +21,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/oleiade/lane/v2"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -142,7 +140,7 @@ func New(
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
-		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](15*time.Minute, 5*time.Minute),
+		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](1*time.Minute, 1*time.Minute),
 		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 5*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
@@ -182,23 +180,29 @@ func (n *p2pNetwork) PeersIndex() peers.Index {
 	return n.idx
 }
 
-func (n *p2pNetwork) PeersByTopic() ([]peer.ID, map[string][]peer.ID) {
-	var err error
-	tpcs := n.topicsCtrl.Topics()
-	peerz := make(map[string][]peer.ID, len(tpcs))
-	for _, tpc := range tpcs {
-		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
-		if err != nil {
-			n.interfaceLogger.Error("Cant get peers for specified topic", zap.String("topic", tpc), zap.Error(err))
-			return nil, nil
-		}
-	}
+// Peers returns all peers connected to the network
+func (n *p2pNetwork) Peers() []peer.ID {
 	allPeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
 		n.interfaceLogger.Error("Cant list all peers", zap.Error(err))
-		return nil, nil
+		return nil
 	}
-	return allPeers, peerz
+	return allPeers
+}
+
+// PeersByTopic returns a map of peers grouped by topic
+func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
+	tpcs := n.topicsCtrl.Topics()
+	peerz := make(map[string][]peer.ID, len(tpcs))
+	for _, tpc := range tpcs {
+		peers, err := n.topicsCtrl.Peers(tpc)
+		if err != nil {
+			n.interfaceLogger.Error("Cant get peers for specified topic", zap.String("topic", tpc), zap.Error(err))
+			return nil
+		}
+		peerz[tpc] = peers
+	}
+	return peerz
 }
 
 // Close implements io.Closer
@@ -290,155 +294,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	if err := n.subscribeToFixedSubnets(logger); err != nil {
 		return err
 	}
-
-	return nil
-}
-
-func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
-	startTime := time.Now()
-
-	connector, err := n.getConnector()
-	if err != nil {
-		return err
-	}
-
-	// Spawn a goroutine to deduplicate discovered peers by peer ID.
-	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
-	go n.bootstrapDiscovery(logger, connectorProposals)
-	go func() {
-		// keep discovered peers in a pool so we can choose the best ones
-		for proposal := range connectorProposals {
-			discoveredPeer := discovery.DiscoveredPeer{
-				AddrInfo:       proposal,
-				ConnectRetries: 0,
-			}
-			n.discoveredPeersPool.Set(proposal.ID, discoveredPeer)
-
-			n.interfaceLogger.Debug(
-				"discovery proposed peer, adding it to the pool",
-				zap.String("peer_id", string(proposal.ID)),
-			)
-		}
-	}()
-
-	// Spawn a goroutine to repeatedly select & connect to the best peers discovery offers.
-	// Try to connect only half as many peers as we have outbound slots available because this
-	// leaves some vacant slots for the next iteration - on the next iteration better peers
-	// might show up (so we don't want to "spend" all of these vacant slots at once).
-	// To find the best set of peers to connect we'll:
-	// - iterate over all available candidate-peers (peers discovered so far) and choose the best one
-	//   scoring peers based on how many dead/solo/duo subnets they resolve for us
-	// - add the best peer to "peersToConnect" set assuming (optimistically) we are gonna successfully
-	//   connect with this peer
-	// - repeat those steps from above N times (depending on how many connection slots we have available),
-	//   also taking into account "peersToConnect" set of peers on each consecutive iteration
-	async.Interval(n.ctx, 15*time.Second, func() {
-		// Collect enough peers first to increase the quality of peer selection.
-		const minDiscoveredPeers = 100
-		const minDiscoveryTime = 1 * time.Minute
-		if time.Since(startTime) < minDiscoveryTime &&
-			n.discoveredPeersPool.SlowLen() < minDiscoveredPeers {
-			return
-		}
-
-		// Avoid connecting to more peers if we're already at the limit.
-		inbound, outbound := n.connectionStats()
-		vacantOutboundSlots := n.cfg.MaxPeers - (inbound + outbound)
-		if vacantOutboundSlots <= 0 {
-			n.interfaceLogger.Debug(
-				"no vacant outbound slots, skipping peer selection",
-				zap.Int("inbound_peers", inbound),
-				zap.Int("outbound_peers", outbound),
-				zap.Int("max_peers", n.cfg.MaxPeers),
-			)
-			return
-		}
-
-		peersToConnectMaxCnt := vacantOutboundSlots / 2
-		if peersToConnectMaxCnt == 0 {
-			peersToConnectMaxCnt = 1
-		}
-
-		// ownSubnetSum represents subnet-sum of peers we already have open connections with
-		ownSubnetSum := SubnetSum{}
-		allPeerIDs, err := n.topicsCtrl.Peers("")
-		if err != nil {
-			n.interfaceLogger.Error("Cant list all peers", zap.Error(err))
-			return
-		}
-		for _, pID := range allPeerIDs {
-			pSubnets := n.idx.GetPeerSubnets(pID)
-			ownSubnetSum.addSubnetVector(pSubnets)
-		}
-		// currentSubnetSum represents subnet-sum of our own peers + peers we are about to connect with
-		currentSubnetSum := ownSubnetSum
-
-		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
-		for i := 0; i < peersToConnectMaxCnt; i++ {
-			peersByPriority := lane.NewMaxPriorityQueue[peerWithSubnetSum, float64]()
-			minScore, maxScore := math.MaxFloat64, 0.0
-			n.discoveredPeersPool.Range(func(key peer.ID, value discovery.DiscoveredPeer) bool {
-				const retryLimit = 2
-				if value.ConnectRetries >= retryLimit {
-					// this discovered peer has been tried many times already, we'll ignore him but won't
-					// remove him from discoveredPeersPool (since if we do - discovery might suggest this
-					// peer again essentially resetting this peer's retry attempts counter to 0), eventually
-					// (after some time passes) this peer will automatically get removed from discoveredPeersPool
-					// so it can be discovered again (effectively resetting peer's retry attempts counter to 0)
-					return true
-				}
-
-				if _, ok := peersToConnect[key]; ok {
-					return true // we've already decided to connect this peer, hence we skip it now
-				}
-
-				pSubnets := n.idx.GetPeerSubnets(key)
-				peerScore := currentSubnetSum.scoreSubnetVector(pSubnets)
-
-				peersByPriority.Push(peerWithSubnetSum{
-					p:         value,
-					subnetSum: pSubnets,
-				}, peerScore)
-
-				if minScore > peerScore {
-					minScore = peerScore
-				}
-				if maxScore < peerScore {
-					maxScore = peerScore
-				}
-
-				return true
-			})
-
-			bestPeer, _, ok := peersByPriority.Pop()
-			if !ok {
-				break // means discoveredPeersPool is exhausted, no point in trying to find more of best peers
-			}
-
-			currentSubnetSum.addSubnetVector(bestPeer.subnetSum)
-			peersToConnect[bestPeer.p.ID] = bestPeer.p
-
-			n.interfaceLogger.Debug(
-				fmt.Sprintf("Found the best peer (iteration %d of %d) to try to connect to", i, peersToConnectMaxCnt),
-				zap.Uint("peers_scored_total", peersByPriority.Size()),
-				zap.Float64("min_score", minScore),
-				zap.Float64("max_score", maxScore),
-			)
-		}
-
-		for _, p := range peersToConnect {
-			// updating retry counter for this peer so we eventually skip it after certain number of retries
-			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
-				AddrInfo:       p.AddrInfo,
-				ConnectRetries: p.ConnectRetries + 1,
-			})
-			connector <- p.AddrInfo
-		}
-		n.interfaceLogger.Info(
-			"Proposed discovered peers to try connect to",
-			zap.Int("count", len(peersToConnect)),
-		)
-	})
 
 	return nil
 }
@@ -541,16 +396,19 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 // disregarding immunityQuota entirely (when it comes to outbound connections).
 func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool) map[peer.ID]struct{} {
 	myPeersSet := make(map[peer.ID]struct{})
-	peerz, err := n.topicsCtrl.Peers("")
-	if err != nil {
-		n.interfaceLogger.Error(
-			"Cant get all peers, skipping to keep the network running",
-			zap.Error(err),
-		)
-		return make(map[peer.ID]struct{})
-	}
-	for _, p := range peerz {
-		myPeersSet[p] = struct{}{}
+	for _, tpc := range n.topicsCtrl.Topics() {
+		peerz, err := n.topicsCtrl.Peers(tpc)
+		if err != nil {
+			n.interfaceLogger.Error(
+				"Cant get peers for topic, skipping to keep the network running",
+				zap.String("topic", tpc),
+				zap.Error(err),
+			)
+			continue
+		}
+		for _, p := range peerz {
+			myPeersSet[p] = struct{}{}
+		}
 	}
 
 	myPeers := maps.Keys(myPeersSet)
@@ -824,47 +682,4 @@ func score(desired, actual int) float64 {
 		result *= float64(2.0 + i)
 	}
 	return result
-}
-
-// SubnetSum represents a sum of 0 or more subnets, each byte at index K counts how many of
-// that particular subnet at index K the sum has
-type SubnetSum [commons.SubnetsCount]byte
-
-// addSubnetVector adds subnets contributed by subnet-vector v (each byte in v is 0 or 1) to
-// this subnet-sum
-func (s *SubnetSum) addSubnetVector(v commons.Subnets) {
-	for i := 0; i < commons.SubnetsCount; i++ {
-		s[i] = s[i] + v[i]
-	}
-}
-
-// scoreSubnetVector estimates the score of subnet-vector v (each byte in v is 0 or 1) based on
-// how many dead/solo/duo subnets it contributes to the current subnet-sum (higher score is better)
-func (s *SubnetSum) scoreSubnetVector(v commons.Subnets) (score float64) {
-	const (
-		duoSubnetPriority  = 1
-		soloSubnetPriority = 3
-		deadSubnetPriority = 9
-	)
-
-	for i := 0; i < commons.SubnetsCount; i++ {
-		if v[i] != 1 {
-			continue
-		}
-		if s[i] == 0 {
-			score += deadSubnetPriority
-		}
-		if s[i] == 1 {
-			score += soloSubnetPriority
-		}
-		if s[i] == 2 {
-			score += duoSubnetPriority
-		}
-	}
-	return score
-}
-
-type peerWithSubnetSum struct {
-	p         discovery.DiscoveredPeer
-	subnetSum commons.Subnets
 }
