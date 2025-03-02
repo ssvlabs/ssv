@@ -141,7 +141,7 @@ func New(
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
-		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](1*time.Minute, 1*time.Minute),
+		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](5*time.Minute, 1*time.Minute),
 		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 5*time.Minute),
 	}
 	if err := n.parseTrustedPeers(); err != nil {
