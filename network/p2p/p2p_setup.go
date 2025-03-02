@@ -50,7 +50,7 @@ const (
 	connectorQueueSize = 2048
 	// inboundLimitRatio is the ratio of inbound connections to the total connections
 	// we allow (both inbound and outbound).
-	inboundLimitRatio = float64(0.5)
+	inboundLimitRatio = float64(0.333)
 )
 
 // Setup is used to setup the network
@@ -359,7 +359,7 @@ func (n *p2pNetwork) atInboundLimit() bool {
 	in, _ := n.connectionStats()
 	inboundLimit := n.inboundLimit()
 	if in >= inboundLimit {
-		n.interfaceLogger.Debug(
+		n.logger.Debug(
 			"Preventing inbound connections due to reaching inbound limit",
 			zap.Int("inbound", in),
 			zap.Int("inbound_limit", inboundLimit),
