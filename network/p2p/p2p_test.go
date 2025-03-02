@@ -293,7 +293,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	for {
 		noPeers := false
 		for _, node := range ln.Nodes {
-			peers, _ := node.PeersByTopic()
+			peers := node.PeersByTopic()
 			if len(peers) < 2 {
 				noPeers = true
 			}
