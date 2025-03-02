@@ -27,8 +27,9 @@ func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 	return sum
 }
 
-// Score returns the score of the proposed peer based on the current subnets we are connected to.
-func (a SubnetPeers) Score(b SubnetPeers) uint64 {
+// Score estimates how much the given peer would contribute to our subscribed subnets.
+// Score only considers shared subnets in which we have less than 2 peers.
+func (a SubnetPeers) Score(ours, theirs commons.Subnets) uint64 {
 	const (
 		duoSubnetPriority  = 1
 		soloSubnetPriority = 3
@@ -36,7 +37,7 @@ func (a SubnetPeers) Score(b SubnetPeers) uint64 {
 	)
 	score := uint64(0)
 	for i := range a {
-		if b[i] > 0 {
+		if ours[i] > 0 && theirs[i] > 0 {
 			switch a[i] {
 			case 0:
 				score += deadSubnetPriority
@@ -105,6 +106,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 
 		// Compute number of peers we're connected to for each subnet.
+		ownSubnets := n.SubscribedSubnets()
 		ownSubnetPeers := SubnetPeers{}
 		peersByTopic := n.PeersByTopic()
 		for topic, peers := range peersByTopic {
@@ -139,35 +141,32 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, uint64]()
 			minScore, maxScore := uint64(math.MaxUint64), uint64(0)
 			n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
-				peerSubnets := SubnetPeers{}
-				for subnet, v := range n.PeersIndex().GetPeerSubnets(peerID) {
-					peerSubnets[subnet] = uint16(v)
-				}
-				peerScore := optimisticSubnetPeers.Score(peerSubnets)
-				n.logger.Debug(
-					"TODO: considering peer",
-					fields.PeerID(peerID),
-					zap.String("optimistic_subnet_peers", optimisticSubnetPeers.String()),
-					zap.String("peer_subnets", peerSubnets.String()),
-					zap.Uint64("peer_score", peerScore),
-				)
+				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
+				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
+				// n.logger.Debug(
+				// 	"TODO: considering peer",
+				// 	fields.PeerID(peerID),
+				// 	zap.String("optimistic_subnet_peers", optimisticSubnetPeers.String()),
+				// 	zap.String("peer_subnets", peerSubnets.String()),
+				// 	zap.Uint64("peer_score", peerScore),
+				// )
 
 				const retryLimit = 3
 				if discoveredPeer.ConnectRetries >= retryLimit {
 					// We've exhausted retry attempts for this peer.
-					n.logger.Debug(
-						"TODO: peer already tried max number of times, skipping",
-						fields.PeerID(peerID),
-					)
+					// n.logger.Debug(
+					// 	"TODO: peer already tried max number of times, skipping",
+					// 	fields.PeerID(peerID),
+					// )
 					return true
 				}
 
 				if _, ok := peersToConnect[peerID]; ok {
 					// This peer was already selected.
-					n.logger.Debug(
-						"TODO: peer already selected, skipping",
-						fields.PeerID(peerID),
-					)
+					// n.logger.Debug(
+					// 	"TODO: peer already selected, skipping",
+					// 	fields.PeerID(peerID),
+					// )
 					return true
 				}
 
