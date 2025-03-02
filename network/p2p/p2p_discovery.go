@@ -118,26 +118,22 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			ownSubnetPeers[subnet] = uint16(len(peers))
 		}
 
-		// Limit new connections to half of the remaining outbound slots.
-		maxPeersToConnect := max(vacantOutboundSlots/2, 1)
+		// Limit new connections to the remaining outbound slots.
+		maxPeersToConnect := max(vacantOutboundSlots, 1)
 
 		// Repeatedly select the next best peer to connect to,
 		// adding its subnets to pendingSubnetPeers so that the next selection
 		// is scored assuming the previous peers are already connected.
 		pendingSubnetPeers := SubnetPeers{}
 		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
-		for i := 0; i < maxPeersToConnect; i++ {
-			currentSubnetPeers := ownSubnetPeers.Add(pendingSubnetPeers)
+		for i := range maxPeersToConnect {
+			optimisticSubnetPeers := ownSubnetPeers.Add(pendingSubnetPeers)
 			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, uint64]()
 			minScore, maxScore := uint64(math.MaxUint64), uint64(0)
 			n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
-				const retryLimit = 2
+				const retryLimit = 3
 				if discoveredPeer.ConnectRetries >= retryLimit {
-					// this discovered peer has been tried many times already, we'll ignore him but won't
-					// remove him from discoveredPeersPool (since if we do - discovery might suggest this
-					// peer again essentially resetting this peer's retry attempts counter to 0), eventually
-					// (after some time passes) this peer will automatically get removed from discoveredPeersPool
-					// so it can be discovered again (effectively resetting peer's retry attempts counter to 0)
+					// We've exhausted retry attempts for this peer.
 					return true
 				}
 
@@ -152,7 +148,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				for subnet, v := range n.PeersIndex().GetPeerSubnets(peerID) {
 					discPeerSubnetPeer[subnet] = uint16(v)
 				}
-				peerScore := currentSubnetPeers.Score(discPeerSubnetPeer)
+				peerScore := optimisticSubnetPeers.Score(discPeerSubnetPeer)
 				peersByPriority.Push(discoveredPeer, peerScore)
 
 				if minScore > peerScore {
@@ -167,7 +163,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 			bestPeer, _, ok := peersByPriority.Pop()
 			if !ok {
-				break // there is no point in trying to find more of best peers
+				// No more peers.
+				break
 			}
 
 			// Add the selected peer's subnets to pendingSubnetPeers,
@@ -188,9 +185,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			)
 		}
 
-		// Forward the selected peers to the connector.
+		// Forward the selected peers for connection, incrementing the retry counter.
 		for _, p := range peersToConnect {
-			// update retry counter for this peer so we eventually skip it after certain number of retries
 			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
 				AddrInfo:       p.AddrInfo,
 				ConnectRetries: p.ConnectRetries + 1,
