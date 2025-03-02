@@ -21,6 +21,11 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	ekmcore "github.com/ssvlabs/eth2-key-manager/core"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -42,9 +47,6 @@ import (
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 var (
@@ -1366,6 +1368,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		return nil, nil, err
 	}
 
+	dgHandler := doppelganger.NoOpHandler{}
+
 	if useMockCtrl {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -1387,6 +1391,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operator.privateKey,
 			keyManager,
 			bc,
+			dgHandler,
 			WithFullNode(),
 			WithLogger(logger),
 		)
@@ -1425,6 +1430,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operator.privateKey,
 		keyManager,
 		bc,
+		dgHandler,
 		WithFullNode(),
 		WithLogger(logger))
 	if err != nil {

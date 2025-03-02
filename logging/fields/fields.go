@@ -95,6 +95,7 @@ const (
 	FieldType                = "type"
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
+	FieldValidatorIndex      = "validator_index"
 )
 
 func FromBlock(val uint64) zapcore.Field {
@@ -127,6 +128,10 @@ func OperatorPubKey(pubKey []byte) zapcore.Field {
 
 func Validator(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, stringer.HexStringer{Val: pubKey})
+}
+
+func ValidatorIndex(index phase0.ValidatorIndex) zapcore.Field {
+	return zap.Uint64(FieldValidatorIndex, uint64(index))
 }
 
 func DutyExecutorID(senderID []byte) zapcore.Field {

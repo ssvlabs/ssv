@@ -108,6 +108,7 @@ type MultiClient interface {
 	eth2client.EventsProvider
 	eth2client.ValidatorRegistrationsSubmitter
 	eth2client.VoluntaryExitSubmitter
+	eth2client.ValidatorLivenessProvider
 }
 
 type operatorDataStore interface {

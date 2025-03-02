@@ -38,8 +38,8 @@ github.com/aristanetworks/glog v0.0.0-20191112221043-67e8567f59f3/go.mod h1:KASm
 github.com/aristanetworks/goarista v0.0.0-20200805130819-fd197cf57d96 h1:XJH0YfVFKbq782tlNThzN/Ud5qm/cx6LXOA/P6RkTxc=
 github.com/aristanetworks/goarista v0.0.0-20200805130819-fd197cf57d96/go.mod h1:QZe5Yh80Hp1b6JxQdpfSEEe8X7hTyTEZSosSrFf/oJE=
 github.com/aristanetworks/splunk-hec-go v0.3.3/go.mod h1:1VHO9r17b0K7WmOlLb9nTk/2YanvOEnLMUgsFrxBROc=
-github.com/attestantio/go-eth2-client v0.24.0 h1:lGVbcnhlBwRglt1Zs56JOCgXVyLWKFZOmZN8jKhE7Ws=
-github.com/attestantio/go-eth2-client v0.24.0/go.mod h1:/KTLN3WuH1xrJL7ZZrpBoWM1xCCihnFbzequD5L+83o=
+github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc h1:Z8ZheVRqbZsg9wg+OECZGxGglYmVZ7sLAPjaMZR6r6M=
+github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc/go.mod h1:/KTLN3WuH1xrJL7ZZrpBoWM1xCCihnFbzequD5L+83o=
 github.com/bazelbuild/rules_go v0.23.2 h1:Wxu7JjqnF78cKZbsBsARLSXx/jlGaSLCnUV3mTlyHvM=
 github.com/bazelbuild/rules_go v0.23.2/go.mod h1:MC23Dc/wkXEyk3Wpq6lCqz0ZAYOZDw2DR5y3N1q2i7M=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
