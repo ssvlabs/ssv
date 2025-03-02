@@ -77,8 +77,8 @@ type p2pNetwork struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
-	interfaceLogger *zap.Logger // struct logger to log in interface methods that do not accept a logger
-	cfg             *Config
+	logger *zap.Logger // struct logger to log in interface methods that do not accept a logger
+	cfg    *Config
 
 	host         host.Host
 	streamCtrl   streams.StreamController
@@ -130,7 +130,7 @@ func New(
 		parentCtx:               cfg.Ctx,
 		ctx:                     ctx,
 		cancel:                  cancel,
-		interfaceLogger:         logger,
+		logger:                  logger,
 		cfg:                     cfg,
 		msgRouter:               cfg.Router,
 		msgValidator:            cfg.MessageValidator,
@@ -184,7 +184,7 @@ func (n *p2pNetwork) PeersIndex() peers.Index {
 func (n *p2pNetwork) Peers() []peer.ID {
 	allPeers, err := n.topicsCtrl.Peers("")
 	if err != nil {
-		n.interfaceLogger.Error("Cant list all peers", zap.Error(err))
+		n.logger.Error("Cant list all peers", zap.Error(err))
 		return nil
 	}
 	return allPeers
@@ -197,7 +197,7 @@ func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
 	for _, tpc := range tpcs {
 		peers, err := n.topicsCtrl.Peers(tpc)
 		if err != nil {
-			n.interfaceLogger.Error("Cant get peers for specified topic", zap.String("topic", tpc), zap.Error(err))
+			n.logger.Error("Cant get peers for specified topic", zap.String("topic", tpc), zap.Error(err))
 			return nil
 		}
 		peerz[tpc] = peers
@@ -211,16 +211,16 @@ func (n *p2pNetwork) Close() error {
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
 	if err := n.libConnManager.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.disc.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.idx.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close index", zap.Error(err))
+		n.logger.Warn("could not close index", zap.Error(err))
 	}
 	if err := n.topicsCtrl.Close(); err != nil {
-		n.interfaceLogger.Warn("could not close topics controller", zap.Error(err))
+		n.logger.Warn("could not close topics controller", zap.Error(err))
 	}
 	return n.host.Close()
 }
@@ -287,7 +287,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	// TODO - used for testing (to gather more stats on how logs node takes to resolve dead
 	// subnets at node-start)
 	async.Interval(n.ctx, 2*time.Hour, func() {
-		n.interfaceLogger.Info("FORCE-restarting SSV node")
+		n.logger.Info("FORCE-restarting SSV node")
 		os.Exit(0)
 	})
 
@@ -399,7 +399,7 @@ func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool
 	for _, tpc := range n.topicsCtrl.Topics() {
 		peerz, err := n.topicsCtrl.Peers(tpc)
 		if err != nil {
-			n.interfaceLogger.Error(
+			n.logger.Error(
 				"Cant get peers for topic, skipping to keep the network running",
 				zap.String("topic", tpc),
 				zap.Error(err),
@@ -435,7 +435,7 @@ func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool
 		// we shouldn't have more than 1 connection per peer, but if we do we'd want
 		// a warning about it logged, and we'd want to handle it to the best of our ability
 		if len(pConns) > 1 {
-			n.interfaceLogger.Error(
+			n.logger.Error(
 				"PeerProtection: encountered peer we have multiple open connections with (expected 1 at most)",
 				zap.String("peer_id", p.String()),
 				zap.Int("connections_count", len(pConns)),
@@ -444,7 +444,7 @@ func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool
 		for _, pConn := range pConns {
 			connDir := pConn.Stat().Direction
 			if connDir == p2pnet.DirUnknown {
-				n.interfaceLogger.Error(
+				n.logger.Error(
 					"PeerProtection: encountered peer connection with direction Unknown",
 					zap.String("peer_id", p.String()),
 				)
@@ -649,7 +649,7 @@ func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
 	topic := strconv.Itoa(subnet)
 	subnetPeers, err := n.topicsCtrl.Peers(topic)
 	if err != nil {
-		n.interfaceLogger.Debug(
+		n.logger.Debug(
 			"cannot score peer with respect to this subnet, assuming zero contribution",
 			zap.String("topic", topic),
 			zap.Error(fmt.Errorf("could not get topic peers: %w", err)),
