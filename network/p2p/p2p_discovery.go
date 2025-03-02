@@ -28,7 +28,7 @@ func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 }
 
 // Score estimates how much the given peer would contribute to our subscribed subnets.
-// Score only considers shared subnets in which we have less than 2 peers.
+// Score only rewards shared subnets in which we have very few peers.
 func (a SubnetPeers) Score(ours, theirs commons.Subnets) uint64 {
 	const (
 		duoSubnetPriority  = 1
