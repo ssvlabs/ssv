@@ -95,7 +95,7 @@ func TestSubnetPeers_Score_DeadSubnets(t *testing.T) {
 	tests := []struct {
 		name          string
 		theirSubnets  commons.Subnets
-		expectedScore uint64
+		expectedScore float64
 		description   string
 	}{
 		{
@@ -171,7 +171,7 @@ func TestSubnetPeers_Score_MixedSubnets(t *testing.T) {
 	tests := []struct {
 		name          string
 		theirSubnets  commons.Subnets
-		expectedScore uint64
+		expectedScore float64
 		description   string
 	}{
 		{
@@ -271,7 +271,7 @@ func TestSubnetPeers_Score_PeerSelection(t *testing.T) {
 	require.True(t, scoreG >= scoreF, "Peer with all subnets should score at least as high as peer with solo+duo subnets")
 
 	// Check that peer with no shared subnets scores lowest
-	require.Equal(t, uint64(0), scoreH, "Peer with no shared subnets should have zero score")
+	require.Equal(t, float64(0), scoreH, "Peer with no shared subnets should have zero score")
 	require.True(t, scoreC > scoreH, "Even peer with only duo subnet should score higher than peer with no shared subnets")
 }
 
