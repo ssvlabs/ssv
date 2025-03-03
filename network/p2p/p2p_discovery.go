@@ -166,13 +166,18 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 				// Apply backoff penalty for peers with failed connection attempts.
 				if discoveredPeer.Tries > 0 {
-					elapsed := time.Since(discoveredPeer.LastTry)
-					period := min(retryCooldownLimit, retryCooldown*time.Duration(discoveredPeer.Tries))
-					progress := min(1, float64(elapsed)/float64(period))
+					// Calculate the portion of the retry cooldown that has elapsed.
+					cooldown := min(retryCooldownLimit, retryCooldown*time.Duration(discoveredPeer.Tries))
+					waited := time.Since(discoveredPeer.LastTry)
+					progress := min(1, float64(waited)/float64(cooldown))
+
+					// Skip peers still in early cooldown.
 					if progress < 0.1 {
-						// Skip peers still in early cooldown.
 						return true
 					}
+
+					// Reduce the peer score such that the more time has passed,
+					// the lower the penalty becomes.
 					peerScore *= progress
 				}
 
