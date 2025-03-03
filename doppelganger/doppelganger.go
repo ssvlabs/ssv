@@ -110,8 +110,10 @@ func (h *handler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
 		return
 	}
 
-	state.observedQuorum = true
-	h.logger.Info("Validator marked as safe due to observed quorum", fields.ValidatorIndex(validatorIndex))
+	if !state.safe() {
+		state.observedQuorum = true
+		h.logger.Info("Validator marked as safe due to observed quorum", fields.ValidatorIndex(validatorIndex))
+	}
 }
 
 func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorIndex) {
