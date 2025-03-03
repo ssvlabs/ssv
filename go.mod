@@ -36,8 +36,8 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.5.1
-	github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c
+	github.com/ssvlabs/eth2-key-manager v1.5.2-0.20250303133403-3a1b65ebc8a4
+	github.com/ssvlabs/ssv-spec v0.0.0-20250225152506-effaa78d816a
 	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250306233140-f5b3e240c771
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
