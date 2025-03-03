@@ -756,6 +756,7 @@ func saveOperatorPrivKey(
 		}
 	} else if configStoragePrivKeyHash != storedPrivKeyHash &&
 		configStoragePrivKeyLegacyHash != storedPrivKeyHash {
+		// Prevent the node from running with a different key.
 		return fmt.Errorf("operator private key is not matching the one encrypted the storage")
 	}
 
@@ -773,6 +774,7 @@ func saveOperatorPubKeyBase64(nodeStorage operatorstorage.Storage, operatorPubKe
 			return fmt.Errorf("could not save public key: %w", err)
 		}
 	} else if storedPubKey != string(operatorPubKeyBase64) {
+		// Prevent the node from running with a different key.
 		return fmt.Errorf("operator public key is not matching the one in the storage")
 	}
 
