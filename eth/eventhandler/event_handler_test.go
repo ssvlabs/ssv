@@ -25,6 +25,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -1367,6 +1368,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		return nil, nil, err
 	}
 
+	dgHandler := doppelganger.NoOpHandler{}
+
 	if useMockCtrl {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -1388,6 +1391,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operator.privateKey,
 			keyManager,
 			bc,
+			dgHandler,
 			WithFullNode(),
 			WithLogger(logger),
 		)
@@ -1426,6 +1430,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operator.privateKey,
 		keyManager,
 		bc,
+		dgHandler,
 		WithFullNode(),
 		WithLogger(logger))
 	if err != nil {
