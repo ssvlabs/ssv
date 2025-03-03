@@ -154,8 +154,11 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 				// Compute the portion of the retry cooldown that has passed
 				// as a penalty to the peer's score.
-				timeout := retryCooldown * time.Duration(min(discoveredPeer.Tries, 10))
-				retryPenalty := float64(time.Since(discoveredPeer.LastTry) / timeout)
+				retryPenalty := float64(1.0)
+				if discoveredPeer.Tries > 0 && time.Since(discoveredPeer.LastTry) > retryCooldown {
+					timeout := retryCooldown * time.Duration(min(discoveredPeer.Tries, 10))
+					retryPenalty = float64(time.Since(discoveredPeer.LastTry) / timeout)
+				}
 
 				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
 				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets) * retryPenalty
