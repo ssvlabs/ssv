@@ -26,9 +26,8 @@ func (ds *doppelgangerState) decreaseRemainingEpochs() error {
 	return nil
 }
 
-// markAsLive marks the validator as detected live on another node via liveness checks.
-// This means the validator should not be trusted for signing, as it indicates potential duplication.
-// The remaining epochs are set to FarFutureEpoch to ensure it is not considered safe until explicitly reset.
+// resetRemainingEpochs resets the validator's remaining epochs to the initial detection period.
+// This ensures the validator undergoes the full Doppelganger protection period before being marked safe.
 func (ds *doppelgangerState) resetRemainingEpochs() {
 	ds.remainingEpochs = initialRemainingDetectionEpochs
 }
