@@ -271,8 +271,8 @@ func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2ap
 				fields.Epoch(epoch),
 			)
 
-			// Mark the validator as live since it was reported as such by the Beacon node.
-			// This ensures it remains unsafe for signing until explicitly reset.
+			// Reset the validator's remaining epochs to the initial detection period,
+			// ensuring it undergoes the full Doppelganger protection before being marked safe.
 			state.resetRemainingEpochs()
 			continue
 		}
