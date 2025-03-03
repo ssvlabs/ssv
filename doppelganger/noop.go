@@ -16,7 +16,7 @@ func (NoOpHandler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
 	return true
 }
 
-func (NoOpHandler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
+func (NoOpHandler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
 	// No operation
 }
 
