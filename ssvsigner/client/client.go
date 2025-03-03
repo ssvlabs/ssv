@@ -182,17 +182,16 @@ func (c *SSVSignerClient) Sign(sharePubKey []byte, payload web3signer.SignReques
 		}
 	}()
 
-	if resp.StatusCode != http.StatusOK {
-		respBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(respBytes))
-	}
-
-	signature, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	return signature, nil
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	return body, nil
 }
 
 func (c *SSVSignerClient) GetOperatorIdentity() (string, error) {
@@ -208,17 +207,16 @@ func (c *SSVSignerClient) GetOperatorIdentity() (string, error) {
 		}
 	}()
 
-	if resp.StatusCode != http.StatusOK {
-		respBytes, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(respBytes))
-	}
-
-	publicKey, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
 	}
 
-	return string(publicKey), nil
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	return string(body), nil
 }
 
 func (c *SSVSignerClient) OperatorSign(payload []byte) ([]byte, error) {
@@ -234,15 +232,14 @@ func (c *SSVSignerClient) OperatorSign(payload []byte) ([]byte, error) {
 		}
 	}()
 
-	if resp.StatusCode != http.StatusOK {
-		respBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(respBytes))
-	}
-
-	signature, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	return signature, nil
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	return body, nil
 }
