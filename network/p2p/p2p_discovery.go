@@ -176,7 +176,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					}
 
 					// Reduce score based on cooldown progress (penalty decreases over time).
-					peerScore *= 1 - progress
+					peerScore *= progress
 				}
 
 				// Push the peer.
