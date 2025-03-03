@@ -169,13 +169,10 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					elapsed := time.Since(discoveredPeer.LastTry)
 					period := min(retryCooldownLimit, retryCooldown*time.Duration(discoveredPeer.Tries))
 					progress := min(1, float64(elapsed)/float64(period))
-
-					// Skip peers still in early cooldown.
 					if progress < 0.1 {
+						// Skip peers still in early cooldown.
 						return true
 					}
-
-					// Reduce score based on cooldown progress (penalty decreases over time).
 					peerScore *= progress
 				}
 
