@@ -126,6 +126,9 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 		return fmt.Errorf("received status %s", statuses[0])
 	}
 
+	// Bumping slashing protection for both StatusImported and StatusDuplicated.
+	// If web3signer is not used exclusively by a single ssv-signer,
+	// it may return StatusDuplicated if the key has already been added by another ssv-signer.
 	if err := km.BumpSlashingProtection(sharePubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
@@ -143,6 +146,9 @@ func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
 		return fmt.Errorf("received status %s", statuses[0])
 	}
 
+	// Removing slashing protection data even if the key was not found.
+	// If web3signer is not used exclusively by a single ssv-signer,
+	// it may return StatusNotActive/StatusNotFound if the key has already been removed by another ssv-signer.
 	if err := km.RemoveHighestAttestation(pubKey); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
 	}
