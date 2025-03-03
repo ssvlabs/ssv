@@ -18,9 +18,10 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -97,21 +98,32 @@ func WithRetryCount(n int) Option {
 	}
 }
 
-func (km *RemoteKeyManager) AddShare(encryptedShare []byte) error {
-	var statuses []ssvsignerclient.Status
-	var publicKeys [][]byte
-	f := func() error {
-		var err error
-		statuses, publicKeys, err = km.client.AddValidators(encryptedShare)
-		return err
+func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) error {
+	f := func() (any, error) {
+		shareKeys := ssvsignerclient.ShareKeys{
+			EncryptedPrivKey: encryptedSharePrivKey,
+			PublicKey:        sharePubKey,
+		}
+
+		return km.client.AddValidators(shareKeys)
 	}
-	err := km.retryFunc(f, "AddValidators")
+
+	res, err := km.retryFunc(f, "AddValidators")
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
 
+	statuses, ok := res.([]ssvsignerclient.Status)
+	if !ok {
+		return fmt.Errorf("bug: expected []Status, got %T", res)
+	}
+
+	if len(statuses) != 1 {
+		return fmt.Errorf("bug: expected 1 status, got %d", len(statuses))
+	}
+
 	if statuses[0] == ssvsignerclient.StatusImported || statuses[0] == ssvsignerclient.StatusDuplicated {
-		if err := km.BumpSlashingProtection(publicKeys[0]); err != nil {
+		if err := km.BumpSlashingProtection(sharePubKey); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 	}
@@ -137,26 +149,26 @@ func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
 	return nil
 }
 
-func (km *RemoteKeyManager) retryFunc(f func() error, funcName string) error {
+func (km *RemoteKeyManager) retryFunc(f func() (any, error), funcName string) (any, error) {
 	if km.retryCount < 2 {
 		return f()
 	}
 
 	var multiErr error
 	for i := 1; i <= km.retryCount; i++ {
-		err := f()
+		v, err := f()
 		if err == nil {
-			return nil
+			return v, nil
 		}
 		var shareDecryptionError ssvsignerclient.ShareDecryptionError
 		if errors.As(err, &shareDecryptionError) {
-			return ShareDecryptionError(err)
+			return nil, ShareDecryptionError(err)
 		}
 		multiErr = errors.Join(multiErr, err)
 		km.logger.Warn("call failed", zap.Error(err), zap.Int("attempt", i), zap.String("func", funcName))
 	}
 
-	return fmt.Errorf("no successful result after %d attempts: %w", km.retryCount, multiErr)
+	return nil, fmt.Errorf("no successful result after %d attempts: %w", km.retryCount, multiErr)
 }
 
 func (km *RemoteKeyManager) SignBeaconObject(

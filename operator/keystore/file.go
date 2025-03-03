@@ -89,25 +89,20 @@ func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.Op
 
 type Keystore map[string]any
 
-func GenerateShareKeystore(sharePrivateKey []byte, passphrase string) (Keystore, error) {
-	sharePrivateKeyBytes, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivateKey), "0x"))
-	if err != nil {
-		return Keystore{}, fmt.Errorf("could not decode share private key %s: %w", string(sharePrivateKey), err)
-	}
-
-	keystoreCrypto, err := keystorev4.New().Encrypt(sharePrivateKeyBytes, passphrase)
+func GenerateShareKeystore(sharePrivateKey, sharePublicKey []byte, passphrase string) (Keystore, error) {
+	keystoreCrypto, err := keystorev4.New().Encrypt(sharePrivateKey, passphrase)
 	if err != nil {
 		return Keystore{}, fmt.Errorf("encrypt private key: %w", err)
 	}
 
 	sharePrivBLS := &bls.SecretKey{}
-	if err = sharePrivBLS.Deserialize(sharePrivateKeyBytes); err != nil {
+	if err = sharePrivBLS.Deserialize(sharePrivateKey); err != nil {
 		return Keystore{}, fmt.Errorf("share private key to BLS: %w", err)
 	}
 
 	keystoreData := Keystore{
 		"crypto":  keystoreCrypto,
-		"pubkey":  "0x" + hex.EncodeToString(sharePrivBLS.GetPublicKey().Serialize()[:]),
+		"pubkey":  "0x" + hex.EncodeToString(sharePublicKey),
 		"version": 4,
 		"uuid":    uuid.New().String(),
 		"path":    "m/12381/3600/0/0/0",

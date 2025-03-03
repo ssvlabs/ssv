@@ -235,7 +235,7 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if err := eh.keyManager.AddShare(encryptedKey); err != nil {
+		if err := eh.keyManager.AddShare(encryptedKey, share.SharePubKey); err != nil {
 			var shareDecryptionEKMError ekm.ShareDecryptionError
 			if errors.As(err, &shareDecryptionEKMError) {
 				return nil, &MalformedEventError{Err: err}

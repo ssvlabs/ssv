@@ -1,6 +1,7 @@
 package ekm
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -216,7 +217,7 @@ func (km *LocalKeyManager) signBeaconObject(obj ssz.HashRoot, domain phase0.Doma
 	}
 }
 
-func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte) error {
+func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey []byte) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
@@ -224,9 +225,14 @@ func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte) error {
 	if err != nil {
 		return ShareDecryptionError(fmt.Errorf("decrypt: %w", err))
 	}
+
 	sharePrivKey := &bls.SecretKey{}
 	if err := sharePrivKey.SetHexString(string(sharePrivKeyHex)); err != nil {
 		return ShareDecryptionError(fmt.Errorf("decode hex: %w", err))
+	}
+
+	if !bytes.Equal(sharePrivKey.GetPublicKey().Serialize(), sharePubKey) {
+		return ShareDecryptionError(errors.New("share private key does not match public key"))
 	}
 
 	acc, err := km.wallet.AccountByPublicKey(string(sharePrivKeyHex))

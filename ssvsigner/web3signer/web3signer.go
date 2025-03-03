@@ -19,7 +19,7 @@ type Web3Signer struct {
 	httpClient *http.Client
 }
 
-func New(logger *zap.Logger, baseURL string) (*Web3Signer, error) {
+func New(logger *zap.Logger, baseURL string) *Web3Signer {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	return &Web3Signer{
@@ -28,7 +28,7 @@ func New(logger *zap.Logger, baseURL string) (*Web3Signer, error) {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-	}, nil
+	}
 }
 
 // ImportKeystore adds a key to Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT

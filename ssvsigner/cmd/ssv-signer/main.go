@@ -70,10 +70,7 @@ func main() {
 		}
 	}
 
-	web3SignerClient, err := web3signer.New(logger, cli.Web3SignerEndpoint)
-	if err != nil {
-		logger.Fatal("create web3signer client", zap.Error(err))
-	}
+	web3SignerClient := web3signer.New(logger, cli.Web3SignerEndpoint)
 
 	logger.Info("Starting ssv-signer server", zap.String("addr", cli.ListenAddr))
 

@@ -58,25 +58,31 @@ func WithLogger(logger *zap.Logger) Option {
 	}
 }
 
-func (c *SSVSignerClient) AddValidators(encryptedPrivKeys ...[]byte) ([]Status, [][]byte, error) {
-	privKeyStrs := make([]string, 0, len(encryptedPrivKeys))
-	for _, privKey := range encryptedPrivKeys {
-		privKeyStrs = append(privKeyStrs, hex.EncodeToString(privKey))
+type ShareKeys struct {
+	EncryptedPrivKey []byte
+	PublicKey        []byte
+}
+
+func (c *SSVSignerClient) AddValidators(shares ...ShareKeys) ([]Status, error) {
+	encodedShares := make([]server.ShareKeys, 0, len(shares))
+	for _, share := range shares {
+		encodedShares = append(encodedShares, server.ShareKeys{
+			EncryptedPrivKey: hex.EncodeToString(share.EncryptedPrivKey),
+			PublicKey:        hex.EncodeToString(share.PublicKey),
+		})
 	}
 
-	req := server.AddValidatorRequest{
-		EncryptedSharePrivateKeys: privKeyStrs,
-	}
+	req := server.AddValidatorRequest(encodedShares)
 
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("marshal request: %w", err)
+		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/v1/validators/add", c.baseURL)
 	httpResp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(reqBytes))
 	if err != nil {
-		return nil, nil, fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() {
 		if err := httpResp.Body.Close(); err != nil {
@@ -86,39 +92,26 @@ func (c *SSVSignerClient) AddValidators(encryptedPrivKeys ...[]byte) ([]Status, 
 
 	respBytes, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read response body: %w", err)
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
 		if httpResp.StatusCode == http.StatusUnauthorized {
-			return nil, nil, ShareDecryptionError(errors.New(string(respBytes)))
+			return nil, ShareDecryptionError(errors.New(string(respBytes)))
 		}
-		return nil, nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(respBytes))
+		return nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(respBytes))
 	}
 
 	var resp server.AddValidatorResponse
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		return nil, nil, fmt.Errorf("unmarshal response body: %w", err)
+		return nil, fmt.Errorf("unmarshal response body: %w", err)
 	}
 
-	if len(resp.Statuses) != len(encryptedPrivKeys) {
-		return nil, nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Statuses), len(encryptedPrivKeys))
+	if len(resp) != len(shares) {
+		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp), len(shares))
 	}
 
-	if len(resp.PublicKeys) != len(encryptedPrivKeys) {
-		return nil, nil, fmt.Errorf("unexpected public keys length, got %d, expected %d", len(resp.PublicKeys), len(encryptedPrivKeys))
-	}
-
-	publicKeys := make([][]byte, 0, len(resp.PublicKeys))
-	for _, pkStr := range resp.PublicKeys {
-		pk, err := hex.DecodeString(strings.TrimPrefix(pkStr, "0x"))
-		if err != nil {
-			return nil, nil, fmt.Errorf("decode public key: %w", err)
-		}
-		publicKeys = append(publicKeys, pk)
-	}
-
-	return resp.Statuses, publicKeys, nil
+	return resp, nil
 }
 
 func (c *SSVSignerClient) RemoveValidators(sharePubKeys ...[]byte) ([]Status, error) {

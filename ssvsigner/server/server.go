@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/fasthttp/router"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
@@ -55,14 +57,14 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 
 type Status = web3signer.Status
 
-type AddValidatorRequest struct {
-	EncryptedSharePrivateKeys []string `json:"encrypted_share_private_keys"`
+type AddValidatorRequest []ShareKeys
+
+type ShareKeys struct {
+	EncryptedPrivKey string `json:"encrypted_private_key"`
+	PublicKey        string `json:"public_key"`
 }
 
-type AddValidatorResponse struct {
-	Statuses   []Status `json:"statuses"`
-	PublicKeys []string `json:"public_keys"`
-}
+type AddValidatorResponse []Status
 
 func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	body := ctx.PostBody()
@@ -79,24 +81,51 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var encShareKeystores, shareKeystorePasswords, publicKeys []string
+	var encShareKeystores, shareKeystorePasswords []string
 
-	for _, encSharePrivKeyStr := range req.EncryptedSharePrivateKeys {
-		encSharePrivKey, err := hex.DecodeString(encSharePrivKeyStr)
+	for _, share := range req {
+		encPrivKey, err := hex.DecodeString(strings.TrimPrefix(share.EncryptedPrivKey, "0x"))
 		if err != nil {
 			ctx.SetStatusCode(fasthttp.StatusBadRequest)
-			r.writeErr(ctx, fmt.Errorf("failed to decode share as hex: %w", err))
+			r.writeErr(ctx, fmt.Errorf("failed to decode share.EncryptedPrivKey as hex: %w", err))
 			return
 		}
 
-		sharePrivKey, err := r.operatorPrivKey.Decrypt(encSharePrivKey)
+		pubKey, err := hex.DecodeString(strings.TrimPrefix(share.PublicKey, "0x"))
+		if err != nil {
+			ctx.SetStatusCode(fasthttp.StatusBadRequest)
+			r.writeErr(ctx, fmt.Errorf("failed to decode share.PublicKey as hex: %w", err))
+			return
+		}
+
+		sharePrivKeyHex, err := r.operatorPrivKey.Decrypt(encPrivKey)
 		if err != nil {
 			ctx.SetStatusCode(fasthttp.StatusUnauthorized)
 			r.writeErr(ctx, fmt.Errorf("failed to decrypt share: %w", err))
 			return
 		}
 
-		shareKeystore, err := keystore.GenerateShareKeystore(sharePrivKey, r.keystorePasswd)
+		sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
+		if err != nil {
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			r.writeErr(ctx, fmt.Errorf("failed to decode share private key from hex %s: %w", string(sharePrivKeyHex), err))
+			return
+		}
+
+		sharePrivBLS := &bls.SecretKey{}
+		if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			r.writeErr(ctx, fmt.Errorf("failed to parse share private key as BLS %s: %w", string(sharePrivKeyHex), err))
+			return
+		}
+
+		if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), pubKey) {
+			ctx.SetStatusCode(fasthttp.StatusUnauthorized)
+			r.writeErr(ctx, fmt.Errorf("derived public key does not match expected public key"))
+			return
+		}
+
+		shareKeystore, err := keystore.GenerateShareKeystore(sharePrivKey, pubKey, r.keystorePasswd)
 		if err != nil {
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 			r.writeErr(ctx, fmt.Errorf("failed to generate share keystore: %w", err))
@@ -112,13 +141,6 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		encShareKeystores = append(encShareKeystores, string(keystoreJSON))
 		shareKeystorePasswords = append(shareKeystorePasswords, r.keystorePasswd)
-		pubKey, ok := shareKeystore["pubkey"].(string)
-		if !ok {
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			r.writeErr(ctx, fmt.Errorf("failed to find public key in share keystore: %v", shareKeystore))
-			return
-		}
-		publicKeys = append(publicKeys, pubKey)
 	}
 
 	statuses, err := r.web3Signer.ImportKeystore(encShareKeystores, shareKeystorePasswords)
@@ -128,10 +150,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp := AddValidatorResponse{
-		Statuses:   statuses,
-		PublicKeys: publicKeys,
-	}
+	resp := AddValidatorResponse(statuses)
 
 	respJSON, err := json.Marshal(resp)
 	if err != nil {

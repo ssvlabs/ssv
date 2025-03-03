@@ -8,7 +8,7 @@ type KeyManager interface {
 	spectypes.BeaconSigner
 	SlashingProtector
 	// AddShare decrypts and saves an encrypted share private key
-	AddShare(encryptedSharePrivKey []byte) error
+	AddShare(encryptedSharePrivKey, sharePubKey []byte) error
 	// RemoveShare removes a share key
 	RemoveShare(pubKey []byte) error
 }
