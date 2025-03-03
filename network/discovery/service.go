@@ -70,7 +70,6 @@ type DiscoveredPeer struct {
 
 	// Tries keeps track of how many times we tried to connect to this peer.
 	Tries int
-
 	// LastTry is the last time we tried to connect to this peer.
 	LastTry time.Time
 }
