@@ -1,0 +1,308 @@
+package web3signer
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"testing"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+)
+
+func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Web3Signer) {
+	server := httptest.NewServer(handler)
+	t.Cleanup(func() {
+		server.Close()
+	})
+
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	web3Signer := New(logger, server.URL)
+	return server, web3Signer
+}
+
+func TestNew(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		baseURL string
+	}{
+		{
+			name:    "Valid URL",
+			baseURL: "http://localhost:9000",
+		},
+		{
+			name:    "Valid URL with trailing slash",
+			baseURL: "http://localhost:9000/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := New(logger, tt.baseURL)
+			require.NotNil(t, client)
+
+			expectedBaseURL := tt.baseURL
+			if expectedBaseURL[len(expectedBaseURL)-1] == '/' {
+				expectedBaseURL = expectedBaseURL[:len(expectedBaseURL)-1]
+			}
+
+			require.Equal(t, expectedBaseURL, client.baseURL)
+		})
+	}
+}
+
+func TestImportKeystore(t *testing.T) {
+	tests := []struct {
+		name                 string
+		keystoreList         []string
+		keystorePasswordList []string
+		statusCode           int
+		responseBody         ImportKeystoreResponse
+		expectedStatuses     []Status
+		expectError          bool
+	}{
+		{
+			name: "Successful import",
+			keystoreList: []string{
+				`{"crypto":{"kdf":{"function":"scrypt","params":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"message":""},"checksum":{"function":"sha256","params":{},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"cipher":{"function":"aes-128-ctr","params":{"iv":"0123456789abcdef0123456789abcdef"},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},"description":"","pubkey":"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789","path":"","uuid":"00000000-0000-0000-0000-000000000000","version":4}`,
+			},
+			keystorePasswordList: []string{"password123"},
+			statusCode:           http.StatusOK,
+			responseBody: ImportKeystoreResponse{
+				Data: []KeyManagerResponseData{
+					{
+						Status:  "imported",
+						Message: "Key successfully imported",
+					},
+				},
+			},
+			expectedStatuses: []Status{"imported"},
+			expectError:      false,
+		},
+		{
+			name: "Failed import",
+			keystoreList: []string{
+				`{"crypto":{"kdf":{"function":"scrypt","params":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"message":""},"checksum":{"function":"sha256","params":{},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"cipher":{"function":"aes-128-ctr","params":{"iv":"0123456789abcdef0123456789abcdef"},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},"description":"","pubkey":"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789","path":"","uuid":"00000000-0000-0000-0000-000000000000","version":4}`,
+			},
+			keystorePasswordList: []string{"wrongpassword"},
+			statusCode:           http.StatusBadRequest,
+			responseBody: ImportKeystoreResponse{
+				Message: "Failed to import keystore",
+				Data: []KeyManagerResponseData{
+					{
+						Status:  "error",
+						Message: "Invalid password",
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "/eth/v1/keystores", r.URL.Path)
+				require.Equal(t, http.MethodPost, r.Method)
+
+				var req ImportKeystoreRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+
+				if !reflect.DeepEqual(req.Keystores, tt.keystoreList) {
+					t.Errorf("Expected keystores %v but got %v", tt.keystoreList, req.Keystores)
+				}
+				if !reflect.DeepEqual(req.Passwords, tt.keystorePasswordList) {
+					t.Errorf("Expected passwords %v but got %v", tt.keystorePasswordList, req.Passwords)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
+			})
+
+			statuses, err := web3Signer.ImportKeystore(tt.keystoreList, tt.keystorePasswordList)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if !reflect.DeepEqual(statuses, tt.expectedStatuses) {
+					t.Errorf("Expected statuses %v but got %v", tt.expectedStatuses, statuses)
+				}
+			}
+		})
+	}
+}
+
+func TestDeleteKeystore(t *testing.T) {
+	tests := []struct {
+		name             string
+		sharePubKeyList  []string
+		statusCode       int
+		responseBody     DeleteKeystoreResponse
+		expectedStatuses []Status
+		expectError      bool
+	}{
+		{
+			name: "Successful delete",
+			sharePubKeyList: []string{
+				"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			},
+			statusCode: http.StatusOK,
+			responseBody: DeleteKeystoreResponse{
+				Data: []KeyManagerResponseData{
+					{
+						Status:  "deleted",
+						Message: "Key successfully deleted",
+					},
+				},
+			},
+			expectedStatuses: []Status{"deleted"},
+			expectError:      false,
+		},
+		{
+			name: "Failed delete",
+			sharePubKeyList: []string{
+				"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			},
+			statusCode: http.StatusBadRequest,
+			responseBody: DeleteKeystoreResponse{
+				Message: "Failed to delete keystore",
+				Data: []KeyManagerResponseData{
+					{
+						Status:  "error",
+						Message: "Key not found",
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "/eth/v1/keystores", r.URL.Path)
+				require.Equal(t, http.MethodDelete, r.Method)
+
+				var req DeleteKeystoreRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+
+				if !reflect.DeepEqual(req.Pubkeys, tt.sharePubKeyList) {
+					t.Errorf("Expected pubkeys %v but got %v", tt.sharePubKeyList, req.Pubkeys)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
+			})
+
+			// Call DeleteKeystore
+			statuses, err := web3Signer.DeleteKeystore(tt.sharePubKeyList)
+
+			// Verify result
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if !reflect.DeepEqual(statuses, tt.expectedStatuses) {
+					t.Errorf("Expected statuses %v but got %v", tt.expectedStatuses, statuses)
+				}
+			}
+		})
+	}
+}
+
+func TestSign(t *testing.T) {
+	testPayload := SignRequest{
+		Type: AggregationSlot,
+		ForkInfo: ForkInfo{
+			Fork: &phase0.Fork{
+				PreviousVersion: [4]byte{0, 0, 0, 0},
+				CurrentVersion:  [4]byte{1, 0, 0, 0},
+				Epoch:           0,
+			},
+			GenesisValidatorsRoot: phase0.Root{},
+		},
+		AggregationSlot: &AggregationSlotData{
+			Slot: 1,
+		},
+	}
+
+	tests := []struct {
+		name           string
+		sharePubKey    []byte
+		payload        SignRequest
+		statusCode     int
+		responseBody   string
+		expectedResult []byte
+		expectError    bool
+	}{
+		{
+			name:         "Successful sign",
+			sharePubKey:  []byte{0x01, 0x02, 0x03, 0x04},
+			payload:      testPayload,
+			statusCode:   http.StatusOK,
+			responseBody: "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			expectedResult: []byte{
+				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+			},
+			expectError: false,
+		},
+		{
+			name:         "Failed sign",
+			sharePubKey:  []byte{0x01, 0x02, 0x03, 0x04},
+			payload:      testPayload,
+			statusCode:   http.StatusBadRequest,
+			responseBody: `{"message": "Failed to sign"}`,
+			expectError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				expectedPath := fmt.Sprintf("/api/v1/eth2/sign/0x%s", hex.EncodeToString(tt.sharePubKey))
+				require.Equal(t, expectedPath, r.URL.Path)
+				require.Equal(t, http.MethodPost, r.Method)
+
+				var req SignRequest
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					t.Errorf("Failed to decode request body: %v", err)
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				_, err := fmt.Fprint(w, tt.responseBody)
+				require.NoError(t, err)
+			})
+
+			result, err := web3Signer.Sign(tt.sharePubKey, tt.payload)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				if !reflect.DeepEqual(result, tt.expectedResult) {
+					t.Errorf("Expected result %v but got %v", tt.expectedResult, result)
+				}
+			}
+		})
+	}
+}
