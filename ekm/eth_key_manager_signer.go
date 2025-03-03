@@ -50,6 +50,7 @@ type ethKeyManagerSigner struct {
 	storage           Storage
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
+	canSignSlashable  bool
 }
 
 // StorageProvider provides the underlying KeyManager storage.
@@ -69,7 +70,7 @@ type KeyManager interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string) (KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string, canSignSlashable bool) (KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
@@ -106,6 +107,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		storage:           signerStore,
 		domain:            network.DomainType,
 		slashingProtector: slashingProtector,
+		canSignSlashable:  canSignSlashable,
 	}, nil
 }
 
@@ -245,6 +247,9 @@ func (km *ethKeyManagerSigner) IsAttestationSlashable(pk spectypes.ShareValidato
 	if val, err := km.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
 		if err != nil {
 			return err
+		}
+		if km.canSignSlashable {
+			return nil
 		}
 		return errors.Errorf("slashable attestation (%s), not signing", val.Status)
 	}

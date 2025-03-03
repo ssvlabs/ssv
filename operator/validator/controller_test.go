@@ -949,7 +949,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
+	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "", false)
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }
