@@ -4,10 +4,11 @@ import (
 	"log"
 
 	"github.com/alecthomas/kong"
-	"github.com/ssvlabs/ssv/operator/keys"
-	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keystore"
 
 	"github.com/ssvlabs/ssv/ssvsigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -32,7 +33,7 @@ func main() {
 	}
 	defer func() {
 		if err := logger.Sync(); err != nil {
-			log.Println("failed to sync logger", zap.Error(err))
+			log.Println("failed to sync logger: ", err)
 		}
 	}()
 
