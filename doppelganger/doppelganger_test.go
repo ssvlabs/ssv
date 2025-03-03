@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -42,9 +42,12 @@ func TestMarkAsSafe(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
 
 	dg.validatorsState[1] = &doppelgangerState{remainingEpochs: 2}
-	dg.MarkAsSafe(1)
+	dg.ReportQuorum(1)
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(1))
-	require.Equal(t, phase0.Epoch(0), dg.validatorsState[1].remainingEpochs)
+	require.Equal(t, phase0.Epoch(2), dg.validatorsState[1].remainingEpochs)
+	require.Equal(t, true, dg.validatorsState[1].observedQuorum)
+	require.True(t, dg.CanSign(1))
+	require.True(t, dg.validatorsState[1].safe())
 }
 
 func TestUpdateDoppelgangerState(t *testing.T) {
@@ -65,7 +68,7 @@ func TestCheckLiveness(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
 
 	// Prepare doppelganger state
-	dg.validatorsState[1] = &doppelgangerState{remainingEpochs: 2}
+	dg.validatorsState[1] = &doppelgangerState{remainingEpochs: 1}
 	dg.validatorsState[2] = &doppelgangerState{remainingEpochs: 1}
 
 	dg.beaconNode.(*MockBeaconNode).EXPECT().ValidatorLiveness(gomock.Any(), gomock.Any(), gomock.Any()).Return(
@@ -77,11 +80,11 @@ func TestCheckLiveness(t *testing.T) {
 
 	dg.checkLiveness(context.Background(), 0, 0)
 
-	require.Equal(t, true, dg.validatorsState[1].detectedAsLive())           // Marked as permanently unsafe
-	require.Equal(t, phase0.Epoch(0), dg.validatorsState[2].remainingEpochs) // Reduced to 0
+	require.Equal(t, initialRemainingDetectionEpochs, dg.validatorsState[1].remainingEpochs)
+	require.Equal(t, phase0.Epoch(0), dg.validatorsState[2].remainingEpochs)
 
-	require.True(t, dg.validatorsState[1].requiresFurtherChecks())
-	require.False(t, dg.validatorsState[2].requiresFurtherChecks())
+	require.False(t, dg.validatorsState[1].safe())
+	require.True(t, dg.validatorsState[2].safe())
 
 	require.Equal(t, false, dg.CanSign(1))
 	require.Equal(t, true, dg.CanSign(2))
@@ -98,11 +101,11 @@ func TestProcessLivenessData(t *testing.T) {
 		{Index: 2, IsLive: false},
 	})
 
-	require.Equal(t, true, dg.validatorsState[1].detectedAsLive())
+	require.Equal(t, initialRemainingDetectionEpochs, dg.validatorsState[1].remainingEpochs)
 	require.Equal(t, phase0.Epoch(1), dg.validatorsState[2].remainingEpochs)
 
-	require.True(t, dg.validatorsState[1].requiresFurtherChecks())
-	require.True(t, dg.validatorsState[2].requiresFurtherChecks())
+	require.False(t, dg.validatorsState[1].safe())
+	require.False(t, dg.validatorsState[2].safe())
 
 	require.Equal(t, false, dg.CanSign(1))
 	require.Equal(t, false, dg.CanSign(2))
@@ -115,8 +118,8 @@ func TestProcessLivenessData(t *testing.T) {
 	require.Equal(t, phase0.Epoch(1), dg.validatorsState[1].remainingEpochs)
 	require.Equal(t, phase0.Epoch(0), dg.validatorsState[2].remainingEpochs)
 
-	require.True(t, dg.validatorsState[1].requiresFurtherChecks())
-	require.False(t, dg.validatorsState[2].requiresFurtherChecks())
+	require.False(t, dg.validatorsState[1].safe())
+	require.True(t, dg.validatorsState[2].safe())
 
 	require.Equal(t, false, dg.CanSign(1))
 	require.Equal(t, true, dg.CanSign(2))

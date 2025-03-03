@@ -32,9 +32,9 @@ type Provider interface {
 	// Returns true if the validator has passed all required safety checks, false otherwise.
 	CanSign(validatorIndex phase0.ValidatorIndex) bool
 
-	// MarkAsSafe marks a validator as safe for signing, immediately bypassing further Doppelganger checks.
+	// ReportQuorum changes a validator's state to observed quorum, immediately bypassing further Doppelganger checks.
 	// Typically used when a validator successfully completes post-consensus partial sig quorum (attester/proposer).
-	MarkAsSafe(validatorIndex phase0.ValidatorIndex)
+	ReportQuorum(validatorIndex phase0.ValidatorIndex)
 
 	// RemoveValidatorState removes a validator from Doppelganger tracking, clearing its protection status.
 	// Useful when a validator is no longer managed (validator removed or liquidated).
@@ -96,11 +96,11 @@ func (h *handler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
 		return false
 	}
 
-	return !state.requiresFurtherChecks()
+	return state.safe()
 }
 
-// MarkAsSafe marks the validator as safe to sign.
-func (h *handler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
+// ReportQuorum changes a validator's state to observed quorum, marking it as safe to sign in effect.
+func (h *handler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -110,10 +110,8 @@ func (h *handler) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
 		return
 	}
 
-	if state.requiresFurtherChecks() {
-		state.remainingEpochs = 0
-		h.logger.Info("Validator marked as safe", fields.ValidatorIndex(validatorIndex))
-	}
+	state.observedQuorum = true
+	h.logger.Info("Validator marked as safe due to observed quorum", fields.ValidatorIndex(validatorIndex))
 }
 
 func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorIndex) {
@@ -233,7 +231,7 @@ func (h *handler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch pha
 	h.mu.RLock()
 	validatorsToCheck := make([]phase0.ValidatorIndex, 0, len(h.validatorsState))
 	for validatorIndex, state := range h.validatorsState {
-		if state.requiresFurtherChecks() {
+		if !state.safe() {
 			validatorsToCheck = append(validatorsToCheck, validatorIndex)
 		}
 	}
@@ -273,21 +271,9 @@ func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2ap
 				fields.Epoch(epoch),
 			)
 
-			// Mark the validator as live since it was detected producing messages on another node.
-			// This ensures it remains unsafe for signing until explicitly reset.
-			state.markAsLive()
-			continue
-		}
-
-		// If the validator was previously marked as live (detected as active on another node),
-		// but is now considered inactive, we reset the detection period to ensure safety.
-		// Since we just checked for liveness and found it inactive, we reduce the detection period by 1
-		// so that it gets checked again in the next epoch before being marked safe.
-		if state.detectedAsLive() {
-			state.remainingEpochs = initialRemainingDetectionEpochs - 1
-			h.logger.Debug("Validator is no longer live but requires further checks",
-				fields.ValidatorIndex(response.Index),
-				zap.Uint64("remaining_epochs", uint64(state.remainingEpochs)))
+			// Reset the validator's remaining epochs to the initial detection period,
+			// ensuring it undergoes the full Doppelganger protection before being marked safe.
+			state.resetRemainingEpochs()
 			continue
 		}
 
@@ -298,7 +284,8 @@ func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2ap
 			continue
 		}
 
-		if state.requiresFurtherChecks() {
+		// Log if the validator still requires further checks
+		if !state.safe() {
 			h.logger.Debug("Validator still requires further checks",
 				fields.ValidatorIndex(response.Index),
 				zap.Uint64("remaining_epochs", uint64(state.remainingEpochs)))
@@ -314,7 +301,7 @@ func (h *handler) resetDoppelgangerStates() {
 	defer h.mu.Unlock()
 
 	for _, state := range h.validatorsState {
-		state.remainingEpochs = initialRemainingDetectionEpochs
+		state.resetRemainingEpochs()
 	}
 
 	h.logger.Info("All Doppelganger states reset to initial detection epochs")

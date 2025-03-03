@@ -56,16 +56,16 @@ func (mr *MockProviderMockRecorder) CanSign(validatorIndex any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CanSign", reflect.TypeOf((*MockProvider)(nil).CanSign), validatorIndex)
 }
 
-// MarkAsSafe mocks base method.
-func (m *MockProvider) MarkAsSafe(validatorIndex phase0.ValidatorIndex) {
+// ReportQuorum mocks base method.
+func (m *MockProvider) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "MarkAsSafe", validatorIndex)
+	m.ctrl.Call(m, "ReportQuorum", validatorIndex)
 }
 
-// MarkAsSafe indicates an expected call of MarkAsSafe.
-func (mr *MockProviderMockRecorder) MarkAsSafe(validatorIndex any) *gomock.Call {
+// ReportQuorum indicates an expected call of ReportQuorum.
+func (mr *MockProviderMockRecorder) ReportQuorum(validatorIndex any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAsSafe", reflect.TypeOf((*MockProvider)(nil).MarkAsSafe), validatorIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportQuorum", reflect.TypeOf((*MockProvider)(nil).ReportQuorum), validatorIndex)
 }
 
 // RemoveValidatorState mocks base method.

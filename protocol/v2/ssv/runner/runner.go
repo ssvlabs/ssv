@@ -53,7 +53,7 @@ type Runner interface {
 
 type DoppelgangerProvider interface {
 	CanSign(validatorIndex phase0.ValidatorIndex) bool
-	MarkAsSafe(validatorIndex phase0.ValidatorIndex)
+	ReportQuorum(validatorIndex phase0.ValidatorIndex)
 }
 
 var _ Runner = new(CommitteeRunner)
