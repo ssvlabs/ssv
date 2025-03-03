@@ -22,8 +22,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
-
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -66,6 +64,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -86,7 +85,7 @@ type config struct {
 	ConsensusClient              beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config                     `yaml:"p2p"`
 	KeyStore                     KeyStore                         `yaml:"KeyStore"`
-	SSVSignerEndpoint          string                           `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer"`
+	SSVSignerEndpoint            string                           `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer"`
 	Graffiti                     string                           `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals." env-default:"ssv.network" `
 	OperatorPrivateKey           string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	MetricsAPIPort               int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
