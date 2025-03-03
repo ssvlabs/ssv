@@ -99,16 +99,16 @@ func WithRetryCount(n int) Option {
 }
 
 func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) error {
-	f := func() (any, error) {
-		shareKeys := ssvsignerclient.ShareKeys{
-			EncryptedPrivKey: encryptedSharePrivKey,
-			PublicKey:        sharePubKey,
-		}
-
-		return km.client.AddValidators(shareKeys)
+	shareKeys := ssvsignerclient.ShareKeys{
+		EncryptedPrivKey: encryptedSharePrivKey,
+		PublicKey:        sharePubKey,
 	}
 
-	res, err := km.retryFunc(f, "AddValidators")
+	f := func(arg any) (any, error) {
+		return km.client.AddValidators(arg.(ssvsignerclient.ShareKeys))
+	}
+
+	res, err := km.retryFunc(f, shareKeys, "AddValidators")
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
@@ -122,10 +122,12 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 		return fmt.Errorf("bug: expected 1 status, got %d", len(statuses))
 	}
 
-	if statuses[0] == ssvsignerclient.StatusImported || statuses[0] == ssvsignerclient.StatusDuplicated {
-		if err := km.BumpSlashingProtection(sharePubKey); err != nil {
-			return fmt.Errorf("could not bump slashing protection: %w", err)
-		}
+	if statuses[0] == ssvsignerclient.StatusError {
+		return fmt.Errorf("received status %s", statuses[0])
+	}
+
+	if err := km.BumpSlashingProtection(sharePubKey); err != nil {
+		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
 	return nil
@@ -137,26 +139,28 @@ func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
 		return fmt.Errorf("remove validator: %w", err)
 	}
 
-	if statuses[0] == ssvsignerclient.StatusDeleted {
-		if err := km.RemoveHighestAttestation(pubKey); err != nil {
-			return fmt.Errorf("could not remove highest attestation: %w", err)
-		}
-		if err := km.RemoveHighestProposal(pubKey); err != nil {
-			return fmt.Errorf("could not remove highest proposal: %w", err)
-		}
+	if statuses[0] == ssvsignerclient.StatusError {
+		return fmt.Errorf("received status %s", statuses[0])
+	}
+
+	if err := km.RemoveHighestAttestation(pubKey); err != nil {
+		return fmt.Errorf("could not remove highest attestation: %w", err)
+	}
+	if err := km.RemoveHighestProposal(pubKey); err != nil {
+		return fmt.Errorf("could not remove highest proposal: %w", err)
 	}
 
 	return nil
 }
 
-func (km *RemoteKeyManager) retryFunc(f func() (any, error), funcName string) (any, error) {
+func (km *RemoteKeyManager) retryFunc(f func(arg any) (any, error), arg any, funcName string) (any, error) {
 	if km.retryCount < 2 {
-		return f()
+		return f(arg)
 	}
 
 	var multiErr error
 	for i := 1; i <= km.retryCount; i++ {
-		v, err := f()
+		v, err := f(arg)
 		if err == nil {
 			return v, nil
 		}
