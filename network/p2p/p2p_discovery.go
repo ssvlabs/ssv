@@ -188,7 +188,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				// Predict this peer's score by estimating how much it would contribute to our subscribed subnets,
 				// applying backoff penalty for peers with failed connection attempts:
 				// - the more a peer has been tried the less relevant it is (cooldown grows)
-				// - the more time has passed the more relevant peer is (waited grows)
+				// - the more time has passed since last connect attempt the more relevant peer is (waited grows)
 				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
 				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
 				if discoveredPeer.Tries > 0 {
