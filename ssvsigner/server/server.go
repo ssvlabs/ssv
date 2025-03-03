@@ -57,14 +57,18 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 
 type Status = web3signer.Status
 
-type AddValidatorRequest []ShareKeys
+type AddValidatorRequest struct {
+	ShareKeys []ShareKeys `json:"share_keys"`
+}
 
 type ShareKeys struct {
 	EncryptedPrivKey string `json:"encrypted_private_key"`
 	PublicKey        string `json:"public_key"`
 }
 
-type AddValidatorResponse []Status
+type AddValidatorResponse struct {
+	Statuses []Status
+}
 
 func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	body := ctx.PostBody()
@@ -83,7 +87,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 	var encShareKeystores, shareKeystorePasswords []string
 
-	for _, share := range req {
+	for _, share := range req.ShareKeys {
 		encPrivKey, err := hex.DecodeString(strings.TrimPrefix(share.EncryptedPrivKey, "0x"))
 		if err != nil {
 			ctx.SetStatusCode(fasthttp.StatusBadRequest)
@@ -150,7 +154,9 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	resp := AddValidatorResponse(statuses)
+	resp := AddValidatorResponse{
+		Statuses: statuses,
+	}
 
 	respJSON, err := json.Marshal(resp)
 	if err != nil {

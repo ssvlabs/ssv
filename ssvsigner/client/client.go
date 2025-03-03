@@ -75,7 +75,9 @@ func (c *SSVSignerClient) AddValidators(shares ...ShareKeys) ([]Status, error) {
 		})
 	}
 
-	req := server.AddValidatorRequest(encodedShares)
+	req := server.AddValidatorRequest{
+		ShareKeys: encodedShares,
+	}
 
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
@@ -110,11 +112,11 @@ func (c *SSVSignerClient) AddValidators(shares ...ShareKeys) ([]Status, error) {
 		return nil, fmt.Errorf("unmarshal response body: %w", err)
 	}
 
-	if len(resp) != len(shares) {
-		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp), len(shares))
+	if len(resp.Statuses) != len(shares) {
+		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Statuses), len(shares))
 	}
 
-	return resp, nil
+	return resp.Statuses, nil
 }
 
 func (c *SSVSignerClient) RemoveValidators(sharePubKeys ...[]byte) ([]Status, error) {
