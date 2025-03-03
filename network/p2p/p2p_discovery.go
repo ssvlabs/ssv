@@ -55,7 +55,7 @@ func (a SubnetPeers) String() string {
 	var b strings.Builder
 	for i, v := range a {
 		if v > 0 {
-			fmt.Fprintf(&b, "%d:%d ", i, v)
+			_, _ = fmt.Fprintf(&b, "%d:%d ", i, v)
 		}
 	}
 	return b.String()
@@ -83,11 +83,16 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 	}()
 
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
-	// TODO: insert description of the mechanism here below
-	const (
-		retryCooldown      = 30 * time.Second
-		retryCooldownLimit = 300 * time.Second
-	)
+	// Try to connect only half as many peers as we have outbound slots available because this
+	// leaves some vacant slots for the next iteration - on the next iteration better peers
+	// might show up (so we don't want to "spend" all of these vacant slots at once).
+	// To find the best set of peers to connect we'll:
+	// - iterate over all available candidate-peers (peers discovered so far) and choose the best one
+	//   scoring peers based on how many dead/solo/duo subnets they resolve for us
+	// - add the best peer to "peersToConnect" set assuming (optimistically) we are gonna successfully
+	//   connect with this peer
+	// - repeat those steps from above N times (depending on how many connection slots we have available),
+	//   also taking into account "peersToConnect" set of peers on each consecutive iteration
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// Collect enough peers first to increase the quality of peer selection.
 		const minDiscoveryTime = 1 * time.Minute
@@ -124,7 +129,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					zap.String("topic", topic), zap.Int("subnet", int(subnet)))
 				continue
 			}
-			ownSubnetPeers[subnet] = uint16(len(peers))
+			ownSubnetPeers[subnet] = uint16(len(peers)) // nolint: gosec
 		}
 
 		n.logger.Debug("selecting discovered peers",
@@ -142,7 +147,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		for i := range maxPeersToConnect {
 			optimisticSubnetPeers := ownSubnetPeers.Add(pendingSubnetPeers)
 			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, float64]()
-			minScore, maxScore := float64(math.MaxFloat64), float64(0)
+			minScore, maxScore := math.MaxFloat64, float64(0)
 			n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
 				if _, ok := peersToConnect[peerID]; ok {
 					// This peer was already selected.
@@ -155,6 +160,13 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
 				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
+				// Apply backoff penalty for peers with failed connection attempts.
+				if discoveredPeer.Tries > 0 {
+					const maxTries = float64(5)
+					penalty := float64(discoveredPeer.Tries) / maxTries
+					peerScore *= 1 - penalty
+				}
+
 				// n.logger.Debug(
 				// 	"TODO: considering peer",
 				// 	fields.PeerID(peerID),
@@ -162,21 +174,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				// 	zap.String("peer_subnets", peerSubnets.String()),
 				// 	zap.Uint64("peer_score", peerScore),
 				// )
-
-				// Apply backoff penalty for peers with failed connection attempts.
-				if discoveredPeer.Tries > 0 {
-					elapsed := time.Since(discoveredPeer.LastTry)
-					period := min(retryCooldownLimit, retryCooldown*time.Duration(discoveredPeer.Tries))
-					progress := min(1, float64(elapsed)/float64(period))
-
-					// Skip peers still in early cooldown.
-					if progress < 0.1 {
-						return true
-					}
-
-					// Reduce score based on cooldown progress (penalty decreases over time).
-					peerScore *= 1 - progress
-				}
 
 				// Predict this peer's score by adding its subnets to pendingSubnetPeers
 				// and then scoring the total.
