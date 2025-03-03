@@ -151,7 +151,7 @@ var StartNodeCmd = &cobra.Command{
 
 		var operatorPrivKey keys.OperatorPrivateKey
 		var ssvSignerClient *ssvsignerclient.SSVSignerClient
-		var operatorPubKeyBase64 []byte
+		var operatorPubKeyBase64 string
 
 		if usingSSVSigner {
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
@@ -213,7 +213,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 
-		logger.Info("successfully loaded operator keys", zap.String("pubkey", string(operatorPubKeyBase64)))
+		logger.Info("successfully loaded operator keys", zap.String("pubkey", operatorPubKeyBase64))
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
@@ -723,15 +723,15 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 func setupOperatorDataStore(
 	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
-	pubKey []byte,
+	pubKey string,
 ) operatordatastore.OperatorDataStore {
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, pubKey)
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(pubKey))
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: pubKey,
+			PublicKey: []byte(pubKey),
 		}
 	}
 	if operatorData == nil {
@@ -781,17 +781,17 @@ func saveOperatorPrivKey(
 	return nil
 }
 
-func saveOperatorPubKeyBase64(nodeStorage operatorstorage.Storage, operatorPubKeyBase64 []byte) error {
+func saveOperatorPubKeyBase64(nodeStorage operatorstorage.Storage, operatorPubKeyBase64 string) error {
 	storedPubKey, found, err := nodeStorage.GetPublicKey()
 	if err != nil {
 		return fmt.Errorf("could not get public key: %w", err)
 	}
 
 	if !found {
-		if err := nodeStorage.SavePublicKey(string(operatorPubKeyBase64)); err != nil {
+		if err := nodeStorage.SavePublicKey(operatorPubKeyBase64); err != nil {
 			return fmt.Errorf("could not save public key: %w", err)
 		}
-	} else if storedPubKey != string(operatorPubKeyBase64) {
+	} else if storedPubKey != operatorPubKeyBase64 {
 		// Prevent the node from running with a different key.
 		return fmt.Errorf("operator public key is not matching the one in the storage")
 	}

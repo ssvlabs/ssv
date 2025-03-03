@@ -260,7 +260,7 @@ func (r *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
 
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeBytes(ctx, pubKeyB64)
+	r.writeString(ctx, pubKeyB64)
 }
 
 func (r *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {

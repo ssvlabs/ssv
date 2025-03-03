@@ -232,13 +232,13 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
+	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, []byte(encodedPubKey))
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: encodedPubKey,
+			PublicKey: []byte(encodedPubKey),
 		}
 	}
 
