@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/url"
 
 	"github.com/alecthomas/kong"
 	"github.com/valyala/fasthttp"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/keystore"
-
 	"github.com/ssvlabs/ssv/ssvsigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
@@ -45,6 +45,10 @@ func main() {
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
 		zap.Bool("got_share_keystore_passphrase", cli.ShareKeystorePassphrase != ""),
 	)
+
+	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
+		logger.Fatal("invalid WEB3SIGNER_ENDPOINT format", zap.Error(err))
+	}
 
 	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
 		logger.Fatal("either private key or private key file must be set, found none")
