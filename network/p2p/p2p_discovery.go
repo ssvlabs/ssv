@@ -85,7 +85,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
 	// TODO: insert description of the mechanism here below
 	const (
-		retryCooldown = 30 * time.Second
+		retryCooldown      = 30 * time.Second
+		retryCooldownLimit = 300 * time.Second
 	)
 	async.Interval(n.ctx, 15*time.Second, func() {
 		// Collect enough peers first to increase the quality of peer selection.
@@ -152,16 +153,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					return true
 				}
 
-				// Compute the portion of the retry cooldown that has passed
-				// as a penalty to the peer's score.
-				retryPenalty := float64(1.0)
-				if discoveredPeer.Tries > 0 && time.Since(discoveredPeer.LastTry) > retryCooldown {
-					timeout := retryCooldown * time.Duration(min(discoveredPeer.Tries, 10))
-					retryPenalty = float64(time.Since(discoveredPeer.LastTry) / timeout)
-				}
-
 				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
-				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets) * retryPenalty
+				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
 				// n.logger.Debug(
 				// 	"TODO: considering peer",
 				// 	fields.PeerID(peerID),
@@ -169,6 +162,21 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				// 	zap.String("peer_subnets", peerSubnets.String()),
 				// 	zap.Uint64("peer_score", peerScore),
 				// )
+
+				// Apply backoff penalty for peers with failed connection attempts.
+				if discoveredPeer.Tries > 0 {
+					elapsed := time.Since(discoveredPeer.LastTry)
+					period := min(retryCooldownLimit, retryCooldown*time.Duration(discoveredPeer.Tries))
+					progress := min(1, float64(elapsed)/float64(period))
+
+					// Skip peers still in early cooldown.
+					if progress < 0.1 {
+						return true
+					}
+
+					// Reduce score based on cooldown progress (penalty decreases over time).
+					peerScore *= 1 - progress
+				}
 
 				// Predict this peer's score by adding its subnets to pendingSubnetPeers
 				// and then scoring the total.
