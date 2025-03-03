@@ -2,11 +2,11 @@ package p2pv1
 
 import (
 	"fmt"
-	"github.com/sanity-io/litter"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -86,6 +86,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 	// TODO
 	discoveredTopicsFirstTime := hashmap.New[int, time.Duration]()
+	var discoveredTopicsFirstTimeOnce sync.Once
 
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
 	// Try to connect only half as many peers as we have outbound slots available because this
@@ -156,11 +157,18 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		})
 		subscribedTopicsCnt := len(n.topicsCtrl.Topics())
 		if discoveredTopicsFirstTime.SlowLen() >= subscribedTopicsCnt {
-			n.logger.Debug(
-				"ALL SUBSCRIBED TOPICS have been discovered",
-				zap.Int("topics_cnt", subscribedTopicsCnt),
-				zap.String("discovered_topics_times_since_node_start", litter.Sdump(discoveredTopicsFirstTime)),
-			)
+			discoveredTopicsFirstTimeOnce.Do(func() {
+				var result string
+				discoveredTopicsFirstTime.Range(func(i int, duration time.Duration) bool {
+					result += fmt.Sprintf("%d: %s \n", i, duration)
+					return true
+				})
+				n.logger.Debug(
+					"ALL SUBSCRIBED TOPICS have been discovered",
+					zap.Int("topics_cnt", subscribedTopicsCnt),
+					zap.String("discovered_topics_times_since_node_start", result),
+				)
+			})
 		}
 
 		// Limit new connections to the remaining outbound slots.
