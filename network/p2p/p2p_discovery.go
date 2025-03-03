@@ -153,6 +153,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					return true
 				}
 
+				// Predict this peer's score by estimating how much it would contribute to our subscribed subnets.
 				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
 				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
 				// n.logger.Debug(
@@ -178,8 +179,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					peerScore *= 1 - progress
 				}
 
-				// Predict this peer's score by adding its subnets to pendingSubnetPeers
-				// and then scoring the total.
+				// Push the peer.
 				peersByPriority.Push(discoveredPeer, peerScore)
 				minScore = min(minScore, peerScore)
 				maxScore = max(maxScore, peerScore)
