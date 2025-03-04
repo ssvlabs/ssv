@@ -3,6 +3,7 @@ package ekm
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
 	eth2keymanager "github.com/ssvlabs/eth2-key-manager"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/signer"
@@ -237,14 +237,14 @@ func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey []
 
 	acc, err := km.wallet.AccountByPublicKey(string(sharePrivKeyHex))
 	if err != nil && err.Error() != "account not found" {
-		return errors.Wrap(err, "could not check share existence")
+		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc == nil {
 		if err := km.BumpSlashingProtection(sharePrivKey.GetPublicKey().Serialize()); err != nil {
-			return errors.Wrap(err, "could not bump slashing protection")
+			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 		if err := km.saveShare(sharePrivKey.Serialize()); err != nil {
-			return errors.Wrap(err, "could not save share")
+			return fmt.Errorf("could not save share: %w", err)
 		}
 	}
 
@@ -259,17 +259,17 @@ func (km *LocalKeyManager) RemoveShare(pubKey []byte) error {
 
 	acc, err := km.wallet.AccountByPublicKey(pubKeyHex)
 	if err != nil && err.Error() != "account not found" {
-		return errors.Wrap(err, "could not check share existence")
+		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc != nil {
 		if err := km.RemoveHighestAttestation(pubKey); err != nil {
-			return errors.Wrap(err, "could not remove highest attestation")
+			return fmt.Errorf("could not remove highest attestation: %w", err)
 		}
 		if err := km.RemoveHighestProposal(pubKey); err != nil {
-			return errors.Wrap(err, "could not remove highest proposal")
+			return fmt.Errorf("could not remove highest proposal: %w", err)
 		}
 		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {
-			return errors.Wrap(err, "could not delete share")
+			return fmt.Errorf("could not delete share: %w", err)
 		}
 	}
 	return nil
@@ -278,11 +278,11 @@ func (km *LocalKeyManager) RemoveShare(pubKey []byte) error {
 func (km *LocalKeyManager) saveShare(privKey []byte) error {
 	key, err := core.NewHDKeyFromPrivateKey(privKey, "")
 	if err != nil {
-		return errors.Wrap(err, "could not generate HDKey")
+		return fmt.Errorf("could not generate HDKey: %w", err)
 	}
 	account := wallets.NewValidatorAccount("", key, nil, "", nil)
 	if err := km.wallet.AddValidatorAccount(account); err != nil {
-		return errors.Wrap(err, "could not save new account")
+		return fmt.Errorf("could not save new account: %w", err)
 	}
 	return nil
 }
