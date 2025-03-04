@@ -35,7 +35,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
 
-	tracer := NewTracer(context.TODO(), logger, validators, nil, nil, networkconfig.TestNetwork.Beacon.GetBeaconNetwork())
+	tracer := NewTracer(context.TODO(), logger, validators, nil, nil, networkconfig.TestNetwork.Beacon.GetBeaconNetwork(), true)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
@@ -344,7 +344,7 @@ func TestCommitteeDuty(t *testing.T) {
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
 	validators.EXPECT().Committee(committeeID).Return(committee, true)
 
-	tracer := NewTracer(context.TODO(), logger, validators, nil, nil, networkconfig.TestNetwork.Beacon.GetBeaconNetwork())
+	tracer := NewTracer(context.TODO(), logger, validators, nil, nil, networkconfig.TestNetwork.Beacon.GetBeaconNetwork(), true)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
