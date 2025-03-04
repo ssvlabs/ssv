@@ -353,6 +353,190 @@ func (v *ValidatorDutyTrace) GetTree() (*ssz.Node, error) {
 	return ssz.ProofTree(v)
 }
 
+// MarshalSSZ ssz marshals the DiskMsg object
+func (d *DiskMsg) MarshalSSZ() ([]byte, error) {
+	return ssz.MarshalSSZ(d)
+}
+
+// MarshalSSZTo ssz marshals the DiskMsg object to a target array
+func (d *DiskMsg) MarshalSSZTo(buf []byte) (dst []byte, err error) {
+	dst = buf
+	offset := int(17)
+
+	// Offset (0) 'Signed'
+	dst = ssz.WriteOffset(dst, offset)
+	offset += d.Signed.SizeSSZ()
+
+	// Offset (1) 'Spec'
+	dst = ssz.WriteOffset(dst, offset)
+	offset += d.Spec.SizeSSZ()
+
+	// Field (2) 'Kind'
+	dst = ssz.MarshalUint8(dst, d.Kind)
+
+	// Offset (3) 'Qbft'
+	dst = ssz.WriteOffset(dst, offset)
+	offset += d.Qbft.SizeSSZ()
+
+	// Offset (4) 'Sig'
+	dst = ssz.WriteOffset(dst, offset)
+	offset += d.Sig.SizeSSZ()
+
+	// Field (0) 'Signed'
+	if dst, err = d.Signed.MarshalSSZTo(dst); err != nil {
+		return
+	}
+
+	// Field (1) 'Spec'
+	if dst, err = d.Spec.MarshalSSZTo(dst); err != nil {
+		return
+	}
+
+	// Field (3) 'Qbft'
+	if dst, err = d.Qbft.MarshalSSZTo(dst); err != nil {
+		return
+	}
+
+	// Field (4) 'Sig'
+	if dst, err = d.Sig.MarshalSSZTo(dst); err != nil {
+		return
+	}
+
+	return
+}
+
+// UnmarshalSSZ ssz unmarshals the DiskMsg object
+func (d *DiskMsg) UnmarshalSSZ(buf []byte) error {
+	var err error
+	size := uint64(len(buf))
+	if size < 17 {
+		return ssz.ErrSize
+	}
+
+	tail := buf
+	var o0, o1, o3, o4 uint64
+
+	// Offset (0) 'Signed'
+	if o0 = ssz.ReadOffset(buf[0:4]); o0 > size {
+		return ssz.ErrOffset
+	}
+
+	if o0 < 17 {
+		return ssz.ErrInvalidVariableOffset
+	}
+
+	// Offset (1) 'Spec'
+	if o1 = ssz.ReadOffset(buf[4:8]); o1 > size || o0 > o1 {
+		return ssz.ErrOffset
+	}
+
+	// Field (2) 'Kind'
+	d.Kind = ssz.UnmarshallUint8(buf[8:9])
+
+	// Offset (3) 'Qbft'
+	if o3 = ssz.ReadOffset(buf[9:13]); o3 > size || o1 > o3 {
+		return ssz.ErrOffset
+	}
+
+	// Offset (4) 'Sig'
+	if o4 = ssz.ReadOffset(buf[13:17]); o4 > size || o3 > o4 {
+		return ssz.ErrOffset
+	}
+
+	// Field (0) 'Signed'
+	{
+		buf = tail[o0:o1]
+		if err = d.Signed.UnmarshalSSZ(buf); err != nil {
+			return err
+		}
+	}
+
+	// Field (1) 'Spec'
+	{
+		buf = tail[o1:o3]
+		if err = d.Spec.UnmarshalSSZ(buf); err != nil {
+			return err
+		}
+	}
+
+	// Field (3) 'Qbft'
+	{
+		buf = tail[o3:o4]
+		if err = d.Qbft.UnmarshalSSZ(buf); err != nil {
+			return err
+		}
+	}
+
+	// Field (4) 'Sig'
+	{
+		buf = tail[o4:]
+		if err = d.Sig.UnmarshalSSZ(buf); err != nil {
+			return err
+		}
+	}
+	return err
+}
+
+// SizeSSZ returns the ssz encoded size in bytes for the DiskMsg object
+func (d *DiskMsg) SizeSSZ() (size int) {
+	size = 17
+
+	// Field (0) 'Signed'
+	size += d.Signed.SizeSSZ()
+
+	// Field (1) 'Spec'
+	size += d.Spec.SizeSSZ()
+
+	// Field (3) 'Qbft'
+	size += d.Qbft.SizeSSZ()
+
+	// Field (4) 'Sig'
+	size += d.Sig.SizeSSZ()
+
+	return
+}
+
+// HashTreeRoot ssz hashes the DiskMsg object
+func (d *DiskMsg) HashTreeRoot() ([32]byte, error) {
+	return ssz.HashWithDefaultHasher(d)
+}
+
+// HashTreeRootWith ssz hashes the DiskMsg object with a hasher
+func (d *DiskMsg) HashTreeRootWith(hh ssz.HashWalker) (err error) {
+	indx := hh.Index()
+
+	// Field (0) 'Signed'
+	if err = d.Signed.HashTreeRootWith(hh); err != nil {
+		return
+	}
+
+	// Field (1) 'Spec'
+	if err = d.Spec.HashTreeRootWith(hh); err != nil {
+		return
+	}
+
+	// Field (2) 'Kind'
+	hh.PutUint8(d.Kind)
+
+	// Field (3) 'Qbft'
+	if err = d.Qbft.HashTreeRootWith(hh); err != nil {
+		return
+	}
+
+	// Field (4) 'Sig'
+	if err = d.Sig.HashTreeRootWith(hh); err != nil {
+		return
+	}
+
+	hh.Merkleize(indx)
+	return
+}
+
+// GetTree ssz hashes the DiskMsg object
+func (d *DiskMsg) GetTree() (*ssz.Node, error) {
+	return ssz.ProofTree(d)
+}
+
 // MarshalSSZ ssz marshals the DecidedTrace object
 func (d *DecidedTrace) MarshalSSZ() ([]byte, error) {
 	return ssz.MarshalSSZ(d)

@@ -4,10 +4,19 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-//go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace
+type DiskMsg struct {
+	Signed spectypes.SignedSSVMessage
+	Spec   spectypes.SSVMessage
+	Kind   uint8 // 0 - qbft, 1 - sig
+	Qbft   specqbft.Message
+	Sig    spectypes.PartialSignatureMessages
+}
+
+//go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types,../../vendor/github.com/ssvlabs/ssv-spec/qbft --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace,DiskMsg
 type ValidatorDutyTrace struct {
 	ConsensusTrace
 
