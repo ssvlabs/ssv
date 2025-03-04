@@ -5,11 +5,11 @@ import (
 	"net/url"
 
 	"github.com/alecthomas/kong"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/operator/keys"
-	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
