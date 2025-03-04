@@ -75,6 +75,9 @@ const addressLength = 20
 // Note, SSZ encodings generator has some limitations in terms of what types it supports, hence
 // we define a bunch of own types here to satisfy it, see more on this here:
 // https://github.com/ferranbt/fastssz/issues/179#issuecomment-2454371820
+// Warning: SSZ encoding generator v0.1.4 has a bug related to ignoring the inline struct declarations
+// (e.g. 'Name, Address []byte')
+// GitHub issue: (https://github.com/ferranbt/fastssz/issues/188)
 type Share struct {
 	ValidatorIndex      uint64
 	ValidatorPubKey     []byte             `ssz-size:"48"`
