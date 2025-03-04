@@ -647,3 +647,24 @@ func justification(rcj [][]byte) []byte {
 
 	return data
 }
+
+func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
+	tracer := NewTracer(context.TODO(), zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon.GetBeaconNetwork(), true)
+
+	bnVote := &spectypes.BeaconVote{BlockRoot: [32]byte{1, 2, 3}}
+
+	data, _ := bnVote.Encode()
+	root, err := tracer.getSyncCommitteeRoot(1, data)
+	require.NoError(t, err)
+
+	wantRoot := [32]byte{3, 73, 222, 196, 134, 206, 159, 128,
+		166, 167, 30, 61, 93, 176, 31, 245, 206, 128, 55, 43,
+		252, 38, 103, 222, 41, 238, 156, 242, 86, 60, 152, 240}
+	assert.Equal(t, phase0.Root(wantRoot), root)
+}
+
+type mockclient struct{}
+
+func (m mockclient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+	return phase0.Domain{}, nil
+}

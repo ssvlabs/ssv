@@ -14,7 +14,9 @@ const (
 	ttlSyncCommitteeContribution = 2
 	ttlValidatorRegistration     = 2
 	ttlVoluntaryExit             = 2
-	ttlMapping                   = 2
+
+	ttlMapping = 2
+	ttlRoot    = 2
 )
 
 func getTTL(role spectypes.BeaconRole) phase0.Slot {

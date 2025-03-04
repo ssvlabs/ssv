@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	gc "github.com/ssvlabs/ssv/beacon/goclient"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -34,30 +34,48 @@ type InMemTracer struct {
 	// validatorIndex:slot:committeeID
 	validatorIndexToCommitteeLinks *TypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]]
 
+	syncCommitteeRoots *ttlcache.Cache[phase0.Slot, phase0.Root]
+
 	beaconNetwork spectypes.BeaconNetwork
 
+	verifyBLSSignatureFn func(*spectypes.PartialSignatureMessages, *spectypes.SignedSSVMessage) error
+
 	store      *store.DutyTraceStore
-	client     *gc.GoClient
+	client     DomainDataProvider
 	validators registrystorage.ValidatorStore
+}
+
+type DomainDataProvider interface {
+	DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error)
 }
 
 func NewTracer(ctx context.Context,
 	logger *zap.Logger,
 	validators registrystorage.ValidatorStore,
-	client *gc.GoClient,
+	client DomainDataProvider,
 	store *store.DutyTraceStore,
-	beaconNetwork spectypes.BeaconNetwork) *InMemTracer {
+	beaconNetwork spectypes.BeaconNetwork,
+	disableBLSVerfication ...bool,
+) *InMemTracer {
 
-	return &InMemTracer{
+	tracer := &InMemTracer{
 		logger:                         logger,
 		store:                          store,
 		client:                         client,
 		beaconNetwork:                  beaconNetwork,
+		validators:                     validators,
 		committeeTraces:                NewTypedSyncMap[spectypes.CommitteeID, *TypedSyncMap[phase0.Slot, *committeeDutyTrace]](),
 		validatorTraces:                NewTypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]](),
 		validatorIndexToCommitteeLinks: NewTypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]](),
-		validators:                     validators,
+		syncCommitteeRoots:             ttlcache.New(ttlcache.WithTTL[phase0.Slot, phase0.Root](ttlRoot)),
+		verifyBLSSignatureFn:           func(*spectypes.PartialSignatureMessages, *spectypes.SignedSSVMessage) error { return nil },
 	}
+
+	if len(disableBLSVerfication) == 0 {
+		tracer.verifyBLSSignatureFn = tracer.verifyBLSSignature
+	}
+
+	return tracer
 }
 
 func (n *InMemTracer) StartEvictionJob(ctx context.Context, tickerProvider slotticker.Provider) {
@@ -71,9 +89,9 @@ func (n *InMemTracer) StartEvictionJob(ctx context.Context, tickerProvider slott
 			currentSlot := ticker.Slot()
 			n.evictCommitteeTraces(currentSlot)
 			n.evictValidatorTraces(currentSlot)
-			// TODO: do we evict validator committee mapping?
-			// CONFIRM: we store them against a slot?
 			n.evictValidatorCommitteeLinks(currentSlot)
+			// remove old SC roots
+			n.syncCommitteeRoots.DeleteExpired()
 		}
 	}
 }
@@ -108,6 +126,7 @@ func (n *InMemTracer) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes
 		}
 	}
 
+	// or create a new one
 	roleDutyTrace := &model.ValidatorDutyTrace{
 		Slot: slot,
 		Role: role,
@@ -120,7 +139,7 @@ func (n *InMemTracer) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes
 func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole) {
 	switch r {
 	case spectypes.RoleCommittee:
-		panic("unexpected committee role")
+		panic("unexpected committee role") // TODO(me): replace by error?
 	case spectypes.RoleProposer:
 		bnRole = spectypes.BNRoleProposer
 	case spectypes.RoleAggregator:
@@ -357,12 +376,19 @@ func (n *InMemTracer) saveValidatorToCommitteeLink(slot phase0.Slot, msg *specty
 
 		slotToCommittee.Store(slot, committeeID)
 
-		n.logger.Info("store link for", fields.Slot(slot), zap.Uint64("index", uint64(msg.ValidatorIndex)), fields.CommitteeID(committeeID))
+		// TODO(me): remove this
+		// n.logger.Info("store link for", fields.Slot(slot), zap.Uint64("index", uint64(msg.ValidatorIndex)), fields.CommitteeID(committeeID))
 	}
 }
 
-// nolint:unused
 func (n *InMemTracer) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Root, error) {
+	// lookup in cache first
+	cacheItem := n.syncCommitteeRoots.Get(slot)
+	if cacheItem != nil {
+		return cacheItem.Value(), nil
+	}
+
+	// call remote and cache the result
 	var beaconVote = new(spectypes.BeaconVote)
 	if err := beaconVote.Decode(in); err != nil {
 		return phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
@@ -370,19 +396,20 @@ func (n *InMemTracer) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.
 
 	epoch := n.beaconNetwork.EstimatedEpochAtSlot(slot)
 
-	// Root
 	domain, err := n.client.DomainData(epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return phase0.Root{}, fmt.Errorf("get sync committee domain: %w", err)
 	}
 
-	// Eth root
 	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
 
 	root, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
 	if err != nil {
 		return phase0.Root{}, fmt.Errorf("compute sync committee root: %w", err)
 	}
+
+	// cache the result with the same ttl as the committee
+	_ = n.syncCommitteeRoots.Set(slot, root, ttlCommittee)
 
 	return root, nil
 }
@@ -403,17 +430,54 @@ func (n *InMemTracer) populateProposer(round *model.RoundTrace, committeeID spec
 }
 
 func (n *InMemTracer) toMockState(msg *specqbft.Message, operatorIDs []spectypes.OperatorID) *specqbft.State {
-	var mockState = &specqbft.State{}
-	mockState.Height = msg.Height
-	mockState.CommitteeMember = &spectypes.CommitteeMember{
-		Committee: make([]*spectypes.Operator, 0, len(operatorIDs)),
+	// assemble operator IDs into a committee
+	committee := make([]*spectypes.Operator, 0, len(operatorIDs))
+	for _, operatorID := range operatorIDs {
+		committee = append(committee, &spectypes.Operator{OperatorID: operatorID})
 	}
-	for i := 0; i < len(operatorIDs); i++ {
-		mockState.CommitteeMember.Committee = append(mockState.CommitteeMember.Committee, &spectypes.Operator{
-			OperatorID: operatorIDs[i],
-		})
+
+	return &specqbft.State{
+		Height: msg.Height,
+		CommitteeMember: &spectypes.CommitteeMember{
+			Committee: committee,
+		},
 	}
-	return mockState
+}
+
+func (n *InMemTracer) verifyBLSSignature(pSigMessages *spectypes.PartialSignatureMessages, msg *spectypes.SignedSSVMessage) error {
+	for _, msg := range pSigMessages.Messages {
+		sig, err := decodeSig(msg.PartialSignature)
+		if err != nil {
+			return fmt.Errorf("decode partial signature: %w", err)
+		}
+
+		share, found := n.validators.ValidatorByIndex(msg.ValidatorIndex)
+		if !found {
+			return fmt.Errorf("get share by index: %w", err)
+		}
+
+		var sharePubkey spectypes.ShareValidatorPK
+
+		found = false
+		for _, cmt := range share.Committee {
+			if cmt.Signer == msg.Signer {
+				sharePubkey = cmt.SharePubKey
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("share not found in committee by signer")
+		}
+
+		err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
+		if err != nil {
+			return fmt.Errorf("verify reconstructed signature: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
@@ -434,11 +498,11 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				trace.Lock()
 				defer trace.Unlock()
 
-				// first step fill in sync committee roots
+				// fill in sync committee roots
 				// to be later read in 'processPartialSigCommittee'
 				// root, err := n.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
 				// if err != nil {
-				// 	n.logger.Error("get sync committee roots", zap.Error(err))
+				// 	n.logger.Error("get sync committee root", zap.Error(err))
 				// }
 				// trace.syncCommitteeRoot = root
 
@@ -467,19 +531,18 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 						n.logger.Error("decode validator consensus data", zap.Error(err))
 					} else {
 						if qbftMsg.MsgType == specqbft.ProposalMsgType && roleDutyTrace.Validator == 0 {
-							func() {
-								var data = new(spectypes.ValidatorConsensusData)
-								err := data.Decode(msg.SignedSSVMessage.FullData)
-								if err != nil {
-									n.logger.Error("decode validator proposal data", zap.Error(err))
-									return
-								}
+							var data = new(spectypes.ValidatorConsensusData)
+							err := data.Decode(msg.SignedSSVMessage.FullData)
+							if err != nil {
+								n.logger.Error("decode validator proposal data", zap.Error(err))
+							} else {
+								func() {
+									trace.Lock()
+									defer trace.Unlock()
 
-								trace.Lock()
-								defer trace.Unlock()
-
-								roleDutyTrace.Validator = data.Duty.ValidatorIndex
-							}()
+									roleDutyTrace.Validator = data.Duty.ValidatorIndex
+								}()
+							}
 						}
 					}
 				}
@@ -508,32 +571,11 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 		}
 
 		// BLS signature verification
-		for _, msg := range pSigMessages.Messages {
-			sig, err := decodeSig(msg.PartialSignature)
-			if err != nil {
-				n.logger.Error("decode partial signature", zap.Error(err))
-				continue
-			}
-
-			share, found := n.validators.ValidatorByIndex(msg.ValidatorIndex)
-			if !found {
-				n.logger.Error("get share by index", zap.Uint64("validator", uint64(msg.ValidatorIndex)))
-				continue
-			}
-
-			var sharePubkey spectypes.ShareValidatorPK
-			for _, cmt := range share.Committee {
-				if cmt.Signer == msg.Signer {
-					sharePubkey = cmt.SharePubKey
-					break
-				}
-			}
-
-			err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
-			if err != nil {
-				n.logger.Error("bls verification failed", zap.Error(err))
-				return
-			}
+		// called via a member function to allow disabling during
+		// benchmarking for more accurate readings
+		if err = n.verifyBLSSignatureFn(pSigMessages, msg.SignedSSVMessage); err != nil {
+			n.logger.Error("verify bls signature", zap.Error(err))
+			return
 		}
 
 		executorID := msg.MsgID.GetDutyExecutorID()
