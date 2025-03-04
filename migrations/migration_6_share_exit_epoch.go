@@ -105,5 +105,10 @@ func mapShare(share *migration_6_OldStorageShare) *storage.Share {
 		ActivationEpoch: phase0.Epoch(share.ActivationEpoch),
 	}
 
+	/**
+		We cannot directly map migration_6_OldStorageShare to storage.Share because storage.Share
+		contains unexported types ('storageOperator'). Instead, we map to SSVShare first
+		and use storage.FromSSVShare() which has access to set those unexported types.
+	**/
 	return storage.FromSSVShare(domainShare)
 }
