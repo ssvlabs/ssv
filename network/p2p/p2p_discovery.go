@@ -172,7 +172,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 
 		// Limit new connections to the remaining outbound slots.
-		maxPeersToConnect := max(vacantOutboundSlots, 1)
+		maxPeersToConnect := max(vacantOutboundSlots/2, 1)
 
 		// Repeatedly select the next best peer to connect to,
 		// adding its subnets to pendingSubnetPeers so that the next selection
