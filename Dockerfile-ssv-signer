@@ -33,16 +33,18 @@ FROM preparer AS builder
 # Copy files and install app
 COPY . .
 
-RUN --mount=type=cache,target=/root/.cache/go-build \
-  --mount=type=cache,mode=0755,target=/go/pkg \
-  COMMIT=$(git rev-parse HEAD) && \
-  VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
-  CGO_ENABLED=1 GOOS=linux go install \
-  -tags="blst_enabled" \
-  -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
-  ./ssvsigner/cmd/ssv-signer
+#RUN --mount=type=cache,target=/root/.cache/go-build \
+#  --mount=type=cache,mode=0755,target=/go/pkg \
+#  COMMIT=$(git rev-parse HEAD) && \
+#  VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
+#  CGO_ENABLED=1 GOOS=linux go install \
+#  -tags="blst_enabled" \
+#  -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
+#  ./ssvsigner/cmd/ssv-signer
 
-#
+RUN go install -C ./ssvsigner/cmd/ssv-signer
+
+##
 # STEP 3: Prepare image to run the binary
 #
 FROM golang:1.22 AS runner
