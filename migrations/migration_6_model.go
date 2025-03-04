@@ -8,6 +8,8 @@ import (
 
 //go:generate sszgen -path ./migration_6_model.go --objs migration_6_OldStorageShare
 
+var oldSharesPrefix = []byte("shares_ssz/")
+
 const addressLength = 20
 
 type migration_6_OldStorageOperator struct {

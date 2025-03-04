@@ -20,16 +20,16 @@ var migration_6_share_exit_epoch = Migration{
 	Name: migration_6_Name,
 	Run: func(ctx context.Context, l *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		var (
-			storageGetPrefix = storage.SharesDBPrefix(opstorage.OperatorStoragePrefix)
-			storageSetPrefix = opstorage.OperatorStoragePrefix
-			oldShares        = make(map[string]*migration_6_OldStorageShare)
-			sharesToPersist  []basedb.Obj
+			oldSharesPrefix = append(opstorage.OperatorStoragePrefix, oldSharesPrefix...)
+			oldShares       = make(map[string]*migration_6_OldStorageShare)
+			sharesToPersist []basedb.Obj
 		)
+
 		logger := l.With(zap.String("migration_name", migration_6_Name))
 
 		logger.Debug("fetching and converting all shares that need to be migrated")
 
-		err := opt.Db.GetAll(storageGetPrefix, func(i int, obj basedb.Obj) error {
+		err := opt.Db.GetAll(oldSharesPrefix, func(i int, obj basedb.Obj) error {
 			oldShare := &migration_6_OldStorageShare{}
 			if err := oldShare.Decode(obj.Value); err != nil {
 				return fmt.Errorf("error: '%w' decoding share: %v", err, obj.Value)
@@ -64,14 +64,22 @@ var migration_6_share_exit_epoch = Migration{
 			With(zap.Int("shares_len", len(sharesToPersist))).
 			Debug("shares fetched. Persisting new shares")
 
-		err = opt.Db.SetMany(storageSetPrefix, len(sharesToPersist), func(i int) (basedb.Obj, error) {
+		err = opt.Db.SetMany(opstorage.OperatorStoragePrefix, len(sharesToPersist), func(i int) (basedb.Obj, error) {
 			return sharesToPersist[i], nil
 		})
 		if err != nil {
 			return fmt.Errorf("error during 'SetMany' operation, err: '%w'", err)
 		}
 
-		logger.Debug("shares were successfully persisted")
+		logger.
+			With(zap.String("old_prefix", string(oldSharesPrefix))).
+			Debug("shares were successfully persisted. Dropping old prefix")
+
+		if err = opt.Db.DropPrefix(oldSharesPrefix); err != nil {
+			return fmt.Errorf("error during DropPrefix operation: %w", err)
+		}
+
+		logger.Debug("prefix dropped. Executing completion function")
 
 		return completed(opt.Db)
 	},
