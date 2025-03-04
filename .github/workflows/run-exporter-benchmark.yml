@@ -1,7 +1,15 @@
 name: Run exporter benchmark
 run-name: ${{ github.actor }} started workflow 🚀
+
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/exporter-v2
+  pull_request:
+    branches:
+      - feat/exporter-v2
+
 jobs:
   Test-with-LFS:
     runs-on: ubuntu-latest
