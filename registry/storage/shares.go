@@ -10,10 +10,11 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"golang.org/x/exp/maps"
+
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"golang.org/x/exp/maps"
 )
 
 //go:generate sszgen -path ./shares.go --objs Share
@@ -51,7 +52,7 @@ type Shares interface {
 	Drop() error
 
 	// UpdateValidatorsMetadata updates the metadata of the given validators
-	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) ([]*types.SSVShare, error)
 }
 
 type sharesStorage struct {
@@ -356,8 +357,8 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 }
 
 // UpdateValidatorsMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	var shares []*types.SSVShare
+func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) ([]*types.SSVShare, error) {
+	var updatedShares []*types.SSVShare
 
 	s.storageMtx.Lock()
 	defer s.storageMtx.Unlock()
@@ -377,19 +378,36 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			if !exists {
 				continue
 			}
-			share.ValidatorIndex = metadata.Index
-			share.Status = metadata.Status
-			share.ActivationEpoch = metadata.ActivationEpoch
-			shares = append(shares, share)
+
+			// Only update if metadata has changed
+			if share.ValidatorIndex != metadata.Index ||
+				share.Status != metadata.Status ||
+				share.ActivationEpoch != metadata.ActivationEpoch {
+
+				share.ValidatorIndex = metadata.Index
+				share.Status = metadata.Status
+				share.ActivationEpoch = metadata.ActivationEpoch
+				updatedShares = append(updatedShares, share)
+			}
 		}
 
-		return s.validatorStore.handleSharesUpdated(shares...)
+		if len(updatedShares) == 0 {
+			return nil
+		}
+
+		return s.validatorStore.handleSharesUpdated(updatedShares...)
 	}()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return s.saveToDB(nil, shares...)
+	if len(updatedShares) > 0 {
+		if err := s.saveToDB(nil, updatedShares...); err != nil {
+			return nil, err
+		}
+	}
+
+	return updatedShares, nil
 }
 
 // Drop deletes all shares.

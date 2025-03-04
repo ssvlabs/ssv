@@ -185,9 +185,8 @@ type controller struct {
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
 
-	recentlyStartedValidators uint64
-	indicesChange             chan struct{}
-	validatorExitCh           chan duties.ExitDescriptor
+	indicesChange   chan struct{}
+	validatorExitCh chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -539,15 +538,31 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-func (c *controller) startValidatorsForMetadata(_ context.Context, validators metadata.ValidatorMap) (count int) {
+// startValidatorsFromMetadata starts validators that transitioned to attesting due to a metadata update.
+func (c *controller) startValidatorsFromMetadata(_ context.Context, validators []*ssvtypes.SSVShare) (count int) {
 	// TODO: use context
 
+	// Build a map for quick lookup
+	validatorsSet := make(map[spectypes.ValidatorPK]struct{}, len(validators))
+	for _, v := range validators {
+		validatorsSet[v.ValidatorPubKey] = struct{}{}
+	}
+
+	// Filtering shares again ensures:
+	// 1. Validators still exist (not removed or liquidated).
+	// 2. They belong to this operator (ownership check).
+	// 3. They are active and eligible to attest in this epoch.
+	// TODO: Potential race condition: validator might be removed after being detected as active but before being started.
+	operatorID := c.operatorDataStore.GetOperatorID()
+	currentEpoch := c.networkConfig.Beacon.EstimatedCurrentEpoch()
 	shares := c.sharesStorage.List(
 		nil,
+		registrystorage.ByOperatorID(operatorID),
 		registrystorage.ByNotLiquidated(),
-		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
+		registrystorage.ByAttesting(currentEpoch),
 		func(share *ssvtypes.SSVShare) bool {
-			return validators[share.ValidatorPubKey] != nil
+			_, exists := validatorsSet[share.ValidatorPubKey]
+			return exists
 		},
 	)
 
@@ -915,11 +930,8 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
 	}
-	if started {
-		c.recentlyStartedValidators++
-	}
 
-	return true, nil // TODO: what should be returned if c.validatorStart(v) returns false?
+	return started, nil
 }
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {
@@ -933,31 +945,41 @@ func (c *controller) HandleMetadataUpdates(ctx context.Context) {
 	}
 }
 
+// handleMetadataUpdate processes metadata changes for validators.
 func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadata.SyncBatch) error {
-	startedValidators := 0
-	if c.operatorDataStore.GetOperatorID() != 0 {
-		startedValidators = c.startValidatorsForMetadata(ctx, syncBatch.Validators)
+	operatorID := c.operatorDataStore.GetOperatorID()
+	if operatorID == 0 {
+		return nil
 	}
 
-	if startedValidators > 0 || hasNewValidators(syncBatch.IndicesBefore, syncBatch.IndicesAfter) {
-		c.logger.Debug("new validators found after metadata sync",
-			zap.Int("started_validators", startedValidators),
-		)
-		// Refresh duties if there are any new active validators.
-		if !c.reportIndicesChange(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec()) {
-			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
+	// Identify validators that changed state (attesting, slashed, or exited) after the metadata update.
+	attestingShares, slashedShares, exitedShares := detectValidatorStateChanges(syncBatch, operatorID)
+
+	// Start only the validators that became attesting as a result of the metadata update.
+	// We do NOT start slashed or exited validators, as they are no longer eligible to participate.
+	startedValidators := c.startValidatorsFromMetadata(ctx, attestingShares)
+
+	if len(attestingShares) > 0 {
+		// Refresh duties only if there are newly attesting validators.
+		if !c.reportIndicesChange(ctx) {
+			c.logger.Error("failed to notify indices change")
 		}
 	}
 
-	c.logger.Debug("started validators after metadata sync",
-		fields.Count(startedValidators),
-	)
+	if len(attestingShares) > 0 || len(slashedShares) > 0 || len(exitedShares) > 0 {
+		c.logger.Debug("validators state changed after metadata sync",
+			zap.Int("started_validators", startedValidators),
+			zap.Int("attesting_count", len(attestingShares)),
+			zap.Int("slashed_count", len(slashedShares)),
+			zap.Int("exited_count", len(exitedShares)),
+		)
+	}
 
 	return nil
 }
 
-func (c *controller) reportIndicesChange(ctx context.Context, timeout time.Duration) bool {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+func (c *controller) reportIndicesChange(ctx context.Context) bool {
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec())
 	defer cancel()
 
 	select {
@@ -1016,17 +1038,44 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 
 }
 
-func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIndex) bool {
-	m := make(map[phase0.ValidatorIndex]struct{})
-	for _, v := range before {
-		m[v] = struct{}{}
-	}
-	for _, v := range after {
-		if _, ok := m[v]; !ok {
-			return true
+// Compares validator metadata before and after the update to detect state changes.
+// Returns validators that became attesting, slashed, or exited for the given operator.
+func detectValidatorStateChanges(syncBatch metadata.SyncBatch, operatorID spectypes.OperatorID) (attesting, slashed, exited []*ssvtypes.SSVShare) {
+	// Build a map of previous states for quick lookups
+	beforeMap := make(map[spectypes.ValidatorPK]*ssvtypes.SSVShare, len(syncBatch.SharesBefore))
+	for _, share := range syncBatch.SharesBefore {
+		if share.BelongsToOperator(operatorID) {
+			beforeMap[share.ValidatorPubKey] = share
 		}
 	}
-	return false
+
+	attesting = make([]*ssvtypes.SSVShare, 0, len(syncBatch.SharesAfter))
+	slashed = make([]*ssvtypes.SSVShare, 0, len(syncBatch.SharesAfter))
+	exited = make([]*ssvtypes.SSVShare, 0, len(syncBatch.SharesAfter))
+
+	for _, shareAfter := range syncBatch.SharesAfter {
+		shareBefore, exists := beforeMap[shareAfter.ValidatorPubKey]
+		if !exists {
+			continue
+		}
+
+		// Track attesting status changes
+		if !shareBefore.IsAttesting(syncBatch.Epoch) && shareAfter.IsAttesting(syncBatch.Epoch) {
+			attesting = append(attesting, shareAfter)
+		}
+
+		// Track slashed status changes
+		if !shareBefore.Slashed() && shareAfter.Slashed() {
+			slashed = append(slashed, shareAfter)
+		}
+
+		// Track exited status changes
+		if !shareBefore.Exiting() && shareAfter.Exiting() {
+			exited = append(exited, shareAfter)
+		}
+	}
+
+	return attesting, slashed, exited
 }
 
 func SetupCommitteeRunners(

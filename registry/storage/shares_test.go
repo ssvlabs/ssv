@@ -19,6 +19,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -26,9 +30,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 )
 
 func init() {
@@ -121,13 +122,14 @@ func TestSharesStorage(t *testing.T) {
 	require.EqualValues(t, 2, len(validators))
 
 	t.Run("UpdateValidatorMetadata_shareExists", func(t *testing.T) {
-		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+		_, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			validatorShare.ValidatorPubKey: {
 				Index:           3,
 				Status:          eth2apiv1.ValidatorStateActiveOngoing,
 				ActivationEpoch: 4,
 			},
-		}))
+		})
+		require.NoError(t, err)
 	})
 
 	t.Run("List_Filter_ByClusterId", func(t *testing.T) {
@@ -171,13 +173,14 @@ func TestSharesStorage(t *testing.T) {
 	require.Nil(t, share)
 
 	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
-		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+		_, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			validatorShare.ValidatorPubKey: {
 				Index:           3,
 				Status:          2,
 				ActivationEpoch: 4,
 			},
-		}))
+		})
+		require.NoError(t, err)
 	})
 
 	t.Run("Drop", func(t *testing.T) {
@@ -297,9 +300,10 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 		}
 
 		// Update the share with new metadata
-		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+		_, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			testShare.ValidatorPubKey: updatedMetadata,
-		}))
+		})
+		require.NoError(t, err)
 		reopen(t)
 
 		// Ensure the updated share is reflected in validatorStore
@@ -400,13 +404,14 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 					case "add":
 						require.NoError(t, storage.Shares.Save(nil, share1, share2, share3, share4))
 					case "update":
-						require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+						_, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 							share2.ValidatorPubKey: {
 								Status:          updatedShare2.Status,
 								Index:           updatedShare2.ValidatorIndex,
 								ActivationEpoch: updatedShare2.ActivationEpoch,
 							},
-						}))
+						})
+						require.NoError(t, err)
 					case "remove1":
 						require.NoError(t, storage.Shares.Delete(nil, share1.ValidatorPubKey[:]))
 					case "remove4":
