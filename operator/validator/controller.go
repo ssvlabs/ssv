@@ -19,6 +19,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -86,6 +89,7 @@ type ControllerOptions struct {
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
+	DoppelgangerHandler        doppelganger.Provider
 	NetworkConfig              networkconfig.NetworkConfig
 	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte
@@ -224,6 +228,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		//Share:   nil,  // set per validator
 		Signer:              options.BeaconSigner,
 		OperatorSigner:      options.OperatorSigner,
+		DoppelgangerHandler: options.DoppelgangerHandler,
 		DutyRunners:         nil, // set per validator
 		NewDecidedHandler:   options.NewDecidedHandler,
 		FullNode:            options.FullNode,
@@ -1088,6 +1093,7 @@ func SetupCommitteeRunners(
 			options.OperatorSigner,
 			valCheck,
 			dutyGuard,
+			options.DoppelgangerHandler,
 		)
 		if err != nil {
 			return nil, err
@@ -1149,7 +1155,7 @@ func SetupRunners(
 		case spectypes.RoleProposer:
 			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
-			runners[role], err = runner.NewProposerRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0, options.Graffiti)
+			runners[role], err = runner.NewProposerRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:
 			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
