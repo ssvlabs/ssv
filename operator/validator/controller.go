@@ -18,10 +18,8 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	model "github.com/ssvlabs/ssv/exporter/v2"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/doppelganger"
+	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
