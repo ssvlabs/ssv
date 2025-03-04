@@ -33,16 +33,14 @@ FROM preparer AS builder
 # Copy files and install app
 COPY . .
 
-#RUN --mount=type=cache,target=/root/.cache/go-build \
-#  --mount=type=cache,mode=0755,target=/go/pkg \
-#  COMMIT=$(git rev-parse HEAD) && \
-#  VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
-#  CGO_ENABLED=1 GOOS=linux go install \
-#  -tags="blst_enabled" \
-#  -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
-#  ./ssvsigner/cmd/ssv-signer
-
-RUN go install -C ./ssvsigner/cmd/ssv-signer
+RUN --mount=type=cache,target=/root/.cache/go-build \
+  --mount=type=cache,mode=0755,target=/go/pkg \
+  COMMIT=$(git rev-parse HEAD) && \
+  VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
+  CGO_ENABLED=1 GOOS=linux go install -C ./ssvsigner/cmd/ssv-signer \
+  -tags="blst_enabled" \
+  -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" 
+#RUN go install -C ./ssvsigner/cmd/ssv-signer
 
 ##
 # STEP 3: Prepare image to run the binary
@@ -59,7 +57,7 @@ WORKDIR /
 COPY --from=builder /go/bin/ssv-signer /go/bin/ssv-signer
 
 # Expose port for load balancing
-EXPOSE 5678 5000 4000/udp
+EXPOSE 8080
 
 # Force using Go's DNS resolver because Alpine's DNS resolver (when netdns=cgo) may cause issues.
 ENV GODEBUG="netdns=go"
