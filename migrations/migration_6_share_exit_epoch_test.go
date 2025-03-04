@@ -3,6 +3,7 @@ package migrations
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -18,10 +19,10 @@ import (
 
 func TestMigration6ExitEpochField(t *testing.T) {
 	ctx := context.Background()
-	storageGetSharesKey := storage.SharesDBPrefix(opstorage.OperatorStoragePrefix)
+	newStorageGetSharesKey := storage.SharesDBPrefix(opstorage.OperatorStoragePrefix)
 	storageSetSharesKey := opstorage.OperatorStoragePrefix
 
-	t.Run("successfully migrates all shares", func(t *testing.T) {
+	t.Run("successfully migrates all shares from old prefix to new prefix", func(t *testing.T) {
 		options, err := setupOptions(ctx, t)
 		require.NoError(t, err)
 
@@ -37,36 +38,15 @@ func TestMigration6ExitEpochField(t *testing.T) {
 
 		assert.NoError(t, err)
 
-		var persistedShares []*storage.Share
-		err = options.Db.GetAll(storageGetSharesKey, func(i int, o basedb.Obj) error {
-			share := &storage.Share{}
-			err = share.UnmarshalSSZ(o.Value)
-			require.NoError(t, err)
-			persistedShares = append(persistedShares, share)
-			return nil
-		})
-		require.NoError(t, err)
-		assert.Equal(t, initialDBCapacity, len(persistedShares))
-		for _, seededShare := range seededShares {
-			found := false
-			for _, persistedShare := range persistedShares {
-				if bytes.Equal(persistedShare.ValidatorPubKey, seededShare.ValidatorPubKey) {
-					found = true
-					assert.True(t, sharesEqual(seededShare, persistedShare))
-				}
-			}
-			if !found {
-				t.Fatalf("one of the seeded shares was not found after the migration")
-			}
-		}
+		assertMigratedShares(t, options.Db, newStorageGetSharesKey, seededShares)
 	})
 
-	t.Run("runs 'completed' function when no shares to migrate", func(t *testing.T) {
+	t.Run("runs completion function when no errors occur", func(t *testing.T) {
 		options, err := setupOptions(ctx, t)
 		require.NoError(t, err)
 
 		const initialDBCapacity = 50
-		_, err = seedDatabase(initialDBCapacity, options.Db, storageGetSharesKey)
+		_, err = seedDatabase(initialDBCapacity, options.Db, newStorageGetSharesKey)
 		require.NoError(t, err)
 
 		completedExecuted := false
@@ -83,23 +63,58 @@ func TestMigration6ExitEpochField(t *testing.T) {
 		assert.True(t, completedExecuted)
 	})
 
-	t.Run("runs 'completed' function when there are shares to migrate", func(t *testing.T) {
+	t.Run("successfully re-runs migration when completion function returns error", func(t *testing.T) {
 		options, err := setupOptions(ctx, t)
 		require.NoError(t, err)
 
-		completedExecuted := false
+		const initialDBCapacity = 50
+		seededShares, err := seedDatabase(initialDBCapacity, options.Db, storageSetSharesKey)
+		require.NoError(t, err)
+
 		err = migration_6_share_exit_epoch.Run(ctx,
 			logging.TestLogger(t),
 			options,
 			[]byte(migration_6_share_exit_epoch.Name),
-			func(rw basedb.ReadWriter) error {
-				completedExecuted = true
-				return nil
-			})
+			func(rw basedb.ReadWriter) error { return fmt.Errorf("test error") })
+
+		assert.Error(t, err)
+		assert.Equal(t, "test error", err.Error())
+
+		err = migration_6_share_exit_epoch.Run(ctx,
+			logging.TestLogger(t),
+			options,
+			[]byte(migration_6_share_exit_epoch.Name),
+			func(rw basedb.ReadWriter) error { return nil })
 
 		assert.NoError(t, err)
-		assert.True(t, completedExecuted)
+
+		assertMigratedShares(t, options.Db, newStorageGetSharesKey, seededShares)
 	})
+}
+
+func assertMigratedShares(t *testing.T, db basedb.Database, key []byte, seededShares []*migration_6_OldStorageShare) {
+	var persistedShares []*storage.Share
+	err := db.GetAll(key, func(i int, o basedb.Obj) error {
+		share := &storage.Share{}
+		err := share.UnmarshalSSZ(o.Value)
+		require.NoError(t, err)
+		persistedShares = append(persistedShares, share)
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, len(seededShares), len(persistedShares))
+	for _, seededShare := range seededShares {
+		found := false
+		for _, persistedShare := range persistedShares {
+			if bytes.Equal(persistedShare.ValidatorPubKey, seededShare.ValidatorPubKey) {
+				found = true
+				assert.True(t, sharesEqual(seededShare, persistedShare))
+			}
+		}
+		if !found {
+			t.Fatalf("one of the seeded shares was not found after the migration")
+		}
+	}
 }
 
 func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*migration_6_OldStorageShare, error) {
@@ -129,7 +144,7 @@ func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*mig
 		}
 
 		dbShares = append(dbShares, basedb.Obj{
-			Key:   storage.SharesDBKey(share.ValidatorPubKey[:]),
+			Key:   append(oldSharesPrefix, share.ValidatorPubKey[:]...),
 			Value: shareBytes,
 		})
 	}
