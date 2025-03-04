@@ -1,0 +1,22 @@
+name: Run exporter benchmark
+run-name: ${{ github.actor }} started workflow 🚀
+on:
+  workflow_dispatch:
+jobs:
+  Test-with-LFS:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+        with:
+          lfs: true # Ensure Git LFS files are fetched
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Run benchmarks
+        run: |
+          go test -benchmem -run=^$ -bench ^BenchmarkTracer$ github.com/ssvlabs/ssv/operator/validator -v
+      - run: echo "🍏 This job's status is ${{ job.status }}."
