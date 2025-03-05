@@ -635,6 +635,77 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 	})
 }
 
+func (s *RemoteKeyManagerTestSuite) TestWithOptions() {
+
+	rm := &RemoteKeyManager{
+		logger:     zap.NewNop(),
+		retryCount: 1,
+	}
+
+	s.Run("WithLogger", func() {
+		customLogger := zap.NewNop().Named("custom_logger")
+		WithLogger(customLogger)(rm)
+		s.Equal("custom_logger.remote_key_manager", rm.logger.Name())
+	})
+
+	s.Run("WithRetryCount", func() {
+		WithRetryCount(5)(rm)
+		s.Equal(5, rm.retryCount)
+	})
+}
+
+func (s *RemoteKeyManagerTestSuite) TestPublic() {
+
+	mockOperatorPublicKey := new(MockOperatorPublicKey)
+
+	rm := &RemoteKeyManager{
+		operatorPubKey: mockOperatorPublicKey,
+	}
+
+	result := rm.Public()
+	s.Equal(mockOperatorPublicKey, result)
+}
+
+func (s *RemoteKeyManagerTestSuite) TestGetOperatorID() {
+
+	expectedOperatorID := spectypes.OperatorID(42)
+
+	rm := &RemoteKeyManager{
+		getOperatorId: func() spectypes.OperatorID { return expectedOperatorID },
+	}
+
+	result := rm.GetOperatorID()
+	s.Equal(expectedOperatorID, result)
+}
+
+func (s *RemoteKeyManagerTestSuite) TestSignSSVMessage() {
+
+	mockRemoteSigner := new(MockRemoteSigner)
+
+	rm := &RemoteKeyManager{
+		logger:        zap.NewNop(),
+		remoteSigner:  mockRemoteSigner,
+		getOperatorId: func() spectypes.OperatorID { return 1 },
+	}
+
+	message := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+	}
+
+	encodedMsg, err := message.Encode()
+	s.NoError(err)
+
+	expectedSignature := []byte("test_signature")
+
+	mockRemoteSigner.On("OperatorSign", mock.Anything, encodedMsg).Return(expectedSignature, nil)
+
+	signature, err := rm.SignSSVMessage(message)
+
+	s.NoError(err)
+	s.Equal(expectedSignature, signature)
+	mockRemoteSigner.AssertExpectations(s.T())
+}
+
 func TestRemoteKeyManagerTestSuite(t *testing.T) {
 	suite.Run(t, new(RemoteKeyManagerTestSuite))
 }
