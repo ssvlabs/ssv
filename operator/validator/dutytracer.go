@@ -317,6 +317,8 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 
 	if roleDutyTrace.Validator == 0 {
 		roleDutyTrace.Validator = msg.Messages[0].ValidatorIndex
+		// n.validators.(*validatorCache).addNew(pubkey[:], roleDutyTrace.Validator)
+		n.logger.Info("added new validator", fields.Slot(slot), fields.Validator(pubkey[:]), fields.ValidatorIndex(roleDutyTrace.Validator), fields.BeaconRole(role))
 	}
 
 	tr := &model.PartialSigTrace{
@@ -377,7 +379,7 @@ func (n *InMemTracer) saveValidatorToCommitteeLink(slot phase0.Slot, msg *specty
 		slotToCommittee.Store(slot, committeeID)
 
 		// TODO(me): remove this
-		// n.logger.Info("store link for", fields.Slot(slot), zap.Uint64("index", uint64(msg.ValidatorIndex)), fields.CommitteeID(committeeID))
+		n.logger.Info("store link for", fields.Slot(slot), fields.ValidatorIndex(msg.ValidatorIndex), fields.CommitteeID(committeeID))
 	}
 }
 
@@ -414,6 +416,7 @@ func (n *InMemTracer) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.
 	return root, nil
 }
 
+//nolint:unused
 func (n *InMemTracer) populateProposer(round *model.RoundTrace, committeeID spectypes.CommitteeID, subMsg *specqbft.Message) {
 	committee, found := n.validators.Committee(committeeID)
 	if !found {
@@ -429,6 +432,7 @@ func (n *InMemTracer) populateProposer(round *model.RoundTrace, committeeID spec
 	}
 }
 
+//nolint:unused
 func (n *InMemTracer) toMockState(msg *specqbft.Message, operatorIDs []spectypes.OperatorID) *specqbft.State {
 	// assemble operator IDs into a committee
 	committee := make([]*spectypes.Operator, 0, len(operatorIDs))
@@ -509,7 +513,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
 				// TODO(moshe) populate proposer or not?
-				n.populateProposer(round, committeeID, subMsg)
+				// n.populateProposer(round, committeeID, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {

@@ -236,7 +236,8 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			slot := phase0.Slot(s)
 			duty, err := e.TraceStore.GetCommitteeDuty(slot, cmtID)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting duties: %w", err))
+				// return api.Error(fmt.Errorf("error getting duties: %w", err))
+				continue
 			}
 			duties = append(duties, duty)
 		}
@@ -305,7 +306,8 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 			role := spectypes.BeaconRole(r)
 			duties, err := e.TraceStore.GetValidatorDuties(role, slot, pubkeys)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting duties: %w", err))
+				// return api.Error(fmt.Errorf("error getting duties: %w", err))
+				continue
 			}
 			results = append(results, duties...)
 		}
