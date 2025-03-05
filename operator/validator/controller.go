@@ -968,11 +968,14 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 
 	if len(attestingShares) > 0 || len(slashedShares) > 0 || len(exitedShares) > 0 {
 		c.logger.Debug("validators state changed after metadata sync",
-			zap.Int("started_validators", startedValidators),
 			zap.Int("attesting_count", len(attestingShares)),
 			zap.Int("slashed_count", len(slashedShares)),
 			zap.Int("exited_count", len(exitedShares)),
 		)
+	}
+
+	if startedValidators > 0 {
+		c.logger.Debug("started new attesting validators", zap.Int("started_validators", startedValidators))
 	}
 
 	return nil
