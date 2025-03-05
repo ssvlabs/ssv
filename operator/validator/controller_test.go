@@ -18,6 +18,11 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -28,6 +33,7 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -41,9 +47,6 @@ import (
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 const (
@@ -92,6 +95,7 @@ func TestNewController(t *testing.T) {
 	}
 	control := NewController(logger, controllerOptions)
 	require.IsType(t, &controller{}, control)
+	//control.HandleMetadataUpdates()
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
@@ -982,4 +986,211 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 	return s, func() {
 		db.Close()
 	}
+}
+
+func TestHandleMetadataUpdates_ValidatorStateChangedToActive(t *testing.T) {
+	validatorCtrl, mockSharesStorage := prepareController(t)
+
+	sharesBefore := []*types.SSVShare{
+		{
+			Share:  spectypes.Share{Committee: buildOperators(t)},
+			Status: eth2apiv1.ValidatorStateUnknown,
+		},
+	}
+	sharesAfter := []*types.SSVShare{
+		{
+			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			Status: eth2apiv1.ValidatorStateActiveOngoing,
+		},
+	}
+
+	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sharesAfter).AnyTimes()
+
+	syncBatch := metadata.SyncBatch{
+		SharesBefore: sharesBefore,
+		SharesAfter:  sharesAfter,
+	}
+
+	go waitForIndicesChange(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
+}
+
+func TestHandleMetadataUpdates_NoStateChange(t *testing.T) {
+	validatorCtrl, mockSharesStorage := prepareController(t)
+
+	sharesBefore := []*types.SSVShare{
+		{
+			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			Status: eth2apiv1.ValidatorStateActiveOngoing,
+		},
+	}
+	sharesAfter := sharesBefore // No change
+
+	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sharesAfter).AnyTimes()
+
+	syncBatch := metadata.SyncBatch{
+		SharesBefore: sharesBefore,
+		SharesAfter:  sharesAfter,
+	}
+
+	go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
+}
+
+func TestHandleMetadataUpdates_NoStateChange_ActiveToExiting(t *testing.T) {
+	validatorCtrl, mockSharesStorage := prepareController(t)
+
+	sharesBefore := []*types.SSVShare{
+		{
+			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			Status: eth2apiv1.ValidatorStateActiveOngoing,
+		},
+	}
+	sharesAfter := []*types.SSVShare{
+		{
+			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			Status: eth2apiv1.ValidatorStateActiveExiting,
+		},
+	}
+
+	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sharesAfter).AnyTimes()
+
+	syncBatch := metadata.SyncBatch{
+		SharesBefore: sharesBefore,
+		SharesAfter:  sharesAfter,
+	}
+
+	go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
+}
+
+func TestHandleMetadataUpdates_NonCommitteeValidatorStateChangeToActive(t *testing.T) {
+	validatorCtrl, mockSharesStorage := prepareController(t)
+
+	sharesBefore := []*types.SSVShare{
+		{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 10}, {Signer: 11}, {Signer: 12}, {Signer: 13},
+				},
+			},
+			Status: eth2apiv1.ValidatorStatePendingQueued,
+		},
+	}
+	sharesAfter := []*types.SSVShare{
+		{
+			Share: spectypes.Share{
+				Committee: []*spectypes.ShareMember{
+					{Signer: 10}, {Signer: 11}, {Signer: 12}, {Signer: 13},
+				},
+				ValidatorIndex: 1,
+			},
+			Status: eth2apiv1.ValidatorStateActiveOngoing,
+		},
+	}
+
+	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sharesAfter).AnyTimes()
+
+	syncBatch := metadata.SyncBatch{
+		SharesBefore: sharesBefore,
+		SharesAfter:  sharesAfter,
+	}
+
+	go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
+}
+
+func TestHandleMetadataUpdates_ValidatorStateChangedToActiveButDeletedBeforeStarting(t *testing.T) {
+	validatorCtrl, mockSharesStorage := prepareController(t)
+
+	sharesBefore := []*types.SSVShare{
+		{
+			Share:  spectypes.Share{Committee: buildOperators(t)},
+			Status: eth2apiv1.ValidatorStateUnknown,
+		},
+	}
+	sharesAfter := []*types.SSVShare{
+		{
+			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			Status: eth2apiv1.ValidatorStateActiveOngoing,
+		},
+	}
+
+	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]*types.SSVShare{}).AnyTimes() // Validator is deleted
+
+	syncBatch := metadata.SyncBatch{
+		SharesBefore: sharesBefore,
+		SharesAfter:  sharesAfter,
+	}
+
+	go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
+}
+
+func waitForIndicesChange(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
+	select {
+	case <-indicesChange:
+		logger.Debug("indices change received")
+	case <-time.After(timeout):
+		require.FailNow(t, "timed out waiting for indices change")
+	}
+}
+
+func waitForNoAction(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
+	select {
+	case <-indicesChange:
+		require.FailNow(t, "unexpected indices change received")
+	case <-time.After(timeout):
+		logger.Debug("expected: no indices change received")
+	}
+}
+
+func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
+	ctrl := gomock.NewController(t)
+	t.Cleanup(ctrl.Finish) // Ensures gomock is properly cleaned up after the test
+
+	logger := logging.TestLogger(t)
+	ctx := context.Background()
+
+	operators := buildOperators(t)
+	operatorsStorage, done := newOperatorStorageForTest(logger)
+	t.Cleanup(done)
+
+	operatorDataStore := operatordatastore.New(buildOperatorData(operators[0].Signer, "ownerAddress1"))
+	for i, operator := range operators {
+		od := buildOperatorData(operator.Signer, fmt.Sprintf("ownerAddress%d", i))
+		found, err := operatorsStorage.SaveOperatorData(nil, od)
+		require.NoError(t, err)
+		require.False(t, found)
+	}
+
+	mockSharesStorage := mocks.NewMockSharesStorage(ctrl)
+	mockRecipientsStorage := mocks.NewMockRecipients(ctrl)
+	mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+	mockValidatorsMap := validators.New(ctx)
+
+	validatorCtrl := &controller{
+		ctx:               ctx,
+		beacon:            mockBeaconNode,
+		logger:            logger,
+		operatorDataStore: operatorDataStore,
+		operatorsStorage:  operatorsStorage,
+		recipientsStorage: mockRecipientsStorage,
+		sharesStorage:     mockSharesStorage,
+		validatorsMap:     mockValidatorsMap,
+		networkConfig:     networkconfig.TestNetwork,
+		indicesChange:     make(chan struct{}, 1), // Buffered channel for each test
+		validatorOptions: validator.Options{
+			Signer:        spectestingutils.NewTestingKeyManager(),
+			NetworkConfig: networkconfig.TestNetwork,
+		},
+		validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+			return true, nil
+		},
+	}
+
+	mockBeaconNode.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
+	mockRecipientsStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
+
+	return validatorCtrl, mockSharesStorage
 }
