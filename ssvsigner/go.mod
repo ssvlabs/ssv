@@ -8,7 +8,7 @@ require (
 	github.com/fasthttp/router v1.5.4
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/pkg/errors v0.9.1
-	github.com/ssvlabs/ssv v1.2.1-0.20250303231921-de11c780aa6a
+	github.com/ssvlabs/ssv v1.2.1-0.20250305014712-4a3c2acfe181
 	github.com/stretchr/testify v1.10.0
 	github.com/valyala/fasthttp v1.58.0
 	go.uber.org/zap v1.27.0
