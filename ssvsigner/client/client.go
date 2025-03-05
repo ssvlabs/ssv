@@ -2,6 +2,7 @@ package ssvsignerclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -20,12 +21,12 @@ import (
 type Status = server.Status
 
 const (
-	StatusImported   Status = "imported"
-	StatusDuplicated Status = "duplicate"
-	StatusDeleted    Status = "deleted"
-	StatusNotActive  Status = "not_active"
-	StatusNotFound   Status = "not_found"
-	StatusError      Status = "error"
+	StatusImported   = server.StatusImported
+	StatusDuplicated = server.StatusDuplicated
+	StatusDeleted    = server.StatusDeleted
+	StatusNotActive  = server.StatusNotActive
+	StatusNotFound   = server.StatusNotFound
+	StatusError      = server.StatusError
 )
 
 type ShareDecryptionError error
@@ -66,7 +67,43 @@ type ShareKeys struct {
 	PublicKey        []byte
 }
 
-func (c *SSVSignerClient) AddValidators(shares ...ShareKeys) ([]Status, error) {
+func (c *SSVSignerClient) ListValidators(ctx context.Context) ([]string, error) {
+	url := fmt.Sprintf("%s/v1/validators/list", c.baseURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	httpResp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	defer func() {
+		if err := httpResp.Body.Close(); err != nil {
+			c.logger.Error("failed to close http response body", zap.Error(err))
+		}
+	}()
+
+	respBytes, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d", httpResp.StatusCode)
+	}
+
+	var resp server.ListValidatorsResponse
+	if err := json.Unmarshal(respBytes, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response body: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (c *SSVSignerClient) AddValidators(ctx context.Context, shares ...ShareKeys) ([]Status, error) {
 	encodedShares := make([]server.ShareKeys, 0, len(shares))
 	for _, share := range shares {
 		encodedShares = append(encodedShares, server.ShareKeys{
@@ -85,10 +122,18 @@ func (c *SSVSignerClient) AddValidators(shares ...ShareKeys) ([]Status, error) {
 	}
 
 	url := fmt.Sprintf("%s/v1/validators/add", c.baseURL)
-	httpResp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(reqBytes))
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBytes))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
+
 	defer func() {
 		if err := httpResp.Body.Close(); err != nil {
 			c.logger.Error("failed to close http response body", zap.Error(err))
@@ -101,7 +146,7 @@ func (c *SSVSignerClient) AddValidators(shares ...ShareKeys) ([]Status, error) {
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		if httpResp.StatusCode == http.StatusUnauthorized {
+		if httpResp.StatusCode == http.StatusUnprocessableEntity {
 			return nil, ShareDecryptionError(errors.New(string(respBytes)))
 		}
 		return nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(respBytes))
@@ -119,7 +164,7 @@ func (c *SSVSignerClient) AddValidators(shares ...ShareKeys) ([]Status, error) {
 	return resp.Statuses, nil
 }
 
-func (c *SSVSignerClient) RemoveValidators(sharePubKeys ...[]byte) ([]Status, error) {
+func (c *SSVSignerClient) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]Status, error) {
 	pubKeyStrs := make([]string, 0, len(sharePubKeys))
 	for _, pubKey := range sharePubKeys {
 		pubKeyStrs = append(pubKeyStrs, hex.EncodeToString(pubKey))
@@ -135,10 +180,18 @@ func (c *SSVSignerClient) RemoveValidators(sharePubKeys ...[]byte) ([]Status, er
 	}
 
 	url := fmt.Sprintf("%s/v1/validators/remove", c.baseURL)
-	httpResp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(reqBytes))
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBytes))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
+
 	defer func() {
 		if err := httpResp.Body.Close(); err != nil {
 			c.logger.Error("failed to close http response body", zap.Error(err))
@@ -166,7 +219,7 @@ func (c *SSVSignerClient) RemoveValidators(sharePubKeys ...[]byte) ([]Status, er
 	return resp.Statuses, nil
 }
 
-func (c *SSVSignerClient) Sign(sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error) {
+func (c *SSVSignerClient) Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error) {
 	url := fmt.Sprintf("%s/v1/validators/sign/%s", c.baseURL, hex.EncodeToString(sharePubKey))
 
 	data, err := json.Marshal(payload)
@@ -174,74 +227,115 @@ func (c *SSVSignerClient) Sign(sharePubKey []byte, payload web3signer.SignReques
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(data))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
+
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
+		if err := httpResp.Body.Close(); err != nil {
 			c.logger.Error("failed to close http response body", zap.Error(err))
 		}
 	}()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(body))
 	}
 
 	return body, nil
 }
 
-func (c *SSVSignerClient) GetOperatorIdentity() (string, error) {
+func (c *SSVSignerClient) GetOperatorIdentity(ctx context.Context) (string, error) {
 	url := fmt.Sprintf("%s/v1/operator/identity", c.baseURL)
 
-	resp, err := c.httpClient.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+
+	httpResp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
+
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
+		if err := httpResp.Body.Close(); err != nil {
 			c.logger.Error("failed to close http response body", zap.Error(err))
 		}
 	}()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	if httpResp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(body))
 	}
 
 	return string(body), nil
 }
 
-func (c *SSVSignerClient) OperatorSign(payload []byte) ([]byte, error) {
+func (c *SSVSignerClient) OperatorSign(ctx context.Context, payload []byte) ([]byte, error) {
 	url := fmt.Sprintf("%s/v1/operator/sign", c.baseURL)
 
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
+
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
+		if err := httpResp.Body.Close(); err != nil {
 			c.logger.Error("failed to close http response body", zap.Error(err))
 		}
 	}()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(body))
 	}
 
 	return body, nil
+}
+
+func (c *SSVSignerClient) MissingKeys(ctx context.Context, localKeys []string) ([]string, error) {
+	remoteKeys, err := c.ListValidators(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get remote keys: %w", err)
+	}
+
+	remoteKeysSet := make(map[string]struct{}, len(remoteKeys))
+	for _, remoteKey := range remoteKeys {
+		remoteKeysSet[remoteKey] = struct{}{}
+	}
+
+	var missing []string
+	for _, key := range localKeys {
+		if _, ok := remoteKeysSet[key]; !ok {
+			missing = append(missing, key)
+		}
+	}
+
+	return missing, nil
 }

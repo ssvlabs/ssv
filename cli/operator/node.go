@@ -158,7 +158,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Info("using ssv-signer for signing")
 
 			ssvSignerClient = ssvsignerclient.New(cfg.SSVSignerEndpoint, ssvsignerclient.WithLogger(logger))
-			operatorPubKeyString, err := ssvSignerClient.GetOperatorIdentity()
+			operatorPubKeyString, err := ssvSignerClient.GetOperatorIdentity(cmd.Context())
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
 			}
@@ -477,6 +477,10 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to sync metadata on startup", zap.Error(err))
 		}
 
+		if usingSSVSigner {
+			ensureNoMissingKeys(cmd.Context(), logger, nodeStorage, operatorDataStore, ssvSignerClient)
+		}
+
 		// Increase MaxPeers if the operator is subscribed to many subnets.
 		// TODO: use OperatorCommittees when it's fixed.
 		if cfg.P2pNetworkConfig.DynamicMaxPeers {
@@ -549,6 +553,41 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
+}
+
+func ensureNoMissingKeys(
+	ctx context.Context,
+	logger *zap.Logger,
+	nodeStorage operatorstorage.Storage,
+	operatorDataStore operatordatastore.OperatorDataStore,
+	ssvSignerClient *ssvsignerclient.SSVSignerClient,
+) {
+	shares := nodeStorage.Shares().List(nil, registrystorage.ByNotLiquidated())
+	if len(shares) == 0 {
+		return
+	}
+
+	var localKeys []string
+	for _, share := range shares {
+		if operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(operatorDataStore.GetOperatorID()) {
+			localKeys = append(localKeys, hex.EncodeToString(share.SharePubKey))
+		}
+	}
+
+	missingKeys, err := ssvSignerClient.MissingKeys(ctx, localKeys)
+	if err != nil {
+		logger.Fatal("failed to check for missing keys", zap.Error(err))
+	}
+
+	if len(missingKeys) > 0 {
+		if len(missingKeys) > 50 {
+			logger = logger.With(zap.Int("count", len(missingKeys)))
+		} else {
+			logger = logger.With(zap.Strings("keys", missingKeys))
+		}
+
+		logger.Fatal("remote signer misses keys")
+	}
 }
 
 func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPrivateKey, []byte, error) {

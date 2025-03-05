@@ -58,7 +58,7 @@ func NewRemoteKeyManager(
 		logger.Fatal("could not create new slashing protector", zap.Error(err))
 	}
 
-	operatorPubKeyString, err := client.GetOperatorIdentity()
+	operatorPubKeyString, err := client.GetOperatorIdentity(context.Background()) // TODO: use context
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
 	}
@@ -105,7 +105,7 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 	}
 
 	f := func(arg any) (any, error) {
-		return km.client.AddValidators(arg.(ssvsignerclient.ShareKeys))
+		return km.client.AddValidators(context.Background(), arg.(ssvsignerclient.ShareKeys)) // TODO: use context
 	}
 
 	res, err := km.retryFunc(f, shareKeys, "AddValidators")
@@ -122,13 +122,10 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 		return fmt.Errorf("bug: expected 1 status, got %d", len(statuses))
 	}
 
-	if statuses[0] == ssvsignerclient.StatusError {
-		return fmt.Errorf("received status %s", statuses[0])
+	if statuses[0] != ssvsignerclient.StatusImported {
+		return fmt.Errorf("unexpected status %s", statuses[0])
 	}
 
-	// Bumping slashing protection for both StatusImported and StatusDuplicated.
-	// If web3signer is not used exclusively by a single ssv-signer,
-	// it may return StatusDuplicated if the key has already been added by another ssv-signer.
 	if err := km.BumpSlashingProtection(sharePubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
@@ -137,18 +134,15 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 }
 
 func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
-	statuses, err := km.client.RemoveValidators(pubKey)
+	statuses, err := km.client.RemoveValidators(context.Background(), pubKey) // TODO: use context
 	if err != nil {
 		return fmt.Errorf("remove validator: %w", err)
 	}
 
-	if statuses[0] == ssvsignerclient.StatusError {
+	if statuses[0] != ssvsignerclient.StatusDeleted {
 		return fmt.Errorf("received status %s", statuses[0])
 	}
 
-	// Removing slashing protection data even if the key was not found.
-	// If web3signer is not used exclusively by a single ssv-signer,
-	// it may return StatusNotActive/StatusNotFound if the key has already been removed by another ssv-signer.
 	if err := km.RemoveHighestAttestation(pubKey); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
 	}
@@ -413,7 +407,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	req.SigningRoot = hex.EncodeToString(root[:])
 
-	sig, err := km.client.Sign(sharePubkey, req)
+	sig, err := km.client.Sign(context.Background(), sharePubkey, req) // TODO: use context
 	if err != nil {
 		return spectypes.Signature{}, [32]byte{}, err
 	}
@@ -440,7 +434,7 @@ func (km *RemoteKeyManager) getForkInfo(ctx context.Context) (web3signer.ForkInf
 }
 
 func (km *RemoteKeyManager) Sign(payload []byte) ([]byte, error) {
-	return km.client.OperatorSign(payload)
+	return km.client.OperatorSign(context.Background(), payload) // TODO: use context
 }
 
 func (km *RemoteKeyManager) Public() keys.OperatorPublicKey {
@@ -453,7 +447,7 @@ func (km *RemoteKeyManager) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte
 		return nil, err
 	}
 
-	return km.client.OperatorSign(encodedMsg)
+	return km.client.OperatorSign(context.Background(), encodedMsg) // TODO: use context
 }
 
 func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {

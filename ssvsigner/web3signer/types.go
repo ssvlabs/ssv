@@ -6,6 +6,12 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+type ListKeysResponse []string
+
+type KeyData struct {
+	ValidatingPubkey string `json:"validating_pubkey"`
+}
+
 type ImportKeystoreRequest struct {
 	Keystores          []string `json:"keystores"`
 	Passwords          []string `json:"passwords"`
@@ -33,6 +39,15 @@ type KeyManagerResponseData struct {
 }
 
 type Status string
+
+const (
+	StatusImported   Status = "imported"
+	StatusDuplicated Status = "duplicate"
+	StatusDeleted    Status = "deleted"
+	StatusNotActive  Status = "not_active"
+	StatusNotFound   Status = "not_found"
+	StatusError      Status = "error"
+)
 
 type SignRequest struct {
 	ForkInfo                    ForkInfo                              `json:"fork_info"`

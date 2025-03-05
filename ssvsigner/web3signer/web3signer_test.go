@@ -1,6 +1,7 @@
 package web3signer
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -129,7 +130,7 @@ func TestImportKeystore(t *testing.T) {
 				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
 			})
 
-			statuses, err := web3Signer.ImportKeystore(tt.keystoreList, tt.keystorePasswordList)
+			statuses, err := web3Signer.ImportKeystore(context.Background(), tt.keystoreList, tt.keystorePasswordList)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -207,7 +208,7 @@ func TestDeleteKeystore(t *testing.T) {
 			})
 
 			// Call DeleteKeystore
-			statuses, err := web3Signer.DeleteKeystore(tt.sharePubKeyList)
+			statuses, err := web3Signer.DeleteKeystore(context.Background(), tt.sharePubKeyList)
 
 			// Verify result
 			if tt.expectError {
@@ -293,7 +294,7 @@ func TestSign(t *testing.T) {
 				require.NoError(t, err)
 			})
 
-			result, err := web3Signer.Sign(tt.sharePubKey, tt.payload)
+			result, err := web3Signer.Sign(context.Background(), tt.sharePubKey, tt.payload)
 
 			if tt.expectError {
 				require.Error(t, err)
