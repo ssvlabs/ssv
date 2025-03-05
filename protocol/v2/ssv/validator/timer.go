@@ -91,7 +91,7 @@ func (c *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 		//}
 		dr := c.Runners[phase0.Slot(height)]
 		if dr == nil { // only happens when we prune expired runners
-			logger.Warn("❗no committee runner found for slot", fields.Slot(phase0.Slot(height)))
+			logger.Debug("❗no committee runner found for slot", fields.Slot(phase0.Slot(height)))
 			return
 		}
 
