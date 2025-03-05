@@ -453,7 +453,7 @@ func (n *InMemTracer) verifyBLSSignature(pSigMessages *spectypes.PartialSignatur
 
 		share, found := n.validators.ValidatorByIndex(msg.ValidatorIndex)
 		if !found {
-			return fmt.Errorf("get share by index: %w", err)
+			return fmt.Errorf("get share by index: %d", msg.ValidatorIndex)
 		}
 
 		var sharePubkey spectypes.ShareValidatorPK
@@ -513,6 +513,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
+					n.logger.Info("committee decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.CommitteeID(committeeID))
 					trace.Decideds = append(trace.Decideds, decided)
 				}
 			default:
@@ -556,6 +557,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
+					n.logger.Info("validator decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.Validator(validatorPK[:]))
 					roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
 				}
 			}

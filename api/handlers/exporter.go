@@ -156,7 +156,9 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				// TODO(Moshe): do we need role for committee decideds?
 				participantsByPK, err := e.TraceStore.GetCommitteeDecideds(slot, pubkeys)
 				if err != nil {
-					return api.Error(fmt.Errorf("get committee participants: %w", err))
+					// don't stop on error, continue to next slot
+					// return api.Error(fmt.Errorf("get committee participants: %w", err))
+					continue
 				}
 				for _, pr := range participantsByPK {
 					response.Data = append(response.Data, transformToParticipantResponse(role, pr))
@@ -167,7 +169,9 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				slot := phase0.Slot(s)
 				participantsByPK, err := e.TraceStore.GetValidatorDecideds(role, slot, pubkeys)
 				if err != nil {
-					return api.Error(fmt.Errorf("get validator participants: %w", err))
+					// don't stop on error, continue to next slot
+					// return api.Error(fmt.Errorf("get validator participants: %w", err))
+					continue
 				}
 				for _, pr := range participantsByPK {
 					response.Data = append(response.Data, transformToParticipantResponse(role, pr))
