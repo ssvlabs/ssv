@@ -32,6 +32,7 @@ func New(logger *zap.Logger, baseURL string) *Web3Signer {
 	}
 }
 
+// ListKeys lists keys in Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Public-Key/operation/ETH2_LIST
 func (c *Web3Signer) ListKeys(ctx context.Context) ([]string, error) {
 	logger := c.logger.With(zap.String("request", "ListKeys"))
 	logger.Info("listing keys")
