@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,15 +22,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
-
-func Test_ShareDecryptionError(t *testing.T) {
-	var customErr error = ShareDecryptionError(errors.New("test error"))
-
-	var shareDecryptionError ShareDecryptionError
-	if !errors.As(customErr, &shareDecryptionError) {
-		t.Errorf("shareDecryptionError was expected to be a ShareDecryptionError")
-	}
-}
 
 type SSVSignerClientSuite struct {
 	suite.Suite
@@ -265,20 +260,110 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 	}
 }
 
+func (s *SSVSignerClientSuite) TestListValidators() {
+	t := s.T()
+
+	testCases := []struct {
+		name               string
+		expectedStatusCode int
+		expectedResponse   server.ListValidatorsResponse
+		expectedResult     []string
+		expectError        bool
+	}{
+		{
+			name:               "Success",
+			expectedStatusCode: http.StatusOK,
+			expectedResponse: server.ListValidatorsResponse{
+				"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+				"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+			},
+			expectedResult: []string{
+				"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+				"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+			},
+			expectError: false,
+		},
+		{
+			name:               "EmptyList",
+			expectedStatusCode: http.StatusOK,
+			expectedResponse:   server.ListValidatorsResponse{},
+			expectedResult:     []string{},
+			expectError:        false,
+		},
+		{
+			name:               "ServerError",
+			expectedStatusCode: http.StatusInternalServerError,
+			expectedResponse:   nil,
+			expectError:        true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s.mux = http.NewServeMux()
+			s.mux.HandleFunc("/v1/validators/list", func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodGet, r.Method)
+
+				w.WriteHeader(tc.expectedStatusCode)
+				if tc.expectedStatusCode == http.StatusOK {
+					respBytes, err := json.Marshal(tc.expectedResponse)
+					require.NoError(t, err, "Failed to marshal response")
+					w.Write(respBytes)
+				} else {
+					w.Write([]byte("Server error"))
+				}
+			})
+
+			result, err := s.client.ListValidators(context.Background())
+
+			if tc.expectError {
+				assert.Error(t, err, "Expected an error")
+			} else {
+				assert.NoError(t, err, "Unexpected error")
+				assert.Equal(t, tc.expectedResult, result)
+			}
+
+			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
+		})
+		s.serverHits = 0
+	}
+}
+
 func (s *SSVSignerClientSuite) TestSign() {
 	t := s.T()
 
 	samplePubKey := []byte("sample_pubkey")
 	samplePayload := web3signer.SignRequest{
-		Type: "ATTESTATION",
+		Type: web3signer.Attestation,
+		ForkInfo: web3signer.ForkInfo{
+			Fork: &phase0.Fork{
+				PreviousVersion: phase0.Version{0, 0, 0, 0},
+				CurrentVersion:  phase0.Version{1, 0, 0, 0},
+				Epoch:           0,
+			},
+			GenesisValidatorsRoot: phase0.Root{},
+		},
+		Attestation: &phase0.AttestationData{
+			Slot:            1,
+			Index:           2,
+			BeaconBlockRoot: phase0.Root{},
+			Source: &phase0.Checkpoint{
+				Epoch: 0,
+				Root:  phase0.Root{},
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: 1,
+				Root:  phase0.Root{},
+			},
+		},
 	}
-	expectedSignature := []byte("signed_data")
 
 	testCases := []struct {
 		name               string
 		pubKey             []byte
 		payload            web3signer.SignRequest
 		expectedStatusCode int
+		responseBody       string
 		expectedResult     []byte
 		expectError        bool
 	}{
@@ -287,14 +372,24 @@ func (s *SSVSignerClientSuite) TestSign() {
 			pubKey:             samplePubKey,
 			payload:            samplePayload,
 			expectedStatusCode: http.StatusOK,
-			expectedResult:     expectedSignature,
+			responseBody:       "0x1234567890abcdef",
+			expectedResult:     []byte("0x1234567890abcdef"),
 			expectError:        false,
+		},
+		{
+			name:               "InvalidSignature",
+			pubKey:             samplePubKey,
+			payload:            samplePayload,
+			expectedStatusCode: http.StatusBadRequest,
+			responseBody:       "invalid signature",
+			expectError:        true,
 		},
 		{
 			name:               "ServerError",
 			pubKey:             samplePubKey,
 			payload:            samplePayload,
 			expectedStatusCode: http.StatusInternalServerError,
+			responseBody:       "Server error",
 			expectError:        true,
 		},
 	}
@@ -302,27 +397,20 @@ func (s *SSVSignerClientSuite) TestSign() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/validators/sign/"+hex.EncodeToString(tc.pubKey), func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(fmt.Sprintf("/v1/validators/sign/%s", hex.EncodeToString(tc.pubKey)), func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodPost, r.Method)
-
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
+				var req web3signer.SignRequest
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err, "Failed to read request body")
 				defer r.Body.Close()
 
-				var req web3signer.SignRequest
 				err = json.Unmarshal(body, &req)
 				require.NoError(t, err, "Failed to unmarshal request body")
 
-				assert.Equal(t, tc.payload.Type, req.Type)
-
 				w.WriteHeader(tc.expectedStatusCode)
-				if tc.expectedStatusCode == http.StatusOK {
-					w.Write(tc.expectedResult)
-				} else {
-					w.Write([]byte("Server error"))
-				}
+				w.Write([]byte(tc.responseBody))
 			})
 
 			result, err := s.client.Sign(context.Background(), tc.pubKey, tc.payload)
@@ -570,4 +658,58 @@ func TestResponseHandlingErrors(t *testing.T) {
 
 	_, err = client.RemoveValidators(context.Background(), []byte("test"))
 	assert.Error(t, err)
+}
+
+func TestNew(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name    string
+		baseURL string
+		opts    []Option
+	}{
+		{
+			name:    "WithoutOptions",
+			baseURL: "http://localhost:9000",
+			opts:    nil,
+		},
+		{
+			name:    "WithLogger",
+			baseURL: "http://localhost:9000",
+			opts:    []Option{WithLogger(logger)},
+		},
+		{
+			name:    "WithTrailingSlash",
+			baseURL: "http://localhost:9000/",
+			opts:    []Option{WithLogger(logger)},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := New(tc.baseURL, tc.opts...)
+
+			expectedBaseURL := strings.TrimRight(tc.baseURL, "/")
+			assert.Equal(t, expectedBaseURL, client.baseURL)
+
+			if len(tc.opts) > 0 {
+				assert.NotNil(t, client.logger)
+			} else {
+				assert.Nil(t, client.logger)
+			}
+
+			assert.NotNil(t, client.httpClient)
+			assert.Equal(t, 30*time.Second, client.httpClient.Timeout)
+		})
+	}
+}
+
+func Test_ShareDecryptionError(t *testing.T) {
+	var customErr error = ShareDecryptionError(errors.New("test error"))
+
+	var shareDecryptionError ShareDecryptionError
+	if !errors.As(customErr, &shareDecryptionError) {
+		t.Errorf("shareDecryptionError was expected to be a ShareDecryptionError")
+	}
 }
