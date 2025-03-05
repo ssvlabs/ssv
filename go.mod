@@ -4,7 +4,7 @@ go 1.22.6
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.24.0
+	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -36,7 +36,7 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.5.0
+	github.com/ssvlabs/eth2-key-manager v1.5.1
 	github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
