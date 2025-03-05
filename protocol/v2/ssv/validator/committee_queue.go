@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -21,32 +20,14 @@ import (
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
-
 	slot, err := msg.Slot()
 	if err != nil {
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
 		return
 	}
 
-	q := c.prepareQueue(logger, slot)
-
-	if pushed := q.Q.TryPush(msg); !pushed {
-		msgID := msg.MsgID.String()
-		logger.Warn("❗ dropping message because the queue is full",
-			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msg_id", msgID))
-	} else {
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
-	}
-}
-
-func (c *Committee) prepareQueue(logger *zap.Logger, slot phase0.Slot) queueContainer {
+	// Retrieve or create the queue for the given slot.
 	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
 	q, ok := c.Queues[slot]
 	if !ok {
 		q = queueContainer{
@@ -61,8 +42,15 @@ func (c *Committee) prepareQueue(logger *zap.Logger, slot phase0.Slot) queueCont
 		c.Queues[slot] = q
 		logger.Debug("missing queue for slot created", fields.Slot(slot))
 	}
+	c.mtx.Unlock()
 
-	return q
+	// Push the message.
+	if pushed := q.Q.TryPush(msg); !pushed {
+		msgID := msg.MsgID.String()
+		logger.Warn("❗ dropping message because the queue is full",
+			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
+			zap.String("msg_id", msgID))
+	}
 }
 
 func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
