@@ -478,19 +478,6 @@ func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
 	return startTime
 }
 
-func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
-	if err := gc.multiClient.Events(ctx, topics, handler); err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Events"),
-			zap.Error(err),
-		)
-
-		return err
-	}
-
-	return nil
-}
-
 func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
 	start := time.Now()
 	genesisResp, err := gc.multiClient.Genesis(ctx, &api.GenesisOpts{})
