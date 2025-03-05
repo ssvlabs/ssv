@@ -23,7 +23,6 @@ import (
 	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -32,24 +31,36 @@ import (
 
 type RemoteKeyManager struct {
 	logger          *zap.Logger
-	client          *ssvsignerclient.SSVSignerClient
-	consensusClient *goclient.GoClient
+	remoteSigner    RemoteSigner
+	consensusClient ConsensusClient
 	getOperatorId   func() spectypes.OperatorID
 	retryCount      int
 	operatorPubKey  keys.OperatorPublicKey
 	SlashingProtector
 }
 
+type RemoteSigner interface {
+	AddValidators(ctx context.Context, shares ...ssvsignerclient.ShareKeys) ([]ssvsignerclient.Status, error)
+	RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]ssvsignerclient.Status, error)
+	Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error)
+	GetOperatorIdentity(ctx context.Context) (string, error)
+	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
+}
+
+type ConsensusClient interface {
+	CurrentFork(ctx context.Context) (*phase0.Fork, error)
+	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)
+}
+
 func NewRemoteKeyManager(
 	logger *zap.Logger,
-	client *ssvsignerclient.SSVSignerClient,
-	consensusClient *goclient.GoClient,
+	remoteSigner RemoteSigner,
+	consensusClient ConsensusClient,
 	db basedb.Database,
 	networkConfig networkconfig.NetworkConfig,
 	getOperatorId func() spectypes.OperatorID,
 	options ...Option,
 ) (*RemoteKeyManager, error) {
-
 	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
@@ -58,7 +69,7 @@ func NewRemoteKeyManager(
 		logger.Fatal("could not create new slashing protector", zap.Error(err))
 	}
 
-	operatorPubKeyString, err := client.GetOperatorIdentity(context.Background()) // TODO: use context
+	operatorPubKeyString, err := remoteSigner.GetOperatorIdentity(context.Background()) // TODO: use context
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
 	}
@@ -70,7 +81,7 @@ func NewRemoteKeyManager(
 
 	s := &RemoteKeyManager{
 		logger:            logger,
-		client:            client,
+		remoteSigner:      remoteSigner,
 		consensusClient:   consensusClient,
 		SlashingProtector: sp,
 		getOperatorId:     getOperatorId,
@@ -105,7 +116,7 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 	}
 
 	f := func(arg any) (any, error) {
-		return km.client.AddValidators(context.Background(), arg.(ssvsignerclient.ShareKeys)) // TODO: use context
+		return km.remoteSigner.AddValidators(context.Background(), arg.(ssvsignerclient.ShareKeys)) // TODO: use context
 	}
 
 	res, err := km.retryFunc(f, shareKeys, "AddValidators")
@@ -134,7 +145,7 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 }
 
 func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
-	statuses, err := km.client.RemoveValidators(context.Background(), pubKey) // TODO: use context
+	statuses, err := km.remoteSigner.RemoveValidators(context.Background(), pubKey) // TODO: use context
 	if err != nil {
 		return fmt.Errorf("remove validator: %w", err)
 	}
@@ -407,7 +418,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	req.SigningRoot = hex.EncodeToString(root[:])
 
-	sig, err := km.client.Sign(context.Background(), sharePubkey, req) // TODO: use context
+	sig, err := km.remoteSigner.Sign(context.Background(), sharePubkey, req) // TODO: use context
 	if err != nil {
 		return spectypes.Signature{}, [32]byte{}, err
 	}
@@ -434,7 +445,7 @@ func (km *RemoteKeyManager) getForkInfo(ctx context.Context) (web3signer.ForkInf
 }
 
 func (km *RemoteKeyManager) Sign(payload []byte) ([]byte, error) {
-	return km.client.OperatorSign(context.Background(), payload) // TODO: use context
+	return km.remoteSigner.OperatorSign(context.Background(), payload) // TODO: use context
 }
 
 func (km *RemoteKeyManager) Public() keys.OperatorPublicKey {
@@ -447,7 +458,7 @@ func (km *RemoteKeyManager) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte
 		return nil, err
 	}
 
-	return km.client.OperatorSign(context.Background(), encodedMsg) // TODO: use context
+	return km.remoteSigner.OperatorSign(context.Background(), encodedMsg) // TODO: use context
 }
 
 func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {
