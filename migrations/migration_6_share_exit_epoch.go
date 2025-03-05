@@ -20,16 +20,16 @@ var migration_6_share_exit_epoch = Migration{
 	Name: migration_6_Name,
 	Run: func(ctx context.Context, l *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		var (
-			oldSharesPrefix = append(opstorage.OperatorStoragePrefix, oldSharesPrefix...)
-			oldShares       = make(map[string]*migration_6_OldStorageShare)
-			sharesToPersist []basedb.Obj
+			oldSharesFullPrefix = append(opstorage.OperatorStoragePrefix, oldSharesPrefix...)
+			oldShares           = make(map[string]*migration_6_OldStorageShare)
+			sharesToPersist     []basedb.Obj
 		)
 
 		logger := l.With(zap.String("migration_name", migration_6_Name))
 
 		logger.Debug("fetching and converting all shares that need to be migrated")
 
-		err := opt.Db.GetAll(oldSharesPrefix, func(i int, obj basedb.Obj) error {
+		err := opt.Db.GetAll(oldSharesFullPrefix, func(i int, obj basedb.Obj) error {
 			oldShare := &migration_6_OldStorageShare{}
 			if err := oldShare.Decode(obj.Value); err != nil {
 				return fmt.Errorf("error: '%w' decoding share: %v", err, obj.Value)
@@ -72,10 +72,10 @@ var migration_6_share_exit_epoch = Migration{
 		}
 
 		logger.
-			With(zap.String("old_prefix", string(oldSharesPrefix))).
+			With(zap.String("old_prefix", string(oldSharesFullPrefix))).
 			Debug("shares were successfully persisted. Dropping old prefix")
 
-		if err = opt.Db.DropPrefix(oldSharesPrefix); err != nil {
+		if err = opt.Db.DropPrefix(oldSharesFullPrefix); err != nil {
 			return fmt.Errorf("error during DropPrefix operation: %w", err)
 		}
 
