@@ -249,29 +249,46 @@ func TestSign(t *testing.T) {
 		expectError    bool
 	}{
 		{
-			name:         "Successful sign",
-			sharePubKey:  []byte{0x01, 0x02, 0x03, 0x04},
-			payload:      testPayload,
-			statusCode:   http.StatusOK,
-			responseBody: "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			name:        "Successful sign",
+			sharePubKey: []byte{0x01, 0x02, 0x03},
+			payload:     testPayload,
+			statusCode:  http.StatusOK,
+			responseBody: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" +
+				"1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
 			expectedResult: []byte{
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
-				0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89,
+				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
 			},
 			expectError: false,
 		},
 		{
-			name:         "Failed sign",
-			sharePubKey:  []byte{0x01, 0x02, 0x03, 0x04},
+			name:         "Invalid public key",
+			sharePubKey:  []byte{0x01, 0x02, 0x03},
 			payload:      testPayload,
 			statusCode:   http.StatusBadRequest,
-			responseBody: `{"message": "Failed to sign"}`,
+			responseBody: `{"message": "Invalid public key"}`,
+			expectError:  true,
+		},
+		{
+			name:         "Server error",
+			sharePubKey:  []byte{0x01, 0x02, 0x03},
+			payload:      testPayload,
+			statusCode:   http.StatusInternalServerError,
+			responseBody: `{"message": "Internal server error"}`,
+			expectError:  true,
+		},
+		{
+			name:         "Invalid response format",
+			sharePubKey:  []byte{0x01, 0x02, 0x03},
+			payload:      testPayload,
+			statusCode:   http.StatusOK,
+			responseBody: "invalid-hex",
 			expectError:  true,
 		},
 	}
@@ -284,13 +301,12 @@ func TestSign(t *testing.T) {
 				require.Equal(t, http.MethodPost, r.Method)
 
 				var req SignRequest
-				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-					t.Errorf("Failed to decode request body: %v", err)
-				}
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+				require.Equal(t, tt.payload, req)
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
-				_, err := fmt.Fprint(w, tt.responseBody)
+				_, err := w.Write([]byte(tt.responseBody))
 				require.NoError(t, err)
 			})
 
@@ -300,9 +316,66 @@ func TestSign(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				if !reflect.DeepEqual(result, tt.expectedResult) {
-					t.Errorf("Expected result %v but got %v", tt.expectedResult, result)
-				}
+				require.Equal(t, tt.expectedResult, result)
+			}
+		})
+	}
+}
+
+func TestListKeys(t *testing.T) {
+	tests := []struct {
+		name         string
+		statusCode   int
+		responseBody ListKeysResponse
+		expectedKeys []string
+		expectError  bool
+	}{
+		{
+			name:       "Successful list keys",
+			statusCode: http.StatusOK,
+			responseBody: ListKeysResponse{
+				"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+				"0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			},
+			expectedKeys: []string{
+				"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+				"0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			},
+			expectError: false,
+		},
+		{
+			name:         "Empty list",
+			statusCode:   http.StatusOK,
+			responseBody: ListKeysResponse{},
+			expectedKeys: []string{},
+			expectError:  false,
+		},
+		{
+			name:         "Server error",
+			statusCode:   http.StatusInternalServerError,
+			responseBody: ListKeysResponse{},
+			expectError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "/api/v1/eth2/publicKeys", r.URL.Path)
+				require.Equal(t, http.MethodGet, r.Method)
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
+			})
+
+			keys, err := web3Signer.ListKeys(context.Background())
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedKeys, keys)
 			}
 		})
 	}
