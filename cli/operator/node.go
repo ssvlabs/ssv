@@ -22,6 +22,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -64,7 +66,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -562,16 +563,22 @@ func ensureNoMissingKeys(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	ssvSignerClient *ssvsignerclient.SSVSignerClient,
 ) {
-	shares := nodeStorage.Shares().List(nil, registrystorage.ByNotLiquidated())
+	if operatorDataStore.GetOperatorID() == 0 {
+		logger.Fatal("operator ID is not ready")
+	}
+
+	shares := nodeStorage.Shares().List(
+		nil,
+		registrystorage.ByNotLiquidated(),
+		registrystorage.ByOperatorID(operatorDataStore.GetOperatorID()),
+	)
 	if len(shares) == 0 {
 		return
 	}
 
 	var localKeys []string
 	for _, share := range shares {
-		if operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(operatorDataStore.GetOperatorID()) {
-			localKeys = append(localKeys, hex.EncodeToString(share.SharePubKey))
-		}
+		localKeys = append(localKeys, hex.EncodeToString(share.SharePubKey))
 	}
 
 	missingKeys, err := ssvSignerClient.MissingKeys(ctx, localKeys)
