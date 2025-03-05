@@ -957,15 +957,6 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 
 	// Start only the validators that became attesting as a result of the metadata update.
 	// We do NOT start slashed or exited validators, as they are no longer eligible to participate.
-	startedValidators := c.startValidatorsFromMetadata(ctx, attestingShares)
-
-	if len(attestingShares) > 0 {
-		// Refresh duties only if there are newly attesting validators.
-		if !c.reportIndicesChange(ctx) {
-			c.logger.Error("failed to notify indices change")
-		}
-	}
-
 	if len(attestingShares) > 0 || len(slashedShares) > 0 || len(exitedShares) > 0 {
 		c.logger.Debug("validators state changed after metadata sync",
 			zap.Int("attesting_count", len(attestingShares)),
@@ -974,15 +965,23 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 		)
 	}
 
-	if startedValidators > 0 {
-		c.logger.Debug("started new attesting validators", zap.Int("started_validators", startedValidators))
+	if len(attestingShares) > 0 {
+		startedValidators := c.startValidatorsFromMetadata(ctx, attestingShares)
+		if startedValidators > 0 {
+			c.logger.Debug("started new attesting validators", zap.Int("started_validators", startedValidators))
+
+			// Refresh duties only if there are started validators.
+			if !c.reportIndicesChange(ctx) {
+				c.logger.Error("failed to notify indices change")
+			}
+		}
 	}
 
 	return nil
 }
 
 func (c *controller) reportIndicesChange(ctx context.Context) bool {
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec())
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.Beacon.SlotDurationSec())
 	defer cancel()
 
 	select {
