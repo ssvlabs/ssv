@@ -89,9 +89,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 	var discoveredTopicsFirstTimeOnce sync.Once
 
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
-	// Try to connect only half as many peers as we have outbound slots available because this
-	// leaves some vacant slots for the next iteration - on the next iteration better peers
-	// might show up (so we don't want to "spend" all of these vacant slots at once).
 	// To find the best set of peers to connect we'll:
 	// - iterate over all available candidate-peers (peers discovered so far) and choose the best one
 	//   scoring peers based on how many dead/solo/duo subnets they resolve for us
@@ -172,7 +169,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 
 		// Limit new connections to the remaining outbound slots.
-		maxPeersToConnect := max(vacantOutboundSlots/2, 1)
+		maxPeersToConnect := max(vacantOutboundSlots, 1)
 
 		// Repeatedly select the next best peer to connect to,
 		// adding its subnets to pendingSubnetPeers so that the next selection
