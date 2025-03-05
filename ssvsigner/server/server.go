@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,15 +22,22 @@ import (
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
-	web3Signer      *web3signer.Web3Signer
+	remoteSigner    RemoteSigner
 	router          *router.Router
 	keystorePasswd  string
+}
+
+type RemoteSigner interface {
+	ListKeys(ctx context.Context) ([]string, error)
+	ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]Status, error)
+	DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]Status, error)
+	Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error)
 }
 
 func New(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
-	web3Signer *web3signer.Web3Signer,
+	remoteSigner RemoteSigner,
 	keystorePasswd string,
 ) *Server {
 	r := router.New()
@@ -37,7 +45,7 @@ func New(
 	server := &Server{
 		logger:          logger,
 		operatorPrivKey: operatorPrivKey,
-		web3Signer:      web3Signer,
+		remoteSigner:    remoteSigner,
 		router:          r,
 		keystorePasswd:  keystorePasswd,
 	}
@@ -71,7 +79,7 @@ const (
 type ListValidatorsResponse []string
 
 func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
-	publicKeys, err := r.web3Signer.ListKeys(ctx)
+	publicKeys, err := r.remoteSigner.ListKeys(ctx)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		r.writeErr(ctx, fmt.Errorf("failed to import share to Web3Signer: %w", err))
@@ -180,7 +188,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		shareKeystorePasswords = append(shareKeystorePasswords, r.keystorePasswd)
 	}
 
-	statuses, err := r.web3Signer.ImportKeystore(ctx, encShareKeystores, shareKeystorePasswords)
+	statuses, err := r.remoteSigner.ImportKeystore(ctx, encShareKeystores, shareKeystorePasswords)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		r.writeErr(ctx, fmt.Errorf("failed to import share to Web3Signer: %w", err))
@@ -235,7 +243,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	statuses, err := r.web3Signer.DeleteKeystore(ctx, req.PublicKeys)
+	statuses, err := r.remoteSigner.DeleteKeystore(ctx, req.PublicKeys)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		r.writeErr(ctx, fmt.Errorf("failed to remove share from Web3Signer: %w", err))
@@ -289,7 +297,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	sig, err := r.web3Signer.Sign(ctx, sharePubKey, req)
+	sig, err := r.remoteSigner.Sign(ctx, sharePubKey, req)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		r.writeErr(ctx, fmt.Errorf("failed to sign with Web3Signer: %w", err))
