@@ -94,7 +94,9 @@ type config struct {
 	SSVAPIPort                   int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
 	LocalEventsPath              string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
 	EnableDoppelgangerProtection bool                             `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Flag to enable Doppelganger protection for validators."`
-	AllowSigningSlashable        bool                             `yaml:"AllowSigningSlashableAttestations" env:"ALLOW_SIGNING_SLASHABLE_ATTESTATIONS" env-description:"allow the node to sign slashable attestations"`
+
+	// This may be needed in cases where finality has been lost due to failure of a large portion of the network such as the Holesky Pectra fork.
+	AllowSigningSlashable bool `yaml:"AllowSigningSlashableAttestations" env:"ALLOW_SIGNING_SLASHABLE_ATTESTATIONS" env-description:"allow the node to sign slashable attestations"`
 }
 
 var cfg config
