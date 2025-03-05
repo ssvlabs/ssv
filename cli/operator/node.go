@@ -94,7 +94,7 @@ type config struct {
 	SSVAPIPort                   int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
 	LocalEventsPath              string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
 	EnableDoppelgangerProtection bool                             `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Flag to enable Doppelganger protection for validators."`
-	AllowSigningSlashable        bool                             `yaml:"AllowSigningSlashableAttestations" env:"CAN_SIGN_SLASHABLE_ATTESTATIONS" env-description:"allow the node to sign slashable attestations"`
+	AllowSigningSlashable        bool                             `yaml:"AllowSigningSlashableAttestations" env:"ALLOW_SIGNING_SLASHABLE_ATTESTATIONS" env-description:"allow the node to sign slashable attestations"`
 }
 
 var cfg config
@@ -189,11 +189,10 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not get operator private key hash", zap.Error(err))
 		}
 
-		if cfg.AllowSigningSlashable {
-			logger.Warn("    --------------------- ! WARNING ! ---------------------")
+		if cfg.AllowSigningSlashable && networkConfig.Name == "mainnet" {
+			logger.Fatal("This node is configured to allow signing slashable attesations, however it appears to be running on mainnet.")
+		} else if cfg.AllowSigningSlashable {
 			logger.Warn("This node is configured to allow signing slashable attesations.")
-			logger.Warn("          DO NOT RUN THIS IN A PRODUCTION ENVIRONMENT")
-			logger.Warn("    --------------------- ! WARNING ! ---------------------")
 		}
 
 		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey, cfg.AllowSigningSlashable)

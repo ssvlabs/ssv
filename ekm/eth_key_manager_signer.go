@@ -244,12 +244,12 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 }
 
 func (km *ethKeyManagerSigner) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
+	if km.canSignSlashable {
+		return nil
+	}
 	if val, err := km.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
 		if err != nil {
 			return err
-		}
-		if km.canSignSlashable {
-			return nil
 		}
 		return errors.Errorf("slashable attestation (%s), not signing", val.Status)
 	}
