@@ -221,7 +221,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	case spectypes.DomainProposer:
 		switch v := obj.(type) {
-		case *capella.BeaconBlock, *deneb.BeaconBlock:
+		case *capella.BeaconBlock, *deneb.BeaconBlock, *electra.BeaconBlock:
 			return nil, [32]byte{}, fmt.Errorf("web3signer supports only blinded blocks since bellatrix") // https://github.com/Consensys/web3signer/blob/85ed009955d4a5bbccba5d5248226093987e7f6f/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/BlockRequest.java#L29
 
 		case *apiv1capella.BlindedBeaconBlock:
