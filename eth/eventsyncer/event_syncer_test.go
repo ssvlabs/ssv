@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
@@ -177,6 +178,8 @@ func setupEventHandler(
 
 	parser := eventparser.New(contractFilterer)
 
+	dgHandler := doppelganger.NoOpHandler{}
+
 	eh, err := eventhandler.New(
 		nodeStorage,
 		parser,
@@ -186,6 +189,7 @@ func setupEventHandler(
 		privateKey,
 		keyManager,
 		bc,
+		dgHandler,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger))
 

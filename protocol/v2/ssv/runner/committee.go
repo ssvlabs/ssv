@@ -35,14 +35,15 @@ type CommitteeDutyGuard interface {
 }
 
 type CommitteeRunner struct {
-	BaseRunner     *BaseRunner
-	network        specqbft.Network
-	beacon         beacon.BeaconNode
-	signer         spectypes.BeaconSigner
-	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
-	DutyGuard      CommitteeDutyGuard
-	measurements   measurementsStore
+	BaseRunner          *BaseRunner
+	network             specqbft.Network
+	beacon              beacon.BeaconNode
+	signer              spectypes.BeaconSigner
+	operatorSigner      ssvtypes.OperatorSigner
+	valCheck            specqbft.ProposedValueCheckF
+	DutyGuard           CommitteeDutyGuard
+	doppelgangerHandler DoppelgangerProvider
+	measurements        measurementsStore
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
 }
@@ -57,6 +58,7 @@ func NewCommitteeRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	dutyGuard CommitteeDutyGuard,
+	doppelgangerHandler DoppelgangerProvider,
 ) (Runner, error) {
 	if len(share) == 0 {
 		return nil, errors.New("no shares")
@@ -69,14 +71,15 @@ func NewCommitteeRunner(
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		beacon:          beacon,
-		network:         network,
-		signer:          signer,
-		operatorSigner:  operatorSigner,
-		valCheck:        valCheck,
-		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
-		DutyGuard:       dutyGuard,
-		measurements:    NewMeasurementsStore(),
+		beacon:              beacon,
+		network:             network,
+		signer:              signer,
+		operatorSigner:      operatorSigner,
+		valCheck:            valCheck,
+		submittedDuties:     make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
+		DutyGuard:           dutyGuard,
+		doppelgangerHandler: doppelgangerHandler,
+		measurements:        NewMeasurementsStore(),
 	}, nil
 }
 
@@ -222,7 +225,9 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
-	validDuties := 0
+	totalAttesterDuties := 0
+	totalSyncCommitteeDuties := 0
+	blockedAttesterDuties := 0
 
 	epoch := cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
 	version := cr.beacon.DataVersion(epoch)
@@ -232,9 +237,19 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			logger.Warn("duty is no longer valid", fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
 			continue
 		}
+
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
-			validDuties++
+			totalAttesterDuties++
+
+			// Doppelganger protection applies only to attester duties since they are slashable.
+			// Sync committee duties are not slashable, so they are always allowed.
+			if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
+				logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(validatorDuty.ValidatorIndex))
+				blockedAttesterDuties++
+				continue
+			}
+
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, attestationData, validatorDuty.DutySlot(),
 				spectypes.DomainAttester)
@@ -257,7 +272,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)
 		case spectypes.BNRoleSyncCommittee:
-			validDuties++
+			totalSyncCommitteeDuties++
+
 			blockRoot := beaconVote.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, spectypes.SSZBytes(blockRoot[:]), validatorDuty.DutySlot(),
 				spectypes.DomainSyncCommittee)
@@ -269,9 +285,22 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			return fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}
 	}
-	if validDuties == 0 {
+
+	if totalAttesterDuties == 0 && totalSyncCommitteeDuties == 0 {
 		cr.BaseRunner.State.Finished = true
 		return ErrNoValidDuties
+	}
+
+	// Avoid sending an empty message if all attester duties were blocked due to Doppelganger protection
+	// and no sync committee duties exist.
+	//
+	// We do not mark the state as finished here because post-consensus messages must still be processed,
+	// allowing validators to be marked as safe once sufficient consensus is reached.
+	if totalAttesterDuties == blockedAttesterDuties && totalSyncCommitteeDuties == 0 {
+		logger.Debug("Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties.",
+			zap.Int("attester_duties", totalAttesterDuties),
+			zap.Int("blocked_attesters", blockedAttesterDuties))
+		return nil
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -301,8 +330,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	return nil
 
+	return nil
 }
 
 // TODO finish edge case where some roots may be missing
@@ -429,6 +458,11 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				syncCommitteeMessagesToSubmit[validator] = syncMsg
 
 			} else if role == spectypes.BNRoleAttester {
+				// Only mark as safe if this is an attester role
+				// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
+				// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
+				cr.doppelgangerHandler.ReportQuorum(validator)
+
 				att := sszObject.(*spec.VersionedAttestation)
 				// Insert signature
 				att, err = specssv.VersionedAttestationWithSignature(att, specSig)
@@ -744,6 +778,10 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 func (cr *CommitteeRunner) GetSigner() spectypes.BeaconSigner {
 	return cr.signer
+}
+
+func (cr *CommitteeRunner) GetDoppelgangerHandler() DoppelgangerProvider {
+	return cr.doppelgangerHandler
 }
 
 func (cr *CommitteeRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
