@@ -50,7 +50,7 @@ const (
 	connectorQueueSize = 2048
 	// inboundLimitRatio is the ratio of inbound connections to the total connections
 	// we allow (both inbound and outbound).
-	inboundLimitRatio = float64(0.333)
+	inboundLimitRatio = float64(0.5)
 )
 
 // Setup is used to setup the network
