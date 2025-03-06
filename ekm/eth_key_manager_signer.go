@@ -236,6 +236,13 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 		return km.signer.SignRegistration(data, domain, pk)
+	case spectypes.PreconfCommitment:
+		// TODO - do we need similar implementation for remote signer as well ?
+		data, ok := obj.(TODO)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to TODO")
+		}
+		return km.signer.TODO(data, domain, pk)
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}

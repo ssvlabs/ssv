@@ -46,11 +46,11 @@ func (b *BaseRunner) signPreconfCommitment(
 	validatorIndex spec.ValidatorIndex,
 	root ssz.HashRoot,
 ) (*spectypes.PartialSignatureMessage, error) {
-	domain := TODO
+	domain := spec.Domain{} // TODO - need to use a specific domain ? maybe check with https://commit-boost.github.io/commit-boost-client/api/
 	if _, ok := b.Share[validatorIndex]; !ok {
 		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
 	}
-	sig, r, err := runner.GetSigner().SignBeaconObject(root, domain, b.Share[validatorIndex].SharePubKey, domainType)
+	sig, r, err := runner.GetSigner().SignBeaconObject(root, domain, b.Share[validatorIndex].SharePubKey, spectypes.PreconfCommitment)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}

@@ -1118,7 +1118,7 @@ func SetupRunners(
 		return qbftCtrl
 	}
 
-	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share) // TODO: fill the map
+	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[options.SSVShare.ValidatorIndex] = &options.SSVShare.Share
 
 	runners := runner.ValidatorDutyRunners{}
@@ -1143,7 +1143,7 @@ func SetupRunners(
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		case spectypes.RolePreconfCommitment:
-			runners[role], err = runner.NewPreconfCommitmentRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.GasLimit)
+			runners[role], err = runner.NewPreconfCommitmentRunner(&options.SSVShare.Share, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.Operator.GetQuorum())
 		}
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create duty runner")
