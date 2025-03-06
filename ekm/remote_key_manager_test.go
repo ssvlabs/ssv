@@ -174,6 +174,30 @@ func (s *RemoteKeyManagerTestSuite) TestRetryFunc() {
 	s.Contains(err.Error(), "persistent error")
 }
 
+func (s *RemoteKeyManagerTestSuite) TestRetryFuncMoreCases() {
+	rm := &RemoteKeyManager{
+		logger:     s.logger,
+		retryCount: 3,
+	}
+
+	s.Run("ShareDecryptionError", func() {
+		testArg := "test-arg"
+		decryptionError := ssvsignerclient.ShareDecryptionError(errors.New("decryption error"))
+
+		failingFunc := func(arg any) (any, error) {
+			s.Equal(testArg, arg)
+			return nil, decryptionError
+		}
+
+		result, err := rm.retryFunc(failingFunc, testArg, "TestRetryFunction")
+
+		s.Error(err)
+		var shareDecryptionError ShareDecryptionError
+		s.True(errors.As(err, &shareDecryptionError))
+		s.Nil(result)
+	})
+}
+
 func (s *RemoteKeyManagerTestSuite) TestSignWithMockedOperatorKey() {
 
 	rm := &RemoteKeyManager{
@@ -708,6 +732,33 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessage() {
 	mockRemoteSigner.AssertExpectations(s.T())
 }
 
+func (s *RemoteKeyManagerTestSuite) TestSignSSVMessageErrors() {
+	mockRemoteSigner := new(MockRemoteSigner)
+
+	rm := &RemoteKeyManager{
+		logger:       s.logger,
+		remoteSigner: mockRemoteSigner,
+		retryCount:   3,
+	}
+
+	message := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+	}
+
+	encodedMsg, err := message.Encode()
+	s.NoError(err)
+
+	signerError := errors.New("signer error")
+	mockRemoteSigner.On("OperatorSign", mock.Anything, encodedMsg).Return(nil, signerError).Once()
+
+	signature, err := rm.SignSSVMessage(message)
+
+	s.Error(err)
+	s.Equal(signerError, err)
+	s.Nil(signature)
+	mockRemoteSigner.AssertExpectations(s.T())
+}
+
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 	mockSlashingProtector := &MockSlashingProtector{}
 
@@ -828,6 +879,194 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		s.Contains(err.Error(), "domain unknown")
 		s.Nil(signature)
 		s.Equal([32]byte{}, root)
+		s.consensusClient.AssertExpectations(s.T())
+	})
+}
+
+func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
+	mockSlashingProtector := &MockSlashingProtector{}
+
+	rm := &RemoteKeyManager{
+		logger:            s.logger,
+		remoteSigner:      s.client,
+		consensusClient:   s.consensusClient,
+		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		retryCount:        3,
+		operatorPubKey:    &MockOperatorPublicKey{},
+		SlashingProtector: mockSlashingProtector,
+	}
+
+	mockFork := &phase0.Fork{
+		PreviousVersion: phase0.Version{1, 2, 3, 4},
+		CurrentVersion:  phase0.Version{5, 6, 7, 8},
+		Epoch:           10,
+	}
+
+	genesis := &eth2api.Genesis{
+		GenesisTime:           time.Unix(12345, 0),
+		GenesisValidatorsRoot: phase0.Root{9, 8, 7},
+		GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
+	}
+
+	pubKey := []byte("validator_pubkey")
+	domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+	expectedSignature := []byte("signature_bytes")
+
+	s.Run("SignAggregateAndProof", func() {
+		attestationData := &phase0.AttestationData{
+			Slot:            123,
+			Index:           4,
+			BeaconBlockRoot: phase0.Root{1, 2, 3, 4},
+			Source: &phase0.Checkpoint{
+				Epoch: 10,
+				Root:  phase0.Root{5, 6, 7, 8},
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: 11,
+				Root:  phase0.Root{9, 10, 11, 12},
+			},
+		}
+
+		attestation := &phase0.Attestation{
+			AggregationBits: []byte{0x01},
+			Data:            attestationData,
+			Signature:       phase0.BLSSignature{1, 2, 3},
+		}
+
+		aggregateAndProof := &phase0.AggregateAndProof{
+			AggregatorIndex: 789,
+			SelectionProof:  phase0.BLSSignature{4, 5, 6},
+			Aggregate:       attestation,
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(aggregateAndProof, domain, pubKey, spectypes.DomainAggregateAndProof)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignRandao", func() {
+		epoch := spectypes.SSZUint64(42)
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(epoch, domain, pubKey, spectypes.DomainRandao)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignApplicationBuilder", func() {
+		validatorReg := &eth2api.ValidatorRegistration{
+			FeeRecipient: [20]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+			GasLimit:     1000000,
+			Timestamp:    time.Unix(1234567890, 0),
+			Pubkey:       phase0.BLSPubKey{1, 2, 3, 4, 5},
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(validatorReg, domain, pubKey, spectypes.DomainApplicationBuilder)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+}
+
+func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
+	mockSlashingProtector := &MockSlashingProtector{}
+
+	rm := &RemoteKeyManager{
+		logger:            s.logger,
+		remoteSigner:      s.client,
+		consensusClient:   s.consensusClient,
+		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		retryCount:        3,
+		operatorPubKey:    &MockOperatorPublicKey{},
+		SlashingProtector: mockSlashingProtector,
+	}
+
+	mockFork := &phase0.Fork{
+		PreviousVersion: phase0.Version{1, 2, 3, 4},
+		CurrentVersion:  phase0.Version{5, 6, 7, 8},
+		Epoch:           10,
+	}
+
+	genesis := &eth2api.Genesis{
+		GenesisTime:           time.Unix(12345, 0),
+		GenesisValidatorsRoot: phase0.Root{9, 8, 7},
+		GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
+	}
+
+	pubKey := []byte("validator_pubkey")
+	domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+
+	s.Run("AttesterTypeCastError", func() {
+		wrongType := &phase0.VoluntaryExit{}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainAttester)
+
+		s.Error(err)
+		s.Contains(err.Error(), "could not cast obj to AttestationData")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("AggregateAndProofTypeCastError", func() {
+		wrongType := &phase0.VoluntaryExit{}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainAggregateAndProof)
+
+		s.Error(err)
+		s.Contains(err.Error(), "obj type is unknown")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("RandaoTypeCastError", func() {
+		wrongType := &phase0.VoluntaryExit{}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainRandao)
+
+		s.Error(err)
+		s.Contains(err.Error(), "could not cast obj to SSZUint64")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("ApplicationBuilderTypeCastError", func() {
+		wrongType := &phase0.VoluntaryExit{}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainApplicationBuilder)
+
+		s.Error(err)
+		s.Contains(err.Error(), "could not cast obj to ValidatorRegistration")
 		s.consensusClient.AssertExpectations(s.T())
 	})
 }
