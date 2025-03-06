@@ -18,8 +18,8 @@ RUN apt-get update                                                        && \
 RUN go version
 
 WORKDIR /go/src/github.com/ssvlabs/ssv/ssvsigner
-COPY ssvsigner/go.mod .
-COPY ssvsigner/go.sum .
+COPY go.mod .
+COPY go.sum .
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
   go mod download
@@ -31,7 +31,7 @@ ARG APP_VERSION
 FROM preparer AS builder
 
 # Copy files and install app
-COPY . .
+COPY .. .
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
