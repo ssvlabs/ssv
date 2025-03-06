@@ -256,7 +256,7 @@ func (c *SSVSignerClient) Sign(ctx context.Context, sharePubKey []byte, payload 
 	return body, nil
 }
 
-func (c *SSVSignerClient) GetOperatorIdentity(ctx context.Context) (string, error) {
+func (c *SSVSignerClient) OperatorIdentity(ctx context.Context) (string, error) {
 	url := fmt.Sprintf("%s/v1/operator/identity", c.baseURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

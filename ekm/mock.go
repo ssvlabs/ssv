@@ -40,7 +40,7 @@ func (m *MockRemoteSigner) Sign(ctx context.Context, sharePubKey []byte, payload
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (m *MockRemoteSigner) GetOperatorIdentity(ctx context.Context) (string, error) {
+func (m *MockRemoteSigner) OperatorIdentity(ctx context.Context) (string, error) {
 	args := m.Called(ctx)
 	return args.String(0), args.Error(1)
 }

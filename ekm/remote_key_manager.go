@@ -43,7 +43,7 @@ type RemoteSigner interface {
 	AddValidators(ctx context.Context, shares ...ssvsignerclient.ShareKeys) ([]ssvsignerclient.Status, error)
 	RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]ssvsignerclient.Status, error)
 	Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error)
-	GetOperatorIdentity(ctx context.Context) (string, error)
+	OperatorIdentity(ctx context.Context) (string, error)
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
 }
 
@@ -69,7 +69,7 @@ func NewRemoteKeyManager(
 		logger.Fatal("could not create new slashing protector", zap.Error(err))
 	}
 
-	operatorPubKeyString, err := remoteSigner.GetOperatorIdentity(context.Background()) // TODO: use context
+	operatorPubKeyString, err := remoteSigner.OperatorIdentity(context.Background()) // TODO: use context
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
 	}

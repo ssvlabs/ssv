@@ -428,7 +428,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 	}
 }
 
-func (s *SSVSignerClientSuite) TestGetOperatorIdentity() {
+func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 	t := s.T()
 
 	expectedIdentity := "operator_identity_key"
@@ -466,7 +466,7 @@ func (s *SSVSignerClientSuite) TestGetOperatorIdentity() {
 				}
 			})
 
-			result, err := s.client.GetOperatorIdentity(context.Background())
+			result, err := s.client.OperatorIdentity(context.Background())
 
 			if tc.expectError {
 				assert.Error(t, err, "Expected an error")
@@ -633,7 +633,7 @@ func TestRequestErrors(t *testing.T) {
 	_, err = client.Sign(context.Background(), []byte("test"), web3signer.SignRequest{})
 	assert.Error(t, err)
 
-	_, err = client.GetOperatorIdentity(context.Background())
+	_, err = client.OperatorIdentity(context.Background())
 	assert.Error(t, err)
 
 	_, err = client.OperatorSign(context.Background(), []byte("test"))

@@ -159,7 +159,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Info("using ssv-signer for signing")
 
 			ssvSignerClient = ssvsignerclient.New(cfg.SSVSignerEndpoint, ssvsignerclient.WithLogger(logger))
-			operatorPubKeyString, err := ssvSignerClient.GetOperatorIdentity(cmd.Context())
+			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
 			}

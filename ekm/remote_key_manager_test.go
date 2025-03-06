@@ -1079,7 +1079,7 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
 	networkCfg := networkconfig.NetworkConfig{}
 
 	invalidPubKey := "invalid-public-key-format"
-	s.client.On("GetOperatorIdentity", mock.Anything).Return(invalidPubKey, nil)
+	s.client.On("OperatorIdentity", mock.Anything).Return(invalidPubKey, nil)
 
 	logger, _ := zap.NewDevelopment()
 
