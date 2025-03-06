@@ -1,0 +1,145 @@
+package goclient
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+)
+
+func TestCurrentFork(t *testing.T) {
+	ctx := context.Background()
+
+	network := beacon.NewNetwork(types.MainNetwork)
+	currentEpoch := network.EstimatedCurrentEpoch()
+
+	t.Run("success", func(t *testing.T) {
+		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+			if r.URL.Path == "/eth/v1/config/fork_schedule" {
+				return json.RawMessage(`{
+					"data": [
+						{
+							"previous_version": "0x00010203",
+							"current_version": "0x04050607",
+							"epoch": "` + fmt.Sprint(currentEpoch-100) + `"
+						},
+						{
+							"previous_version": "0x04050607",
+							"current_version": "0x08090a0b",
+							"epoch": "` + fmt.Sprint(currentEpoch-50) + `"
+						},
+						{
+							"previous_version": "0x08090a0b",
+							"current_version": "0x0c0d0e0f",
+							"epoch": "` + fmt.Sprint(currentEpoch+100) + `"
+						}
+					]
+				}`), nil
+			}
+			return resp, nil
+		})
+		defer mockServer.Close()
+
+		client, err := New(
+			zap.NewNop(),
+			beacon.Options{
+				Context:        ctx,
+				Network:        network,
+				BeaconNodeAddr: mockServer.URL,
+				CommonTimeout:  100 * time.Millisecond,
+				LongTimeout:    500 * time.Millisecond,
+			},
+			tests.MockDataStore{},
+			tests.MockSlotTickerProvider,
+		)
+		require.NoError(t, err)
+
+		currentFork, err := client.CurrentFork(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, currentFork)
+
+		require.Equal(t, currentEpoch-50, currentFork.Epoch)
+		require.Equal(t, phase0.Version{0x04, 0x05, 0x06, 0x07}, currentFork.PreviousVersion)
+		require.Equal(t, phase0.Version{0x08, 0x09, 0x0a, 0x0b}, currentFork.CurrentVersion)
+	})
+
+	t.Run("nil_data", func(t *testing.T) {
+		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+			if r.URL.Path == "/eth/v1/config/fork_schedule" {
+				return json.RawMessage(`{"data": null}`), nil
+			}
+			return resp, nil
+		})
+		defer mockServer.Close()
+
+		client, err := New(
+			zap.NewNop(),
+			beacon.Options{
+				Context:        ctx,
+				Network:        network,
+				BeaconNodeAddr: mockServer.URL,
+				CommonTimeout:  100 * time.Millisecond,
+				LongTimeout:    500 * time.Millisecond,
+			},
+			tests.MockDataStore{},
+			tests.MockSlotTickerProvider,
+		)
+		require.NoError(t, err)
+
+		_, err = client.CurrentFork(ctx)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "fork schedule response data is nil")
+	})
+
+	t.Run("no_current_fork", func(t *testing.T) {
+		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+			if r.URL.Path == "/eth/v1/config/fork_schedule" {
+				return json.RawMessage(`{
+					"data": [
+						{
+							"previous_version": "0x00010203",
+							"current_version": "0x04050607",
+							"epoch": "` + fmt.Sprint(currentEpoch+100) + `"
+						},
+						{
+							"previous_version": "0x04050607",
+							"current_version": "0x08090a0b",
+							"epoch": "` + fmt.Sprint(currentEpoch+200) + `"
+						}
+					]
+				}`), nil
+			}
+			return resp, nil
+		})
+		defer mockServer.Close()
+
+		client, err := New(
+			zap.NewNop(),
+			beacon.Options{
+				Context:        ctx,
+				Network:        network,
+				BeaconNodeAddr: mockServer.URL,
+				CommonTimeout:  100 * time.Millisecond,
+				LongTimeout:    500 * time.Millisecond,
+			},
+			tests.MockDataStore{},
+			tests.MockSlotTickerProvider,
+		)
+		require.NoError(t, err)
+
+		_, err = client.CurrentFork(ctx)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "could not find current fork")
+	})
+}
