@@ -538,8 +538,8 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-// startValidatorsFromMetadata starts validators that transitioned to attesting due to a metadata update.
-func (c *controller) startValidatorsFromMetadata(_ context.Context, validators []*ssvtypes.SSVShare) (count int) {
+// startAttestingValidators starts validators that transitioned to attesting due to a metadata update.
+func (c *controller) startAttestingValidators(_ context.Context, validators []*ssvtypes.SSVShare) (count int) {
 	// TODO: use context
 
 	// Build a map for quick lookup
@@ -966,7 +966,7 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 	}
 
 	if len(attestingShares) > 0 {
-		startedValidators := c.startValidatorsFromMetadata(ctx, attestingShares)
+		startedValidators := c.startAttestingValidators(ctx, attestingShares)
 		if startedValidators > 0 {
 			c.logger.Debug("started new attesting validators", zap.Int("started_validators", startedValidators))
 
