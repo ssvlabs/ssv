@@ -1,16 +1,14 @@
 package web3signer
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/carlmjohnson/requests"
 	"go.uber.org/zap"
 )
 
@@ -37,48 +35,28 @@ func (c *Web3Signer) ListKeys(ctx context.Context) ([]string, error) {
 	logger := c.logger.With(zap.String("request", "ListKeys"))
 	logger.Info("listing keys")
 
-	url := fmt.Sprintf("%s/api/v1/eth2/publicKeys", c.baseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		logger.Error("failed to create http request", zap.Error(err))
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	httpResp, err := c.httpClient.Do(req)
-	if err != nil {
-		logger.Error("failed to send http request", zap.Error(err))
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() {
-		if err := httpResp.Body.Close(); err != nil {
-			logger.Error("failed to close http response body", zap.Error(err))
-		}
-	}()
-
-	respBytes, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		logger.Error("failed to read http response body", zap.Error(err))
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
 	var resp ListKeysResponse
-	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		logger.Error("failed to unmarshal http response body", zap.String("body", string(respBytes)), zap.Error(err))
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+	err := requests.
+		URL(c.baseURL).
+		Client(c.httpClient).
+		Path("/api/v1/eth2/publicKeys").
+		ToJSON(&resp).
+		Fetch(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("web3signer: %w", err)
 	}
 
-	if httpResp.StatusCode != http.StatusOK {
-		logger.Error("failed to import keystore", zap.Int("status_code", httpResp.StatusCode))
-		return nil, fmt.Errorf("unexpected status %d", httpResp.StatusCode)
-	}
-
-	logger.Info("listed keys", zap.Int("key_count", len(resp)))
+	logger.Info("listed keys", zap.Int("count", len(resp)))
 
 	return resp, nil
 }
 
 // ImportKeystore adds a key to Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT
 func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]Status, error) {
-	logger := c.logger.With(zap.String("request", "ImportKeystore"), zap.Int("count", len(keystoreList)))
+	logger := c.logger.With(
+		zap.String("request", "ImportKeystore"),
+		zap.Int("count", len(keystoreList)),
+	)
 	logger.Info("importing keystores")
 
 	payload := ImportKeystoreRequest{
@@ -87,50 +65,20 @@ func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList, keystoreP
 		SlashingProtection: "", // TODO
 	}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		logger.Error("failed to marshal payload", zap.Error(err))
-		return nil, fmt.Errorf("marshal payload: %w", err)
-	}
-
-	url := fmt.Sprintf("%s/eth/v1/keystores", c.baseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		logger.Error("failed to create http request", zap.Error(err))
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	httpResp, err := c.httpClient.Do(req)
-	if err != nil {
-		logger.Error("failed to send http request", zap.Error(err))
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() {
-		if err := httpResp.Body.Close(); err != nil {
-			logger.Error("failed to close http response body", zap.Error(err))
-		}
-	}()
-
-	respBytes, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		logger.Error("failed to read http response body", zap.Error(err))
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
 	var resp ImportKeystoreResponse
-	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		logger.Error("failed to unmarshal http response body", zap.String("body", string(respBytes)), zap.Error(err))
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+	err := requests.
+		URL(c.baseURL).
+		Client(c.httpClient).
+		Path("/eth/v1/keystores").
+		BodyJSON(payload).
+		Post().
+		ToJSON(&resp).
+		Fetch(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("web3signer: %w", err)
 	}
 
-	if httpResp.StatusCode != http.StatusOK {
-		logger.Error("failed to import keystore",
-			zap.Int("status_code", httpResp.StatusCode),
-			zap.String("message", resp.Message))
-		return nil, fmt.Errorf("unexpected status %d: %v", httpResp.StatusCode, resp.Message)
-	}
-
-	logger.Info("imported keystores", zap.Any("response", string(respBytes)))
+	logger.Info("imported keystores")
 
 	var statuses []Status
 	for _, data := range resp.Data {
@@ -142,55 +90,30 @@ func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList, keystoreP
 
 // DeleteKeystore removes a key from Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#operation/KEYMANAGER_DELETE
 func (c *Web3Signer) DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]Status, error) {
-	logger := c.logger.With(zap.String("request", "DeleteKeystore"), zap.Int("count", len(sharePubKeyList)))
+	logger := c.logger.With(
+		zap.String("request", "DeleteKeystore"),
+		zap.Int("count", len(sharePubKeyList)),
+	)
 	logger.Info("deleting keystores")
 
 	payload := DeleteKeystoreRequest{
 		Pubkeys: sharePubKeyList,
 	}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		logger.Error("failed to marshal payload", zap.Error(err))
-		return nil, fmt.Errorf("marshal payload: %w", err)
-	}
-
-	url := fmt.Sprintf("%s/eth/v1/keystores", c.baseURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, bytes.NewReader(body))
-	if err != nil {
-		logger.Error("failed to create http request", zap.Error(err))
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-
-	httpResp, err := c.httpClient.Do(req)
-	if err != nil {
-		logger.Error("failed to send http request", zap.Error(err))
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer func() {
-		if err := httpResp.Body.Close(); err != nil {
-			logger.Error("failed to close http response body", zap.Error(err))
-		}
-	}()
-
-	respBytes, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		logger.Error("failed to read http response body", zap.Error(err))
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
 	var resp DeleteKeystoreResponse
-	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		logger.Error("failed to unmarshal http response body", zap.String("body", string(respBytes)), zap.Error(err))
+	err := requests.
+		URL(c.baseURL).
+		Client(c.httpClient).
+		Path("/eth/v1/keystores").
+		BodyJSON(payload).
+		Delete().
+		ToJSON(&resp).
+		Fetch(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("web3signer: %w", err)
 	}
 
-	if httpResp.StatusCode != http.StatusOK {
-		logger.Error("failed to delete keystore",
-			zap.Int("status_code", httpResp.StatusCode),
-			zap.String("message", resp.Message))
-		return nil, fmt.Errorf("unexpected status %d: %v", httpResp.StatusCode, resp.Message)
-	}
-
-	logger.Info("deleted keystores", zap.Any("response", string(respBytes)))
+	logger.Info("deleted keystores")
 
 	var statuses []Status
 	for _, data := range resp.Data {
@@ -210,49 +133,25 @@ func (c *Web3Signer) Sign(ctx context.Context, sharePubKey []byte, payload SignR
 	)
 	logger.Info("signing")
 
-	body, err := json.Marshal(payload)
+	var resp string
+	err := requests.
+		URL(c.baseURL).
+		Client(c.httpClient).
+		Pathf("/api/v1/eth2/sign/%s", sharePubKeyHex).
+		BodyJSON(payload).
+		Post().
+		ToString(&resp).
+		Fetch(ctx)
 	if err != nil {
-		logger.Error("failed to marshal payload", zap.Error(err))
-		return nil, fmt.Errorf("marshal payload: %w", err)
+		return nil, fmt.Errorf("web3signer: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/api/v1/eth2/sign/%s", c.baseURL, sharePubKeyHex)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	sigBytes, err := hex.DecodeString(strings.TrimPrefix(resp, "0x"))
 	if err != nil {
-		logger.Error("failed to create http request", zap.Error(err))
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		logger.Error("failed to send http request", zap.Error(err))
-		return nil, fmt.Errorf("sign request failed: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logger.Error("failed to close http response body", zap.Error(err))
-		}
-	}()
-
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error("failed to read http response body", zap.Error(err))
-		return nil, fmt.Errorf("read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		logger.Error("sign request failed",
-			zap.Int("status_code", resp.StatusCode),
-			zap.Any("response", string(respData)),
-			zap.Any("request", string(body)),
-			zap.Any("url", url))
-		return nil, fmt.Errorf("unexpected status %d: %v", resp.StatusCode, respData)
-	}
-
-	sigBytes, err := hex.DecodeString(strings.TrimPrefix(string(respData), "0x"))
-	if err != nil {
-		logger.Error("failed to decode signature", zap.String("signature", string(respData)), zap.Error(err))
+		logger.Error("failed to decode signature",
+			zap.String("signature", resp),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("decode signature: %w", err)
 	}
 
