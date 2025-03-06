@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -54,7 +54,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 	testCases := []struct {
 		name               string
-		shares             []ServerShareKeys
+		shares             []ClientShareKeys
 		expectedStatusCode int
 		expectedResponse   AddValidatorResponse
 		expectedResult     []web3signer.Status
@@ -63,7 +63,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 	}{
 		{
 			name: "Success",
-			shares: []ServerShareKeys{
+			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted1"),
 					PublicKey:        []byte("pubkey1"),
@@ -82,7 +82,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		},
 		{
 			name: "DecryptionError",
-			shares: []ServerShareKeys{
+			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("bad_encrypted"),
 					PublicKey:        []byte("pubkey"),
@@ -95,7 +95,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		},
 		{
 			name: "ServerError",
-			shares: []ServerShareKeys{
+			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted"),
 					PublicKey:        []byte("pubkey"),
@@ -107,7 +107,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		},
 		{
 			name:               "NoShares",
-			shares:             []ServerShareKeys{},
+			shares:             []ClientShareKeys{},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: AddValidatorResponse{
 				Statuses: []web3signer.Status{},
@@ -620,7 +620,7 @@ func TestRequestErrors(t *testing.T) {
 
 	client := NewClient(server.URL)
 
-	_, err := client.AddValidators(context.Background(), ServerShareKeys{
+	_, err := client.AddValidators(context.Background(), ClientShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PublicKey:        []byte("test"),
 	})
@@ -649,7 +649,7 @@ func TestResponseHandlingErrors(t *testing.T) {
 
 	client := NewClient(server.URL)
 
-	_, err := client.AddValidators(context.Background(), ServerShareKeys{
+	_, err := client.AddValidators(context.Background(), ClientShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PublicKey:        []byte("test"),
 	})
