@@ -988,160 +988,180 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 	}
 }
 
-func TestHandleMetadataUpdates_ValidatorStateChangedToActive(t *testing.T) {
-	validatorCtrl, mockSharesStorage := prepareController(t)
-
-	sharesBefore := []*types.SSVShare{
+func TestHandleMetadataUpdates(t *testing.T) {
+	testCases := []struct {
+		name                    string
+		sharesBefore            []*types.SSVShare
+		sharesAfter             []*types.SSVShare
+		expectIndicesChange     bool
+		mockSharesStorageExpect func(mockSharesStorage *mocks.MockSharesStorage)
+	}{
 		{
-			Share:  spectypes.Share{Committee: buildOperators(t)},
-			Status: eth2apiv1.ValidatorStateUnknown,
-		},
-	}
-	sharesAfter := []*types.SSVShare{
-		{
-			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
-			Status: eth2apiv1.ValidatorStateActiveOngoing,
-		},
-	}
-
-	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sharesAfter).AnyTimes()
-
-	syncBatch := metadata.SyncBatch{
-		SharesBefore: sharesBefore,
-		SharesAfter:  sharesAfter,
-	}
-
-	go waitForIndicesChange(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
-	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
-}
-
-func TestHandleMetadataUpdates_NoStateChange(t *testing.T) {
-	validatorCtrl, mockSharesStorage := prepareController(t)
-
-	sharesBefore := []*types.SSVShare{
-		{
-			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
-			Status: eth2apiv1.ValidatorStateActiveOngoing,
-		},
-	}
-	sharesAfter := sharesBefore // No change
-
-	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sharesAfter).AnyTimes()
-
-	syncBatch := metadata.SyncBatch{
-		SharesBefore: sharesBefore,
-		SharesAfter:  sharesAfter,
-	}
-
-	go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
-	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
-}
-
-func TestHandleMetadataUpdates_NoStateChange_ActiveToExiting(t *testing.T) {
-	validatorCtrl, mockSharesStorage := prepareController(t)
-
-	sharesBefore := []*types.SSVShare{
-		{
-			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
-			Status: eth2apiv1.ValidatorStateActiveOngoing,
-		},
-	}
-	sharesAfter := []*types.SSVShare{
-		{
-			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
-			Status: eth2apiv1.ValidatorStateActiveExiting,
-		},
-	}
-
-	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sharesAfter).AnyTimes()
-
-	syncBatch := metadata.SyncBatch{
-		SharesBefore: sharesBefore,
-		SharesAfter:  sharesAfter,
-	}
-
-	go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
-	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
-}
-
-func TestHandleMetadataUpdates_NonCommitteeValidatorStateChangeToActive(t *testing.T) {
-	validatorCtrl, mockSharesStorage := prepareController(t)
-
-	sharesBefore := []*types.SSVShare{
-		{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 10}, {Signer: 11}, {Signer: 12}, {Signer: 13},
+			name: "report indices change (Unknown → ActiveOngoing)",
+			sharesBefore: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t)},
+					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			Status: eth2apiv1.ValidatorStatePendingQueued,
-		},
-	}
-	sharesAfter := []*types.SSVShare{
-		{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 10}, {Signer: 11}, {Signer: 12}, {Signer: 13},
+			sharesAfter: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
-				ValidatorIndex: 1,
 			},
-			Status: eth2apiv1.ValidatorStateActiveOngoing,
+			expectIndicesChange: true,
 		},
-	}
-
-	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(sharesAfter).AnyTimes()
-
-	syncBatch := metadata.SyncBatch{
-		SharesBefore: sharesBefore,
-		SharesAfter:  sharesAfter,
-	}
-
-	go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
-	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
-}
-
-func TestHandleMetadataUpdates_ValidatorStateChangedToActiveButDeletedBeforeStarting(t *testing.T) {
-	validatorCtrl, mockSharesStorage := prepareController(t)
-
-	sharesBefore := []*types.SSVShare{
 		{
-			Share:  spectypes.Share{Committee: buildOperators(t)},
-			Status: eth2apiv1.ValidatorStateUnknown,
+			name: "report indices change (PendingQueued → ActiveOngoing)",
+			sharesBefore: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStatePendingQueued,
+				},
+			},
+			sharesAfter: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+			},
+			expectIndicesChange: true,
 		},
-	}
-	sharesAfter := []*types.SSVShare{
 		{
-			Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
-			Status: eth2apiv1.ValidatorStateActiveOngoing,
+			name: "no report indices change (ActiveOngoing → ActiveOngoing)",
+			sharesBefore: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+			},
+			sharesAfter: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+			},
+			expectIndicesChange: false,
+		},
+		{
+			name: "no report indices change (ActiveOngoing → ActiveExiting)",
+			sharesBefore: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+			},
+			sharesAfter: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveExiting,
+				},
+			},
+			expectIndicesChange: false,
+		},
+		{
+			name: "no report indices change (ActiveExiting → ExitedUnslashed)",
+			sharesBefore: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveExiting,
+				},
+			},
+			sharesAfter: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateExitedUnslashed,
+				},
+			},
+			expectIndicesChange: false,
+		},
+		{
+			name: "no report indices change (ActiveOngoing → ActiveSlashed)",
+			sharesBefore: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+			},
+			sharesAfter: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveSlashed,
+				},
+			},
+			expectIndicesChange: false,
+		},
+		{
+			name: "no report indices change for non-committee validator (PendingQueued → ActiveOngoing)",
+			sharesBefore: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						Committee: []*spectypes.ShareMember{
+							{Signer: 10}, {Signer: 11}, {Signer: 12}, {Signer: 13},
+						},
+						ValidatorIndex: 1,
+					},
+					Status: eth2apiv1.ValidatorStatePendingQueued,
+				},
+			},
+			sharesAfter: []*types.SSVShare{
+				{
+					Share: spectypes.Share{
+						Committee: []*spectypes.ShareMember{
+							{Signer: 10}, {Signer: 11}, {Signer: 12}, {Signer: 13},
+						},
+						ValidatorIndex: 1,
+					},
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+			},
+			expectIndicesChange: false,
+		},
+		{
+			name: "no report indices change - validator not found before starting (Unknown → ActiveOngoing)",
+			sharesBefore: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t)},
+					Status: eth2apiv1.ValidatorStateUnknown,
+				},
+			},
+			sharesAfter: []*types.SSVShare{
+				{
+					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+			},
+			expectIndicesChange: false,
+			mockSharesStorageExpect: func(mockSharesStorage *mocks.MockSharesStorage) {
+				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]*types.SSVShare{}).AnyTimes()
+			},
 		},
 	}
 
-	mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]*types.SSVShare{}).AnyTimes() // Validator is deleted
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			validatorCtrl, mockSharesStorage := prepareController(t)
 
-	syncBatch := metadata.SyncBatch{
-		SharesBefore: sharesBefore,
-		SharesAfter:  sharesAfter,
-	}
+			if tc.mockSharesStorageExpect != nil {
+				tc.mockSharesStorageExpect(mockSharesStorage)
+			} else {
+				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(tc.sharesAfter).AnyTimes()
+			}
 
-	go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
-	require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
-}
+			syncBatch := metadata.SyncBatch{
+				SharesBefore: tc.sharesBefore,
+				SharesAfter:  tc.sharesAfter,
+			}
 
-func waitForIndicesChange(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
-	select {
-	case <-indicesChange:
-		logger.Debug("indices change received")
-	case <-time.After(timeout):
-		require.FailNow(t, "timed out waiting for indices change")
-	}
-}
+			if tc.expectIndicesChange {
+				go waitForIndicesChange(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+			} else {
+				go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+			}
 
-func waitForNoAction(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
-	select {
-	case <-indicesChange:
-		require.FailNow(t, "unexpected indices change received")
-	case <-time.After(timeout):
-		logger.Debug("expected: no indices change received")
+			require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
+		})
 	}
 }
 
@@ -1193,4 +1213,22 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 	mockRecipientsStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
 
 	return validatorCtrl, mockSharesStorage
+}
+
+func waitForIndicesChange(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
+	select {
+	case <-indicesChange:
+		logger.Debug("indices change received")
+	case <-time.After(timeout):
+		require.FailNow(t, "timed out waiting for indices change")
+	}
+}
+
+func waitForNoAction(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
+	select {
+	case <-indicesChange:
+		require.FailNow(t, "unexpected indices change received")
+	case <-time.After(timeout):
+		logger.Debug("expected: no indices change received")
+	}
 }
