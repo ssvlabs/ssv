@@ -947,13 +947,12 @@ func (c *controller) HandleMetadataUpdates(ctx context.Context) {
 
 // handleMetadataUpdate processes metadata changes for validators.
 func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadata.SyncBatch) error {
-	operatorID := c.operatorDataStore.GetOperatorID()
-	if operatorID == 0 {
+	if !c.operatorDataStore.OperatorIDReady() {
 		return nil
 	}
 
 	// Identify validators that changed state (attesting, slashed, or exited) after the metadata update.
-	attestingShares, slashedShares, exitedShares := detectValidatorStateChanges(syncBatch, operatorID)
+	attestingShares, slashedShares, exitedShares := detectValidatorStateChanges(syncBatch, c.operatorDataStore.GetOperatorID())
 
 	// Start only the validators that became attesting as a result of the metadata update.
 	// We do NOT start slashed or exited validators, as they are no longer eligible to participate.
