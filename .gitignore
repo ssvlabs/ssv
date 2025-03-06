@@ -41,3 +41,4 @@ bin/
 patches/
 
 go.work
+go.work.sum
