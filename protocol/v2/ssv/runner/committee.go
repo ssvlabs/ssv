@@ -8,18 +8,15 @@ import (
 	"fmt"
 	"math"
 	"time"
-
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -174,8 +171,36 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (cr *CommitteeRunner) GetBaseRunner() *BaseRunner {
-	return cr.BaseRunner
+func (cr *CommitteeRunner) HasRunningQBFTInstance() bool {
+	return cr.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (cr *CommitteeRunner) HasAcceptedProposalForCurrentRound() bool {
+	return cr.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (cr *CommitteeRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return cr.BaseRunner.GetShares()
+}
+
+func (cr *CommitteeRunner) GetRole() spectypes.RunnerRole {
+	return cr.BaseRunner.GetRole()
+}
+
+func (cr *CommitteeRunner) GetLastHeight() specqbft.Height {
+	return cr.BaseRunner.GetLastHeight()
+}
+
+func (cr *CommitteeRunner) GetLastRound() specqbft.Round {
+	return cr.BaseRunner.GetLastRound()
+}
+
+func (cr *CommitteeRunner) GetStateRoot() ([32]byte, error) {
+	return cr.BaseRunner.GetStateRoot()
+}
+
+func (cr *CommitteeRunner) SetTimeoutFunc(fn TimeoutF) {
+	cr.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (cr *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
@@ -309,7 +334,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID: spectypes.NewMsgID(
 			cr.BaseRunner.DomainType,
-			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
+			cr.BaseRunner.QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),
 	}
@@ -505,7 +530,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if attestationsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
 				uint32(attestationsCount),
-				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 				spectypes.BNRoleAttester)
 		}
 
@@ -515,7 +540,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			// TODO return error?
 		}
 		logger.Info("✅ successfully submitted attestations",
-			fields.Epoch(cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
+			fields.Epoch(cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot())),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
@@ -548,7 +573,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if syncMsgsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
 				uint32(syncMsgsCount),
-				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 				spectypes.BNRoleSyncCommittee)
 		}
 
@@ -643,14 +668,14 @@ func findValidators(
 }
 
 // Unneeded since no preconsensus phase
-func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("no pre consensus root for committee runner")
+func (cr *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return nil, spectypes.DomainError, errors.New("no pre consensus roots for committee runner")
 }
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("expected post consensus roots function is unused")
+func (cr *CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return nil, spectypes.DomainError, errors.New("expected post consensus roots function to be unused")
 }
 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *zap.Logger) (
@@ -684,7 +709,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 		}
 		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
 		slot := validatorDuty.DutySlot()
-		epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
+		epoch := cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			// Attestation object

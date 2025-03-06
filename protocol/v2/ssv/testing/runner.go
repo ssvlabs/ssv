@@ -55,6 +55,11 @@ var VoluntaryExitRunner = func(logger *zap.Logger, keySet *spectestingutils.Test
 	return baseRunner(logger, spectypes.RoleVoluntaryExit, keySet)
 }
 
+var PreconfCommitmentRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
+	ret := baseRunner(logger, spectypes.RolePreconfCommitment, keySet)
+	return ret
+}
+
 var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectestingutils.UnknownDutyType, keySet)
 }
@@ -196,6 +201,17 @@ var ConstructBaseRunner = func(
 			net,
 			km,
 			opSigner,
+		)
+	case spectypes.RolePreconfCommitment:
+		r, err = runner.NewPreconfCommitmentRunner(
+			networkconfig.TestNetwork.DomainType,
+			spectypes.BeaconTestNetwork,
+			shareMap,
+			tests.NewTestingBeaconNodeWrapped(),
+			net,
+			km,
+			opSigner,
+			spectypes.DefaultGasLimit,
 		)
 	case spectestingutils.UnknownDutyType:
 		r, err = runner.NewCommitteeRunner(
@@ -451,6 +467,17 @@ var ConstructBaseRunnerWithShareMap = func(
 			net,
 			km,
 			opSigner,
+		)
+	case spectypes.RolePreconfCommitment:
+		r, err = runner.NewPreconfCommitmentRunner(
+			networkconfig.TestNetwork.DomainType,
+			spectypes.BeaconTestNetwork,
+			shareMap,
+			tests.NewTestingBeaconNodeWrapped(),
+			net,
+			km,
+			opSigner,
+			spectypes.DefaultGasLimit,
 		)
 	case spectestingutils.UnknownDutyType:
 		r, err = runner.NewCommitteeRunner(

@@ -20,15 +20,15 @@ func (b *BaseRunner) signBeaconObject(
 	slot spec.Slot,
 	domainType spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
+	epoch := b.BeaconNetwork.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get beacon domain")
 	}
-	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
+	if _, ok := b.Share[duty.ValidatorIndex]; !ok {
 		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
 	}
-	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey, domainType)
+	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, b.Share[duty.ValidatorIndex].SharePubKey, domainType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}
@@ -38,6 +38,28 @@ func (b *BaseRunner) signBeaconObject(
 		SigningRoot:      r,
 		Signer:           runner.GetOperatorSigner().GetOperatorID(),
 		ValidatorIndex:   duty.ValidatorIndex,
+	}, nil
+}
+
+func (b *BaseRunner) signPreconfCommitment(
+	runner Runner,
+	validatorIndex spec.ValidatorIndex,
+	root ssz.HashRoot,
+) (*spectypes.PartialSignatureMessage, error) {
+	domain := TODO
+	if _, ok := b.Share[validatorIndex]; !ok {
+		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
+	}
+	sig, r, err := runner.GetSigner().SignBeaconObject(root, domain, b.Share[validatorIndex].SharePubKey, domainType)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not sign beacon object")
+	}
+
+	return &spectypes.PartialSignatureMessage{
+		PartialSignature: sig,
+		SigningRoot:      r,
+		Signer:           runner.GetOperatorSigner().GetOperatorID(),
+		ValidatorIndex:   validatorIndex,
 	}, nil
 }
 
@@ -136,7 +158,6 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
-
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {

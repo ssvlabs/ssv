@@ -178,7 +178,7 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// nonCommittees is a cache of initialized committeeObserver instances
+	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
 	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
@@ -611,7 +611,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+		if pushed := v.Queues[duty.RunnerRole()].TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
@@ -1094,6 +1094,7 @@ func SetupRunners(
 		spectypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
+		spectypes.RolePreconfCommitment,
 	}
 
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
@@ -1141,6 +1142,8 @@ func SetupRunners(
 			runners[role], err = runner.NewValidatorRegistrationRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+		case spectypes.RolePreconfCommitment:
+			runners[role], err = runner.NewPreconfCommitmentRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.GasLimit)
 		}
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create duty runner")

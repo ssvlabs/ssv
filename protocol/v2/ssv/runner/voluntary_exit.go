@@ -40,7 +40,6 @@ func NewVoluntaryExitRunner(
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 ) (Runner, error) {
-
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
 	}
@@ -114,6 +113,10 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 
 func (r *VoluntaryExitRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
 	return errors.New("no consensus phase for voluntary exit")
+}
+
+func (r *VoluntaryExitRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return r.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
 }
 
 func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
@@ -198,8 +201,36 @@ func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, e
 	}, nil
 }
 
-func (r *VoluntaryExitRunner) GetBaseRunner() *BaseRunner {
-	return r.BaseRunner
+func (r *VoluntaryExitRunner) HasRunningQBFTInstance() bool {
+	return r.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (r *VoluntaryExitRunner) HasAcceptedProposalForCurrentRound() bool {
+	return r.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (r *VoluntaryExitRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return r.BaseRunner.GetShares()
+}
+
+func (r *VoluntaryExitRunner) GetRole() spectypes.RunnerRole {
+	return r.BaseRunner.GetRole()
+}
+
+func (r *VoluntaryExitRunner) GetLastHeight() specqbft.Height {
+	return r.BaseRunner.GetLastHeight()
+}
+
+func (r *VoluntaryExitRunner) GetLastRound() specqbft.Round {
+	return r.BaseRunner.GetLastRound()
+}
+
+func (r *VoluntaryExitRunner) GetStateRoot() ([32]byte, error) {
+	return r.BaseRunner.GetStateRoot()
+}
+
+func (r *VoluntaryExitRunner) SetTimeoutFunc(fn TimeoutF) {
+	r.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
