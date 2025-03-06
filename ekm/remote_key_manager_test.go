@@ -833,17 +833,14 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 }
 
 func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
-
-	s.T().Skip("Skipping test because we can't mock static function calls")
-
-	s.db.On("Begin").Return(s.txn, nil)
-	s.txn.On("Commit").Return(nil)
+	s.db.On("Begin").Return(s.txn, nil).Maybe()
+	s.txn.On("Commit").Return(nil).Maybe()
+	s.txn.On("Rollback").Return(nil).Maybe()
 
 	networkCfg := networkconfig.NetworkConfig{}
-	s.consensusClient.On("GetNetworkConfig").Return(5, nil)
 
-	operatorPublicKey := "some-public-key-string"
-	s.client.On("GetOperatorIdentity", mock.Anything).Return(operatorPublicKey, nil)
+	invalidPubKey := "invalid-public-key-format"
+	s.client.On("GetOperatorIdentity", mock.Anything).Return(invalidPubKey, nil)
 
 	logger, _ := zap.NewDevelopment()
 
@@ -862,13 +859,9 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
 	)
 
 	s.Error(err)
-
 	s.Contains(err.Error(), "extract operator public key")
 
 	s.client.AssertExpectations(s.T())
-	s.consensusClient.AssertExpectations(s.T())
-	s.db.AssertExpectations(s.T())
-	s.txn.AssertExpectations(s.T())
 }
 
 func TestRemoteKeyManagerTestSuite(t *testing.T) {
