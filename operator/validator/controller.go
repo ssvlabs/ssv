@@ -952,7 +952,7 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 	}
 
 	// Identify validators that changed state (attesting, slashed, or exited) after the metadata update.
-	attestingShares, slashedShares, exitedShares := detectValidatorStateChanges(syncBatch, c.operatorDataStore.GetOperatorID())
+	attestingShares, slashedShares, exitedShares := syncBatch.DetectValidatorStateChanges(c.operatorDataStore.GetOperatorID())
 
 	// Start only the validators that became attesting as a result of the metadata update.
 	// We do NOT start slashed or exited validators, as they are no longer eligible to participate.
@@ -1039,46 +1039,6 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 		}
 	}
 
-}
-
-// Compares validator metadata before and after the update to detect state changes.
-// Returns validators that became attesting, slashed, or exited for the given operator.
-func detectValidatorStateChanges(syncBatch metadata.SyncBatch, operatorID spectypes.OperatorID) (attesting, slashed, exited []*ssvtypes.SSVShare) {
-	// Build a map of previous states for quick lookups
-	beforeMap := make(map[spectypes.ValidatorPK]*ssvtypes.SSVShare, len(syncBatch.SharesBefore))
-	for _, share := range syncBatch.SharesBefore {
-		if share.BelongsToOperator(operatorID) {
-			beforeMap[share.ValidatorPubKey] = share
-		}
-	}
-
-	attesting = make([]*ssvtypes.SSVShare, 0, len(syncBatch.SharesAfter))
-	slashed = make([]*ssvtypes.SSVShare, 0, len(syncBatch.SharesAfter))
-	exited = make([]*ssvtypes.SSVShare, 0, len(syncBatch.SharesAfter))
-
-	for _, shareAfter := range syncBatch.SharesAfter {
-		shareBefore, exists := beforeMap[shareAfter.ValidatorPubKey]
-		if !exists {
-			continue
-		}
-
-		// Track attesting status changes
-		if !shareBefore.IsAttesting(syncBatch.Epoch) && shareAfter.IsAttesting(syncBatch.Epoch) {
-			attesting = append(attesting, shareAfter)
-		}
-
-		// Track slashed status changes
-		if !shareBefore.Slashed() && shareAfter.Slashed() {
-			slashed = append(slashed, shareAfter)
-		}
-
-		// Track exited status changes
-		if !shareBefore.Exiting() && shareAfter.Exiting() {
-			exited = append(exited, shareAfter)
-		}
-	}
-
-	return attesting, slashed, exited
 }
 
 func SetupCommitteeRunners(

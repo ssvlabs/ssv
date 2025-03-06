@@ -120,12 +120,6 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) ([]*ssvtypes.SSVShare, error
 	return s.Sync(ctx, pubKeysToFetch)
 }
 
-type SyncBatch struct {
-	SharesBefore []*ssvtypes.SSVShare
-	SharesAfter  []*ssvtypes.SSVShare
-	Epoch        phase0.Epoch
-}
-
 func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) ([]*ssvtypes.SSVShare, error) {
 	fetchStart := time.Now()
 	metadata, err := s.Fetch(ctx, pubKeys)
