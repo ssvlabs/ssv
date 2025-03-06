@@ -116,7 +116,7 @@ func (h *handler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
 	}
 }
 
-func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorIndex) {
+func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorIndex, epoch phase0.Epoch) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -145,11 +145,15 @@ func (h *handler) updateDoppelgangerState(validatorIndices []phase0.ValidatorInd
 	}
 
 	if len(addedValidators) > 0 {
-		h.logger.Debug("Added validators to Doppelganger state", zap.Uint64s("validator_indices", addedValidators))
+		h.logger.Debug("Added validators to Doppelganger state",
+			zap.Uint64s("validator_indices", addedValidators),
+			fields.Epoch(epoch))
 	}
 
 	if len(removedValidators) > 0 {
-		h.logger.Debug("Removed validators from Doppelganger state", zap.Uint64s("validator_indices", removedValidators))
+		h.logger.Debug("Removed validators from Doppelganger state",
+			zap.Uint64s("validator_indices", addedValidators),
+			fields.Epoch(epoch))
 	}
 }
 
@@ -189,7 +193,7 @@ func (h *handler) Start(ctx context.Context) error {
 
 			// Update DG state with self participating validators from validator provider at the current epoch
 			validatorIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(currentEpoch))
-			h.updateDoppelgangerState(validatorIndices)
+			h.updateDoppelgangerState(validatorIndices, currentEpoch)
 
 			// Perform liveness checks during the first run or at the last slot of the epoch.
 			// This ensures that the beacon node has had enough time to observe blocks and attestations,
