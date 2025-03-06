@@ -38,7 +38,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.1
 	github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c
-	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250305014712-4a3c2acfe181
+	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250306230805-88e8355d7acb
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.10.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -60,6 +60,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
+	github.com/carlmjohnson/requests v0.24.3 // indirect
 	github.com/emicklei/dot v1.6.4 // indirect
 	github.com/fasthttp/router v1.5.4 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect

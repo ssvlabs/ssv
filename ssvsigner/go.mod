@@ -5,6 +5,7 @@ go 1.22.6
 require (
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
+	github.com/carlmjohnson/requests v0.24.3
 	github.com/fasthttp/router v1.5.4
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/pkg/errors v0.9.1
@@ -16,7 +17,6 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
-	github.com/carlmjohnson/requests v0.24.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/dot v1.6.4 // indirect
 	github.com/fatih/color v1.18.0 // indirect
