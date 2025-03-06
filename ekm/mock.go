@@ -7,9 +7,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/mock"
+
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"github.com/stretchr/testify/mock"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -18,21 +19,21 @@ type MockRemoteSigner struct {
 	mock.Mock
 }
 
-func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) ([]ssvclient.Status, error) {
+func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) ([]web3signer.Status, error) {
 	args := m.Called(ctx, shares[0])
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]ssvclient.Status), args.Error(1)
+	return args.Get(0).([]web3signer.Status), args.Error(1)
 }
 
-func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]ssvclient.Status, error) {
+func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error) {
 	args := m.Called(ctx, sharePubKeys)
 	result := args.Get(0)
 	if result == nil {
 		return nil, args.Error(1)
 	}
-	return result.([]ssvclient.Status), args.Error(1)
+	return result.([]web3signer.Status), args.Error(1)
 }
 
 func (m *MockRemoteSigner) Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error) {

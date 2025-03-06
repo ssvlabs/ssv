@@ -14,8 +14,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
@@ -65,7 +68,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 
 	mockSlashingProtector.On("BumpSlashingProtection", pubKey).Return(nil)
 
-	status := []ssvclient.Status{ssvclient.StatusImported}
+	status := []web3signer.Status{web3signer.StatusImported}
 	s.client.On("AddValidators", mock.Anything, ssvclient.ShareKeys{
 		PublicKey:        pubKey,
 		EncryptedPrivKey: encShare,
@@ -126,7 +129,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 	mockSlashingProtector.On("RemoveHighestAttestation", pubKey).Return(nil)
 	mockSlashingProtector.On("RemoveHighestProposal", pubKey).Return(nil)
 
-	status := []ssvclient.Status{ssvclient.StatusDeleted}
+	status := []web3signer.Status{web3signer.StatusDeleted}
 	s.client.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil)
 
 	err := rm.RemoveShare(pubKey)
@@ -529,7 +532,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := []byte("validator_pubkey")
 		encShare := []byte("encrypted_share_data")
 
-		status := []ssvclient.Status{ssvclient.StatusError}
+		status := []web3signer.Status{web3signer.StatusError}
 		clientMock.On("AddValidators", mock.Anything, ssvclient.ShareKeys{
 			PublicKey:        pubKey,
 			EncryptedPrivKey: encShare,
@@ -560,7 +563,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := []byte("validator_pubkey")
 		encShare := []byte("encrypted_share_data")
 
-		status := []ssvclient.Status{ssvclient.StatusImported}
+		status := []web3signer.Status{web3signer.StatusImported}
 		clientMock.On("AddValidators", mock.Anything, ssvclient.ShareKeys{
 			PublicKey:        pubKey,
 			EncryptedPrivKey: encShare,
@@ -620,7 +623,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		pubKey := []byte("validator_pubkey")
 
-		status := []ssvclient.Status{ssvclient.StatusError}
+		status := []web3signer.Status{web3signer.StatusError}
 		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil).Once()
 
 		err := rmTest.RemoveShare(pubKey)
@@ -647,7 +650,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		pubKey := []byte("validator_pubkey")
 
-		status := []ssvclient.Status{ssvclient.StatusDeleted}
+		status := []web3signer.Status{web3signer.StatusDeleted}
 		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil).Once()
 
 		slashingMock.On("RemoveHighestAttestation", pubKey).Return(errors.New("remove highest attestation error")).Once()

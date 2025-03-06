@@ -18,17 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-type Status = server.Status
-
-const (
-	StatusImported   = server.StatusImported
-	StatusDuplicated = server.StatusDuplicated
-	StatusDeleted    = server.StatusDeleted
-	StatusNotActive  = server.StatusNotActive
-	StatusNotFound   = server.StatusNotFound
-	StatusError      = server.StatusError
-)
-
 type ShareDecryptionError error
 
 type SSVSignerClient struct {
@@ -103,7 +92,7 @@ func (c *SSVSignerClient) ListValidators(ctx context.Context) ([]string, error) 
 	return resp, nil
 }
 
-func (c *SSVSignerClient) AddValidators(ctx context.Context, shares ...ShareKeys) ([]Status, error) {
+func (c *SSVSignerClient) AddValidators(ctx context.Context, shares ...ShareKeys) ([]web3signer.Status, error) {
 	encodedShares := make([]server.ShareKeys, 0, len(shares))
 	for _, share := range shares {
 		encodedShares = append(encodedShares, server.ShareKeys{
@@ -164,7 +153,7 @@ func (c *SSVSignerClient) AddValidators(ctx context.Context, shares ...ShareKeys
 	return resp.Statuses, nil
 }
 
-func (c *SSVSignerClient) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]Status, error) {
+func (c *SSVSignerClient) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error) {
 	pubKeyStrs := make([]string, 0, len(sharePubKeys))
 	for _, pubKey := range sharePubKeys {
 		pubKeyStrs = append(pubKeyStrs, hex.EncodeToString(pubKey))

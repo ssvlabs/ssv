@@ -40,8 +40,8 @@ type RemoteKeyManager struct {
 }
 
 type RemoteSigner interface {
-	AddValidators(ctx context.Context, shares ...ssvsignerclient.ShareKeys) ([]ssvsignerclient.Status, error)
-	RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]ssvsignerclient.Status, error)
+	AddValidators(ctx context.Context, shares ...ssvsignerclient.ShareKeys) ([]web3signer.Status, error)
+	RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error)
 	Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error)
 	OperatorIdentity(ctx context.Context) (string, error)
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
@@ -124,7 +124,7 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 		return fmt.Errorf("add validator: %w", err)
 	}
 
-	statuses, ok := res.([]ssvsignerclient.Status)
+	statuses, ok := res.([]web3signer.Status)
 	if !ok {
 		return fmt.Errorf("bug: expected []Status, got %T", res)
 	}
@@ -133,7 +133,7 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 		return fmt.Errorf("bug: expected 1 status, got %d", len(statuses))
 	}
 
-	if statuses[0] != ssvsignerclient.StatusImported {
+	if statuses[0] != web3signer.StatusImported {
 		return fmt.Errorf("unexpected status %s", statuses[0])
 	}
 
@@ -150,7 +150,7 @@ func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
 		return fmt.Errorf("remove validator: %w", err)
 	}
 
-	if statuses[0] != ssvsignerclient.StatusDeleted {
+	if statuses[0] != web3signer.StatusDeleted {
 		return fmt.Errorf("received status %s", statuses[0])
 	}
 

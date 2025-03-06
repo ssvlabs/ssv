@@ -9,12 +9,13 @@ import (
 	"testing"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/operator/keys"
 
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
@@ -53,8 +54,8 @@ func (s *ServerTestSuite) SetupTest() {
 
 	s.remoteSigner = &testRemoteSigner{
 		listKeysResult: []string{"0x123", "0x456"},
-		importResult:   []Status{StatusImported},
-		deleteResult:   []Status{StatusDeleted},
+		importResult:   []web3signer.Status{web3signer.StatusImported},
+		deleteResult:   []web3signer.Status{web3signer.StatusDeleted},
 		signResult:     []byte("signature_bytes"),
 	}
 
@@ -134,7 +135,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 	var response AddValidatorResponse
 	err = json.Unmarshal(resp.Body(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, []Status{StatusImported}, response.Statuses)
+	assert.Equal(t, []web3signer.Status{web3signer.StatusImported}, response.Statuses)
 
 	resp, err = s.ServeHTTP("POST", "/v1/validators/add", []byte("{invalid json}"))
 	require.NoError(t, err)
@@ -226,7 +227,7 @@ func (s *ServerTestSuite) TestRemoveValidator() {
 	var response RemoveValidatorResponse
 	err = json.Unmarshal(resp.Body(), &response)
 	require.NoError(t, err)
-	assert.Equal(t, []Status{StatusDeleted}, response.Statuses)
+	assert.Equal(t, []web3signer.Status{web3signer.StatusDeleted}, response.Statuses)
 
 	resp, err = s.ServeHTTP("POST", "/v1/validators/remove", []byte("{invalid json}"))
 	require.NoError(t, err)
@@ -241,12 +242,12 @@ func (s *ServerTestSuite) TestRemoveValidator() {
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
 
-	s.remoteSigner.deleteResult = []Status{StatusDeleted, StatusNotFound}
+	s.remoteSigner.deleteResult = []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusNotFound}
 	resp, err = s.ServeHTTP("POST", "/v1/validators/remove", reqBody)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
 
-	s.remoteSigner.deleteResult = []Status{StatusDeleted}
+	s.remoteSigner.deleteResult = []web3signer.Status{web3signer.StatusDeleted}
 
 	s.remoteSigner.deleteError = errors.New("remote signer error")
 	resp, err = s.ServeHTTP("POST", "/v1/validators/remove", reqBody)
@@ -427,9 +428,9 @@ func (t *testOperatorPrivateKey) Base64() string {
 type testRemoteSigner struct {
 	listKeysResult []string
 	listKeysError  error
-	importResult   []Status
+	importResult   []web3signer.Status
 	importError    error
-	deleteResult   []Status
+	deleteResult   []web3signer.Status
 	deleteError    error
 	signResult     []byte
 	signError      error
@@ -442,14 +443,14 @@ func (t *testRemoteSigner) ListKeys(ctx context.Context) ([]string, error) {
 	return t.listKeysResult, nil
 }
 
-func (t *testRemoteSigner) ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]Status, error) {
+func (t *testRemoteSigner) ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]web3signer.Status, error) {
 	if t.importError != nil {
 		return nil, t.importError
 	}
 	return t.importResult, nil
 }
 
-func (t *testRemoteSigner) DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]Status, error) {
+func (t *testRemoteSigner) DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]web3signer.Status, error) {
 	if t.deleteError != nil {
 		return nil, t.deleteError
 	}

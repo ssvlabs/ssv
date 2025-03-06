@@ -58,7 +58,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		shares             []ShareKeys
 		expectedStatusCode int
 		expectedResponse   server.AddValidatorResponse
-		expectedResult     []Status
+		expectedResult     []web3signer.Status
 		expectError        bool
 		isDecryptionError  bool
 	}{
@@ -76,9 +76,9 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: server.AddValidatorResponse{
-				Statuses: []Status{StatusImported, StatusDuplicated},
+				Statuses: []web3signer.Status{web3signer.StatusImported, web3signer.StatusDuplicated},
 			},
-			expectedResult: []Status{StatusImported, StatusDuplicated},
+			expectedResult: []web3signer.Status{web3signer.StatusImported, web3signer.StatusDuplicated},
 			expectError:    false,
 		},
 		{
@@ -111,9 +111,9 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares:             []ShareKeys{},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: server.AddValidatorResponse{
-				Statuses: []Status{},
+				Statuses: []web3signer.Status{},
 			},
-			expectedResult: []Status{},
+			expectedResult: []web3signer.Status{},
 			expectError:    false,
 		},
 	}
@@ -179,7 +179,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 		pubKeys            [][]byte
 		expectedStatusCode int
 		expectedResponse   server.RemoveValidatorResponse
-		expectedResult     []Status
+		expectedResult     []web3signer.Status
 		expectError        bool
 	}{
 		{
@@ -190,9 +190,9 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 			},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: server.RemoveValidatorResponse{
-				Statuses: []Status{StatusDeleted, StatusNotFound},
+				Statuses: []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusNotFound},
 			},
-			expectedResult: []Status{StatusDeleted, StatusNotFound},
+			expectedResult: []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusNotFound},
 			expectError:    false,
 		},
 		{
@@ -207,9 +207,9 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 			pubKeys:            [][]byte{},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: server.RemoveValidatorResponse{
-				Statuses: []Status{},
+				Statuses: []web3signer.Status{},
 			},
-			expectedResult: []Status{},
+			expectedResult: []web3signer.Status{},
 			expectError:    false,
 		},
 	}

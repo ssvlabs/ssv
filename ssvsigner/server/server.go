@@ -29,8 +29,8 @@ type Server struct {
 
 type RemoteSigner interface {
 	ListKeys(ctx context.Context) ([]string, error)
-	ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]Status, error)
-	DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]Status, error)
+	ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]web3signer.Status, error)
+	DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]web3signer.Status, error)
 	Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error)
 }
 
@@ -65,17 +65,6 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 	return r.router.Handler
 }
 
-type Status = web3signer.Status
-
-const (
-	StatusImported   = web3signer.StatusImported
-	StatusDuplicated = web3signer.StatusDuplicated
-	StatusDeleted    = web3signer.StatusDeleted
-	StatusNotActive  = web3signer.StatusNotActive
-	StatusNotFound   = web3signer.StatusNotFound
-	StatusError      = web3signer.StatusError
-)
-
 type ListValidatorsResponse []string
 
 func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
@@ -108,7 +97,7 @@ type ShareKeys struct {
 }
 
 type AddValidatorResponse struct {
-	Statuses []Status
+	Statuses []web3signer.Status
 }
 
 func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
@@ -200,7 +189,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	for i, status := range statuses {
-		if status != StatusImported {
+		if status != web3signer.StatusImported {
 			r.logger.Warn("unexpected status",
 				zap.String("status", string(status)),
 				zap.String("share_pubkey", req.ShareKeys[i].PublicKey),
@@ -225,7 +214,7 @@ type RemoveValidatorRequest struct {
 }
 
 type RemoveValidatorResponse struct {
-	Statuses []Status `json:"statuses"`
+	Statuses []web3signer.Status `json:"statuses"`
 }
 
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
@@ -251,7 +240,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	for i, status := range statuses {
-		if status != StatusDeleted {
+		if status != web3signer.StatusDeleted {
 			r.logger.Warn("unexpected status",
 				zap.String("status", string(status)),
 				zap.String("share_pubkey", req.PublicKeys[i]),
