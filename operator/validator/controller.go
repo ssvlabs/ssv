@@ -974,6 +974,8 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 			if !c.reportIndicesChange(ctx) {
 				c.logger.Error("failed to notify indices change")
 			}
+		} else {
+			c.logger.Warn("no new attesting validators started")
 		}
 	}
 
