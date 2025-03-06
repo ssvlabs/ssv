@@ -813,7 +813,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		networkConfig:           opts.networkConfig,
 		messageRouter:           newMessageRouter(logger),
 		committeeValidatorSetup: make(chan struct{}),
-		indicesChange:           make(chan struct{}, 32),
+		indicesChangeCh:         make(chan struct{}, 32),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,
@@ -1158,9 +1158,9 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			done := make(<-chan struct{})
 
 			if tc.expectIndicesChange {
-				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
 			} else {
-				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
 			}
 
 			require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
@@ -1235,7 +1235,7 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 		sharesStorage:     mockSharesStorage,
 		validatorsMap:     mockValidatorsMap,
 		networkConfig:     networkconfig.TestNetwork,
-		indicesChange:     make(chan struct{}, 1), // Buffered channel for each test
+		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
 		validatorOptions: validator.Options{
 			Signer:        spectestingutils.NewTestingKeyManager(),
 			NetworkConfig: networkconfig.TestNetwork,

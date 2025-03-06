@@ -185,7 +185,7 @@ type controller struct {
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
 
-	indicesChange   chan struct{}
+	indicesChangeCh chan struct{}
 	validatorExitCh chan duties.ExitDescriptor
 }
 
@@ -269,7 +269,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		),
 		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
 
-		indicesChange:           make(chan struct{}),
+		indicesChangeCh:         make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
@@ -288,7 +288,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
-	return c.indicesChange
+	return c.indicesChangeCh
 }
 
 func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
@@ -988,7 +988,7 @@ func (c *controller) reportIndicesChange(ctx context.Context) bool {
 	select {
 	case <-timeoutCtx.Done():
 		return false
-	case c.indicesChange <- struct{}{}:
+	case c.indicesChangeCh <- struct{}{}:
 		return true
 	}
 }
