@@ -15,12 +15,12 @@ import (
 )
 
 type CLI struct {
-	ListenAddr              string `env:"LISTEN_ADDR" default:":8080"` // TODO: finalize port
+	ListenAddr              string `env:"LISTEN_ADDR" default:":8080" required:""` // TODO: finalize port
 	Web3SignerEndpoint      string `env:"WEB3SIGNER_ENDPOINT" required:""`
-	PrivateKey              string `env:"PRIVATE_KEY"`
-	PrivateKeyFile          string `env:"PRIVATE_KEY_FILE"`
-	PasswordFile            string `env:"PASSWORD_FILE"`
-	ShareKeystorePassphrase string `env:"SHARE_KEYSTORE_PASSPHRASE" default:"password"` // TODO: finalize default password
+	PrivateKey              string `env:"PRIVATE_KEY" xor:"keys" required:""`
+	PrivateKeyFile          string `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files"`
+	PasswordFile            string `env:"PASSWORD_FILE" and:"files"`
+	ShareKeystorePassphrase string `env:"SHARE_KEYSTORE_PASSPHRASE" default:"password" required:""` // TODO: finalize default password
 }
 
 func main() {
@@ -46,20 +46,14 @@ func main() {
 		zap.Bool("got_share_keystore_passphrase", cli.ShareKeystorePassphrase != ""),
 	)
 
+	// PrivateKeyFile and PasswordFile use the same 'and' group,
+	// so setting them as 'required' wouldn't allow to start with PrivateKey.
+	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
+		logger.Fatal("neither private key nor keystore provided")
+	}
+
 	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
 		logger.Fatal("invalid WEB3SIGNER_ENDPOINT format", zap.Error(err))
-	}
-
-	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
-		logger.Fatal("either private key or private key file must be set, found none")
-	}
-
-	if cli.PrivateKey != "" && cli.PrivateKeyFile != "" {
-		logger.Fatal("either private key or private key file must be set, found both")
-	}
-
-	if cli.ShareKeystorePassphrase == "" {
-		logger.Fatal("share keystore passphrase must not be empty")
 	}
 
 	var operatorPrivateKey keys.OperatorPrivateKey
