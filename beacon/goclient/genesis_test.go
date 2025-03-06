@@ -16,12 +16,14 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
+const genesisPath = "/eth/v1/beacon/genesis"
+
 func TestGenesis(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
 		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			if r.URL.Path == "/eth/v1/beacon/genesis" {
+			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{
 					"data": {
 						"genesis_time": "1606824023",
@@ -58,7 +60,7 @@ func TestGenesis(t *testing.T) {
 
 	t.Run("nil_data", func(t *testing.T) {
 		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			if r.URL.Path == "/eth/v1/beacon/genesis" {
+			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{"data": null}`), nil
 			}
 			return resp, nil

@@ -18,6 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
+const forkSchedulePath = "/eth/v1/config/fork_schedule"
+
 func TestCurrentFork(t *testing.T) {
 	ctx := context.Background()
 
@@ -26,7 +28,7 @@ func TestCurrentFork(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			if r.URL.Path == "/eth/v1/config/fork_schedule" {
+			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{
 					"data": [
 						{
@@ -76,7 +78,7 @@ func TestCurrentFork(t *testing.T) {
 
 	t.Run("nil_data", func(t *testing.T) {
 		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			if r.URL.Path == "/eth/v1/config/fork_schedule" {
+			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{"data": null}`), nil
 			}
 			return resp, nil
@@ -104,7 +106,7 @@ func TestCurrentFork(t *testing.T) {
 
 	t.Run("no_current_fork", func(t *testing.T) {
 		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			if r.URL.Path == "/eth/v1/config/fork_schedule" {
+			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{
 					"data": [
 						{
