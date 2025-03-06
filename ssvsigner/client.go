@@ -49,7 +49,7 @@ func WithLogger(logger *zap.Logger) ClientOption {
 }
 
 func (c *Client) ListValidators(ctx context.Context) ([]string, error) {
-	url := fmt.Sprintf("%s/v1/validators/list", c.baseURL)
+	url := fmt.Sprintf("%s/v1/validators", c.baseURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -102,7 +102,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ClientShareKeys) (
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/validators/add", c.baseURL)
+	url := fmt.Sprintf("%s/v1/validators", c.baseURL)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBytes))
 	if err != nil {
@@ -160,9 +160,9 @@ func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) (
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/validators/remove", c.baseURL)
+	url := fmt.Sprintf("%s/v1/validators", c.baseURL)
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBytes))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, bytes.NewReader(reqBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

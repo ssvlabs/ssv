@@ -41,9 +41,9 @@ func NewServer(
 		keystorePasswd:  keystorePasswd,
 	}
 
-	r.GET("/v1/validators/list", server.handleListValidators)
-	r.POST("/v1/validators/add", server.handleAddValidator)
-	r.POST("/v1/validators/remove", server.handleRemoveValidator)
+	r.GET("/v1/validators", server.handleListValidators)
+	r.POST("/v1/validators", server.handleAddValidator)
+	r.DELETE("/v1/validators", server.handleRemoveValidator)
 	r.POST("/v1/validators/sign/{identifier}", server.handleSignValidator)
 
 	r.GET("/v1/operator/identity", server.handleOperatorIdentity)
