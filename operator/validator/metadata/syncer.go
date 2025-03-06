@@ -244,7 +244,7 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 	default:
 	}
 
-	sharesBefore := s.nextBatch(ctx, subnetsBuf)
+	sharesBefore := s.nextBatchFromDB(ctx, subnetsBuf)
 	if len(sharesBefore) == 0 {
 		return SyncBatch{}, false, nil
 	}
@@ -269,8 +269,8 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 	return syncBatch, len(sharesBefore) < batchSize, nil
 }
 
-// nextBatch returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
-func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.SSVShare {
+// nextBatchFromDB returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
+func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.SSVShare {
 	// TODO: use context, return if it's done
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
