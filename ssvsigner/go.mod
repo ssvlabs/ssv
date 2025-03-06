@@ -8,7 +8,7 @@ require (
 	github.com/carlmjohnson/requests v0.24.3
 	github.com/fasthttp/router v1.5.4
 	github.com/herumi/bls-eth-go-binary v1.29.1
-	github.com/ssvlabs/ssv v1.2.1-0.20250306231303-8acaa1ae8606
+	github.com/ssvlabs/ssv v1.2.1-0.20250306232720-fb80a8af6702
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0
 	go.uber.org/zap v1.27.0
@@ -30,6 +30,7 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
