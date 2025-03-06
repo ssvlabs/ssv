@@ -23,6 +23,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -1016,8 +1017,9 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			name: "report indices change (PendingQueued → ActiveOngoing)",
 			sharesBefore: []*types.SSVShare{
 				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
-					Status: eth2apiv1.ValidatorStatePendingQueued,
+					Share:           spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+					Status:          eth2apiv1.ValidatorStatePendingQueued,
+					ActivationEpoch: goclient.FarFutureEpoch,
 				},
 			},
 			sharesAfter: []*types.SSVShare{
