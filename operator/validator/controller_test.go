@@ -1155,15 +1155,50 @@ func TestHandleMetadataUpdates(t *testing.T) {
 				SharesAfter:  tc.sharesAfter,
 			}
 
+			done := make(<-chan struct{})
+
 			if tc.expectIndicesChange {
-				go waitForIndicesChange(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
 			} else {
-				go waitForNoAction(t, validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
+				done = waitForNoAction(validatorCtrl.logger, validatorCtrl.indicesChange, 100*time.Millisecond)
 			}
 
 			require.NoError(t, validatorCtrl.handleMetadataUpdate(validatorCtrl.ctx, syncBatch))
+			<-done // Ensure the goroutine has completed before exiting the test
 		})
 	}
+}
+
+func waitForIndicesChange(logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) <-chan struct{} {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		select {
+		case <-indicesChange:
+			logger.Debug("indices change received")
+		case <-time.After(timeout):
+			panic("Timeout: no indices change received")
+		}
+	}()
+
+	return done
+}
+
+func waitForNoAction(logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) <-chan struct{} {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		select {
+		case <-indicesChange:
+			panic("Unexpected indices change received")
+		case <-time.After(timeout):
+			logger.Debug("expected: no indices change received")
+		}
+	}()
+
+	return done
 }
 
 func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
@@ -1214,38 +1249,4 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 	mockRecipientsStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
 
 	return validatorCtrl, mockSharesStorage
-}
-
-func waitForIndicesChange(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
-	done := make(chan struct{}) // Signal completion
-
-	go func() {
-		defer close(done) // Ensure we mark completion
-		select {
-		case <-indicesChange:
-			logger.Debug("indices change received")
-		case <-time.After(timeout):
-			t.Logf("Timeout: no indices change received")
-			t.Fail() // Mark failure safely
-		}
-	}()
-
-	t.Cleanup(func() { <-done }) // Ensure goroutine completes before test exits
-}
-
-func waitForNoAction(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		select {
-		case <-indicesChange:
-			t.Logf("Unexpected indices change received")
-			t.Fail()
-		case <-time.After(timeout):
-			logger.Debug("expected: no indices change received")
-		}
-	}()
-
-	t.Cleanup(func() { <-done }) // Wait for goroutine before test exits
 }
