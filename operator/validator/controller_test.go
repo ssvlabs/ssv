@@ -1216,19 +1216,39 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 }
 
 func waitForIndicesChange(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
-	select {
-	case <-indicesChange:
-		logger.Debug("indices change received")
-	case <-time.After(timeout):
-		require.FailNow(t, "timed out waiting for indices change")
+	errChan := make(chan error, 1)
+
+	go func() {
+		select {
+		case <-indicesChange:
+			logger.Debug("indices change received")
+			errChan <- nil
+		case <-time.After(timeout):
+			errChan <- fmt.Errorf("timed out waiting for indices change")
+		}
+	}()
+
+	if err := <-errChan; err != nil {
+		t.Logf("Failing test: %s", err)
+		t.Fail()
 	}
 }
 
 func waitForNoAction(t *testing.T, logger *zap.Logger, indicesChange chan struct{}, timeout time.Duration) {
-	select {
-	case <-indicesChange:
-		require.FailNow(t, "unexpected indices change received")
-	case <-time.After(timeout):
-		logger.Debug("expected: no indices change received")
+	errChan := make(chan error, 1)
+
+	go func() {
+		select {
+		case <-indicesChange:
+			errChan <- fmt.Errorf("unexpected indices change received")
+		case <-time.After(timeout):
+			logger.Debug("expected: no indices change received")
+			errChan <- nil
+		}
+	}()
+
+	if err := <-errChan; err != nil {
+		t.Logf("Failing test: %s", err)
+		t.Fail()
 	}
 }
