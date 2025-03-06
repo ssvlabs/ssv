@@ -20,7 +20,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
+	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -40,7 +40,7 @@ type RemoteKeyManager struct {
 }
 
 type RemoteSigner interface {
-	AddValidators(ctx context.Context, shares ...ssvsignerclient.ShareKeys) ([]web3signer.Status, error)
+	AddValidators(ctx context.Context, shares ...ssvsigner.ClientShareKeys) ([]web3signer.Status, error)
 	RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error)
 	Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error)
 	OperatorIdentity(ctx context.Context) (string, error)
@@ -110,13 +110,13 @@ func WithRetryCount(n int) Option {
 }
 
 func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) error {
-	shareKeys := ssvsignerclient.ShareKeys{
+	shareKeys := ssvsigner.ClientShareKeys{
 		EncryptedPrivKey: encryptedSharePrivKey,
 		PublicKey:        sharePubKey,
 	}
 
 	f := func(arg any) (any, error) {
-		return km.remoteSigner.AddValidators(context.Background(), arg.(ssvsignerclient.ShareKeys)) // TODO: use context
+		return km.remoteSigner.AddValidators(context.Background(), arg.(ssvsigner.ClientShareKeys)) // TODO: use context
 	}
 
 	res, err := km.retryFunc(f, shareKeys, "AddValidators")
@@ -175,7 +175,7 @@ func (km *RemoteKeyManager) retryFunc(f func(arg any) (any, error), arg any, fun
 		if err == nil {
 			return v, nil
 		}
-		var shareDecryptionError ssvsignerclient.ShareDecryptionError
+		var shareDecryptionError ssvsigner.ShareDecryptionError
 		if errors.As(err, &shareDecryptionError) {
 			return nil, ShareDecryptionError(err)
 		}

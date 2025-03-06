@@ -1,8 +1,7 @@
-package server
+package ssvsigner
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/keystore"
-
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -27,14 +25,7 @@ type Server struct {
 	keystorePasswd  string
 }
 
-type RemoteSigner interface {
-	ListKeys(ctx context.Context) ([]string, error)
-	ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]web3signer.Status, error)
-	DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]web3signer.Status, error)
-	Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error)
-}
-
-func New(
+func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
 	remoteSigner RemoteSigner,
@@ -65,8 +56,6 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 	return r.router.Handler
 }
 
-type ListValidatorsResponse []string
-
 func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	publicKeys, err := r.remoteSigner.ListKeys(ctx)
 	if err != nil {
@@ -85,19 +74,6 @@ func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	r.writeBytes(ctx, respJSON)
-}
-
-type AddValidatorRequest struct {
-	ShareKeys []ShareKeys `json:"share_keys"`
-}
-
-type ShareKeys struct {
-	EncryptedPrivKey string `json:"encrypted_private_key"`
-	PublicKey        string `json:"public_key"`
-}
-
-type AddValidatorResponse struct {
-	Statuses []web3signer.Status
 }
 
 func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
@@ -207,14 +183,6 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	r.writeBytes(ctx, respJSON)
-}
-
-type RemoveValidatorRequest struct {
-	PublicKeys []string `json:"public_keys"`
-}
-
-type RemoveValidatorResponse struct {
-	Statuses []web3signer.Status `json:"statuses"`
 }
 
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {

@@ -22,8 +22,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
-
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -66,6 +64,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -151,14 +150,14 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var operatorPrivKey keys.OperatorPrivateKey
-		var ssvSignerClient *ssvsignerclient.SSVSignerClient
+		var ssvSignerClient *ssvsigner.Client
 		var operatorPubKeyBase64 string
 
 		if usingSSVSigner {
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
 			logger.Info("using ssv-signer for signing")
 
-			ssvSignerClient = ssvsignerclient.New(cfg.SSVSignerEndpoint, ssvsignerclient.WithLogger(logger))
+			ssvSignerClient = ssvsigner.NewClient(cfg.SSVSignerEndpoint, ssvsigner.WithLogger(logger))
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
@@ -561,7 +560,7 @@ func ensureNoMissingKeys(
 	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
-	ssvSignerClient *ssvsignerclient.SSVSignerClient,
+	ssvSignerClient *ssvsigner.Client,
 ) {
 	if operatorDataStore.GetOperatorID() == 0 {
 		logger.Fatal("operator ID is not ready")

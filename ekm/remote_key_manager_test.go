@@ -14,17 +14,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	ssvclient "github.com/ssvlabs/ssv/ssvsigner/client"
-	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
-	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
 type RemoteKeyManagerTestSuite struct {
@@ -69,7 +66,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 	mockSlashingProtector.On("BumpSlashingProtection", pubKey).Return(nil)
 
 	status := []web3signer.Status{web3signer.StatusImported}
-	s.client.On("AddValidators", mock.Anything, ssvclient.ShareKeys{
+	s.client.On("AddValidators", mock.Anything, ssvsigner.ClientShareKeys{
 		PublicKey:        pubKey,
 		EncryptedPrivKey: encShare,
 	}).Return(status, nil)
@@ -95,7 +92,7 @@ func (s *RemoteKeyManagerTestSuite) TestDecryptionErrors() {
 
 	s.Run("DecryptionError", func() {
 
-		decryptionError := ssvsignerclient.ShareDecryptionError(errors.New("failed to decrypt share"))
+		decryptionError := ssvsigner.ShareDecryptionError(errors.New("failed to decrypt share"))
 
 		decryptFunc := func(arg any) (any, error) {
 			return nil, decryptionError
@@ -185,7 +182,7 @@ func (s *RemoteKeyManagerTestSuite) TestRetryFuncMoreCases() {
 
 	s.Run("ShareDecryptionError", func() {
 		testArg := "test-arg"
-		decryptionError := ssvsignerclient.ShareDecryptionError(errors.New("decryption error"))
+		decryptionError := ssvsigner.ShareDecryptionError(errors.New("decryption error"))
 
 		failingFunc := func(arg any) (any, error) {
 			s.Equal(testArg, arg)
@@ -503,7 +500,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := []byte("validator_pubkey")
 		encShare := []byte("encrypted_share_data")
 
-		clientMock.On("AddValidators", mock.Anything, ssvclient.ShareKeys{
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ClientShareKeys{
 			PublicKey:        pubKey,
 			EncryptedPrivKey: encShare,
 		}).Return(nil, errors.New("add validators error")).Once()
@@ -533,7 +530,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		encShare := []byte("encrypted_share_data")
 
 		status := []web3signer.Status{web3signer.StatusError}
-		clientMock.On("AddValidators", mock.Anything, ssvclient.ShareKeys{
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ClientShareKeys{
 			PublicKey:        pubKey,
 			EncryptedPrivKey: encShare,
 		}).Return(status, nil).Once()
@@ -564,7 +561,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		encShare := []byte("encrypted_share_data")
 
 		status := []web3signer.Status{web3signer.StatusImported}
-		clientMock.On("AddValidators", mock.Anything, ssvclient.ShareKeys{
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ClientShareKeys{
 			PublicKey:        pubKey,
 			EncryptedPrivKey: encShare,
 		}).Return(status, nil).Once()

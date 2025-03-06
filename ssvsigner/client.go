@@ -1,4 +1,4 @@
-package ssvsignerclient
+package ssvsigner
 
 import (
 	"bytes"
@@ -14,22 +14,19 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-type ShareDecryptionError error
-
-type SSVSignerClient struct {
+type Client struct {
 	logger     *zap.Logger
 	baseURL    string
 	httpClient *http.Client
 }
 
-func New(baseURL string, opts ...Option) *SSVSignerClient {
+func NewClient(baseURL string, opts ...ClientOption) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
 
-	c := &SSVSignerClient{
+	c := &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -43,20 +40,15 @@ func New(baseURL string, opts ...Option) *SSVSignerClient {
 	return c
 }
 
-type Option func(*SSVSignerClient)
+type ClientOption func(*Client)
 
-func WithLogger(logger *zap.Logger) Option {
-	return func(client *SSVSignerClient) {
+func WithLogger(logger *zap.Logger) ClientOption {
+	return func(client *Client) {
 		client.logger = logger
 	}
 }
 
-type ShareKeys struct {
-	EncryptedPrivKey []byte
-	PublicKey        []byte
-}
-
-func (c *SSVSignerClient) ListValidators(ctx context.Context) ([]string, error) {
+func (c *Client) ListValidators(ctx context.Context) ([]string, error) {
 	url := fmt.Sprintf("%s/v1/validators/list", c.baseURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -84,7 +76,7 @@ func (c *SSVSignerClient) ListValidators(ctx context.Context) ([]string, error) 
 		return nil, fmt.Errorf("unexpected status code %d", httpResp.StatusCode)
 	}
 
-	var resp server.ListValidatorsResponse
+	var resp ListValidatorsResponse
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response body: %w", err)
 	}
@@ -92,16 +84,16 @@ func (c *SSVSignerClient) ListValidators(ctx context.Context) ([]string, error) 
 	return resp, nil
 }
 
-func (c *SSVSignerClient) AddValidators(ctx context.Context, shares ...ShareKeys) ([]web3signer.Status, error) {
-	encodedShares := make([]server.ShareKeys, 0, len(shares))
+func (c *Client) AddValidators(ctx context.Context, shares ...ClientShareKeys) ([]web3signer.Status, error) {
+	encodedShares := make([]ServerShareKeys, 0, len(shares))
 	for _, share := range shares {
-		encodedShares = append(encodedShares, server.ShareKeys{
+		encodedShares = append(encodedShares, ServerShareKeys{
 			EncryptedPrivKey: hex.EncodeToString(share.EncryptedPrivKey),
 			PublicKey:        hex.EncodeToString(share.PublicKey),
 		})
 	}
 
-	req := server.AddValidatorRequest{
+	req := AddValidatorRequest{
 		ShareKeys: encodedShares,
 	}
 
@@ -141,7 +133,7 @@ func (c *SSVSignerClient) AddValidators(ctx context.Context, shares ...ShareKeys
 		return nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(respBytes))
 	}
 
-	var resp server.AddValidatorResponse
+	var resp AddValidatorResponse
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response body: %w", err)
 	}
@@ -153,13 +145,13 @@ func (c *SSVSignerClient) AddValidators(ctx context.Context, shares ...ShareKeys
 	return resp.Statuses, nil
 }
 
-func (c *SSVSignerClient) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error) {
+func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error) {
 	pubKeyStrs := make([]string, 0, len(sharePubKeys))
 	for _, pubKey := range sharePubKeys {
 		pubKeyStrs = append(pubKeyStrs, hex.EncodeToString(pubKey))
 	}
 
-	req := server.RemoveValidatorRequest{
+	req := RemoveValidatorRequest{
 		PublicKeys: pubKeyStrs,
 	}
 
@@ -196,7 +188,7 @@ func (c *SSVSignerClient) RemoveValidators(ctx context.Context, sharePubKeys ...
 		return nil, fmt.Errorf("unexpected status code %d: %s", httpResp.StatusCode, string(respBytes))
 	}
 
-	var resp server.RemoveValidatorResponse
+	var resp RemoveValidatorResponse
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response body: %w", err)
 	}
@@ -208,7 +200,7 @@ func (c *SSVSignerClient) RemoveValidators(ctx context.Context, sharePubKeys ...
 	return resp.Statuses, nil
 }
 
-func (c *SSVSignerClient) Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error) {
+func (c *Client) Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error) {
 	url := fmt.Sprintf("%s/v1/validators/sign/%s", c.baseURL, hex.EncodeToString(sharePubKey))
 
 	data, err := json.Marshal(payload)
@@ -245,7 +237,7 @@ func (c *SSVSignerClient) Sign(ctx context.Context, sharePubKey []byte, payload 
 	return body, nil
 }
 
-func (c *SSVSignerClient) OperatorIdentity(ctx context.Context) (string, error) {
+func (c *Client) OperatorIdentity(ctx context.Context) (string, error) {
 	url := fmt.Sprintf("%s/v1/operator/identity", c.baseURL)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -276,7 +268,7 @@ func (c *SSVSignerClient) OperatorIdentity(ctx context.Context) (string, error) 
 	return string(body), nil
 }
 
-func (c *SSVSignerClient) OperatorSign(ctx context.Context, payload []byte) ([]byte, error) {
+func (c *Client) OperatorSign(ctx context.Context, payload []byte) ([]byte, error) {
 	url := fmt.Sprintf("%s/v1/operator/sign", c.baseURL)
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
@@ -308,7 +300,7 @@ func (c *SSVSignerClient) OperatorSign(ctx context.Context, payload []byte) ([]b
 	return body, nil
 }
 
-func (c *SSVSignerClient) MissingKeys(ctx context.Context, localKeys []string) ([]string, error) {
+func (c *Client) MissingKeys(ctx context.Context, localKeys []string) ([]string, error) {
 	remoteKeys, err := c.ListValidators(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get remote keys: %w", err)

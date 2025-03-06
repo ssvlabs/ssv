@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/mock"
 
-	ssvclient "github.com/ssvlabs/ssv/ssvsigner/client"
+	ssvclient "github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -19,7 +19,7 @@ type MockRemoteSigner struct {
 	mock.Mock
 }
 
-func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) ([]web3signer.Status, error) {
+func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ClientShareKeys) ([]web3signer.Status, error) {
 	args := m.Called(ctx, shares[0])
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

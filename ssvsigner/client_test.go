@@ -1,4 +1,4 @@
-package ssvsignerclient
+package ssvsigner
 
 import (
 	"context"
@@ -19,14 +19,13 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/server"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
 type SSVSignerClientSuite struct {
 	suite.Suite
 	server     *httptest.Server
-	client     *SSVSignerClient
+	client     *Client
 	logger     *zap.Logger
 	mux        *http.ServeMux
 	serverHits int
@@ -42,7 +41,7 @@ func (s *SSVSignerClientSuite) SetupTest() {
 		s.serverHits++
 		s.mux.ServeHTTP(w, r)
 	}))
-	s.client = New(s.server.URL, WithLogger(s.logger))
+	s.client = NewClient(s.server.URL, WithLogger(s.logger))
 }
 
 func (s *SSVSignerClientSuite) TearDownTest() {
@@ -55,16 +54,16 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 	testCases := []struct {
 		name               string
-		shares             []ShareKeys
+		shares             []ServerShareKeys
 		expectedStatusCode int
-		expectedResponse   server.AddValidatorResponse
+		expectedResponse   AddValidatorResponse
 		expectedResult     []web3signer.Status
 		expectError        bool
 		isDecryptionError  bool
 	}{
 		{
 			name: "Success",
-			shares: []ShareKeys{
+			shares: []ServerShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted1"),
 					PublicKey:        []byte("pubkey1"),
@@ -75,7 +74,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				},
 			},
 			expectedStatusCode: http.StatusOK,
-			expectedResponse: server.AddValidatorResponse{
+			expectedResponse: AddValidatorResponse{
 				Statuses: []web3signer.Status{web3signer.StatusImported, web3signer.StatusDuplicated},
 			},
 			expectedResult: []web3signer.Status{web3signer.StatusImported, web3signer.StatusDuplicated},
@@ -83,34 +82,34 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		},
 		{
 			name: "DecryptionError",
-			shares: []ShareKeys{
+			shares: []ServerShareKeys{
 				{
 					EncryptedPrivKey: []byte("bad_encrypted"),
 					PublicKey:        []byte("pubkey"),
 				},
 			},
 			expectedStatusCode: http.StatusUnprocessableEntity,
-			expectedResponse:   server.AddValidatorResponse{},
+			expectedResponse:   AddValidatorResponse{},
 			expectError:        true,
 			isDecryptionError:  true,
 		},
 		{
 			name: "ServerError",
-			shares: []ShareKeys{
+			shares: []ServerShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted"),
 					PublicKey:        []byte("pubkey"),
 				},
 			},
 			expectedStatusCode: http.StatusInternalServerError,
-			expectedResponse:   server.AddValidatorResponse{},
+			expectedResponse:   AddValidatorResponse{},
 			expectError:        true,
 		},
 		{
 			name:               "NoShares",
-			shares:             []ShareKeys{},
+			shares:             []ServerShareKeys{},
 			expectedStatusCode: http.StatusOK,
-			expectedResponse: server.AddValidatorResponse{
+			expectedResponse: AddValidatorResponse{
 				Statuses: []web3signer.Status{},
 			},
 			expectedResult: []web3signer.Status{},
@@ -130,7 +129,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				require.NoError(t, err, "Failed to read request body")
 				defer r.Body.Close()
 
-				var req server.AddValidatorRequest
+				var req AddValidatorRequest
 				err = json.Unmarshal(body, &req)
 				require.NoError(t, err, "Failed to unmarshal request body")
 
@@ -178,7 +177,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 		name               string
 		pubKeys            [][]byte
 		expectedStatusCode int
-		expectedResponse   server.RemoveValidatorResponse
+		expectedResponse   RemoveValidatorResponse
 		expectedResult     []web3signer.Status
 		expectError        bool
 	}{
@@ -189,7 +188,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				[]byte("pubkey2"),
 			},
 			expectedStatusCode: http.StatusOK,
-			expectedResponse: server.RemoveValidatorResponse{
+			expectedResponse: RemoveValidatorResponse{
 				Statuses: []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusNotFound},
 			},
 			expectedResult: []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusNotFound},
@@ -199,14 +198,14 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 			name:               "ServerError",
 			pubKeys:            [][]byte{[]byte("pubkey")},
 			expectedStatusCode: http.StatusInternalServerError,
-			expectedResponse:   server.RemoveValidatorResponse{},
+			expectedResponse:   RemoveValidatorResponse{},
 			expectError:        true,
 		},
 		{
 			name:               "NoPubKeys",
 			pubKeys:            [][]byte{},
 			expectedStatusCode: http.StatusOK,
-			expectedResponse: server.RemoveValidatorResponse{
+			expectedResponse: RemoveValidatorResponse{
 				Statuses: []web3signer.Status{},
 			},
 			expectedResult: []web3signer.Status{},
@@ -226,7 +225,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				require.NoError(t, err, "Failed to read request body")
 				defer r.Body.Close()
 
-				var req server.RemoveValidatorRequest
+				var req RemoveValidatorRequest
 				err = json.Unmarshal(body, &req)
 				require.NoError(t, err, "Failed to unmarshal request body")
 
@@ -266,14 +265,14 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 	testCases := []struct {
 		name               string
 		expectedStatusCode int
-		expectedResponse   server.ListValidatorsResponse
+		expectedResponse   ListValidatorsResponse
 		expectedResult     []string
 		expectError        bool
 	}{
 		{
 			name:               "Success",
 			expectedStatusCode: http.StatusOK,
-			expectedResponse: server.ListValidatorsResponse{
+			expectedResponse: ListValidatorsResponse{
 				"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
 				"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
 			},
@@ -286,7 +285,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 		{
 			name:               "EmptyList",
 			expectedStatusCode: http.StatusOK,
-			expectedResponse:   server.ListValidatorsResponse{},
+			expectedResponse:   ListValidatorsResponse{},
 			expectedResult:     []string{},
 			expectError:        false,
 		},
@@ -573,12 +572,12 @@ func (s *SSVSignerClientSuite) TestNew() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := New(tc.baseURL)
+			client := NewClient(tc.baseURL)
 			assert.Equal(t, tc.expectedBaseURL, client.baseURL)
 			assert.NotNil(t, client.httpClient)
 
 			logger, _ := zap.NewDevelopment()
-			clientWithLogger := New(tc.baseURL, WithLogger(logger))
+			clientWithLogger := NewClient(tc.baseURL, WithLogger(logger))
 			assert.Equal(t, tc.expectedBaseURL, clientWithLogger.baseURL)
 			assert.Equal(t, logger, clientWithLogger.logger)
 		})
@@ -596,11 +595,11 @@ func TestCustomHTTPClient(t *testing.T) {
 		},
 	}
 
-	withCustomClient := func(client *SSVSignerClient) {
+	withCustomClient := func(client *Client) {
 		client.httpClient = customClient
 	}
 
-	c := New("http://example.com", withCustomClient)
+	c := NewClient("http://example.com", withCustomClient)
 
 	assert.Equal(t, customClient, c.httpClient)
 }
@@ -619,9 +618,9 @@ func TestRequestErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL)
+	client := NewClient(server.URL)
 
-	_, err := client.AddValidators(context.Background(), ShareKeys{
+	_, err := client.AddValidators(context.Background(), ServerShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PublicKey:        []byte("test"),
 	})
@@ -648,9 +647,9 @@ func TestResponseHandlingErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL)
+	client := NewClient(server.URL)
 
-	_, err := client.AddValidators(context.Background(), ShareKeys{
+	_, err := client.AddValidators(context.Background(), ServerShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PublicKey:        []byte("test"),
 	})
@@ -667,7 +666,7 @@ func TestNew(t *testing.T) {
 	testCases := []struct {
 		name    string
 		baseURL string
-		opts    []Option
+		opts    []ClientOption
 	}{
 		{
 			name:    "WithoutOptions",
@@ -677,18 +676,18 @@ func TestNew(t *testing.T) {
 		{
 			name:    "WithLogger",
 			baseURL: "http://localhost:9000",
-			opts:    []Option{WithLogger(logger)},
+			opts:    []ClientOption{WithLogger(logger)},
 		},
 		{
 			name:    "WithTrailingSlash",
 			baseURL: "http://localhost:9000/",
-			opts:    []Option{WithLogger(logger)},
+			opts:    []ClientOption{WithLogger(logger)},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := New(tc.baseURL, tc.opts...)
+			client := NewClient(tc.baseURL, tc.opts...)
 
 			expectedBaseURL := strings.TrimRight(tc.baseURL, "/")
 			assert.Equal(t, expectedBaseURL, client.baseURL)

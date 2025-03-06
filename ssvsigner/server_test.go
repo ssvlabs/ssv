@@ -1,4 +1,4 @@
-package server
+package ssvsigner
 
 import (
 	"context"
@@ -61,7 +61,7 @@ func (s *ServerTestSuite) SetupTest() {
 
 	s.password = "testpassword"
 
-	s.server = New(s.logger, s.operatorPrivKey, s.remoteSigner, s.password)
+	s.server = NewServer(s.logger, s.operatorPrivKey, s.remoteSigner, s.password)
 }
 
 func (s *ServerTestSuite) ServeHTTP(method, path string, body []byte) (*fasthttp.Response, error) {
@@ -118,7 +118,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 	s.operatorPrivKey.decryptResult = []byte(validBlsKey)
 
 	request := AddValidatorRequest{
-		ShareKeys: []ShareKeys{
+		ShareKeys: []ServerShareKeys{
 			{
 				EncryptedPrivKey: hex.EncodeToString([]byte("encrypted_key")),
 				PublicKey:        hex.EncodeToString(pubKey),
@@ -142,7 +142,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
 
 	emptyRequest := AddValidatorRequest{
-		ShareKeys: []ShareKeys{},
+		ShareKeys: []ServerShareKeys{},
 	}
 	emptyReqBody, err := json.Marshal(emptyRequest)
 	require.NoError(t, err)
@@ -151,7 +151,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
 
 	invalidPubKeyRequest := AddValidatorRequest{
-		ShareKeys: []ShareKeys{
+		ShareKeys: []ServerShareKeys{
 			{
 				EncryptedPrivKey: hex.EncodeToString([]byte("encrypted_key")),
 				PublicKey:        "invalid_hex",
@@ -165,7 +165,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
 
 	invalidPrivKeyRequest := AddValidatorRequest{
-		ShareKeys: []ShareKeys{
+		ShareKeys: []ServerShareKeys{
 			{
 				EncryptedPrivKey: "invalid_hex",
 				PublicKey:        hex.EncodeToString(pubKey),
