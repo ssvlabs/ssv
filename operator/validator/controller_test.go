@@ -1155,7 +1155,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 				SharesAfter:  tc.sharesAfter,
 			}
 
-			done := make(<-chan struct{})
+			var done <-chan struct{}
 
 			if tc.expectIndicesChange {
 				done = waitForIndicesChange(validatorCtrl.logger, validatorCtrl.indicesChangeCh, 100*time.Millisecond)
