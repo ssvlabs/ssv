@@ -13,13 +13,15 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	ssvclient "github.com/ssvlabs/ssv/ssvsigner/client"
+	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	ssvclient "github.com/ssvlabs/ssv/ssvsigner/client"
-	ssvsignerclient "github.com/ssvlabs/ssv/ssvsigner/client"
+	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type RemoteKeyManagerTestSuite struct {
@@ -704,6 +706,169 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessage() {
 	s.NoError(err)
 	s.Equal(expectedSignature, signature)
 	mockRemoteSigner.AssertExpectations(s.T())
+}
+
+func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
+	mockSlashingProtector := &MockSlashingProtector{}
+
+	rm := &RemoteKeyManager{
+		logger:            s.logger,
+		remoteSigner:      s.client,
+		consensusClient:   s.consensusClient,
+		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		retryCount:        3,
+		operatorPubKey:    &MockOperatorPublicKey{},
+		SlashingProtector: mockSlashingProtector,
+	}
+
+	mockFork := &phase0.Fork{
+		PreviousVersion: phase0.Version{1, 2, 3, 4},
+		CurrentVersion:  phase0.Version{5, 6, 7, 8},
+		Epoch:           10,
+	}
+
+	genesis := &eth2api.Genesis{
+		GenesisTime:           time.Unix(12345, 0),
+		GenesisValidatorsRoot: phase0.Root{9, 8, 7},
+		GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
+	}
+
+	pubKey := []byte("validator_pubkey")
+	domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+	expectedSignature := []byte("signature_bytes")
+
+	s.Run("SignVoluntaryExit", func() {
+
+		voluntaryExit := &phase0.VoluntaryExit{
+			Epoch:          123,
+			ValidatorIndex: 456,
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(voluntaryExit, domain, pubKey, spectypes.DomainVoluntaryExit)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignSelectionProof", func() {
+
+		slot := spectypes.SSZUint64(123)
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(slot, domain, pubKey, spectypes.DomainSelectionProof)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignSyncCommittee", func() {
+
+		blockRoot := ssvtypes.BlockRootWithSlot{
+			SSZBytes: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32},
+			Slot:     123,
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(blockRoot, domain, pubKey, spectypes.DomainSyncCommittee)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignSyncCommitteeSelectionProof", func() {
+
+		selectionData := &altair.SyncAggregatorSelectionData{
+			Slot:              123,
+			SubcommitteeIndex: 456,
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(selectionData, domain, pubKey, spectypes.DomainSyncCommitteeSelectionProof)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("InvalidDomainType", func() {
+
+		slot := spectypes.SSZUint64(123)
+		unknownDomain := phase0.DomainType{255, 255, 255, 255}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(slot, domain, pubKey, unknownDomain)
+
+		s.Error(err)
+		s.Contains(err.Error(), "domain unknown")
+		s.Nil(signature)
+		s.Equal([32]byte{}, root)
+		s.consensusClient.AssertExpectations(s.T())
+	})
+}
+
+func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
+
+	s.T().Skip("Skipping test because we can't mock static function calls")
+
+	s.db.On("Begin").Return(s.txn, nil)
+	s.txn.On("Commit").Return(nil)
+
+	networkCfg := networkconfig.NetworkConfig{}
+	s.consensusClient.On("GetNetworkConfig").Return(5, nil)
+
+	operatorPublicKey := "some-public-key-string"
+	s.client.On("GetOperatorIdentity", mock.Anything).Return(operatorPublicKey, nil)
+
+	logger, _ := zap.NewDevelopment()
+
+	getOperatorId := func() spectypes.OperatorID {
+		return 42
+	}
+
+	_, err := NewRemoteKeyManager(
+		logger,
+		s.client,
+		s.consensusClient,
+		s.db,
+		networkCfg,
+		getOperatorId,
+		WithRetryCount(5),
+	)
+
+	s.Error(err)
+
+	s.Contains(err.Error(), "extract operator public key")
+
+	s.client.AssertExpectations(s.T())
+	s.consensusClient.AssertExpectations(s.T())
+	s.db.AssertExpectations(s.T())
+	s.txn.AssertExpectations(s.T())
 }
 
 func TestRemoteKeyManagerTestSuite(t *testing.T) {
