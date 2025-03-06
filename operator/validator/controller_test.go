@@ -96,7 +96,6 @@ func TestNewController(t *testing.T) {
 	}
 	control := NewController(logger, controllerOptions)
 	require.IsType(t, &controller{}, control)
-	//control.HandleMetadataUpdates()
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
