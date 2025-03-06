@@ -49,6 +49,16 @@ var (
 			metricName("errors"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("total number of validator errors")))
+
+	tracerInFlightMessageCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("tracer.inflight"),
+			metric.WithDescription("total number of messages received tracer intercepted")))
+
+	tracerInFlightMessageHist = observability.NewMetric(
+		meter.Float64Histogram(
+			metricName("tracer.duration"),
+			metric.WithDescription("message processing duration")))
 )
 
 func metricName(name string) string {

@@ -317,8 +317,6 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 
 	if roleDutyTrace.Validator == 0 {
 		roleDutyTrace.Validator = msg.Messages[0].ValidatorIndex
-		// n.validators.(*validatorCache).addNew(pubkey[:], roleDutyTrace.Validator)
-		n.logger.Info("added new validator", fields.Slot(slot), fields.Validator(pubkey[:]), fields.ValidatorIndex(roleDutyTrace.Validator), fields.BeaconRole(role))
 	}
 
 	tr := &model.PartialSigTrace{
@@ -485,6 +483,12 @@ func (n *InMemTracer) verifyBLSSignature(pSigMessages *spectypes.PartialSignatur
 }
 
 func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
+	start := time.Now()
+	tracerInFlightMessageCounter.Add(context.Background(), 1)
+	defer func() {
+		tracerInFlightMessageHist.Record(context.Background(), time.Since(start).Seconds())
+	}()
+
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		if subMsg, ok := msg.Body.(*specqbft.Message); ok {
