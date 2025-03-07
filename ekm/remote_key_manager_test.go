@@ -55,7 +55,6 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 		remoteSigner:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        3,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		SlashingProtector: mockSlashingProtector,
 	}
@@ -78,35 +77,6 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 	mockSlashingProtector.AssertExpectations(s.T())
 }
 
-func (s *RemoteKeyManagerTestSuite) TestDecryptionErrors() {
-
-	mockRemoteSigner := new(MockRemoteSigner)
-	mockSlashingProtector := new(MockSlashingProtector)
-
-	rm := &RemoteKeyManager{
-		logger:            zap.NewNop(),
-		remoteSigner:      mockRemoteSigner,
-		SlashingProtector: mockSlashingProtector,
-		retryCount:        1,
-	}
-
-	s.Run("DecryptionError", func() {
-
-		decryptionError := ssvsigner.ShareDecryptionError(errors.New("failed to decrypt share"))
-
-		decryptFunc := func(arg any) (any, error) {
-			return nil, decryptionError
-		}
-
-		_, err := rm.retryFunc(decryptFunc, "encrypted_share", "DecryptShare")
-
-		s.Error(err)
-		var shareDecryptionError ShareDecryptionError
-		s.True(errors.As(err, &shareDecryptionError), "Expected a ShareDecryptionError")
-		s.Contains(err.Error(), "failed to decrypt share")
-	})
-}
-
 func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 
 	mockSlashingProtector := &MockSlashingProtector{}
@@ -116,7 +86,6 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 		remoteSigner:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        3,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		SlashingProtector: mockSlashingProtector,
 	}
@@ -136,68 +105,6 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 	mockSlashingProtector.AssertExpectations(s.T())
 }
 
-func (s *RemoteKeyManagerTestSuite) TestRetryFunc() {
-
-	rmNoRetry := &RemoteKeyManager{
-		logger:     s.logger,
-		retryCount: 1,
-	}
-
-	successFunc := func(arg any) (any, error) {
-		return "success", nil
-	}
-
-	res, err := rmNoRetry.retryFunc(successFunc, "test_arg", "SuccessFunc")
-	s.NoError(err)
-	s.Equal("success", res)
-
-	failFunc := func(arg any) (any, error) {
-		return nil, errors.New("simple error")
-	}
-
-	_, err = rmNoRetry.retryFunc(failFunc, "test_arg", "FailFunc")
-	s.Error(err)
-	s.Equal("simple error", err.Error())
-
-	rmWithRetry := &RemoteKeyManager{
-		logger:     s.logger,
-		retryCount: 3,
-	}
-
-	persistentFailFunc := func(arg any) (any, error) {
-		return nil, errors.New("persistent error")
-	}
-
-	_, err = rmWithRetry.retryFunc(persistentFailFunc, "test_arg", "PersistentFailFunc")
-	s.Error(err)
-
-	s.Contains(err.Error(), "persistent error")
-}
-
-func (s *RemoteKeyManagerTestSuite) TestRetryFuncMoreCases() {
-	rm := &RemoteKeyManager{
-		logger:     s.logger,
-		retryCount: 3,
-	}
-
-	s.Run("ShareDecryptionError", func() {
-		testArg := "test-arg"
-		decryptionError := ssvsigner.ShareDecryptionError(errors.New("decryption error"))
-
-		failingFunc := func(arg any) (any, error) {
-			s.Equal(testArg, arg)
-			return nil, decryptionError
-		}
-
-		result, err := rm.retryFunc(failingFunc, testArg, "TestRetryFunction")
-
-		s.Error(err)
-		var shareDecryptionError ShareDecryptionError
-		s.True(errors.As(err, &shareDecryptionError))
-		s.Nil(result)
-	})
-}
-
 func (s *RemoteKeyManagerTestSuite) TestSignWithMockedOperatorKey() {
 
 	rm := &RemoteKeyManager{
@@ -205,7 +112,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignWithMockedOperatorKey() {
 		remoteSigner:    s.client,
 		consensusClient: s.consensusClient,
 		getOperatorId:   func() spectypes.OperatorID { return 1 },
-		retryCount:      3,
 		operatorPubKey:  &MockOperatorPublicKey{},
 	}
 
@@ -233,7 +139,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 		SlashingProtector: mockSlashingProtector,
 		operatorPubKey:    mockOperatorPublicKey,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        1,
 	}
 
 	message := []byte("test message to sign")
@@ -259,7 +164,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		remoteSigner:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        3,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		SlashingProtector: mockSlashingProtector,
 	}
@@ -395,7 +299,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		remoteSigner:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        3,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		SlashingProtector: mockSlashingProtector,
 	}
@@ -440,7 +343,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
-			retryCount:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			SlashingProtector: slashingMock,
 		}
@@ -492,7 +394,6 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
-			retryCount:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			SlashingProtector: mockSlashingProtector,
 		}
@@ -521,7 +422,6 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
-			retryCount:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			SlashingProtector: mockSlashingProtector,
 		}
@@ -552,7 +452,6 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
-			retryCount:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			SlashingProtector: slashingMock,
 		}
@@ -586,7 +485,6 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		remoteSigner:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        3,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		SlashingProtector: mockSlashingProtector,
 	}
@@ -613,7 +511,6 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
-			retryCount:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			SlashingProtector: mockSlashingProtector,
 		}
@@ -640,7 +537,6 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
-			retryCount:        1,
 			operatorPubKey:    &MockOperatorPublicKey{},
 			SlashingProtector: slashingMock,
 		}
@@ -719,7 +615,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessageErrors() {
 	rm := &RemoteKeyManager{
 		logger:       s.logger,
 		remoteSigner: mockRemoteSigner,
-		retryCount:   3,
 	}
 
 	message := &spectypes.SSVMessage{
@@ -748,7 +643,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		remoteSigner:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        3,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		SlashingProtector: mockSlashingProtector,
 	}
@@ -872,7 +766,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		remoteSigner:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        3,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		SlashingProtector: mockSlashingProtector,
 	}
@@ -979,7 +872,6 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		remoteSigner:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
-		retryCount:        3,
 		operatorPubKey:    &MockOperatorPublicKey{},
 		SlashingProtector: mockSlashingProtector,
 	}

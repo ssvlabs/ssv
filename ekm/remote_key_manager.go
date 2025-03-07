@@ -34,7 +34,6 @@ type RemoteKeyManager struct {
 	remoteSigner    RemoteSigner
 	consensusClient ConsensusClient
 	getOperatorId   func() spectypes.OperatorID
-	retryCount      int
 	operatorPubKey  keys.OperatorPublicKey
 	SlashingProtector
 }
@@ -132,28 +131,6 @@ func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
 	}
 
 	return nil
-}
-
-func (km *RemoteKeyManager) retryFunc(f func(arg any) (any, error), arg any, funcName string) (any, error) {
-	if km.retryCount < 2 {
-		return f(arg)
-	}
-
-	var multiErr error
-	for i := 1; i <= km.retryCount; i++ {
-		v, err := f(arg)
-		if err == nil {
-			return v, nil
-		}
-		var shareDecryptionError ssvsigner.ShareDecryptionError
-		if errors.As(err, &shareDecryptionError) {
-			return nil, ShareDecryptionError(err)
-		}
-		multiErr = errors.Join(multiErr, err)
-		km.logger.Warn("call failed", zap.Error(err), zap.Int("attempt", i), zap.String("func", funcName))
-	}
-
-	return nil, fmt.Errorf("no successful result after %d attempts: %w", km.retryCount, multiErr)
 }
 
 func (km *RemoteKeyManager) SignBeaconObject(
