@@ -94,7 +94,7 @@ func NewPreconfCommitmentRunner(
 		quorum:         quorum,
 	}
 
-	r.childRunners.Start()
+	go r.childRunners.Start()
 
 	return r, nil
 }
