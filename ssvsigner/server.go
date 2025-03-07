@@ -20,7 +20,7 @@ import (
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
-	remoteSigner    RemoteSigner
+	remoteSigner    remoteSigner
 	router          *router.Router
 	keystorePasswd  string
 }
@@ -28,7 +28,7 @@ type Server struct {
 func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
-	remoteSigner RemoteSigner,
+	remoteSigner remoteSigner,
 	keystorePasswd string,
 ) *Server {
 	r := router.New()

@@ -8,7 +8,7 @@ import (
 
 type ShareDecryptionError error
 
-type RemoteSigner interface {
+type remoteSigner interface {
 	ListKeys(ctx context.Context) ([]string, error)
 	ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]web3signer.Status, error)
 	DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]web3signer.Status, error)
