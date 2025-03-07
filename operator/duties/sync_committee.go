@@ -9,9 +9,12 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -162,20 +165,34 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 }
 
 func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.sync_committee.process_execution", observabilityNamespace),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(slot),
+			observability.DutyPeriodAttribute(period),
+		))
+	defer span.End()
+
 	// range over duties and execute
 	duties := h.duties.CommitteePeriodDuties(period)
 	if duties == nil {
+		span.AddEvent("no duties available")
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
+	span.AddEvent("duties fetched", trace.WithAttributes(observability.DutyCountAttribute(len(duties))))
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
 			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 		}
 	}
+	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
 
 	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {

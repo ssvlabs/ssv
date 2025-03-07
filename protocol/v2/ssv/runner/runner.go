@@ -3,15 +3,19 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -143,13 +147,27 @@ func NewBaseRunner(
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.base_runner.start_new_duty", observabilityNamespace),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
+	defer span.End()
+
 	if err := b.ShouldProcessDuty(duty); err != nil {
-		return errors.Wrap(err, "can't start duty")
+		err := errors.Wrap(err, "can't start duty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	b.baseSetupForNewDuty(duty, quorum)
 
-	return runner.executeDuty(ctx, logger, duty)
+	if err := runner.executeDuty(ctx, logger, duty); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	span.SetStatus(codes.Ok, "")
+	return nil
 }
 
 // baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
@@ -292,32 +310,51 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 }
 
 func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.base_runner.decide", observabilityNamespace),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(runner.GetBaseRunner().RunnerRoleType),
+			observability.BeaconSlotAttribute(slot)))
+	defer span.End()
+
 	byts, err := input.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not encode input data for consensus")
+		err = errors.Wrap(err, "could not encode input data for consensus")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	if err := runner.GetValCheckF()(byts); err != nil {
-		return errors.Wrap(err, "input data invalid")
+		err = errors.Wrap(err, "input data invalid")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
+	span.AddEvent("start new instance")
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
 		ctx,
 		logger,
 		specqbft.Height(slot),
 		byts,
 	); err != nil {
-		return errors.Wrap(err, "could not start new QBFT instance")
+		err = errors.Wrap(err, "could not start new QBFT instance")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
 	newInstance := runner.GetBaseRunner().QBFTController.StoredInstances.FindInstance(runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
-		return errors.New("could not find newly created QBFT instance")
+		err = errors.New("could not find newly created QBFT instance")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
+	span.AddEvent("register timeout handler")
 	b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

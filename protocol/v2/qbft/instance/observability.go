@@ -24,7 +24,8 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	meter  = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
 
 	validatorStageDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
