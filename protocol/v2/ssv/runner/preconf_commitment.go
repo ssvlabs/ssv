@@ -2,9 +2,7 @@ package runner
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -105,8 +103,17 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	ctx context.Context,
 	logger *zap.Logger,
 	validatorIndex phase0.ValidatorIndex,
-	root rootHash,
+	objectRootHex string,
 ) (chan PreconfCommitmentResult, error) {
+	objectRootRaw, err := hex.DecodeString(objectRootHex)
+	if err != nil {
+		return nil, fmt.Errorf("decode objectRootHex: %s, error: %w", objectRootHex, err)
+	}
+	if len(objectRootRaw) != 32 {
+		return nil, errors.New("objectRootHex must be 32 bytes")
+	}
+	root := rootHash(objectRootRaw)
+
 	cRunner, err := r.childRunner(root)
 	if err != nil {
 		// TODO - can we even get an error from `r.childRunner(root)` ?
@@ -114,7 +121,15 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	}
 	defer close(cRunner.initialized)
 
-	msg, err := cRunner.signPreconfCommitment(r, validatorIndex, root)
+	// commit-boost uses DomainApplicationBuilder domain for signing, see this doc for details
+	// https://github.com/Commit-Boost/commit-boost-client/blob/c5a16eec53b7e6ce0ee5c18295565f1a0aa6e389/docs/docs/developing/commit-module.md#requesting-signatures
+	msg, err := cRunner.signPreconfCommitment(
+		r,
+		validatorIndex,
+		spectypes.SSZBytes(root[:]),
+		phase0.Slot(0), // TODO - what slot should we use here ?
+		spectypes.DomainApplicationBuilder,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("could not sign preconf-commitment: %w", err)
 	}
@@ -257,10 +272,10 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 			"preconf-commitment was signed successfully",
 			zap.String("signature", hex.EncodeToString(fullSig)),
 		)
+		cRunner.State.Finished = true
 		cRunner.result <- PreconfCommitmentResult{
 			Success: struct{ CommitmentSignature []byte }{CommitmentSignature: fullSig},
 		}
-		cRunner.State.Finished = true
 	}()
 
 	logger.Debug("spun up preconf-commitment child runner to process pre-consensus message")
@@ -337,9 +352,7 @@ func (r *PreconfCommitmentRunner) GetStateRoot() ([32]byte, error) {
 	return [32]byte{}, fmt.Errorf("GetStateRoot not implemented")
 }
 
-func (r *PreconfCommitmentRunner) SetTimeoutFunc(fn TimeoutF) {
-	return
-}
+func (r *PreconfCommitmentRunner) SetTimeoutFunc(fn TimeoutF) {}
 
 func (r *PreconfCommitmentRunner) GetNetwork() specqbft.Network {
 	return r.network
@@ -366,22 +379,17 @@ func (r *PreconfCommitmentRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 
 // Encode returns the encoded struct in bytes or error
 func (r *PreconfCommitmentRunner) Encode() ([]byte, error) {
-	return json.Marshal(r)
+	return nil, fmt.Errorf("not implemented")
 }
 
 // Decode returns error if decoding failed
 func (r *PreconfCommitmentRunner) Decode(data []byte) error {
-	return json.Unmarshal(data, &r)
+	return fmt.Errorf("not implemented")
 }
 
 // GetRoot returns the root used for signing and verification
 func (r *PreconfCommitmentRunner) GetRoot() ([32]byte, error) {
-	marshaledRoot, err := r.Encode()
-	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode PreconfCommitmentRunner")
-	}
-	ret := sha256.Sum256(marshaledRoot)
-	return ret, nil
+	return [32]byte{}, fmt.Errorf("not implemented")
 }
 
 func (r *PreconfCommitmentRunner) childRunner(root rootHash) (*pcRunner, error) {

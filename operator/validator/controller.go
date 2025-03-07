@@ -191,7 +191,7 @@ type controller struct {
 }
 
 // NewController creates a new validator controller instance
-func NewController(logger *zap.Logger, options ControllerOptions) Controller {
+func NewController(logger *zap.Logger, options ControllerOptions) *controller {
 	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
@@ -233,7 +233,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	beaconNetwork := options.NetworkConfig.Beacon
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
-	ctrl := controller{
+	ctrl := &controller{
 		logger:            logger.Named(logging.NameController),
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
@@ -285,7 +285,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.syncCommRoots.Start()
 	go ctrl.domainCache.Start()
 
-	return &ctrl
+	return ctrl
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
@@ -592,6 +592,16 @@ func (c *controller) startValidatorsForMetadata(_ context.Context, validators me
 // GetValidator returns a validator instance from ValidatorsMap
 func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
+}
+
+// ListValidatorPubKeys returns a list of validator pubkeys for all validators controller manages
+func (c *controller) ListValidatorPubKeys() []phase0.BLSPubKey {
+	result := make([]phase0.BLSPubKey, 0, c.validatorsMap.SizeValidators())
+	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
+		result = append(result, phase0.BLSPubKey(v.Share.ValidatorPubKey))
+		return true
+	})
+	return result
 }
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
@@ -1081,7 +1091,6 @@ func SetupRunners(
 	logger *zap.Logger,
 	options validator.Options,
 ) (runner.ValidatorDutyRunners, error) {
-
 	if options.SSVShare == nil || !options.SSVShare.HasBeaconMetadata() {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it

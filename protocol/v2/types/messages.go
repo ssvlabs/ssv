@@ -45,12 +45,6 @@ type ExecuteCommitteeDutyData struct {
 	Duty *types.CommitteeDuty
 }
 
-// TODO - do we need to define a separate type in `types` pkg (similar to ValidatorDuty & CommitteeDuty) ?
-// ^ probably yes
-type ExecutePreconfCommitmentDutyData struct {
-	Duty *types.PreconfCommitmentDuty
-}
-
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {
 	td := &TimeoutData{}
 	if err := json.Unmarshal(m.Data, td); err != nil {
@@ -69,14 +63,6 @@ func (m *EventMsg) GetExecuteDutyData() (*ExecuteDutyData, error) {
 
 func (m *EventMsg) GetExecuteCommitteeDutyData() (*ExecuteCommitteeDutyData, error) {
 	ed := &ExecuteCommitteeDutyData{}
-	if err := json.Unmarshal(m.Data, ed); err != nil {
-		return nil, err
-	}
-	return ed, nil
-}
-
-func (m *EventMsg) GetExecutePreconfCommitmentDutyData() (*ExecutePreconfCommitmentDutyData, error) {
-	ed := &ExecutePreconfCommitmentDutyData{}
 	if err := json.Unmarshal(m.Data, ed); err != nil {
 		return nil, err
 	}

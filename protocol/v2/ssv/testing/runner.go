@@ -202,17 +202,6 @@ var ConstructBaseRunner = func(
 			km,
 			opSigner,
 		)
-	case spectypes.RolePreconfCommitment:
-		r, err = runner.NewPreconfCommitmentRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
-			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			spectypes.DefaultGasLimit,
-		)
 	case spectestingutils.UnknownDutyType:
 		r, err = runner.NewCommitteeRunner(
 			networkconfig.TestNetwork,
@@ -467,17 +456,6 @@ var ConstructBaseRunnerWithShareMap = func(
 			net,
 			km,
 			opSigner,
-		)
-	case spectypes.RolePreconfCommitment:
-		r, err = runner.NewPreconfCommitmentRunner(
-			networkconfig.TestNetwork.DomainType,
-			spectypes.BeaconTestNetwork,
-			shareMap,
-			tests.NewTestingBeaconNodeWrapped(),
-			net,
-			km,
-			opSigner,
-			spectypes.DefaultGasLimit,
 		)
 	case spectestingutils.UnknownDutyType:
 		r, err = runner.NewCommitteeRunner(

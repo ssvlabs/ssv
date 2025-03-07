@@ -1,35 +1,36 @@
-package server
+package cbapi
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/fasthttp/router"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/operator/keys"
+	"time"
 )
 
+// Server implements commit-boost singer API described here:
+// https://commit-boost.github.io/commit-boost-client/api/
 type Server struct {
-	logger         *zap.Logger
-	router         *router.Router
-	keystorePasswd string
+	logger    *zap.Logger
+	router    *router.Router
+	vProvider validatorProvider
 }
 
 func New(
 	logger *zap.Logger,
-	operatorPrivKey keys.OperatorPrivateKey,
-	remoteSigner RemoteSigner,
-	keystorePasswd string,
+	vProvider validatorProvider,
 ) *Server {
 	r := router.New()
 
 	server := &Server{
-		logger:          logger,
-		operatorPrivKey: operatorPrivKey,
-		remoteSigner:    remoteSigner,
-		router:          r,
-		keystorePasswd:  keystorePasswd,
+		logger:    logger,
+		router:    r,
+		vProvider: vProvider,
 	}
 
 	r.GET("/signer/v1/get_pubkeys", server.handleGetPubkeys)
@@ -42,80 +43,144 @@ func New(
 	return server
 }
 
-func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
-	return r.router.Handler
+func (s *Server) Run(addr string) error {
+	s.logger.Info("commit-boost API is starting listening for connections", zap.String("addr", addr))
+
+	err := fasthttp.ListenAndServe(addr, s.router.Handler)
+	if err != nil {
+		return fmt.Errorf("failed to start server: %w", err)
+	}
+	return nil
 }
 
-func (r *Server) handleGetPubkeys(ctx *fasthttp.RequestCtx) {
+func (s *Server) handleGetPubkeys(ctx *fasthttp.RequestCtx) {
+	resp := GetPubKeysResponse{}
+
+	pubkeys := s.vProvider.ListValidatorPubKeys()
+	for _, pubkey := range pubkeys {
+		resp.Keys = append(resp.Keys, ValidatorKeys{
+			Consensus:  pubkey.String(),
+			ProxyBLS:   nil, // we don't support these at the moment
+			ProxyECDSA: nil, // we don't support these at the moment
+		})
+	}
+
+	s.writeJSON(ctx, fasthttp.StatusOK, resp)
+}
+
+func (s *Server) handleRequestSignature(ctx *fasthttp.RequestCtx) {
 	body := ctx.PostBody()
 	if len(body) == 0 {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeString(ctx, "request body is empty")
+		s.writeJSONErr(ctx, fasthttp.StatusBadRequest, fmt.Errorf("request body is empty"))
 		return
 	}
-
-	var req RemoveValidatorRequest
+	var req RequestSignatureRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, fmt.Errorf("failed to parse request: %w", err))
+		s.writeJSONErr(ctx, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
-
-	statuses, err := r.remoteSigner.DeleteKeystore(ctx, req.PublicKeys)
+	if req.ValidatorKeyType != "consensus" {
+		err := fmt.Errorf("only consensus validator key type is supported at the moment, got: %s", req.ValidatorKeyType)
+		s.writeJSONErr(ctx, fasthttp.StatusBadRequest, err)
+		return
+	}
+	pubkeyDecoded, err := hex.DecodeString(req.ValidatorPubKeyHex)
 	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to remove share from Web3Signer: %w", err))
+		err = fmt.Errorf("decode pubkey: %s", req.ValidatorPubKeyHex)
+		s.writeJSONErr(ctx, fasthttp.StatusBadRequest, err)
+		return
+	}
+	if len(pubkeyDecoded) != 48 {
+		// TODO - not sure if that's true for proxy keys - need to check that
+		err = fmt.Errorf("pubkey size must be 48 bytes, got %d instead (pubkey: %s)", len(pubkeyDecoded), req.ValidatorPubKeyHex)
+		s.writeJSONErr(ctx, fasthttp.StatusBadRequest, err)
 		return
 	}
 
-	for i, status := range statuses {
-		if status != StatusDeleted {
-			r.logger.Warn("unexpected status",
-				zap.String("status", string(status)),
-				zap.String("share_pubkey", req.PublicKeys[i]),
-			)
+	v, ok := s.vProvider.GetValidator(spectypes.ValidatorPK(pubkeyDecoded))
+	if !ok {
+		err := fmt.Errorf("validator is not found for pubkey: %s", req.ValidatorPubKeyHex)
+		s.writeJSONErr(ctx, fasthttp.StatusNotFound, err)
+		return
+	}
+	dutyRunner := v.GetPreconfCommitmentRunner()
+	validatorIdx := v.Share.ValidatorIndex
+
+	resultCh, err := dutyRunner.StartNewDutyWithResponse(ctx, s.logger, validatorIdx, req.ObjectRootHex)
+	if err != nil {
+		err = fmt.Errorf("start preconf-commitment duty: %w", err)
+		s.writeJSONErr(ctx, fasthttp.StatusInternalServerError, err)
+		return
+	}
+
+	select {
+	case result := <-resultCh:
+		if result.Err != nil {
+			s.writeJSONErr(ctx, fasthttp.StatusInternalServerError, result.Err)
+			return
 		}
+		commitmentSigHex := hex.EncodeToString(result.Success.CommitmentSignature)
+		s.writeJSON(ctx, fasthttp.StatusOK, commitmentSigHex)
+		return
+	case <-time.After(12 * time.Second): // TODO - what timeout should we use ?
+		err = fmt.Errorf("timed out waiting for preconf-commitment duty to finish")
+		s.writeJSONErr(ctx, fasthttp.StatusInternalServerError, err)
+		return
+	case <-ctx.Done():
+		err = fmt.Errorf("request ctx terminated waiting for preconf-commitment duty to finish")
+		s.writeJSONErr(ctx, fasthttp.StatusInternalServerError, err)
+		return
 	}
+}
 
-	resp := RemoveValidatorResponse{
-		Statuses: statuses,
+func (s *Server) handleStatus(ctx *fasthttp.RequestCtx) {
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	s.writeString(ctx, "OK")
+}
+
+func (s *Server) writeString(ctx *fasthttp.RequestCtx, str string) {
+	if _, writeErr := ctx.WriteString(str); writeErr != nil {
+		s.logger.Error("failed to write response", zap.Error(writeErr))
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 	}
+}
 
+func (s *Server) writeJSON(ctx *fasthttp.RequestCtx, statusCode int, resp any) {
+	ctx.SetContentType("application/json")
 	respJSON, err := json.Marshal(resp)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to marshal statuses: %w", err))
+		s.writeString(ctx, fmt.Sprintf("failed to marshal response: %v", err))
 		return
 	}
+	ctx.SetStatusCode(statusCode)
+	if _, writeErr := ctx.Write(respJSON); writeErr != nil {
+		s.logger.Error("failed to write response", zap.Error(writeErr))
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	}
+}
 
+func (s *Server) writeJSONErr(ctx *fasthttp.RequestCtx, statusCode int, err error) {
 	ctx.SetContentType("application/json")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeBytes(ctx, respJSON)
-}
-
-func (r *Server) handleStatus(ctx *fasthttp.RequestCtx) {
-	ctx.SetContentType("application/json")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeString(ctx, "OK")
-}
-
-func (r *Server) writeString(ctx *fasthttp.RequestCtx, s string) {
-	if _, writeErr := ctx.WriteString(s); writeErr != nil {
-		r.logger.Error("failed to write response", zap.Error(writeErr))
+	errResp := ErrorResponse{
+		Code:    statusCode,
+		Message: err.Error(),
+	}
+	errRespJSON, err := json.Marshal(errResp)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		s.writeString(ctx, fmt.Sprintf("failed to marshal error response: %v", err))
+		return
+	}
+	ctx.SetStatusCode(statusCode)
+	if _, writeErr := ctx.Write(errRespJSON); writeErr != nil {
+		s.logger.Error("failed to write response", zap.Error(writeErr))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 	}
 }
 
-func (r *Server) writeBytes(ctx *fasthttp.RequestCtx, b []byte) {
-	if _, writeErr := ctx.Write(b); writeErr != nil {
-		r.logger.Error("failed to write response", zap.Error(writeErr))
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-	}
-}
-
-func (r *Server) writeErr(ctx *fasthttp.RequestCtx, err error) {
-	if _, writeErr := ctx.WriteString(err.Error()); writeErr != nil {
-		r.logger.Error("failed to write response", zap.Error(writeErr))
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-	}
+type validatorProvider interface {
+	ListValidatorPubKeys() []phase0.BLSPubKey
+	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
 }

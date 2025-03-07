@@ -25,28 +25,36 @@ func (b *BaseRunner) signBeaconObject(
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	return b.signAsValidator(runner, duty.ValidatorIndex, obj, domain)
+	return b.signAsValidator(runner, duty.ValidatorIndex, obj, domainType, domain)
 }
 
+// TODO - signPreconfCommitment and signBeaconObject can be 1 single function (refactor it)
 func (b *BaseRunner) signPreconfCommitment(
 	runner Runner,
 	validatorIndex spec.ValidatorIndex,
 	root ssz.HashRoot,
+	slot spec.Slot,
+	domainType spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	domain := spec.Domain{} // TODO - need to use a specific domain ? maybe check with https://commit-boost.github.io/commit-boost-client/api/
-	return b.signAsValidator(runner, validatorIndex, root, domain)
+	epoch := b.BeaconNetwork.EstimatedEpochAtSlot(slot)
+	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
+	}
+	return b.signAsValidator(runner, validatorIndex, root, domainType, domain)
 }
 
 func (b *BaseRunner) signAsValidator(
 	runner Runner,
 	validatorIndex spec.ValidatorIndex,
 	root ssz.HashRoot,
+	domainType spec.DomainType,
 	domain spec.Domain,
 ) (*spectypes.PartialSignatureMessage, error) {
 	if _, ok := b.Share[validatorIndex]; !ok {
 		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
 	}
-	sig, r, err := runner.GetSigner().SignBeaconObject(root, domain, b.Share[validatorIndex].SharePubKey, spectypes.PreconfCommitment)
+	sig, r, err := runner.GetSigner().SignBeaconObject(root, domain, b.Share[validatorIndex].SharePubKey, domainType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}

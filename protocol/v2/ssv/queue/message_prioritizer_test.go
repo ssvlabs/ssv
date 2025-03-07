@@ -415,8 +415,6 @@ func ssvMessageFactory(role spectypes.RunnerRole) func(*spectypes.SignedSSVMessa
 		return testingutils.SSVMsgValidatorRegistration
 	case spectypes.RoleVoluntaryExit:
 		return testingutils.SSVMsgVoluntaryExit
-	case spectypes.RolePreconfCommitment:
-		return testingutils.SSVMsgPreconfCommitment
 	default:
 		panic("invalid role")
 	}
