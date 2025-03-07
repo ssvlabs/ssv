@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
@@ -187,7 +189,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
-				Version: "CAPELLA",
+				Version: strings.ToUpper(spec.DataVersionCapella.String()),
 				BlockHeader: &phase0.BeaconBlockHeader{
 					Slot:          v.Slot,
 					ProposerIndex: v.ProposerIndex,
@@ -213,7 +215,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
-				Version: "DENEB",
+				Version: strings.ToUpper(spec.DataVersionDeneb.String()),
 				BlockHeader: &phase0.BeaconBlockHeader{
 					Slot:          v.Slot,
 					ProposerIndex: v.ProposerIndex,
@@ -239,7 +241,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
-				Version: "ELECTRA",
+				Version: strings.ToUpper(spec.DataVersionElectra.String()),
 				BlockHeader: &phase0.BeaconBlockHeader{
 					Slot:          v.Slot,
 					ProposerIndex: v.ProposerIndex,
