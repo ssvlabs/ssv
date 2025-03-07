@@ -67,7 +67,7 @@ func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	respJSON, err := json.Marshal(publicKeys)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to marshal statuses: %w", err))
+		r.writeErr(ctx, fmt.Errorf("failed to marshal response: %w", err))
 		return
 	}
 
@@ -176,7 +176,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	respJSON, err := json.Marshal(resp)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to marshal statuses: %w", err))
+		r.writeErr(ctx, fmt.Errorf("failed to marshal response: %w", err))
 		return
 	}
 
@@ -223,7 +223,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	respJSON, err := json.Marshal(resp)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to marshal statuses: %w", err))
+		r.writeErr(ctx, fmt.Errorf("failed to marshal response: %w", err))
 		return
 	}
 
