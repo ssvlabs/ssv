@@ -489,6 +489,33 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
+
+		apiServer := apiserver.New(
+			logger,
+			fmt.Sprintf(":%d", cfg.SSVAPIPort),
+			&handlers.Node{
+				// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
+				ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
+				PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+				Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+				TopicIndex:      p2pNetwork.(handlers.TopicIndex),
+				NodeProber:      nodeProber,
+			},
+			&handlers.Validators{
+				Shares: nodeStorage.Shares(),
+			},
+			&handlers.Exporter{
+				NetworkConfig:     networkConfig,
+				ParticipantStores: storageMap,
+			},
+		)
+		go func() {
+			err := apiServer.Run()
+			if err != nil {
+				logger.Fatal("failed to start API server", zap.Error(err))
+			}
+		}()
+
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
