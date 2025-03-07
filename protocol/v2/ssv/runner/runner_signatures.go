@@ -23,22 +23,9 @@ func (b *BaseRunner) signBeaconObject(
 	epoch := b.BeaconNetwork.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get beacon domain")
+		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	if _, ok := b.Share[duty.ValidatorIndex]; !ok {
-		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
-	}
-	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, b.Share[duty.ValidatorIndex].SharePubKey, domainType)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not sign beacon object")
-	}
-
-	return &spectypes.PartialSignatureMessage{
-		PartialSignature: sig,
-		SigningRoot:      r,
-		Signer:           runner.GetOperatorSigner().GetOperatorID(),
-		ValidatorIndex:   duty.ValidatorIndex,
-	}, nil
+	return b.signAsValidator(runner, duty.ValidatorIndex, obj, domain)
 }
 
 func (b *BaseRunner) signPreconfCommitment(
@@ -47,6 +34,15 @@ func (b *BaseRunner) signPreconfCommitment(
 	root ssz.HashRoot,
 ) (*spectypes.PartialSignatureMessage, error) {
 	domain := spec.Domain{} // TODO - need to use a specific domain ? maybe check with https://commit-boost.github.io/commit-boost-client/api/
+	return b.signAsValidator(runner, validatorIndex, root, domain)
+}
+
+func (b *BaseRunner) signAsValidator(
+	runner Runner,
+	validatorIndex spec.ValidatorIndex,
+	root ssz.HashRoot,
+	domain spec.Domain,
+) (*spectypes.PartialSignatureMessage, error) {
 	if _, ok := b.Share[validatorIndex]; !ok {
 		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
 	}
@@ -62,19 +58,6 @@ func (b *BaseRunner) signPreconfCommitment(
 		ValidatorIndex:   validatorIndex,
 	}, nil
 }
-
-//func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
-//	signature, err := runner.GetSigner().SignBeaconObject(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
-//	if err != nil {
-//		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
-//	}
-//
-//	return &spectypes.SignedPartialSignatureMessage{
-//		Message:   *msg,
-//		Signature: signature,
-//		Signer:    b.Share.OperatorID,
-//	}, nil
-//}
 
 // Validate message content without verifying signatures
 func (b *BaseRunner) validatePartialSigMsgForSlot(
