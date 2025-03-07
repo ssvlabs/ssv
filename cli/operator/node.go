@@ -290,7 +290,6 @@ var StartNodeCmd = &cobra.Command{
 				db,
 				networkConfig,
 				operatorDataStore.GetOperatorID,
-				ekm.WithRetryCount(3),
 			)
 			if err != nil {
 				logger.Fatal("could not create remote key manager", zap.Error(err))

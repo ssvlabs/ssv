@@ -661,25 +661,6 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 	})
 }
 
-func (s *RemoteKeyManagerTestSuite) TestWithOptions() {
-
-	rm := &RemoteKeyManager{
-		logger:     zap.NewNop(),
-		retryCount: 1,
-	}
-
-	s.Run("WithLogger", func() {
-		customLogger := zap.NewNop().Named("custom_logger")
-		WithLogger(customLogger)(rm)
-		s.Equal("custom_logger.remote_key_manager", rm.logger.Name())
-	})
-
-	s.Run("WithRetryCount", func() {
-		WithRetryCount(5)(rm)
-		s.Equal(5, rm.retryCount)
-	})
-}
-
 func (s *RemoteKeyManagerTestSuite) TestPublic() {
 
 	mockOperatorPublicKey := new(MockOperatorPublicKey)
@@ -1094,7 +1075,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
 		s.db,
 		networkCfg,
 		getOperatorId,
-		WithRetryCount(5),
 	)
 
 	s.Error(err)

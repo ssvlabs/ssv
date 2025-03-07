@@ -59,7 +59,6 @@ func NewRemoteKeyManager(
 	db basedb.Database,
 	networkConfig networkconfig.NetworkConfig,
 	getOperatorId func() spectypes.OperatorID,
-	options ...Option,
 ) (*RemoteKeyManager, error) {
 	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
@@ -79,34 +78,14 @@ func NewRemoteKeyManager(
 		return nil, fmt.Errorf("extract operator public key: %w", err)
 	}
 
-	s := &RemoteKeyManager{
+	return &RemoteKeyManager{
 		logger:            logger,
 		remoteSigner:      remoteSigner,
 		consensusClient:   consensusClient,
 		SlashingProtector: sp,
 		getOperatorId:     getOperatorId,
 		operatorPubKey:    operatorPubKey,
-	}
-
-	for _, option := range options {
-		option(s)
-	}
-
-	return s, nil
-}
-
-type Option func(signer *RemoteKeyManager)
-
-func WithLogger(logger *zap.Logger) Option {
-	return func(s *RemoteKeyManager) {
-		s.logger = logger.Named("remote_key_manager")
-	}
-}
-
-func WithRetryCount(n int) Option {
-	return func(s *RemoteKeyManager) {
-		s.retryCount = n
-	}
+	}, nil
 }
 
 func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) error {
@@ -115,18 +94,9 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 		PublicKey:        sharePubKey,
 	}
 
-	f := func(arg any) (any, error) {
-		return km.remoteSigner.AddValidators(context.Background(), arg.(ssvsigner.ClientShareKeys)) // TODO: use context
-	}
-
-	res, err := km.retryFunc(f, shareKeys, "AddValidators")
+	statuses, err := km.remoteSigner.AddValidators(context.Background(), shareKeys) // TODO: pass context from outside
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
-	}
-
-	statuses, ok := res.([]web3signer.Status)
-	if !ok {
-		return fmt.Errorf("bug: expected []Status, got %T", res)
 	}
 
 	if len(statuses) != 1 {
