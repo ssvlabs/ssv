@@ -81,7 +81,7 @@ type Config struct {
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"Duration to remember a message ID as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"Size of the outbound pubsub message queue"`
 	PubsubValidationQueueSize int           `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"Size of the pubsub validation queue"`
-	PubsubValidateThrottle    int           `yaml:"PubsubPubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"Number of goroutines for pubsub message validation"`
+	PubsubValidateThrottle    int           `yaml:"PubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"Number of goroutines for pubsub message validation"`
 
 	// FullNode determines whether the network should sync decided history from peers.
 	// If false, SyncDecidedByRange becomes a no-op.
