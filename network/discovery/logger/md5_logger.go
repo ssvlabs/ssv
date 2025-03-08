@@ -2,11 +2,11 @@ package compatible_logger
 
 import (
 	"context"
+	"log/slog"
 	"runtime"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/exp/slog"
 )
 
 type Option struct {
@@ -60,7 +60,7 @@ func (h *ZapHandler) Enabled(_ context.Context, level slog.Level) bool {
 	return level >= h.option.Level.Level()
 }
 
-func (h *ZapHandler) Handle(ctx context.Context, record slog.Record) error {
+func (h *ZapHandler) Handle(_ context.Context, record slog.Record) error {
 	converter := DefaultConverter
 	if h.option.Converter != nil {
 		converter = h.option.Converter
@@ -123,7 +123,7 @@ func DefaultConverter(addSource bool, replaceAttr func(groups []string, a slog.A
 	// handler formatter
 	fields := AttrsToMap(attrs...)
 
-	output := []zapcore.Field{}
+	var output []zapcore.Field
 	for k, v := range fields {
 		output = append(output, zap.Any(k, v))
 	}
