@@ -13,7 +13,6 @@ import (
 	"github.com/aquasecurity/table"
 	"github.com/cespare/xxhash/v2"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 )
 
@@ -102,7 +101,10 @@ func run() (changes int, err error) {
 
 		// For each element in the left package, find the corresponding element
 		// in the right package and compare.
-		sortedNames := maps.Keys(lefts)
+		sortedNames := make([]string, 0, len(lefts))
+		for name := range lefts {
+			sortedNames = append(sortedNames, name)
+		}
 		sort.Strings(sortedNames)
 		for _, name := range sortedNames {
 			left := lefts[name]
