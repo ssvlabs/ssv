@@ -4,8 +4,9 @@ import (
 	"encoding/base64"
 	"testing"
 
-	testingspace "github.com/ssvlabs/ssv/utils/rsaencryption/testingspace"
 	"github.com/stretchr/testify/require"
+
+	testingspace "github.com/ssvlabs/ssv/utils/rsaencryption/testingspace"
 )
 
 func TestGenerateKeys(t *testing.T) {
@@ -18,7 +19,7 @@ func TestGenerateKeys(t *testing.T) {
 	require.NoError(t, sk.Validate())
 }
 
-func TestDecodeKey(t *testing.T) {
+func TestDecryptKey(t *testing.T) {
 	sk, err := PemToPrivateKey([]byte(testingspace.SkPem))
 	require.NoError(t, err)
 
