@@ -317,7 +317,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainSyncCommittee:
 		data, ok := obj.(ssvtypes.BlockRootWithSlot)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to SSZBytes")
+			return nil, [32]byte{}, errors.New("could not cast obj to BlockRootWithSlot")
 		}
 
 		req.Type = web3signer.SyncCommitteeMessage

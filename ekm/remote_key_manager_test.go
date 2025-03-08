@@ -8,11 +8,16 @@ import (
 	"time"
 
 	eth2api "github.com/attestantio/go-eth2-client/api/v1"
+	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ssz "github.com/ferranbt/fastssz"
 	"github.com/holiman/uint256"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/mock"
@@ -217,7 +222,77 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		s.consensusClient.AssertExpectations(s.T())
 	})
 
-	s.Run("SignBlindedBeaconBlock", func() {
+	s.Run("SignBlindedBeaconBlock (capella)", func() {
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		blindedBlock := &apiv1capella.BlindedBeaconBlock{
+			Slot:          123,
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root{1, 2, 3},
+			StateRoot:     phase0.Root{4, 5, 6},
+			Body: &apiv1capella.BlindedBeaconBlockBody{
+				ETH1Data: &phase0.ETH1Data{
+					DepositRoot:  phase0.Root{1, 2, 3},
+					DepositCount: 100,
+					BlockHash:    bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+				},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits:      make([]byte, 64),
+					SyncCommitteeSignature: phase0.BLSSignature{1, 2, 3},
+				},
+				ExecutionPayloadHeader: &capella.ExecutionPayloadHeader{
+					ParentHash:       phase0.Hash32{1, 1, 1},
+					FeeRecipient:     bellatrix.ExecutionAddress{2, 2, 2},
+					StateRoot:        phase0.Root{3, 3, 3},
+					ReceiptsRoot:     phase0.Root{4, 4, 4},
+					LogsBloom:        [256]byte{5, 5, 5},
+					PrevRandao:       [32]byte{6, 6, 6},
+					BlockNumber:      1,
+					GasLimit:         2,
+					GasUsed:          3,
+					Timestamp:        4,
+					ExtraData:        []byte{7, 7, 7},
+					BaseFeePerGas:    uint256.NewInt(8).Bytes32(),
+					BlockHash:        phase0.Hash32{9, 9, 9},
+					TransactionsRoot: phase0.Root{10, 10, 10},
+					WithdrawalsRoot:  phase0.Root{11, 11, 11},
+				},
+			},
+		}
+
+		mockSlashingProtector.On("IsBeaconBlockSlashable", mock.Anything, blindedBlock.Slot).Return(nil)
+		mockSlashingProtector.On("UpdateHighestProposal", pubKey, blindedBlock.Slot).Return(nil)
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Unix(12345, 0),
+			GenesisValidatorsRoot: phase0.Root{9, 8, 7},
+			GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil)
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
+
+		expectedSignature := []byte("signature_bytes")
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil)
+
+		signature, root, err := rm.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+
+		s.NoError(err)
+		s.NotNil(signature)
+		s.NotEqual([32]byte{}, root)
+		mockSlashingProtector.AssertExpectations(s.T())
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignBlindedBeaconBlock (deneb)", func() {
 
 		pubKey := []byte("validator_pubkey")
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
@@ -254,6 +329,104 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 					WithdrawalsRoot:  phase0.Root{11, 11, 11},
 					BlobGasUsed:      12,
 					ExcessBlobGas:    13,
+				},
+			},
+		}
+
+		mockSlashingProtector.On("IsBeaconBlockSlashable", mock.Anything, blindedBlock.Slot).Return(nil)
+		mockSlashingProtector.On("UpdateHighestProposal", pubKey, blindedBlock.Slot).Return(nil)
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Unix(12345, 0),
+			GenesisValidatorsRoot: phase0.Root{9, 8, 7},
+			GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil)
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
+
+		expectedSignature := []byte("signature_bytes")
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil)
+
+		signature, root, err := rm.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+
+		s.NoError(err)
+		s.NotNil(signature)
+		s.NotEqual([32]byte{}, root)
+		mockSlashingProtector.AssertExpectations(s.T())
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignBlindedBeaconBlock (electra)", func() {
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+
+		blindedBlock := &apiv1electra.BlindedBeaconBlock{
+			Slot:          123,
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root{1, 2, 3},
+			StateRoot:     phase0.Root{4, 5, 6},
+			Body: &apiv1electra.BlindedBeaconBlockBody{
+				ETH1Data: &phase0.ETH1Data{
+					DepositRoot:  phase0.Root{1, 2, 3},
+					DepositCount: 100,
+					BlockHash:    bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+				},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits:      make([]byte, 64),
+					SyncCommitteeSignature: phase0.BLSSignature{1, 2, 3},
+				},
+				ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{
+					ParentHash:       phase0.Hash32{1, 1, 1},
+					FeeRecipient:     bellatrix.ExecutionAddress{2, 2, 2},
+					StateRoot:        phase0.Root{3, 3, 3},
+					ReceiptsRoot:     phase0.Root{4, 4, 4},
+					LogsBloom:        [256]byte{5, 5, 5},
+					PrevRandao:       [32]byte{6, 6, 6},
+					BlockNumber:      1,
+					GasLimit:         2,
+					GasUsed:          3,
+					Timestamp:        4,
+					ExtraData:        []byte{7, 7, 7},
+					BaseFeePerGas:    uint256.NewInt(8),
+					BlockHash:        phase0.Hash32{9, 9, 9},
+					TransactionsRoot: phase0.Root{10, 10, 10},
+					WithdrawalsRoot:  phase0.Root{11, 11, 11},
+					BlobGasUsed:      12,
+					ExcessBlobGas:    13,
+				},
+				ExecutionRequests: &electra.ExecutionRequests{
+					Deposits: []*electra.DepositRequest{
+						{
+							Pubkey:                phase0.BLSPubKey{1, 2, 3},
+							WithdrawalCredentials: bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+							Amount:                111,
+							Signature:             phase0.BLSSignature{4, 5, 6},
+							Index:                 1,
+						},
+					},
+					Withdrawals: []*electra.WithdrawalRequest{
+						{
+							SourceAddress:   bellatrix.ExecutionAddress{1, 2, 3},
+							ValidatorPubkey: phase0.BLSPubKey{4, 5, 6},
+							Amount:          222,
+						},
+					},
+					Consolidations: []*electra.ConsolidationRequest{
+						{
+							SourceAddress: bellatrix.ExecutionAddress{1, 2, 3},
+							SourcePubkey:  phase0.BLSPubKey{4, 5, 6},
+							TargetPubkey:  phase0.BLSPubKey{7, 8, 9},
+						},
+					},
 				},
 			},
 		}
@@ -538,6 +711,520 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
 
 		s.ErrorContains(err, "test error (UpdateHighestAttestation)")
+		s.Empty(signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
+
+	s.Run("IsBeaconBlockSlashable_Capella", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		blindedBlock := &apiv1capella.BlindedBeaconBlock{
+			Slot:          123,
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root{1, 2, 3},
+			StateRoot:     phase0.Root{4, 5, 6},
+			Body: &apiv1capella.BlindedBeaconBlockBody{
+				ETH1Data: &phase0.ETH1Data{
+					DepositRoot:  phase0.Root{1, 2, 3},
+					DepositCount: 100,
+					BlockHash:    bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+				},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits:      make([]byte, 64),
+					SyncCommitteeSignature: phase0.BLSSignature{1, 2, 3},
+				},
+				ExecutionPayloadHeader: &capella.ExecutionPayloadHeader{
+					ParentHash:       phase0.Hash32{1, 1, 1},
+					FeeRecipient:     bellatrix.ExecutionAddress{2, 2, 2},
+					StateRoot:        phase0.Root{3, 3, 3},
+					ReceiptsRoot:     phase0.Root{4, 4, 4},
+					LogsBloom:        [256]byte{5, 5, 5},
+					PrevRandao:       [32]byte{6, 6, 6},
+					BlockNumber:      1,
+					GasLimit:         2,
+					GasUsed:          3,
+					Timestamp:        4,
+					ExtraData:        []byte{7, 7, 7},
+					BaseFeePerGas:    uint256.NewInt(8).Bytes32(),
+					BlockHash:        phase0.Hash32{9, 9, 9},
+					TransactionsRoot: phase0.Root{10, 10, 10},
+					WithdrawalsRoot:  phase0.Root{11, 11, 11},
+				},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(errors.New("test error (IsBeaconBlockSlashable)")).Once()
+		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+
+		s.ErrorContains(err, "test error (IsBeaconBlockSlashable)")
+		s.Empty(signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
+
+	s.Run("UpdateHighestProposal_Capella", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		blindedBlock := &apiv1capella.BlindedBeaconBlock{
+			Slot:          123,
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root{1, 2, 3},
+			StateRoot:     phase0.Root{4, 5, 6},
+			Body: &apiv1capella.BlindedBeaconBlockBody{
+				ETH1Data: &phase0.ETH1Data{
+					DepositRoot:  phase0.Root{1, 2, 3},
+					DepositCount: 100,
+					BlockHash:    bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+				},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits:      make([]byte, 64),
+					SyncCommitteeSignature: phase0.BLSSignature{1, 2, 3},
+				},
+				ExecutionPayloadHeader: &capella.ExecutionPayloadHeader{
+					ParentHash:       phase0.Hash32{1, 1, 1},
+					FeeRecipient:     bellatrix.ExecutionAddress{2, 2, 2},
+					StateRoot:        phase0.Root{3, 3, 3},
+					ReceiptsRoot:     phase0.Root{4, 4, 4},
+					LogsBloom:        [256]byte{5, 5, 5},
+					PrevRandao:       [32]byte{6, 6, 6},
+					BlockNumber:      1,
+					GasLimit:         2,
+					GasUsed:          3,
+					Timestamp:        4,
+					ExtraData:        []byte{7, 7, 7},
+					BaseFeePerGas:    uint256.NewInt(8).Bytes32(),
+					BlockHash:        phase0.Hash32{9, 9, 9},
+					TransactionsRoot: phase0.Root{10, 10, 10},
+					WithdrawalsRoot:  phase0.Root{11, 11, 11},
+				},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(nil).Once()
+		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+
+		s.ErrorContains(err, "test error (UpdateHighestProposal)")
+		s.Empty(signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
+
+	s.Run("IsBeaconBlockSlashable_Deneb", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		blindedBlock := &apiv1deneb.BlindedBeaconBlock{
+			Slot:          123,
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root{1, 2, 3},
+			StateRoot:     phase0.Root{4, 5, 6},
+			Body: &apiv1deneb.BlindedBeaconBlockBody{
+				ETH1Data: &phase0.ETH1Data{
+					DepositRoot:  phase0.Root{1, 2, 3},
+					DepositCount: 100,
+					BlockHash:    bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+				},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits:      make([]byte, 64),
+					SyncCommitteeSignature: phase0.BLSSignature{1, 2, 3},
+				},
+				ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{
+					ParentHash:       phase0.Hash32{1, 1, 1},
+					FeeRecipient:     bellatrix.ExecutionAddress{2, 2, 2},
+					StateRoot:        phase0.Root{3, 3, 3},
+					ReceiptsRoot:     phase0.Root{4, 4, 4},
+					LogsBloom:        [256]byte{5, 5, 5},
+					PrevRandao:       [32]byte{6, 6, 6},
+					BlockNumber:      1,
+					GasLimit:         2,
+					GasUsed:          3,
+					Timestamp:        4,
+					ExtraData:        []byte{7, 7, 7},
+					BaseFeePerGas:    uint256.NewInt(8),
+					BlockHash:        phase0.Hash32{9, 9, 9},
+					TransactionsRoot: phase0.Root{10, 10, 10},
+					WithdrawalsRoot:  phase0.Root{11, 11, 11},
+					BlobGasUsed:      12,
+					ExcessBlobGas:    13,
+				},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(errors.New("test error (IsBeaconBlockSlashable)")).Once()
+		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+
+		s.ErrorContains(err, "test error (IsBeaconBlockSlashable)")
+		s.Empty(signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
+
+	s.Run("UpdateHighestProposal_Deneb", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		blindedBlock := &apiv1deneb.BlindedBeaconBlock{
+			Slot:          123,
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root{1, 2, 3},
+			StateRoot:     phase0.Root{4, 5, 6},
+			Body: &apiv1deneb.BlindedBeaconBlockBody{
+				ETH1Data: &phase0.ETH1Data{
+					DepositRoot:  phase0.Root{1, 2, 3},
+					DepositCount: 100,
+					BlockHash:    bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+				},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits:      make([]byte, 64),
+					SyncCommitteeSignature: phase0.BLSSignature{1, 2, 3},
+				},
+				ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{
+					ParentHash:       phase0.Hash32{1, 1, 1},
+					FeeRecipient:     bellatrix.ExecutionAddress{2, 2, 2},
+					StateRoot:        phase0.Root{3, 3, 3},
+					ReceiptsRoot:     phase0.Root{4, 4, 4},
+					LogsBloom:        [256]byte{5, 5, 5},
+					PrevRandao:       [32]byte{6, 6, 6},
+					BlockNumber:      1,
+					GasLimit:         2,
+					GasUsed:          3,
+					Timestamp:        4,
+					ExtraData:        []byte{7, 7, 7},
+					BaseFeePerGas:    uint256.NewInt(8),
+					BlockHash:        phase0.Hash32{9, 9, 9},
+					TransactionsRoot: phase0.Root{10, 10, 10},
+					WithdrawalsRoot:  phase0.Root{11, 11, 11},
+					BlobGasUsed:      12,
+					ExcessBlobGas:    13,
+				},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(nil).Once()
+		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+
+		s.ErrorContains(err, "test error (UpdateHighestProposal)")
+		s.Empty(signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
+
+	s.Run("IsBeaconBlockSlashable_Electra", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		blindedBlock := &apiv1electra.BlindedBeaconBlock{
+			Slot:          123,
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root{1, 2, 3},
+			StateRoot:     phase0.Root{4, 5, 6},
+			Body: &apiv1electra.BlindedBeaconBlockBody{
+				ETH1Data: &phase0.ETH1Data{
+					DepositRoot:  phase0.Root{1, 2, 3},
+					DepositCount: 100,
+					BlockHash:    bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+				},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits:      make([]byte, 64),
+					SyncCommitteeSignature: phase0.BLSSignature{1, 2, 3},
+				},
+				ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{
+					ParentHash:       phase0.Hash32{1, 1, 1},
+					FeeRecipient:     bellatrix.ExecutionAddress{2, 2, 2},
+					StateRoot:        phase0.Root{3, 3, 3},
+					ReceiptsRoot:     phase0.Root{4, 4, 4},
+					LogsBloom:        [256]byte{5, 5, 5},
+					PrevRandao:       [32]byte{6, 6, 6},
+					BlockNumber:      1,
+					GasLimit:         2,
+					GasUsed:          3,
+					Timestamp:        4,
+					ExtraData:        []byte{7, 7, 7},
+					BaseFeePerGas:    uint256.NewInt(8),
+					BlockHash:        phase0.Hash32{9, 9, 9},
+					TransactionsRoot: phase0.Root{10, 10, 10},
+					WithdrawalsRoot:  phase0.Root{11, 11, 11},
+					BlobGasUsed:      12,
+					ExcessBlobGas:    13,
+				},
+				ExecutionRequests: &electra.ExecutionRequests{
+					Deposits: []*electra.DepositRequest{
+						{
+							Pubkey:                phase0.BLSPubKey{1, 2, 3},
+							WithdrawalCredentials: bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+							Amount:                111,
+							Signature:             phase0.BLSSignature{4, 5, 6},
+							Index:                 1,
+						},
+					},
+					Withdrawals: []*electra.WithdrawalRequest{
+						{
+							SourceAddress:   bellatrix.ExecutionAddress{1, 2, 3},
+							ValidatorPubkey: phase0.BLSPubKey{4, 5, 6},
+							Amount:          222,
+						},
+					},
+					Consolidations: []*electra.ConsolidationRequest{
+						{
+							SourceAddress: bellatrix.ExecutionAddress{1, 2, 3},
+							SourcePubkey:  phase0.BLSPubKey{4, 5, 6},
+							TargetPubkey:  phase0.BLSPubKey{7, 8, 9},
+						},
+					},
+				},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(errors.New("test error (IsBeaconBlockSlashable)")).Once()
+		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+
+		s.ErrorContains(err, "test error (IsBeaconBlockSlashable)")
+		s.Empty(signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
+
+	s.Run("UpdateHighestProposal_Electra", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		blindedBlock := &apiv1electra.BlindedBeaconBlock{
+			Slot:          123,
+			ProposerIndex: 1,
+			ParentRoot:    phase0.Root{1, 2, 3},
+			StateRoot:     phase0.Root{4, 5, 6},
+			Body: &apiv1electra.BlindedBeaconBlockBody{
+				ETH1Data: &phase0.ETH1Data{
+					DepositRoot:  phase0.Root{1, 2, 3},
+					DepositCount: 100,
+					BlockHash:    bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+				},
+				SyncAggregate: &altair.SyncAggregate{
+					SyncCommitteeBits:      make([]byte, 64),
+					SyncCommitteeSignature: phase0.BLSSignature{1, 2, 3},
+				},
+				ExecutionPayloadHeader: &deneb.ExecutionPayloadHeader{
+					ParentHash:       phase0.Hash32{1, 1, 1},
+					FeeRecipient:     bellatrix.ExecutionAddress{2, 2, 2},
+					StateRoot:        phase0.Root{3, 3, 3},
+					ReceiptsRoot:     phase0.Root{4, 4, 4},
+					LogsBloom:        [256]byte{5, 5, 5},
+					PrevRandao:       [32]byte{6, 6, 6},
+					BlockNumber:      1,
+					GasLimit:         2,
+					GasUsed:          3,
+					Timestamp:        4,
+					ExtraData:        []byte{7, 7, 7},
+					BaseFeePerGas:    uint256.NewInt(8),
+					BlockHash:        phase0.Hash32{9, 9, 9},
+					TransactionsRoot: phase0.Root{10, 10, 10},
+					WithdrawalsRoot:  phase0.Root{11, 11, 11},
+					BlobGasUsed:      12,
+					ExcessBlobGas:    13,
+				},
+				ExecutionRequests: &electra.ExecutionRequests{
+					Deposits: []*electra.DepositRequest{
+						{
+							Pubkey:                phase0.BLSPubKey{1, 2, 3},
+							WithdrawalCredentials: bytes.Repeat([]byte{1, 2, 3, 4}, 8),
+							Amount:                111,
+							Signature:             phase0.BLSSignature{4, 5, 6},
+							Index:                 1,
+						},
+					},
+					Withdrawals: []*electra.WithdrawalRequest{
+						{
+							SourceAddress:   bellatrix.ExecutionAddress{1, 2, 3},
+							ValidatorPubkey: phase0.BLSPubKey{4, 5, 6},
+							Amount:          222,
+						},
+					},
+					Consolidations: []*electra.ConsolidationRequest{
+						{
+							SourceAddress: bellatrix.ExecutionAddress{1, 2, 3},
+							SourcePubkey:  phase0.BLSPubKey{4, 5, 6},
+							TargetPubkey:  phase0.BLSPubKey{7, 8, 9},
+						},
+					},
+				},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(nil).Once()
+		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+
+		s.ErrorContains(err, "test error (UpdateHighestProposal)")
 		s.Empty(signature)
 		s.Equal([32]byte{}, root)
 		consensusMock.AssertExpectations(s.T())
@@ -1014,7 +1701,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 	domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 	expectedSignature := []byte("signature_bytes")
 
-	s.Run("SignAggregateAndProof", func() {
+	s.Run("SignAggregateAndProofPhase0", func() {
 		attestationData := &phase0.AttestationData{
 			Slot:            123,
 			Index:           4,
@@ -1036,6 +1723,47 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		}
 
 		aggregateAndProof := &phase0.AggregateAndProof{
+			AggregatorIndex: 789,
+			SelectionProof:  phase0.BLSSignature{4, 5, 6},
+			Aggregate:       attestation,
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(aggregateAndProof, domain, pubKey, spectypes.DomainAggregateAndProof)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignAggregateAndProofElectra", func() {
+		attestationData := &phase0.AttestationData{
+			Slot:            123,
+			Index:           4,
+			BeaconBlockRoot: phase0.Root{1, 2, 3, 4},
+			Source: &phase0.Checkpoint{
+				Epoch: 10,
+				Root:  phase0.Root{5, 6, 7, 8},
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: 11,
+				Root:  phase0.Root{9, 10, 11, 12},
+			},
+		}
+
+		attestation := &electra.Attestation{
+			AggregationBits: []byte{0x01},
+			Data:            attestationData,
+			Signature:       phase0.BLSSignature{1, 2, 3},
+			CommitteeBits:   bytes.Repeat([]byte{0}, 8),
+		}
+
+		aggregateAndProof := &electra.AggregateAndProof{
 			AggregatorIndex: 789,
 			SelectionProof:  phase0.BLSSignature{4, 5, 6},
 			Aggregate:       attestation,
@@ -1083,6 +1811,32 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
 		signature, root, err := rm.SignBeaconObject(validatorReg, domain, pubKey, spectypes.DomainApplicationBuilder)
+
+		s.NoError(err)
+		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.NotEqual([32]byte{}, root)
+		s.client.AssertExpectations(s.T())
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignContributionAndProof", func() {
+		contributionAndProof := &altair.ContributionAndProof{
+			AggregatorIndex: 1,
+			Contribution: &altair.SyncCommitteeContribution{
+				Slot:              1,
+				BeaconBlockRoot:   phase0.Root{1, 2, 3},
+				SubcommitteeIndex: 2,
+				AggregationBits:   bytes.Repeat([]byte{0x00}, 16),
+				Signature:         phase0.BLSSignature{4, 5, 6},
+			},
+			SelectionProof: phase0.BLSSignature{1, 2, 3, 4, 5},
+		}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
+
+		signature, root, err := rm.SignBeaconObject(contributionAndProof, domain, pubKey, spectypes.DomainContributionAndProof)
 
 		s.NoError(err)
 		s.Equal(spectypes.Signature(expectedSignature), signature)
@@ -1164,6 +1918,89 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainApplicationBuilder)
 
 		s.ErrorContains(err, "could not cast obj to ValidatorRegistration")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignContributionAndProofTypeCastError", func() {
+		wrongType := &phase0.VoluntaryExit{}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainContributionAndProof)
+
+		s.ErrorContains(err, "could not cast obj to ContributionAndProof")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignSyncCommitteeSelectionProofTypeCastError", func() {
+		wrongType := &phase0.VoluntaryExit{}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainSyncCommitteeSelectionProof)
+
+		s.ErrorContains(err, "could not cast obj to SyncAggregatorSelectionData")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignVoluntaryExitTypeCastError", func() {
+		wrongType := spectypes.SSZUint64(1)
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainVoluntaryExit)
+
+		s.ErrorContains(err, "could not cast obj to VoluntaryExit")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignSyncCommitteeTypeCastError", func() {
+		wrongType := spectypes.SSZUint64(1)
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainSyncCommittee)
+
+		s.ErrorContains(err, "could not cast obj to BlockRootWithSlot")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignSelectionProofTypeCastError", func() {
+		wrongType := &phase0.VoluntaryExit{}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainSelectionProof)
+
+		s.ErrorContains(err, "could not cast obj to SSZUint64")
+		s.consensusClient.AssertExpectations(s.T())
+	})
+
+	s.Run("SignProposerTypeCastError", func() {
+		wrongType := &phase0.VoluntaryExit{}
+
+		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil)
+		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
+
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainProposer)
+		s.ErrorContains(err, "obj type is unknown")
+
+		unsupportedTypes := []ssz.HashRoot{
+			&capella.BeaconBlock{},
+			&deneb.BeaconBlock{},
+			&electra.BeaconBlock{},
+		}
+
+		for _, v := range unsupportedTypes {
+			_, _, err := rm.SignBeaconObject(v, domain, pubKey, spectypes.DomainProposer)
+			s.ErrorContains(err, "web3signer supports only blinded blocks since bellatrix")
+		}
+
 		s.consensusClient.AssertExpectations(s.T())
 	})
 }
