@@ -1,18 +1,18 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/url"
 
 	"github.com/alecthomas/kong"
+	"github.com/valyala/fasthttp"
+
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner"
-
-	"github.com/valyala/fasthttp"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -39,6 +39,12 @@ func main() {
 		}
 	}()
 
+	if err := run(logger, cli); err != nil {
+		logger.Fatal("Application failed", zap.Error(err))
+	}
+}
+
+func run(logger *zap.Logger, cli CLI) error {
 	logger.Debug("Starting ssv-signer",
 		zap.String("listen_addr", cli.ListenAddr),
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
@@ -51,24 +57,26 @@ func main() {
 	// PrivateKeyFile and PasswordFile use the same 'and' group,
 	// so setting them as 'required' wouldn't allow to start with PrivateKey.
 	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
-		logger.Fatal("neither private key nor keystore provided")
+		return fmt.Errorf("neither private key nor keystore provided")
 	}
 
 	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
-		logger.Fatal("invalid WEB3SIGNER_ENDPOINT format", zap.Error(err))
+		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
 	var operatorPrivateKey keys.OperatorPrivateKey
 	if cli.PrivateKey != "" {
-		operatorPrivateKey, err = keys.PrivateKeyFromString(cli.PrivateKey)
+		pk, err := keys.PrivateKeyFromString(cli.PrivateKey)
 		if err != nil {
-			logger.Fatal("failed to parse private key", zap.Error(err))
+			return fmt.Errorf("failed to parse private key: %w", err)
 		}
+		operatorPrivateKey = pk
 	} else {
-		operatorPrivateKey, err = keystore.LoadOperatorKeystore(cli.PrivateKeyFile, cli.PasswordFile)
+		pk, err := keystore.LoadOperatorKeystore(cli.PrivateKeyFile, cli.PasswordFile)
 		if err != nil {
-			logger.Fatal("failed to load operator key from file", zap.Error(err))
+			return fmt.Errorf("failed to load operator key from file: %w", err)
 		}
+		operatorPrivateKey = pk
 	}
 
 	web3SignerClient := web3signer.New(logger, cli.Web3SignerEndpoint)
@@ -77,6 +85,8 @@ func main() {
 
 	srv := ssvsigner.NewServer(logger, operatorPrivateKey, web3SignerClient, cli.ShareKeystorePassphrase)
 	if err := fasthttp.ListenAndServe(cli.ListenAddr, srv.Handler()); err != nil {
-		logger.Fatal("failed to start server", zap.Error(err))
+		return fmt.Errorf("listen on %v: %w", cli.ListenAddr, err)
 	}
+
+	return nil
 }
