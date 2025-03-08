@@ -64,11 +64,6 @@ func NewRemoteKeyManager(
 	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	sp, err := NewSlashingProtector(logger, signerStore, protection)
-	if err != nil {
-		logger.Fatal("could not create new slashing protector", zap.Error(err))
-	}
-
 	operatorPubKeyString, err := remoteSigner.OperatorIdentity(context.Background()) // TODO: use context
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
@@ -83,7 +78,7 @@ func NewRemoteKeyManager(
 		logger:            logger,
 		remoteSigner:      remoteSigner,
 		consensusClient:   consensusClient,
-		SlashingProtector: sp,
+		SlashingProtector: NewSlashingProtector(logger, signerStore, protection),
 		getOperatorId:     getOperatorId,
 		operatorPubKey:    operatorPubKey,
 	}, nil
@@ -119,6 +114,10 @@ func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
 	statuses, err := km.remoteSigner.RemoveValidators(context.Background(), pubKey) // TODO: use context
 	if err != nil {
 		return fmt.Errorf("remove validator: %w", err)
+	}
+
+	if len(statuses) != 1 {
+		return fmt.Errorf("bug: expected 1 status, got %d", len(statuses))
 	}
 
 	if statuses[0] != web3signer.StatusDeleted {

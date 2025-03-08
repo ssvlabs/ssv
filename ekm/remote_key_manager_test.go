@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
@@ -442,6 +443,34 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		clientMock.AssertExpectations(s.T())
 	})
 
+	s.Run("WrongStatusCountError", func() {
+
+		clientMock := new(MockRemoteSigner)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   s.consensusClient,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: mockSlashingProtector,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		encShare := []byte("encrypted_share_data")
+
+		statuses := []web3signer.Status{web3signer.StatusImported, web3signer.StatusImported}
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ClientShareKeys{
+			PublicKey:        pubKey,
+			EncryptedPrivKey: encShare,
+		}).Return(statuses, nil).Once()
+
+		err := rmTest.AddShare(encShare, pubKey)
+
+		s.ErrorContains(err, "expected 1 status, got 2")
+		clientMock.AssertExpectations(s.T())
+	})
+
 	s.Run("BumpSlashingProtectionError", func() {
 
 		clientMock := new(MockRemoteSigner)
@@ -524,6 +553,30 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		s.Error(err)
 		s.Contains(err.Error(), "received status")
+		clientMock.AssertExpectations(s.T())
+	})
+
+	s.Run("WrongStatusCountError", func() {
+
+		clientMock := new(MockRemoteSigner)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   s.consensusClient,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: mockSlashingProtector,
+		}
+
+		pubKey := []byte("validator_pubkey")
+
+		statuses := []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusDeleted}
+		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(statuses, nil).Once()
+
+		err := rmTest.RemoveShare(pubKey)
+
+		s.ErrorContains(err, "expected 1 status, got 2")
 		clientMock.AssertExpectations(s.T())
 	})
 
@@ -951,6 +1004,47 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
 
 	networkCfg := networkconfig.NetworkConfig{}
 
+	const sampleRSAPublicKey = `
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArVzXJ1Xm3YIY8QYs2MFL
+O/FY8M5BZ5GtCgFVdAkhDY2S3n6Q0X8gY9K+9YiQ6ZrLGfrbhUQ9D8q2JY9KZpQ1
+X3sMfJ3TYIjdbq6KUZ0C8fLIft8E0qPMIYlGjjbYKjLC3MBq3Md0K9V7jW7NAjIe
+A5CjGHlTlI5n8YUZBQhp2zKDHOFThq4Mh8BiWC5LdiJF1F4fW2JzruBHZMGxK4EX
+E3y7OUL8IkYI3RFm7L4yx1M2FAhkQdqBP5LjCObTbk27R8nW5g4pvlrf9GPpDaV9
+UH3pIsH5oiLqSi6q5Y4yAgL1MVzF3eeZ5kPVwLzopY6B4KjP2Lvb9Kbw5tz4gjx2
+QwIDAQAB
+-----END PUBLIC KEY-----
+`
+	pubKey := base64.StdEncoding.EncodeToString([]byte(sampleRSAPublicKey))
+	s.client.On("OperatorIdentity", mock.Anything).Return(pubKey, nil)
+
+	logger, _ := zap.NewDevelopment()
+
+	getOperatorId := func() spectypes.OperatorID {
+		return 42
+	}
+
+	_, err := NewRemoteKeyManager(
+		logger,
+		s.client,
+		s.consensusClient,
+		s.db,
+		networkCfg,
+		getOperatorId,
+	)
+
+	s.NoError(err)
+
+	s.client.AssertExpectations(s.T())
+}
+
+func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_WrongFormat() {
+	s.db.On("Begin").Return(s.txn, nil).Maybe()
+	s.txn.On("Commit").Return(nil).Maybe()
+	s.txn.On("Rollback").Return(nil).Maybe()
+
+	networkCfg := networkconfig.NetworkConfig{}
+
 	invalidPubKey := "invalid-public-key-format"
 	s.client.On("OperatorIdentity", mock.Anything).Return(invalidPubKey, nil)
 
@@ -969,8 +1063,36 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
 		getOperatorId,
 	)
 
-	s.Error(err)
-	s.Contains(err.Error(), "extract operator public key")
+	s.ErrorContains(err, "extract operator public key")
+
+	s.client.AssertExpectations(s.T())
+}
+
+func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Error() {
+	s.db.On("Begin").Return(s.txn, nil).Maybe()
+	s.txn.On("Commit").Return(nil).Maybe()
+	s.txn.On("Rollback").Return(nil).Maybe()
+
+	networkCfg := networkconfig.NetworkConfig{}
+
+	s.client.On("OperatorIdentity", mock.Anything).Return("", errors.New("err"))
+
+	logger, _ := zap.NewDevelopment()
+
+	getOperatorId := func() spectypes.OperatorID {
+		return 42
+	}
+
+	_, err := NewRemoteKeyManager(
+		logger,
+		s.client,
+		s.consensusClient,
+		s.db,
+		networkCfg,
+		getOperatorId,
+	)
+
+	s.ErrorContains(err, "get operator identity")
 
 	s.client.AssertExpectations(s.T())
 }

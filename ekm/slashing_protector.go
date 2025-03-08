@@ -44,12 +44,12 @@ func NewSlashingProtector(
 	logger *zap.Logger,
 	signerStore Storage,
 	protection *slashingprotection.NormalProtection,
-) (SlashingProtector, error) {
+) SlashingProtector {
 	return &slashingProtector{
 		logger:      logger,
 		signerStore: signerStore,
 		protection:  protection,
-	}, nil
+	}
 }
 
 func (sp *slashingProtector) ListAccounts() ([]core.ValidatorAccount, error) {

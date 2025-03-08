@@ -61,11 +61,6 @@ func NewLocalKeyManager(
 
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	slashingProtector, err := NewSlashingProtector(logger, signerStore, protection)
-	if err != nil {
-		return nil, fmt.Errorf("create slashing protector: %w", err)
-	}
-
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
 	options.SetWalletType(core.NDWallet)
@@ -92,7 +87,7 @@ func NewLocalKeyManager(
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		domain:            network.DomainType,
-		SlashingProtector: slashingProtector,
+		SlashingProtector: NewSlashingProtector(logger, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
 	}, nil
 }
