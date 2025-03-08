@@ -150,8 +150,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 
 	_, err := rm.Sign(message)
 
-	s.Error(err)
-	s.Contains(err.Error(), "signature operation failed", "Error should contain the original message")
+	s.ErrorContains(err, "signature operation failed", "Error should contain the original message")
 
 	mockRemoteSigner.AssertExpectations(s.T())
 }
@@ -326,8 +325,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		signature, root, err := rm.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
 
-		s.Error(err)
-		s.Contains(err.Error(), "get fork info")
+		s.ErrorContains(err, "get fork info")
 		s.Equal(spectypes.Signature{}, signature)
 		s.Equal([32]byte{}, root)
 		s.consensusClient.AssertExpectations(s.T())
@@ -374,8 +372,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
 
-		s.Error(err)
-		s.Contains(err.Error(), "get fork info: get genesis")
+		s.ErrorContains(err, "get fork info: get genesis")
 		s.Equal(spectypes.Signature{}, signature)
 		s.Equal([32]byte{}, root)
 		consensusMock.AssertExpectations(s.T())
@@ -409,8 +406,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		err := rmTest.AddShare(encShare, pubKey)
 
-		s.Error(err)
-		s.Contains(err.Error(), "add validator")
+		s.ErrorContains(err, "add validator")
 		clientMock.AssertExpectations(s.T())
 	})
 
@@ -438,8 +434,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		err := rmTest.AddShare(encShare, pubKey)
 
-		s.Error(err)
-		s.Contains(err.Error(), "unexpected status")
+		s.ErrorContains(err, "unexpected status")
 		clientMock.AssertExpectations(s.T())
 	})
 
@@ -498,8 +493,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		err := rmTest.AddShare(encShare, pubKey)
 
-		s.Error(err)
-		s.Contains(err.Error(), "could not bump slashing protection")
+		s.ErrorContains(err, "could not bump slashing protection")
 		clientMock.AssertExpectations(s.T())
 		slashingMock.AssertExpectations(s.T())
 	})
@@ -524,10 +518,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		s.client.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(nil, errors.New("remove validators error"))
 
-		err := rm.RemoveShare(pubKey)
-
-		s.Error(err)
-		s.Contains(err.Error(), "remove validator")
+		s.ErrorContains(rm.RemoveShare(pubKey), "remove validator")
 		s.client.AssertExpectations(s.T())
 	})
 
@@ -549,10 +540,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		status := []web3signer.Status{web3signer.StatusError}
 		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil).Once()
 
-		err := rmTest.RemoveShare(pubKey)
-
-		s.Error(err)
-		s.Contains(err.Error(), "received status")
+		s.ErrorContains(rmTest.RemoveShare(pubKey), "received status")
 		clientMock.AssertExpectations(s.T())
 	})
 
@@ -574,9 +562,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		statuses := []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusDeleted}
 		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(statuses, nil).Once()
 
-		err := rmTest.RemoveShare(pubKey)
-
-		s.ErrorContains(err, "expected 1 status, got 2")
+		s.ErrorContains(rmTest.RemoveShare(pubKey), "expected 1 status, got 2")
 		clientMock.AssertExpectations(s.T())
 	})
 
@@ -601,10 +587,34 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		slashingMock.On("RemoveHighestAttestation", pubKey).Return(errors.New("remove highest attestation error")).Once()
 
-		err := rmTest.RemoveShare(pubKey)
+		s.ErrorContains(rmTest.RemoveShare(pubKey), "could not remove highest attestation")
+		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
+	})
 
-		s.Error(err)
-		s.Contains(err.Error(), "could not remove highest attestation")
+	s.Run("RemoveHighestProposalError", func() {
+
+		clientMock := new(MockRemoteSigner)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   s.consensusClient,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+
+		status := []web3signer.Status{web3signer.StatusDeleted}
+		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil).Once()
+
+		slashingMock.On("RemoveHighestAttestation", pubKey).Return(nil).Once()
+		slashingMock.On("RemoveHighestProposal", pubKey).Return(errors.New("remove highest proposal error")).Once()
+
+		s.ErrorContains(rmTest.RemoveShare(pubKey), "could not remove highest proposal")
 		clientMock.AssertExpectations(s.T())
 		slashingMock.AssertExpectations(s.T())
 	})
@@ -685,6 +695,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessageErrors() {
 	s.Error(err)
 	s.Equal(signerError, err)
 	s.Nil(signature)
+
 	mockRemoteSigner.AssertExpectations(s.T())
 }
 
@@ -803,8 +814,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 
 		signature, root, err := rm.SignBeaconObject(slot, domain, pubKey, unknownDomain)
 
-		s.Error(err)
-		s.Contains(err.Error(), "domain unknown")
+		s.ErrorContains(err, "domain unknown")
 		s.Nil(signature)
 		s.Equal([32]byte{}, root)
 		s.consensusClient.AssertExpectations(s.T())
@@ -952,8 +962,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 
 		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainAttester)
 
-		s.Error(err)
-		s.Contains(err.Error(), "could not cast obj to AttestationData")
+		s.ErrorContains(err, "could not cast obj to AttestationData")
 		s.consensusClient.AssertExpectations(s.T())
 	})
 
@@ -965,8 +974,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 
 		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainAggregateAndProof)
 
-		s.Error(err)
-		s.Contains(err.Error(), "obj type is unknown")
+		s.ErrorContains(err, "obj type is unknown")
 		s.consensusClient.AssertExpectations(s.T())
 	})
 
@@ -978,8 +986,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 
 		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainRandao)
 
-		s.Error(err)
-		s.Contains(err.Error(), "could not cast obj to SSZUint64")
+		s.ErrorContains(err, "could not cast obj to SSZUint64")
 		s.consensusClient.AssertExpectations(s.T())
 	})
 
@@ -991,8 +998,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 
 		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainApplicationBuilder)
 
-		s.Error(err)
-		s.Contains(err.Error(), "could not cast obj to ValidatorRegistration")
+		s.ErrorContains(err, "could not cast obj to ValidatorRegistration")
 		s.consensusClient.AssertExpectations(s.T())
 	})
 }
