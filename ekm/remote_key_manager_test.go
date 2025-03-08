@@ -377,6 +377,171 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		s.Equal([32]byte{}, root)
 		consensusMock.AssertExpectations(s.T())
 	})
+
+	s.Run("RemoteSignerError", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		attestationData := &phase0.AttestationData{
+			Slot:            123,
+			Index:           1,
+			BeaconBlockRoot: phase0.Root{1, 2, 3},
+			Source: &phase0.Checkpoint{
+				Epoch: 10,
+				Root:  phase0.Root{4, 5, 6},
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: 11,
+				Root:  phase0.Root{7, 8, 9},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsAttestationSlashable", mock.Anything, mock.Anything).Return(nil).Once()
+		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(nil).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, errors.New("sign error")).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+
+		s.ErrorContains(err, "remote signer")
+		s.Equal(spectypes.Signature{}, signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
+
+	s.Run("IsAttestationSlashableError", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		attestationData := &phase0.AttestationData{
+			Slot:            123,
+			Index:           1,
+			BeaconBlockRoot: phase0.Root{1, 2, 3},
+			Source: &phase0.Checkpoint{
+				Epoch: 10,
+				Root:  phase0.Root{4, 5, 6},
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: 11,
+				Root:  phase0.Root{7, 8, 9},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsAttestationSlashable", mock.Anything, mock.Anything).Return(errors.New("test error (IsAttestationSlashable)")).Once()
+		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(nil).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+
+		s.ErrorContains(err, "test error (IsAttestationSlashable)")
+		s.Empty(signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
+
+	s.Run("UpdateHighestAttestationError", func() {
+
+		clientMock := new(MockRemoteSigner)
+		consensusMock := new(MockConsensusClient)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			remoteSigner:      clientMock,
+			consensusClient:   consensusMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			SlashingProtector: slashingMock,
+		}
+
+		pubKey := []byte("validator_pubkey")
+		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
+		attestationData := &phase0.AttestationData{
+			Slot:            123,
+			Index:           1,
+			BeaconBlockRoot: phase0.Root{1, 2, 3},
+			Source: &phase0.Checkpoint{
+				Epoch: 10,
+				Root:  phase0.Root{4, 5, 6},
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: 11,
+				Root:  phase0.Root{7, 8, 9},
+			},
+		}
+
+		mockFork := &phase0.Fork{
+			PreviousVersion: phase0.Version{1, 2, 3, 4},
+			CurrentVersion:  phase0.Version{5, 6, 7, 8},
+			Epoch:           10,
+		}
+		genesis := &eth2api.Genesis{
+			GenesisTime:           time.Time{},
+			GenesisValidatorsRoot: phase0.Root{},
+			GenesisForkVersion:    phase0.Version{},
+		}
+		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
+		slashingMock.On("IsAttestationSlashable", mock.Anything, mock.Anything).Return(nil).Once()
+		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestAttestation)")).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
+
+		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+
+		s.ErrorContains(err, "test error (UpdateHighestAttestation)")
+		s.Empty(signature)
+		s.Equal([32]byte{}, root)
+		consensusMock.AssertExpectations(s.T())
+	})
 }
 
 func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {

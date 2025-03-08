@@ -368,7 +368,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	sig, err := km.remoteSigner.Sign(context.Background(), sharePubkey, req) // TODO: use context
 	if err != nil {
-		return spectypes.Signature{}, [32]byte{}, err
+		return spectypes.Signature{}, [32]byte{}, fmt.Errorf("remote signer: %w", err)
 	}
 	return sig, root, nil
 }
