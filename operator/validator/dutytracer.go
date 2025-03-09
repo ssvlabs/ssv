@@ -96,6 +96,12 @@ func (n *InMemTracer) StartEvictionJob(ctx context.Context, tickerProvider slott
 	}
 }
 
+/*
+all validatorDutyTrace contain a collection of model.ValidatorDutyTrace(s)
+so when we request a certain trace we return both of them:
+one (validatorDutyTrace) contains the lock and the model.* contains the data
+that we enrich subsequently
+*/
 func (n *InMemTracer) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace) {
 	validatorSlots, found := n.validatorTraces.Load(vPubKey)
 	if !found {
@@ -520,7 +526,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				// n.populateProposer(round, committeeID, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
-				if decided != nil {
+				if decided != nil && len(trace.Decideds) == 0 {
 					n.logger.Info("committee decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.CommitteeID(committeeID))
 					trace.Decideds = append(trace.Decideds, decided)
 				}
@@ -564,7 +570,7 @@ func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
 				// n.populateProposer(round, validatorPK, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
-				if decided != nil {
+				if decided != nil && len(roleDutyTrace.Decideds) == 0 {
 					n.logger.Info("validator decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.Validator(validatorPK[:]))
 					roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
 				}
