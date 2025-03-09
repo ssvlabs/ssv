@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"golang.org/x/exp/maps"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
@@ -148,7 +147,11 @@ func (c *validatorStore) Committees() []*Committee {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return maps.Values(c.byCommitteeID)
+	committees := make([]*Committee, 0, len(c.byCommitteeID))
+	for _, committee := range c.byCommitteeID {
+		committees = append(committees, committee)
+	}
+	return committees
 }
 
 func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committee {

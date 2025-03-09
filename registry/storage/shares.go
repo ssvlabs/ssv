@@ -13,7 +13,6 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"golang.org/x/exp/maps"
 )
 
 //go:generate sszgen -path ./shares.go --objs Share
@@ -131,7 +130,13 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
 	)
-	if err := storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...); err != nil {
+
+	allShares := make([]*types.SSVShare, 0, len(storage.shares))
+	for _, share := range storage.shares {
+		allShares = append(allShares, share)
+	}
+
+	if err := storage.validatorStore.handleSharesAdded(allShares...); err != nil {
 		return nil, nil, err
 	}
 	return storage, storage.validatorStore, nil
@@ -173,7 +178,12 @@ func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.
 	defer s.memoryMtx.RUnlock()
 
 	if len(filters) == 0 {
-		return maps.Values(s.shares)
+		result := make([]*types.SSVShare, 0, len(s.shares))
+		for _, share := range s.shares {
+			result = append(result, share)
+		}
+
+		return result
 	}
 
 	var shares []*types.SSVShare
