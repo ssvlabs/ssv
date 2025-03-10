@@ -22,7 +22,7 @@ require (
 	github.com/holiman/uint256 v1.3.2
 	github.com/ilyakaznacheev/cleanenv v1.4.2
 	github.com/jellydator/ttlcache/v3 v3.3.0
-	github.com/libp2p/go-libp2p v0.37.2
+	github.com/libp2p/go-libp2p v0.36.3
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-pubsub v0.12.0
 	github.com/microsoft/go-crypto-openssl v0.2.9
@@ -47,10 +47,10 @@ require (
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.opentelemetry.io/otel/sdk v1.32.0
 	go.opentelemetry.io/otel/sdk/metric v1.32.0
-	go.uber.org/mock v0.5.0
+	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
+	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa
 	golang.org/x/mod v0.22.0
 	golang.org/x/sync v0.10.0
 	golang.org/x/text v0.21.0
