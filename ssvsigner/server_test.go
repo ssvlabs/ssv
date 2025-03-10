@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +54,7 @@ func (s *ServerTestSuite) SetupTest() {
 	}
 
 	s.remoteSigner = &testRemoteSigner{
-		listKeysResult: []string{"0x123", "0x456"},
+		listKeysResult: []phase0.BLSPubKey{{1, 2, 3}, {4, 5, 6}},
 		importResult:   []web3signer.Status{web3signer.StatusImported},
 		deleteResult:   []web3signer.Status{web3signer.StatusDeleted},
 		signResult:     []byte("signature_bytes"),
@@ -426,40 +427,40 @@ func (t *testOperatorPrivateKey) Base64() string {
 }
 
 type testRemoteSigner struct {
-	listKeysResult []string
+	listKeysResult []phase0.BLSPubKey
 	listKeysError  error
 	importResult   []web3signer.Status
 	importError    error
 	deleteResult   []web3signer.Status
 	deleteError    error
-	signResult     []byte
+	signResult     phase0.BLSSignature
 	signError      error
 }
 
-func (t *testRemoteSigner) ListKeys(ctx context.Context) ([]string, error) {
+func (t *testRemoteSigner) ListKeys(ctx context.Context) ([]phase0.BLSPubKey, error) {
 	if t.listKeysError != nil {
 		return nil, t.listKeysError
 	}
 	return t.listKeysResult, nil
 }
 
-func (t *testRemoteSigner) ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]web3signer.Status, error) {
+func (t *testRemoteSigner) ImportKeystore(ctx context.Context, keystoreList []web3signer.Keystore, keystorePasswordList []string) ([]web3signer.Status, error) {
 	if t.importError != nil {
 		return nil, t.importError
 	}
 	return t.importResult, nil
 }
 
-func (t *testRemoteSigner) DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]web3signer.Status, error) {
+func (t *testRemoteSigner) DeleteKeystore(ctx context.Context, sharePubKeyList []phase0.BLSPubKey) ([]web3signer.Status, error) {
 	if t.deleteError != nil {
 		return nil, t.deleteError
 	}
 	return t.deleteResult, nil
 }
 
-func (t *testRemoteSigner) Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error) {
+func (t *testRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
 	if t.signError != nil {
-		return nil, t.signError
+		return phase0.BLSSignature{}, t.signError
 	}
 	return t.signResult, nil
 }

@@ -70,8 +70,8 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operator
 	encryptedSK2, err := operatorPrivateKey.Public().Encrypt([]byte(sk2.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(encryptedSK1, sk1.GetPublicKey().Serialize()))
-	require.NoError(t, km.AddShare(encryptedSK2, sk2.GetPublicKey().Serialize()))
+	require.NoError(t, km.AddShare(encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
 
 	return km, network
 }
@@ -153,7 +153,7 @@ func TestSlashing(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(encryptedSK1, sk1.GetPublicKey().Serialize()))
+	require.NoError(t, km.AddShare(encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
 	currentEpoch := network.Beacon.EstimatedEpochAtSlot(currentSlot)
@@ -305,7 +305,7 @@ func TestSlashing(t *testing.T) {
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 	})
 	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
-		require.NoError(t, km.AddShare(encryptedSK1, sk1.GetPublicKey().Serialize()))
+		require.NoError(t, km.AddShare(encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
@@ -324,7 +324,7 @@ func TestSignBeaconObject(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(encryptedSK1, sk1.GetPublicKey().Serialize()))
+	require.NoError(t, km.AddShare(encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
 	highestProposal := currentSlot + MinSPProposalSlotGap + 1
@@ -727,8 +727,8 @@ func TestRemoveShare(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(pk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(encryptedPrivKey, pk.GetPublicKey().Serialize()))
-		require.NoError(t, km.RemoveShare(pk.GetPublicKey().Serialize()))
+		require.NoError(t, km.AddShare(encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.RemoveShare(phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
 	})
 
 	t.Run("key doesn't exist", func(t *testing.T) {
@@ -737,7 +737,7 @@ func TestRemoveShare(t *testing.T) {
 		pk := &bls.SecretKey{}
 		pk.SetByCSPRNG()
 
-		err := km.RemoveShare(pk.GetPublicKey().Serialize())
+		err := km.RemoveShare(phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
 		require.NoError(t, err)
 	})
 }
@@ -917,7 +917,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(encryptedPrivKey, validator.sk.GetPublicKey().Serialize()))
+		require.NoError(t, km.AddShare(encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
@@ -1007,7 +1007,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(encryptedPrivKey, validator.sk.GetPublicKey().Serialize()))
+		require.NoError(t, km.AddShare(encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
 	currentSlot := network.Beacon.EstimatedCurrentSlot()

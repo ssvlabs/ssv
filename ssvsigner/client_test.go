@@ -175,7 +175,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 
 	testCases := []struct {
 		name               string
-		pubKeys            [][]byte
+		pubKeys            []phase0.BLSPubKey
 		expectedStatusCode int
 		expectedResponse   RemoveValidatorResponse
 		expectedResult     []web3signer.Status
@@ -183,9 +183,9 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 	}{
 		{
 			name: "Success",
-			pubKeys: [][]byte{
-				[]byte("pubkey1"),
-				[]byte("pubkey2"),
+			pubKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
 			},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: RemoveValidatorResponse{
@@ -195,15 +195,17 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 			expectError:    false,
 		},
 		{
-			name:               "ServerError",
-			pubKeys:            [][]byte{[]byte("pubkey")},
+			name: "ServerError",
+			pubKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+			},
 			expectedStatusCode: http.StatusInternalServerError,
 			expectedResponse:   RemoveValidatorResponse{},
 			expectError:        true,
 		},
 		{
 			name:               "NoPubKeys",
-			pubKeys:            [][]byte{},
+			pubKeys:            []phase0.BLSPubKey{},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: RemoveValidatorResponse{
 				Statuses: []web3signer.Status{},
@@ -231,7 +233,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 
 				assert.Len(t, req.PublicKeys, len(tc.pubKeys))
 				for i, pubKey := range tc.pubKeys {
-					assert.Equal(t, hex.EncodeToString(pubKey), req.PublicKeys[i])
+					assert.Equal(t, pubKey, req.PublicKeys[i])
 				}
 
 				w.WriteHeader(tc.expectedStatusCode)
@@ -622,20 +624,20 @@ func TestRequestErrors(t *testing.T) {
 
 	_, err := client.AddValidators(context.Background(), ClientShareKeys{
 		EncryptedPrivKey: []byte("test"),
-		PublicKey:        []byte("test"),
+		PublicKey:        phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	_, err = client.RemoveValidators(context.Background(), []byte("test"))
+	_, err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 
-	_, err = client.Sign(context.Background(), []byte("test"), web3signer.SignRequest{})
+	_, err = client.Sign(context.Background(), phase0.BLSPubKey{1, 1, 1}, web3signer.SignRequest{})
 	assert.Error(t, err)
 
 	_, err = client.OperatorIdentity(context.Background())
 	assert.Error(t, err)
 
-	_, err = client.OperatorSign(context.Background(), []byte("test"))
+	_, err = client.OperatorSign(context.Background(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 }
 

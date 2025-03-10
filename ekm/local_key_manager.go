@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -249,7 +250,7 @@ func (km *LocalKeyManager) RemoveShare(pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
-	pubKeyHex := pubKey.String()
+	pubKeyHex := hex.EncodeToString(pubKey[:]) // pubKey.String() would add the "0x" prefix so we cannot use it
 
 	acc, err := km.wallet.AccountByPublicKey(pubKeyHex)
 	if err != nil && err.Error() != "account not found" {

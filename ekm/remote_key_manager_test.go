@@ -65,10 +65,10 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 		SlashingProtector: mockSlashingProtector,
 	}
 
-	pubKey := []byte("test_validator_pubkey")
+	pubKey := phase0.BLSPubKey{1, 2, 3}
 	encShare := []byte("encrypted_share_data")
 
-	mockSlashingProtector.On("BumpSlashingProtection", pubKey).Return(nil)
+	mockSlashingProtector.On("BumpSlashingProtection", pubKey[:]).Return(nil)
 
 	status := []web3signer.Status{web3signer.StatusImported}
 	s.client.On("AddValidators", mock.Anything, ssvsigner.ClientShareKeys{
@@ -96,13 +96,13 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 		SlashingProtector: mockSlashingProtector,
 	}
 
-	pubKey := []byte("test_validator_pubkey")
+	pubKey := phase0.BLSPubKey{1, 2, 3}
 
-	mockSlashingProtector.On("RemoveHighestAttestation", pubKey).Return(nil)
-	mockSlashingProtector.On("RemoveHighestProposal", pubKey).Return(nil)
+	mockSlashingProtector.On("RemoveHighestAttestation", pubKey[:]).Return(nil)
+	mockSlashingProtector.On("RemoveHighestProposal", pubKey[:]).Return(nil)
 
 	status := []web3signer.Status{web3signer.StatusDeleted}
-	s.client.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil)
+	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(status, nil)
 
 	err := rm.RemoveShare(pubKey)
 
@@ -175,7 +175,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 
 	s.Run("SignAttestationData", func() {
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		attestationData := &phase0.AttestationData{
 			Slot:            123,
@@ -192,7 +192,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		}
 
 		mockSlashingProtector.On("IsAttestationSlashable", mock.Anything, attestationData).Return(nil)
-		mockSlashingProtector.On("UpdateHighestAttestation", pubKey, attestationData).Return(nil)
+		mockSlashingProtector.On("UpdateHighestAttestation", pubKey[:], attestationData).Return(nil)
 
 		mockFork := &phase0.Fork{
 			PreviousVersion: phase0.Version{1, 2, 3, 4},
@@ -209,10 +209,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
-		expectedSignature := []byte("signature_bytes")
+		expectedSignature := phase0.BLSSignature{5, 6, 7}
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil)
 
-		signature, root, err := rm.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+		signature, root, err := rm.SignBeaconObject(attestationData, domain, pubKey[:], spectypes.DomainAttester)
 
 		s.NoError(err)
 		s.NotNil(signature)
@@ -224,7 +224,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 
 	s.Run("SignBlindedBeaconBlock (capella)", func() {
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		blindedBlock := &apiv1capella.BlindedBeaconBlock{
 			Slot:          123,
@@ -262,7 +262,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		}
 
 		mockSlashingProtector.On("IsBeaconBlockSlashable", mock.Anything, blindedBlock.Slot).Return(nil)
-		mockSlashingProtector.On("UpdateHighestProposal", pubKey, blindedBlock.Slot).Return(nil)
+		mockSlashingProtector.On("UpdateHighestProposal", pubKey[:], blindedBlock.Slot).Return(nil)
 
 		mockFork := &phase0.Fork{
 			PreviousVersion: phase0.Version{1, 2, 3, 4},
@@ -279,10 +279,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
-		expectedSignature := []byte("signature_bytes")
+		expectedSignature := phase0.BLSSignature{5, 6, 7}
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil)
 
-		signature, root, err := rm.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rm.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.NoError(err)
 		s.NotNil(signature)
@@ -294,7 +294,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 
 	s.Run("SignBlindedBeaconBlock (deneb)", func() {
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		blindedBlock := &apiv1deneb.BlindedBeaconBlock{
 			Slot:          123,
@@ -334,7 +334,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		}
 
 		mockSlashingProtector.On("IsBeaconBlockSlashable", mock.Anything, blindedBlock.Slot).Return(nil)
-		mockSlashingProtector.On("UpdateHighestProposal", pubKey, blindedBlock.Slot).Return(nil)
+		mockSlashingProtector.On("UpdateHighestProposal", pubKey[:], blindedBlock.Slot).Return(nil)
 
 		mockFork := &phase0.Fork{
 			PreviousVersion: phase0.Version{1, 2, 3, 4},
@@ -351,10 +351,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
-		expectedSignature := []byte("signature_bytes")
+		expectedSignature := phase0.BLSSignature{5, 6, 7}
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil)
 
-		signature, root, err := rm.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rm.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.NoError(err)
 		s.NotNil(signature)
@@ -366,7 +366,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 
 	s.Run("SignBlindedBeaconBlock (electra)", func() {
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 
 		blindedBlock := &apiv1electra.BlindedBeaconBlock{
@@ -432,7 +432,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		}
 
 		mockSlashingProtector.On("IsBeaconBlockSlashable", mock.Anything, blindedBlock.Slot).Return(nil)
-		mockSlashingProtector.On("UpdateHighestProposal", pubKey, blindedBlock.Slot).Return(nil)
+		mockSlashingProtector.On("UpdateHighestProposal", pubKey[:], blindedBlock.Slot).Return(nil)
 
 		mockFork := &phase0.Fork{
 			PreviousVersion: phase0.Version{1, 2, 3, 4},
@@ -449,10 +449,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
-		expectedSignature := []byte("signature_bytes")
+		expectedSignature := phase0.BLSSignature{5, 6, 7}
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil)
 
-		signature, root, err := rm.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rm.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.NoError(err)
 		s.NotNil(signature)
@@ -478,7 +478,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 	s.Run("ForkInfoError", func() {
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		attestationData := &phase0.AttestationData{
 			Slot:            123,
@@ -496,7 +496,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(nil, errors.New("fork info error"))
 
-		signature, root, err := rm.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+		signature, root, err := rm.SignBeaconObject(attestationData, domain, pubKey[:], spectypes.DomainAttester)
 
 		s.ErrorContains(err, "get fork info")
 		s.Equal(spectypes.Signature{}, signature)
@@ -519,7 +519,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		attestationData := &phase0.AttestationData{
 			Slot:            123,
@@ -543,7 +543,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		consensusMock.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(nil, errors.New("genesis error")).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey[:], spectypes.DomainAttester)
 
 		s.ErrorContains(err, "get fork info: get genesis")
 		s.Equal(spectypes.Signature{}, signature)
@@ -566,7 +566,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		attestationData := &phase0.AttestationData{
 			Slot:            123,
@@ -596,9 +596,9 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsAttestationSlashable", mock.Anything, mock.Anything).Return(nil).Once()
 		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(nil).Once()
-		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, errors.New("sign error")).Once()
+		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return(phase0.BLSSignature{}, errors.New("sign error")).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey[:], spectypes.DomainAttester)
 
 		s.ErrorContains(err, "remote signer")
 		s.Equal(spectypes.Signature{}, signature)
@@ -621,7 +621,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		attestationData := &phase0.AttestationData{
 			Slot:            123,
@@ -653,7 +653,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(nil).Once()
 		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey[:], spectypes.DomainAttester)
 
 		s.ErrorContains(err, "test error (IsAttestationSlashable)")
 		s.Empty(signature)
@@ -676,7 +676,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		attestationData := &phase0.AttestationData{
 			Slot:            123,
@@ -708,7 +708,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestAttestation)")).Once()
 		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey, spectypes.DomainAttester)
+		signature, root, err := rmTest.SignBeaconObject(attestationData, domain, pubKey[:], spectypes.DomainAttester)
 
 		s.ErrorContains(err, "test error (UpdateHighestAttestation)")
 		s.Empty(signature)
@@ -731,7 +731,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		blindedBlock := &apiv1capella.BlindedBeaconBlock{
 			Slot:          123,
@@ -784,7 +784,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
 		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.ErrorContains(err, "test error (IsBeaconBlockSlashable)")
 		s.Empty(signature)
@@ -807,7 +807,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		blindedBlock := &apiv1capella.BlindedBeaconBlock{
 			Slot:          123,
@@ -860,7 +860,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
 		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.ErrorContains(err, "test error (UpdateHighestProposal)")
 		s.Empty(signature)
@@ -883,7 +883,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		blindedBlock := &apiv1deneb.BlindedBeaconBlock{
 			Slot:          123,
@@ -938,7 +938,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
 		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.ErrorContains(err, "test error (IsBeaconBlockSlashable)")
 		s.Empty(signature)
@@ -961,7 +961,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		blindedBlock := &apiv1deneb.BlindedBeaconBlock{
 			Slot:          123,
@@ -1016,7 +1016,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
 		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.ErrorContains(err, "test error (UpdateHighestProposal)")
 		s.Empty(signature)
@@ -1039,7 +1039,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		blindedBlock := &apiv1electra.BlindedBeaconBlock{
 			Slot:          123,
@@ -1119,7 +1119,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
 		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.ErrorContains(err, "test error (IsBeaconBlockSlashable)")
 		s.Empty(signature)
@@ -1142,7 +1142,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 		blindedBlock := &apiv1electra.BlindedBeaconBlock{
 			Slot:          123,
@@ -1222,7 +1222,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
 		clientMock.On("Sign", mock.Anything, mock.Anything, mock.Anything).Return([]byte{1, 2, 3}, nil).Once()
 
-		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey, spectypes.DomainProposer)
+		signature, root, err := rmTest.SignBeaconObject(blindedBlock, domain, pubKey[:], spectypes.DomainProposer)
 
 		s.ErrorContains(err, "test error (UpdateHighestProposal)")
 		s.Empty(signature)
@@ -1248,7 +1248,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			SlashingProtector: mockSlashingProtector,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ClientShareKeys{
@@ -1275,7 +1275,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			SlashingProtector: mockSlashingProtector,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
 		status := []web3signer.Status{web3signer.StatusError}
@@ -1287,34 +1287,6 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		err := rmTest.AddShare(encShare, pubKey)
 
 		s.ErrorContains(err, "unexpected status")
-		clientMock.AssertExpectations(s.T())
-	})
-
-	s.Run("WrongStatusCountError", func() {
-
-		clientMock := new(MockRemoteSigner)
-
-		rmTest := &RemoteKeyManager{
-			logger:            s.logger,
-			remoteSigner:      clientMock,
-			consensusClient:   s.consensusClient,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
-			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: mockSlashingProtector,
-		}
-
-		pubKey := []byte("validator_pubkey")
-		encShare := []byte("encrypted_share_data")
-
-		statuses := []web3signer.Status{web3signer.StatusImported, web3signer.StatusImported}
-		clientMock.On("AddValidators", mock.Anything, ssvsigner.ClientShareKeys{
-			PublicKey:        pubKey,
-			EncryptedPrivKey: encShare,
-		}).Return(statuses, nil).Once()
-
-		err := rmTest.AddShare(encShare, pubKey)
-
-		s.ErrorContains(err, "expected 1 status, got 2")
 		clientMock.AssertExpectations(s.T())
 	})
 
@@ -1332,7 +1304,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
 		status := []web3signer.Status{web3signer.StatusImported}
@@ -1341,7 +1313,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			EncryptedPrivKey: encShare,
 		}).Return(status, nil).Once()
 
-		slashingMock.On("BumpSlashingProtection", pubKey).Return(errors.New("bump slashing protection error")).Once()
+		slashingMock.On("BumpSlashingProtection", pubKey[:]).Return(errors.New("bump slashing protection error")).Once()
 
 		err := rmTest.AddShare(encShare, pubKey)
 
@@ -1366,9 +1338,9 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 	s.Run("RemoveValidatorsError", func() {
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 
-		s.client.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(nil, errors.New("remove validators error"))
+		s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(nil, errors.New("remove validators error"))
 
 		s.ErrorContains(rm.RemoveShare(pubKey), "remove validator")
 		s.client.AssertExpectations(s.T())
@@ -1387,34 +1359,12 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			SlashingProtector: mockSlashingProtector,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 
 		status := []web3signer.Status{web3signer.StatusError}
-		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil).Once()
+		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(status, nil).Once()
 
 		s.ErrorContains(rmTest.RemoveShare(pubKey), "received status")
-		clientMock.AssertExpectations(s.T())
-	})
-
-	s.Run("WrongStatusCountError", func() {
-
-		clientMock := new(MockRemoteSigner)
-
-		rmTest := &RemoteKeyManager{
-			logger:            s.logger,
-			remoteSigner:      clientMock,
-			consensusClient:   s.consensusClient,
-			getOperatorId:     func() spectypes.OperatorID { return 1 },
-			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: mockSlashingProtector,
-		}
-
-		pubKey := []byte("validator_pubkey")
-
-		statuses := []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusDeleted}
-		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(statuses, nil).Once()
-
-		s.ErrorContains(rmTest.RemoveShare(pubKey), "expected 1 status, got 2")
 		clientMock.AssertExpectations(s.T())
 	})
 
@@ -1432,12 +1382,12 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 
 		status := []web3signer.Status{web3signer.StatusDeleted}
-		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil).Once()
+		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(status, nil).Once()
 
-		slashingMock.On("RemoveHighestAttestation", pubKey).Return(errors.New("remove highest attestation error")).Once()
+		slashingMock.On("RemoveHighestAttestation", pubKey[:]).Return(errors.New("remove highest attestation error")).Once()
 
 		s.ErrorContains(rmTest.RemoveShare(pubKey), "could not remove highest attestation")
 		clientMock.AssertExpectations(s.T())
@@ -1458,13 +1408,13 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			SlashingProtector: slashingMock,
 		}
 
-		pubKey := []byte("validator_pubkey")
+		pubKey := phase0.BLSPubKey{1, 2, 3}
 
 		status := []web3signer.Status{web3signer.StatusDeleted}
-		clientMock.On("RemoveValidators", mock.Anything, [][]byte{pubKey}).Return(status, nil).Once()
+		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(status, nil).Once()
 
-		slashingMock.On("RemoveHighestAttestation", pubKey).Return(nil).Once()
-		slashingMock.On("RemoveHighestProposal", pubKey).Return(errors.New("remove highest proposal error")).Once()
+		slashingMock.On("RemoveHighestAttestation", pubKey[:]).Return(nil).Once()
+		slashingMock.On("RemoveHighestProposal", pubKey[:]).Return(errors.New("remove highest proposal error")).Once()
 
 		s.ErrorContains(rmTest.RemoveShare(pubKey), "could not remove highest proposal")
 		clientMock.AssertExpectations(s.T())
@@ -1575,9 +1525,9 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
 	}
 
-	pubKey := []byte("validator_pubkey")
+	pubKey := phase0.BLSPubKey{1, 2, 3}
 	domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
-	expectedSignature := []byte("signature_bytes")
+	expectedSignature := phase0.BLSSignature{5, 6, 7}
 
 	s.Run("SignVoluntaryExit", func() {
 
@@ -1590,10 +1540,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(voluntaryExit, domain, pubKey, spectypes.DomainVoluntaryExit)
+		signature, root, err := rm.SignBeaconObject(voluntaryExit, domain, pubKey[:], spectypes.DomainVoluntaryExit)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1607,10 +1557,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(slot, domain, pubKey, spectypes.DomainSelectionProof)
+		signature, root, err := rm.SignBeaconObject(slot, domain, pubKey[:], spectypes.DomainSelectionProof)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1627,10 +1577,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(blockRoot, domain, pubKey, spectypes.DomainSyncCommittee)
+		signature, root, err := rm.SignBeaconObject(blockRoot, domain, pubKey[:], spectypes.DomainSyncCommittee)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1647,10 +1597,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(selectionData, domain, pubKey, spectypes.DomainSyncCommitteeSelectionProof)
+		signature, root, err := rm.SignBeaconObject(selectionData, domain, pubKey[:], spectypes.DomainSyncCommitteeSelectionProof)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1664,7 +1614,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(slot, domain, pubKey, unknownDomain)
+		signature, root, err := rm.SignBeaconObject(slot, domain, pubKey[:], unknownDomain)
 
 		s.ErrorContains(err, "domain unknown")
 		s.Nil(signature)
@@ -1697,9 +1647,9 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
 	}
 
-	pubKey := []byte("validator_pubkey")
+	pubKey := phase0.BLSPubKey{1, 2, 3}
 	domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
-	expectedSignature := []byte("signature_bytes")
+	expectedSignature := phase0.BLSSignature{5, 6, 7}
 
 	s.Run("SignAggregateAndProofPhase0", func() {
 		attestationData := &phase0.AttestationData{
@@ -1732,10 +1682,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(aggregateAndProof, domain, pubKey, spectypes.DomainAggregateAndProof)
+		signature, root, err := rm.SignBeaconObject(aggregateAndProof, domain, pubKey[:], spectypes.DomainAggregateAndProof)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1773,10 +1723,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(aggregateAndProof, domain, pubKey, spectypes.DomainAggregateAndProof)
+		signature, root, err := rm.SignBeaconObject(aggregateAndProof, domain, pubKey[:], spectypes.DomainAggregateAndProof)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1789,10 +1739,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(epoch, domain, pubKey, spectypes.DomainRandao)
+		signature, root, err := rm.SignBeaconObject(epoch, domain, pubKey[:], spectypes.DomainRandao)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1810,10 +1760,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(validatorReg, domain, pubKey, spectypes.DomainApplicationBuilder)
+		signature, root, err := rm.SignBeaconObject(validatorReg, domain, pubKey[:], spectypes.DomainApplicationBuilder)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1836,10 +1786,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
-		signature, root, err := rm.SignBeaconObject(contributionAndProof, domain, pubKey, spectypes.DomainContributionAndProof)
+		signature, root, err := rm.SignBeaconObject(contributionAndProof, domain, pubKey[:], spectypes.DomainContributionAndProof)
 
 		s.NoError(err)
-		s.Equal(spectypes.Signature(expectedSignature), signature)
+		s.EqualValues(expectedSignature[:], signature)
 		s.NotEqual([32]byte{}, root)
 		s.client.AssertExpectations(s.T())
 		s.consensusClient.AssertExpectations(s.T())
@@ -1870,7 +1820,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
 	}
 
-	pubKey := []byte("validator_pubkey")
+	pubKey := phase0.BLSPubKey{1, 2, 3}
 	domain := phase0.Domain{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 
 	s.Run("AttesterTypeCastError", func() {
@@ -1879,7 +1829,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainAttester)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainAttester)
 
 		s.ErrorContains(err, "could not cast obj to AttestationData")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1891,7 +1841,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainAggregateAndProof)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainAggregateAndProof)
 
 		s.ErrorContains(err, "obj type is unknown")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1903,7 +1853,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainRandao)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainRandao)
 
 		s.ErrorContains(err, "could not cast obj to SSZUint64")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1915,7 +1865,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainApplicationBuilder)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainApplicationBuilder)
 
 		s.ErrorContains(err, "could not cast obj to ValidatorRegistration")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1927,7 +1877,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainContributionAndProof)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainContributionAndProof)
 
 		s.ErrorContains(err, "could not cast obj to ContributionAndProof")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1939,7 +1889,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainSyncCommitteeSelectionProof)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainSyncCommitteeSelectionProof)
 
 		s.ErrorContains(err, "could not cast obj to SyncAggregatorSelectionData")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1951,7 +1901,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainVoluntaryExit)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainVoluntaryExit)
 
 		s.ErrorContains(err, "could not cast obj to VoluntaryExit")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1963,7 +1913,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainSyncCommittee)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainSyncCommittee)
 
 		s.ErrorContains(err, "could not cast obj to BlockRootWithSlot")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1975,7 +1925,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainSelectionProof)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainSelectionProof)
 
 		s.ErrorContains(err, "could not cast obj to SSZUint64")
 		s.consensusClient.AssertExpectations(s.T())
@@ -1987,7 +1937,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
-		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey, spectypes.DomainProposer)
+		_, _, err := rm.SignBeaconObject(wrongType, domain, pubKey[:], spectypes.DomainProposer)
 		s.ErrorContains(err, "obj type is unknown")
 
 		unsupportedTypes := []ssz.HashRoot{
@@ -1997,7 +1947,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		}
 
 		for _, v := range unsupportedTypes {
-			_, _, err := rm.SignBeaconObject(v, domain, pubKey, spectypes.DomainProposer)
+			_, _, err := rm.SignBeaconObject(v, domain, pubKey[:], spectypes.DomainProposer)
 			s.ErrorContains(err, "web3signer supports only blinded blocks since bellatrix")
 		}
 
