@@ -201,7 +201,7 @@ func (v *Validator) GetLastRound(identifier spectypes.MessageID) specqbft.Round 
 	if r == nil {
 		return specqbft.Round(1)
 	}
-	if r != nil && r.HasRunningDuty() {
+	if r.HasRunningDuty() {
 		inst := r.GetBaseRunner().State.RunningInstance
 		if inst != nil {
 			return inst.State.Round
