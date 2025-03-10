@@ -52,14 +52,21 @@ var (
 
 	tracerInFlightMessageCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("tracer.inflight"),
+			metricName("tracer.message.received"),
 			metric.WithDescription("total number of messages received tracer intercepted")))
 
 	tracerInFlightMessageHist = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("tracer.duration"),
+			metricName("tracer.messages.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("message processing duration"),
+			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+
+	tracerDBDurationHistogram = observability.NewMetric(
+		meter.Float64Histogram(
+			metricName("tracer.db.duration"),
+			metric.WithUnit("s"),
+			metric.WithDescription("db interaction duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
 

@@ -1,22 +1,27 @@
 package validator
 
 import (
+	"context"
+	"time"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
 )
 
 // TTL in slots for each role
 const (
-	ttlCommittee                 = 2
-	ttlProposer                  = 2
-	ttlSyncCommitteeContribution = 2
-	ttlValidatorRegistration     = 2
-	ttlVoluntaryExit             = 2
+	ttlCommittee                 = 4
+	ttlProposer                  = 4
+	ttlSyncCommitteeContribution = 4
+	ttlValidatorRegistration     = 4
+	ttlVoluntaryExit             = 4
 
-	ttlMapping = 2
-	ttlRoot    = 2
+	ttlMapping = 4
+	ttlRoot    = 4
 )
 
 func getTTL(role spectypes.BeaconRole) phase0.Slot {
@@ -42,10 +47,23 @@ func (tracer *InMemTracer) evictValidatorCommitteeLinks(slot phase0.Slot) {
 			if !found {
 				break
 			}
+
+			start := time.Now()
+
 			if err := tracer.store.SaveCommitteeDutyLink(slot, index, committeeID); err != nil {
 				tracer.logger.Error("save validator to committee relations to disk", zap.Error(err))
 				return true
 			}
+
+			duration := time.Since(start)
+			tracerDBDurationHistogram.Record(
+				context.Background(),
+				duration.Seconds(),
+				metric.WithAttributes(
+					semconv.DBCollectionName("link"),
+					semconv.DBOperationName("save"),
+				),
+			)
 
 			slotToCommittee.Delete(slot)
 		}
@@ -69,10 +87,22 @@ func (tracer *InMemTracer) evictCommitteeTraces(currentSlot phase0.Slot) {
 			trace.Lock()
 			defer trace.Unlock()
 
+			start := time.Now()
+
 			if err := tracer.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace); err != nil {
 				tracer.logger.Error("save committee duty to disk", zap.Error(err))
 				continue
 			}
+
+			duration := time.Since(start)
+			tracerDBDurationHistogram.Record(
+				context.Background(),
+				duration.Seconds(),
+				metric.WithAttributes(
+					semconv.DBCollectionName("committee"),
+					semconv.DBOperationName("save"),
+				),
+			)
 
 			stats[slot]++
 			slotToTraceMap.Delete(slot)
@@ -113,16 +143,29 @@ func (tracer *InMemTracer) evictValidatorTraces(slot phase0.Slot) {
 					trace.Validator = index
 				}
 
+				start := time.Now()
+
 				if err := tracer.store.SaveValidatorDuty(trace); err != nil {
 					tracer.logger.Error("save validator duties to disk", zap.Error(err))
 					continue
 				}
+
+				duration := time.Since(start)
+				tracerDBDurationHistogram.Record(
+					context.Background(),
+					duration.Seconds(),
+					metric.WithAttributes(
+						semconv.DBCollectionName("validator"),
+						semconv.DBOperationName("save"),
+					),
+				)
 
 				stats[slot]++
 
 				savedCount++
 			}
 
+			// if all were saved, remove the slot; otherwise, keep it for the next iteration
 			if savedCount == len(trace.Roles) {
 				slotToTraceMap.Delete(slot)
 			}

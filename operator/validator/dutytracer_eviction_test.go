@@ -49,7 +49,7 @@ func TestEvictCommitteeDuty(t *testing.T) {
 	dutyTrace = tracer.getOrCreateCommitteeTrace(slot4, committeeID2)
 	require.NotNil(t, dutyTrace)
 
-	slot5 := phase0.Slot(5)
+	slot5 := phase0.Slot(7)
 
 	dutyTrace = tracer.getOrCreateCommitteeTrace(slot5, committeeID1)
 	require.NotNil(t, dutyTrace)
@@ -58,7 +58,7 @@ func TestEvictCommitteeDuty(t *testing.T) {
 	require.NotNil(t, dutyTrace)
 
 	// evict traces for slot 6 - meaning that slot 3 and 4 should be evicted
-	slot6 := phase0.Slot(6)
+	slot6 := phase0.Slot(8)
 
 	tracer.evictCommitteeTraces(slot6)
 
@@ -140,7 +140,7 @@ func TestEvictValidatorDuty(t *testing.T) {
 	mod.Validator = phase0.ValidatorIndex(2)
 	require.NotNil(t, dutyTrace)
 
-	slot5 := phase0.Slot(5)
+	slot5 := phase0.Slot(7)
 
 	dutyTrace, mod = tracer.getOrCreateValidatorTrace(slot5, spectypes.BNRoleProposer, validatorPK1)
 	mod.Validator = phase0.ValidatorIndex(1)
@@ -150,7 +150,7 @@ func TestEvictValidatorDuty(t *testing.T) {
 	mod.Validator = phase0.ValidatorIndex(2)
 	require.NotNil(t, dutyTrace)
 
-	slot6 := phase0.Slot(6)
+	slot6 := phase0.Slot(8)
 
 	// evict traces for slot 6 - meaning that slot 3 and 4 should be evicted (tolernace=2)
 	tracer.evictValidatorTraces(slot6)

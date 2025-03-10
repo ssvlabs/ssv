@@ -1,7 +1,9 @@
 package validator
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -10,6 +12,8 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/logging/fields"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 type ValidatorDutyTrace struct {
@@ -64,10 +68,22 @@ func (a *InMemTracer) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.
 			return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
 		}
 
+		start := time.Now()
+
 		trace, err := a.store.GetValidatorDuty(slot, role, vIndex)
 		if err != nil {
 			return nil, fmt.Errorf("get validator duty from disk: %w", err)
 		}
+
+		duration := time.Since(start)
+		tracerDBDurationHistogram.Record(
+			context.Background(),
+			duration.Seconds(),
+			metric.WithAttributes(
+				semconv.DBCollectionName("validator"),
+				semconv.DBOperationName("get"),
+			),
+		)
 
 		pkTrace := &ValidatorDutyTrace{
 			ValidatorDutyTrace: *trace,
@@ -89,10 +105,21 @@ func (imt *InMemTracer) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes
 
 	trace, found := committeeSlots.Load(slot)
 	if !found {
+		start := time.Now()
 		trace, err := imt.store.GetCommitteeDuty(slot, committeeID)
 		if err != nil {
 			return nil, fmt.Errorf("get committee duty from disk: %w", err)
 		}
+
+		duration := time.Since(start)
+		tracerDBDurationHistogram.Record(
+			context.Background(),
+			duration.Seconds(),
+			metric.WithAttributes(
+				semconv.DBCollectionName("committee"),
+				semconv.DBOperationName("get"),
+			),
+		)
 
 		if trace != nil {
 			return trace, nil
@@ -152,7 +179,7 @@ func (a *InMemTracer) GetValidatorDecideds(role spectypes.BeaconRole, slot phase
 
 	for _, duty := range duties {
 		var signers []spectypes.OperatorID
-		// TODO(matheus) is this correct?
+		// TODO(matheus) is this correct? if decideds empty, return err?
 		for _, d := range duty.Decideds {
 			signers = append(signers, d.Signers...)
 		}
@@ -175,7 +202,24 @@ func (n *InMemTracer) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase
 
 	committeeID, found := slotToCommittee.Load(slot)
 	if !found {
-		return n.store.GetCommitteeDutyLink(slot, index)
+		start := time.Now()
+
+		link, err := n.store.GetCommitteeDutyLink(slot, index)
+		if err != nil {
+			return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link from disk: %w", err)
+		}
+
+		duration := time.Since(start)
+		tracerDBDurationHistogram.Record(
+			context.Background(),
+			duration.Seconds(),
+			metric.WithAttributes(
+				semconv.DBCollectionName("committee"),
+				semconv.DBOperationName("get"),
+			),
+		)
+
+		return link, nil
 	}
 
 	return committeeID, nil
