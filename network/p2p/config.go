@@ -52,7 +52,7 @@ type Config struct {
 	TopicMaxPeers        int  `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Maximum peers per pubsub topic"`
 
 	// Subnets is a static bit list of subnets that this node will register upon start.
-	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string representing subnets to join on startup (e.g. '0x01ff')"`
+	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string (32 characters) representing 128 subnets to join on startup. Each bit corresponds to a subnet - 1 means join, 0 means skip. Examples: '0x0000000000000000000000000000ffff' (join last 16 subnets), '0xffffffffffffffffffffffffffffffff' (join all 128 subnets)"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-default:"true" env-description:"Enable pubsub peer scoring"`
 	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
