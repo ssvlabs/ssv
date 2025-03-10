@@ -282,7 +282,7 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 func calculateSubscriptionInfo(duties []*eth2apiv1.AttesterDuty, slot phase0.Slot) []*eth2apiv1.BeaconCommitteeSubscription {
 	subscriptions := make([]*eth2apiv1.BeaconCommitteeSubscription, 0, len(duties)*2)
 	for _, duty := range duties {
-		if duty.Slot < slot {
+		if duty.Slot <= slot {
 			continue
 		}
 		// Append a subscription for the attester role
