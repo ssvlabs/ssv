@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -131,12 +133,7 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
 	)
 
-	allShares := make([]*types.SSVShare, 0, len(storage.shares))
-	for _, share := range storage.shares {
-		allShares = append(allShares, share)
-	}
-
-	if err := storage.validatorStore.handleSharesAdded(allShares...); err != nil {
+	if err := storage.validatorStore.handleSharesAdded(slices.Collect(maps.Values(storage.shares))...); err != nil {
 		return nil, nil, err
 	}
 	return storage, storage.validatorStore, nil
@@ -178,12 +175,7 @@ func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.
 	defer s.memoryMtx.RUnlock()
 
 	if len(filters) == 0 {
-		result := make([]*types.SSVShare, 0, len(s.shares))
-		for _, share := range s.shares {
-			result = append(result, share)
-		}
-
-		return result
+		return slices.Collect(maps.Values(s.shares))
 	}
 
 	var shares []*types.SSVShare
