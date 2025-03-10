@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"testing"
@@ -37,7 +38,6 @@ import (
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
-	"golang.org/x/exp/maps"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -58,7 +58,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	dutyStore := dutystore.New()
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
 
-	committee := maps.Keys(ks.Shares)
+	committee := slices.Collect(maps.Keys(ks.Shares))
 	slices.Sort(committee)
 
 	committeeID := shares.active.CommitteeID()
