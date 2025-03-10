@@ -23,11 +23,6 @@ const (
 	childRunnerInitializationTimeout = 2 * 32 * 12 * time.Second
 )
 
-// TODOs:
-// - does rootHash need to implement ssz.HashRoot ? Probably yes if we want to use it with BeaconSigner.SignBeaconObject
-// - should this type be defined in spectypes package instead ?
-type rootHash [32]byte
-
 type PreconfCommitmentResult struct {
 	Success struct {
 		CommitmentSignature []byte
@@ -56,12 +51,12 @@ type pcRunner struct {
 type PreconfCommitmentRunner struct {
 	// childRunnersInflight prevents concurrent requests to childRunners from initializing
 	// the same childRunners entry twice (instead we'll initialize just 1 childRunner instance
-	// and return that same instance or repetitive gets).
-	childRunnersInflight singleflight.Group[rootHash, *pcRunner]
-	// childRunners maintains mapping between preconf sign-requests (identified by rootHash) and
-	// corresponding runners that process those requests. It's a ttlcache so we can access it
-	// concurrently clean it up periodically (to prevent no longer relevant runners from piling up).
-	childRunners *ttlcache.Cache[rootHash, *pcRunner]
+	// and return that same instance on repetitive gets).
+	childRunnersInflight singleflight.Group[spectypes.PreconfCommitmentDuty, *pcRunner]
+	// childRunners maintains mapping between preconf sign-requests and corresponding runners
+	// that process those requests. It's a ttlcache so we can access it concurrently clean it up
+	// periodically (to prevent no longer relevant runners from piling up).
+	childRunners *ttlcache.Cache[spectypes.PreconfCommitmentDuty, *pcRunner]
 
 	share *spectypes.Share
 
@@ -84,7 +79,7 @@ func NewPreconfCommitmentRunner(
 	r := &PreconfCommitmentRunner{
 		childRunners: ttlcache.New(
 			// TODO how long should child runners live for ? setting it to ~2 epochs for now
-			ttlcache.WithTTL[rootHash, *pcRunner](2 * 32 * 12 * time.Second),
+			ttlcache.WithTTL[spectypes.PreconfCommitmentDuty, *pcRunner](2 * 32 * 12 * time.Second),
 		),
 		share:          share,
 		beacon:         beacon,
@@ -112,7 +107,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	if len(objectRootRaw) != 32 {
 		return nil, errors.New("objectRootHex must be 32 bytes")
 	}
-	root := rootHash(objectRootRaw)
+	root := spectypes.PreconfCommitmentDuty(objectRootRaw)
 
 	cRunner, err := r.childRunner(root)
 	if err != nil {
@@ -392,7 +387,7 @@ func (r *PreconfCommitmentRunner) GetRoot() ([32]byte, error) {
 	return [32]byte{}, fmt.Errorf("not implemented")
 }
 
-func (r *PreconfCommitmentRunner) childRunner(root rootHash) (*pcRunner, error) {
+func (r *PreconfCommitmentRunner) childRunner(root spectypes.PreconfCommitmentDuty) (*pcRunner, error) {
 	result, err, _ := r.childRunnersInflight.Do(root, func() (*pcRunner, error) {
 		item := r.childRunners.Get(root)
 		if item != nil {

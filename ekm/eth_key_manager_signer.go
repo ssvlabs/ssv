@@ -232,12 +232,9 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 				V1:      v,
 			}
 			return km.signer.SignRegistration(data, domain, pk)
-		case spectypes.SSZBytes:
+		case *spectypes.PreconfCommitmentDuty:
 			// TODO - do we need similar implementation adjustment(s) for remote signer as well ?
-			//
-			// TODO - `case spectypes.SSZBytes` is probably not specific-enough here, we probably want
-			// to define some concrete type (just an alias for spectypes.SSZBytes ?) and cast to that
-			return km.signer.SignPreconfCommitment(v, domain, pk)
+			return km.signer.SignPreconfCommitment(v[:], domain, pk)
 		default:
 			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
