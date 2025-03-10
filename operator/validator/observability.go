@@ -58,7 +58,9 @@ var (
 	tracerInFlightMessageHist = observability.NewMetric(
 		meter.Float64Histogram(
 			metricName("tracer.duration"),
-			metric.WithDescription("message processing duration")))
+			metric.WithUnit("s"),
+			metric.WithDescription("message processing duration"),
+			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
 
 func metricName(name string) string {
