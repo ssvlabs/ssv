@@ -552,7 +552,10 @@ func (c *controller) startAttestingValidators(_ context.Context, validators []*s
 	// 1. Validators still exist (not removed or liquidated).
 	// 2. They belong to this operator (ownership check).
 	// 3. They are active and eligible to attest in this epoch.
-	// TODO: Potential race condition: validator might be removed after being detected as active but before being started.
+
+	// Note: A validator might be removed from storage after being fetched but before starting.
+	// In this case, it could still be added to validatorsMap despite no longer existing in sharesStorage,
+	// leading to unnecessary tracking.
 	operatorID := c.operatorDataStore.GetOperatorID()
 	currentEpoch := c.networkConfig.Beacon.EstimatedCurrentEpoch()
 	shares := c.sharesStorage.List(
