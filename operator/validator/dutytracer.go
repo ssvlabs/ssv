@@ -488,11 +488,11 @@ func (n *InMemTracer) verifyBLSSignature(pSigMessages *spectypes.PartialSignatur
 	return nil
 }
 
-func (n *InMemTracer) Trace(msg *queue.SSVMessage) {
+func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 	start := time.Now()
-	tracerInFlightMessageCounter.Add(context.Background(), 1)
+	tracerInFlightMessageCounter.Add(ctx, 1)
 	defer func() {
-		tracerInFlightMessageHist.Record(context.Background(), time.Since(start).Seconds())
+		tracerInFlightMessageHist.Record(ctx, time.Since(start).Seconds())
 	}()
 
 	switch msg.MsgType {

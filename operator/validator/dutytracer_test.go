@@ -67,7 +67,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC 1 - PartialSig - Aggregator - pre-consensus
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		tracer.Trace(partSigMsg)
+		tracer.Trace(context.Background(), partSigMsg)
 
 		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
@@ -93,7 +93,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC 2 - PartialSig - Aggregator - post-consensus
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		tracer.Trace(partSigMsg)
+		tracer.Trace(context.Background(), partSigMsg)
 
 		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 3 - Proposal
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
-		tracer.Trace(proposalMsg)
+		tracer.Trace(context.Background(), proposalMsg)
 
 		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
@@ -171,7 +171,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 4 - Prepare
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
-		tracer.Trace(prepareMsg)
+		tracer.Trace(context.Background(), prepareMsg)
 
 		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 5 - Decided
 		decidedMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
-		tracer.Trace(decidedMsg)
+		tracer.Trace(context.Background(), decidedMsg)
 
 		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
@@ -233,7 +233,7 @@ func TestValidatorDuty(t *testing.T) {
 	{ // TC - 6 - Commit
 		commitMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
 		commitMsg.SignedSSVMessage.OperatorIDs = nil
-		tracer.Trace(commitMsg)
+		tracer.Trace(context.Background(), commitMsg)
 
 		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
@@ -262,7 +262,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 7 - RoundChange
 		roundChangeMsg := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
-		tracer.Trace(roundChangeMsg)
+		tracer.Trace(context.Background(), roundChangeMsg)
 
 		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestValidatorDuty(t *testing.T) {
 	{ // TC - 8 - Second RoundChange
 		roundChangeMsg := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		roundChangeMsg.Body.(*specqbft.Message).Round = 2
-		tracer.Trace(roundChangeMsg)
+		tracer.Trace(context.Background(), roundChangeMsg)
 
 		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
 		require.NoError(t, err)
@@ -369,7 +369,7 @@ func TestCommitteeDuty(t *testing.T) {
 		require.NoError(t, err)
 
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		tracer.Trace(partSigMsg)
+		tracer.Trace(context.Background(), partSigMsg)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -401,7 +401,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 	{ // TC 2 - Proposal
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
-		tracer.Trace(proposalMsg)
+		tracer.Trace(context.Background(), proposalMsg)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -429,7 +429,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 	{ // TC 3 - Prepare
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
-		tracer.Trace(prepareMsg)
+		tracer.Trace(context.Background(), prepareMsg)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -457,7 +457,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 	{ // TC 4 - Decided
 		decided := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, generateDecidedMessage(t, identifier))
-		tracer.Trace(decided)
+		tracer.Trace(context.Background(), decided)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -500,7 +500,7 @@ func TestCommitteeDuty(t *testing.T) {
 		commitMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
 		commitMsg.SignedSSVMessage.OperatorIDs = nil
 
-		tracer.Trace(commitMsg)
+		tracer.Trace(context.Background(), commitMsg)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -529,7 +529,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 	{ // TC 6 - RoundChange
 		roundChangeMsg1 := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
-		tracer.Trace(roundChangeMsg1)
+		tracer.Trace(context.Background(), roundChangeMsg1)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -559,7 +559,7 @@ func TestCommitteeDuty(t *testing.T) {
 		roundChangeMsg2 := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		roundChangeMsg2.Body.(*specqbft.Message).Round = 2
 
-		tracer.Trace(roundChangeMsg2)
+		tracer.Trace(context.Background(), roundChangeMsg2)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)

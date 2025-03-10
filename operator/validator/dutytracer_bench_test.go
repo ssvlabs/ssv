@@ -53,7 +53,7 @@ func BenchmarkTracer(b *testing.B) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				tracer.Trace(msg)
+				tracer.Trace(context.Background(), msg)
 			}()
 		}
 		wg.Wait()
@@ -99,5 +99,81 @@ func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 		}
 
 		result = append(result, msg)
+	}
+}
+
+// f, err := os.OpenFile("../../data/ssvtraces25m.bin", os.O_RDONLY, 0644)
+
+func TestBin(t *testing.T) {
+	file, err := os.OpenFile("../../data/ssvtraces25m.bin", os.O_RDONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	out, err := os.OpenFile("../../data/slot_3707881_3707882.bin", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer out.Close()
+
+	var header [2]byte
+	r := io.NewSectionReader(file, 0, math.MaxInt64)
+
+	for {
+		_, err := r.Read(header[:])
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+
+		length := int(header[0])<<8 | int(header[1])
+
+		data := make([]byte, length)
+		_, err = r.Read(data)
+		if err != nil {
+			panic(err)
+		}
+
+		dataMsg := new(model.DiskMsg)
+		if err := dataMsg.UnmarshalSSZ(data); err != nil {
+			panic(err)
+		}
+
+		var slot uint64
+
+		if dataMsg.Qbft.Height > 0 {
+			slot = uint64(dataMsg.Qbft.Height)
+		} else if dataMsg.Sig.Slot > 0 {
+			slot = uint64(dataMsg.Sig.Slot)
+		} else {
+			panic("no slot found")
+		}
+
+		msg := &queue.SSVMessage{
+			SignedSSVMessage: &dataMsg.Signed,
+			SSVMessage:       &dataMsg.Spec,
+		}
+
+		if dataMsg.Kind == 0 {
+			msg.Body = &dataMsg.Qbft
+		} else {
+			msg.Body = &dataMsg.Sig
+		}
+
+		if slot == 3707881 || slot == 3707882 {
+			if _, err := out.Write(header[:]); err != nil {
+				panic("write header to file")
+			}
+
+			// Write the byte slice itself
+			if _, err := out.Write(data); err != nil {
+				panic("write data to file")
+			}
+		}
+
+		// t.Log(msg)
 	}
 }

@@ -197,7 +197,7 @@ type controller struct {
 }
 
 type DutyTracer interface {
-	Trace(*queue.SSVMessage)
+	Trace(context.Context, *queue.SSVMessage)
 	StartEvictionJob(context.Context, slotticker.Provider)
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
@@ -383,7 +383,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	var ncv *committeeObserver
 	ssvMsg := msg.(*queue.SSVMessage)
 
-	c.tracer.Trace(ssvMsg)
+	c.tracer.Trace(c.ctx, ssvMsg)
 
 	item := c.getNonCommitteeValidators(ssvMsg.GetID())
 	if item == nil {
