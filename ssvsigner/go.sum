@@ -87,8 +87,8 @@ github.com/rogpeppe/go-internal v1.12.0 h1:exVL4IDcn6na9z1rAb56Vxr+CgyK3nn3O+epU
 github.com/rogpeppe/go-internal v1.12.0/go.mod h1:E+RYuTGaKKdloAfM02xzb0FW3Paa99yedzYV+kq4uf4=
 github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 h1:D0vL7YNisV2yqE55+q0lFuGse6U8lxlg7fYTctlT5Gc=
 github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38/go.mod h1:sM7Mt7uEoCeFSCBM+qBrqvEo+/9vdmj19wzp3yzUhmg=
-github.com/ssvlabs/ssv v1.2.1-0.20250306233140-f5b3e240c771 h1:xtUiMrEBmj2Fw48o1iVtlfmEACaevA1qo0L5gbQ5hVw=
-github.com/ssvlabs/ssv v1.2.1-0.20250306233140-f5b3e240c771/go.mod h1:hWdXNuKZtfISb2Q/T4F3vumofIE6aNLBdr+pMlW72hk=
+github.com/ssvlabs/ssv v1.2.1-0.20250310163951-ce155e750d5c h1:AaqhX2I3lSCW1yiuUF9emY+thBhrhVmR0jxa/GD/knI=
+github.com/ssvlabs/ssv v1.2.1-0.20250310163951-ce155e750d5c/go.mod h1:kcoRYOiZO6SOIA2cNMAyvLGX4+KLWKOEhFxUXH1UyCU=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
