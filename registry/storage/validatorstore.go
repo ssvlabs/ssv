@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 
@@ -147,11 +148,7 @@ func (c *validatorStore) Committees() []*Committee {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	committees := make([]*Committee, 0, len(c.byCommitteeID))
-	for _, committee := range c.byCommitteeID {
-		committees = append(committees, committee)
-	}
-	return committees
+	return slices.Collect(maps.Values(c.byCommitteeID))
 }
 
 func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committee {

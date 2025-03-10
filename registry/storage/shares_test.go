@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -330,28 +331,19 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 func TestShareStorage_MultipleCommittees(t *testing.T) {
 	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
 		shares := map[phase0.ValidatorIndex]*ssvtypes.SSVShare{}
-		getShareValues := func() []*ssvtypes.SSVShare {
-			shareValues := make([]*ssvtypes.SSVShare, 0, len(shares))
-			for _, share := range shares {
-				shareValues = append(shareValues, share)
-			}
-
-			return shareValues
-		}
-
 		saveAndVerify := func(s ...*ssvtypes.SSVShare) {
 			require.NoError(t, storage.Shares.Save(nil, s...))
 			reopen(t)
 			for _, share := range s {
 				shares[share.ValidatorIndex] = share
 			}
-			requireValidatorStoreIntegrity(t, storage.ValidatorStore, getShareValues())
+			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
 		}
 		deleteAndVerify := func(share *ssvtypes.SSVShare) {
 			require.NoError(t, storage.Shares.Delete(nil, share.ValidatorPubKey[:]))
 			reopen(t)
 			delete(shares, share.ValidatorIndex)
-			requireValidatorStoreIntegrity(t, storage.ValidatorStore, getShareValues())
+			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
 		}
 
 		share1 := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
