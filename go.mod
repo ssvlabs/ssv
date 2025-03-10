@@ -48,7 +48,6 @@ require (
 	go.uber.org/mock v0.5.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa
 	golang.org/x/mod v0.22.0
 	golang.org/x/sync v0.10.0
 	golang.org/x/text v0.21.0
@@ -56,6 +55,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.72.0
 )
+
+require golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa // indirect
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
