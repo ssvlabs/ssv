@@ -8,7 +8,7 @@ require (
 	github.com/carlmjohnson/requests v0.24.3
 	github.com/fasthttp/router v1.5.4
 	github.com/herumi/bls-eth-go-binary v1.29.1
-	github.com/ssvlabs/ssv v1.2.1-0.20250310172607-c938c2241619
+	github.com/ssvlabs/ssv v1.2.1-0.20250310174233-9e9eae412f48
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0
 	go.uber.org/zap v1.27.0
