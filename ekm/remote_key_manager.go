@@ -93,10 +93,7 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey p
 		return fmt.Errorf("add validator: %w", err)
 	}
 
-	if len(statuses) != 1 {
-		return fmt.Errorf("bug: expected 1 status, got %d", len(statuses))
-	}
-
+	// AddValidators validates response length.
 	if statuses[0] != web3signer.StatusImported {
 		return fmt.Errorf("unexpected status %s", statuses[0])
 	}
@@ -114,10 +111,7 @@ func (km *RemoteKeyManager) RemoveShare(pubKey phase0.BLSPubKey) error {
 		return fmt.Errorf("remove validator: %w", err)
 	}
 
-	if len(statuses) != 1 {
-		return fmt.Errorf("bug: expected 1 status, got %d", len(statuses))
-	}
-
+	// RemoveValidators validates response length.
 	if statuses[0] != web3signer.StatusDeleted {
 		return fmt.Errorf("received status %s", statuses[0])
 	}
