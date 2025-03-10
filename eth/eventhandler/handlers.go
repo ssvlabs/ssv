@@ -235,7 +235,7 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if err := eh.keyManager.AddShare(encryptedKey, share.SharePubKey); err != nil {
+		if err := eh.keyManager.AddShare(encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			var shareDecryptionEKMError ekm.ShareDecryptionError
 			if errors.As(err, &shareDecryptionEKMError) {
 				return nil, &MalformedEventError{Err: err}
@@ -357,7 +357,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(share.SharePubKey)
+		err := eh.keyManager.RemoveShare(phase0.BLSPubKey(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}

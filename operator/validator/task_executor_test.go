@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -135,7 +136,7 @@ func TestController_StopValidator(t *testing.T) {
 	encryptedSharePrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(encryptedSharePrivKey, secretKey.GetPublicKey().Serialize()))
+	require.NoError(t, signer.AddShare(encryptedSharePrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	d, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
@@ -202,7 +203,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(encryptedPrivKey, secretKey.GetPublicKey().Serialize()))
+	require.NoError(t, signer.AddShare(encryptedPrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	d, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)

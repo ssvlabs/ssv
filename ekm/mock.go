@@ -27,7 +27,7 @@ func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclien
 	return args.Get(0).([]web3signer.Status), args.Error(1)
 }
 
-func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error) {
+func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error) {
 	args := m.Called(ctx, sharePubKeys)
 	result := args.Get(0)
 	if result == nil {
@@ -36,9 +36,9 @@ func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ..
 	return result.([]web3signer.Status), args.Error(1)
 }
 
-func (m *MockRemoteSigner) Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error) {
+func (m *MockRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
 	args := m.Called(ctx, sharePubKey, payload)
-	return args.Get(0).([]byte), args.Error(1)
+	return args.Get(0).(phase0.BLSSignature), args.Error(1)
 }
 
 func (m *MockRemoteSigner) OperatorIdentity(ctx context.Context) (string, error) {

@@ -2,10 +2,8 @@ package ekm
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
@@ -42,8 +40,8 @@ type RemoteKeyManager struct {
 
 type RemoteSigner interface {
 	AddValidators(ctx context.Context, shares ...ssvsigner.ClientShareKeys) ([]web3signer.Status, error)
-	RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error)
-	Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error)
+	RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error)
+	Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error)
 	OperatorIdentity(ctx context.Context) (string, error)
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
 }
@@ -84,7 +82,7 @@ func NewRemoteKeyManager(
 	}, nil
 }
 
-func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) error {
+func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey phase0.BLSPubKey) error {
 	shareKeys := ssvsigner.ClientShareKeys{
 		EncryptedPrivKey: encryptedSharePrivKey,
 		PublicKey:        sharePubKey,
@@ -103,14 +101,14 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey, sharePubKey []byte) 
 		return fmt.Errorf("unexpected status %s", statuses[0])
 	}
 
-	if err := km.BumpSlashingProtection(sharePubKey); err != nil {
+	if err := km.BumpSlashingProtection(sharePubKey[:]); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
 	return nil
 }
 
-func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
+func (km *RemoteKeyManager) RemoveShare(pubKey phase0.BLSPubKey) error {
 	statuses, err := km.remoteSigner.RemoveValidators(context.Background(), pubKey) // TODO: use context
 	if err != nil {
 		return fmt.Errorf("remove validator: %w", err)
@@ -124,10 +122,10 @@ func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
 		return fmt.Errorf("received status %s", statuses[0])
 	}
 
-	if err := km.RemoveHighestAttestation(pubKey); err != nil {
+	if err := km.RemoveHighestAttestation(pubKey[:]); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
 	}
-	if err := km.RemoveHighestProposal(pubKey); err != nil {
+	if err := km.RemoveHighestProposal(pubKey[:]); err != nil {
 		return fmt.Errorf("could not remove highest proposal: %w", err)
 	}
 
@@ -137,7 +135,7 @@ func (km *RemoteKeyManager) RemoveShare(pubKey []byte) error {
 func (km *RemoteKeyManager) SignBeaconObject(
 	obj ssz.HashRoot,
 	domain phase0.Domain,
-	sharePubkey []byte,
+	sharePubkey []byte, // TODO: use phase0.BLSPubKey
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, [32]byte, error) {
 	forkInfo, err := km.getForkInfo(context.Background()) // TODO: consider passing context to SignBeaconObject
@@ -188,7 +186,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
-				Version: strings.ToUpper(spec.DataVersionCapella.String()),
+				Version: spec.DataVersionCapella,
 				BlockHeader: &phase0.BeaconBlockHeader{
 					Slot:          v.Slot,
 					ProposerIndex: v.ProposerIndex,
@@ -214,7 +212,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
-				Version: strings.ToUpper(spec.DataVersionDeneb.String()),
+				Version: spec.DataVersionDeneb,
 				BlockHeader: &phase0.BeaconBlockHeader{
 					Slot:          v.Slot,
 					ProposerIndex: v.ProposerIndex,
@@ -240,7 +238,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
-				Version: strings.ToUpper(spec.DataVersionElectra.String()),
+				Version: spec.DataVersionElectra,
 				BlockHeader: &phase0.BeaconBlockHeader{
 					Slot:          v.Slot,
 					ProposerIndex: v.ProposerIndex,
@@ -364,13 +362,13 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		return nil, [32]byte{}, err
 	}
 
-	req.SigningRoot = hex.EncodeToString(root[:])
+	req.SigningRoot = root
 
-	sig, err := km.remoteSigner.Sign(context.Background(), sharePubkey, req) // TODO: use context
+	sig, err := km.remoteSigner.Sign(context.Background(), phase0.BLSPubKey(sharePubkey), req) // TODO: use context
 	if err != nil {
 		return spectypes.Signature{}, [32]byte{}, fmt.Errorf("remote signer: %w", err)
 	}
-	return sig, root, nil
+	return sig[:], root, nil
 }
 
 func (km *RemoteKeyManager) getForkInfo(ctx context.Context) (web3signer.ForkInfo, error) {

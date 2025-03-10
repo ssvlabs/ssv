@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/fasthttp/router"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/valyala/fasthttp"
@@ -64,16 +65,7 @@ func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	respJSON, err := json.Marshal(publicKeys)
-	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to marshal response: %w", err))
-		return
-	}
-
-	ctx.SetContentType("application/json")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeBytes(ctx, respJSON)
+	r.writeJSON(ctx, publicKeys)
 }
 
 func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
@@ -91,20 +83,14 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var encShareKeystores, shareKeystorePasswords []string
+	var shareKeystores []web3signer.Keystore
+	var shareKeystorePasswords []string
 
 	for _, share := range req.ShareKeys {
 		encPrivKey, err := hex.DecodeString(strings.TrimPrefix(share.EncryptedPrivKey, "0x"))
 		if err != nil {
 			ctx.SetStatusCode(fasthttp.StatusBadRequest)
 			r.writeErr(ctx, fmt.Errorf("failed to decode share.EncryptedPrivKey as hex: %w", err))
-			return
-		}
-
-		pubKey, err := hex.DecodeString(strings.TrimPrefix(share.PublicKey, "0x"))
-		if err != nil {
-			ctx.SetStatusCode(fasthttp.StatusBadRequest)
-			r.writeErr(ctx, fmt.Errorf("failed to decode share.PublicKey as hex: %w", err))
 			return
 		}
 
@@ -129,31 +115,24 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			return
 		}
 
-		if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), pubKey) {
+		if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), share.PublicKey[:]) {
 			ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
 			r.writeErr(ctx, fmt.Errorf("derived public key does not match expected public key"))
 			return
 		}
 
-		shareKeystore, err := keystore.GenerateShareKeystore(sharePrivKey, pubKey, r.keystorePasswd)
+		shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, share.PublicKey, r.keystorePasswd)
 		if err != nil {
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 			r.writeErr(ctx, fmt.Errorf("failed to generate share keystore: %w", err))
 			return
 		}
 
-		keystoreJSON, err := json.Marshal(shareKeystore)
-		if err != nil {
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			r.writeErr(ctx, fmt.Errorf("marshal share keystore: %w", err))
-			return
-		}
-
-		encShareKeystores = append(encShareKeystores, string(keystoreJSON))
+		shareKeystores = append(shareKeystores, shareKeystore)
 		shareKeystorePasswords = append(shareKeystorePasswords, r.keystorePasswd)
 	}
 
-	statuses, err := r.remoteSigner.ImportKeystore(ctx, encShareKeystores, shareKeystorePasswords)
+	statuses, err := r.remoteSigner.ImportKeystore(ctx, shareKeystores, shareKeystorePasswords)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		r.writeErr(ctx, fmt.Errorf("failed to import share to Web3Signer: %w", err))
@@ -168,21 +147,12 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		if status != web3signer.StatusImported {
 			r.logger.Warn("unexpected status",
 				zap.String("status", string(status)),
-				zap.String("share_pubkey", req.ShareKeys[i].PublicKey),
+				zap.Stringer("share_pubkey", req.ShareKeys[i].PublicKey),
 			)
 		}
 	}
 
-	respJSON, err := json.Marshal(resp)
-	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to marshal response: %w", err))
-		return
-	}
-
-	ctx.SetContentType("application/json")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeBytes(ctx, respJSON)
+	r.writeJSON(ctx, resp)
 }
 
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
@@ -211,7 +181,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 		if status != web3signer.StatusDeleted {
 			r.logger.Warn("unexpected status",
 				zap.String("status", string(status)),
-				zap.String("share_pubkey", req.PublicKeys[i]),
+				zap.Stringer("share_pubkey", req.PublicKeys[i]),
 			)
 		}
 	}
@@ -220,16 +190,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 		Statuses: statuses,
 	}
 
-	respJSON, err := json.Marshal(resp)
-	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to marshal response: %w", err))
-		return
-	}
-
-	ctx.SetContentType("application/json")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeBytes(ctx, respJSON)
+	r.writeJSON(ctx, resp)
 }
 
 func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
@@ -254,16 +215,23 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	sig, err := r.remoteSigner.Sign(ctx, sharePubKey, req)
+	if len(sharePubKey) != len(phase0.BLSPubKey{}) {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		r.writeErr(ctx, fmt.Errorf("invalid share public key length %d, expected %d", len(sharePubKey), len(phase0.BLSPubKey{})))
+		return
+	}
+
+	var blsPubKey phase0.BLSPubKey
+	copy(blsPubKey[:], sharePubKey)
+
+	sig, err := r.remoteSigner.Sign(ctx, blsPubKey, req)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		r.writeErr(ctx, fmt.Errorf("failed to sign with Web3Signer: %w", err))
 		return
 	}
 
-	ctx.SetContentType("application/json")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeBytes(ctx, sig)
+	r.writeJSON(ctx, sig)
 }
 
 func (r *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
@@ -295,17 +263,34 @@ func (r *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
 }
 
 func (r *Server) writeString(ctx *fasthttp.RequestCtx, s string) {
-	if _, writeErr := ctx.WriteString(s); writeErr != nil {
-		r.logger.Error("failed to write response", zap.Error(writeErr))
+	if _, err := ctx.WriteString(s); err != nil {
+		r.logger.Error("failed to write response", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 	}
 }
 
 func (r *Server) writeBytes(ctx *fasthttp.RequestCtx, b []byte) {
-	if _, writeErr := ctx.Write(b); writeErr != nil {
-		r.logger.Error("failed to write response", zap.Error(writeErr))
+	if _, err := ctx.Write(b); err != nil {
+		r.logger.Error("failed to write response", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 	}
+}
+
+func (r *Server) writeJSON(ctx *fasthttp.RequestCtx, v any) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		r.logger.Error("failed to marshal JSON", zap.Error(err))
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		r.writeErr(ctx, err)
+		return
+	}
+
+	if _, err := ctx.Write(b); err != nil {
+		r.logger.Error("failed to write response", zap.Error(err))
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+	}
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(fasthttp.StatusOK)
 }
 
 func (r *Server) writeErr(ctx *fasthttp.RequestCtx, err error) {

@@ -572,9 +572,9 @@ func ensureNoMissingKeys(
 		return
 	}
 
-	var localKeys []string
+	var localKeys []phase0.BLSPubKey
 	for _, share := range shares {
-		localKeys = append(localKeys, hex.EncodeToString(share.SharePubKey))
+		localKeys = append(localKeys, phase0.BLSPubKey(share.SharePubKey))
 	}
 
 	missingKeys, err := ssvSignerClient.MissingKeys(ctx, localKeys)
@@ -586,7 +586,7 @@ func ensureNoMissingKeys(
 		if len(missingKeys) > 50 {
 			logger = logger.With(zap.Int("count", len(missingKeys)))
 		} else {
-			logger = logger.With(zap.Strings("keys", missingKeys))
+			logger = logger.With(zap.Stringers("keys", missingKeys))
 		}
 
 		logger.Fatal("remote signer misses keys")

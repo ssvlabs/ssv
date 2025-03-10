@@ -2,17 +2,18 @@ package keystore
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/google/uuid"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 
 	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
 // DecryptKeystore decrypts a keystore JSON file using the provided password.
@@ -87,22 +88,15 @@ func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.Op
 	return operatorPrivKey, nil
 }
 
-type Keystore map[string]any
-
-func GenerateShareKeystore(sharePrivateKey, sharePublicKey []byte, passphrase string) (Keystore, error) {
-	keystoreCrypto, err := keystorev4.New().Encrypt(sharePrivateKey, passphrase)
+func GenerateShareKeystore(sharePrivateKey *bls.SecretKey, sharePublicKey phase0.BLSPubKey, passphrase string) (web3signer.Keystore, error) {
+	keystoreCrypto, err := keystorev4.New().Encrypt(sharePrivateKey.Serialize(), passphrase)
 	if err != nil {
-		return Keystore{}, fmt.Errorf("encrypt private key: %w", err)
+		return nil, fmt.Errorf("encrypt private key: %w", err)
 	}
 
-	sharePrivBLS := &bls.SecretKey{}
-	if err = sharePrivBLS.Deserialize(sharePrivateKey); err != nil {
-		return Keystore{}, fmt.Errorf("share private key to BLS: %w", err)
-	}
-
-	keystoreData := Keystore{
+	keystoreData := web3signer.Keystore{
 		"crypto":  keystoreCrypto,
-		"pubkey":  "0x" + hex.EncodeToString(sharePublicKey),
+		"pubkey":  sharePublicKey.String(),
 		"version": 4,
 		"uuid":    uuid.New().String(),
 		"path":    "m/12381/3600/0/0/0",

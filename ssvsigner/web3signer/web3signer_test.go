@@ -147,7 +147,7 @@ func TestImportKeystore(t *testing.T) {
 func TestDeleteKeystore(t *testing.T) {
 	tests := []struct {
 		name             string
-		sharePubKeyList  []string
+		sharePubKeyList  []phase0.BLSPubKey
 		statusCode       int
 		responseBody     DeleteKeystoreResponse
 		expectedStatuses []Status
@@ -155,8 +155,8 @@ func TestDeleteKeystore(t *testing.T) {
 	}{
 		{
 			name: "Successful delete",
-			sharePubKeyList: []string{
-				"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			sharePubKeyList: []phase0.BLSPubKey{
+				mustBLSFromString("0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
 			},
 			statusCode: http.StatusOK,
 			responseBody: DeleteKeystoreResponse{
@@ -172,8 +172,8 @@ func TestDeleteKeystore(t *testing.T) {
 		},
 		{
 			name: "Failed delete",
-			sharePubKeyList: []string{
-				"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			sharePubKeyList: []phase0.BLSPubKey{
+				mustBLSFromString("0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
 			},
 			statusCode: http.StatusBadRequest,
 			responseBody: DeleteKeystoreResponse{
@@ -207,10 +207,8 @@ func TestDeleteKeystore(t *testing.T) {
 				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
 			})
 
-			// Call DeleteKeystore
 			statuses, err := web3Signer.DeleteKeystore(context.Background(), tt.sharePubKeyList)
 
-			// Verify result
 			if tt.expectError {
 				require.Error(t, err)
 			} else {
@@ -241,7 +239,7 @@ func TestSign(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		sharePubKey    []byte
+		sharePubKey    phase0.BLSPubKey
 		payload        SignRequest
 		statusCode     int
 		responseBody   string
@@ -250,7 +248,7 @@ func TestSign(t *testing.T) {
 	}{
 		{
 			name:        "Successful sign",
-			sharePubKey: []byte{0x01, 0x02, 0x03},
+			sharePubKey: phase0.BLSPubKey{0x01, 0x02, 0x03},
 			payload:     testPayload,
 			statusCode:  http.StatusOK,
 			responseBody: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" +
@@ -269,7 +267,7 @@ func TestSign(t *testing.T) {
 		},
 		{
 			name:         "Invalid public key",
-			sharePubKey:  []byte{0x01, 0x02, 0x03},
+			sharePubKey:  phase0.BLSPubKey{0x01, 0x02, 0x03},
 			payload:      testPayload,
 			statusCode:   http.StatusBadRequest,
 			responseBody: `{"message": "Invalid public key"}`,
@@ -277,7 +275,7 @@ func TestSign(t *testing.T) {
 		},
 		{
 			name:         "Server error",
-			sharePubKey:  []byte{0x01, 0x02, 0x03},
+			sharePubKey:  phase0.BLSPubKey{0x01, 0x02, 0x03},
 			payload:      testPayload,
 			statusCode:   http.StatusInternalServerError,
 			responseBody: `{"message": "Internal server error"}`,
@@ -285,7 +283,7 @@ func TestSign(t *testing.T) {
 		},
 		{
 			name:         "Invalid response format",
-			sharePubKey:  []byte{0x01, 0x02, 0x03},
+			sharePubKey:  phase0.BLSPubKey{0x01, 0x02, 0x03},
 			payload:      testPayload,
 			statusCode:   http.StatusOK,
 			responseBody: "invalid-hex",
@@ -296,7 +294,7 @@ func TestSign(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				expectedPath := fmt.Sprintf("/api/v1/eth2/sign/0x%s", hex.EncodeToString(tt.sharePubKey))
+				expectedPath := fmt.Sprintf("/api/v1/eth2/sign/%s", tt.sharePubKey.String())
 				require.Equal(t, expectedPath, r.URL.Path)
 				require.Equal(t, http.MethodPost, r.Method)
 
@@ -327,19 +325,19 @@ func TestListKeys(t *testing.T) {
 		name         string
 		statusCode   int
 		responseBody ListKeysResponse
-		expectedKeys []string
+		expectedKeys []phase0.BLSPubKey
 		expectError  bool
 	}{
 		{
 			name:       "Successful list keys",
 			statusCode: http.StatusOK,
 			responseBody: ListKeysResponse{
-				"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-				"0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+				mustBLSFromString("0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				mustBLSFromString("0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 			},
-			expectedKeys: []string{
-				"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-				"0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			expectedKeys: []phase0.BLSPubKey{
+				mustBLSFromString("0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				mustBLSFromString("0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 			},
 			expectError: false,
 		},
@@ -347,7 +345,7 @@ func TestListKeys(t *testing.T) {
 			name:         "Empty list",
 			statusCode:   http.StatusOK,
 			responseBody: ListKeysResponse{},
-			expectedKeys: []string{},
+			expectedKeys: []phase0.BLSPubKey{},
 			expectError:  false,
 		},
 		{
@@ -379,4 +377,17 @@ func TestListKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+func mustBLSFromString(s string) phase0.BLSPubKey {
+	pk, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+
+	if len(pk) != len(phase0.BLSPubKey{}) {
+		panic("invalid public key length")
+	}
+
+	return phase0.BLSPubKey(pk)
 }

@@ -2,21 +2,24 @@ package web3signer
 
 import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-type ListKeysResponse []string
+type ListKeysResponse []phase0.BLSPubKey
 
 type KeyData struct {
-	ValidatingPubkey string `json:"validating_pubkey"`
+	ValidatingPubkey phase0.BLSPubKey `json:"validating_pubkey"`
 }
 
 type ImportKeystoreRequest struct {
-	Keystores          []string `json:"keystores"`
-	Passwords          []string `json:"passwords"`
-	SlashingProtection string   `json:"slashing_protection,omitempty"`
+	Keystores          []Keystore `json:"keystores"`
+	Passwords          []string   `json:"passwords"`
+	SlashingProtection string     `json:"slashing_protection,omitempty"`
 }
+
+type Keystore map[string]any
 
 type ImportKeystoreResponse struct {
 	Data    []KeyManagerResponseData `json:"data"`
@@ -24,7 +27,7 @@ type ImportKeystoreResponse struct {
 }
 
 type DeleteKeystoreRequest struct {
-	Pubkeys []string `json:"pubkeys"`
+	Pubkeys []phase0.BLSPubKey `json:"pubkeys"`
 }
 
 type DeleteKeystoreResponse struct {
@@ -51,7 +54,7 @@ const (
 
 type SignRequest struct {
 	ForkInfo                    ForkInfo                              `json:"fork_info"`
-	SigningRoot                 string                                `json:"signing_root,omitempty"`
+	SigningRoot                 phase0.Root                           `json:"signing_root,omitempty"`
 	Type                        SignedObjectType                      `json:"type"`
 	Attestation                 *phase0.AttestationData               `json:"attestation,omitempty"`
 	BeaconBlock                 *BeaconBlockData                      `json:"beacon_block,omitempty"`
@@ -88,7 +91,7 @@ const (
 )
 
 type BeaconBlockData struct {
-	Version     string                    `json:"version"`
+	Version     spec.DataVersion          `json:"version"`
 	BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
 }
 

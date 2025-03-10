@@ -2,7 +2,6 @@ package ekm
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -212,7 +211,7 @@ func (km *LocalKeyManager) signBeaconObject(obj ssz.HashRoot, domain phase0.Doma
 	}
 }
 
-func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey []byte) error {
+func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
@@ -226,7 +225,7 @@ func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey []
 		return ShareDecryptionError(fmt.Errorf("decode hex: %w", err))
 	}
 
-	if !bytes.Equal(sharePrivKey.GetPublicKey().Serialize(), sharePubKey) {
+	if !bytes.Equal(sharePrivKey.GetPublicKey().Serialize(), sharePubKey[:]) {
 		return ShareDecryptionError(errors.New("share private key does not match public key"))
 	}
 
@@ -246,21 +245,21 @@ func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey []
 	return nil
 }
 
-func (km *LocalKeyManager) RemoveShare(pubKey []byte) error {
+func (km *LocalKeyManager) RemoveShare(pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
-	pubKeyHex := hex.EncodeToString(pubKey)
+	pubKeyHex := pubKey.String()
 
 	acc, err := km.wallet.AccountByPublicKey(pubKeyHex)
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc != nil {
-		if err := km.RemoveHighestAttestation(pubKey); err != nil {
+		if err := km.RemoveHighestAttestation(pubKey[:]); err != nil {
 			return fmt.Errorf("could not remove highest attestation: %w", err)
 		}
-		if err := km.RemoveHighestProposal(pubKey); err != nil {
+		if err := km.RemoveHighestProposal(pubKey[:]); err != nil {
 			return fmt.Errorf("could not remove highest proposal: %w", err)
 		}
 		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {

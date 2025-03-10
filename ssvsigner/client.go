@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
 	"go.uber.org/zap"
 
@@ -47,7 +48,7 @@ func WithLogger(logger *zap.Logger) ClientOption {
 	}
 }
 
-func (c *Client) ListValidators(ctx context.Context) ([]string, error) {
+func (c *Client) ListValidators(ctx context.Context) ([]phase0.BLSPubKey, error) {
 	var resp ListValidatorsResponse
 	err := requests.
 		URL(c.baseURL).
@@ -67,7 +68,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ClientShareKeys) (
 	for _, share := range shares {
 		encodedShares = append(encodedShares, ServerShareKeys{
 			EncryptedPrivKey: hex.EncodeToString(share.EncryptedPrivKey),
-			PublicKey:        hex.EncodeToString(share.PublicKey),
+			PublicKey:        share.PublicKey,
 		})
 	}
 
@@ -102,14 +103,9 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ClientShareKeys) (
 	return resp.Statuses, nil
 }
 
-func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) ([]web3signer.Status, error) {
-	pubKeyStrs := make([]string, 0, len(sharePubKeys))
-	for _, pubKey := range sharePubKeys {
-		pubKeyStrs = append(pubKeyStrs, hex.EncodeToString(pubKey))
-	}
-
+func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error) {
 	req := RemoveValidatorRequest{
-		PublicKeys: pubKeyStrs,
+		PublicKeys: sharePubKeys,
 	}
 
 	var resp RemoveValidatorResponse
@@ -132,21 +128,21 @@ func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...[]byte) (
 	return resp.Statuses, nil
 }
 
-func (c *Client) Sign(ctx context.Context, sharePubKey []byte, payload web3signer.SignRequest) ([]byte, error) {
-	var resp bytes.Buffer
+func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
+	var resp phase0.BLSSignature
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Pathf("/v1/validators/sign/%s", hex.EncodeToString(sharePubKey)).
+		Pathf("/v1/validators/sign/%s", sharePubKey).
 		BodyJSON(payload).
 		Post().
-		ToBytesBuffer(&resp).
+		ToJSON(&resp).
 		Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return phase0.BLSSignature{}, fmt.Errorf("request failed: %w", err)
 	}
 
-	return resp.Bytes(), nil
+	return resp, nil
 }
 
 func (c *Client) OperatorIdentity(ctx context.Context) (string, error) {
@@ -181,18 +177,18 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) ([]byte, erro
 	return resp.Bytes(), nil
 }
 
-func (c *Client) MissingKeys(ctx context.Context, localKeys []string) ([]string, error) {
+func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) ([]phase0.BLSPubKey, error) {
 	remoteKeys, err := c.ListValidators(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get remote keys: %w", err)
 	}
 
-	remoteKeysSet := make(map[string]struct{}, len(remoteKeys))
+	remoteKeysSet := make(map[phase0.BLSPubKey]struct{}, len(remoteKeys))
 	for _, remoteKey := range remoteKeys {
 		remoteKeysSet[remoteKey] = struct{}{}
 	}
 
-	var missing []string
+	var missing []phase0.BLSPubKey
 	for _, key := range localKeys {
 		if _, ok := remoteKeysSet[key]; !ok {
 			missing = append(missing, key)

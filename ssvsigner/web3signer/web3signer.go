@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
 	"go.uber.org/zap"
 )
@@ -31,11 +32,11 @@ func New(logger *zap.Logger, baseURL string) *Web3Signer {
 }
 
 // ListKeys lists keys in Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Public-Key/operation/ETH2_LIST
-func (c *Web3Signer) ListKeys(ctx context.Context) ([]string, error) {
+func (c *Web3Signer) ListKeys(ctx context.Context) ([]phase0.BLSPubKey, error) {
 	logger := c.logger.With(zap.String("request", "ListKeys"))
 	logger.Info("listing keys")
 
-	var resp ListKeysResponse
+	var resp []phase0.BLSPubKey
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -52,7 +53,7 @@ func (c *Web3Signer) ListKeys(ctx context.Context) ([]string, error) {
 }
 
 // ImportKeystore adds a key to Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT
-func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList, keystorePasswordList []string) ([]Status, error) {
+func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList []Keystore, keystorePasswordList []string) ([]Status, error) {
 	logger := c.logger.With(
 		zap.String("request", "ImportKeystore"),
 		zap.Int("count", len(keystoreList)),
@@ -89,7 +90,7 @@ func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList, keystoreP
 }
 
 // DeleteKeystore removes a key from Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#operation/KEYMANAGER_DELETE
-func (c *Web3Signer) DeleteKeystore(ctx context.Context, sharePubKeyList []string) ([]Status, error) {
+func (c *Web3Signer) DeleteKeystore(ctx context.Context, sharePubKeyList []phase0.BLSPubKey) ([]Status, error) {
 	logger := c.logger.With(
 		zap.String("request", "DeleteKeystore"),
 		zap.Int("count", len(sharePubKeyList)),
@@ -124,11 +125,10 @@ func (c *Web3Signer) DeleteKeystore(ctx context.Context, sharePubKeyList []strin
 }
 
 // Sign signs using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Signing/operation/ETH2_SIGN
-func (c *Web3Signer) Sign(ctx context.Context, sharePubKey []byte, payload SignRequest) ([]byte, error) {
-	sharePubKeyHex := "0x" + hex.EncodeToString(sharePubKey)
+func (c *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload SignRequest) (phase0.BLSSignature, error) {
 	logger := c.logger.With(
 		zap.String("request", "Sign"),
-		zap.String("share_pubkey", sharePubKeyHex),
+		zap.String("share_pubkey", sharePubKey.String()),
 		zap.String("type", string(payload.Type)),
 	)
 	logger.Info("signing")
@@ -137,13 +137,13 @@ func (c *Web3Signer) Sign(ctx context.Context, sharePubKey []byte, payload SignR
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Pathf("/api/v1/eth2/sign/%s", sharePubKeyHex).
+		Pathf("/api/v1/eth2/sign/%s", sharePubKey.String()).
 		BodyJSON(payload).
 		Post().
 		ToString(&resp).
 		Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("web3signer: %w", err)
+		return phase0.BLSSignature{}, fmt.Errorf("web3signer: %w", err)
 	}
 
 	sigBytes, err := hex.DecodeString(strings.TrimPrefix(resp, "0x"))
@@ -152,8 +152,16 @@ func (c *Web3Signer) Sign(ctx context.Context, sharePubKey []byte, payload SignR
 			zap.String("signature", resp),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("decode signature: %w", err)
+		return phase0.BLSSignature{}, fmt.Errorf("decode signature: %w", err)
 	}
 
-	return sigBytes, nil
+	if len(sigBytes) != len(phase0.BLSSignature{}) {
+		logger.Error("unexpected signature length",
+			zap.Int("length", len(sigBytes)),
+			zap.Int("expected", len(phase0.BLSSignature{})),
+		)
+		return phase0.BLSSignature{}, fmt.Errorf("unexpected signature length %d, expected %d", len(sigBytes), len(phase0.BLSSignature{}))
+	}
+
+	return phase0.BLSSignature(sigBytes), nil
 }

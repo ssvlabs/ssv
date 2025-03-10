@@ -22,6 +22,7 @@ const (
 )
 
 type SlashingProtector interface {
+	// TODO: consider using phase0.BLSPubKey for public keys
 	ListAccounts() ([]core.ValidatorAccount, error)
 	RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error)
 	RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error)
