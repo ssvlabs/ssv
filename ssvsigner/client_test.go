@@ -335,7 +335,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 
 	samplePubKey := []byte("sample_pubkey")
 	samplePayload := web3signer.SignRequest{
-		Type: web3signer.Attestation,
+		Type: web3signer.TypeAttestation,
 		ForkInfo: web3signer.ForkInfo{
 			Fork: &phase0.Fork{
 				PreviousVersion: phase0.Version{0, 0, 0, 0},

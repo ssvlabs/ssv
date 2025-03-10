@@ -53,19 +53,19 @@ const (
 )
 
 type SignRequest struct {
-	ForkInfo                    ForkInfo                              `json:"fork_info"`
-	SigningRoot                 phase0.Root                           `json:"signing_root,omitempty"`
-	Type                        SignedObjectType                      `json:"type"`
-	Attestation                 *phase0.AttestationData               `json:"attestation,omitempty"`
-	BeaconBlock                 *BeaconBlockData                      `json:"beacon_block,omitempty"`
-	VoluntaryExit               *phase0.VoluntaryExit                 `json:"voluntary_exit,omitempty"`
-	AggregateAndProof           *AggregateAndProofData                `json:"aggregate_and_proof,omitempty"`
-	AggregationSlot             *AggregationSlotData                  `json:"aggregation_slot,omitempty"`
-	RandaoReveal                *RandaoRevealData                     `json:"randao_reveal,omitempty"`
-	SyncCommitteeMessage        *SyncCommitteeMessageData             `json:"sync_committee_message,omitempty"`
-	SyncAggregatorSelectionData *SyncCommitteeAggregatorSelectionData `json:"sync_aggregator_selection_data,omitempty"`
-	ContributionAndProof        *altair.ContributionAndProof          `json:"contribution_and_proof,omitempty"`
-	ValidatorRegistration       *v1.ValidatorRegistration             `json:"validator_registration,omitempty"`
+	ForkInfo                    ForkInfo                          `json:"fork_info"`
+	SigningRoot                 phase0.Root                       `json:"signing_root,omitempty"`
+	Type                        SignedObjectType                  `json:"type"`
+	Attestation                 *phase0.AttestationData           `json:"attestation,omitempty"`
+	BeaconBlock                 *BeaconBlockData                  `json:"beacon_block,omitempty"`
+	VoluntaryExit               *phase0.VoluntaryExit             `json:"voluntary_exit,omitempty"`
+	AggregateAndProof           *AggregateAndProof                `json:"aggregate_and_proof,omitempty"`
+	AggregationSlot             *AggregationSlot                  `json:"aggregation_slot,omitempty"`
+	RandaoReveal                *RandaoReveal                     `json:"randao_reveal,omitempty"`
+	SyncCommitteeMessage        *SyncCommitteeMessage             `json:"sync_committee_message,omitempty"`
+	SyncAggregatorSelectionData *SyncCommitteeAggregatorSelection `json:"sync_aggregator_selection_data,omitempty"`
+	ContributionAndProof        *altair.ContributionAndProof      `json:"contribution_and_proof,omitempty"`
+	ValidatorRegistration       *v1.ValidatorRegistration         `json:"validator_registration,omitempty"`
 }
 
 type ForkInfo struct {
@@ -76,18 +76,18 @@ type ForkInfo struct {
 type SignedObjectType string
 
 const (
-	AggregationSlot                   SignedObjectType = "AGGREGATION_SLOT"
-	AggregateAndProof                 SignedObjectType = "AGGREGATE_AND_PROOF"
-	Attestation                       SignedObjectType = "ATTESTATION"
-	Block                             SignedObjectType = "BLOCK" // TODO: not tested
-	BlockV2                           SignedObjectType = "BLOCK_V2"
-	Deposit                           SignedObjectType = "DEPOSIT" // TODO: not tested
-	RandaoReveal                      SignedObjectType = "RANDAO_REVEAL"
-	VoluntaryExit                     SignedObjectType = "VOLUNTARY_EXIT" // TODO: not tested
-	SyncCommitteeMessage              SignedObjectType = "SYNC_COMMITTEE_MESSAGE"
-	SyncCommitteeSelectionProof       SignedObjectType = "SYNC_COMMITTEE_SELECTION_PROOF"
-	SyncCommitteeContributionAndProof SignedObjectType = "SYNC_COMMITTEE_CONTRIBUTION_AND_PROOF"
-	ValidatorRegistration             SignedObjectType = "VALIDATOR_REGISTRATION"
+	TypeAggregationSlot                   SignedObjectType = "AGGREGATION_SLOT"
+	TypeAggregateAndProof                 SignedObjectType = "AGGREGATE_AND_PROOF"
+	TypeAttestation                       SignedObjectType = "ATTESTATION"
+	TypeBlock                             SignedObjectType = "BLOCK"
+	TypeBlockV2                           SignedObjectType = "BLOCK_V2"
+	TypeDeposit                           SignedObjectType = "DEPOSIT"
+	TypeRandaoReveal                      SignedObjectType = "RANDAO_REVEAL"
+	TypeVoluntaryExit                     SignedObjectType = "VOLUNTARY_EXIT"
+	TypeSyncCommitteeMessage              SignedObjectType = "SYNC_COMMITTEE_MESSAGE"
+	TypeSyncCommitteeSelectionProof       SignedObjectType = "SYNC_COMMITTEE_SELECTION_PROOF"
+	TypeSyncCommitteeContributionAndProof SignedObjectType = "SYNC_COMMITTEE_CONTRIBUTION_AND_PROOF"
+	TypeValidatorRegistration             SignedObjectType = "VALIDATOR_REGISTRATION"
 )
 
 type BeaconBlockData struct {
@@ -95,7 +95,7 @@ type BeaconBlockData struct {
 	BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
 }
 
-type AggregateAndProofData struct {
+type AggregateAndProof struct {
 	AggregatorIndex phase0.ValidatorIndex `json:"aggregator_index"`
 	Aggregate       *AttestationData      `json:"aggregate"`
 	SelectionProof  phase0.BLSSignature   `json:"selection_proof"`
@@ -108,20 +108,20 @@ type AttestationData struct {
 	CommitteeBits   string                  `json:"committee_bits,omitempty"`
 }
 
-type AggregationSlotData struct {
+type AggregationSlot struct {
 	Slot phase0.Slot `json:"slot"`
 }
 
-type RandaoRevealData struct {
+type RandaoReveal struct {
 	Epoch phase0.Epoch `json:"epoch"`
 }
 
-type SyncCommitteeMessageData struct {
+type SyncCommitteeMessage struct {
 	BeaconBlockRoot phase0.Root `json:"beacon_block_root"`
 	Slot            phase0.Slot `json:"slot"`
 }
 
-type SyncCommitteeAggregatorSelectionData struct {
+type SyncCommitteeAggregatorSelection struct {
 	Slot              phase0.Slot           `json:"slot"`
 	SubcommitteeIndex phase0.CommitteeIndex `json:"subcommittee_index"` // phase0.CommitteeIndex type to marshal to string
 }

@@ -223,7 +223,7 @@ func TestDeleteKeystore(t *testing.T) {
 
 func TestSign(t *testing.T) {
 	testPayload := SignRequest{
-		Type: AggregationSlot,
+		Type: TypeAggregationSlot,
 		ForkInfo: ForkInfo{
 			Fork: &phase0.Fork{
 				PreviousVersion: [4]byte{0, 0, 0, 0},
@@ -232,7 +232,7 @@ func TestSign(t *testing.T) {
 			},
 			GenesisValidatorsRoot: phase0.Root{},
 		},
-		AggregationSlot: &AggregationSlotData{
+		AggregationSlot: &AggregationSlot{
 			Slot: 1,
 		},
 	}

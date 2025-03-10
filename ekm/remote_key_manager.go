@@ -156,7 +156,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, err
 		}
 
-		req.Type = web3signer.Attestation
+		req.Type = web3signer.TypeAttestation
 		req.Attestation = data
 
 	case spectypes.DomainProposer:
@@ -165,7 +165,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, fmt.Errorf("web3signer supports only blinded blocks since bellatrix") // https://github.com/Consensys/web3signer/blob/85ed009955d4a5bbccba5d5248226093987e7f6f/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/BlockRequest.java#L29
 
 		case *apiv1capella.BlindedBeaconBlock:
-			req.Type = web3signer.BlockV2
+			req.Type = web3signer.TypeBlockV2
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (capella): %w", err)
@@ -191,7 +191,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 		case *apiv1deneb.BlindedBeaconBlock:
-			req.Type = web3signer.BlockV2
+			req.Type = web3signer.TypeBlockV2
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
@@ -217,7 +217,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 		case *apiv1electra.BlindedBeaconBlock:
-			req.Type = web3signer.BlockV2
+			req.Type = web3signer.TypeBlockV2
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
 				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (electra): %w", err)
@@ -252,15 +252,15 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to VoluntaryExit")
 		}
 
-		req.Type = web3signer.VoluntaryExit
+		req.Type = web3signer.TypeVoluntaryExit
 		req.VoluntaryExit = data
 
 	case spectypes.DomainAggregateAndProof:
-		req.Type = web3signer.AggregateAndProof
+		req.Type = web3signer.TypeAggregateAndProof
 
 		switch v := obj.(type) {
 		case *phase0.AggregateAndProof:
-			req.AggregateAndProof = &web3signer.AggregateAndProofData{
+			req.AggregateAndProof = &web3signer.AggregateAndProof{
 				AggregatorIndex: v.AggregatorIndex,
 				SelectionProof:  v.SelectionProof,
 			}
@@ -272,7 +272,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 				}
 			}
 		case *electra.AggregateAndProof:
-			req.AggregateAndProof = &web3signer.AggregateAndProofData{
+			req.AggregateAndProof = &web3signer.AggregateAndProof{
 				AggregatorIndex: v.AggregatorIndex,
 				SelectionProof:  v.SelectionProof,
 			}
@@ -294,8 +294,8 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to SSZUint64")
 		}
 
-		req.Type = web3signer.AggregationSlot
-		req.AggregationSlot = &web3signer.AggregationSlotData{Slot: phase0.Slot(data)}
+		req.Type = web3signer.TypeAggregationSlot
+		req.AggregationSlot = &web3signer.AggregationSlot{Slot: phase0.Slot(data)}
 
 	case spectypes.DomainRandao:
 		data, ok := obj.(spectypes.SSZUint64)
@@ -303,8 +303,8 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to SSZUint64")
 		}
 
-		req.Type = web3signer.RandaoReveal
-		req.RandaoReveal = &web3signer.RandaoRevealData{Epoch: phase0.Epoch(data)}
+		req.Type = web3signer.TypeRandaoReveal
+		req.RandaoReveal = &web3signer.RandaoReveal{Epoch: phase0.Epoch(data)}
 
 	case spectypes.DomainSyncCommittee:
 		data, ok := obj.(ssvtypes.BlockRootWithSlot)
@@ -312,8 +312,8 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to BlockRootWithSlot")
 		}
 
-		req.Type = web3signer.SyncCommitteeMessage
-		req.SyncCommitteeMessage = &web3signer.SyncCommitteeMessageData{
+		req.Type = web3signer.TypeSyncCommitteeMessage
+		req.SyncCommitteeMessage = &web3signer.SyncCommitteeMessage{
 			BeaconBlockRoot: phase0.Root(data.SSZBytes),
 			Slot:            data.Slot,
 		}
@@ -324,8 +324,8 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to SyncAggregatorSelectionData")
 		}
 
-		req.Type = web3signer.SyncCommitteeSelectionProof
-		req.SyncAggregatorSelectionData = &web3signer.SyncCommitteeAggregatorSelectionData{
+		req.Type = web3signer.TypeSyncCommitteeSelectionProof
+		req.SyncAggregatorSelectionData = &web3signer.SyncCommitteeAggregatorSelection{
 			Slot:              data.Slot,
 			SubcommitteeIndex: phase0.CommitteeIndex(data.SubcommitteeIndex),
 		}
@@ -336,7 +336,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to ContributionAndProof")
 		}
 
-		req.Type = web3signer.SyncCommitteeContributionAndProof
+		req.Type = web3signer.TypeSyncCommitteeContributionAndProof
 		req.ContributionAndProof = data
 
 	case spectypes.DomainApplicationBuilder:
@@ -345,7 +345,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			return nil, [32]byte{}, errors.New("could not cast obj to ValidatorRegistration")
 		}
 
-		req.Type = web3signer.ValidatorRegistration
+		req.Type = web3signer.TypeValidatorRegistration
 		req.ValidatorRegistration = data
 	default:
 		return nil, [32]byte{}, errors.New("domain unknown")

@@ -264,7 +264,7 @@ func (s *ServerTestSuite) TestSignValidator() {
 	pubKeyHex := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 	signPayload := web3signer.SignRequest{
-		Type: web3signer.Attestation,
+		Type: web3signer.TypeAttestation,
 	}
 
 	reqBody, err := json.Marshal(signPayload)
