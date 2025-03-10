@@ -225,24 +225,22 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
 	case spectypes.DomainApplicationBuilder:
-		var data *api.VersionedValidatorRegistration
 		switch v := obj.(type) {
 		case *eth2apiv1.ValidatorRegistration:
-			data = &api.VersionedValidatorRegistration{
+			data := &api.VersionedValidatorRegistration{
 				Version: spec.BuilderVersionV1,
 				V1:      v,
 			}
+			return km.signer.SignRegistration(data, domain, pk)
+		case spectypes.SSZBytes:
+			// TODO - do we need similar implementation adjustment(s) for remote signer as well ?
+			//
+			// TODO - `case spectypes.SSZBytes` is probably not specific-enough here, we probably want
+			// to define some concrete type (just an alias for spectypes.SSZBytes ?) and cast to that
+			return km.signer.SignPreconfCommitment(v, domain, pk)
 		default:
 			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
-		return km.signer.SignRegistration(data, domain, pk)
-	case spectypes.PreconfCommitment:
-		// TODO - do we need similar implementation for remote signer as well ?
-		data, ok := obj.(spectypes.SSZBytes)
-		if !ok {
-			return nil, nil, errors.New("could not cast obj to TODO")
-		}
-		return km.signer.SignPreconfCommitment(data, domain, pk)
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}
