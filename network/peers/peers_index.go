@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -8,9 +9,8 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/records"
+	"go.uber.org/zap"
 )
 
 // MaxPeersProvider returns the max peers for the given topic.
@@ -85,14 +85,14 @@ func (pi *peersIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 	return pi.network.Connectedness(id)
 }
 
-func (pi *peersIndex) CanConnect(id peer.ID) bool {
+func (pi *peersIndex) CanConnect(id peer.ID) error {
 	cntd := pi.network.Connectedness(id)
 	switch cntd {
 	case libp2pnetwork.Connected:
-		fallthrough
+		return fmt.Errorf("peer already connected")
 	default:
 	}
-	return true
+	return nil
 }
 
 func (pi *peersIndex) AtLimit(dir libp2pnetwork.Direction) bool {

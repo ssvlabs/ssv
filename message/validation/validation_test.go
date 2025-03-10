@@ -233,7 +233,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
-		msgSize := maxSignedMsgSize*2 + commons.MessageOffset
+		msgSize := maxSignedMsgSize*2 + MessageOffset
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
@@ -260,7 +260,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
-				Data:  bytes.Repeat([]byte{1}, 1+commons.MessageOffset),
+				Data:  bytes.Repeat([]byte{1}, 1+MessageOffset),
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
 			},
