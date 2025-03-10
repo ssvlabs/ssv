@@ -55,6 +55,11 @@ var VoluntaryExitRunner = func(logger *zap.Logger, keySet *spectestingutils.Test
 	return baseRunner(logger, spectypes.RoleVoluntaryExit, keySet)
 }
 
+var PreconfCommitmentRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
+	ret := baseRunner(logger, spectypes.RolePreconfCommitment, keySet)
+	return ret
+}
+
 var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectestingutils.UnknownDutyType, keySet)
 }

@@ -132,8 +132,8 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
-	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
-	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
+	// Rule: Duty role has consensus (true except for ValidatorRegistration, VoluntaryExit, PreconfCommitment)
+	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit || role == spectypes.RolePreconfCommitment {
 		e := ErrUnexpectedConsensusMessage
 		e.got = role
 		return e
