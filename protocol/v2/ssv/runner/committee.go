@@ -17,12 +17,14 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 var (
@@ -274,9 +276,9 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		case spectypes.BNRoleSyncCommittee:
 			totalSyncCommitteeDuties++
 
-			blockRootWithSlot := ssvtypes.BlockRootWithSlot{ // ssv-signer needs slot but cannot use slot passed to signBeaconObject to avoid breaking spec interface
-				SSZBytes: spectypes.SSZBytes(beaconVote.BlockRoot[:]),
-				Slot:     duty.DutySlot(),
+			blockRootWithSlot := ekm.BlockRootWithSlot{ // ssv-signer needs slot but cannot use slot passed to signBeaconObject to avoid breaking spec interface
+				BlockRoot: beaconVote.BlockRoot,
+				Slot:      duty.DutySlot(),
 			}
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, blockRootWithSlot, validatorDuty.DutySlot(),
 				spectypes.DomainSyncCommittee)

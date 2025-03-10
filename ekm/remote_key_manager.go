@@ -25,7 +25,6 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -307,14 +306,14 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		req.RandaoReveal = &web3signer.RandaoReveal{Epoch: phase0.Epoch(data)}
 
 	case spectypes.DomainSyncCommittee:
-		data, ok := obj.(ssvtypes.BlockRootWithSlot)
+		data, ok := obj.(BlockRootWithSlot)
 		if !ok {
 			return nil, [32]byte{}, errors.New("could not cast obj to BlockRootWithSlot")
 		}
 
 		req.Type = web3signer.TypeSyncCommitteeMessage
 		req.SyncCommitteeMessage = &web3signer.SyncCommitteeMessage{
-			BeaconBlockRoot: phase0.Root(data.SSZBytes),
+			BeaconBlockRoot: data.BlockRoot,
 			Slot:            data.Slot,
 		}
 

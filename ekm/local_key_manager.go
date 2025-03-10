@@ -30,7 +30,6 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -178,11 +177,11 @@ func (km *LocalKeyManager) signBeaconObject(obj ssz.HashRoot, domain phase0.Doma
 
 		return km.signer.SignEpoch(phase0.Epoch(data), domain, pk)
 	case spectypes.DomainSyncCommittee:
-		data, ok := obj.(ssvtypes.BlockRootWithSlot)
+		data, ok := obj.(BlockRootWithSlot)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to BlockRootWithSlot")
 		}
-		return km.signer.SignSyncCommittee(data.SSZBytes, domain, pk)
+		return km.signer.SignSyncCommittee(data.BlockRoot[:], domain, pk)
 	case spectypes.DomainSyncCommitteeSelectionProof:
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
 		if !ok {

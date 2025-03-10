@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -145,9 +146,9 @@ func TestController_StopValidator(t *testing.T) {
 	root, err := signable{}.GetRoot()
 	require.NoError(t, err)
 
-	obj := types.BlockRootWithSlot{
-		SSZBytes: spectypes.SSZBytes(root[:]),
-		Slot:     1,
+	obj := ekm.BlockRootWithSlot{
+		BlockRoot: root,
+		Slot:      1,
 	}
 
 	_, _, err = signer.SignBeaconObject(obj, d, secretKey.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)
@@ -212,9 +213,9 @@ func TestController_ReactivateCluster(t *testing.T) {
 	root, err := signable{}.GetRoot()
 	require.NoError(t, err)
 
-	obj := types.BlockRootWithSlot{
-		SSZBytes: spectypes.SSZBytes(root[:]),
-		Slot:     1,
+	obj := ekm.BlockRootWithSlot{
+		BlockRoot: root,
+		Slot:      1,
 	}
 
 	_, _, err = signer.SignBeaconObject(obj, d, secretKey.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)

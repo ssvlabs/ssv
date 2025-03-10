@@ -25,7 +25,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
@@ -1568,9 +1567,9 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 
 	s.Run("SignSyncCommittee", func() {
 
-		blockRoot := ssvtypes.BlockRootWithSlot{
-			SSZBytes: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32},
-			Slot:     123,
+		blockRoot := BlockRootWithSlot{
+			BlockRoot: phase0.Root{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32},
+			Slot:      123,
 		}
 
 		s.consensusClient.On("CurrentFork", mock.Anything).Return(mockFork, nil).Once()
