@@ -260,28 +260,11 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		switch v := obj.(type) {
 		case *phase0.AggregateAndProof:
 			req.AggregateAndProof = &web3signer.AggregateAndProof{
-				AggregatorIndex: v.AggregatorIndex,
-				SelectionProof:  v.SelectionProof,
-			}
-			if v.Aggregate != nil {
-				req.AggregateAndProof.Aggregate = &web3signer.AttestationData{
-					AggregationBits: fmt.Sprintf("%#x", v.Aggregate.AggregationBits),
-					Data:            v.Aggregate.Data,
-					Signature:       v.Aggregate.Signature,
-				}
+				Phase0: v,
 			}
 		case *electra.AggregateAndProof:
 			req.AggregateAndProof = &web3signer.AggregateAndProof{
-				AggregatorIndex: v.AggregatorIndex,
-				SelectionProof:  v.SelectionProof,
-			}
-			if v.Aggregate != nil {
-				req.AggregateAndProof.Aggregate = &web3signer.AttestationData{
-					AggregationBits: fmt.Sprintf("%#x", []byte(v.Aggregate.AggregationBits)),
-					Data:            v.Aggregate.Data,
-					Signature:       v.Aggregate.Signature,
-					CommitteeBits:   fmt.Sprintf("%#x", v.Aggregate.CommitteeBits),
-				}
+				Electra: v,
 			}
 		default:
 			return nil, [32]byte{}, fmt.Errorf("obj type is unknown: %T", obj)

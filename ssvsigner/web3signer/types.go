@@ -1,9 +1,13 @@
 package web3signer
 
 import (
+	"encoding/json"
+	"errors"
+
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
@@ -95,17 +99,34 @@ type BeaconBlockData struct {
 	BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
 }
 
+// AggregateAndProof is a union of *phase0.AggregateAndProof or *electra.AggregateAndProof.
+// If Electra is set, Phase0 is ignored.
 type AggregateAndProof struct {
-	AggregatorIndex phase0.ValidatorIndex `json:"aggregator_index"`
-	Aggregate       *AttestationData      `json:"aggregate"`
-	SelectionProof  phase0.BLSSignature   `json:"selection_proof"`
+	Phase0  *phase0.AggregateAndProof
+	Electra *electra.AggregateAndProof
 }
 
-type AttestationData struct {
-	AggregationBits string                  `json:"aggregation_bits"`
-	Data            *phase0.AttestationData `json:"data"`
-	Signature       phase0.BLSSignature     `json:"signature"`
-	CommitteeBits   string                  `json:"committee_bits,omitempty"`
+func (ap *AggregateAndProof) MarshalJSON() ([]byte, error) {
+	if ap == nil {
+		return json.Marshal(nil)
+	}
+
+	if ap.Electra != nil {
+		return json.Marshal(ap.Electra)
+	}
+
+	return json.Marshal(ap.Phase0)
+}
+
+func (ap *AggregateAndProof) UnmarshalJSON(data []byte) error {
+	electraErr := json.Unmarshal(data, &ap.Electra)
+	phase0Err := json.Unmarshal(data, &ap.Phase0)
+
+	if electraErr != nil && phase0Err != nil {
+		return errors.Join(electraErr, phase0Err)
+	}
+
+	return nil
 }
 
 type AggregationSlot struct {
