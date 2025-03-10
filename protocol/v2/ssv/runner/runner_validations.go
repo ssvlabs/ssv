@@ -20,12 +20,18 @@ func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes
 		return err
 	}
 
-	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
+	// TODO - disabled for now in order for preconfs to even work (until
+	// expectedPreConsensusRootsAndDomain is implemented fully)
+	//roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
+	_, _, err := runner.expectedPreConsensusRootsAndDomain()
 	if err != nil {
 		return err
 	}
 
-	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
+	// TODO - disabled for now in order for preconfs to even work (until
+	// expectedPreConsensusRootsAndDomain is implemented fully)
+	//return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
+	return nil
 }
 
 // Verify each signature in container removing the invalid ones

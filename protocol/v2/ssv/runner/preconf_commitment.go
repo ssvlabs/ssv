@@ -52,11 +52,11 @@ type PreconfCommitmentRunner struct {
 	// childRunnersInflight prevents concurrent requests to childRunners from initializing
 	// the same childRunners entry twice (instead we'll initialize just 1 childRunner instance
 	// and return that same instance on repetitive gets).
-	childRunnersInflight singleflight.Group[spectypes.PreconfCommitmentDuty, *pcRunner]
+	childRunnersInflight singleflight.Group[[32]byte, *pcRunner]
 	// childRunners maintains mapping between preconf sign-requests and corresponding runners
 	// that process those requests. It's a ttlcache so we can access it concurrently clean it up
 	// periodically (to prevent no longer relevant runners from piling up).
-	childRunners *ttlcache.Cache[spectypes.PreconfCommitmentDuty, *pcRunner]
+	childRunners *ttlcache.Cache[[32]byte, *pcRunner]
 
 	share *spectypes.Share
 
@@ -79,7 +79,7 @@ func NewPreconfCommitmentRunner(
 	r := &PreconfCommitmentRunner{
 		childRunners: ttlcache.New(
 			// TODO how long should child runners live for ? setting it to ~2 epochs for now
-			ttlcache.WithTTL[spectypes.PreconfCommitmentDuty, *pcRunner](2 * 32 * 12 * time.Second),
+			ttlcache.WithTTL[[32]byte, *pcRunner](2 * 32 * 12 * time.Second),
 		),
 		share:          share,
 		beacon:         beacon,
@@ -107,11 +107,12 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	if len(objectRootRaw) != 32 {
 		return nil, errors.New("objectRootHex must be 32 bytes")
 	}
-	root := spectypes.PreconfCommitmentDuty(objectRootRaw)
 
-	cRunner, err := r.childRunner(root)
+	root := [32]byte(objectRootRaw)
+	duty := spectypes.PreconfCommitmentDuty(root)
+
+	cRunner, err := r.childRunner(root, &duty)
 	if err != nil {
-		// TODO - can we even get an error from `r.childRunner(root)` ?
 		return nil, fmt.Errorf("failed to get child runner: %w", err)
 	}
 	defer close(cRunner.initialized)
@@ -121,8 +122,8 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	msg, err := cRunner.signPreconfCommitment(
 		r,
 		validatorIndex,
-		spectypes.SSZBytes(root[:]),
-		phase0.Slot(0), // TODO - what slot should we use here ?
+		&duty,
+		duty.DutySlot(),
 		spectypes.DomainApplicationBuilder,
 	)
 	if err != nil {
@@ -157,7 +158,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 
 	logger.Debug(
 		"broadcasting preconf-commitment partial sig",
-		zap.Any("preconf_commitment_root", root),
+		zap.String("root", hex.EncodeToString(root[:])),
 	)
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
@@ -187,9 +188,9 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 		zap.String("root", hex.EncodeToString(root[:])),
 	)
 
-	cRunner, err := r.childRunner(root)
+	duty := spectypes.PreconfCommitmentDuty(root)
+	cRunner, err := r.childRunner(root, &duty)
 	if err != nil {
-		// TODO - can we even get an error from `r.childRunner(root)` ?
 		return fmt.Errorf("failed to get child runner: %w", err)
 	}
 	go func() {
@@ -236,7 +237,11 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 		}
 		if roots[0] != root {
 			cRunner.result <- PreconfCommitmentResult{
-				Err: fmt.Errorf("base runner extracted root %s that doesn't match pre-consensus message root %s", roots[0], root),
+				Err: fmt.Errorf(
+					"base runner extracted root %s that doesn't match pre-consensus message root %s",
+					hex.EncodeToString(roots[0][:]),
+					hex.EncodeToString(root[:]),
+				),
 			}
 			return
 		}
@@ -259,9 +264,6 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 				Err: fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err),
 			}
 		}
-		// TODO - do we need array here ?
-		//specSig := phase0.BLSSignature{}
-		//copy(specSig[:], fullSig)
 
 		logger.Debug(
 			"preconf-commitment was signed successfully",
@@ -273,7 +275,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 		}
 	}()
 
-	logger.Debug("spun up preconf-commitment child runner to process pre-consensus message")
+	logger.Debug("spun up child runner")
 
 	return nil
 }
@@ -291,12 +293,12 @@ func (r *PreconfCommitmentRunner) ProcessPostConsensus(ctx context.Context, logg
 }
 
 func (r *PreconfCommitmentRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	// TODO - implement this for preconfs
+	// TODO - implement this properly for preconfs
 	// compare hash-root that comes with pre-consensus message against what corresponding child-runner
 	// expects based on the data it has pulled on its own
-	// NOTE, currently with Bolt there is no way for us to fetch data about preconf(s) independently:
-	// https://github.com/chainbound/bolt/issues/772
-	return nil, phase0.DomainType{}, nil
+	// NOTE, currently with Bolt (or ETHgas) there is no way for us to fetch data about preconf(s)
+	// independently: https://github.com/chainbound/bolt/issues/772
+	return nil, spectypes.DomainApplicationBuilder, nil
 
 	//if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
 	//	return nil, spectypes.DomainError, errors.New("no running duty to compute preconsensus roots and domain")
@@ -387,7 +389,7 @@ func (r *PreconfCommitmentRunner) GetRoot() ([32]byte, error) {
 	return [32]byte{}, fmt.Errorf("not implemented")
 }
 
-func (r *PreconfCommitmentRunner) childRunner(root spectypes.PreconfCommitmentDuty) (*pcRunner, error) {
+func (r *PreconfCommitmentRunner) childRunner(root [32]byte, duty *spectypes.PreconfCommitmentDuty) (*pcRunner, error) {
 	result, err, _ := r.childRunnersInflight.Do(root, func() (*pcRunner, error) {
 		item := r.childRunners.Get(root)
 		if item != nil {
@@ -396,19 +398,17 @@ func (r *PreconfCommitmentRunner) childRunner(root spectypes.PreconfCommitmentDu
 
 		result := pcRunner{
 			BaseRunner: BaseRunner{
-				// TODO - do we need to initialize RunnerRoleType on BaseRunner ?
-				//RunnerRoleType: spectypes.RolePreconfCommitment,
-				// TODO - do we need to initialize DomainType on BaseRunner ?
-				//DomainType:     r.domainType,
-				BeaconNetwork: r.beacon.GetBeaconNetwork(),
-				// TODO - do we need to initialize Share on BaseRunner ?
-				//Share:          r.share,
+				RunnerRoleType: spectypes.RolePreconfCommitment,
+				DomainType:     spectypes.DomainApplicationBuilder,
+				BeaconNetwork:  r.beacon.GetBeaconNetwork(),
+				Share: map[phase0.ValidatorIndex]*spectypes.Share{
+					r.share.ValidatorIndex: r.share,
+				},
 			},
 			initialized: make(chan struct{}),
 			result:      make(chan PreconfCommitmentResult),
 		}
-		// preconf-commitment BaseRunner doesn't use spectypes.Duty hence we pass nil
-		result.BaseRunner.baseSetupForNewDuty(nil, r.quorum)
+		result.BaseRunner.baseSetupForNewDuty(duty, r.quorum)
 
 		r.childRunners.Set(root, &result, ttlcache.DefaultTTL)
 
