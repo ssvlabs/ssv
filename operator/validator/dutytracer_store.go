@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,6 +15,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.uber.org/zap"
 )
 
 type ValidatorDutyTrace struct {
@@ -141,17 +143,21 @@ func (imt *InMemTracer) GetCommitteeDecideds(slot phase0.Slot, pubkeys []spectyp
 
 		index, found := imt.validators.ValidatorIndex(pubkey)
 		if !found {
-			imt.logger.Error("validator not found", fields.Validator(pubkey[:]))
+			imt.logger.Error("-committee decideds- validator not found", fields.Validator(pubkey[:]))
 			continue
 		}
 
 		committeeID, err := imt.getCommitteeIDBySlotAndIndex(slot, index)
 		if err != nil {
+			imt.logger.Error("-committee decideds- getCommitteeIDBySlotAndIndex", zap.Error(err))
 			return nil, err
 		}
 
+		imt.logger.Error("-committee decideds- got committee ID", fields.CommitteeID(committeeID))
+
 		duty, err := imt.GetCommitteeDuty(slot, committeeID)
 		if err != nil {
+			imt.logger.Error("-committee decideds- GetCommitteeDuty", zap.Error(err))
 			return nil, err
 		}
 
@@ -164,15 +170,15 @@ func (imt *InMemTracer) GetCommitteeDecideds(slot phase0.Slot, pubkeys []spectyp
 		out = append(out, qbftstorage.ParticipantsRangeEntry{
 			Slot:    slot,
 			PubKey:  pubkey,
-			Signers: signers,
+			Signers: slices.Compact(signers),
 		})
 	}
 
 	return
 }
 
-func (a *InMemTracer) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
-	duties, err := a.GetValidatorDuties(role, slot, pubkeys)
+func (imt *InMemTracer) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+	duties, err := imt.GetValidatorDuties(role, slot, pubkeys)
 	if err != nil {
 		return nil, fmt.Errorf("get validator duties for decideds: %w", err)
 	}
@@ -194,8 +200,8 @@ func (a *InMemTracer) GetValidatorDecideds(role spectypes.BeaconRole, slot phase
 	return
 }
 
-func (n *InMemTracer) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
-	slotToCommittee, found := n.validatorIndexToCommitteeLinks.Load(index)
+func (imt *InMemTracer) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
+	slotToCommittee, found := imt.validatorIndexToCommitteeLinks.Load(index)
 	if !found {
 		return spectypes.CommitteeID{}, fmt.Errorf("committee not found by index: %d", index)
 	}
@@ -204,7 +210,9 @@ func (n *InMemTracer) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase
 	if !found {
 		start := time.Now()
 
-		link, err := n.store.GetCommitteeDutyLink(slot, index)
+		imt.logger.Info("-committee decideds- loading from disk", fields.Slot(slot), fields.ValidatorIndex(index))
+
+		link, err := imt.store.GetCommitteeDutyLink(slot, index)
 		if err != nil {
 			return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link from disk: %w", err)
 		}

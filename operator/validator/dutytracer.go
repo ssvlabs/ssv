@@ -75,6 +75,11 @@ func NewTracer(ctx context.Context,
 		tracer.verifyBLSSignatureFn = tracer.verifyBLSSignature
 	}
 
+	// TODO(me): remove this
+	tracer.syncCommitteeRoots.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[phase0.Slot, phase0.Root]) {
+		tracer.logger.Info("sync committee root evicted", fields.Slot(item.Key()), fields.Root(item.Value()))
+	})
+
 	return tracer
 }
 
@@ -526,7 +531,7 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 				// n.populateProposer(round, committeeID, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
-				if decided != nil && len(trace.Decideds) == 0 {
+				if decided != nil {
 					n.logger.Info("committee decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.CommitteeID(committeeID))
 					trace.Decideds = append(trace.Decideds, decided)
 				}
@@ -570,7 +575,7 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 				// n.populateProposer(round, validatorPK, subMsg)
 
 				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
-				if decided != nil && len(roleDutyTrace.Decideds) == 0 {
+				if decided != nil {
 					n.logger.Info("validator decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.Validator(validatorPK[:]))
 					roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
 				}
