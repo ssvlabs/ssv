@@ -22,7 +22,7 @@ require (
 	github.com/holiman/uint256 v1.3.2
 	github.com/ilyakaznacheev/cleanenv v1.4.2
 	github.com/jellydator/ttlcache/v3 v3.3.0
-	github.com/libp2p/go-libp2p v0.36.3
+	github.com/libp2p/go-libp2p v0.36.4 // v0.36.3 and below breaks linter and tests
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-pubsub v0.12.0
 	github.com/microsoft/go-crypto-openssl v0.2.9
