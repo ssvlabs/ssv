@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	// childRunnerInitializationTimeout - TODO how long should we wait ? setting it to ~2 epochs for now
-	childRunnerInitializationTimeout = 2 * 32 * 12 * time.Second
+	// childRunnerInitializationTimeout - TODO how long should we wait ?
+	childRunnerInitializationTimeout = 60 * time.Second
 )
 
 type PreconfCommitmentResult struct {
