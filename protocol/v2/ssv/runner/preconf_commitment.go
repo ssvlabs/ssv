@@ -136,6 +136,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	}
 	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PreconfCommitmentPartialSig,
+		Slot:     duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
@@ -294,7 +295,7 @@ func (r *PreconfCommitmentRunner) ProcessConsensus(ctx context.Context, logger *
 }
 
 func (r *PreconfCommitmentRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
-	return errors.New("no qbft phase")
+	return errors.New("no qbft phase for preconf-commitment")
 }
 
 func (r *PreconfCommitmentRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {

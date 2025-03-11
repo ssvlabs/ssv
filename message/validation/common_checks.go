@@ -2,6 +2,7 @@ package validation
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -13,6 +14,11 @@ func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
 }
 
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
+	// TODO - do we want to validate slot(s) for preconfs ?
+	if role == spectypes.RolePreconfCommitment {
+		return nil
+	}
+
 	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > clockErrorTolerance {
 		e := ErrEarlySlotMessage
 		e.got = fmt.Sprintf("early by %v", earliness)
@@ -109,6 +115,9 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 		}
 
 		return min(slotsPerEpoch, 2*validatorIndexCount), true
+
+	case spectypes.RolePreconfCommitment:
+		return math.MaxUint64, true // TODO - what limit we want to set here ?
 
 	default:
 		return 0, false
