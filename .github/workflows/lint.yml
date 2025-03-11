@@ -20,7 +20,7 @@ jobs:
         with:
           go-version: "1.24.x"
 
-      - name: Run tool
+      - name: Run tools
         run: make tools
 
       - name: Run make lint
