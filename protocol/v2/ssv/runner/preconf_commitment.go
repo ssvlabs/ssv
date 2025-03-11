@@ -58,7 +58,8 @@ type PreconfCommitmentRunner struct {
 	// periodically (to prevent no longer relevant runners from piling up).
 	childRunners *ttlcache.Cache[[32]byte, *pcRunner]
 
-	share *spectypes.Share
+	domainType spectypes.DomainType
+	share      *spectypes.Share
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
@@ -69,6 +70,7 @@ type PreconfCommitmentRunner struct {
 }
 
 func NewPreconfCommitmentRunner(
+	domainType spectypes.DomainType,
 	share *spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
@@ -81,6 +83,7 @@ func NewPreconfCommitmentRunner(
 			// TODO how long should child runners live for ? setting it to ~2 epochs for now
 			ttlcache.WithTTL[[32]byte, *pcRunner](2 * 32 * 12 * time.Second),
 		),
+		domainType:     domainType,
 		share:          share,
 		beacon:         beacon,
 		network:        network,
@@ -409,7 +412,7 @@ func (r *PreconfCommitmentRunner) childRunner(root [32]byte, duty *spectypes.Pre
 		result := pcRunner{
 			BaseRunner: BaseRunner{
 				RunnerRoleType: spectypes.RolePreconfCommitment,
-				DomainType:     spectypes.DomainApplicationBuilder,
+				DomainType:     r.domainType,
 				BeaconNetwork:  r.beacon.GetBeaconNetwork(),
 				Share: map[phase0.ValidatorIndex]*spectypes.Share{
 					r.share.ValidatorIndex: r.share,

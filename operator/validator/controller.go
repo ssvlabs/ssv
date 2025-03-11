@@ -1152,7 +1152,7 @@ func SetupRunners(
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		case spectypes.RolePreconfCommitment:
-			runners[role], err = runner.NewPreconfCommitmentRunner(&options.SSVShare.Share, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.Operator.GetQuorum())
+			runners[role], err = runner.NewPreconfCommitmentRunner(domainType, &options.SSVShare.Share, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.Operator.GetQuorum())
 		}
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create duty runner")
