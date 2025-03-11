@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -748,6 +749,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NotNil(t, valShare)
 			valShare.ValidatorIndex = 1
 			valShare.ActivationEpoch = 0
+			valShare.ExitEpoch = math.MaxUint64
 			valShare.Status = eth2apiv1.ValidatorStateActiveOngoing
 			err := eh.nodeStorage.Shares().Save(nil, valShare)
 			require.NoError(t, err)
