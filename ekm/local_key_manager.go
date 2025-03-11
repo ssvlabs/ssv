@@ -237,7 +237,7 @@ func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey ph
 		return ShareDecryptionError(errors.New("share private key does not match public key"))
 	}
 
-	acc, err := km.wallet.AccountByPublicKey(string(sharePrivKeyHex))
+	acc, err := km.wallet.AccountByPublicKey(sharePrivKey.GetPublicKey().SerializeToHexStr())
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
