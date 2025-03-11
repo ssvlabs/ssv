@@ -24,7 +24,7 @@ const (
 	commitStage   stage = "commit"
 )
 
-// roundChangeReason represents the reason for a round change in the QBFT protocoltu
+// roundChangeReason represents the reason for a round change in the QBFT protocol
 type roundChangeReason string
 
 const (
