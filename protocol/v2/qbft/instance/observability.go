@@ -15,6 +15,7 @@ const (
 	observabilityNamespace = "ssv.validator"
 )
 
+// stage represents a QBFT protocol stage
 type stage string
 
 const (
@@ -23,7 +24,7 @@ const (
 	commitStage   stage = "commit"
 )
 
-// roundChangeReason represents the reason for a round change
+// roundChangeReason represents the reason for a round change in the QBFT protocoltu
 type roundChangeReason string
 
 const (

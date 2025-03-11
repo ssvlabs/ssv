@@ -100,7 +100,7 @@ func getRoundChangeJustification(state *specqbft.State, prepareMsgContainer *spe
 	return ret, nil
 }
 
-// validSignedPrepareForHeightRoundAndRoot known in dafny spec as validSignedPrepareForHeightRoundAndDigest
+// validSignedPrepareForHeightRoundAndRootIgnoreSignature known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
 func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	msg *specqbft.ProcessingMessage,
