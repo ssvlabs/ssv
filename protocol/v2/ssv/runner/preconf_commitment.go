@@ -184,7 +184,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 	}
 
 	logger = logger.With(
-		zap.String("preconf_commitment_runner", "process pre-consensus message"),
+		zap.String("preconf-commitment runner", "processing pre-consensus message"),
 		zap.String("root", hexutil.Encode(root[:])),
 	)
 
