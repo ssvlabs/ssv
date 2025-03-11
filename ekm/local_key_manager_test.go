@@ -278,17 +278,25 @@ func TestSlashing(t *testing.T) {
 
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
-			attestationData, phase0.Domain{}, phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), currentSlot, spectypes.DomainAttester)
+			attestationData,
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainAttester)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
 	})
-	t.Run("slashable sign, fail", func(t *testing.T) {
+	t.Run("slashable sign, fail (attestation)", func(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
-			attestationData, phase0.Domain{}, phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), currentSlot, spectypes.DomainAttester)
+			attestationData,
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainAttester)
 		require.EqualError(t, err, "slashable attestation (HighestAttestationVote), not signing")
-		require.Equal(t, [32]byte{}, sig)
+		require.Equal(t, phase0.Root{}, sig)
 
 		err = km.(*LocalKeyManager).IsAttestationSlashable(phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), attestationData)
 		require.EqualError(t, err, "slashable attestation (HighestAttestationVote), not signing")
@@ -309,12 +317,16 @@ func TestSlashing(t *testing.T) {
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
 	})
-	t.Run("slashable sign, fail", func(t *testing.T) {
+	t.Run("slashable sign, fail (proposal)", func(t *testing.T) {
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
-			beaconBlock, phase0.Domain{}, phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), currentSlot, spectypes.DomainProposer)
+			beaconBlock,
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
-		require.Equal(t, [32]byte{}, sig)
+		require.Equal(t, phase0.Root{}, sig)
 
 		err = km.(*LocalKeyManager).IsBeaconBlockSlashable(phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), beaconBlock.Slot)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
@@ -323,9 +335,13 @@ func TestSlashing(t *testing.T) {
 		require.NoError(t, km.AddShare(encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
-			beaconBlock, phase0.Domain{}, phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), currentSlot, spectypes.DomainProposer)
+			beaconBlock,
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
-		require.Equal(t, [32]byte{}, sig)
+		require.Equal(t, phase0.Root{}, sig)
 	})
 }
 
@@ -558,7 +574,11 @@ func TestSignBeaconObject(t *testing.T) {
 		}
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
-			data, phase0.Domain{}, phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), currentSlot, spectypes.DomainSyncCommitteeSelectionProof)
+			data,
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainSyncCommitteeSelectionProof)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -591,7 +611,11 @@ func TestSignBeaconObject(t *testing.T) {
 		}
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
-			data, phase0.Domain{}, phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), currentSlot, spectypes.DomainContributionAndProof)
+			data,
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainContributionAndProof)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -612,7 +636,11 @@ func TestSignBeaconObject(t *testing.T) {
 		}
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
-			data, phase0.Domain{}, phase0.BLSPubKey(sk1.GetPublicKey().Serialize()), currentSlot, spectypes.DomainApplicationBuilder)
+			data,
+			phase0.Domain{},
+			phase0.BLSPubKey(sk1.GetPublicKey().Serialize()),
+			currentSlot,
+			spectypes.DomainApplicationBuilder)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)

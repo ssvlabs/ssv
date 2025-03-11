@@ -335,12 +335,16 @@ func TestSetupValidators(t *testing.T) {
 		operators[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
+	shareKey, err := createKey()
+	require.NoError(t, err)
+
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorIndex: 1,
 			// OperatorID:      2,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+			SharePubKey:     shareKey,
 		},
 		Status:          3, // ValidatorStateActiveOngoing
 		ActivationEpoch: passedEpoch,
@@ -351,6 +355,7 @@ func TestSetupValidators(t *testing.T) {
 			// OperatorID:      2,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+			SharePubKey:     shareKey,
 		},
 		OwnerAddress: common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 	}

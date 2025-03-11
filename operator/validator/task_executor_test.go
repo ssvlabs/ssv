@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 func TestController_LiquidateCluster(t *testing.T) {
@@ -177,6 +178,11 @@ func TestController_ReactivateCluster(t *testing.T) {
 	require.NoError(t, secretKey.SetHexString(sk1Str))
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
+	shares1, err := threshold.Create(secretKey.Serialize(), 3, 4)
+	require.NoError(t, err)
+	shares2, err := threshold.Create(secretKey2.Serialize(), 3, 4)
+	require.NoError(t, err)
+
 	operatorPrivKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
@@ -234,6 +240,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorIndex:  1,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
+				SharePubKey:     shares1[1].GetPublicKey().Serialize(),
 			},
 			Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
 			ActivationEpoch: 1,
@@ -242,6 +249,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorIndex:  1,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
+				SharePubKey:     shares2[1].GetPublicKey().Serialize(),
 			},
 			Status:          v1.ValidatorStateActiveOngoing, // ValidatorStateUnknown
 			ActivationEpoch: 1,

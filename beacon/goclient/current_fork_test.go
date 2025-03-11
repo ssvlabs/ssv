@@ -3,7 +3,6 @@ package goclient
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -24,7 +23,6 @@ func TestCurrentFork(t *testing.T) {
 	ctx := context.Background()
 
 	network := beacon.NewNetwork(types.MainNetwork)
-	currentEpoch := network.EstimatedCurrentEpoch()
 
 	t.Run("success", func(t *testing.T) {
 		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
@@ -34,17 +32,17 @@ func TestCurrentFork(t *testing.T) {
 						{
 							"previous_version": "0x00010203",
 							"current_version": "0x04050607",
-							"epoch": "` + fmt.Sprint(currentEpoch-100) + `"
+							"epoch": "100"
 						},
 						{
 							"previous_version": "0x04050607",
 							"current_version": "0x08090a0b",
-							"epoch": "` + fmt.Sprint(currentEpoch-50) + `"
+							"epoch": "150"
 						},
 						{
 							"previous_version": "0x08090a0b",
 							"current_version": "0x0c0d0e0f",
-							"epoch": "` + fmt.Sprint(currentEpoch+100) + `"
+							"epoch": "300"
 						}
 					]
 				}`), nil
@@ -67,11 +65,11 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		currentFork, err := client.ForkAtSlot(ctx, 0)
+		currentFork, err := client.ForkAtSlot(ctx, phase0.Slot(network.SlotsPerEpoch())*200)
 		require.NoError(t, err)
 		require.NotNil(t, currentFork)
 
-		require.Equal(t, currentEpoch-50, currentFork.Epoch)
+		require.EqualValues(t, 150, currentFork.Epoch)
 		require.Equal(t, phase0.Version{0x04, 0x05, 0x06, 0x07}, currentFork.PreviousVersion)
 		require.Equal(t, phase0.Version{0x08, 0x09, 0x0a, 0x0b}, currentFork.CurrentVersion)
 	})
@@ -99,7 +97,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.ForkAtSlot(ctx, 0)
+		_, err = client.ForkAtSlot(ctx, 1)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "fork schedule response data is nil")
 	})
@@ -112,12 +110,12 @@ func TestCurrentFork(t *testing.T) {
 						{
 							"previous_version": "0x00010203",
 							"current_version": "0x04050607",
-							"epoch": "` + fmt.Sprint(currentEpoch+100) + `"
+							"epoch": "200"
 						},
 						{
 							"previous_version": "0x04050607",
 							"current_version": "0x08090a0b",
-							"epoch": "` + fmt.Sprint(currentEpoch+200) + `"
+							"epoch": "300"
 						}
 					]
 				}`), nil
@@ -140,8 +138,8 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.ForkAtSlot(ctx, 0)
+		_, err = client.ForkAtSlot(ctx, phase0.Slot(network.SlotsPerEpoch())*100)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "could not find current fork")
+		require.Contains(t, err.Error(), "could not find fork at epoch 100")
 	})
 }
