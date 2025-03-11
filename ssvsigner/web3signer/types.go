@@ -3,6 +3,7 @@ package web3signer
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
@@ -107,8 +108,12 @@ type AggregateAndProof struct {
 }
 
 func (ap *AggregateAndProof) MarshalJSON() ([]byte, error) {
-	if ap == nil {
+	if ap == nil || ap.Phase0 == nil && ap.Electra == nil {
 		return json.Marshal(nil)
+	}
+
+	if ap.Phase0 != nil && ap.Electra != nil {
+		return nil, fmt.Errorf("both phase0 and electra cannot be set")
 	}
 
 	if ap.Electra != nil {
