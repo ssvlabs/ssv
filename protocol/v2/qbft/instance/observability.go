@@ -46,8 +46,8 @@ var (
 	roundChangesCounter = observability.NewMetric(
 		meter.Int64Counter(
 			metricName("round.changes"),
-			metric.WithUnit("1"),
-			metric.WithDescription("Number of round changes with their reasons")))
+			metric.WithUnit("{change}"),
+			metric.WithDescription("number of round changes with their reasons")))
 )
 
 func metricName(name string) string {
