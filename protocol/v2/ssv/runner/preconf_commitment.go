@@ -111,6 +111,11 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	root := [32]byte(objectRootRaw)
 	duty := spectypes.PreconfCommitmentDuty(root)
 
+	logger = logger.With(
+		zap.String("preconf-commitment runner", "starting duty"),
+		zap.String("root", hexutil.Encode(root[:])),
+	)
+
 	cRunner, err := r.childRunner(root, &duty)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get child runner: %w", err)
@@ -156,13 +161,10 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		SSVMessage:  ssvMsg,
 	}
 
-	logger.Debug(
-		"broadcasting preconf-commitment partial sig",
-		zap.String("root", hexutil.Encode(root[:])),
-	)
+	logger.Debug("broadcasting partial sig")
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return nil, fmt.Errorf("failed to broadcast preconf-commitment partial signature: %w", err)
+		return nil, fmt.Errorf("failed to broadcast partial signature: %w", err)
 	}
 
 	return cRunner.result, nil
@@ -178,13 +180,20 @@ func (r *PreconfCommitmentRunner) HasRunningDuty() bool {
 }
 
 func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	// TODO
+	logger = logger.With(
+		zap.String("preconf-commitment runner", "processing pre-consensus message"),
+	)
+	logger.Debug("GOTPARTIALSIG")
+
 	root := signedMsg.Messages[0].SigningRoot
 	if root == [32]byte{} {
 		return fmt.Errorf("pre-consensus message has empty root")
 	}
 
 	logger = logger.With(
-		zap.String("preconf-commitment runner", "processing pre-consensus message"),
+		// TODO
+		//	zap.String("preconf-commitment runner", "processing pre-consensus message"),
 		zap.String("root", hexutil.Encode(root[:])),
 	)
 
