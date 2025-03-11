@@ -5,8 +5,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/network/streams"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/streams"
 )
 
 var _ streams.StreamController = StreamController{}

@@ -4,8 +4,9 @@ import (
 	"encoding/base64"
 	"testing"
 
-	testingspace "github.com/ssvlabs/ssv/utils/rsaencryption/testingspace"
 	"github.com/stretchr/testify/require"
+
+	testingspace "github.com/ssvlabs/ssv/utils/rsaencryption/testingspace"
 )
 
 func TestGenerateKeys(t *testing.T) {

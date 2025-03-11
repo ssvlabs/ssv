@@ -5,11 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	"go.opentelemetry.io/otel/attribute"
-
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (

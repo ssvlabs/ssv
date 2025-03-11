@@ -4,12 +4,10 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
 	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 type SignatureVerifier struct {

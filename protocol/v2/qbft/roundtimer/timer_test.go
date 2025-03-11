@@ -11,9 +11,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer/mocks"
 	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
+
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer/mocks"
 )
 
 func TestTimeoutForRound(t *testing.T) {

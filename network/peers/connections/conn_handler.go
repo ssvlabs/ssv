@@ -2,8 +2,6 @@ package connections
 
 import (
 	"context"
-	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/utils/ttl"
 	"sync"
 	"time"
 
@@ -11,11 +9,14 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
