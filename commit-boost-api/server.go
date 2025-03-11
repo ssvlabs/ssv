@@ -28,7 +28,7 @@ func New(
 	r := router.New()
 
 	server := &Server{
-		logger:    logger,
+		logger:    logger.Named("commit-boost API"),
 		router:    r,
 		vProvider: vProvider,
 	}
@@ -44,7 +44,7 @@ func New(
 }
 
 func (s *Server) Run(addr string) error {
-	s.logger.Info("commit-boost API is starting listening for connections", zap.String("addr", addr))
+	s.logger.Info("starting listening for connections", zap.String("addr", addr))
 
 	err := fasthttp.ListenAndServe(addr, s.router.Handler)
 	if err != nil {
@@ -86,7 +86,7 @@ func (s *Server) handleRequestSignature(ctx *fasthttp.RequestCtx) {
 	}
 	pubkeyDecoded, err := hex.DecodeString(req.ValidatorPubKeyHex)
 	if err != nil {
-		err = fmt.Errorf("decode pubkey: %s", req.ValidatorPubKeyHex)
+		err = fmt.Errorf("decode pubkey: %s, %w", req.ValidatorPubKeyHex, err)
 		s.writeJSONErr(ctx, fasthttp.StatusBadRequest, err)
 		return
 	}
