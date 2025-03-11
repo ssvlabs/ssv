@@ -176,7 +176,10 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	}
 	close(cRunner.initialized)
 
-	logger.Debug("broadcasting partial sig")
+	logger.Debug(
+		"broadcasting partial sig",
+		zap.String("signing_root", hexutil.Encode(signingRoot[:])),
+	)
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return nil, fmt.Errorf("failed to broadcast partial signature: %w", err)
 	}
@@ -194,18 +197,18 @@ func (r *PreconfCommitmentRunner) HasRunningDuty() bool {
 }
 
 func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	root := signedMsg.Messages[0].SigningRoot
-	if root == [32]byte{} {
+	signingRoot := signedMsg.Messages[0].SigningRoot
+	if signingRoot == [32]byte{} {
 		return fmt.Errorf("pre-consensus message has empty root")
 	}
 
 	logger = logger.With(
 		zap.String("preconf-commitment runner", "processing pre-consensus message"),
-		zap.String("root", hexutil.Encode(root[:])),
+		zap.String("signing_root", hexutil.Encode(signingRoot[:])),
 	)
 
-	duty := spectypes.PreconfCommitmentDuty(root)
-	cRunner, err := r.childRunner(root, &duty)
+	duty := spectypes.PreconfCommitmentDuty(signingRoot)
+	cRunner, err := r.childRunner(signingRoot, &duty)
 	if err != nil {
 		return fmt.Errorf("failed to get child runner: %w", err)
 	}
@@ -249,18 +252,18 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 			logger.Error("pre-consensus message has more than one root", zap.Int("roots", len(roots)))
 			return
 		}
-		if roots[0] != root {
+		if roots[0] != signingRoot {
 			logger.Error(fmt.Sprintf(
 				"base runner extracted root %s that doesn't match pre-consensus message root %s",
 				hexutil.Encode(roots[0][:]),
-				hexutil.Encode(root[:]),
+				hexutil.Encode(signingRoot[:]),
 			))
 			return
 		}
 
 		fullSig, err := cRunner.State.ReconstructBeaconSig(
 			cRunner.State.PreConsensusContainer,
-			root,
+			signingRoot,
 			r.share.ValidatorPubKey[:],
 			r.share.ValidatorIndex,
 		)
@@ -268,7 +271,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			cRunner.FallBackAndVerifyEachSignature(
 				cRunner.State.PreConsensusContainer,
-				root,
+				signingRoot,
 				r.share.Committee,
 				r.share.ValidatorIndex,
 			)
