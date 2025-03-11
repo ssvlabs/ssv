@@ -122,7 +122,7 @@ func (s *Server) handleRequestSignature(ctx *fasthttp.RequestCtx) {
 		commitmentSigHex := hexutil.Encode(result.Success.CommitmentSignature)
 		s.writeJSON(ctx, fasthttp.StatusOK, commitmentSigHex)
 		return
-	case <-time.After(12 * time.Second): // TODO - what timeout should we use ?
+	case <-time.After(60 * time.Second): // TODO - what timeout should we use ?
 		err = fmt.Errorf("timed out waiting for preconf-commitment duty to finish")
 		s.writeJSONErr(ctx, fasthttp.StatusInternalServerError, err)
 		return
