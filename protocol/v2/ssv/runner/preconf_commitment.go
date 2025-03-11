@@ -166,16 +166,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		SSVMessage:  ssvMsg,
 	}
 
-	// TODO - which one it is ?
-	//signingRoot, err := msg.GetRoot()
-	//signingRoot, err := msgs.GetRoot()
-	//signingRoot, err := msgToBroadcast.GetRoot()
 	signingRoot := msg.SigningRoot
-	//signingRoot, err := ssvMsg.HashTreeRoot()
-	//signingRoot, err := duty.HashTreeRoot()
-	//if err != nil {
-	//	return nil, fmt.Errorf("compute signing root: %w", err)
-	//}
 	cRunner, err := r.childRunner(signingRoot, &duty)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get child runner: %w", err)
@@ -409,6 +400,8 @@ func (r *PreconfCommitmentRunner) GetRoot() ([32]byte, error) {
 	return [32]byte{}, fmt.Errorf("not implemented")
 }
 
+// childRunner creates a child runner (or returns one if it already exists) for the provided signingRoot
+// (which is a root of a message that contains preconf object + signing domain)
 func (r *PreconfCommitmentRunner) childRunner(signingRoot [32]byte, duty *spectypes.PreconfCommitmentDuty) (*pcRunner, error) {
 	result, err, _ := r.childRunnersInflight.Do(signingRoot, func() (*pcRunner, error) {
 		item := r.childRunners.Get(signingRoot)
