@@ -1,10 +1,10 @@
 package cbapi
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/fasthttp/router"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
@@ -84,7 +84,7 @@ func (s *Server) handleRequestSignature(ctx *fasthttp.RequestCtx) {
 		s.writeJSONErr(ctx, fasthttp.StatusBadRequest, err)
 		return
 	}
-	pubkeyDecoded, err := hex.DecodeString(req.ValidatorPubKeyHex)
+	pubkeyDecoded, err := hexutil.Decode(req.ValidatorPubKeyHex)
 	if err != nil {
 		err = fmt.Errorf("decode pubkey: %s, %w", req.ValidatorPubKeyHex, err)
 		s.writeJSONErr(ctx, fasthttp.StatusBadRequest, err)
@@ -119,7 +119,7 @@ func (s *Server) handleRequestSignature(ctx *fasthttp.RequestCtx) {
 			s.writeJSONErr(ctx, fasthttp.StatusInternalServerError, result.Err)
 			return
 		}
-		commitmentSigHex := hex.EncodeToString(result.Success.CommitmentSignature)
+		commitmentSigHex := hexutil.Encode(result.Success.CommitmentSignature)
 		s.writeJSON(ctx, fasthttp.StatusOK, commitmentSigHex)
 		return
 	case <-time.After(12 * time.Second): // TODO - what timeout should we use ?

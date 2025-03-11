@@ -2,9 +2,9 @@ package runner
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
@@ -100,7 +100,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	validatorIndex phase0.ValidatorIndex,
 	objectRootHex string,
 ) (chan PreconfCommitmentResult, error) {
-	objectRootRaw, err := hex.DecodeString(objectRootHex)
+	objectRootRaw, err := hexutil.Decode(objectRootHex)
 	if err != nil {
 		return nil, fmt.Errorf("decode objectRootHex: %s, error: %w", objectRootHex, err)
 	}
@@ -158,7 +158,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 
 	logger.Debug(
 		"broadcasting preconf-commitment partial sig",
-		zap.String("root", hex.EncodeToString(root[:])),
+		zap.String("root", hexutil.Encode(root[:])),
 	)
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
@@ -185,7 +185,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 
 	logger = logger.With(
 		zap.String("preconf_commitment_runner", "process pre-consensus message"),
-		zap.String("root", hex.EncodeToString(root[:])),
+		zap.String("root", hexutil.Encode(root[:])),
 	)
 
 	duty := spectypes.PreconfCommitmentDuty(root)
@@ -239,8 +239,8 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 			cRunner.result <- PreconfCommitmentResult{
 				Err: fmt.Errorf(
 					"base runner extracted root %s that doesn't match pre-consensus message root %s",
-					hex.EncodeToString(roots[0][:]),
-					hex.EncodeToString(root[:]),
+					hexutil.Encode(roots[0][:]),
+					hexutil.Encode(root[:]),
 				),
 			}
 			return
@@ -267,7 +267,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 
 		logger.Debug(
 			"preconf-commitment was signed successfully",
-			zap.String("signature", hex.EncodeToString(fullSig)),
+			zap.String("signature", hexutil.Encode(fullSig)),
 		)
 		cRunner.State.Finished = true
 		cRunner.result <- PreconfCommitmentResult{
