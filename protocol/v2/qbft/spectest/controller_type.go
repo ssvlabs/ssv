@@ -11,14 +11,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"

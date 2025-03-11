@@ -2,11 +2,10 @@ package validation
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"

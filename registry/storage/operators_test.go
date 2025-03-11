@@ -5,10 +5,9 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/registry/storage"

@@ -9,9 +9,8 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"

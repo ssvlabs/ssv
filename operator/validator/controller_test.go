@@ -16,12 +16,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"

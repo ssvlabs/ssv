@@ -10,9 +10,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"

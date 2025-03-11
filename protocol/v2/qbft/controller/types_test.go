@@ -5,9 +5,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )

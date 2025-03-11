@@ -6,11 +6,10 @@ import (
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"

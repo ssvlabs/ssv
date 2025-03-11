@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 

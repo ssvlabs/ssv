@@ -8,12 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"

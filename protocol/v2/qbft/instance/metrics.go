@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/metric"
-
 	"github.com/ssvlabs/ssv-spec/qbft"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
 )

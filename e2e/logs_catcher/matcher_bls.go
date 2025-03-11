@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/logs"

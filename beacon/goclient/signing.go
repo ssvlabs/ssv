@@ -13,9 +13,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 )
 
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {

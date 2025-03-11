@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )

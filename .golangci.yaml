@@ -46,7 +46,6 @@ linters-settings:
       - blank
       - dot
       - localmodule
-      - prefix(github.com/ssvlabs/ssv-spec)
     # various configuration options are listed here: https://golangci-lint.run/usage/linters/#gci
     skip-generated: true
   dogsled:

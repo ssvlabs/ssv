@@ -14,10 +14,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ibft/storage"

@@ -6,9 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"

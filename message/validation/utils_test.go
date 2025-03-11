@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMessageValidator_maxRound(t *testing.T) {

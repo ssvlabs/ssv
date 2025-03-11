@@ -8,9 +8,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"

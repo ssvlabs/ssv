@@ -8,9 +8,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"

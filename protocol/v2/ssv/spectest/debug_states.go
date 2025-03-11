@@ -7,9 +7,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/stretchr/testify/require"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 )
 
 var (

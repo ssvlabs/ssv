@@ -8,9 +8,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"

@@ -7,9 +7,8 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"golang.org/x/exp/maps"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )

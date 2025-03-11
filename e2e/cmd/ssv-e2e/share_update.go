@@ -9,10 +9,9 @@ import (
 	"path/filepath"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
-
-	"github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/e2e/logs_catcher"
 	"github.com/ssvlabs/ssv/ekm"

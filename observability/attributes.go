@@ -6,10 +6,9 @@ import (
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
-	"go.opentelemetry.io/otel/attribute"
-
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (

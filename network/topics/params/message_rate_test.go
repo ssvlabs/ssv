@@ -4,9 +4,8 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/stretchr/testify/require"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"

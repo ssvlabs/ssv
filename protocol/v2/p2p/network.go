@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv-spec/p2p"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 )
 
 var (

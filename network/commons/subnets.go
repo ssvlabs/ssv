@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/prysmaticlabs/go-bitfield"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 

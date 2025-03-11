@@ -4,9 +4,8 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 )

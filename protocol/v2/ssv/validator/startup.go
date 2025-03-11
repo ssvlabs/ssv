@@ -4,10 +4,9 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"

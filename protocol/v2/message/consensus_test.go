@@ -5,10 +5,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"

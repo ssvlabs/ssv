@@ -3,9 +3,8 @@ package format
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDomainTypeFromString(t *testing.T) {

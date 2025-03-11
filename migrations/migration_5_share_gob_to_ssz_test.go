@@ -5,9 +5,8 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
-
 	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )

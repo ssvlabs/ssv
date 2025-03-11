@@ -4,9 +4,8 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/stretchr/testify/require"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNetwork_GetSlotEndTime(t *testing.T) {

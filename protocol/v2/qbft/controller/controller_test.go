@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"

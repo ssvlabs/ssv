@@ -20,10 +20,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"

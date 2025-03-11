@@ -4,9 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"

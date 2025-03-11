@@ -7,11 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"

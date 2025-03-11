@@ -19,12 +19,11 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"

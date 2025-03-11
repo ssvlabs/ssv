@@ -18,11 +18,10 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	"go.uber.org/zap"
-	"tailscale.com/util/singleflight"
-
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
