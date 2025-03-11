@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"time"
@@ -11,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
-	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
@@ -137,45 +137,37 @@ func (imt *InMemTracer) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes
 	return deepCopyCommitteeDutyTrace(&trace.CommitteeDutyTrace), nil
 }
 
-func (imt *InMemTracer) GetCommitteeDecideds(slot phase0.Slot, pubkeys []spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
-	for _, pubkey := range pubkeys {
-
-		// use GetValidatorIndicesByPubkeys here?
-
-		index, found := imt.validators.ValidatorIndex(pubkey)
-		if !found {
-			imt.logger.Error("-committee decideds- validator not found", fields.Validator(pubkey[:]))
-			continue
-		}
-
-		committeeID, err := imt.getCommitteeIDBySlotAndIndex(slot, index)
-		if err != nil {
-			imt.logger.Error("-committee decideds- getCommitteeIDBySlotAndIndex", zap.Error(err))
-			return nil, err
-		}
-
-		imt.logger.Error("-committee decideds- got committee ID", fields.CommitteeID(committeeID))
-
-		duty, err := imt.GetCommitteeDuty(slot, committeeID)
-		if err != nil {
-			imt.logger.Error("-committee decideds- GetCommitteeDuty", zap.Error(err))
-			return nil, err
-		}
-
-		var signers []spectypes.OperatorID
-		// TODO(matheus) is this correct?
-		for _, d := range duty.Decideds {
-			signers = append(signers, d.Signers...)
-		}
-
-		out = append(out, qbftstorage.ParticipantsRangeEntry{
-			Slot:    slot,
-			PubKey:  pubkey,
-			Signers: slices.Compact(signers),
-		})
+func (imt *InMemTracer) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+	index, found := imt.validators.ValidatorIndex(pubkey)
+	if !found {
+		return nil, fmt.Errorf("validator not found: %s", hex.EncodeToString(pubkey[:]))
 	}
 
-	return
+	committeeID, err := imt.getCommitteeIDBySlotAndIndex(slot, index)
+	if err != nil {
+		return nil, fmt.Errorf("get committee ID by slot(%d) and index(%d): %w", slot, index, err)
+	}
+
+	duty, err := imt.GetCommitteeDuty(slot, committeeID)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duty: %w", err)
+	}
+
+	var signers []spectypes.OperatorID
+	// TODO(matheus) is this correct?
+	for _, d := range duty.Decideds {
+		signers = append(signers, d.Signers...)
+	}
+
+	slices.Sort(signers)
+
+	out = append(out, qbftstorage.ParticipantsRangeEntry{
+		Slot:    slot,
+		PubKey:  pubkey,
+		Signers: slices.Compact(signers),
+	})
+
+	return out, nil
 }
 
 func (imt *InMemTracer) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
@@ -191,10 +183,12 @@ func (imt *InMemTracer) GetValidatorDecideds(role spectypes.BeaconRole, slot pha
 			signers = append(signers, d.Signers...)
 		}
 
+		slices.Sort(signers)
+
 		out = append(out, qbftstorage.ParticipantsRangeEntry{
 			Slot:    slot,
 			PubKey:  duty.pubkey,
-			Signers: signers,
+			Signers: slices.Compact(signers),
 		})
 	}
 

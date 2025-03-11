@@ -4,15 +4,34 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	store "github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
+
+func TestSaveCommitteeDutyLink(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := store.New(db)
+
+	cmdID := spectypes.CommitteeID{1, 2, 3}
+
+	require.NoError(t, store.SaveCommitteeDutyLink(phase0.Slot(1), phase0.ValidatorIndex(39393), cmdID))
+
+	gotID, err := store.GetCommitteeDutyLink(phase0.Slot(1), phase0.ValidatorIndex(39393))
+	require.NoError(t, err)
+	assert.Equal(t, cmdID, gotID)
+}
 
 func TestSaveCommitteeDutyTrace(t *testing.T) {
 	logger := zap.NewNop()
