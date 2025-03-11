@@ -170,11 +170,12 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	//signingRoot, err := msg.GetRoot()
 	//signingRoot, err := msgs.GetRoot()
 	//signingRoot, err := msgToBroadcast.GetRoot()
-	signingRoot, err := ssvMsg.HashTreeRoot()
+	signingRoot := msg.SigningRoot
+	//signingRoot, err := ssvMsg.HashTreeRoot()
 	//signingRoot, err := duty.HashTreeRoot()
-	if err != nil {
-		return nil, fmt.Errorf("compute signing root: %w", err)
-	}
+	//if err != nil {
+	//	return nil, fmt.Errorf("compute signing root: %w", err)
+	//}
 	cRunner, err := r.childRunner(signingRoot, &duty)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get child runner: %w", err)
