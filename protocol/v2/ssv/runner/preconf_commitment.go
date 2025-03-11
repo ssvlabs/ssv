@@ -167,8 +167,10 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	}
 
 	// TODO - which one it is ?
-	signingRoot, err := msgs.GetRoot()
-	//signingRoot, err := msgToBroadcast.GetRoot()
+	//signingRoot, err := msg.GetRoot()
+	//signingRoot, err := msgs.GetRoot()
+	signingRoot, err := msgToBroadcast.GetRoot()
+	//signingRoot, err := duty.HashTreeRoot()
 	if err != nil {
 		return nil, err
 	}
