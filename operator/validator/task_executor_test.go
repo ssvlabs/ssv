@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -146,12 +145,16 @@ func TestController_StopValidator(t *testing.T) {
 	root, err := signable{}.GetRoot()
 	require.NoError(t, err)
 
-	obj := ekm.BlockRootWithSlot{
-		BlockRoot: root,
-		Slot:      1,
-	}
+	slot := phase0.Slot(1)
 
-	_, _, err = signer.SignBeaconObject(obj, d, secretKey.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)
+	_, _, err = signer.SignBeaconObject(
+		context.Background(),
+		spectypes.SSZBytes(root[:]),
+		d,
+		phase0.BLSPubKey(secretKey.GetPublicKey().Serialize()),
+		slot,
+		spectypes.DomainSyncCommittee,
+	)
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 1)
@@ -213,12 +216,16 @@ func TestController_ReactivateCluster(t *testing.T) {
 	root, err := signable{}.GetRoot()
 	require.NoError(t, err)
 
-	obj := ekm.BlockRootWithSlot{
-		BlockRoot: root,
-		Slot:      1,
-	}
+	slot := phase0.Slot(1)
 
-	_, _, err = signer.SignBeaconObject(obj, d, secretKey.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)
+	_, _, err = signer.SignBeaconObject(
+		context.Background(),
+		spectypes.SSZBytes(root[:]),
+		d,
+		phase0.BLSPubKey(secretKey.GetPublicKey().Serialize()),
+		slot,
+		spectypes.DomainSyncCommittee,
+	)
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)

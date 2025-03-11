@@ -5,7 +5,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/ssvlabs/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type BeaconSigner interface {
@@ -17,7 +17,7 @@ type BeaconSigner interface {
 		pk phase0.BLSPubKey,
 		slot phase0.Slot,
 		domainType phase0.DomainType,
-	) (types.Signature, phase0.Root, error)
+	) (spectypes.Signature, phase0.Root, error)
 	// IsAttestationSlashable returns error if attestation is slashable
 	IsAttestationSlashable(pk phase0.BLSPubKey, data *phase0.AttestationData) error
 	// IsBeaconBlockSlashable returns error if the given block is slashable

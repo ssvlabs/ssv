@@ -93,11 +93,11 @@ func NewLocalKeyManager(
 }
 
 func (km *LocalKeyManager) SignBeaconObject(
-	ctx context.Context,
+	_ context.Context,
 	obj ssz.HashRoot,
 	domain phase0.Domain,
 	pk phase0.BLSPubKey,
-	slot phase0.Slot,
+	_ phase0.Slot,
 	domainType phase0.DomainType,
 ) (spectypes.Signature, phase0.Root, error) {
 	sig, rootSlice, err := km.signBeaconObject(obj, domain, pk, domainType)
