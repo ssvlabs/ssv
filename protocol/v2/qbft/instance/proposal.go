@@ -38,7 +38,7 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 	}
 	i.bumpToRound(ctx, newRound)
 
-	i.metrics.EndStage(ctx, proposalStage, newRound)
+	i.metrics.EndStage(ctx, newRound, proposalStage)
 
 	// value root
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)

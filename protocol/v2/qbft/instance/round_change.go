@@ -44,6 +44,8 @@ func (i *Instance) uponRoundChange(
 		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
 	)
 
+	i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, receivedReason)
+
 	logger.Debug("🔄 got round change",
 		fields.Root(msg.QBFTMessage.Root),
 		zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs))
@@ -84,6 +86,8 @@ func (i *Instance) uponRoundChange(
 
 		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happenes in createproposal
 
+		i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, justifiedReason)
+
 		logger.Debug("🔄 got justified round change, broadcasting proposal message",
 			fields.Round(i.State.Round),
 			zap.Any("round_change_signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
@@ -120,6 +124,9 @@ func (i *Instance) uponChangeRoundPartialQuorum(ctx context.Context, logger *zap
 	if err != nil {
 		return errors.Wrap(err, "failed to hash instance start value")
 	}
+
+	i.metrics.RecordRoundChange(ctx, newRound, partialQuorumReason)
+
 	logger.Debug("📢 got partial quorum, broadcasting round change message",
 		fields.Round(i.State.Round),
 		fields.Root(root),

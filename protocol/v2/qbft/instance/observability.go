@@ -23,6 +23,16 @@ const (
 	commitStage   stage = "commit"
 )
 
+// roundChangeReason represents the reason for a round change
+type roundChangeReason string
+
+const (
+	timeoutReason       roundChangeReason = "timeout"
+	partialQuorumReason roundChangeReason = "partial-quorum"
+	receivedReason      roundChangeReason = "received"
+	justifiedReason     roundChangeReason = "justified"
+)
+
 var (
 	meter = otel.Meter(observabilityName)
 
@@ -32,6 +42,12 @@ var (
 			metric.WithUnit("s"),
 			metric.WithDescription("validator stage(proposal, prepare, commit) duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
+
+	roundChangesCounter = observability.NewMetric(
+		meter.Int64Counter(
+			metricName("round.changes"),
+			metric.WithUnit("1"),
+			metric.WithDescription("Number of round changes with their reasons")))
 )
 
 func metricName(name string) string {
@@ -44,4 +60,8 @@ func stageAttribute(stage stage) attribute.KeyValue {
 
 func roleAttribute(role string) attribute.KeyValue {
 	return attribute.String(observability.RunnerRoleAttrKey, role)
+}
+
+func reasonAttribute(reason roundChangeReason) attribute.KeyValue {
+	return observability.RoundChangeReasonAttribute(string(reason))
 }
