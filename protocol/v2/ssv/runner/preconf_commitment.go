@@ -24,10 +24,7 @@ const (
 )
 
 type PreconfCommitmentResult struct {
-	Success struct {
-		CommitmentSignature []byte
-	}
-	Err error
+	CommitmentSignature []byte
 }
 
 // pcRunner wraps BaseRunner providing means of
@@ -184,20 +181,13 @@ func (r *PreconfCommitmentRunner) HasRunningDuty() bool {
 }
 
 func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	// TODO
-	logger = logger.With(
-		zap.String("preconf-commitment runner", "processing pre-consensus message"),
-	)
-	logger.Debug("GOTPARTIALSIG")
-
 	root := signedMsg.Messages[0].SigningRoot
 	if root == [32]byte{} {
 		return fmt.Errorf("pre-consensus message has empty root")
 	}
 
 	logger = logger.With(
-		// TODO
-		//	zap.String("preconf-commitment runner", "processing pre-consensus message"),
+		zap.String("preconf-commitment runner", "processing pre-consensus message"),
 		zap.String("root", hexutil.Encode(root[:])),
 	)
 
@@ -226,9 +216,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 
 		quorum, roots, err := cRunner.basePreConsensusMsgProcessing(r, signedMsg)
 		if err != nil {
-			cRunner.result <- PreconfCommitmentResult{
-				Err: fmt.Errorf("basePreConsensusMsgProcessing: %w", err),
-			}
+			logger.Error("basePreConsensusMsgProcessing failed", zap.Error(err))
 			return
 		}
 
@@ -245,19 +233,15 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 
 		// sanity checks
 		if len(roots) != 1 {
-			cRunner.result <- PreconfCommitmentResult{
-				Err: fmt.Errorf("pre-consensus message has more than one root (%d)", len(roots)),
-			}
+			logger.Error("pre-consensus message has more than one root", zap.Int("roots", len(roots)))
 			return
 		}
 		if roots[0] != root {
-			cRunner.result <- PreconfCommitmentResult{
-				Err: fmt.Errorf(
-					"base runner extracted root %s that doesn't match pre-consensus message root %s",
-					hexutil.Encode(roots[0][:]),
-					hexutil.Encode(root[:]),
-				),
-			}
+			logger.Error(fmt.Sprintf(
+				"base runner extracted root %s that doesn't match pre-consensus message root %s",
+				hexutil.Encode(roots[0][:]),
+				hexutil.Encode(root[:]),
+			))
 			return
 		}
 
@@ -275,9 +259,8 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 				r.share.Committee,
 				r.share.ValidatorIndex,
 			)
-			cRunner.result <- PreconfCommitmentResult{
-				Err: fmt.Errorf("got pre-consensus quorum but it has invalid signatures: %w", err),
-			}
+			logger.Error("got pre-consensus quorum but it has invalid signatures", zap.Error(err))
+			return
 		}
 
 		logger.Debug(
@@ -286,7 +269,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 		)
 		cRunner.State.Finished = true
 		cRunner.result <- PreconfCommitmentResult{
-			Success: struct{ CommitmentSignature []byte }{CommitmentSignature: fullSig},
+			CommitmentSignature: fullSig,
 		}
 	}()
 

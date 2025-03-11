@@ -115,11 +115,7 @@ func (s *Server) handleRequestSignature(ctx *fasthttp.RequestCtx) {
 
 	select {
 	case result := <-resultCh:
-		if result.Err != nil {
-			s.writeJSONErr(ctx, fasthttp.StatusInternalServerError, result.Err)
-			return
-		}
-		commitmentSigHex := hexutil.Encode(result.Success.CommitmentSignature)
+		commitmentSigHex := hexutil.Encode(result.CommitmentSignature)
 		s.writeJSON(ctx, fasthttp.StatusOK, commitmentSigHex)
 		return
 	case <-time.After(60 * time.Second): // TODO - what timeout should we use ?
