@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -22,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -315,7 +315,7 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 			Status:          v1.ValidatorStateActiveOngoing,
 			Index:           3,
 			ActivationEpoch: 5,
-			ExitEpoch:       math.MaxUint64,
+			ExitEpoch:       goclient.FarFutureEpoch,
 		}
 
 		// Update the share with new metadata
@@ -628,7 +628,7 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 		},
 		Status:          v1.ValidatorStateActiveOngoing,
 		ActivationEpoch: 4,
-		ExitEpoch:       math.MaxUint64,
+		ExitEpoch:       goclient.FarFutureEpoch,
 		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 		Liquidated:      false,
 	}

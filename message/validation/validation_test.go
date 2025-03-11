@@ -21,6 +21,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -1812,7 +1813,7 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 
 	slot := netCfg.Beacon.EstimatedCurrentSlot()
 	activationEpoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
-	exitEpoch := phase0.Epoch(math.MaxUint64)
+	exitEpoch := goclient.FarFutureEpoch
 
 	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
 		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
