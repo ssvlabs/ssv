@@ -123,7 +123,6 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get child runner: %w", err)
 	}
-	defer close(cRunner.initialized)
 
 	// commit-boost uses DomainApplicationBuilder domain for signing, see this doc for details
 	// https://github.com/Commit-Boost/commit-boost-client/blob/c5a16eec53b7e6ce0ee5c18295565f1a0aa6e389/docs/docs/developing/commit-module.md#requesting-signatures
@@ -171,6 +170,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		return nil, fmt.Errorf("failed to broadcast partial signature: %w", err)
 	}
 
+	close(cRunner.initialized)
 	return cRunner.result, nil
 }
 
@@ -212,8 +212,10 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 		case <-time.After(childRunnerInitializationTimeout):
 			// looks like this child-runner won't be initialized, terminating here to release
 			// resources
+			logger.Debug("timed out waiting for child runner to be initialized")
 			return
 		case <-ctx.Done():
+			logger.Debug("context canceled waiting for child runner to be initialized")
 			return
 		}
 
