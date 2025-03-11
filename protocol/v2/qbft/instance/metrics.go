@@ -24,34 +24,12 @@ func (m *metrics) StartStage() {
 	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStageProposal(ctx context.Context, round qbft.Round) {
+func (m *metrics) EndStage(ctx context.Context, s stage, round qbft.Round) {
 	validatorStageDurationHistogram.Record(
 		ctx,
 		time.Since(m.stageStart).Seconds(),
 		metric.WithAttributes(
-			stageAttribute(proposalStage),
-			roleAttribute(m.role),
-			observability.DutyRoundAttribute(round)))
-	m.stageStart = time.Now()
-}
-
-func (m *metrics) EndStagePrepare(ctx context.Context, round qbft.Round) {
-	validatorStageDurationHistogram.Record(
-		ctx,
-		time.Since(m.stageStart).Seconds(),
-		metric.WithAttributes(
-			stageAttribute(prepareStage),
-			roleAttribute(m.role),
-			observability.DutyRoundAttribute(round)))
-	m.stageStart = time.Now()
-}
-
-func (m *metrics) EndStageCommit(ctx context.Context, round qbft.Round) {
-	validatorStageDurationHistogram.Record(
-		ctx,
-		time.Since(m.stageStart).Seconds(),
-		metric.WithAttributes(
-			stageAttribute(commitStage),
+			stageAttribute(s),
 			roleAttribute(m.role),
 			observability.DutyRoundAttribute(round)))
 	m.stageStart = time.Now()
