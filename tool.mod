@@ -1,4 +1,4 @@
-module github.com/anatollupacescu/llm
+module github.com/ssvlabs/ssv
 
 go 1.24
 
