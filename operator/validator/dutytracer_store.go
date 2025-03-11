@@ -24,79 +24,57 @@ type ValidatorDutyTrace struct {
 	pubkey spectypes.ValidatorPK
 }
 
-func (a *InMemTracer) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) (out []*ValidatorDutyTrace, err error) {
-	out = make([]*ValidatorDutyTrace, 0, len(pubkeys))
-
-	var diskPubkeys []spectypes.ValidatorPK
-
+func (a *InMemTracer) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	// lookup in cache
-	for _, pubkey := range pubkeys {
-		validatorSlots, found := a.validatorTraces.Load(pubkey)
-		if !found {
-			// should only happen if we request a validator duty right after startup
-			return nil, errors.New("validator not found")
-		}
+	validatorSlots, found := a.validatorTraces.Load(pubkey)
+	if !found {
+		// should only happen if we request a validator duty right after startup
+		return nil, errors.New("validator not found")
+	}
 
-		traces, found := validatorSlots.Load(slot)
-		if !found {
-			diskPubkeys = append(diskPubkeys, pubkey)
-			continue
-		}
-
+	traces, found := validatorSlots.Load(slot)
+	if found {
 		traces.Lock()
 		defer traces.Unlock()
 
 		// find the trace for the role
 		for _, trace := range traces.Roles {
 			if trace.Role == role {
-				pkTrace := &ValidatorDutyTrace{
+				return &ValidatorDutyTrace{
 					ValidatorDutyTrace: *deepCopyValidatorDutyTrace(trace),
 					pubkey:             pubkey,
-				}
-				out = append(out, pkTrace)
-				found = true
-				break
+				}, nil
 			}
-		}
-
-		if !found {
-			return nil, fmt.Errorf("validator duty not found for role: %s", role)
 		}
 	}
 
 	// go to disk for the older ones
-	for _, pubkey := range diskPubkeys {
-		vIndex, found := a.validators.ValidatorIndex(pubkey)
-		if !found {
-			return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
-		}
-
-		start := time.Now()
-
-		trace, err := a.store.GetValidatorDuty(slot, role, vIndex)
-		if err != nil {
-			return nil, fmt.Errorf("get validator duty from disk: %w", err)
-		}
-
-		duration := time.Since(start)
-		tracerDBDurationHistogram.Record(
-			context.Background(),
-			duration.Seconds(),
-			metric.WithAttributes(
-				semconv.DBCollectionName("validator"),
-				semconv.DBOperationName("get"),
-			),
-		)
-
-		pkTrace := &ValidatorDutyTrace{
-			ValidatorDutyTrace: *trace,
-			pubkey:             pubkey,
-		}
-
-		out = append(out, pkTrace)
+	vIndex, found := a.validators.ValidatorIndex(pubkey)
+	if !found {
+		return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
 	}
 
-	return out, nil
+	start := time.Now()
+
+	trace, err := a.store.GetValidatorDuty(slot, role, vIndex)
+	if err != nil {
+		return nil, fmt.Errorf("get validator duty from disk: %w", err)
+	}
+
+	duration := time.Since(start)
+	tracerDBDurationHistogram.Record(
+		context.Background(),
+		duration.Seconds(),
+		metric.WithAttributes(
+			semconv.DBCollectionName("validator"),
+			semconv.DBOperationName("get"),
+		),
+	)
+
+	return &ValidatorDutyTrace{
+		ValidatorDutyTrace: *trace,
+		pubkey:             pubkey,
+	}, nil
 }
 
 func (imt *InMemTracer) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
@@ -171,12 +149,12 @@ func (imt *InMemTracer) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.
 }
 
 func (imt *InMemTracer) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
-	duties, err := imt.GetValidatorDuties(role, slot, pubkeys)
-	if err != nil {
-		return nil, fmt.Errorf("get validator duties for decideds: %w", err)
-	}
+	for _, pubkey := range pubkeys {
+		duty, err := imt.GetValidatorDuties(role, slot, pubkey)
+		if err != nil {
+			return nil, fmt.Errorf("get validator duties for decideds: %w", err)
+		}
 
-	for _, duty := range duties {
 		var signers []spectypes.OperatorID
 		// TODO(matheus) is this correct? if decideds empty, return err?
 		for _, d := range duty.Decideds {

@@ -45,8 +45,6 @@ func TestValidatorDuty(t *testing.T) {
 	var validatorPK spectypes.ValidatorPK
 	copy(validatorPK[:], identifier.GetDutyExecutorID()[:])
 
-	var pubkeys = []spectypes.ValidatorPK{validatorPK}
-
 	fakeSig := [96]byte{}
 
 	partialSigType := spectypes.VoluntaryExitPartialSig
@@ -70,11 +68,10 @@ func TestValidatorDuty(t *testing.T) {
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
 		tracer.Trace(context.Background(), partSigMsg)
 
-		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
+		duty, err := tracer.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
-		require.Len(t, duties, 1)
+		require.NotNil(t, duty)
 
-		duty := duties[0]
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, bnRole, duty.Role)
 		assert.Equal(t, vIndex, duty.Validator)
@@ -96,12 +93,10 @@ func TestValidatorDuty(t *testing.T) {
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
 		tracer.Trace(context.Background(), partSigMsg)
 
-		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
+		duty, err := tracer.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
-		require.NotNil(t, duties)
-		require.Len(t, duties, 1)
+		require.NotNil(t, duty)
 
-		duty := duties[0]
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, bnRole, duty.Role)
 		assert.Equal(t, vIndex, duty.Validator)
@@ -124,12 +119,10 @@ func TestValidatorDuty(t *testing.T) {
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
 		tracer.Trace(context.Background(), proposalMsg)
 
-		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
+		duty, err := tracer.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
-		require.NotNil(t, duties)
-		require.Len(t, duties, 1)
+		require.NotNil(t, duty)
 
-		duty := duties[0]
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, bnRole, duty.Role)
 		assert.Equal(t, vIndex, duty.Validator)
@@ -174,12 +167,10 @@ func TestValidatorDuty(t *testing.T) {
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
 		tracer.Trace(context.Background(), prepareMsg)
 
-		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
+		duty, err := tracer.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
-		require.NotNil(t, duties)
-		require.Len(t, duties, 1)
+		require.NotNil(t, duty)
 
-		duty := duties[0]
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, bnRole, duty.Role)
 		assert.Equal(t, vIndex, duty.Validator)
@@ -203,12 +194,10 @@ func TestValidatorDuty(t *testing.T) {
 		decidedMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
 		tracer.Trace(context.Background(), decidedMsg)
 
-		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
+		duty, err := tracer.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
-		require.NotNil(t, duties)
-		require.Len(t, duties, 1)
+		require.NotNil(t, duty)
 
-		duty := duties[0]
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, bnRole, duty.Role)
 		assert.Equal(t, vIndex, duty.Validator)
@@ -236,12 +225,10 @@ func TestValidatorDuty(t *testing.T) {
 		commitMsg.SignedSSVMessage.OperatorIDs = nil
 		tracer.Trace(context.Background(), commitMsg)
 
-		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
+		duty, err := tracer.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
-		require.NotNil(t, duties)
-		require.Len(t, duties, 1)
+		require.NotNil(t, duty)
 
-		duty := duties[0]
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, bnRole, duty.Role)
 		assert.Equal(t, vIndex, duty.Validator)
@@ -265,12 +252,10 @@ func TestValidatorDuty(t *testing.T) {
 		roundChangeMsg := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		tracer.Trace(context.Background(), roundChangeMsg)
 
-		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
+		duty, err := tracer.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
-		require.NotNil(t, duties)
-		require.Len(t, duties, 1)
+		require.NotNil(t, duty)
 
-		duty := duties[0]
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, bnRole, duty.Role)
 		assert.Equal(t, vIndex, duty.Validator)
@@ -296,12 +281,10 @@ func TestValidatorDuty(t *testing.T) {
 		roundChangeMsg.Body.(*specqbft.Message).Round = 2
 		tracer.Trace(context.Background(), roundChangeMsg)
 
-		duties, err := tracer.GetValidatorDuties(bnRole, slot, pubkeys)
+		duty, err := tracer.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
-		require.NotNil(t, duties)
-		require.Len(t, duties, 1)
+		require.NotNil(t, duty)
 
-		duty := duties[0]
 		assert.Equal(t, slot, duty.Slot)
 		assert.Equal(t, bnRole, duty.Role)
 		assert.Equal(t, vIndex, duty.Validator)

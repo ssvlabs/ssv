@@ -32,7 +32,7 @@ type Exporter struct {
 }
 
 type DutyTraceStore interface {
-	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) ([]*validator.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*validator.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
@@ -306,12 +306,14 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		slot := phase0.Slot(s)
 		for _, r := range request.Roles {
 			role := spectypes.BeaconRole(r)
-			duties, err := e.TraceStore.GetValidatorDuties(role, slot, pubkeys)
-			if err != nil {
-				// return api.Error(fmt.Errorf("error getting duties: %w", err))
-				continue
+			for _, pubkey := range pubkeys {
+				duty, err := e.TraceStore.GetValidatorDuties(role, slot, pubkey)
+				if err != nil {
+					// return api.Error(fmt.Errorf("error getting duties: %w", err))
+					continue
+				}
+				results = append(results, duty)
 			}
-			results = append(results, duties...)
 		}
 	}
 
