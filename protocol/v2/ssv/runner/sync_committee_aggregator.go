@@ -5,17 +5,21 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -77,13 +81,25 @@ func (r *SyncCommitteeAggregatorRunner) HasRunningDuty() bool {
 }
 
 func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.process_pre_consensus", observabilityNamespace),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(signedMsg.Slot),
+			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
+		))
+	defer span.End()
+
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
-		return errors.Wrap(err, "failed processing sync committee selection proof message")
+		err := errors.Wrap(err, "failed processing sync committee selection proof message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// quorum returns true only once (first time quorum achieved)
-	if !quorum {
+	if !hasQuorum {
+		span.AddEvent("no quorum")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -97,13 +113,16 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	)
 	for i, root := range roots {
 		// reconstruct selection proof sig
+		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.DutyRootAttribute(root)))
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
 				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
-			return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
+			err := errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		blsSigSelectionProof := phase0.BLSSignature{}
@@ -111,16 +130,21 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 		aggregator, err := r.GetBeaconNode().IsSyncCommitteeAggregator(sig)
 		if err != nil {
-			return errors.Wrap(err, "could not check if sync committee aggregator")
+			err := errors.Wrap(err, "could not check if sync committee aggregator")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		if !aggregator {
 			continue
 		}
 
 		// fetch sync committee contribution
+		span.AddEvent("fetching sync committee subnet ID")
 		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices[i]))
 		if err != nil {
-			return errors.Wrap(err, "could not get sync committee subnet ID")
+			err := errors.Wrap(err, "could not get sync committee subnet ID")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
@@ -129,22 +153,29 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 	if len(selectionProofs) == 0 {
 		r.GetState().Finished = true
+		span.AddEvent("no selection proofs")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
 	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 
 	r.measurements.PauseDutyFlow()
-	// fetch contributions
+
+	span.AddEvent("fetching sync committee contributions")
 	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.DutySlot(), selectionProofs, subnets)
 	if err != nil {
-		return errors.Wrap(err, "could not get sync committee contribution")
+		err := errors.Wrap(err, "could not get sync committee contribution")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	r.measurements.ContinueDutyFlow()
 
 	byts, err := contributions.MarshalSSZ()
 	if err != nil {
-		return errors.Wrap(err, "could not marshal contributions")
+		err := errors.Wrap(err, "could not marshal contributions")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// create consensus object
@@ -156,19 +187,36 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 	r.measurements.StartConsensus()
 	if err := r.BaseRunner.decide(ctx, logger, r, input.Duty.Slot, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
+		err := errors.Wrap(err, "can't start new duty runner instance for duty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(signedMsg.SSVMessage.GetID()),
+			observability.ValidatorMsgTypeAttribute(signedMsg.SSVMessage.GetType()),
+			observability.RunnerRoleAttribute(signedMsg.SSVMessage.GetID().GetRoleType()),
+		))
+	defer span.End()
+
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
-		return errors.Wrap(err, "failed processing consensus message")
+		err := errors.Wrap(err, "failed processing consensus message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
+		span.AddEvent("instance is not decided")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -178,9 +226,16 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	r.measurements.StartPostConsensus()
 
 	cd := decidedValue.(*spectypes.ValidatorConsensusData)
+	span.SetAttributes(
+		observability.BeaconSlotAttribute(cd.Duty.Slot),
+		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
+	)
+
 	contributions, err := cd.GetSyncCommitteeContributions()
 	if err != nil {
-		return errors.Wrap(err, "could not get contributions")
+		err := errors.Wrap(err, "could not get contributions")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// specific duty sig
@@ -188,16 +243,21 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	for _, c := range contributions {
 		contribAndProof, _, err := r.generateContributionAndProof(c.Contribution, c.SelectionProofSig)
 		if err != nil {
-			return errors.Wrap(err, "could not generate contribution and proof")
+			err := errors.Wrap(err, "could not generate contribution and proof")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		signed, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), contribAndProof, cd.Duty.Slot, spectypes.DomainContributionAndProof)
 		if err != nil {
-			return errors.Wrap(err, "failed to sign aggregate and proof")
+			err := errors.Wrap(err, "failed to sign aggregate and proof")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		msgs = append(msgs, signed)
 	}
+
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
 		Slot:     cd.Duty.Slot,
@@ -208,6 +268,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
@@ -217,9 +278,12 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		Data:    encodedMsg,
 	}
 
+	span.AddEvent("signing SSV partial signature message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return errors.Wrap(err, "could not sign SSVMessage")
+		err := errors.Wrap(err, "could not sign SSV partial signature message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -228,19 +292,35 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		SSVMessage:  ssvMsg,
 	}
 
+	span.AddEvent("broadcasting post consensus partial signature message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial post consensus sig")
+		err := errors.Wrap(err, "can't broadcast partial post consensus sig")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.runner.process_post_consensus", observabilityNamespace),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(signedMsg.Slot),
+			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
+		))
+	defer span.End()
+
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
-		return errors.Wrap(err, "failed processing post consensus message")
+		err := errors.Wrap(err, "failed processing post consensus message")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
-	if !quorum {
+	if !hasQuorum {
+		span.AddEvent("no quorum")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -251,22 +331,29 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {
-		return errors.Wrap(err, "could not create consensus data")
+		err := errors.Wrap(err, "could not create consensus data")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	contributions, err := validatorConsensusData.GetSyncCommitteeContributions()
 	if err != nil {
-		return errors.Wrap(err, "could not get contributions")
+		err := errors.Wrap(err, "could not get contributions")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	var successfullySubmittedContributions uint32
 	for _, root := range roots {
+		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.DutyRootAttribute(root)))
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
 			for _, root := range roots {
 				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 			}
-			return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+			err := errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
@@ -276,15 +363,20 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			// match the right contrib and proof root to signed root
 			contribAndProof, contribAndProofRoot, err := r.generateContributionAndProof(contribution.Contribution, contribution.SelectionProofSig)
 			if err != nil {
-				return errors.Wrap(err, "could not generate contribution and proof")
+				err := errors.Wrap(err, "could not generate contribution and proof")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
 			if !bytes.Equal(root[:], contribAndProofRoot[:]) {
+				span.AddEvent("incorrect root, skipping")
 				continue // not the correct root
 			}
 
 			signedContrib, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 			if err != nil {
-				return errors.Wrap(err, "could not reconstruct contribution and proof sig")
+				err := errors.Wrap(err, "could not reconstruct contribution and proof sig")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
 			blsSignedContribAndProof := phase0.BLSSignature{}
 			copy(blsSignedContribAndProof[:], signedContrib)
@@ -302,9 +394,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			}
 
 			successfullySubmittedContributions++
-			logger.Debug("✅ successfully submitted sync committee aggregator",
-				fields.SubmissionTime(time.Since(start)),
-			)
+
+			const eventMsg = "✅ successfully submitted sync committee aggregator"
+			span.AddEvent(eventMsg)
+			logger.Debug(eventMsg, fields.SubmissionTime(time.Since(start)))
 			break
 		}
 	}
@@ -319,6 +412,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
 		spectypes.BNRoleSyncCommitteeContribution)
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -387,6 +481,13 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 // 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
 func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	_, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.runner.execute_duty", observabilityNamespace),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
+	defer span.End()
+
 	r.measurements.StartDutyFlow()
 	r.measurements.StartPreConsensus()
 
@@ -396,18 +497,24 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		Slot:     duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
+
 	for _, index := range r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
 		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		if err != nil {
-			return errors.Wrap(err, "could not get sync committee subnet ID")
+			err := errors.Wrap(err, "could not get sync committee subnet ID")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		data := &altair.SyncAggregatorSelectionData{
 			Slot:              duty.DutySlot(),
 			SubcommitteeIndex: subnet,
 		}
+		span.AddEvent("signing beacon object")
 		msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), data, duty.DutySlot(), spectypes.DomainSyncCommitteeSelectionProof)
 		if err != nil {
-			return errors.Wrap(err, "could not sign sync committee selection proof")
+			err := errors.Wrap(err, "could not sign sync committee selection proof")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		msgs.Messages = append(msgs.Messages, msg)
@@ -416,6 +523,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
@@ -425,9 +533,12 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		Data:    encodedMsg,
 	}
 
+	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		return errors.Wrap(err, "could not sign SSVMessage")
+		err := errors.Wrap(err, "could not sign SSVMessage")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -436,9 +547,14 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		SSVMessage:  ssvMsg,
 	}
 
+	span.AddEvent("broadcasting signed SSV message")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial contribution proof sig")
+		err := errors.Wrap(err, "can't broadcast partial contribution proof sig")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

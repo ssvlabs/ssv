@@ -12,10 +12,13 @@ import (
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -90,39 +93,67 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 
 // StartDuty starts a new duty for the given slot.
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
-	r, runnableDuty, err := c.prepareDutyAndRunner(logger, duty)
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.start_committee_duty", observabilityNamespace),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.BeaconSlotAttribute(duty.Slot)),
+	)
+	defer span.End()
+
+	span.AddEvent("prepare duty and runner")
+	r, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
 	logger.Info("ℹ️ starting duty processing")
 	err = r.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
 	if err != nil {
-		return errors.Wrap(err, "runner failed to start duty")
+		err = errors.Wrap(err, "runner failed to start duty")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
-func (c *Committee) prepareDutyAndRunner(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
+func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) (
 	r *runner.CommitteeRunner,
 	runnableDuty *spectypes.CommitteeDuty,
 	err error,
 ) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
+	_, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.prepare_duty_runner", observabilityNamespace),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.BeaconSlotAttribute(duty.Slot)),
+	)
+	defer span.End()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
-		return nil, nil, fmt.Errorf("CommitteeRunner for slot %d already exists", duty.Slot)
+		err = fmt.Errorf("CommitteeRunner for slot %d already exists", duty.Slot)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, nil, err
 	}
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		return nil, nil, err
 	}
 
 	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not create CommitteeRunner")
+		err = errors.Wrap(err, "could not create CommitteeRunner")
+		span.SetStatus(codes.Error, err.Error())
+		return nil, nil, err
 	}
 
 	// Set timeout function.
@@ -144,9 +175,11 @@ func (c *Committee) prepareDutyAndRunner(logger *zap.Logger, duty *spectypes.Com
 	// Prunes all expired committee runners, when new runner is created
 	pruneLogger := c.logger.With(zap.Uint64("current_slot", uint64(duty.Slot)))
 	if err := c.unsafePruneExpiredRunners(pruneLogger, duty.Slot); err != nil {
+		span.RecordError(err)
 		pruneLogger.Error("couldn't prune expired committee runners", zap.Error(err))
 	}
 
+	span.SetStatus(codes.Ok, "")
 	return r, runnableDuty, nil
 }
 
@@ -193,51 +226,89 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	msgType := msg.GetType()
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_committee_message", observabilityNamespace),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.ValidatorMsgTypeAttribute(msgType),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+		),
+		trace.WithLinks(trace.LinkFromContext(msg.Context)))
+	defer span.End()
+
+	if msg.SignedSSVMessage != nil {
+		slot, err := msg.Slot()
+		if err == nil {
+			span.SetAttributes(observability.DutyIDAttribute(
+				fields.FormatCommitteeDutyID(msg.SignedSSVMessage.OperatorIDs, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot),
+			))
+		}
+	}
+
 	// Validate message
-	if msg.GetType() != message.SSVEventMsgType {
+	if msgType != message.SSVEventMsgType {
+		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid SignedSSVMessage")
+			err := errors.Wrap(err, "invalid SignedSSVMessage")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			err := errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			return errors.Wrap(err, "Message invalid")
+			err := errors.Wrap(err, "Message invalid")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 	}
 
-	switch msg.GetType() {
+	switch msgType {
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &qbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get consensus Message from network Message")
+			err := errors.Wrap(err, "could not get consensus Message from network Message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		if err := qbftMsg.Validate(); err != nil {
-			return errors.Wrap(err, "invalid qbft Message")
+			err := errors.Wrap(err, "invalid qbft Message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		c.mtx.RLock()
 		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.RUnlock()
 		if !exists {
-			return fmt.Errorf("no runner found for message's slot")
+			err := fmt.Errorf("no runner found for message's slot")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from network Message")
+			err := errors.Wrap(err, "could not get post consensus Message from network Message")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		// Validate
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			return errors.New("PartialSignatureMessage has more than 1 signer")
+			err := errors.New("PartialSignatureMessage has more than 1 signer")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			return errors.Wrap(err, "invalid PartialSignatureMessages")
+			err := errors.Wrap(err, "invalid PartialSignatureMessages")
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
@@ -245,15 +316,31 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
 			if !exists {
-				return fmt.Errorf("no runner found for message's slot")
+				err := fmt.Errorf("no runner found for message's slot")
+				span.SetStatus(codes.Error, err.Error())
+				return err
 			}
-			return r.ProcessPostConsensus(ctx, logger, pSigMessages)
+			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
+				span.SetStatus(codes.Error, err.Error())
+				return err
+			}
+			span.SetStatus(codes.Ok, "")
+			return nil
 		}
 	case message.SSVEventMsgType:
-		return c.handleEventMessage(ctx, logger, msg)
+		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		span.SetStatus(codes.Ok, "")
+		return nil
 	default:
-		return errors.New("unknown msg")
+		err := errors.New("unknown msg")
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

@@ -85,7 +85,8 @@ type config struct {
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
-	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
+	TracesEnabled                bool                    `yaml:"TracesEnabled" env:"TRACES_ENABLED" env-description:"flag that indicates whether Open Telemetry traces are enabled"`
+	EnableProfile                bool                     `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
 	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
 	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
 	WithPing                     bool                    `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
@@ -114,10 +115,17 @@ var StartNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
+		var observabilityOptions []observability.Option
+		observabilityOptions = append(observabilityOptions, observability.WithMetrics())
+		if cfg.TracesEnabled {
+			observabilityOptions = append(observabilityOptions, observability.WithTraces())
+		}
+
 		observabilityShutdown, err := observability.Initialize(
+			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
-			observability.WithMetrics())
+			observabilityOptions...)
 		if err != nil {
 			logger.Fatal("could not initialize observability configuration", zap.Error(err))
 		}

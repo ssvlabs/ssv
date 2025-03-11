@@ -8,7 +8,11 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -19,13 +23,25 @@ import (
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.handle_committee_message", observabilityNamespace),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.ValidatorMsgTypeAttribute(msg.GetType()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+		))
+	defer span.End()
+
+	msg.Context = ctx
 	slot, err := msg.Slot()
 	if err != nil {
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 
+	span.SetAttributes(observability.BeaconSlotAttribute(slot))
 	// Retrieve or create the queue for the given slot.
 	c.mtx.Lock()
 	q, ok := c.Queues[slot]
@@ -40,43 +56,65 @@ func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 			},
 		}
 		c.Queues[slot] = q
-		logger.Debug("missing queue for slot created", fields.Slot(slot))
+		const eventMsg = "missing queue for slot created"
+		logger.Debug(eventMsg, fields.Slot(slot))
+		span.AddEvent(eventMsg)
 	}
 	c.mtx.Unlock()
 
-	// Push the message.
+	span.AddEvent("pushing message to queue")
+
 	if pushed := q.Q.TryPush(msg); !pushed {
-		msgID := msg.MsgID.String()
-		logger.Warn("❗ dropping message because the queue is full",
+		const errMsg = "❗ dropping message because the queue is full"
+		logger.Warn(errMsg,
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msg_id", msgID))
+			zap.String("msg_id", msg.MsgID.String()))
+		span.SetStatus(codes.Error, errMsg)
+	} else {
+		span.SetStatus(codes.Ok, "")
 	}
 }
 
-func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
+
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.start_consume_queue", observabilityNamespace),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+			observability.BeaconSlotAttribute(duty.Slot)),
+	)
+	defer span.End()
 
 	// Setting the cancel function separately due the queue could be created in HandleMessage
 	q, found := c.Queues[duty.Slot]
 	if !found {
-		return fmt.Errorf("no queue found for slot %d", duty.Slot)
+		err := fmt.Errorf("no queue found for slot %d", duty.Slot)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
-		return fmt.Errorf("no runner found for message's slot")
+		err := fmt.Errorf("no runner found for slot %d", duty.Slot)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+	queueCtx, cancelF := context.WithDeadline(ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
 
 	go func() {
 		defer cancelF()
 		if err := c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r); err != nil {
 			logger.Error("❗failed consuming committee queue", zap.Error(err))
+			span.RecordError(err)
 		}
 	}()
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

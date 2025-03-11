@@ -8,9 +8,12 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -165,11 +168,22 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.attester.process_execution", observabilityNamespace),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconSlotAttribute(slot),
+		))
+	defer span.End()
+
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
+		span.AddEvent("no duties available")
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
+	span.AddEvent("duties fetched", trace.WithAttributes(observability.DutyCountAttribute(len(duties))))
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
@@ -177,7 +191,11 @@ func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epo
 		}
 	}
 
+	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
+
 	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) error {

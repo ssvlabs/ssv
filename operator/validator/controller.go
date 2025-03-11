@@ -16,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/doppelganger"
@@ -26,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
@@ -595,6 +598,20 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.execute_duty", observabilityNamespace),
+		trace.WithAttributes(
+			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.BeaconRoleAttribute(duty.Type),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.ValidatorPublicKeyAttribute(duty.PubKey),
+			observability.DutyIDAttribute(
+				fields.FormatDutyID(
+					c.networkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), duty.ValidatorIndex)),
+		))
+	defer span.End()
+
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 	pk := make([]byte, 48)
@@ -604,40 +621,73 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.DomainType)
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(ssvMsg)
 		if err != nil {
 			logger.Error("could not decode duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
+		dec.Context = ctx
+		span.AddEvent("pushing message to the queue")
 		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping ExecuteDuty message because the queue is full")
+			const eventMsg = "dropping ExecuteDuty message because the queue is full"
+			logger.Warn(eventMsg)
+			span.AddEvent(eventMsg)
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
-		logger.Warn("could not find validator")
+		const eventMsg = "could not find validator"
+		logger.Warn(eventMsg)
+		span.AddEvent(eventMsg)
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+	ctx, span := tracer.Start(ctx,
+		fmt.Sprintf("%s.execute_committee_duty", observabilityNamespace),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.CommitteeIDAttribute(committeeID),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+		))
+	defer span.End()
+
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
+		var committee []spectypes.OperatorID
+		for _, operator := range cm.CommitteeMember.Committee {
+			committee = append(committee, operator.OperatorID)
+		}
+		span.SetAttributes(
+			observability.DutyIDAttribute(fields.FormatCommitteeDutyID(committee, c.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot), duty.Slot)),
+		)
+
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(ssvMsg)
 		if err != nil {
 			logger.Error("could not decode duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
 			logger.Error("could not execute committee duty", zap.Error(err))
+			span.RecordError(err)
 		}
 	} else {
-		logger.Warn("could not find committee", fields.CommitteeID(committeeID))
+		const eventMsg = "could not find committee"
+		logger.Warn(eventMsg, fields.CommitteeID(committeeID))
+		span.AddEvent(eventMsg)
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
