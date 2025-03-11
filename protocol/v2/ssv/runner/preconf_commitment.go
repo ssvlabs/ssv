@@ -46,13 +46,18 @@ type pcRunner struct {
 }
 
 type PreconfCommitmentRunner struct {
+	// baseRunner is responsible for some basic stuff like signing
+	baseRunner *BaseRunner
+
 	// childRunnersInflight prevents concurrent requests to childRunners from initializing
 	// the same childRunners entry twice (instead we'll initialize just 1 childRunner instance
 	// and return that same instance on repetitive gets).
 	childRunnersInflight singleflight.Group[[32]byte, *pcRunner]
 	// childRunners maintains mapping between preconf sign-requests and corresponding runners
-	// that process those requests. It's a ttlcache so we can access it concurrently clean it up
-	// periodically (to prevent no longer relevant runners from piling up).
+	// that process those requests. It maps signing-root (not the actual preconf object-root
+	// but a root of a message that contains preconf object + signing domain). It's a ttlcache
+	// so we can access it concurrently clean it up periodically (to prevent no longer relevant
+	// runners from piling up).
 	childRunners *ttlcache.Cache[[32]byte, *pcRunner]
 
 	domainType spectypes.DomainType
@@ -76,6 +81,14 @@ func NewPreconfCommitmentRunner(
 	quorum uint64,
 ) (Runner, error) {
 	r := &PreconfCommitmentRunner{
+		baseRunner: &BaseRunner{
+			RunnerRoleType: spectypes.RolePreconfCommitment,
+			DomainType:     domainType,
+			BeaconNetwork:  beacon.GetBeaconNetwork(),
+			Share: map[phase0.ValidatorIndex]*spectypes.Share{
+				share.ValidatorIndex: share,
+			},
+		},
 		childRunners: ttlcache.New(
 			// TODO how long should child runners live for ? setting it to ~2 epochs for now
 			ttlcache.WithTTL[[32]byte, *pcRunner](2 * 32 * 12 * time.Second),
@@ -108,22 +121,17 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		return nil, errors.New("objectRootHex must be 32 bytes")
 	}
 
-	root := [32]byte(objectRootRaw)
-	duty := spectypes.PreconfCommitmentDuty(root)
+	objectRoot := [32]byte(objectRootRaw)
+	duty := spectypes.PreconfCommitmentDuty(objectRoot)
 
 	logger = logger.With(
 		zap.String("preconf-commitment runner", "starting duty"),
-		zap.String("root", hexutil.Encode(root[:])),
+		zap.String("object_root", hexutil.Encode(objectRoot[:])),
 	)
-
-	cRunner, err := r.childRunner(root, &duty)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get child runner: %w", err)
-	}
 
 	// commit-boost uses DomainApplicationBuilder domain for signing, see this doc for details
 	// https://github.com/Commit-Boost/commit-boost-client/blob/c5a16eec53b7e6ce0ee5c18295565f1a0aa6e389/docs/docs/developing/commit-module.md#requesting-signatures
-	msg, err := cRunner.signPreconfCommitment(
+	msg, err := r.baseRunner.signPreconfCommitment(
 		r,
 		validatorIndex,
 		&duty,
@@ -138,19 +146,16 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		Slot:     duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
-
-	msgID := spectypes.NewMsgID(cRunner.DomainType, r.GetShare().ValidatorPubKey[:], cRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.baseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.baseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return nil, err
 	}
-
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID:   msgID,
 		Data:    encodedMsg,
 	}
-
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign SSVMessage")
@@ -161,13 +166,21 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		SSVMessage:  ssvMsg,
 	}
 
-	logger.Debug("broadcasting partial sig")
+	signingRoot, err := msg.GetRoot()
+	if err != nil {
+		return nil, err
+	}
+	cRunner, err := r.childRunner(signingRoot, &duty)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get child runner: %w", err)
+	}
+	close(cRunner.initialized)
 
+	logger.Debug("broadcasting partial sig")
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return nil, fmt.Errorf("failed to broadcast partial signature: %w", err)
 	}
 
-	close(cRunner.initialized)
 	return cRunner.result, nil
 }
 
@@ -387,9 +400,9 @@ func (r *PreconfCommitmentRunner) GetRoot() ([32]byte, error) {
 	return [32]byte{}, fmt.Errorf("not implemented")
 }
 
-func (r *PreconfCommitmentRunner) childRunner(root [32]byte, duty *spectypes.PreconfCommitmentDuty) (*pcRunner, error) {
-	result, err, _ := r.childRunnersInflight.Do(root, func() (*pcRunner, error) {
-		item := r.childRunners.Get(root)
+func (r *PreconfCommitmentRunner) childRunner(signingRoot [32]byte, duty *spectypes.PreconfCommitmentDuty) (*pcRunner, error) {
+	result, err, _ := r.childRunnersInflight.Do(signingRoot, func() (*pcRunner, error) {
+		item := r.childRunners.Get(signingRoot)
 		if item != nil {
 			return item.Value(), nil
 		}
@@ -408,7 +421,7 @@ func (r *PreconfCommitmentRunner) childRunner(root [32]byte, duty *spectypes.Pre
 		}
 		result.BaseRunner.baseSetupForNewDuty(duty, r.quorum)
 
-		r.childRunners.Set(root, &result, ttlcache.DefaultTTL)
+		r.childRunners.Set(signingRoot, &result, ttlcache.DefaultTTL)
 
 		return &result, nil
 	})
