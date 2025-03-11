@@ -166,7 +166,9 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		SSVMessage:  ssvMsg,
 	}
 
-	signingRoot, err := msg.GetRoot()
+	// TODO - which one it is ?
+	signingRoot, err := msgs.GetRoot()
+	//signingRoot, err := msgToBroadcast.GetRoot()
 	if err != nil {
 		return nil, err
 	}
