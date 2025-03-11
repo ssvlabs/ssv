@@ -149,7 +149,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	msgID := spectypes.NewMsgID(r.baseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.baseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode message: %w", err)
 	}
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
@@ -169,10 +169,11 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	// TODO - which one it is ?
 	//signingRoot, err := msg.GetRoot()
 	//signingRoot, err := msgs.GetRoot()
-	signingRoot, err := msgToBroadcast.GetRoot()
+	//signingRoot, err := msgToBroadcast.GetRoot()
+	signingRoot, err := ssvMsg.HashTreeRoot()
 	//signingRoot, err := duty.HashTreeRoot()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("compute signing root: %w", err)
 	}
 	cRunner, err := r.childRunner(signingRoot, &duty)
 	if err != nil {
