@@ -155,12 +155,12 @@ func (c *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, pay
 		return phase0.BLSSignature{}, fmt.Errorf("decode signature: %w", err)
 	}
 
-	if len(sigBytes) != len(phase0.BLSSignature{}) {
+	if len(sigBytes) != phase0.SignatureLength {
 		logger.Error("unexpected signature length",
 			zap.Int("length", len(sigBytes)),
-			zap.Int("expected", len(phase0.BLSSignature{})),
+			zap.Int("expected", phase0.SignatureLength),
 		)
-		return phase0.BLSSignature{}, fmt.Errorf("unexpected signature length %d, expected %d", len(sigBytes), len(phase0.BLSSignature{}))
+		return phase0.BLSSignature{}, fmt.Errorf("unexpected signature length %d, expected %d", len(sigBytes), phase0.SignatureLength)
 	}
 
 	return phase0.BLSSignature(sigBytes), nil
