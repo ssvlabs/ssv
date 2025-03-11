@@ -38,6 +38,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -60,7 +61,7 @@ type MockControllerOptions struct {
 	sharesStorage     SharesStorage
 	beacon            beacon.BeaconNode
 	validatorOptions  validator.Options
-	signer            spectypes.BeaconSigner
+	signer            signing.BeaconSigner
 	StorageMap        *ibftstorage.ParticipantStores
 	validatorsMap     *validators.ValidatorsMap
 	validatorStore    registrystorage.ValidatorStore

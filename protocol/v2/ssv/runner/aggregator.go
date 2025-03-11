@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -26,7 +27,7 @@ type AggregatorRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         spectypes.BeaconSigner
+	signer         signing.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
@@ -41,7 +42,7 @@ func NewAggregatorRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer signing.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
@@ -158,7 +159,14 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), aggregateAndProofHashRoot, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+		aggregateAndProofHashRoot,
+		decidedValue.Duty.Slot,
+		spectypes.DomainAggregateAndProof,
+	)
 	if err != nil {
 		return errors.Wrap(err, "failed signing aggregate and proof")
 	}
@@ -298,7 +306,14 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	r.measurements.StartPreConsensus()
 
 	// sign selection proof
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(duty.DutySlot()), duty.DutySlot(), spectypes.DomainSelectionProof)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		spectypes.SSZUint64(duty.DutySlot()),
+		duty.DutySlot(),
+		spectypes.DomainSelectionProof,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
@@ -367,7 +382,7 @@ func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *AggregatorRunner) GetSigner() spectypes.BeaconSigner {
+func (r *AggregatorRunner) GetSigner() signing.BeaconSigner {
 	return r.signer
 }
 func (r *AggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

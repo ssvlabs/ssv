@@ -67,7 +67,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		currentFork, err := client.CurrentFork(ctx)
+		currentFork, err := client.ForkAtSlot(ctx, 0)
 		require.NoError(t, err)
 		require.NotNil(t, currentFork)
 
@@ -99,7 +99,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.CurrentFork(ctx)
+		_, err = client.ForkAtSlot(ctx, 0)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "fork schedule response data is nil")
 	})
@@ -140,7 +140,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.CurrentFork(ctx)
+		_, err = client.ForkAtSlot(ctx, 0)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "could not find current fork")
 	})

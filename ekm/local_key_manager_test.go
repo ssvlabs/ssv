@@ -1,6 +1,7 @@
 package ekm
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -273,13 +274,13 @@ func TestSlashing(t *testing.T) {
 		err := km.(*LocalKeyManager).IsAttestationSlashable(sk1.GetPublicKey().Serialize(), attestationData)
 		require.NoError(t, err)
 
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(attestationData, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(attestationData, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(attestationData, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(attestationData, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		require.EqualError(t, err, "slashable attestation (HighestAttestationVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
 
@@ -290,13 +291,13 @@ func TestSlashing(t *testing.T) {
 	t.Run("sign once", func(t *testing.T) {
 		err := km.(*LocalKeyManager).IsBeaconBlockSlashable(sk1.GetPublicKey().Serialize(), beaconBlock.Slot)
 		require.NoError(t, err)
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(beaconBlock, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(beaconBlock, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
 
@@ -305,7 +306,7 @@ func TestSlashing(t *testing.T) {
 	})
 	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
 		require.NoError(t, km.AddShare(encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(beaconBlock, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
 	})
@@ -419,12 +420,7 @@ func TestSignBeaconObject(t *testing.T) {
 				},
 			},
 		}
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			beaconBlock,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainProposer,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(beaconBlock, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -435,12 +431,7 @@ func TestSignBeaconObject(t *testing.T) {
 			ValidatorIndex: 1,
 		}
 
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			voluntaryExit,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainVoluntaryExit,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(voluntaryExit, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainVoluntaryExit)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -472,34 +463,19 @@ func TestSignBeaconObject(t *testing.T) {
 			},
 		}
 
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			voluntaryExit,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainAggregateAndProof,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(voluntaryExit, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAggregateAndProof)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("DomainSelectionProof", func(t *testing.T) {
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			spectypes.SSZUint64(1),
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainSelectionProof,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(spectypes.SSZUint64(1), context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainSelectionProof)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("DomainRandao", func(t *testing.T) {
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			spectypes.SSZUint64(1),
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainRandao,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(spectypes.SSZUint64(1), context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainRandao)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -512,12 +488,7 @@ func TestSignBeaconObject(t *testing.T) {
 			},
 			Slot: 100,
 		}
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			data,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainSyncCommittee,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(data, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainSyncCommittee)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -527,12 +498,7 @@ func TestSignBeaconObject(t *testing.T) {
 			Slot:              currentSlot,
 			SubcommitteeIndex: 1,
 		}
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			data,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainSyncCommitteeSelectionProof,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(data, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainSyncCommitteeSelectionProof)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -563,12 +529,7 @@ func TestSignBeaconObject(t *testing.T) {
 				0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
 			},
 		}
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			data,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainContributionAndProof,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(data, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainContributionAndProof)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -587,12 +548,7 @@ func TestSignBeaconObject(t *testing.T) {
 				0x0c, 0x0f, 0x0e, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			},
 		}
-		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
-			data,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainApplicationBuilder,
-		)
+		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(data, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainApplicationBuilder)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 		require.NotEqual(t, [32]byte{}, sig)
@@ -630,12 +586,7 @@ func TestSlashing_Attestation(t *testing.T) {
 	}
 
 	signAttestation := func(sk *bls.SecretKey, signingRoot phase0.Root, attestation *phase0.AttestationData, expectSlashing bool, expectReason string) {
-		sig, root, err := km.(*LocalKeyManager).SignBeaconObject(
-			attestation,
-			phase0.Domain{},
-			sk.GetPublicKey().Serialize(),
-			spectypes.DomainAttester,
-		)
+		sig, root, err := km.(*LocalKeyManager).SignBeaconObject(attestation, context.Background(), phase0.Domain{}, sk.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		if expectSlashing {
 			require.Error(t, err, "expected slashing: %s", expectReason)
 			require.Zero(t, sig, "expected zero signature")
@@ -774,12 +725,7 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 
 	signAttestation := func(wg *sync.WaitGroup, errChan chan error) {
 		defer wg.Done()
-		sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
-			attestationData,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainAttester,
-		)
+		sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(attestationData, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		if err == nil {
 			sig := &bls.Sign{}
 			require.NoError(t, sig.Deserialize(sigBytes[:]))
@@ -843,12 +789,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	// Define function to concurrently attempt signing.
 	signBeaconBlock := func(wg *sync.WaitGroup, errChan chan error) {
 		defer wg.Done()
-		sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
-			blockContents.Block,
-			phase0.Domain{},
-			sk1.GetPublicKey().Serialize(),
-			spectypes.DomainProposer,
-		)
+		sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(blockContents.Block, context.Background(), phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		if err == nil {
 			sig := &bls.Sign{}
 			require.NoError(t, sig.Deserialize(sigBytes[:]))
@@ -948,12 +889,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
-					attestationData,
-					phase0.Domain{},
-					validator.pk.Serialize(),
-					spectypes.DomainAttester,
-				)
+				sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(attestationData, context.Background(), phase0.Domain{}, validator.pk.Serialize(), spectypes.DomainAttester)
 				mu.Lock()
 				defer mu.Unlock()
 				result := validatorResults[validator.pk.SerializeToHexStr()]
@@ -1036,12 +972,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
-					blockContents.Block,
-					phase0.Domain{},
-					validator.pk.Serialize(),
-					spectypes.DomainProposer,
-				)
+				sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(blockContents.Block, context.Background(), phase0.Domain{}, validator.pk.Serialize(), spectypes.DomainProposer)
 				mu.Lock()
 				defer mu.Unlock()
 				result := validatorResults[validator.pk.SerializeToHexStr()]

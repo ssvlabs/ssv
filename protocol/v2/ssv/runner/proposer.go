@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -33,7 +34,7 @@ type ProposerRunner struct {
 
 	beacon              beacon.BeaconNode
 	network             specqbft.Network
-	signer              spectypes.BeaconSigner
+	signer              signing.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
 	valCheck            specqbft.ProposedValueCheckF
@@ -48,7 +49,7 @@ func NewProposerRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer signing.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	doppelgangerHandler DoppelgangerProvider,
 	valCheck specqbft.ProposedValueCheckF,
@@ -198,13 +199,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return nil
 	}
 
-	msg, err := r.BaseRunner.signBeaconObject(
-		r,
-		duty,
-		blkToSign,
-		cd.Duty.Slot,
-		spectypes.DomainProposer,
-	)
+	msg, err := r.BaseRunner.signBeaconObject(ctx, r, duty, blkToSign, cd.Duty.Slot, spectypes.DomainProposer)
 	if err != nil {
 		return errors.Wrap(err, "failed signing block")
 	}
@@ -415,7 +410,14 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
-	msg, err := r.BaseRunner.signBeaconObject(r, proposerDuty, spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		proposerDuty,
+		spectypes.SSZUint64(epoch),
+		duty.DutySlot(),
+		spectypes.DomainRandao,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
@@ -485,7 +487,7 @@ func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ProposerRunner) GetSigner() spectypes.BeaconSigner {
+func (r *ProposerRunner) GetSigner() signing.BeaconSigner {
 	return r.signer
 }
 

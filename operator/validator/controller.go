@@ -41,6 +41,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -72,7 +73,7 @@ type ControllerOptions struct {
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"The number of slots to be keep back"`
-	BeaconSigner               spectypes.BeaconSigner
+	BeaconSigner               signing.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
@@ -157,7 +158,7 @@ type controller struct {
 	ibftStorageMap    *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
-	beaconSigner   spectypes.BeaconSigner
+	beaconSigner   signing.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 
 	operatorDataStore operatordatastore.OperatorDataStore
@@ -1052,7 +1053,12 @@ func SetupCommitteeRunners(
 		return qbftCtrl
 	}
 
-	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
+	return func(
+		slot phase0.Slot,
+		shares map[phase0.ValidatorIndex]*spectypes.Share,
+		attestingValidators []phase0.BLSPubKey,
+		dutyGuard runner.CommitteeDutyGuard,
+	) (*runner.CommitteeRunner, error) {
 		// Create a committee runner.
 		epoch := options.NetworkConfig.Beacon.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 		valCheck := ssv.BeaconVoteValueCheckF(options.Signer, slot, attestingValidators, epoch)
@@ -1126,7 +1132,7 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex, options.SSVShare.SharePubKey)
+			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex, phase0.BLSPubKey(options.SSVShare.SharePubKey))
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role], err = runner.NewProposerRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:

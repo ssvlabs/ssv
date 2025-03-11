@@ -46,7 +46,7 @@ type RemoteSigner interface {
 }
 
 type ConsensusClient interface {
-	CurrentFork(ctx context.Context) (*phase0.Fork, error)
+	ForkAtSlot(ctx context.Context, slot phase0.Slot) (*phase0.Fork, error)
 	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)
 }
 
@@ -97,7 +97,7 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey p
 		return fmt.Errorf("unexpected status %s", statuses[0])
 	}
 
-	if err := km.BumpSlashingProtection(sharePubKey[:]); err != nil {
+	if err := km.BumpSlashingProtection(sharePubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
@@ -115,10 +115,10 @@ func (km *RemoteKeyManager) RemoveShare(pubKey phase0.BLSPubKey) error {
 		return fmt.Errorf("received status %s", statuses[0])
 	}
 
-	if err := km.RemoveHighestAttestation(pubKey[:]); err != nil {
+	if err := km.RemoveHighestAttestation(pubKey); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
 	}
-	if err := km.RemoveHighestProposal(pubKey[:]); err != nil {
+	if err := km.RemoveHighestProposal(pubKey); err != nil {
 		return fmt.Errorf("could not remove highest proposal: %w", err)
 	}
 
@@ -126,14 +126,16 @@ func (km *RemoteKeyManager) RemoveShare(pubKey phase0.BLSPubKey) error {
 }
 
 func (km *RemoteKeyManager) SignBeaconObject(
+	ctx context.Context,
 	obj ssz.HashRoot,
 	domain phase0.Domain,
-	sharePubkey []byte, // TODO: use phase0.BLSPubKey
+	sharePubkey phase0.BLSPubKey,
+	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
-) (spectypes.Signature, [32]byte, error) {
-	forkInfo, err := km.getForkInfo(context.Background()) // TODO: consider passing context to SignBeaconObject
+) (spectypes.Signature, phase0.Root, error) {
+	forkInfo, err := km.getForkInfo(ctx, slot)
 	if err != nil {
-		return spectypes.Signature{}, [32]byte{}, fmt.Errorf("get fork info: %w", err)
+		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("get fork info: %w", err)
 	}
 
 	req := web3signer.SignRequest{
@@ -144,15 +146,15 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainAttester:
 		data, ok := obj.(*phase0.AttestationData)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to AttestationData")
+			return nil, phase0.Root{}, errors.New("could not cast obj to AttestationData")
 		}
 
 		if err := km.IsAttestationSlashable(sharePubkey, data); err != nil {
-			return nil, [32]byte{}, err
+			return nil, phase0.Root{}, err
 		}
 
 		if err := km.UpdateHighestAttestation(sharePubkey, data); err != nil {
-			return nil, [32]byte{}, err
+			return nil, phase0.Root{}, err
 		}
 
 		req.Type = web3signer.TypeAttestation
@@ -161,21 +163,21 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainProposer:
 		switch v := obj.(type) {
 		case *capella.BeaconBlock, *deneb.BeaconBlock, *electra.BeaconBlock:
-			return nil, [32]byte{}, fmt.Errorf("web3signer supports only blinded blocks since bellatrix") // https://github.com/Consensys/web3signer/blob/85ed009955d4a5bbccba5d5248226093987e7f6f/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/BlockRequest.java#L29
+			return nil, phase0.Root{}, fmt.Errorf("web3signer supports only blinded blocks since bellatrix") // https://github.com/Consensys/web3signer/blob/85ed009955d4a5bbccba5d5248226093987e7f6f/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/BlockRequest.java#L29
 
 		case *apiv1capella.BlindedBeaconBlock:
 			req.Type = web3signer.TypeBlockV2
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
-				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (capella): %w", err)
+				return nil, phase0.Root{}, fmt.Errorf("could not hash beacon block (capella): %w", err)
 			}
 
 			if err := km.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
-				return nil, [32]byte{}, err
+				return nil, phase0.Root{}, err
 			}
 
 			if err = km.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
-				return nil, [32]byte{}, err
+				return nil, phase0.Root{}, err
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
@@ -193,15 +195,15 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			req.Type = web3signer.TypeBlockV2
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
-				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
+				return nil, phase0.Root{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
 			}
 
 			if err := km.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
-				return nil, [32]byte{}, err
+				return nil, phase0.Root{}, err
 			}
 
 			if err = km.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
-				return nil, [32]byte{}, err
+				return nil, phase0.Root{}, err
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
@@ -219,15 +221,15 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			req.Type = web3signer.TypeBlockV2
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
-				return nil, [32]byte{}, fmt.Errorf("could not hash beacon block (electra): %w", err)
+				return nil, phase0.Root{}, fmt.Errorf("could not hash beacon block (electra): %w", err)
 			}
 
 			if err := km.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
-				return nil, [32]byte{}, err
+				return nil, phase0.Root{}, err
 			}
 
 			if err = km.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
-				return nil, [32]byte{}, err
+				return nil, phase0.Root{}, err
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
@@ -242,13 +244,13 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 		default:
-			return nil, [32]byte{}, fmt.Errorf("obj type is unknown: %T", obj)
+			return nil, phase0.Root{}, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 
 	case spectypes.DomainVoluntaryExit:
 		data, ok := obj.(*phase0.VoluntaryExit)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to VoluntaryExit")
+			return nil, phase0.Root{}, errors.New("could not cast obj to VoluntaryExit")
 		}
 
 		req.Type = web3signer.TypeVoluntaryExit
@@ -267,13 +269,13 @@ func (km *RemoteKeyManager) SignBeaconObject(
 				Electra: v,
 			}
 		default:
-			return nil, [32]byte{}, fmt.Errorf("obj type is unknown: %T", obj)
+			return nil, phase0.Root{}, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 
 	case spectypes.DomainSelectionProof:
 		data, ok := obj.(spectypes.SSZUint64)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to SSZUint64")
+			return nil, phase0.Root{}, errors.New("could not cast obj to SSZUint64")
 		}
 
 		req.Type = web3signer.TypeAggregationSlot
@@ -282,28 +284,28 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainRandao:
 		data, ok := obj.(spectypes.SSZUint64)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to SSZUint64")
+			return nil, phase0.Root{}, errors.New("could not cast obj to SSZUint64")
 		}
 
 		req.Type = web3signer.TypeRandaoReveal
 		req.RandaoReveal = &web3signer.RandaoReveal{Epoch: phase0.Epoch(data)}
 
 	case spectypes.DomainSyncCommittee:
-		data, ok := obj.(BlockRootWithSlot)
+		data, ok := obj.(spectypes.SSZBytes)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to BlockRootWithSlot")
+			return nil, phase0.Root{}, errors.New("could not cast obj to SSZBytes")
 		}
 
 		req.Type = web3signer.TypeSyncCommitteeMessage
 		req.SyncCommitteeMessage = &web3signer.SyncCommitteeMessage{
-			BeaconBlockRoot: data.BlockRoot,
-			Slot:            data.Slot,
+			BeaconBlockRoot: phase0.Root(data),
+			Slot:            slot,
 		}
 
 	case spectypes.DomainSyncCommitteeSelectionProof:
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to SyncAggregatorSelectionData")
+			return nil, phase0.Root{}, errors.New("could not cast obj to SyncAggregatorSelectionData")
 		}
 
 		req.Type = web3signer.TypeSyncCommitteeSelectionProof
@@ -315,7 +317,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainContributionAndProof:
 		data, ok := obj.(*altair.ContributionAndProof)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to ContributionAndProof")
+			return nil, phase0.Root{}, errors.New("could not cast obj to ContributionAndProof")
 		}
 
 		req.Type = web3signer.TypeSyncCommitteeContributionAndProof
@@ -324,32 +326,32 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainApplicationBuilder:
 		data, ok := obj.(*eth2apiv1.ValidatorRegistration)
 		if !ok {
-			return nil, [32]byte{}, errors.New("could not cast obj to ValidatorRegistration")
+			return nil, phase0.Root{}, errors.New("could not cast obj to ValidatorRegistration")
 		}
 
 		req.Type = web3signer.TypeValidatorRegistration
 		req.ValidatorRegistration = data
 	default:
-		return nil, [32]byte{}, errors.New("domain unknown")
+		return nil, phase0.Root{}, errors.New("domain unknown")
 	}
 
 	root, err := spectypes.ComputeETHSigningRoot(obj, domain)
 	if err != nil {
-		return nil, [32]byte{}, err
+		return nil, phase0.Root{}, fmt.Errorf("compute root: %w", err)
 	}
 
 	req.SigningRoot = root
 
-	sig, err := km.remoteSigner.Sign(context.Background(), phase0.BLSPubKey(sharePubkey), req) // TODO: use context
+	sig, err := km.remoteSigner.Sign(ctx, sharePubkey, req)
 	if err != nil {
-		return spectypes.Signature{}, [32]byte{}, fmt.Errorf("remote signer: %w", err)
+		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("remote signer: %w", err)
 	}
 	return sig[:], root, nil
 }
 
-func (km *RemoteKeyManager) getForkInfo(ctx context.Context) (web3signer.ForkInfo, error) {
+func (km *RemoteKeyManager) getForkInfo(ctx context.Context, slot phase0.Slot) (web3signer.ForkInfo, error) {
 	// ForkSchedule result is cached in the client and updated once in a while.
-	currentFork, err := km.consensusClient.CurrentFork(ctx)
+	currentFork, err := km.consensusClient.ForkAtSlot(ctx, slot)
 	if err != nil {
 		return web3signer.ForkInfo{}, fmt.Errorf("get current fork: %w", err)
 	}

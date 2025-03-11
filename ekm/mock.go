@@ -6,7 +6,6 @@ import (
 	eth2api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/eth2-key-manager/core"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/mock"
 
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner"
@@ -58,7 +57,7 @@ type MockConsensusClient struct {
 	mock.Mock
 }
 
-func (m *MockConsensusClient) CurrentFork(ctx context.Context) (*phase0.Fork, error) {
+func (m *MockConsensusClient) ForkAtSlot(ctx context.Context, slot phase0.Slot) (*phase0.Fork, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -236,7 +235,7 @@ func (m *MockSlashingProtector) ListAccounts() ([]core.ValidatorAccount, error) 
 	return args.Get(0).([]core.ValidatorAccount), args.Error(1)
 }
 
-func (m *MockSlashingProtector) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+func (m *MockSlashingProtector) RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error) {
 	args := m.Called(pubKey)
 	if args.Get(0) == nil {
 		return nil, args.Bool(1), args.Error(2)
@@ -244,42 +243,42 @@ func (m *MockSlashingProtector) RetrieveHighestAttestation(pubKey []byte) (*phas
 	return args.Get(0).(*phase0.AttestationData), args.Bool(1), args.Error(2)
 }
 
-func (m *MockSlashingProtector) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+func (m *MockSlashingProtector) RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error) {
 	args := m.Called(pubKey)
 	return args.Get(0).(phase0.Slot), args.Bool(1), args.Error(2)
 }
 
-func (m *MockSlashingProtector) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
+func (m *MockSlashingProtector) IsAttestationSlashable(pk phase0.BLSPubKey, data *phase0.AttestationData) error {
 	args := m.Called(pk, data)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) UpdateHighestAttestation(pubKey []byte, data *phase0.AttestationData) error {
-	args := m.Called(pubKey, data)
+func (m *MockSlashingProtector) UpdateHighestAttestation(pubKey phase0.BLSPubKey, attestation *phase0.AttestationData) error {
+	args := m.Called(pubKey, attestation)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) IsBeaconBlockSlashable(pubKey []byte, slot phase0.Slot) error {
+func (m *MockSlashingProtector) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
 	args := m.Called(pubKey, slot)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) UpdateHighestProposal(pubKey []byte, slot phase0.Slot) error {
+func (m *MockSlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
 	args := m.Called(pubKey, slot)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) BumpSlashingProtection(pubKey []byte) error {
+func (m *MockSlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
 	args := m.Called(pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestAttestation(pubKey []byte) error {
+func (m *MockSlashingProtector) RemoveHighestAttestation(pubKey phase0.BLSPubKey) error {
 	args := m.Called(pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestProposal(pubKey []byte) error {
+func (m *MockSlashingProtector) RemoveHighestProposal(pubKey phase0.BLSPubKey) error {
 	args := m.Called(pubKey)
 	return args.Error(0)
 }
