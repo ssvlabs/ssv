@@ -213,7 +213,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 			GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil)
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
 		expectedSignature := phase0.BLSSignature{5, 6, 7}
@@ -283,7 +283,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 			GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil)
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
 		expectedSignature := phase0.BLSSignature{5, 6, 7}
@@ -355,7 +355,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 			GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil)
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
 		expectedSignature := phase0.BLSSignature{5, 6, 7}
@@ -453,7 +453,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 			GenesisForkVersion:    phase0.Version{1, 2, 3, 4},
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil)
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
 		expectedSignature := phase0.BLSSignature{5, 6, 7}
@@ -505,7 +505,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			},
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(nil, errors.New("fork info error"))
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(nil, errors.New("fork info error"))
 
 		signature, root, err := rm.SignBeaconObject(ctx, attestationData, domain, pubKey, slot, spectypes.DomainAttester)
 
@@ -552,7 +552,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			CurrentVersion:  phase0.Version{5, 6, 7, 8},
 			Epoch:           10,
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(nil, errors.New("genesis error")).Once()
 
 		signature, root, err := rmTest.SignBeaconObject(ctx, attestationData, domain, pubKey, slot, spectypes.DomainAttester)
@@ -571,6 +571,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -604,7 +605,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsAttestationSlashable", mock.Anything, mock.Anything).Return(nil).Once()
 		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(nil).Once()
@@ -626,6 +627,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -659,7 +661,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsAttestationSlashable", mock.Anything, mock.Anything).Return(errors.New("test error (IsAttestationSlashable)")).Once()
 		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(nil).Once()
@@ -681,6 +683,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -714,7 +717,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsAttestationSlashable", mock.Anything, mock.Anything).Return(nil).Once()
 		slashingMock.On("UpdateHighestAttestation", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestAttestation)")).Once()
@@ -736,6 +739,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -790,7 +794,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(errors.New("test error (IsBeaconBlockSlashable)")).Once()
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
@@ -812,6 +816,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -866,7 +871,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(nil).Once()
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
@@ -888,6 +893,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -944,7 +950,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(errors.New("test error (IsBeaconBlockSlashable)")).Once()
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
@@ -966,6 +972,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1022,7 +1029,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(nil).Once()
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
@@ -1044,6 +1051,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1125,7 +1133,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(errors.New("test error (IsBeaconBlockSlashable)")).Once()
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(nil).Once()
@@ -1147,6 +1155,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1228,7 +1237,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			GenesisValidatorsRoot: phase0.Root{},
 			GenesisForkVersion:    phase0.Version{},
 		}
-		consensusMock.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		consensusMock.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		consensusMock.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		slashingMock.On("IsBeaconBlockSlashable", mock.Anything, mock.Anything).Return(nil).Once()
 		slashingMock.On("UpdateHighestProposal", mock.Anything, mock.Anything).Return(errors.New("test error (UpdateHighestProposal)")).Once()
@@ -1253,6 +1262,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1280,6 +1290,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1309,6 +1320,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1365,6 +1377,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1388,6 +1401,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1414,6 +1428,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
+			netCfg:            networkconfig.TestNetwork,
 			remoteSigner:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1554,7 +1569,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 			ValidatorIndex: 456,
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1571,7 +1586,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 
 		signedSlot := spectypes.SSZUint64(123)
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1588,7 +1603,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 
 		blockRoot := phase0.Root{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1608,7 +1623,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 			SubcommitteeIndex: 456,
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1626,7 +1641,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		signedSlot := spectypes.SSZUint64(123)
 		unknownDomain := phase0.DomainType{255, 255, 255, 255}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		signature, root, err := rm.SignBeaconObject(ctx, signedSlot, domain, pubKey, slot, unknownDomain)
@@ -1697,7 +1712,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 			Aggregate:       attestation,
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1738,7 +1753,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 			Aggregate:       attestation,
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1754,7 +1769,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 	s.Run("SignRandao", func() {
 		epoch := spectypes.SSZUint64(42)
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1775,7 +1790,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 			Pubkey:       phase0.BLSPubKey{1, 2, 3, 4, 5},
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1801,7 +1816,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 			SelectionProof: phase0.BLSSignature{1, 2, 3, 4, 5},
 		}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 		s.client.On("Sign", mock.Anything, pubKey, mock.Anything).Return(expectedSignature, nil).Once()
 
@@ -1849,7 +1864,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("AttesterTypeCastError", func() {
 		wrongType := &phase0.VoluntaryExit{}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainAttester)
@@ -1861,7 +1876,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("AggregateAndProofTypeCastError", func() {
 		wrongType := &phase0.VoluntaryExit{}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainAggregateAndProof)
@@ -1873,7 +1888,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("RandaoTypeCastError", func() {
 		wrongType := &phase0.VoluntaryExit{}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainRandao)
@@ -1885,7 +1900,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("ApplicationBuilderTypeCastError", func() {
 		wrongType := &phase0.VoluntaryExit{}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainApplicationBuilder)
@@ -1897,7 +1912,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("SignContributionAndProofTypeCastError", func() {
 		wrongType := &phase0.VoluntaryExit{}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainContributionAndProof)
@@ -1909,7 +1924,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("SignSyncCommitteeSelectionProofTypeCastError", func() {
 		wrongType := &phase0.VoluntaryExit{}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainSyncCommitteeSelectionProof)
@@ -1921,7 +1936,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("SignVoluntaryExitTypeCastError", func() {
 		wrongType := spectypes.SSZUint64(1)
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainVoluntaryExit)
@@ -1933,7 +1948,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("SignSyncCommitteeTypeCastError", func() {
 		wrongType := spectypes.SSZUint64(1)
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainSyncCommittee)
@@ -1945,7 +1960,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("SignSelectionProofTypeCastError", func() {
 		wrongType := &phase0.VoluntaryExit{}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil).Once()
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil).Once()
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainSelectionProof)
@@ -1957,7 +1972,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	s.Run("SignProposerTypeCastError", func() {
 		wrongType := &phase0.VoluntaryExit{}
 
-		s.consensusClient.On("ForkAtSlot", mock.Anything, mock.Anything).Return(mockFork, nil)
+		s.consensusClient.On("ForkAtEpoch", mock.Anything, mock.Anything).Return(mockFork, nil)
 		s.consensusClient.On("Genesis", mock.Anything).Return(genesis, nil)
 
 		_, _, err := rm.SignBeaconObject(ctx, wrongType, domain, pubKey, slot, spectypes.DomainProposer)
