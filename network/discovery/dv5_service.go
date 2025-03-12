@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/ssvlabs/ssv/utils/ttl"
 	"net"
 	"time"
+
+	"github.com/ssvlabs/ssv/utils/ttl"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -23,7 +24,7 @@ import (
 )
 
 const (
-	defaultDiscoveryInterval = time.Millisecond * 1
+	defaultDiscoveryInterval = time.Millisecond * 2
 	publishENRTimeout        = time.Minute
 )
 
