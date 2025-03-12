@@ -517,11 +517,11 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 
 				// fill in sync committee roots
 				// to be later read in 'processPartialSigCommittee'
-				// root, err := n.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
-				// if err != nil {
-				// 	n.logger.Error("get sync committee root", zap.Error(err))
-				// }
-				// trace.syncCommitteeRoot = root
+				root, err := n.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
+				if err != nil {
+					n.logger.Error("get sync committee root", zap.Error(err))
+				}
+				trace.syncCommitteeRoot = root
 
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
@@ -635,6 +635,7 @@ func getOrCreateRound(trace *model.ConsensusTrace, rnd uint64) *model.RoundTrace
 	return trace.Rounds[rnd-1]
 }
 
+//nolint:gosec
 func toTime(t time.Time) uint64 {
 	return uint64(t.UnixNano() / int64(time.Millisecond))
 }
