@@ -30,7 +30,9 @@ type PreconfCommitmentResult struct {
 // PreconfCommitmentRunner is a runner that manages a bunch of child-runners (each of which
 // services a single preconf-commitment duty).
 type PreconfCommitmentRunner struct {
-	// baseRunner is responsible for some basic stuff like signing
+	// baseRunner is responsible for some basic stuff like signing. Note, even though
+	// BaseRunner generally is not thread safe (since it has some state) - here we are
+	// only using thread-safe methods on it
 	baseRunner *BaseRunner
 
 	// childRunnersInflight prevents concurrent requests to childRunners from initializing
