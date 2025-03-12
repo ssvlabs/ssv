@@ -414,11 +414,11 @@ type pcRunner struct {
 	// to handle that by timing out (instead of blocking forever)
 	initializedCh chan struct{}
 
-	// TODO mtx also protects objectRoot field ?
-	// mtx synchronizes access to BaseRunner
+	// mtx synchronizes access to BaseRunner and duty fields
 	mtx sync.Mutex
+	// BaseRunner provides basic runner functionality for pcRunner
 	BaseRunner
-	// duty TODO
+	// duty is the preconf-commitment duty this runner is servicing
 	duty *spectypes.PreconfCommitmentDuty
 
 	// resultCh will contain the execution result of pcRunner (success or error), it's a channel
