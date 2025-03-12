@@ -27,24 +27,6 @@ type PreconfCommitmentResult struct {
 	CommitmentSignature []byte
 }
 
-// pcRunner wraps BaseRunner providing means of
-type pcRunner struct {
-	// mtx synchronizes access to BaseRunner
-	mtx sync.Mutex
-	BaseRunner
-
-	// initialized indicates if this pcRunner has been initialized, once this channel is
-	// closed it means BaseRunner is ready to process preconf-commitment duty (preconf-related
-	// messages received from other operators). Note, it is possible that initialized channel
-	// is never closed (meaning pcRunner has never been initialized) - so the receiver needs
-	// to handle that by timing out (instead of blocking forever)
-	initialized chan struct{}
-
-	// result will contain the execution result of pcRunner (success or error), it's a channel
-	// so it can be read (and waited on) concurrently
-	result chan PreconfCommitmentResult
-}
-
 type PreconfCommitmentRunner struct {
 	// baseRunner is responsible for some basic stuff like signing
 	baseRunner *BaseRunner
@@ -171,7 +153,10 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get child runner: %w", err)
 	}
-	close(cRunner.initialized)
+	cRunner.mtx.Lock()
+	cRunner.duty = &duty
+	cRunner.mtx.Unlock()
+	close(cRunner.initializedCh)
 
 	logger.Debug(
 		"broadcasting partial sig",
@@ -181,7 +166,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		return nil, fmt.Errorf("failed to broadcast partial signature: %w", err)
 	}
 
-	return cRunner.result, nil
+	return cRunner.resultCh, nil
 }
 
 func (r *PreconfCommitmentRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
@@ -211,7 +196,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 	}
 	go func() {
 		select {
-		case <-cRunner.initialized:
+		case <-cRunner.initializedCh:
 		case <-time.After(childRunnerInitializationTimeout):
 			// looks like this child-runner won't be initialized, terminating here to release
 			// resources
@@ -281,7 +266,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 			zap.String("signature", hexutil.Encode(fullSig)),
 		)
 		cRunner.State.Finished = true
-		cRunner.result <- PreconfCommitmentResult{
+		cRunner.resultCh <- PreconfCommitmentResult{
 			CommitmentSignature: fullSig,
 		}
 	}()
@@ -304,22 +289,7 @@ func (r *PreconfCommitmentRunner) ProcessPostConsensus(ctx context.Context, logg
 }
 
 func (r *PreconfCommitmentRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	
-	// TODO - implement this properly for preconfs
-	// compare hash-root that comes with pre-consensus message against what corresponding child-runner
-	// expects based on the data it has pulled on its own
-	// NOTE, currently with Bolt (or ETHgas) there is no way for us to fetch data about preconf(s)
-	// independently: https://github.com/chainbound/bolt/issues/772
-	return nil, spectypes.DomainApplicationBuilder, nil
-
-	//if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
-	//	return nil, spectypes.DomainError, errors.New("no running duty to compute preconsensus roots and domain")
-	//}
-	//vr, err := r.calculatePreconfCommitment(r.BaseRunner.State.StartingDuty.DutySlot())
-	//if err != nil {
-	//	return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate preconf-commitment")
-	//}
-	//return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
+	panic("unsupported func")
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
@@ -419,8 +389,8 @@ func (r *PreconfCommitmentRunner) childRunner(signingRoot [32]byte, duty *specty
 					r.share.ValidatorIndex: r.share,
 				},
 			},
-			initialized: make(chan struct{}),
-			result:      make(chan PreconfCommitmentResult),
+			initializedCh: make(chan struct{}),
+			resultCh:      make(chan PreconfCommitmentResult),
 		}
 		result.BaseRunner.baseSetupForNewDuty(duty, r.quorum)
 
@@ -433,4 +403,81 @@ func (r *PreconfCommitmentRunner) childRunner(signingRoot [32]byte, duty *specty
 	}
 
 	return result, nil
+}
+
+// pcRunner wraps BaseRunner providing means of
+type pcRunner struct {
+	// initializedCh indicates if this pcRunner has been initialized, once this channel is
+	// closed it means BaseRunner is ready to process preconf-commitment duty (preconf-related
+	// messages received from other operators). Note, it is possible that initialized channel
+	// is never closed (meaning pcRunner has never been initialized) - so the receiver needs
+	// to handle that by timing out (instead of blocking forever)
+	initializedCh chan struct{}
+
+	// TODO mtx also protects objectRoot field ?
+	// mtx synchronizes access to BaseRunner
+	mtx sync.Mutex
+	BaseRunner
+	// duty TODO
+	duty *spectypes.PreconfCommitmentDuty
+
+	// resultCh will contain the execution result of pcRunner (success or error), it's a channel
+	// so it can be read (and waited on) concurrently
+	resultCh chan PreconfCommitmentResult
+}
+
+func (p *pcRunner) GetRoot() ([32]byte, error) {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) GetBeaconNode() beacon.BeaconNode {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) GetSigner() spectypes.BeaconSigner {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) GetNetwork() specqbft.Network {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) HasRunningDuty() bool {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return []ssz.HashRoot{p.duty}, spectypes.DomainApplicationBuilder, nil
+}
+
+func (p *pcRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	panic("unsupported func")
+}
+
+func (p *pcRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	panic("unsupported func")
 }
