@@ -185,7 +185,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 			return errors.New("did not receive proposal for this round")
 		}
 
-		return validSignedPrepareForHeightRoundAndRootIgnoreSignature(
+		return validSignedPrepareForHeightRoundAndRoot(
 			msg,
 			i.State.Height,
 			i.State.Round,
