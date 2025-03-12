@@ -212,7 +212,7 @@ func (r *PreconfCommitmentRunner) ProcessPreConsensus(ctx context.Context, logge
 		cRunner.mtx.Lock()
 		defer cRunner.mtx.Unlock()
 
-		quorum, roots, err := cRunner.basePreConsensusMsgProcessing(r, signedMsg)
+		quorum, roots, err := cRunner.basePreConsensusMsgProcessing(cRunner, signedMsg)
 		if err != nil {
 			logger.Error("basePreConsensusMsgProcessing failed", zap.Error(err))
 			return
