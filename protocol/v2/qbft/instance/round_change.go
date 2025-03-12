@@ -99,6 +99,9 @@ func (i *Instance) uponRoundChange(
 		if newRound <= i.State.Round {
 			return nil // no need to advance round
 		}
+
+		i.metrics.RecordRoundChange(ctx, newRound, reasonPartialQuorum)
+
 		err := i.uponChangeRoundPartialQuorum(ctx, logger, newRound, instanceStartValue)
 		if err != nil {
 			return err
@@ -122,8 +125,6 @@ func (i *Instance) uponChangeRoundPartialQuorum(ctx context.Context, logger *zap
 	if err != nil {
 		return errors.Wrap(err, "failed to hash instance start value")
 	}
-
-	i.metrics.RecordRoundChange(ctx, newRound, reasonPartialQuorum)
 
 	logger.Debug("📢 got partial quorum, broadcasting round change message",
 		fields.Round(i.State.Round),
