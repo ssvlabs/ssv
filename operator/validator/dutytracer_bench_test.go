@@ -10,6 +10,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -44,7 +46,7 @@ func BenchmarkTracer(b *testing.B) {
 	var until, i int
 	for i = 1; i < b.N; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
-		tracer := NewTracer(ctx, zap.NewNop(), vstore, nil, dutyStore, "BN", true)
+		tracer := NewTracer(ctx, zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, "BN", true)
 
 		until = min(i*100, len(traces))
 
@@ -100,4 +102,10 @@ func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 
 		result = append(result, msg)
 	}
+}
+
+type mockDomainDataProvider struct{}
+
+func (m mockDomainDataProvider) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+	return phase0.Domain{}, errors.New("not implemented")
 }
