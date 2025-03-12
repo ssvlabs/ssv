@@ -203,6 +203,8 @@ func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
 }
 
 // helpers
+
+//nolint:gosec
 func toTime(t uint64) time.Time {
 	return time.Unix(0, int64(t)*int64(time.Millisecond))
 }
