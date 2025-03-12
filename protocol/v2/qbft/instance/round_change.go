@@ -44,8 +44,6 @@ func (i *Instance) uponRoundChange(
 		zap.Uint64("msg_round", uint64(msg.QBFTMessage.Round)),
 	)
 
-	i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, reasonReceived)
-
 	logger.Debug("🔄 got round change",
 		fields.Root(msg.QBFTMessage.Root),
 		zap.Any("round_change_signers", msg.SignedMessage.OperatorIDs))
