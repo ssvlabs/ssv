@@ -109,6 +109,7 @@ var StartNodeCmd = &cobra.Command{
 		{ // TODO: workaround for deploy bot, only for ssv-signer-suppress-operator-key branch
 			cfg.KeyStore.PrivateKeyFile = ""
 			cfg.KeyStore.PasswordFile = ""
+			cfg.OperatorPrivateKey = ""
 		}
 
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
