@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
+// TODO - signBeaconObject doesn't need to be a method of BaseRunner
 func (b *BaseRunner) signBeaconObject(
 	runner Runner,
 	duty *spectypes.ValidatorDuty,
@@ -29,6 +30,7 @@ func (b *BaseRunner) signBeaconObject(
 }
 
 // TODO - signPreconfCommitment and signBeaconObject can be 1 single function (refactor it)
+// TODO - signPreconfCommitment doesn't need to be a method of BaseRunner
 func (b *BaseRunner) signPreconfCommitment(
 	runner Runner,
 	validatorIndex spec.ValidatorIndex,
@@ -44,6 +46,7 @@ func (b *BaseRunner) signPreconfCommitment(
 	return b.signAsValidator(runner, validatorIndex, root, domainType, domain)
 }
 
+// TODO - signAsValidator doesn't need to be a method of BaseRunner
 func (b *BaseRunner) signAsValidator(
 	runner Runner,
 	validatorIndex spec.ValidatorIndex,

@@ -130,7 +130,7 @@ func (r *PreconfCommitmentRunner) StartNewDutyWithResponse(
 		Slot:     duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
-	msgID := spectypes.NewMsgID(r.baseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.baseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.domainType, r.share.ValidatorPubKey[:], spectypes.RolePreconfCommitment)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		return nil, fmt.Errorf("encode message: %w", err)
