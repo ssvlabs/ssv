@@ -27,7 +27,7 @@ import (
 // Options contains options to create the node
 type Options struct {
 	// NetworkName is the network name of this node
-	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, goerli, etc.)"`
+	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.)"`
 	CustomDomainType    string `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Only modify if you know what you're doing. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork). "`
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
