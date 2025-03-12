@@ -189,6 +189,49 @@ func TestSharesStorage(t *testing.T) {
 	})
 }
 
+func TestValidatorIndicesToPubkeysMapping(t *testing.T) {
+	logger := logging.TestLogger(t)
+	storage, err := newTestStorage(logger)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	threshold.Init()
+	const keysCount = 4
+
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
+	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
+	require.NoError(t, err)
+
+	for operatorID := range splitKeys {
+		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: []byte(strconv.FormatUint(operatorID, 10))})
+		require.NoError(t, err)
+	}
+
+	validatorShare, _ := generateRandomShare(splitKeys)
+	validatorShare.Status = eth2apiv1.ValidatorStateActiveOngoing
+	validatorShare.ValidatorIndex = 3
+	validatorShare.ActivationEpoch = 4
+	validatorShare.OwnerAddress = common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e")
+	validatorShare.Liquidated = false
+	require.NoError(t, storage.Shares.Save(nil, validatorShare))
+
+	validatorShare2, _ := generateRandomShare(splitKeys)
+	require.NoError(t, storage.Shares.Save(nil, validatorShare2))
+
+	m, err := storage.Shares.(*sharesStorage).loadPubkeyIndexMapping()
+	require.NoError(t, err)
+	require.Equal(t, 2, len(m))
+	require.Equal(t, validatorShare.ValidatorIndex, m[validatorShare.ValidatorPubKey])
+	require.Equal(t, validatorShare2.ValidatorIndex, m[validatorShare2.ValidatorPubKey])
+
+	indices, err := storage.Shares.(*sharesStorage).GetValidatorIndicesByPubkeys([]spectypes.ValidatorPK{validatorShare.ValidatorPubKey, validatorShare2.ValidatorPubKey})
+	require.NoError(t, err)
+	require.True(t, slices.Contains(indices, validatorShare.ValidatorIndex))
+	require.True(t, slices.Contains(indices, validatorShare2.ValidatorIndex))
+}
+
 func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 	logger := logging.TestLogger(t)
 

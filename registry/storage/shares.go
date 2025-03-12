@@ -152,13 +152,14 @@ func (s *sharesStorage) loadPubkeyIndexMapping() (map[spectypes.ValidatorPK]phas
 	// not locking since at this point nobody has the reference to this object
 	m := make(map[spectypes.ValidatorPK]phase0.ValidatorIndex)
 
-	prefix := append(s.storagePrefix, pubkeyIndexMapping...)
+	prefix := PubkeyIndexMappingDBKey(s.storagePrefix)
 
 	err := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
 		var key spectypes.ValidatorPK
 		if len(obj.Key) != len(key) {
 			return fmt.Errorf("invalid validator PK: bad length: %d", len(obj.Key))
 		}
+		copy(key[:], obj.Key)
 		m[key] = phase0.ValidatorIndex(binary.LittleEndian.Uint64(obj.Value))
 		return nil
 	})
@@ -286,15 +287,14 @@ func uint64ToBytes(n uint64) []byte {
 	return b
 }
 
-func (s *sharesStorage) GetValidatorIndexByPubkey(vkeys []spectypes.ValidatorPK) (out []phase0.ValidatorIndex, err error) {
+func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.ValidatorPK) (out []phase0.ValidatorIndex, err error) {
 	var pubkeys = make([][]byte, len(vkeys))
 
 	for _, pk := range vkeys {
 		pubkeys = append(pubkeys, pk[:])
 	}
 
-	prefix := append(s.storagePrefix, pubkeyIndexMapping...)
-
+	prefix := PubkeyIndexMappingDBKey(s.storagePrefix)
 	err = s.db.GetMany(prefix, pubkeys, func(obj basedb.Obj) error {
 		index := binary.LittleEndian.Uint64(obj.Value)
 		out = append(out, phase0.ValidatorIndex(index))
@@ -310,13 +310,13 @@ func (s *sharesStorage) GetValidatorIndexByPubkey(vkeys []spectypes.ValidatorPK)
 
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	// save validator pubkey -> index mapping
-	err := s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (basedb.Obj, error) {
+	prefix := PubkeyIndexMappingDBKey(s.storagePrefix)
+	err := s.db.Using(rw).SetMany(prefix, len(shares), func(i int) (basedb.Obj, error) {
 		s := shares[i]
 		vi := uint64(s.ValidatorIndex)
-		vpk := s.ValidatorPubKey
+		vpk := s.ValidatorPubKey[:]
 
-		key := ValidatorPubkeyIndexMappingDBKey(vpk[:])
-		return basedb.Obj{Key: key, Value: uint64ToBytes(vi)}, nil
+		return basedb.Obj{Key: vpk, Value: uint64ToBytes(vi)}, nil
 	})
 
 	if err != nil {
@@ -489,9 +489,9 @@ func SharesDBKey(pk []byte) []byte {
 	return append(sharesPrefix, pk...)
 }
 
-// ValidatorPubkeyIndexMappingDBKey builds key using validator public key, e.g. "val_pki0x00..01"
-func ValidatorPubkeyIndexMappingDBKey(pk []byte) []byte {
-	return append(pubkeyIndexMapping, pk...)
+// PubkeyIndexMappingDBKey builds key using storage prefix followed by mapping prefix, e.g. "operator/val_pki"
+func PubkeyIndexMappingDBKey(storagePrefix []byte) []byte {
+	return append(storagePrefix, pubkeyIndexMapping...)
 }
 
 // ByOperatorID filters by operator ID.
