@@ -30,7 +30,7 @@ import (
 
 type RemoteKeyManager struct {
 	logger          *zap.Logger
-	netCfg          *networkconfig.NetworkConfig
+	netCfg          networkconfig.NetworkConfig
 	remoteSigner    RemoteSigner
 	consensusClient ConsensusClient
 	getOperatorId   func() spectypes.OperatorID
@@ -53,6 +53,7 @@ type ConsensusClient interface {
 
 func NewRemoteKeyManager(
 	logger *zap.Logger,
+	netCfg networkconfig.NetworkConfig,
 	remoteSigner RemoteSigner,
 	consensusClient ConsensusClient,
 	db basedb.Database,
@@ -74,6 +75,7 @@ func NewRemoteKeyManager(
 
 	return &RemoteKeyManager{
 		logger:            logger,
+		netCfg:            netCfg,
 		remoteSigner:      remoteSigner,
 		consensusClient:   consensusClient,
 		SlashingProtector: NewSlashingProtector(logger, signerStore, protection),
