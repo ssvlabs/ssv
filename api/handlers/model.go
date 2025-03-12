@@ -77,7 +77,7 @@ func toMessageTrace(m []*model.PartialSigTrace) (out []message) {
 		out = append(out, message{
 			BeaconRoot:   mt.BeaconRoot,
 			Signer:       mt.Signer,
-			ReceivedTime: mt.ReceivedTime,
+			ReceivedTime: toTime(mt.ReceivedTime),
 		})
 	}
 
@@ -106,7 +106,7 @@ func toProposalTrace(rt *model.ProposalTrace) *proposalTrace {
 		Round:           rt.Round,
 		BeaconRoot:      rt.BeaconRoot,
 		Signer:          rt.Signer,
-		ReceivedTime:    rt.ReceivedTime,
+		ReceivedTime:    toTime(rt.ReceivedTime),
 		RoundChanges:    toUIRoundChangeTrace(rt.RoundChanges),
 		PrepareMessages: toUIMessageTrace(rt.PrepareMessages),
 	}
@@ -118,7 +118,7 @@ func toUIMessageTrace(m []*model.QBFTTrace) (out []message) {
 			Round:        mt.Round,
 			BeaconRoot:   mt.BeaconRoot,
 			Signer:       mt.Signer,
-			ReceivedTime: mt.ReceivedTime,
+			ReceivedTime: toTime(mt.ReceivedTime),
 		})
 	}
 
@@ -132,7 +132,7 @@ func toUIRoundChangeTrace(m []*model.RoundChangeTrace) (out []roundChange) {
 				Round:        mt.Round,
 				BeaconRoot:   mt.BeaconRoot,
 				Signer:       mt.Signer,
-				ReceivedTime: mt.ReceivedTime,
+				ReceivedTime: toTime(mt.ReceivedTime),
 			},
 			PreparedRound:   mt.PreparedRound,
 			PrepareMessages: toUIMessageTrace(mt.PrepareMessages),
@@ -184,7 +184,7 @@ func toDecideds(d []*model.DecidedTrace) (out []decided) {
 			Round:        dt.Round,
 			BeaconRoot:   dt.BeaconRoot,
 			Signers:      dt.Signers,
-			ReceivedTime: dt.ReceivedTime,
+			ReceivedTime: toTime(dt.ReceivedTime),
 		})
 	}
 
@@ -195,9 +195,14 @@ func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
 	for _, mt := range m {
 		out = append(out, committeeMessage{
 			Signers:      mt.Signers,
-			ReceivedTime: mt.ReceivedTime,
+			ReceivedTime: toTime(mt.ReceivedTime),
 		})
 	}
 
 	return
+}
+
+// helpers
+func toTime(t uint64) time.Time {
+	return time.Unix(0, int64(t)*int64(time.Millisecond))
 }

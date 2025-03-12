@@ -206,10 +206,10 @@ func (n *InMemTracer) decodeJustificationWithPrepares(justifications [][]byte) [
 		}
 
 		justificationTrace := model.QBFTTrace{
-			Round:        uint64(qbftMsg.Round),
-			BeaconRoot:   qbftMsg.Root,
-			Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: time.Now(),
+			Round:      uint64(qbftMsg.Round),
+			BeaconRoot: qbftMsg.Root,
+			Signer:     signedMsg.OperatorIDs[0],
+			// ReceivedTime: toTime(receivedAt),  TODO(matheus): does this make sense? it's the same time
 		}
 
 		traces = append(traces, &justificationTrace)
@@ -235,52 +235,51 @@ func (n *InMemTracer) decodeJustificationWithRoundChanges(justifications [][]byt
 			continue
 		}
 
-		var receivedTime time.Time // zero value because we can't know the time when the sender received the message
-
-		var roundChangeTrace = n.createRoundChangeTrace(qbftMsg, signedMsg, receivedTime)
+		var receivedAt time.Time // zero time
+		var roundChangeTrace = n.createRoundChangeTrace(receivedAt, qbftMsg, signedMsg)
 		traces = append(traces, roundChangeTrace)
 	}
 
 	return traces
 }
 
-func (n *InMemTracer) createRoundChangeTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, receivedTime time.Time) *model.RoundChangeTrace {
+func (n *InMemTracer) createRoundChangeTrace(receivedAt time.Time, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.RoundChangeTrace {
 	return &model.RoundChangeTrace{
 		QBFTTrace: model.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: receivedTime,
+			ReceivedTime: toTime(receivedAt),
 		},
 		PreparedRound:   uint64(msg.DataRound),
 		PrepareMessages: n.decodeJustificationWithPrepares(msg.RoundChangeJustification),
 	}
 }
 
-func (n *InMemTracer) createProposalTrace(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.ProposalTrace {
+func (n *InMemTracer) createProposalTrace(receivedAt time.Time, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.ProposalTrace {
 	return &model.ProposalTrace{
 		QBFTTrace: model.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: time.Now(), // correct
+			ReceivedTime: toTime(receivedAt),
 		},
 		RoundChanges:    n.decodeJustificationWithRoundChanges(msg.RoundChangeJustification),
 		PrepareMessages: n.decodeJustificationWithPrepares(msg.PrepareJustification),
 	}
 }
 
-func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) *model.DecidedTrace {
+func (n *InMemTracer) processConsensus(receivedAt time.Time, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) *model.DecidedTrace {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
-		round.ProposalTrace = n.createProposalTrace(msg, signedMsg)
+		round.ProposalTrace = n.createProposalTrace(receivedAt, msg, signedMsg)
 
 	case specqbft.PrepareMsgType:
 		prepare := &model.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: time.Now(),
+			ReceivedTime: toTime(receivedAt),
 		}
 
 		round.Prepares = append(round.Prepares, prepare)
@@ -291,7 +290,7 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 				Round:        uint64(msg.Round),
 				BeaconRoot:   msg.Root,
 				Signers:      signedMsg.OperatorIDs,
-				ReceivedTime: time.Now(),
+				ReceivedTime: toTime(receivedAt),
 			}
 		}
 
@@ -300,14 +299,13 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 			BeaconRoot: msg.Root,
 			//  TODO(Moshe/Matheus) - need to get the signer from the message?
 			// Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: time.Now(),
+			ReceivedTime: toTime(receivedAt),
 		}
 
 		round.Commits = append(round.Commits, commit)
 
 	case specqbft.RoundChangeMsgType:
-		now := time.Now()
-		roundChangeTrace := n.createRoundChangeTrace(msg, signedMsg, now)
+		roundChangeTrace := n.createRoundChangeTrace(receivedAt, msg, signedMsg)
 
 		round.RoundChanges = append(round.RoundChanges, roundChangeTrace)
 	}
@@ -315,7 +313,7 @@ func (n *InMemTracer) processConsensus(msg *specqbft.Message, signedMsg *spectyp
 	return nil
 }
 
-func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, pubkey spectypes.ValidatorPK) {
+func (n *InMemTracer) processPartialSigValidator(receivedAt time.Time, msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, pubkey spectypes.ValidatorPK) {
 	var (
 		role = toBNRole(ssvMsg.MsgID.GetRoleType())
 		slot = msg.Slot
@@ -334,7 +332,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 		Type:         msg.Type,
 		BeaconRoot:   msg.Messages[0].SigningRoot,
 		Signer:       msg.Messages[0].Signer,
-		ReceivedTime: time.Now(),
+		ReceivedTime: toTime(receivedAt),
 	}
 
 	if msg.Type == spectypes.PostConsensusPartialSig {
@@ -345,7 +343,7 @@ func (n *InMemTracer) processPartialSigValidator(msg *spectypes.PartialSignature
 	roleDutyTrace.Pre = append(roleDutyTrace.Pre, tr)
 }
 
-func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
+func (n *InMemTracer) processPartialSigCommittee(receivedAt time.Time, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
 	slot := msg.Slot
 
 	trace := n.getOrCreateCommitteeTrace(slot, committeeID)
@@ -365,7 +363,7 @@ func (n *InMemTracer) processPartialSigCommittee(msg *spectypes.PartialSignature
 	for _, partialSigMsg := range msg.Messages {
 		signerData := model.SignerData{
 			Signers:      []spectypes.OperatorID{partialSigMsg.Signer},
-			ReceivedTime: time.Now(),
+			ReceivedTime: toTime(receivedAt),
 		}
 
 		if bytes.Equal(trace.syncCommitteeRoot[:], partialSigMsg.SigningRoot[:]) {
@@ -530,7 +528,7 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 				// TODO(moshe) populate proposer or not?
 				// n.populateProposer(round, committeeID, subMsg)
 
-				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
+				decided := n.processConsensus(start, subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
 					n.logger.Info("committee decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.CommitteeID(committeeID))
 					trace.Decideds = append(trace.Decideds, decided)
@@ -574,7 +572,7 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 				// TODO(moshe) populate proposer or not?
 				// n.populateProposer(round, validatorPK, subMsg)
 
-				decided := n.processConsensus(subMsg, msg.SignedSSVMessage, round)
+				decided := n.processConsensus(start, subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
 					n.logger.Info("validator decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.Validator(validatorPK[:]))
 					roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
@@ -603,7 +601,7 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 			var committeeID spectypes.CommitteeID
 			copy(committeeID[:], executorID[16:])
 
-			n.processPartialSigCommittee(pSigMessages, committeeID)
+			n.processPartialSigCommittee(start, pSigMessages, committeeID)
 
 			return
 		}
@@ -611,7 +609,7 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 		var validatorPK spectypes.ValidatorPK
 		copy(validatorPK[:], executorID)
 
-		n.processPartialSigValidator(pSigMessages, msg, validatorPK)
+		n.processPartialSigValidator(start, pSigMessages, msg, validatorPK)
 	}
 }
 
@@ -635,4 +633,8 @@ func getOrCreateRound(trace *model.ConsensusTrace, rnd uint64) *model.RoundTrace
 	}
 
 	return trace.Rounds[rnd-1]
+}
+
+func toTime(t time.Time) uint64 {
+	return uint64(t.UnixNano() / int64(time.Millisecond))
 }

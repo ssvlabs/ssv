@@ -1,20 +1,10 @@
 package exporter
 
 import (
-	"time"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
-
-type DiskMsg struct {
-	Signed spectypes.SignedSSVMessage
-	Spec   spectypes.SSVMessage
-	Kind   uint8 // 0 - qbft, 1 - sig
-	Qbft   specqbft.Message
-	Sig    spectypes.PartialSignatureMessages
-}
 
 //go:generate sszgen -include ../../vendor/github.com/attestantio/go-eth2-client/spec/phase0,../../vendor/github.com/ssvlabs/ssv-spec/types,../../vendor/github.com/ssvlabs/ssv-spec/qbft --path model.go --objs ValidatorDutyTrace,CommitteeDutyTrace,DiskMsg
 type ValidatorDutyTrace struct {
@@ -37,7 +27,7 @@ type DecidedTrace struct {
 	Round        uint64                 // same for
 	BeaconRoot   phase0.Root            `ssz-size:"32"`
 	Signers      []spectypes.OperatorID `ssz-max:"13"`
-	ReceivedTime time.Time
+	ReceivedTime uint64
 }
 
 type RoundTrace struct {
@@ -65,14 +55,14 @@ type QBFTTrace struct {
 	Round        uint64      // same for
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID
-	ReceivedTime time.Time
+	ReceivedTime uint64
 }
 
 type PartialSigTrace struct {
 	Type         spectypes.PartialSigMsgType
 	BeaconRoot   phase0.Root `ssz-size:"32"`
 	Signer       spectypes.OperatorID
-	ReceivedTime time.Time
+	ReceivedTime uint64
 }
 
 // Committee
@@ -90,5 +80,14 @@ type CommitteeDutyTrace struct {
 
 type SignerData struct {
 	Signers      []spectypes.OperatorID `ssz-max:"13"`
-	ReceivedTime time.Time
+	ReceivedTime uint64
+}
+
+// used in benchmarks
+type DiskMsg struct {
+	Signed spectypes.SignedSSVMessage
+	Spec   spectypes.SSVMessage
+	Kind   uint8 // 0 - qbft, 1 - sig
+	Qbft   specqbft.Message
+	Sig    spectypes.PartialSignatureMessages
 }
