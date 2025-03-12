@@ -304,6 +304,7 @@ func (r *PreconfCommitmentRunner) ProcessPostConsensus(ctx context.Context, logg
 }
 
 func (r *PreconfCommitmentRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	
 	// TODO - implement this properly for preconfs
 	// compare hash-root that comes with pre-consensus message against what corresponding child-runner
 	// expects based on the data it has pulled on its own
