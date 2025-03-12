@@ -27,6 +27,8 @@ type PreconfCommitmentResult struct {
 	CommitmentSignature []byte
 }
 
+// PreconfCommitmentRunner is a runner that manages a bunch of child-runners (each of which
+// services a single preconf-commitment duty).
 type PreconfCommitmentRunner struct {
 	// baseRunner is responsible for some basic stuff like signing
 	baseRunner *BaseRunner
@@ -34,13 +36,13 @@ type PreconfCommitmentRunner struct {
 	// childRunnersInflight prevents concurrent requests to childRunners from initializing
 	// the same childRunners entry twice (instead we'll initialize just 1 childRunner instance
 	// and return that same instance on repetitive gets).
-	childRunnersInflight singleflight.Group[[32]byte, *pcRunner]
+	childRunnersInflight singleflight.Group[[32]byte, *childRunner]
 	// childRunners maintains mapping between preconf sign-requests and corresponding runners
 	// that process those requests. It maps signing-root (not the actual preconf object-root
 	// but a root of a message that contains preconf object + signing domain). It's a ttlcache
 	// so we can access it concurrently clean it up periodically (to prevent no longer relevant
 	// runners from piling up).
-	childRunners *ttlcache.Cache[[32]byte, *pcRunner]
+	childRunners *ttlcache.Cache[[32]byte, *childRunner]
 
 	domainType spectypes.DomainType
 	share      *spectypes.Share
@@ -73,7 +75,7 @@ func NewPreconfCommitmentRunner(
 		},
 		childRunners: ttlcache.New(
 			// TODO how long should child runners live for ? setting it to ~2 epochs for now
-			ttlcache.WithTTL[[32]byte, *pcRunner](2 * 32 * 12 * time.Second),
+			ttlcache.WithTTL[[32]byte, *childRunner](2 * 32 * 12 * time.Second),
 		),
 		domainType:     domainType,
 		share:          share,
@@ -373,14 +375,14 @@ func (r *PreconfCommitmentRunner) GetRoot() ([32]byte, error) {
 
 // childRunner creates a child runner (or returns one if it already exists) for the provided signingRoot
 // (which is a root of a message that contains preconf object + signing domain)
-func (r *PreconfCommitmentRunner) childRunner(signingRoot [32]byte, duty *spectypes.PreconfCommitmentDuty) (*pcRunner, error) {
-	result, err, _ := r.childRunnersInflight.Do(signingRoot, func() (*pcRunner, error) {
+func (r *PreconfCommitmentRunner) childRunner(signingRoot [32]byte, duty *spectypes.PreconfCommitmentDuty) (*childRunner, error) {
+	result, err, _ := r.childRunnersInflight.Do(signingRoot, func() (*childRunner, error) {
 		item := r.childRunners.Get(signingRoot)
 		if item != nil {
 			return item.Value(), nil
 		}
 
-		result := pcRunner{
+		result := childRunner{
 			BaseRunner: BaseRunner{
 				RunnerRoleType: spectypes.RolePreconfCommitment,
 				DomainType:     r.domainType,
@@ -390,6 +392,7 @@ func (r *PreconfCommitmentRunner) childRunner(signingRoot [32]byte, duty *specty
 				},
 			},
 			initializedCh: make(chan struct{}),
+			beacon:        r.beacon,
 			resultCh:      make(chan PreconfCommitmentResult),
 		}
 		result.BaseRunner.baseSetupForNewDuty(duty, r.quorum)
@@ -405,79 +408,81 @@ func (r *PreconfCommitmentRunner) childRunner(signingRoot [32]byte, duty *specty
 	return result, nil
 }
 
-// pcRunner wraps BaseRunner providing means of
-type pcRunner struct {
-	// initializedCh indicates if this pcRunner has been initialized, once this channel is
+// childRunner is a runner that services a single preconf-commitment duty.
+type childRunner struct {
+	// initializedCh indicates if this childRunner has been initialized, once this channel is
 	// closed it means BaseRunner is ready to process preconf-commitment duty (preconf-related
 	// messages received from other operators). Note, it is possible that initialized channel
-	// is never closed (meaning pcRunner has never been initialized) - so the receiver needs
+	// is never closed (meaning childRunner has never been initialized) - so the receiver needs
 	// to handle that by timing out (instead of blocking forever)
 	initializedCh chan struct{}
 
+	beacon beacon.BeaconNode
+
 	// mtx synchronizes access to BaseRunner and duty fields
 	mtx sync.Mutex
-	// BaseRunner provides basic runner functionality for pcRunner
+	// BaseRunner provides basic runner functionality for childRunner
 	BaseRunner
 	// duty is the preconf-commitment duty this runner is servicing
 	duty *spectypes.PreconfCommitmentDuty
 
-	// resultCh will contain the execution result of pcRunner (success or error), it's a channel
+	// resultCh will contain the execution result of childRunner (success or error), it's a channel
 	// so it can be read (and waited on) concurrently
 	resultCh chan PreconfCommitmentResult
 }
 
-func (p *pcRunner) GetRoot() ([32]byte, error) {
+func (p *childRunner) GetRoot() ([32]byte, error) {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) GetBeaconNode() beacon.BeaconNode {
+func (p *childRunner) GetBeaconNode() beacon.BeaconNode {
+	return p.beacon
+}
+
+func (p *childRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (p *childRunner) GetSigner() spectypes.BeaconSigner {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) GetSigner() spectypes.BeaconSigner {
+func (p *childRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
+func (p *childRunner) GetNetwork() specqbft.Network {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) GetNetwork() specqbft.Network {
+func (p *childRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+func (p *childRunner) HasRunningDuty() bool {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) HasRunningDuty() bool {
+func (p *childRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+func (p *childRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
+func (p *childRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	panic("unsupported func")
-}
-
-func (p *pcRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (p *childRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	return []ssz.HashRoot{p.duty}, spectypes.DomainApplicationBuilder, nil
 }
 
-func (p *pcRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (p *childRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	panic("unsupported func")
 }
 
-func (p *pcRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+func (p *childRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	panic("unsupported func")
 }
