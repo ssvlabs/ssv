@@ -44,7 +44,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData
 	i.State.LastPreparedRound = i.State.Round
 
-	i.metrics.EndStage(ctx, i.State.Round, prepareStage)
+	i.metrics.EndStage(ctx, i.State.Round, stagePrepare)
 
 	logger.Debug("🎯 got prepare quorum",
 		fields.Round(i.State.Round),
