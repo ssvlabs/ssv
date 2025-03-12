@@ -30,6 +30,7 @@ import (
 
 type RemoteKeyManager struct {
 	logger          *zap.Logger
+	netCfg          *networkconfig.NetworkConfig
 	remoteSigner    RemoteSigner
 	consensusClient ConsensusClient
 	getOperatorId   func() spectypes.OperatorID
@@ -46,7 +47,7 @@ type RemoteSigner interface {
 }
 
 type ConsensusClient interface {
-	ForkAtSlot(ctx context.Context, slot phase0.Slot) (*phase0.Fork, error)
+	ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error)
 	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)
 }
 
@@ -133,7 +134,9 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, phase0.Root, error) {
-	forkInfo, err := km.getForkInfo(ctx, slot)
+	epoch := km.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+
+	forkInfo, err := km.getForkInfo(ctx, epoch)
 	if err != nil {
 		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("get fork info: %w", err)
 	}
@@ -349,9 +352,9 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	return sig[:], root, nil
 }
 
-func (km *RemoteKeyManager) getForkInfo(ctx context.Context, slot phase0.Slot) (web3signer.ForkInfo, error) {
+func (km *RemoteKeyManager) getForkInfo(ctx context.Context, epoch phase0.Epoch) (web3signer.ForkInfo, error) {
 	// ForkSchedule result is cached in the client and updated once in a while.
-	currentFork, err := km.consensusClient.ForkAtSlot(ctx, slot)
+	currentFork, err := km.consensusClient.ForkAtEpoch(ctx, epoch)
 	if err != nil {
 		return web3signer.ForkInfo{}, fmt.Errorf("get current fork: %w", err)
 	}

@@ -25,7 +25,7 @@ func TestCurrentFork(t *testing.T) {
 	network := beacon.NewNetwork(types.MainNetwork)
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{
 					"data": [
@@ -65,7 +65,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		currentFork, err := client.ForkAtSlot(ctx, phase0.Slot(network.SlotsPerEpoch())*200)
+		currentFork, err := client.ForkAtEpoch(ctx, 200)
 		require.NoError(t, err)
 		require.NotNil(t, currentFork)
 
@@ -75,7 +75,7 @@ func TestCurrentFork(t *testing.T) {
 	})
 
 	t.Run("nil_data", func(t *testing.T) {
-		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{"data": null}`), nil
 			}
@@ -97,13 +97,13 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.ForkAtSlot(ctx, 1)
+		_, err = client.ForkAtEpoch(ctx, 1)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "fork schedule response data is nil")
 	})
 
 	t.Run("no_current_fork", func(t *testing.T) {
-		mockServer := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{
 					"data": [
@@ -138,7 +138,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.ForkAtSlot(ctx, phase0.Slot(network.SlotsPerEpoch())*100)
+		_, err = client.ForkAtEpoch(ctx, 100)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "could not find fork at epoch 100")
 	})

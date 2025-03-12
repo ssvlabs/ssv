@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (gc *GoClient) ForkAtSlot(ctx context.Context, slot phase0.Slot) (*phase0.Fork, error) {
+func (gc *GoClient) ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) {
 	start := time.Now()
 	schedule, err := gc.multiClient.ForkSchedule(ctx, &api.ForkScheduleOpts{})
 	recordRequestDuration(gc.ctx, "ForkSchedule", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
@@ -29,7 +29,6 @@ func (gc *GoClient) ForkAtSlot(ctx context.Context, slot phase0.Slot) (*phase0.F
 		return nil, fmt.Errorf("fork schedule response data is nil")
 	}
 
-	epoch := gc.network.EstimatedEpochAtSlot(slot)
 	var forkAtEpoch *phase0.Fork
 	for _, fork := range schedule.Data {
 		if fork.Epoch <= epoch && (forkAtEpoch == nil || fork.Epoch > forkAtEpoch.Epoch) {
