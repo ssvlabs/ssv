@@ -106,6 +106,11 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+		{ // TODO: workaround for deploy bot, only for ssv-signer-suppress-operator-key branch
+			cfg.KeyStore.PrivateKeyFile = ""
+			cfg.KeyStore.PasswordFile = ""
+		}
+
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 
 		logger, err := setupGlobal()
