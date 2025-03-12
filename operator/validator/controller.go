@@ -950,6 +950,8 @@ func (c *controller) HandleMetadataUpdates(ctx context.Context) {
 
 // handleMetadataUpdate processes metadata changes for validators.
 func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadata.SyncBatch) error {
+	// Skip processing for full nodes (exporters) and operators that are still syncing
+	// (i.e., haven't received their OperatorAdded event yet).
 	if !c.operatorDataStore.OperatorIDReady() {
 		return nil
 	}
