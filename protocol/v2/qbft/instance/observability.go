@@ -19,19 +19,19 @@ const (
 type stage string
 
 const (
-	proposalStage stage = "proposal"
-	prepareStage  stage = "prepare"
-	commitStage   stage = "commit"
+	stageProposal stage = "proposal"
+	stagePrepare  stage = "prepare"
+	stageCommit   stage = "commit"
 )
 
 // roundChangeReason represents the reason for a round change in the QBFT protocol
 type roundChangeReason string
 
 const (
-	timeoutReason       roundChangeReason = "timeout"
-	partialQuorumReason roundChangeReason = "partial-quorum"
-	receivedReason      roundChangeReason = "received"
-	justifiedReason     roundChangeReason = "justified"
+	reasonTimeout       roundChangeReason = "timeout"
+	reasonPartialQuorum roundChangeReason = "partial-quorum"
+	reasonReceived      roundChangeReason = "received"
+	reasonJustified     roundChangeReason = "justified"
 )
 
 var (
