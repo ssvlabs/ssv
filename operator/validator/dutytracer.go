@@ -386,7 +386,7 @@ func (n *InMemTracer) saveValidatorToCommitteeLink(slot phase0.Slot, msg *specty
 		slotToCommittee.Store(slot, committeeID)
 
 		// TODO(me): remove this
-		n.logger.Info("store link for", fields.Slot(slot), fields.ValidatorIndex(msg.ValidatorIndex), fields.CommitteeID(committeeID))
+		// n.logger.Info("store link for", fields.Slot(slot), fields.ValidatorIndex(msg.ValidatorIndex), fields.CommitteeID(committeeID))
 	}
 }
 
@@ -517,11 +517,11 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 
 				// fill in sync committee roots
 				// to be later read in 'processPartialSigCommittee'
-				root, err := n.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
-				if err != nil {
-					n.logger.Error("get sync committee root", zap.Error(err))
-				}
-				trace.syncCommitteeRoot = root
+				// root, err := n.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
+				// if err != nil {
+				// 	n.logger.Error("get sync committee root", zap.Error(err))
+				// }
+				// trace.syncCommitteeRoot = root
 
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
@@ -530,7 +530,7 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 
 				decided := n.processConsensus(start, subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
-					n.logger.Info("committee decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.CommitteeID(committeeID))
+					// n.logger.Info("committee decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.CommitteeID(committeeID))
 					trace.Decideds = append(trace.Decideds, decided)
 				}
 			default:
@@ -574,7 +574,7 @@ func (n *InMemTracer) Trace(ctx context.Context, msg *queue.SSVMessage) {
 
 				decided := n.processConsensus(start, subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
-					n.logger.Info("validator decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.Validator(validatorPK[:]))
+					// n.logger.Info("validator decideds", fields.Slot(phase0.Slot(subMsg.Height)), fields.Validator(validatorPK[:]))
 					roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
 				}
 			}
