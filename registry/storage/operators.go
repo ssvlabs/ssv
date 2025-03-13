@@ -31,6 +31,7 @@ type OperatorData struct {
 type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 
 // Operators is the interface for managing operators data
+// TODO: consider splitting this interface into separate interfaces for read and write operations
 type Operators interface {
 	GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*OperatorData, bool, error)
 	GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*OperatorData, bool, error)
