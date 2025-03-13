@@ -3,6 +3,7 @@ package validation
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -54,27 +55,46 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return ErrSignersNotSorted
 	}
 
-	var prevSigner spectypes.OperatorID
-	for _, signer := range signedSSVMessage.OperatorIDs {
-		// Rule: Signer can't be zero
-		if signer == 0 {
-			return ErrZeroSigner
-		}
-
-		// Rule: Signers must be unique
-		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
-		if signer == prevSigner {
-			return ErrDuplicatedSigner
-		}
-		prevSigner = signer
-	}
-
 	// Rule: Len(Signers) must be equal to Len(Signatures)
 	if len(signedSSVMessage.OperatorIDs) != len(signedSSVMessage.Signatures) {
 		e := ErrSignersAndSignaturesWithDifferentLength
 		e.got = fmt.Sprintf("%d/%d", len(signedSSVMessage.OperatorIDs), len(signedSSVMessage.Signatures))
 		return e
 	}
+
+	var filteredOperatorIDs []spectypes.OperatorID
+	var filteredSignatures [][]byte
+	var prevSigner spectypes.OperatorID
+
+	for i, signer := range signedSSVMessage.OperatorIDs {
+		// Rule: Signer can't be zero
+		if err := mv.validateSignerNotZero(signer); err != nil {
+			return err
+		}
+
+		// Rule: Signers must be unique
+		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
+		if err := mv.validateSignerUnique(signer, prevSigner); err != nil {
+			return err
+		}
+
+		// Rule: Signer must exist (not removed)
+		if err := mv.validateSignerExists(signer); err != nil {
+			// If operator is removed, skip it and continue with next operator
+			if errors.Is(err, ErrRemovedOperator) {
+				continue
+			}
+			return err
+		}
+
+		filteredOperatorIDs = append(filteredOperatorIDs, signer)
+		filteredSignatures = append(filteredSignatures, signedSSVMessage.Signatures[i])
+		prevSigner = signer
+	}
+
+	// Update the message with filtered operators and signatures
+	signedSSVMessage.OperatorIDs = filteredOperatorIDs
+	signedSSVMessage.Signatures = filteredSignatures
 
 	// Rule: SSVMessage cannot be nil
 	ssvMessage := signedSSVMessage.SSVMessage
@@ -143,6 +163,7 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 	}
 }
 
+// belongsToCommittee checks if the signers belong to the committee
 func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorID, committee []spectypes.OperatorID) error {
 	// Rule: Signers must belong to validator committee or CommitteeID
 	for _, signer := range operatorIDs {
@@ -152,6 +173,40 @@ func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorI
 			e.want = committee
 			return e
 		}
+	}
+
+	return nil
+}
+
+// validateSignerNotZero checks if the signer ID is not zero
+func (mv *messageValidator) validateSignerNotZero(signer spectypes.OperatorID) error {
+	if signer == 0 {
+		return ErrZeroSigner
+	}
+	return nil
+}
+
+// validateSignerUnique checks if the signer is unique (not duplicated)
+func (mv *messageValidator) validateSignerUnique(signer, prevSigner spectypes.OperatorID) error {
+	if signer == prevSigner {
+		return ErrDuplicatedSigner
+	}
+	return nil
+}
+
+// validateSignerExists checks if the operator exists and is not removed
+func (mv *messageValidator) validateSignerExists(signer spectypes.OperatorID) error {
+	exists, err := mv.operators.OperatorsExist(nil, []spectypes.OperatorID{signer})
+	if err != nil {
+		e := ErrOperatorValidation
+		e.got = signer
+		return e
+	}
+
+	if !exists {
+		e := ErrRemovedOperator
+		e.got = signer
+		return e
 	}
 
 	return nil

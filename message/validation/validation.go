@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"slices"
 	"sync"
 	"time"
@@ -20,9 +21,22 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/registry/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 )
+
+// Operators defines the minimal interface needed for validation
+type Operators interface {
+	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
+}
+
+// ValidatorStore defines the minimal interface needed for validation
+type ValidatorStore interface {
+	Validator(pubKey []byte) (*ssvtypes.SSVShare, bool)
+	Committee(id spectypes.CommitteeID) (*registrystorage.Committee, bool)
+}
 
 // MessageValidator defines methods for validating pubsub messages.
 type MessageValidator interface {
@@ -35,10 +49,12 @@ type messageValidator struct {
 	netCfg                networkconfig.NetworkConfig
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
-	validatorStore        storage.ValidatorStore
+	validatorStore        ValidatorStore
+	operators             Operators
 	dutyStore             *dutystore.Store
 	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 	pectraForkEpoch       phase0.Epoch
+	nodeStorage           operatorstorage.Storage
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -52,7 +68,8 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
 	netCfg networkconfig.NetworkConfig,
-	validatorStore storage.ValidatorStore,
+	validatorStore ValidatorStore,
+	operators Operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
 	pectraForkEpoch phase0.Epoch,
@@ -64,6 +81,7 @@ func New(
 		consensusStateIndex: make(map[consensusID]*consensusState),
 		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
 		validatorStore:      validatorStore,
+		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
 		pectraForkEpoch:     pectraForkEpoch,

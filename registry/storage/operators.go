@@ -15,6 +15,8 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go
+
 var (
 	operatorsPrefix = []byte("operators")
 )
@@ -225,5 +227,5 @@ func (s *operatorsStorage) DropOperators() error {
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
 func buildOperatorKey(id spectypes.OperatorID) []byte {
-	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(id, 10))}, []byte("/"))
+	return append(operatorsPrefix, []byte("/"+strconv.FormatUint(id, 10))...)
 }
