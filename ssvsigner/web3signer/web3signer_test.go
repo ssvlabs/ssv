@@ -1,6 +1,7 @@
 package web3signer
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -118,7 +119,14 @@ func TestImportKeystore(t *testing.T) {
 				var req ImportKeystoreRequest
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
-				if !reflect.DeepEqual(req.Keystores, tt.keystoreList) {
+				var expectedKeystores []Keystore
+				for _, keystoreStr := range tt.keystoreList {
+					var keystore Keystore
+					require.NoError(t, json.Unmarshal([]byte(keystoreStr), &keystore))
+					expectedKeystores = append(expectedKeystores, keystore)
+				}
+
+				if !reflect.DeepEqual(req.Keystores, expectedKeystores) {
 					t.Errorf("Expected keystores %v but got %v", tt.keystoreList, req.Keystores)
 				}
 				if !reflect.DeepEqual(req.Passwords, tt.keystorePasswordList) {
@@ -130,7 +138,14 @@ func TestImportKeystore(t *testing.T) {
 				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
 			})
 
-			statuses, err := web3Signer.ImportKeystore(context.Background(), tt.keystoreList, tt.keystorePasswordList)
+			var keystores []Keystore
+			for _, keystoreJSON := range tt.keystoreList {
+				var keystore Keystore
+				require.NoError(t, json.Unmarshal([]byte(keystoreJSON), &keystore))
+
+				keystores = append(keystores, keystore)
+			}
+			statuses, err := web3Signer.ImportKeystore(context.Background(), keystores, tt.keystorePasswordList)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -156,7 +171,7 @@ func TestDeleteKeystore(t *testing.T) {
 		{
 			name: "Successful delete",
 			sharePubKeyList: []phase0.BLSPubKey{
-				mustBLSFromString("0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
 			},
 			statusCode: http.StatusOK,
 			responseBody: DeleteKeystoreResponse{
@@ -173,7 +188,7 @@ func TestDeleteKeystore(t *testing.T) {
 		{
 			name: "Failed delete",
 			sharePubKeyList: []phase0.BLSPubKey{
-				mustBLSFromString("0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
 			},
 			statusCode: http.StatusBadRequest,
 			responseBody: DeleteKeystoreResponse{
@@ -247,23 +262,13 @@ func TestSign(t *testing.T) {
 		expectError    bool
 	}{
 		{
-			name:        "Successful sign",
-			sharePubKey: phase0.BLSPubKey{0x01, 0x02, 0x03},
-			payload:     testPayload,
-			statusCode:  http.StatusOK,
-			responseBody: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" +
-				"1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-			expectedResult: []byte{
-				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
-				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
-				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
-				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
-				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
-				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
-				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
-				0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
-			},
-			expectError: false,
+			name:           "Successful sign",
+			sharePubKey:    phase0.BLSPubKey{0x01, 0x02, 0x03},
+			payload:        testPayload,
+			statusCode:     http.StatusOK,
+			responseBody:   hex.EncodeToString(bytes.Repeat([]byte{1}, phase0.SignatureLength)),
+			expectedResult: bytes.Repeat([]byte{1}, phase0.SignatureLength),
+			expectError:    false,
 		},
 		{
 			name:         "Invalid public key",
@@ -314,7 +319,7 @@ func TestSign(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedResult, result)
+				require.EqualValues(t, tt.expectedResult, result)
 			}
 		})
 	}
@@ -332,12 +337,12 @@ func TestListKeys(t *testing.T) {
 			name:       "Successful list keys",
 			statusCode: http.StatusOK,
 			responseBody: ListKeysResponse{
-				mustBLSFromString("0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
-				mustBLSFromString("0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				mustBLSFromString("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 			},
 			expectedKeys: []phase0.BLSPubKey{
-				mustBLSFromString("0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
-				mustBLSFromString("0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				mustBLSFromString("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 			},
 			expectError: false,
 		},
