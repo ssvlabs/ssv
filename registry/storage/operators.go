@@ -24,6 +24,7 @@ type OperatorData struct {
 	ID           spectypes.OperatorID `json:"id"`
 	PublicKey    []byte               `json:"publicKey"`
 	OwnerAddress common.Address       `json:"ownerAddress"`
+	Removed      bool                 `json:"removed"`
 }
 
 // GetOperatorData is a function that returns the operator data
@@ -39,6 +40,9 @@ type Operators interface {
 	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 	DropOperators() error
+	IsOperatorRemoved(r basedb.Reader, id spectypes.OperatorID) (bool, error)
+	MarkOperatorAsRemoved(rw basedb.ReadWriter, id spectypes.OperatorID) error
+	ListRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error)
 }
 
 type operatorsStorage struct {
@@ -223,7 +227,72 @@ func (s *operatorsStorage) DropOperators() error {
 	))
 }
 
+// IsOperatorRemoved checks if an operator has been removed
+func (s *operatorsStorage) IsOperatorRemoved(
+	r basedb.Reader,
+	id spectypes.OperatorID,
+) (bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	op, found, err := s.getOperatorData(r, id)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, nil
+	}
+
+	return op.Removed, nil
+}
+
+// MarkOperatorAsRemoved marks an operator as removed
+func (s *operatorsStorage) MarkOperatorAsRemoved(
+	rw basedb.ReadWriter,
+	id spectypes.OperatorID,
+) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	op, found, err := s.getOperatorData(nil, id)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return errors.New("operator not found")
+	}
+
+	op.Removed = true
+
+	raw, err := json.Marshal(op)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal operator data")
+	}
+
+	return s.db.Using(rw).Set(s.prefix, buildOperatorKey(id), raw)
+}
+
+// ListRemovedOperators returns a list of all removed operator IDs
+func (s *operatorsStorage) ListRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	operators, err := s.listOperators(r, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	var removedOperators []spectypes.OperatorID
+	for _, op := range operators {
+		if op.Removed {
+			removedOperators = append(removedOperators, op.ID)
+		}
+	}
+
+	return removedOperators, nil
+}
+
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
 func buildOperatorKey(id spectypes.OperatorID) []byte {
-	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(id, 10))}, []byte("/"))
+	return append(operatorsPrefix, []byte("/"+strconv.FormatUint(id, 10))...)
 }
