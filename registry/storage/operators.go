@@ -16,7 +16,8 @@ import (
 )
 
 var (
-	operatorsPrefix = []byte("operators")
+	operatorsPrefix     = []byte("operators")
+	removedOperatorsKey = []byte("removed_operators")
 )
 
 // OperatorData the public data of an operator
@@ -24,14 +25,12 @@ type OperatorData struct {
 	ID           spectypes.OperatorID `json:"id"`
 	PublicKey    []byte               `json:"publicKey"`
 	OwnerAddress common.Address       `json:"ownerAddress"`
-	Removed      bool                 `json:"removed"`
 }
 
 // GetOperatorData is a function that returns the operator data
 type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 
 // Operators is the interface for managing operators data
-// TODO: consider splitting this interface into separate interfaces for read and write operations
 type Operators interface {
 	GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*OperatorData, bool, error)
 	GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*OperatorData, bool, error)
@@ -41,9 +40,10 @@ type Operators interface {
 	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 	DropOperators() error
+
 	IsOperatorRemoved(r basedb.Reader, id spectypes.OperatorID) (bool, error)
 	MarkOperatorAsRemoved(rw basedb.ReadWriter, id spectypes.OperatorID) error
-	ListRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error)
+	GetRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error)
 }
 
 type operatorsStorage struct {
@@ -229,65 +229,79 @@ func (s *operatorsStorage) DropOperators() error {
 }
 
 // IsOperatorRemoved checks if an operator has been removed
-func (s *operatorsStorage) IsOperatorRemoved(
-	r basedb.Reader,
-	id spectypes.OperatorID,
-) (bool, error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	op, found, err := s.getOperatorData(r, id)
+func (s *operatorsStorage) IsOperatorRemoved(r basedb.Reader, id spectypes.OperatorID) (bool, error) {
+	removedOperators, err := s.GetRemovedOperators(r)
 	if err != nil {
 		return false, err
 	}
-	if !found {
-		return false, nil
+
+	for _, removedID := range removedOperators {
+		if removedID == id {
+			return true, nil
+		}
 	}
 
-	return op.Removed, nil
+	return false, nil
 }
 
-// MarkOperatorAsRemoved marks an operator as removed
-func (s *operatorsStorage) MarkOperatorAsRemoved(
-	rw basedb.ReadWriter,
-	id spectypes.OperatorID,
-) error {
+// MarkOperatorAsRemoved marks an operator as removed in storage
+func (s *operatorsStorage) MarkOperatorAsRemoved(rw basedb.ReadWriter, id spectypes.OperatorID) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	op, found, err := s.getOperatorData(nil, id)
+	removedOperators, err := s.getRemovedOperators(rw)
 	if err != nil {
 		return err
 	}
-	if !found {
-		return errors.New("operator not found")
+
+	// Check if operator is already marked as removed
+	for _, removedID := range removedOperators {
+		if removedID == id {
+			return nil // Already marked as removed
+		}
 	}
 
-	op.Removed = true
+	// Add operator to removed list
+	removedOperators = append(removedOperators, id)
 
-	raw, err := json.Marshal(op)
+	// Save updated list
+	data, err := json.Marshal(removedOperators)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal operator data")
+		return errors.Wrap(err, "failed to marshal removed operators")
 	}
 
-	return s.db.Using(rw).Set(s.prefix, buildOperatorKey(id), raw)
+	if err := rw.Set(s.prefix, removedOperatorsKey, data); err != nil {
+		return errors.Wrap(err, "failed to save removed operators")
+	}
+
+	return nil
 }
 
-// ListRemovedOperators returns a list of all removed operator IDs
-func (s *operatorsStorage) ListRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error) {
+// GetRemovedOperators returns the list of removed operator IDs
+func (s *operatorsStorage) GetRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	operators, err := s.listOperators(r, 0, 0)
+	return s.getRemovedOperators(r)
+}
+
+// getRemovedOperators returns the list of removed operator IDs
+func (s *operatorsStorage) getRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	data, found, err := r.Get(s.prefix, removedOperatorsKey)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to get removed operators")
+	}
+
+	if !found || data.Value == nil {
+		return []spectypes.OperatorID{}, nil
 	}
 
 	var removedOperators []spectypes.OperatorID
-	for _, op := range operators {
-		if op.Removed {
-			removedOperators = append(removedOperators, op.ID)
-		}
+	if err := json.Unmarshal(data.Value, &removedOperators); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal removed operators")
 	}
 
 	return removedOperators, nil

@@ -120,9 +120,15 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		fields.Owner(od.OwnerAddress),
 	)
 
-	// This function is currently no-op and it will do nothing. Operator removed event is not used in the current implementation.
+	// Mark the operator as removed in storage
+	if err := eh.nodeStorage.MarkOperatorAsRemoved(txn, event.OperatorId); err != nil {
+		logger.Error("failed to mark operator as removed", zap.Error(err))
+		return fmt.Errorf("failed to mark operator as removed: %w", err)
+	}
 
+	logger.Info("operator marked as removed")
 	logger.Debug("processed event")
+
 	return nil
 }
 

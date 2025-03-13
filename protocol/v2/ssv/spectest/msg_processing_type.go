@@ -298,6 +298,7 @@ var baseCommitteeWithRunnerSample = func(
 		createRunnerF,
 		shareMap,
 		committeeDutyGuard,
+		nil, // TODO: missing registry
 	)
 
 	return c
