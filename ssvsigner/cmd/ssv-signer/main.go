@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/alecthomas/kong"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/valyala/fasthttp"
 
 	"go.uber.org/zap"
@@ -53,6 +54,10 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
 		zap.Bool("got_share_keystore_passphrase", cli.ShareKeystorePassphrase != ""),
 	)
+
+	if err := bls.Init(bls.BLS12_381); err != nil {
+		return fmt.Errorf("init BLS: %w", err)
+	}
 
 	// PrivateKeyFile and PasswordFile use the same 'and' group,
 	// so setting them as 'required' wouldn't allow to start with PrivateKey.

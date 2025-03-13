@@ -122,9 +122,9 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		sharePrivBLS := &bls.SecretKey{}
 		if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
-			logger.Warn("Failed to cast private key", zap.Int("index", i), zap.Error(err))
+			logger.Warn("Failed to deserialize share private key", zap.Int("index", i), zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			r.writeErr(ctx, fmt.Errorf("failed to cast share private key: %w", err))
+			r.writeErr(ctx, fmt.Errorf("failed to deserialize share private key: %w", err))
 			return
 		}
 
