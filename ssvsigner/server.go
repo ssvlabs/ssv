@@ -13,6 +13,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -58,19 +59,26 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 }
 
 func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
+	logger := r.logger.With(zap.String("method", "handleListValidators"))
+
 	publicKeys, err := r.remoteSigner.ListKeys(ctx)
 	if err != nil {
+		logger.Warn("Failed to request validators list from web3signer", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		r.writeErr(ctx, fmt.Errorf("failed to import share to Web3Signer: %w", err))
 		return
 	}
 
+	logger.Debug("Listed validators", fields.Count(len(publicKeys)))
 	r.writeJSON(ctx, publicKeys)
 }
 
 func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
+	logger := r.logger.With(zap.String("method", "handleAddValidator"))
+
 	body := ctx.PostBody()
 	if len(body) == 0 {
+		logger.Warn("Request body is empty")
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeString(ctx, "request body is empty")
 		return
@@ -78,6 +86,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 	var req AddValidatorRequest
 	if err := json.Unmarshal(body, &req); err != nil {
+		logger.Warn("Failed to unmarshal request body", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeErr(ctx, fmt.Errorf("failed to parse request: %w", err))
 		return
@@ -86,9 +95,10 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	var shareKeystores []web3signer.Keystore
 	var shareKeystorePasswords []string
 
-	for _, share := range req.ShareKeys {
+	for i, share := range req.ShareKeys {
 		encPrivKey, err := hex.DecodeString(strings.TrimPrefix(share.EncryptedPrivKey, "0x"))
 		if err != nil {
+			logger.Warn("Failed to decode share hex", zap.Int("index", i), zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusBadRequest)
 			r.writeErr(ctx, fmt.Errorf("failed to decode share.EncryptedPrivKey as hex: %w", err))
 			return
@@ -96,6 +106,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		sharePrivKeyHex, err := r.operatorPrivKey.Decrypt(encPrivKey)
 		if err != nil {
+			logger.Warn("Failed to decrypt share", zap.Int("index", i), zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
 			r.writeErr(ctx, fmt.Errorf("failed to decrypt share: %w", err))
 			return
@@ -103,6 +114,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
 		if err != nil {
+			logger.Warn("Failed to decode share private key hex", zap.Int("index", i), zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 			r.writeErr(ctx, fmt.Errorf("failed to decode share private key from hex %s: %w", string(sharePrivKeyHex), err))
 			return
@@ -110,12 +122,14 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		sharePrivBLS := &bls.SecretKey{}
 		if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
+			logger.Warn("Failed to cast private key", zap.Int("index", i), zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			r.writeErr(ctx, fmt.Errorf("failed to parse share private key as BLS %s: %w", string(sharePrivKeyHex), err))
+			r.writeErr(ctx, fmt.Errorf("failed to cast share private key: %w", err))
 			return
 		}
 
 		if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), share.PublicKey[:]) {
+			logger.Warn("Derived public key does not match expected public key", zap.Int("index", i))
 			ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
 			r.writeErr(ctx, fmt.Errorf("derived public key does not match expected public key"))
 			return
@@ -123,6 +137,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, share.PublicKey, r.keystorePasswd)
 		if err != nil {
+			logger.Warn("Failed to generate share keystore", zap.Int("index", i), zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 			r.writeErr(ctx, fmt.Errorf("failed to generate share keystore: %w", err))
 			return
@@ -134,8 +149,9 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 	statuses, err := r.remoteSigner.ImportKeystore(ctx, shareKeystores, shareKeystorePasswords)
 	if err != nil {
+		logger.Warn("Failed to import keystores to web3signer", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to import share to Web3Signer: %w", err))
+		r.writeErr(ctx, fmt.Errorf("failed to import keystores to Web3Signer: %w", err))
 		return
 	}
 
@@ -145,19 +161,23 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 	for i, status := range statuses {
 		if status != web3signer.StatusImported {
-			r.logger.Warn("unexpected status",
+			logger.Warn("Unexpected keystore status",
 				zap.String("status", string(status)),
 				zap.Stringer("share_pubkey", req.ShareKeys[i].PublicKey),
 			)
 		}
 	}
 
+	logger.Debug("Added validators", fields.Count(len(shareKeystores)))
 	r.writeJSON(ctx, resp)
 }
 
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
+	logger := r.logger.With(zap.String("method", "handleRemoveValidator"))
+
 	body := ctx.PostBody()
 	if len(body) == 0 {
+		logger.Warn("Request body is empty")
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeString(ctx, "request body is empty")
 		return
@@ -165,6 +185,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 
 	var req RemoveValidatorRequest
 	if err := json.Unmarshal(body, &req); err != nil {
+		logger.Warn("Failed to unmarshal request body", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeErr(ctx, fmt.Errorf("failed to parse request: %w", err))
 		return
@@ -172,14 +193,15 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 
 	statuses, err := r.remoteSigner.DeleteKeystore(ctx, req.PublicKeys)
 	if err != nil {
+		logger.Warn("Failed to delete keystores from web3signer", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to remove share from Web3Signer: %w", err))
+		r.writeErr(ctx, fmt.Errorf("failed to remove keystores from Web3Signer: %w", err))
 		return
 	}
 
 	for i, status := range statuses {
 		if status != web3signer.StatusDeleted {
-			r.logger.Warn("unexpected status",
+			r.logger.Warn("Unexpected keystore status",
 				zap.String("status", string(status)),
 				zap.Stringer("share_pubkey", req.PublicKeys[i]),
 			)
@@ -190,32 +212,51 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 		Statuses: statuses,
 	}
 
+	logger.Debug("Removed validators", fields.Count(len(req.PublicKeys)))
 	r.writeJSON(ctx, resp)
 }
 
 func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
+	logger := r.logger.With(zap.String("method", "handleSignValidator"))
+
+	body := ctx.PostBody()
+	if len(body) == 0 {
+		logger.Warn("Request body is empty")
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		r.writeString(ctx, "request body is empty")
+		return
+	}
+
 	var req web3signer.SignRequest
-	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
+		logger.Warn("Failed to unmarshal request body", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeErr(ctx, fmt.Errorf("invalid request body: %w", err))
 		return
 	}
 
-	sharePubKeyHex, ok := ctx.UserValue("identifier").(string)
+	identifierValue := ctx.UserValue("identifier")
+	sharePubKeyHex, ok := identifierValue.(string)
 	if !ok {
+		logger.Warn("Unexpected share public key type",
+			zap.String("type", fmt.Sprintf("%T", identifierValue)))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, fmt.Errorf("invalid share public key"))
+		r.writeErr(ctx, fmt.Errorf("unexpected share public key type %T", identifierValue))
 		return
 	}
 
 	sharePubKey, err := hex.DecodeString(strings.TrimPrefix(sharePubKeyHex, "0x"))
 	if err != nil {
+		logger.Warn("Failed to decode share public key hex", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, fmt.Errorf("malformed share public key"))
+		r.writeErr(ctx, fmt.Errorf("decode share public key hex: %w", err))
 		return
 	}
 
 	if len(sharePubKey) != len(phase0.BLSPubKey{}) {
+		logger.Warn("Invalid share public key length",
+			zap.Int("length", len(sharePubKey)),
+			zap.Int("expected", len(phase0.BLSPubKey{})))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeErr(ctx, fmt.Errorf("invalid share public key length %d, expected %d", len(sharePubKey), len(phase0.BLSPubKey{})))
 		return
@@ -226,38 +267,46 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 
 	sig, err := r.remoteSigner.Sign(ctx, blsPubKey, req)
 	if err != nil {
+		logger.Warn("Failed to sign with web3signer", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		r.writeErr(ctx, fmt.Errorf("failed to sign with Web3Signer: %w", err))
 		return
 	}
 
+	logger.Debug("Signed payload with validator key", zap.String("type", string(req.Type)))
 	r.writeJSON(ctx, sig)
 }
 
 func (r *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
+	logger := r.logger.With(zap.String("method", "handleOperatorIdentity"))
+
 	pubKeyB64, err := r.operatorPrivKey.Public().Base64()
 	if err != nil {
+		logger.Warn("Failed to get operator public key base64", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to get public key base64: %w", err))
+		r.writeErr(ctx, fmt.Errorf("get operator public key base64: %w", err))
 		return
 	}
 
-	ctx.SetContentType("application/json")
+	logger.Debug("Got operator public key base64", zap.String("base64", pubKeyB64))
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	r.writeString(ctx, pubKeyB64)
 }
 
 func (r *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
+	logger := r.logger.With(zap.String("method", "handleSignOperator"))
+
 	payload := ctx.PostBody()
 
 	signature, err := r.operatorPrivKey.Sign(payload)
 	if err != nil {
+		logger.Warn("Failed to sign message with operator key", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, fmt.Errorf("failed to sign message: %w", err))
+		r.writeErr(ctx, fmt.Errorf("sign message with operator key: %w", err))
 		return
 	}
 
-	ctx.SetContentType("application/json")
+	logger.Debug("Signed message with operator key", zap.Int("payload_size", len(payload)))
 	ctx.SetStatusCode(fasthttp.StatusOK)
 	r.writeBytes(ctx, signature)
 }
