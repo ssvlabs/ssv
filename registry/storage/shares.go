@@ -131,7 +131,7 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore
 		return nil, nil, err
 	}
 
-	pubkeyIndexMapping, err := storage.loadPubkeyIndexMapping()
+	pubkeyIndexMapping, err := storage.loadPubkeyToIndexMappings()
 	if err != nil {
 		return nil, nil, fmt.Errorf("load validator pubkey index mapping: %w", err)
 	}
@@ -148,11 +148,11 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore
 }
 
 // loadFromDB reads all shares from db.
-func (s *sharesStorage) loadPubkeyIndexMapping() (map[spectypes.ValidatorPK]phase0.ValidatorIndex, error) {
+func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]phase0.ValidatorIndex, error) {
 	// not locking since at this point nobody has the reference to this object
 	m := make(map[spectypes.ValidatorPK]phase0.ValidatorIndex)
 
-	prefix := PubkeyIndexMappingDBKey(s.storagePrefix)
+	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
 
 	err := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
 		var key spectypes.ValidatorPK
@@ -281,20 +281,15 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	return s.saveToDB(rw, shares...)
 }
 
-func uint64ToBytes(n uint64) []byte {
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, n)
-	return b
-}
-
 func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.ValidatorPK) (out []phase0.ValidatorIndex, err error) {
-	var pubkeys = make([][]byte, len(vkeys))
+	var pubkeys = make([][]byte, 0, len(vkeys))
 
 	for _, pk := range vkeys {
 		pubkeys = append(pubkeys, pk[:])
 	}
 
-	prefix := PubkeyIndexMappingDBKey(s.storagePrefix)
+	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
+
 	err = s.db.GetMany(prefix, pubkeys, func(obj basedb.Obj) error {
 		index := binary.LittleEndian.Uint64(obj.Value)
 		out = append(out, phase0.ValidatorIndex(index))
@@ -310,13 +305,16 @@ func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.Validator
 
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	// save validator pubkey -> index mapping
-	prefix := PubkeyIndexMappingDBKey(s.storagePrefix)
-	err := s.db.Using(rw).SetMany(prefix, len(shares), func(i int) (basedb.Obj, error) {
-		s := shares[i]
-		vi := uint64(s.ValidatorIndex)
-		vpk := s.ValidatorPubKey[:]
+	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
 
-		return basedb.Obj{Key: vpk, Value: uint64ToBytes(vi)}, nil
+	err := s.db.Using(rw).SetMany(prefix, len(shares), func(i int) (basedb.Obj, error) {
+		vindex := shares[i].ValidatorIndex
+		pubkey := shares[i].ValidatorPubKey
+
+		b := make([]byte, 8)
+		binary.LittleEndian.PutUint64(b, uint64(vindex))
+
+		return basedb.Obj{Key: pubkey[:], Value: b}, nil
 	})
 
 	if err != nil {
@@ -489,8 +487,8 @@ func SharesDBKey(pk []byte) []byte {
 	return append(sharesPrefix, pk...)
 }
 
-// PubkeyIndexMappingDBKey builds key using storage prefix followed by mapping prefix, e.g. "operator/val_pki"
-func PubkeyIndexMappingDBKey(storagePrefix []byte) []byte {
+// PubkeyToIndexMappingDBKey builds key using storage prefix followed by mapping prefix, e.g. "operator/val_pki"
+func PubkeyToIndexMappingDBKey(storagePrefix []byte) []byte {
 	return append(storagePrefix, pubkeyIndexMapping...)
 }
 

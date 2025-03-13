@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
@@ -189,7 +190,7 @@ func TestSharesStorage(t *testing.T) {
 	})
 }
 
-func TestValidatorIndicesToPubkeysMapping(t *testing.T) {
+func TestValidatorPubkeysToIndicesMapping(t *testing.T) {
 	logger := logging.TestLogger(t)
 	storage, err := newTestStorage(logger)
 	require.NoError(t, err)
@@ -218,18 +219,22 @@ func TestValidatorIndicesToPubkeysMapping(t *testing.T) {
 	require.NoError(t, storage.Shares.Save(nil, validatorShare))
 
 	validatorShare2, _ := generateRandomShare(splitKeys)
+	validatorShare2.ValidatorIndex = 55
 	require.NoError(t, storage.Shares.Save(nil, validatorShare2))
 
-	m, err := storage.Shares.(*sharesStorage).loadPubkeyIndexMapping()
+	m, err := storage.Shares.(*sharesStorage).loadPubkeyToIndexMappings()
 	require.NoError(t, err)
 	require.Equal(t, 2, len(m))
 	require.Equal(t, validatorShare.ValidatorIndex, m[validatorShare.ValidatorPubKey])
 	require.Equal(t, validatorShare2.ValidatorIndex, m[validatorShare2.ValidatorPubKey])
 
-	indices, err := storage.Shares.(*sharesStorage).GetValidatorIndicesByPubkeys([]spectypes.ValidatorPK{validatorShare.ValidatorPubKey, validatorShare2.ValidatorPubKey})
+	pubkeys := []spectypes.ValidatorPK{validatorShare.ValidatorPubKey, validatorShare2.ValidatorPubKey}
+	indices, err := storage.Shares.(*sharesStorage).GetValidatorIndicesByPubkeys(pubkeys)
 	require.NoError(t, err)
-	require.True(t, slices.Contains(indices, validatorShare.ValidatorIndex))
-	require.True(t, slices.Contains(indices, validatorShare2.ValidatorIndex))
+	require.Equal(t, 2, len(indices))
+	// should maintain order
+	assert.Equal(t, validatorShare.ValidatorIndex, indices[0])
+	assert.Equal(t, validatorShare2.ValidatorIndex, indices[1])
 }
 
 func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
