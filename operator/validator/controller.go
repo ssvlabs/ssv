@@ -796,7 +796,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 			committeeRunnerFunc,
 			nil,
 			c.dutyGuard,
-			c.operatorsStorage,
 		)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.CommitteeID, vc)
