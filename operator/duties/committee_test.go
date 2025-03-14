@@ -76,7 +76,7 @@ func setupCommitteeDutiesMock(
 		}).AnyTimes()
 
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).Return(activeShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().Return(activeShares).MinTimes(1)
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validator(gomock.Any()).DoAndReturn(
 		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
 			var ssvShare *ssvtypes.SSVShare
@@ -129,8 +129,8 @@ func setupCommitteeDutiesMock(
 		},
 	).AnyTimes()
 
-	s.validatorController.(*MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
+	s.validatorController.(*MockValidatorController).EXPECT().FilterIndices(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex {
 			return indicesFromShares(activeShares)
 		}).AnyTimes()
 

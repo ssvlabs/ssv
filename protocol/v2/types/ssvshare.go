@@ -101,6 +101,26 @@ func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
 	return !s.Liquidated && s.IsAttesting(epoch)
 }
 
+func (s *SSVShare) IsSyncCommitteeEligible(epoch phase0.Epoch, periodFromEpoch func(epoch phase0.Epoch) uint64) bool {
+	if s.Liquidated {
+		return false
+	}
+
+	if s.IsAttesting(epoch) {
+		return true
+	}
+
+	if s.Status.IsExited() || s.Status == eth2apiv1.ValidatorStateWithdrawalPossible || s.Status == eth2apiv1.ValidatorStateActiveSlashed {
+		// if validator exited within Current Period OR Current Period - 1, then it is eligible
+		// because Sync committees are assigned EPOCHS_PER_SYNC_COMMITTEE_PERIOD in advance
+		if periodFromEpoch(epoch)-periodFromEpoch(s.ExitEpoch) <= 1 {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (s *SSVShare) SetMinParticipationEpoch(epoch phase0.Epoch) {
 	s.minParticipationEpoch = epoch
 }

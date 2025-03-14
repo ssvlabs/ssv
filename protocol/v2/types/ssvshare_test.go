@@ -216,3 +216,112 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 		})
 	}
 }
+
+func TestIsSyncCommitteeEligible(t *testing.T) {
+	var (
+		//[0-255] [256-512] [513-768]
+		currentEpoch          = phase0.Epoch(600)
+		epochSamePeriod       = phase0.Epoch(520)
+		epochPreviousPeriod   = phase0.Epoch(256)
+		epochIneligiblePeriod = phase0.Epoch(255)
+	)
+	tt := []struct {
+		Name     string
+		Share    *SSVShare
+		Epoch    phase0.Epoch
+		Expected bool
+	}{
+		{
+			Name: "Attesting Share Not Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateActiveOngoing,
+				Liquidated: false,
+			},
+			Epoch:    currentEpoch,
+			Expected: true,
+		},
+		{
+			Name: "Attesting Share Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateActiveOngoing,
+				Liquidated: true,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+		{
+			Name: "Exited Share Within Same Period",
+			Share: &SSVShare{
+				Status:    eth2apiv1.ValidatorStateExitedUnslashed,
+				ExitEpoch: epochSamePeriod,
+			},
+			Epoch:    currentEpoch,
+			Expected: true,
+		},
+		{
+			Name: "Exited Share Within Same Period Liquidated",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStateExitedUnslashed,
+				ExitEpoch:  epochSamePeriod,
+				Liquidated: true,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+		{
+			Name: "Exited Share Previous Period",
+			Share: &SSVShare{
+				Status:    eth2apiv1.ValidatorStateExitedUnslashed,
+				ExitEpoch: epochPreviousPeriod,
+			},
+			Epoch:    currentEpoch,
+			Expected: true,
+		},
+		{
+			Name: "Exited Share more than 1 periods ago",
+			Share: &SSVShare{
+				Status:    eth2apiv1.ValidatorStateExitedUnslashed,
+				ExitEpoch: epochIneligiblePeriod,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+		{
+			Name: "Withdrawal Possible Within Same Period",
+			Share: &SSVShare{
+				Status:    eth2apiv1.ValidatorStateWithdrawalPossible,
+				ExitEpoch: epochSamePeriod,
+			},
+			Epoch:    currentEpoch,
+			Expected: true,
+		},
+		{
+			Name: "Slashed Within Same Period",
+			Share: &SSVShare{
+				Status:    eth2apiv1.ValidatorStateActiveSlashed,
+				ExitEpoch: epochPreviousPeriod,
+			},
+			Epoch:    currentEpoch,
+			Expected: true,
+		},
+		{
+			Name: "Non-Participating Non-Exited Share",
+			Share: &SSVShare{
+				Status:     eth2apiv1.ValidatorStatePendingInitialized,
+				Liquidated: false,
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+	}
+
+	for _, tc := range tt {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			result := tc.Share.IsSyncCommitteeEligible(tc.Epoch, func(epoch phase0.Epoch) uint64 {
+				return uint64(epoch) / 256
+			})
+			require.Equal(t, tc.Expected, result)
+		})
+	}
+}
