@@ -43,9 +43,9 @@ var (
 			metric.WithDescription("validator stage(proposal, prepare, commit) duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
-	roundChangesCounter = observability.NewMetric(
+	roundsChangedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("round.changes"),
+			metricName("duty.rounds_changed"),
 			metric.WithUnit("{change}"),
 			metric.WithDescription("number of round changes with their reasons")))
 )

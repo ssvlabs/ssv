@@ -37,7 +37,7 @@ func (m *metrics) EndStage(ctx context.Context, round qbft.Round, s stage) {
 
 // RecordRoundChange records a round change event with the specified reason.
 func (m *metrics) RecordRoundChange(ctx context.Context, round qbft.Round, reason roundChangeReason) {
-	roundChangesCounter.Add(
+	roundsChangedCounter.Add(
 		ctx,
 		1,
 		metric.WithAttributes(
