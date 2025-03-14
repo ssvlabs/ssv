@@ -1949,16 +1949,3 @@ var generateRandaoMsg = func(
 
 	return &msgs
 }
-
-// Test_ValidateRemovedOperator verifies that messages from removed operators are rejected
-// TODO: implement me
-func Test_ValidateRemovedOperator(t *testing.T) {
-	logger := zaptest.NewLogger(t)
-
-	// Setup
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	require.NoError(t, err)
-	defer func() {
-		_ = db.Close()
-	}()
-}

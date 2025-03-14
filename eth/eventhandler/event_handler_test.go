@@ -363,11 +363,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			blockNum++
 
-			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
-			// Check if the operator was removed successfully
-			//operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
-			//require.NoError(t, err)
-			//require.Equal(t, len(ops), len(operators))
+			// List operators and check that the operator was removed
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			// Check that the operator was removed
+			_, found, err := eh.nodeStorage.GetOperatorData(nil, 4)
+			require.NoError(t, err)
+			require.False(t, found)
 		})
 	})
 
