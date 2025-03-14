@@ -16,7 +16,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"go.uber.org/zap"
 )
 
@@ -44,9 +43,6 @@ type Committee struct {
 
 	dutyGuard      *CommitteeDutyGuard
 	CreateRunnerFn CommitteeRunnerFunc
-
-	// Registry provides access to operator storage
-	Registry registrystorage.Operators
 }
 
 // NewCommittee creates a new cluster
@@ -59,7 +55,6 @@ func NewCommittee(
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	dutyGuard *CommitteeDutyGuard,
-	registry registrystorage.Operators,
 ) *Committee {
 	if shares == nil {
 		shares = make(map[phase0.ValidatorIndex]*spectypes.Share)
@@ -75,7 +70,6 @@ func NewCommittee(
 		CommitteeMember: committeeMember,
 		CreateRunnerFn:  createRunnerFn,
 		dutyGuard:       dutyGuard,
-		Registry:        registry,
 	}
 }
 
@@ -208,17 +202,6 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
-		}
-
-		// Check if the message is from a removed operator
-		for _, operatorID := range msg.SignedSSVMessage.OperatorIDs {
-			isRemoved, err := c.Registry.IsOperatorRemoved(nil, operatorID)
-			if err != nil {
-				return errors.Wrap(err, "failed to check if operator is removed")
-			}
-			if isRemoved {
-				return errors.New("message from removed operator rejected")
-			}
 		}
 
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
@@ -366,10 +349,6 @@ func (c *Committee) validateMessage(msg *spectypes.SSVMessage) error {
 	if len(msg.GetData()) == 0 {
 		return errors.New("msg data is invalid")
 	}
-
-	// Check if the message is from a removed operator
-	// We need to extract the operator ID from the message
-	// This will be implemented in a separate method
 
 	return nil
 }
