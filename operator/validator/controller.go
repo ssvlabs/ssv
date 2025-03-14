@@ -99,7 +99,7 @@ type ControllerOptions struct {
 type Controller interface {
 	StartValidators(ctx context.Context)
 	HandleMetadataUpdates(ctx context.Context)
-	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
+	FilterIndices(afterInit bool, filter func(*types.SSVShare) bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
 	StartNetworkHandlers()
 	// GetValidatorStats returns stats of validators, including the following:
@@ -685,13 +685,13 @@ func dutyDataToSSVMsg(
 	}, nil
 }
 
-func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
+func (c *controller) FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex {
 	if afterInit {
 		<-c.committeeValidatorSetup
 	}
 	var indices []phase0.ValidatorIndex
 	c.sharesStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-		if share.IsParticipating(epoch) {
+		if filter(share) {
 			indices = append(indices, share.ValidatorIndex)
 		}
 		return true

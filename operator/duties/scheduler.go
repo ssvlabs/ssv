@@ -62,6 +62,7 @@ type ExecutionClient interface {
 
 // ValidatorProvider represents the component that controls validators via the scheduler
 type ValidatorProvider interface {
+	SelfValidators() []*types.SSVShare
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	Validator(pubKey []byte) (*types.SSVShare, bool)
@@ -69,7 +70,7 @@ type ValidatorProvider interface {
 
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
-	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
+	FilterIndices(afterInit bool, filter func(*types.SSVShare) bool) []phase0.ValidatorIndex
 }
 
 type SchedulerOptions struct {
