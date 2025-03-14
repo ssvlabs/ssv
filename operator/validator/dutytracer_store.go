@@ -1,27 +1,31 @@
 package validator
 
 import (
-	"context"
 	"encoding/hex"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
-	"github.com/ssvlabs/ssv/logging/fields"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 type ValidatorDutyTrace struct {
 	model.ValidatorDutyTrace
 	pubkey spectypes.ValidatorPK
+}
+
+type DutyTraceStore interface {
+	SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
+	SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
+	SaveValidatorDuty(duty *model.ValidatorDutyTrace) error
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
+	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
+	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
 }
 
 func (a *InMemTracer) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
@@ -54,22 +58,10 @@ func (a *InMemTracer) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.
 		return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
 	}
 
-	start := time.Now()
-
 	trace, err := a.store.GetValidatorDuty(slot, role, vIndex)
 	if err != nil {
 		return nil, fmt.Errorf("get validator duty from disk: %w", err)
 	}
-
-	duration := time.Since(start)
-	tracerDBDurationHistogram.Record(
-		context.Background(),
-		duration.Seconds(),
-		metric.WithAttributes(
-			semconv.DBCollectionName("validator"),
-			semconv.DBOperationName("get"),
-		),
-	)
 
 	return &ValidatorDutyTrace{
 		ValidatorDutyTrace: *trace,
@@ -86,21 +78,10 @@ func (imt *InMemTracer) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes
 
 	trace, found := committeeSlots.Load(slot)
 	if !found {
-		start := time.Now()
 		trace, err := imt.store.GetCommitteeDuty(slot, committeeID)
 		if err != nil {
 			return nil, fmt.Errorf("get committee duty from disk: %w", err)
 		}
-
-		duration := time.Since(start)
-		tracerDBDurationHistogram.Record(
-			context.Background(),
-			duration.Seconds(),
-			metric.WithAttributes(
-				semconv.DBCollectionName("committee"),
-				semconv.DBOperationName("get"),
-			),
-		)
 
 		if trace != nil {
 			return trace, nil
@@ -181,24 +162,10 @@ func (imt *InMemTracer) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index pha
 
 	committeeID, found := slotToCommittee.Load(slot)
 	if !found {
-		start := time.Now()
-
-		imt.logger.Info("-committee decideds- loading from disk", fields.Slot(slot), fields.ValidatorIndex(index))
-
 		link, err := imt.store.GetCommitteeDutyLink(slot, index)
 		if err != nil {
 			return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link from disk: %w", err)
 		}
-
-		duration := time.Since(start)
-		tracerDBDurationHistogram.Record(
-			context.Background(),
-			duration.Seconds(),
-			metric.WithAttributes(
-				semconv.DBCollectionName("committee"),
-				semconv.DBOperationName("get"),
-			),
-		)
 
 		return link, nil
 	}

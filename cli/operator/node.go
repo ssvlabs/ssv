@@ -360,9 +360,12 @@ var StartNodeCmd = &cobra.Command{
 		var tracer validator.DutyTracer
 		if cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
 			logger.Info("exporter duty tracing enabled")
+			dstore := &validator.DutyTraceStoreMetrics{
+				Store: dutytracestore.New(db),
+			}
 			tracer = validator.NewTracer(cmd.Context(), logger,
 				nodeStorage.ValidatorStore(), consensusClient,
-				dutytracestore.New(db), networkConfig.Beacon.GetBeaconNetwork())
+				dstore, networkConfig.Beacon.GetBeaconNetwork())
 
 			go tracer.StartEvictionJob(cmd.Context(), slotTickerProvider)
 		}

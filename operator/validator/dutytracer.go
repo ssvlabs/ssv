@@ -14,7 +14,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
-	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -40,7 +39,7 @@ type InMemTracer struct {
 
 	verifyBLSSignatureFn func(*spectypes.PartialSignatureMessages, *spectypes.SignedSSVMessage) error
 
-	store      *store.DutyTraceStore
+	store      DutyTraceStore
 	client     DomainDataProvider
 	validators registrystorage.ValidatorStore
 }
@@ -53,7 +52,7 @@ func NewTracer(ctx context.Context,
 	logger *zap.Logger,
 	validators registrystorage.ValidatorStore,
 	client DomainDataProvider,
-	store *store.DutyTraceStore,
+	store DutyTraceStore,
 	beaconNetwork spectypes.BeaconNetwork,
 	disableBLSVerfication ...bool,
 ) *InMemTracer {
