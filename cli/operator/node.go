@@ -365,7 +365,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 			tracer = validator.NewTracer(cmd.Context(), logger,
 				nodeStorage.ValidatorStore(), consensusClient,
-				dstore, networkConfig.Beacon.GetBeaconNetwork())
+				dstore, networkConfig.Beacon.GetBeaconNetwork(), true) // TODO(me): remove this (disable BLS verification)
 
 			go tracer.StartEvictionJob(cmd.Context(), slotTickerProvider)
 		}
