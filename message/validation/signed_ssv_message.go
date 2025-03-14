@@ -69,16 +69,8 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		prevSigner = signer
 
 		// Rule: Reject messages from removed operators
-		// TODO: i think some small refactoring is needed herestatus
-		
-		if mv.nodeStorage != nil {
-			operatorData, found, err := mv.nodeStorage.GetOperatorData(nil, signer)
-			if err != nil {
-				return fmt.Errorf("failed to check if operator %d is removed: %w", signer, err)
-			}
-			if !found || operatorData == nil {
-				return ErrRemovedOperator
-			}
+		if err := mv.validateOperator(signer); err != nil {
+			return err
 		}
 	}
 
@@ -165,6 +157,28 @@ func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorI
 			e.want = committee
 			return e
 		}
+	}
+
+	return nil
+}
+
+// validateOperator checks if the operator exists and is not removed
+func (mv *messageValidator) validateOperator(operatorID spectypes.OperatorID) error {
+	if mv.nodeStorage == nil {
+		return nil
+	}
+
+	operatorData, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
+	if err != nil {
+		e := ErrOperatorValidation
+		e.got = operatorID
+		return e
+	}
+
+	if !found || operatorData == nil {
+		e := ErrRemovedOperator
+		e.got = operatorID
+		return e
 	}
 
 	return nil
