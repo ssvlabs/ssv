@@ -67,6 +67,19 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 			return ErrDuplicatedSigner
 		}
 		prevSigner = signer
+
+		// Rule: Reject messages from removed operators
+		// TODO: i think some small refactoring is needed herestatus
+		
+		if mv.nodeStorage != nil {
+			operatorData, found, err := mv.nodeStorage.GetOperatorData(nil, signer)
+			if err != nil {
+				return fmt.Errorf("failed to check if operator %d is removed: %w", signer, err)
+			}
+			if !found || operatorData == nil {
+				return ErrRemovedOperator
+			}
+		}
 	}
 
 	// Rule: Len(Signers) must be equal to Len(Signatures)

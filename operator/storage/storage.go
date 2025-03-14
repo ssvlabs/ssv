@@ -117,32 +117,8 @@ func (s *storage) ListOperators(r basedb.Reader, from uint64, to uint64) ([]regi
 	return s.operatorStore.ListOperators(r, from, to)
 }
 
-func (s *storage) IsOperatorRemoved(r basedb.Reader, id spectypes.OperatorID) (bool, error) {
-	return s.operatorStore.IsOperatorRemoved(r, id)
-}
-
-func (s *storage) MarkOperatorAsRemoved(rw basedb.ReadWriter, id spectypes.OperatorID) error {
-	return s.operatorStore.MarkOperatorAsRemoved(rw, id)
-}
-
-func (s *storage) GetRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error) {
-	return s.operatorStore.GetRemovedOperators(r)
-}
-
 func (s *storage) GetOperatorsPrefix() []byte {
 	return s.operatorStore.GetOperatorsPrefix()
-}
-
-func (s *storage) IsOperatorRemoved(r basedb.Reader, id spectypes.OperatorID) (bool, error) {
-	return s.operatorStore.IsOperatorRemoved(r, id)
-}
-
-func (s *storage) MarkOperatorAsRemoved(rw basedb.ReadWriter, id spectypes.OperatorID) error {
-	return s.operatorStore.MarkOperatorAsRemoved(rw, id)
-}
-
-func (s *storage) ListRemovedOperators(r basedb.Reader) ([]spectypes.OperatorID, error) {
-	return s.operatorStore.ListRemovedOperators(r)
 }
 
 func (s *storage) GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error) {

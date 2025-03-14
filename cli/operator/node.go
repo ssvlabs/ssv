@@ -269,6 +269,7 @@ var StartNodeCmd = &cobra.Command{
 			dutyStore,
 			signatureVerifier,
 			validation.WithLogger(logger),
+			validation.WithNodeStorage(nodeStorage), // TODO: consider switching to nodeStorage?
 		)
 
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator

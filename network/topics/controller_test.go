@@ -82,7 +82,12 @@ func TestTopicManager(t *testing.T) {
 		validatorStore := mocks.NewMockValidatorStore(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
-		validator := validation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier)
+		validator := validation.New(
+			networkconfig.TestNetwork,
+			validatorStore,
+			dutyStore,
+			signatureVerifier,
+		)
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
