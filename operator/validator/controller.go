@@ -29,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
@@ -82,7 +83,7 @@ type ControllerOptions struct {
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
-	DutyTracer                 DutyTracer
+	DutyTraceCollector         DutyTraceCollector
 	StorageMap                 *storage.ParticipantStores
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
@@ -193,13 +194,13 @@ type controller struct {
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
 
-	tracer DutyTracer
+	traceCollector DutyTraceCollector
 }
 
-type DutyTracer interface {
-	Trace(context.Context, *queue.SSVMessage)
+type DutyTraceCollector interface {
+	Collect(context.Context, *queue.SSVMessage)
 	StartEvictionJob(context.Context, slotticker.Provider)
-	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
@@ -263,7 +264,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
-		tracer:            options.DutyTracer,
+		traceCollector:    options.DutyTraceCollector,
 
 		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
@@ -380,10 +381,14 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 }
 
 func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
-	var ncv *committeeObserver
 	ssvMsg := msg.(*queue.SSVMessage)
 
-	c.tracer.Trace(c.ctx, ssvMsg)
+	if c.validatorOptions.ExporterDutyTracing {
+		c.traceCollector.Collect(c.ctx, ssvMsg)
+		return nil // TODO(Matus): return here or continue?
+	}
+
+	var ncv *committeeObserver
 
 	item := c.getNonCommitteeValidators(ssvMsg.GetID())
 	if item == nil {

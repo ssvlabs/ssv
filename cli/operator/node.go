@@ -54,6 +54,7 @@ import (
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -357,20 +358,20 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
 		// Validator duty tracing
-		var tracer validator.DutyTracer
+		var collector validator.DutyTraceCollector
 		if cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
 			logger.Info("exporter duty tracing enabled")
-			dstore := &validator.DutyTraceStoreMetrics{
+			dstore := &dutytracer.DutyTraceStoreMetrics{
 				Store: dutytracestore.New(db),
 			}
-			tracer = validator.NewTracer(cmd.Context(), logger,
+			collector = dutytracer.New(cmd.Context(), logger,
 				nodeStorage.ValidatorStore(), consensusClient,
-				dstore, networkConfig.Beacon.GetBeaconNetwork(), true) // TODO(me): remove this (disable BLS verification)
+				dstore, networkConfig.Beacon.GetBeaconNetwork())
 
-			go tracer.StartEvictionJob(cmd.Context(), slotTickerProvider)
+			go collector.StartEvictionJob(cmd.Context(), slotTickerProvider)
 		}
 
-		cfg.SSVOptions.ValidatorOptions.DutyTracer = tracer
+		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
 
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
@@ -496,7 +497,7 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Exporter{
 					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
-					TraceStore:        tracer,
+					TraceStore:        collector,
 					Validators:        nodeStorage.ValidatorStore(),
 				},
 				cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing,

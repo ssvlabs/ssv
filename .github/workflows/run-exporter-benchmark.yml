@@ -1,4 +1,4 @@
-name: Run exporter benchmark
+name: Run dutytracer collector benchmark
 run-name: ${{ github.actor }} started workflow 🚀
 
 on:

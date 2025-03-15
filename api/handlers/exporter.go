@@ -13,7 +13,7 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
-	validator "github.com/ssvlabs/ssv/operator/validator"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
@@ -32,7 +32,7 @@ type Exporter struct {
 }
 
 type DutyTraceStore interface {
-	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*validator.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
@@ -300,7 +300,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		pubkeys = append(pubkeys, pubkey)
 	}
 
-	var results []*validator.ValidatorDutyTrace
+	var results []*dutytracer.ValidatorDutyTrace
 
 	for s := request.From; s <= request.To; s++ {
 		slot := phase0.Slot(s)
@@ -320,7 +320,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	return api.Render(w, r, toValidatorTraceResponse(results))
 }
 
-func toValidatorTraceResponse(duties []*validator.ValidatorDutyTrace) *validatorTraceResponse {
+func toValidatorTraceResponse(duties []*dutytracer.ValidatorDutyTrace) *validatorTraceResponse {
 	r := new(validatorTraceResponse)
 	for _, t := range duties {
 		r.Data = append(r.Data, toValidatorTrace(&t.ValidatorDutyTrace))
