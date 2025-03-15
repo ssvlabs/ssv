@@ -53,7 +53,7 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
 	netCfg networkconfig.NetworkConfig,
-	validatorStore registrystorage.ValidatorStore,
+	nodeStorage operatorstorage.Storage,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
 	opts ...Option,
@@ -63,9 +63,10 @@ func New(
 		netCfg:              netCfg,
 		consensusStateIndex: make(map[consensusID]*consensusState),
 		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
-		validatorStore:      validatorStore,
+		validatorStore:      nodeStorage.ValidatorStore(),
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
+		nodeStorage:         nodeStorage,
 	}
 
 	for _, opt := range opts {

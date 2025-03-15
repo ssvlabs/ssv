@@ -50,10 +50,9 @@ func TestMsgValidator(t *testing.T) {
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
 	mv := validation.New(
 		networkconfig.TestNetwork,
-		ns.ValidatorStore(),
+		ns,
 		dutystore.New(),
 		signatureVerifier,
-		validation.WithNodeStorage(ns),
 	)
 	require.NotNil(t, mv)
 

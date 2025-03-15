@@ -2,7 +2,6 @@ package validation
 
 import (
 	"github.com/libp2p/go-libp2p/core/peer"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"go.uber.org/zap"
 )
 
@@ -27,12 +26,5 @@ func WithSelfAccept(selfAccept bool) Option {
 func WithSelfPID(selfPID peer.ID) Option {
 	return func(mv *messageValidator) {
 		mv.selfPID = selfPID
-	}
-}
-
-// WithNodeStorage sets the node storage.
-func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
-	return func(mv *messageValidator) {
-		mv.nodeStorage = nodeStorage
 	}
 }
