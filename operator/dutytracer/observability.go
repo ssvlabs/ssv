@@ -19,7 +19,7 @@ var (
 
 	tracerInFlightMessageCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("message.received"),
+			metricName("messages.received"),
 			metric.WithDescription("total number of messages received tracer intercepted")))
 
 	tracerInFlightMessageHist = observability.NewMetric(

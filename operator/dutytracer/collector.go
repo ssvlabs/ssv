@@ -101,10 +101,10 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 }
 
 /*
-all validatorDutyTrace contain a collection of model.ValidatorDutyTrace(s)
+all validatorDutyTrace objects contain a collection of model.ValidatorDutyTrace(s) - one per role.
 so when we request a certain trace we return both of them:
-one (validatorDutyTrace) contains the lock and the model.* contains the data
-that we enrich subsequently
+- validatorDutyTrace object contains the lock
+- the model.* ValidatorDutyTrace the data that we enrich subsequently
 */
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace) {
 	validatorSlots, found := c.validatorTraces.Load(vPubKey)
