@@ -55,7 +55,7 @@ const (
 	msgTypeSize           = 8 // uint64
 	maxSignaturesSize     = maxSignatures * rsaSignatureSize
 	maxOperatorIDSize     = maxSignatures * operatorIDSize
-	maxFullDataSize       = 5243144 // from old spectypes.SignedSSVMessage 4194532
+	maxFullDataSize       = 5243144 // from old spectypes.SignedSSVMessage
 	pectraMaxFullDataSize = 8388836 // from spectypes.SignedSSVMessage
 )
 
