@@ -21,10 +21,10 @@ import (
 )
 
 const (
-	pathValidators       = "/v1/validators"
-	pathValidatorsSign   = "/v1/validators/sign/"
-	pathOperatorIdentity = "/v1/operator/identity"
-	pathOperatorSign     = "/v1/operator/sign"
+	pathValidators       = "/v1/validators"        // TODO: /eth/v1/keystores ?
+	pathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
+	pathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
+	pathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
 )
 
 type Server struct {
