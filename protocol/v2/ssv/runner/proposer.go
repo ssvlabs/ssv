@@ -18,10 +18,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -31,13 +31,14 @@ import (
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         beacon.BeaconNode
-	network        specqbft.Network
-	signer         spectypes.BeaconSigner
-	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
-	measurements   measurementsStore
-	graffiti       []byte
+	beacon              beacon.BeaconNode
+	network             specqbft.Network
+	signer              spectypes.BeaconSigner
+	operatorSigner      ssvtypes.OperatorSigner
+	doppelgangerHandler DoppelgangerProvider
+	valCheck            specqbft.ProposedValueCheckF
+	measurements        measurementsStore
+	graffiti            []byte
 }
 
 func NewProposerRunner(
@@ -49,6 +50,7 @@ func NewProposerRunner(
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
+	doppelgangerHandler DoppelgangerProvider,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
@@ -67,13 +69,14 @@ func NewProposerRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		valCheck:       valCheck,
-		operatorSigner: operatorSigner,
-		graffiti:       graffiti,
-		measurements:   NewMeasurementsStore(),
+		beacon:              beacon,
+		network:             network,
+		signer:              signer,
+		operatorSigner:      operatorSigner,
+		doppelgangerHandler: doppelgangerHandler,
+		valCheck:            valCheck,
+		graffiti:            graffiti,
+		measurements:        NewMeasurementsStore(),
 	}, nil
 }
 
@@ -189,9 +192,15 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		}
 	}
 
+	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
+	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
+		return nil
+	}
+
 	msg, err := r.BaseRunner.signBeaconObject(
 		r,
-		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+		duty,
 		blkToSign,
 		cd.Duty.Slot,
 		spectypes.DomainProposer,
@@ -263,6 +272,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.Round(r.GetState().RunningInstance.State.Round))
+
+		r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
 		err = validatorConsensusData.Decode(r.GetState().DecidedValue)
@@ -396,9 +407,15 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	r.measurements.StartDutyFlow()
 	r.measurements.StartPreConsensus()
 
+	proposerDuty := duty.(*spectypes.ValidatorDuty)
+	if !r.doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
+		return nil
+	}
+
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
+	msg, err := r.BaseRunner.signBeaconObject(r, proposerDuty, spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
