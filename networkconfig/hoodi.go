@@ -13,8 +13,8 @@ var Hoodi = NetworkConfig{
 	Beacon:               beacon.NewNetwork(spectypes.HoodiNetwork),
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x3},
 	GenesisEpoch:         1,
-	RegistrySyncOffset:   new(big.Int).SetInt64(181612),
-	RegistryContractAddr: "0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA",
+	RegistrySyncOffset:   new(big.Int).SetInt64(1065),
+	RegistryContractAddr: "0x58410Bef803ECd7E63B23664C586A6DB72DAf59c",
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	Bootnodes: []string{
 		// SSV Labs
