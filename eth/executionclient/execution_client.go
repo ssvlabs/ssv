@@ -179,7 +179,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				return
 			}
 
-			ec.logger.Debug("fetched registry events",
+			ec.logger.Info("fetched registry events",
 				fields.FromBlock(fromBlock),
 				fields.ToBlock(toBlock),
 				zap.Uint64("target_block", endBlock),

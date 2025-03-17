@@ -18,12 +18,6 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
-/*
-TODO
-- migration - populate mapping pubkey -> index for existing db data
-	- using the new format we update on every 'saveShare'
-*/
-
 type Exporter struct {
 	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores

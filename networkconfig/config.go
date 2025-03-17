@@ -17,7 +17,6 @@ var SupportedConfigs = map[string]NetworkConfig{
 	HoleskyStage.Name: HoleskyStage,
 	LocalTestnet.Name: LocalTestnet,
 	HoleskyE2E.Name:   HoleskyE2E,
-	Mekong.Name:       Mekong,
 }
 
 const forkName = "alan"

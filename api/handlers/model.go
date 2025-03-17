@@ -31,7 +31,7 @@ type decided struct {
 }
 
 type round struct {
-	ProposalTrace *proposalTrace `json:"proposal"`
+	Proposal *proposalTrace `json:"proposal"`
 	// Proposer      spectypes.OperatorID `json:"proposer"` not needed
 	Prepares     []message     `json:"prepares"`
 	Commits      []message     `json:"commits"`
@@ -39,12 +39,12 @@ type round struct {
 }
 
 type proposalTrace struct {
-	Round           uint64               `json:"round"`
-	BeaconRoot      phase0.Root          `json:"ssvRoot"`
-	Signer          spectypes.OperatorID `json:"signer"`
-	RoundChanges    []roundChange        `json:"roundChanges"`
-	PrepareMessages []message            `json:"prepareMessages"`
-	ReceivedTime    time.Time            `json:"time"`
+	Round                 uint64               `json:"round"`
+	BeaconRoot            phase0.Root          `json:"ssvRoot"`
+	Signer                spectypes.OperatorID `json:"signer"`
+	RoundChanges          []roundChange        `json:"roundChangeJustifications"`
+	PrepareJustifications []message            `json:"prepareJustifications"`
+	ReceivedTime          time.Time            `json:"time"`
 }
 
 type roundChange struct {
@@ -88,10 +88,10 @@ func toRounds(r []*model.RoundTrace) (out []round) {
 	for _, rt := range r {
 		out = append(out, round{
 			// Proposer:      rt.Proposer,
-			ProposalTrace: toProposalTrace(rt.ProposalTrace),
-			Prepares:      toUIMessageTrace(rt.Prepares),
-			Commits:       toUIMessageTrace(rt.Commits),
-			RoundChanges:  toUIRoundChangeTrace(rt.RoundChanges),
+			Proposal:     toProposalTrace(rt.ProposalTrace),
+			Prepares:     toUIMessageTrace(rt.Prepares),
+			Commits:      toUIMessageTrace(rt.Commits),
+			RoundChanges: toUIRoundChangeTrace(rt.RoundChanges),
 		})
 	}
 
@@ -103,12 +103,12 @@ func toProposalTrace(rt *model.ProposalTrace) *proposalTrace {
 		return nil
 	}
 	return &proposalTrace{
-		Round:           rt.Round,
-		BeaconRoot:      rt.BeaconRoot,
-		Signer:          rt.Signer,
-		ReceivedTime:    toTime(rt.ReceivedTime),
-		RoundChanges:    toUIRoundChangeTrace(rt.RoundChanges),
-		PrepareMessages: toUIMessageTrace(rt.PrepareMessages),
+		Round:                 rt.Round,
+		BeaconRoot:            rt.BeaconRoot,
+		Signer:                rt.Signer,
+		ReceivedTime:          toTime(rt.ReceivedTime),
+		RoundChanges:          toUIRoundChangeTrace(rt.RoundChanges),
+		PrepareJustifications: toUIMessageTrace(rt.PrepareMessages),
 	}
 }
 
@@ -149,9 +149,9 @@ type committeeTraceResponse struct {
 }
 
 type committeeTrace struct {
-	Slot     phase0.Slot `json:"slot"`
-	Rounds   []round     `json:"consensus"`
-	Decideds []decided   `json:"decideds"`
+	Slot      phase0.Slot `json:"slot"`
+	Consensus []round     `json:"consensus"`
+	Decideds  []decided   `json:"decideds"`
 
 	SyncCommittee []committeeMessage `json:"sync_committee"`
 	Attester      []committeeMessage `json:"attester"`
@@ -169,7 +169,7 @@ func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 	return committeeTrace{
 		// consensus trace
 		Slot:          t.Slot,
-		Rounds:        toRounds(t.Rounds),
+		Consensus:     toRounds(t.Rounds),
 		Decideds:      toDecideds(t.Decideds),
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
 		Attester:      toCommitteePost(t.Attester),

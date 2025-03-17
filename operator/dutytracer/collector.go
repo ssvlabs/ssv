@@ -33,7 +33,7 @@ type Collector struct {
 	// validatorIndex:slot:committeeID
 	validatorIndexToCommitteeLinks *TypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]]
 
-	syncCommitteeRoots *ttlcache.Cache[phase0.Slot, phase0.Root]
+	syncCommitteeRootsCache *ttlcache.Cache[phase0.Slot, phase0.Root]
 
 	beaconNetwork spectypes.BeaconNetwork
 
@@ -66,7 +66,7 @@ func New(ctx context.Context,
 		committeeTraces:                NewTypedSyncMap[spectypes.CommitteeID, *TypedSyncMap[phase0.Slot, *committeeDutyTrace]](),
 		validatorTraces:                NewTypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]](),
 		validatorIndexToCommitteeLinks: NewTypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]](),
-		syncCommitteeRoots:             ttlcache.New(ttlcache.WithTTL[phase0.Slot, phase0.Root](ttlRoot)),
+		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[phase0.Slot, phase0.Root](ttlRoot)),
 		verifyBLSSignatureFn:           func(*spectypes.PartialSignatureMessages, *spectypes.SignedSSVMessage) error { return nil },
 	}
 
@@ -75,7 +75,7 @@ func New(ctx context.Context,
 	}
 
 	// TODO(me): remove this
-	tracer.syncCommitteeRoots.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[phase0.Slot, phase0.Root]) {
+	tracer.syncCommitteeRootsCache.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[phase0.Slot, phase0.Root]) {
 		tracer.logger.Info("sync committee root evicted", fields.Slot(item.Key()), fields.Root(item.Value()))
 	})
 
@@ -95,7 +95,7 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 			c.evictValidatorTraces(currentSlot)
 			c.evictValidatorCommitteeLinks(currentSlot)
 			// remove old SC roots
-			c.syncCommitteeRoots.DeleteExpired()
+			c.syncCommitteeRootsCache.DeleteExpired()
 		}
 	}
 }
@@ -387,7 +387,7 @@ func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectype
 
 func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Root, error) {
 	// lookup in cache first
-	cacheItem := c.syncCommitteeRoots.Get(slot)
+	cacheItem := c.syncCommitteeRootsCache.Get(slot)
 	if cacheItem != nil {
 		return cacheItem.Value(), nil
 	}
@@ -398,6 +398,11 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 		return phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
 	}
 
+	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
+
+	// get beacon root from cache or compute it
+	// TODO(me): refactor slot:blockRoot -> beaconRoot
+
 	epoch := c.beaconNetwork.EstimatedEpochAtSlot(slot)
 
 	domain, err := c.client.DomainData(epoch, spectypes.DomainSyncCommittee)
@@ -405,17 +410,16 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 		return phase0.Root{}, fmt.Errorf("get sync committee domain: %w", err)
 	}
 
-	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
-
-	root, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
+	// BeaconRoot
+	signingRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
 	if err != nil {
 		return phase0.Root{}, fmt.Errorf("compute sync committee root: %w", err)
 	}
 
 	// cache the result with the same ttl as the committee
-	_ = c.syncCommitteeRoots.Set(slot, root, ttlCommittee)
+	_ = c.syncCommitteeRootsCache.Set(slot, signingRoot, ttlCommittee)
 
-	return root, nil
+	return signingRoot, nil
 }
 
 //nolint:unused
@@ -514,13 +518,15 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 				trace.Lock()
 				defer trace.Unlock()
 
-				// fill in sync committee roots
-				// to be later read in 'processPartialSigCommittee'
-				// root, err := n.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
-				// if err != nil {
-				// 	n.logger.Error("get sync committee root", zap.Error(err))
+				// if len(msg.SignedSSVMessage.FullData) > 0 {
+				// 	// for future: check if it's a proposal message
+				// 	// if not, skip this step
+				// 	root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
+				// 	if err != nil {
+				// 		c.logger.Error("get sync committee root", zap.Error(err))
+				// 	}
+				// 	trace.syncCommitteeRoot = root
 				// }
-				// trace.syncCommitteeRoot = root
 
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
