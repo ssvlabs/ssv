@@ -40,9 +40,10 @@ func TestValidatorStatus(t *testing.T) {
 
 func TestMarkAsSafe(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
+	ctx := context.Background()
 
 	dg.validatorsState[1] = &doppelgangerState{remainingEpochs: 2}
-	dg.ReportQuorum(1)
+	dg.ReportQuorum(ctx, 1)
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(1))
 	require.Equal(t, phase0.Epoch(2), dg.validatorsState[1].remainingEpochs)
 	require.Equal(t, true, dg.validatorsState[1].observedQuorum)
@@ -52,13 +53,14 @@ func TestMarkAsSafe(t *testing.T) {
 
 func TestUpdateDoppelgangerState(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
+	ctx := context.Background()
 
 	// Update state with validator indices
-	dg.updateDoppelgangerState([]phase0.ValidatorIndex{1, 2})
+	dg.updateDoppelgangerState(ctx, 0, []phase0.ValidatorIndex{1, 2})
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(1))
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(2))
 
-	dg.updateDoppelgangerState([]phase0.ValidatorIndex{1})
+	dg.updateDoppelgangerState(ctx, 0, []phase0.ValidatorIndex{1})
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(1))
 	require.NotContains(t, dg.validatorsState, phase0.ValidatorIndex(2))
 	require.NotContains(t, dg.validatorsState, phase0.ValidatorIndex(3))
@@ -92,11 +94,12 @@ func TestCheckLiveness(t *testing.T) {
 
 func TestProcessLivenessData(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
+	ctx := context.Background()
 
 	dg.validatorsState[1] = &doppelgangerState{remainingEpochs: 2}
 	dg.validatorsState[2] = &doppelgangerState{remainingEpochs: 2}
 
-	dg.processLivenessData(0, []*v1.ValidatorLiveness{
+	dg.processLivenessData(ctx, 0, []*v1.ValidatorLiveness{
 		{Index: 1, IsLive: true},
 		{Index: 2, IsLive: false},
 	})
@@ -110,7 +113,7 @@ func TestProcessLivenessData(t *testing.T) {
 	require.Equal(t, false, dg.CanSign(1))
 	require.Equal(t, false, dg.CanSign(2))
 
-	dg.processLivenessData(1, []*v1.ValidatorLiveness{
+	dg.processLivenessData(ctx, 1, []*v1.ValidatorLiveness{
 		{Index: 1, IsLive: false},
 		{Index: 2, IsLive: false},
 	})
@@ -154,13 +157,14 @@ func TestRemoveValidatorState(t *testing.T) {
 
 func TestEpochSkipReset(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
+	ctx := context.Background()
 
 	// Add test validator states with non-default remainingEpochs
 	dg.validatorsState[1] = &doppelgangerState{remainingEpochs: 5}
 	dg.validatorsState[2] = &doppelgangerState{remainingEpochs: 3}
 
 	// Call the reset method directly
-	dg.resetDoppelgangerStates()
+	dg.resetDoppelgangerStates(ctx)
 
 	// Verify that all validators have been reset
 	for _, state := range dg.validatorsState {

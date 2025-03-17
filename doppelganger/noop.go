@@ -16,7 +16,7 @@ func (NoOpHandler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
 	return true
 }
 
-func (NoOpHandler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
+func (NoOpHandler) ReportQuorum(ctx context.Context, validatorIndex phase0.ValidatorIndex) {
 	// No operation
 }
 
