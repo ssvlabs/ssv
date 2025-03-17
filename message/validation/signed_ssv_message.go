@@ -3,6 +3,7 @@ package validation
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -79,6 +80,10 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 
 		// Rule: Signer must exist (not removed)
 		if err := mv.validateSignerExists(signer); err != nil {
+			// If operator is removed, skip it and continue with next operator
+			if errors.Is(err, ErrRemovedOperator) {
+				continue
+			}
 			return err
 		}
 
