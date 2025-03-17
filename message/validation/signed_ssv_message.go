@@ -69,7 +69,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		prevSigner = signer
 
 		// Rule: Reject messages from removed operators
-		if err := mv.validateOperator(signer); err != nil {
+		if err := mv.validateOperatorExists(signer); err != nil {
 			return err
 		}
 	}
@@ -162,12 +162,8 @@ func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorI
 	return nil
 }
 
-// validateOperator checks if the operator exists and is not removed
-func (mv *messageValidator) validateOperator(operatorID spectypes.OperatorID) error {
-	if mv.nodeStorage == nil {
-		return nil
-	}
-
+// validateOperatorExists checks if the operator exists and is not removed
+func (mv *messageValidator) validateOperatorExists(operatorID spectypes.OperatorID) error {
 	operatorData, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
 	if err != nil {
 		e := ErrOperatorValidation

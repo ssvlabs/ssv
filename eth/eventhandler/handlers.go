@@ -126,7 +126,6 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 		return fmt.Errorf("could not delete operator data: %w", err)
 	}
 
-	logger.Info("operator has been removed")
 	logger.Debug("processed event")
 	return nil
 }
