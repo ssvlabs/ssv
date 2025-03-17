@@ -123,7 +123,6 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 	// Delete the operator data from storage to mark it as removed
 	// This will cause message validation to reject messages from this operator
 	if err := eh.nodeStorage.DeleteOperatorData(txn, event.OperatorId); err != nil {
-		logger.Error("failed to delete operator data", zap.Error(err))
 		return fmt.Errorf("could not delete operator data: %w", err)
 	}
 
