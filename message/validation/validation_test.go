@@ -1046,6 +1046,57 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrDuplicatedSigner)
 	})
 
+	// Get error when receiving a message with an operator that does not exist and has not been removed
+	t.Run("operator exists and not removed", func(t *testing.T) {
+		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+
+		err := validator.validateSignerExists(1)
+		require.NoError(t, err)
+	})
+
+	// Get error when receiving a message with an operator that does not exist but has been removed
+	t.Run("operator exists but removed", func(t *testing.T) {
+		localCtrl := gomock.NewController(t)
+		removedOpMockStorage := mockstorage.NewMockStorage(localCtrl)
+
+		removedOpValidatorStore := mocks.NewMockValidatorStore(localCtrl)
+		removedOpMockStorage.EXPECT().ValidatorStore().Return(removedOpValidatorStore).AnyTimes()
+
+		// Configure mock to return false for operator 999, simulating a removed operator
+		removedOpMockStorage.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{999}).
+			Return(false, nil)
+
+		validator := New(netCfg, removedOpMockStorage, dutyStore, signatureVerifier).(*messageValidator)
+
+		err := validator.validateSignerExists(999)
+		expectedErr := ErrRemovedOperator
+		expectedErr.got = spectypes.OperatorID(999)
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Get error when receiving a message with an operator and there is an error during operator validation
+	t.Run("error during operator validation", func(t *testing.T) {
+		localCtrl := gomock.NewController(t)
+		errMockStorage := mockstorage.NewMockStorage(localCtrl)
+
+		errValidatorStore := mocks.NewMockValidatorStore(localCtrl)
+		errMockStorage.EXPECT().ValidatorStore().Return(errValidatorStore).AnyTimes()
+
+		// Configure mock to return an error when checking if operator 1 exists
+		// This simulates a storage or network error during validation
+		errMockStorage.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{1}).
+			Return(false, fmt.Errorf("validation error"))
+
+		validator := New(netCfg, errMockStorage, dutyStore, signatureVerifier).(*messageValidator)
+
+		err := validator.validateSignerExists(1)
+		expectedErr := ErrOperatorValidation
+		expectedErr.got = spectypes.OperatorID(1)
+		require.ErrorIs(t, err, expectedErr)
+	})
+
 	// Get error when receiving a message with non-sorted signers
 	t.Run("signers not sorted", func(t *testing.T) {
 		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
