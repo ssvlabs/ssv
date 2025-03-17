@@ -2,6 +2,7 @@ package eventhandler
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -125,7 +126,11 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 	return nil
 }
 
-func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.ContractValidatorAdded) (ownShare *ssvtypes.SSVShare, err error) {
+func (eh *EventHandler) handleValidatorAdded(
+	ctx context.Context,
+	txn basedb.Txn,
+	event *contract.ContractValidatorAdded,
+) (ownShare *ssvtypes.SSVShare, err error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorAdded),
 		fields.TxHash(event.Raw.TxHash),
@@ -182,7 +187,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 
 	validatorShare, exists := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if !exists {
-		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
+		shareCreated, err := eh.handleShareCreation(ctx, txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -219,6 +224,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 
 // handleShareCreation is called when a validator was added/updated during registry sync
 func (eh *EventHandler) handleShareCreation(
+	ctx context.Context,
 	txn basedb.Txn,
 	validatorEvent *contract.ContractValidatorAdded,
 	sharePublicKeys [][]byte,
@@ -235,7 +241,7 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if err := eh.keyManager.AddShare(encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		if err := eh.keyManager.AddShare(ctx, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			var shareDecryptionEKMError ekm.ShareDecryptionError
 			if errors.As(err, &shareDecryptionEKMError) {
 				return nil, &MalformedEventError{Err: err}
@@ -318,7 +324,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 var emptyPK = [48]byte{}
 
-func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
+func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
@@ -357,7 +363,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(phase0.BLSPubKey(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}

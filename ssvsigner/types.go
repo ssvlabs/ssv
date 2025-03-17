@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
@@ -17,20 +18,15 @@ type remoteSigner interface {
 	Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error)
 }
 
-type ClientShareKeys struct {
-	EncryptedPrivKey []byte
-	PublicKey        phase0.BLSPubKey
-}
-
 type ListValidatorsResponse []phase0.BLSPubKey
 
 type AddValidatorRequest struct {
-	ShareKeys []ServerShareKeys `json:"share_keys"`
+	ShareKeys []ShareKeys `json:"share_keys"`
 }
 
-type ServerShareKeys struct {
-	EncryptedPrivKey string           `json:"encrypted_private_key"`
-	PublicKey        phase0.BLSPubKey `json:"public_key"`
+type ShareKeys struct {
+	EncryptedPrivKey hexutil.Bytes
+	PublicKey        phase0.BLSPubKey
 }
 
 type AddValidatorResponse struct {

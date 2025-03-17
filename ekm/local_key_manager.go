@@ -219,7 +219,7 @@ func (km *LocalKeyManager) signBeaconObject(obj ssz.HashRoot, domain phase0.Doma
 	}
 }
 
-func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey phase0.BLSPubKey) error {
+func (km *LocalKeyManager) AddShare(_ context.Context, encryptedSharePrivKey []byte, sharePubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
@@ -253,7 +253,7 @@ func (km *LocalKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey ph
 	return nil
 }
 
-func (km *LocalKeyManager) RemoveShare(pubKey phase0.BLSPubKey) error {
+func (km *LocalKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 

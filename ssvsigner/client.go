@@ -3,7 +3,6 @@ package ssvsigner
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -63,11 +62,11 @@ func (c *Client) ListValidators(ctx context.Context) ([]phase0.BLSPubKey, error)
 	return resp, nil
 }
 
-func (c *Client) AddValidators(ctx context.Context, shares ...ClientShareKeys) ([]web3signer.Status, error) {
-	encodedShares := make([]ServerShareKeys, 0, len(shares))
+func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) ([]web3signer.Status, error) {
+	encodedShares := make([]ShareKeys, 0, len(shares))
 	for _, share := range shares {
-		encodedShares = append(encodedShares, ServerShareKeys{
-			EncryptedPrivKey: hex.EncodeToString(share.EncryptedPrivKey),
+		encodedShares = append(encodedShares, ShareKeys{
+			EncryptedPrivKey: share.EncryptedPrivKey,
 			PublicKey:        share.PublicKey,
 		})
 	}

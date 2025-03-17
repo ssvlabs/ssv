@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/fasthttp/router"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/valyala/fasthttp"
@@ -76,16 +77,8 @@ func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleAddValidator"))
 
-	body := ctx.PostBody()
-	if len(body) == 0 {
-		logger.Warn("Request body is empty")
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeString(ctx, "request body is empty")
-		return
-	}
-
 	var req AddValidatorRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("Failed to unmarshal request body", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeErr(ctx, fmt.Errorf("failed to parse request: %w", err))
@@ -96,51 +89,11 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	var shareKeystorePasswords []string
 
 	for i, share := range req.ShareKeys {
-		logger := r.logger.With(zap.Int("index", i))
-		encPrivKey, err := hex.DecodeString(strings.TrimPrefix(share.EncryptedPrivKey, "0x"))
+		shareKeystore, err := r.keystoreFromEncryptedShare(share.EncryptedPrivKey, share.PublicKey)
 		if err != nil {
-			logger.Warn("Failed to decode share hex", zap.Error(err))
-			ctx.SetStatusCode(fasthttp.StatusBadRequest)
-			r.writeErr(ctx, fmt.Errorf("failed to decode share.EncryptedPrivKey as hex: %w", err))
-			return
-		}
-
-		sharePrivKeyHex, err := r.operatorPrivKey.Decrypt(encPrivKey)
-		if err != nil {
-			logger.Warn("Failed to decrypt share", zap.Error(err))
+			logger.Warn("Failed to get keystore from encrypted share", zap.Int("index", i), zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
-			r.writeErr(ctx, fmt.Errorf("failed to decrypt share: %w", err))
-			return
-		}
-
-		sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
-		if err != nil {
-			logger.Warn("Failed to decode share private key hex", zap.Error(err))
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			r.writeErr(ctx, fmt.Errorf("failed to decode share private key from hex %s: %w", string(sharePrivKeyHex), err))
-			return
-		}
-
-		sharePrivBLS := &bls.SecretKey{}
-		if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
-			logger.Warn("Failed to deserialize share private key", zap.Error(err))
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			r.writeErr(ctx, fmt.Errorf("failed to deserialize share private key: %w", err))
-			return
-		}
-
-		if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), share.PublicKey[:]) {
-			logger.Warn("Derived public key does not match expected public key", zap.Int("index", i))
-			ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
-			r.writeErr(ctx, fmt.Errorf("derived public key does not match expected public key"))
-			return
-		}
-
-		shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, share.PublicKey, r.keystorePasswd)
-		if err != nil {
-			logger.Warn("Failed to generate share keystore", zap.Error(err))
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			r.writeErr(ctx, fmt.Errorf("failed to generate share keystore: %w", err))
+			r.writeErr(ctx, fmt.Errorf("failed to get keystore from encrypted share index %d: %w", i, err))
 			return
 		}
 
@@ -173,19 +126,39 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	r.writeJSON(ctx, resp)
 }
 
+func (r *Server) keystoreFromEncryptedShare(encryptedPrivKey hexutil.Bytes, sharePubKey phase0.BLSPubKey) (web3signer.Keystore, error) {
+	sharePrivKeyHex, err := r.operatorPrivKey.Decrypt(encryptedPrivKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt share: %w", err)
+	}
+
+	sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode share private key from hex %s: %w", string(sharePrivKeyHex), err)
+	}
+
+	sharePrivBLS := &bls.SecretKey{}
+	if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
+		return nil, fmt.Errorf("failed to deserialize share private key: %w", err)
+	}
+
+	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {
+		return nil, fmt.Errorf("derived public key does not match expected public key")
+	}
+
+	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, r.keystorePasswd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate share keystore: %w", err)
+	}
+
+	return shareKeystore, nil
+}
+
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleRemoveValidator"))
 
-	body := ctx.PostBody()
-	if len(body) == 0 {
-		logger.Warn("Request body is empty")
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeString(ctx, "request body is empty")
-		return
-	}
-
 	var req RemoveValidatorRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("Failed to unmarshal request body", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeErr(ctx, fmt.Errorf("failed to parse request: %w", err))
@@ -220,16 +193,8 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleSignValidator"))
 
-	body := ctx.PostBody()
-	if len(body) == 0 {
-		logger.Warn("Request body is empty")
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeString(ctx, "request body is empty")
-		return
-	}
-
 	var req web3signer.SignRequest
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("Failed to unmarshal request body", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		r.writeErr(ctx, fmt.Errorf("invalid request body: %w", err))

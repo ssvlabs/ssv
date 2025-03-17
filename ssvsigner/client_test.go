@@ -54,7 +54,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 	testCases := []struct {
 		name               string
-		shares             []ClientShareKeys
+		shares             []ShareKeys
 		expectedStatusCode int
 		expectedResponse   AddValidatorResponse
 		expectedResult     []web3signer.Status
@@ -63,7 +63,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 	}{
 		{
 			name: "Success", // TODO: fix
-			shares: []ClientShareKeys{
+			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted1"),
 					PublicKey:        phase0.BLSPubKey{1, 2, 3},
@@ -82,7 +82,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		},
 		{
 			name: "DecryptionError", // TODO: fix
-			shares: []ClientShareKeys{
+			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("bad_encrypted"),
 					PublicKey:        phase0.BLSPubKey{1, 2, 3},
@@ -95,7 +95,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		},
 		{
 			name: "ServerError", // TODO: fix
-			shares: []ClientShareKeys{
+			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted"),
 					PublicKey:        phase0.BLSPubKey{1, 2, 3},
@@ -107,7 +107,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		},
 		{
 			name:               "NoShares",
-			shares:             []ClientShareKeys{},
+			shares:             []ShareKeys{},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: AddValidatorResponse{
 				Statuses: []web3signer.Status{},
@@ -622,7 +622,7 @@ func TestRequestErrors(t *testing.T) {
 
 	client := NewClient(server.URL)
 
-	_, err := client.AddValidators(context.Background(), ClientShareKeys{
+	_, err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PublicKey:        phase0.BLSPubKey{1, 1, 1},
 	})
@@ -651,7 +651,7 @@ func TestResponseHandlingErrors(t *testing.T) {
 
 	client := NewClient(server.URL)
 
-	_, err := client.AddValidators(context.Background(), ClientShareKeys{
+	_, err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PublicKey:        phase0.BLSPubKey{1, 1, 1},
 	})

@@ -123,7 +123,7 @@ func (s *ServerTestSuite) TestAddValidator() { // TODO: fix
 	s.operatorPrivKey.decryptResult = []byte(validBlsKey)
 
 	request := AddValidatorRequest{
-		ShareKeys: []ServerShareKeys{
+		ShareKeys: []ShareKeys{
 			{
 				EncryptedPrivKey: hex.EncodeToString([]byte("encrypted_key")),
 				PublicKey:        phase0.BLSPubKey(pubKey),
@@ -147,7 +147,7 @@ func (s *ServerTestSuite) TestAddValidator() { // TODO: fix
 	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
 
 	emptyRequest := AddValidatorRequest{
-		ShareKeys: []ServerShareKeys{},
+		ShareKeys: []ShareKeys{},
 	}
 	emptyReqBody, err := json.Marshal(emptyRequest)
 	require.NoError(t, err)
@@ -156,7 +156,7 @@ func (s *ServerTestSuite) TestAddValidator() { // TODO: fix
 	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
 
 	invalidPubKeyRequest := AddValidatorRequest{
-		ShareKeys: []ServerShareKeys{
+		ShareKeys: []ShareKeys{
 			{
 				EncryptedPrivKey: hex.EncodeToString([]byte("encrypted_key")),
 				PublicKey:        phase0.BLSPubKey{},
@@ -170,7 +170,7 @@ func (s *ServerTestSuite) TestAddValidator() { // TODO: fix
 	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
 
 	invalidPrivKeyRequest := AddValidatorRequest{
-		ShareKeys: []ServerShareKeys{
+		ShareKeys: []ShareKeys{
 			{
 				EncryptedPrivKey: "invalid_hex",
 				PublicKey:        phase0.BLSPubKey(pubKey),

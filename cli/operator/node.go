@@ -980,7 +980,7 @@ func syncContractEvents(
 			logger.Fatal("failed to load local events", zap.Error(err))
 		}
 
-		if err := eventHandler.HandleLocalEvents(localEvents); err != nil {
+		if err := eventHandler.HandleLocalEvents(ctx, localEvents); err != nil {
 			logger.Fatal("error occurred while running event data handler", zap.Error(err))
 		}
 	} else {
