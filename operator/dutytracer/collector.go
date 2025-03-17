@@ -234,41 +234,40 @@ func (c *Collector) decodeJustificationWithRoundChanges(justifications [][]byte)
 			continue
 		}
 
-		var receivedAt time.Time // zero time
-		var roundChangeTrace = c.createRoundChangeTrace(receivedAt, qbftMsg, signedMsg)
+		var roundChangeTrace = c.createRoundChangeTrace(0, qbftMsg, signedMsg) // zero time
 		traces = append(traces, roundChangeTrace)
 	}
 
 	return traces
 }
 
-func (c *Collector) createRoundChangeTrace(receivedAt time.Time, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.RoundChangeTrace {
+func (c *Collector) createRoundChangeTrace(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.RoundChangeTrace {
 	return &model.RoundChangeTrace{
 		QBFTTrace: model.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: toTime(receivedAt),
+			ReceivedTime: receivedAt,
 		},
 		PreparedRound:   uint64(msg.DataRound),
 		PrepareMessages: c.decodeJustificationWithPrepares(msg.RoundChangeJustification),
 	}
 }
 
-func (c *Collector) createProposalTrace(receivedAt time.Time, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.ProposalTrace {
+func (c *Collector) createProposalTrace(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage) *model.ProposalTrace {
 	return &model.ProposalTrace{
 		QBFTTrace: model.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: toTime(receivedAt),
+			ReceivedTime: receivedAt,
 		},
 		RoundChanges:    c.decodeJustificationWithRoundChanges(msg.RoundChangeJustification),
 		PrepareMessages: c.decodeJustificationWithPrepares(msg.PrepareJustification),
 	}
 }
 
-func (c *Collector) processConsensus(receivedAt time.Time, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) *model.DecidedTrace {
+func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) *model.DecidedTrace {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		round.ProposalTrace = c.createProposalTrace(receivedAt, msg, signedMsg)
@@ -278,7 +277,7 @@ func (c *Collector) processConsensus(receivedAt time.Time, msg *specqbft.Message
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
 			Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: toTime(receivedAt),
+			ReceivedTime: receivedAt,
 		}
 
 		round.Prepares = append(round.Prepares, prepare)
@@ -289,7 +288,7 @@ func (c *Collector) processConsensus(receivedAt time.Time, msg *specqbft.Message
 				Round:        uint64(msg.Round),
 				BeaconRoot:   msg.Root,
 				Signers:      signedMsg.OperatorIDs,
-				ReceivedTime: toTime(receivedAt),
+				ReceivedTime: receivedAt,
 			}
 		}
 
@@ -298,7 +297,7 @@ func (c *Collector) processConsensus(receivedAt time.Time, msg *specqbft.Message
 			BeaconRoot: msg.Root,
 			//  TODO(Moshe/Matheus) - need to get the signer from the message?
 			// Signer:       signedMsg.OperatorIDs[0],
-			ReceivedTime: toTime(receivedAt),
+			ReceivedTime: receivedAt,
 		}
 
 		round.Commits = append(round.Commits, commit)
@@ -312,7 +311,7 @@ func (c *Collector) processConsensus(receivedAt time.Time, msg *specqbft.Message
 	return nil
 }
 
-func (c *Collector) processPartialSigValidator(receivedAt time.Time, msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, pubkey spectypes.ValidatorPK) {
+func (c *Collector) processPartialSigValidator(receivedAt uint64, msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, pubkey spectypes.ValidatorPK) {
 	var (
 		role = toBNRole(ssvMsg.MsgID.GetRoleType())
 		slot = msg.Slot
@@ -331,7 +330,7 @@ func (c *Collector) processPartialSigValidator(receivedAt time.Time, msg *specty
 		Type:         msg.Type,
 		BeaconRoot:   msg.Messages[0].SigningRoot,
 		Signer:       msg.Messages[0].Signer,
-		ReceivedTime: toTime(receivedAt),
+		ReceivedTime: receivedAt,
 	}
 
 	if msg.Type == spectypes.PostConsensusPartialSig {
@@ -342,7 +341,7 @@ func (c *Collector) processPartialSigValidator(receivedAt time.Time, msg *specty
 	roleDutyTrace.Pre = append(roleDutyTrace.Pre, tr)
 }
 
-func (c *Collector) processPartialSigCommittee(receivedAt time.Time, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
+func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
 	slot := msg.Slot
 
 	trace := c.getOrCreateCommitteeTrace(slot, committeeID)
@@ -362,7 +361,7 @@ func (c *Collector) processPartialSigCommittee(receivedAt time.Time, msg *specty
 	for _, partialSigMsg := range msg.Messages {
 		signerData := model.SignerData{
 			Signers:      []spectypes.OperatorID{partialSigMsg.Signer},
-			ReceivedTime: toTime(receivedAt),
+			ReceivedTime: receivedAt,
 		}
 
 		if bytes.Equal(trace.syncCommitteeRoot[:], partialSigMsg.SigningRoot[:]) {
@@ -489,17 +488,21 @@ func (c *Collector) verifyBLSSignature(pSigMessages *spectypes.PartialSignatureM
 
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 	start := time.Now()
+
 	tracerInFlightMessageCounter.Add(ctx, 1)
 	defer func() {
 		tracerInFlightMessageHist.Record(ctx, time.Since(start).Seconds())
 	}()
 
+	//nolint:gosec
+	startTime := uint64(start.UnixNano() / int64(time.Millisecond))
+
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		if subMsg, ok := msg.Body.(*specqbft.Message); ok {
 			slot := phase0.Slot(subMsg.Height)
-			msgID := spectypes.MessageID(subMsg.Identifier[:]) // validator + pubkey + role + network
-			executorID := msgID.GetDutyExecutorID()            // validator pubkey or committee id
+			msgID := spectypes.MessageID(subMsg.Identifier[:])
+			executorID := msgID.GetDutyExecutorID()
 
 			switch role := msgID.GetRoleType(); role {
 			case spectypes.RoleCommittee:
@@ -524,7 +527,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 				// TODO(moshe) populate proposer or not?
 				// n.populateProposer(round, committeeID, subMsg)
 
-				decided := c.processConsensus(start, subMsg, msg.SignedSSVMessage, round)
+				decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
 					trace.Decideds = append(trace.Decideds, decided)
 				}
@@ -567,7 +570,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 				// TODO(moshe) populate proposer or not?
 				// n.populateProposer(round, validatorPK, subMsg)
 
-				decided := c.processConsensus(start, subMsg, msg.SignedSSVMessage, round)
+				decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
 					roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
 				}
@@ -587,7 +590,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 			var committeeID spectypes.CommitteeID
 			copy(committeeID[:], executorID[16:])
 
-			c.processPartialSigCommittee(start, pSigMessages, committeeID)
+			c.processPartialSigCommittee(startTime, pSigMessages, committeeID)
 
 			return
 		}
@@ -603,7 +606,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 		var validatorPK spectypes.ValidatorPK
 		copy(validatorPK[:], executorID)
 
-		c.processPartialSigValidator(start, pSigMessages, msg, validatorPK)
+		c.processPartialSigValidator(startTime, pSigMessages, msg, validatorPK)
 	}
 }
 
@@ -627,9 +630,4 @@ func getOrCreateRound(trace *model.ConsensusTrace, rnd uint64) *model.RoundTrace
 	}
 
 	return trace.Rounds[rnd-1]
-}
-
-//nolint:gosec
-func toTime(t time.Time) uint64 {
-	return uint64(t.UnixNano() / int64(time.Millisecond))
 }
