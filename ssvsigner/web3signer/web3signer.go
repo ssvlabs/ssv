@@ -37,14 +37,16 @@ func (c *Web3Signer) ListKeys(ctx context.Context) ([]phase0.BLSPubKey, error) {
 	logger.Info("listing keys")
 
 	var resp []phase0.BLSPubKey
+	var errResp ErrorResponse
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path("/api/v1/eth2/publicKeys").
 		ToJSON(&resp).
+		ErrorJSON(errResp).
 		Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("web3signer: %w", err)
+		return nil, fmt.Errorf("web3signer returned an error (%q): %w", errResp.Message, err)
 	}
 
 	logger.Info("listed keys", zap.Int("count", len(resp)))
@@ -67,6 +69,7 @@ func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList []Keystore
 	}
 
 	var resp ImportKeystoreResponse
+	var errResp ErrorResponse
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -74,9 +77,10 @@ func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList []Keystore
 		BodyJSON(payload).
 		Post().
 		ToJSON(&resp).
+		ErrorJSON(errResp).
 		Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("web3signer: %w", err)
+		return nil, fmt.Errorf("web3signer returned an error (%q): %w", errResp.Message, err)
 	}
 
 	logger.Info("imported keystores")
@@ -102,6 +106,7 @@ func (c *Web3Signer) DeleteKeystore(ctx context.Context, sharePubKeyList []phase
 	}
 
 	var resp DeleteKeystoreResponse
+	var errResp ErrorResponse
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -109,9 +114,10 @@ func (c *Web3Signer) DeleteKeystore(ctx context.Context, sharePubKeyList []phase
 		BodyJSON(payload).
 		Delete().
 		ToJSON(&resp).
+		ErrorJSON(errResp).
 		Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("web3signer: %w", err)
+		return nil, fmt.Errorf("web3signer returned an error (%q): %w", errResp.Message, err)
 	}
 
 	logger.Info("deleted keystores")
@@ -134,6 +140,7 @@ func (c *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, pay
 	logger.Info("signing")
 
 	var resp string
+	var errResp ErrorResponse
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -141,9 +148,10 @@ func (c *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, pay
 		BodyJSON(payload).
 		Post().
 		ToString(&resp).
+		ErrorJSON(errResp).
 		Fetch(ctx)
 	if err != nil {
-		return phase0.BLSSignature{}, fmt.Errorf("web3signer: %w", err)
+		return phase0.BLSSignature{}, fmt.Errorf("web3signer returned an error (%q): %w", errResp.Message, err)
 	}
 
 	sigBytes, err := hex.DecodeString(strings.TrimPrefix(resp, "0x"))

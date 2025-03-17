@@ -12,6 +12,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+type ErrorResponse struct {
+	Message string `json:"message"`
+}
+
 type ListKeysResponse []phase0.BLSPubKey
 
 type KeyData struct {
@@ -27,8 +31,7 @@ type ImportKeystoreRequest struct {
 type Keystore map[string]any
 
 type ImportKeystoreResponse struct {
-	Data    []KeyManagerResponseData `json:"data"`
-	Message string                   `json:"message,omitempty"`
+	Data []KeyManagerResponseData `json:"data"`
 }
 
 type DeleteKeystoreRequest struct {
@@ -38,7 +41,6 @@ type DeleteKeystoreRequest struct {
 type DeleteKeystoreResponse struct {
 	Data               []KeyManagerResponseData `json:"data"`
 	SlashingProtection string                   `json:"slashing_protection"`
-	Message            string                   `json:"message,omitempty"`
 }
 
 type KeyManagerResponseData struct {
