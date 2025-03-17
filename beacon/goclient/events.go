@@ -59,6 +59,12 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		strTopics = append(strTopics, string(topic))
 	}
 
+	logger := gc.log.With(
+		zap.Int("clients_len", len(gc.clients)),
+		zap.String("topics", strings.Join(strTopics, ", ")),
+		zap.Bool("is_multi_client_listener", !gc.withWeightedAttestationData),
+	)
+
 	/*
 		When weighted attestation data is disabled, the method responsible for fetching attestation data
 		will use a multi-client instance. It is essential that both event listening and attestation data fetching
@@ -73,25 +79,18 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		the first event received for the slot(and ignore other events for the same slot), as it will most likely
 		originate from the same Beacon Node that provided the attestation data.
 	*/
-	isMultiClientListener := !gc.withWeightedAttestationData
-	logger := gc.log.With(
-		zap.Int("clients_len", len(gc.clients)),
-		zap.String("topics", strings.Join(strTopics, ", ")),
-		zap.Bool("is_multi_client_listener", isMultiClientListener),
-	)
-
 	logger.Info("subscribing to events")
-	if isMultiClientListener {
-		if err := gc.multiClient.Events(ctx, strTopics, gc.eventHandler); err != nil {
-			logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
-			return err
-		}
-	} else {
+	if gc.withWeightedAttestationData {
 		for _, client := range gc.clients {
 			if err := client.Events(ctx, strTopics, gc.eventHandler); err != nil {
 				logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
 				return err
 			}
+		}
+	} else {
+		if err := gc.multiClient.Events(ctx, strTopics, gc.eventHandler); err != nil {
+			logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
+			return err
 		}
 	}
 
