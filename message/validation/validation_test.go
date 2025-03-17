@@ -233,7 +233,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
-		msgSize := maxSignedMsgSize*2 + MessageOffset
+		msgSize := maxSignedMsgSizeBeforePectra*2 + MessageOffset
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{

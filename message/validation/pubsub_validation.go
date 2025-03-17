@@ -10,10 +10,10 @@ func (mv *messageValidator) validatePubSubMessage(pMsg *pubsub.Message) error {
 		return ErrPubSubMessageHasNoData
 	}
 
-	maxMsgSize := MaxEncodedMsgSize
+	maxMsgSize := MaxEncodedMsgSizeBeforePectra
 
 	if mv.netCfg.Beacon.EstimatedCurrentEpoch() >= mv.pectraForkEpoch {
-		maxMsgSize = PecraMaxEncodedMsgSize
+		maxMsgSize = MaxEncodedMsgSize
 	}
 
 	// Rule: Pubsub.Message.Message.Data size upper limit
