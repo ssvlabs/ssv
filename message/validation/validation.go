@@ -19,8 +19,9 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"go.uber.org/zap"
 )
 
@@ -35,9 +36,10 @@ type messageValidator struct {
 	netCfg                networkconfig.NetworkConfig
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
-	validatorStore        storage.ValidatorStore
+	validatorStore        registrystorage.ValidatorStore
 	dutyStore             *dutystore.Store
 	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+	nodeStorage           operatorstorage.Storage
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -51,7 +53,7 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
 	netCfg networkconfig.NetworkConfig,
-	validatorStore storage.ValidatorStore,
+	nodeStorage operatorstorage.Storage,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
 	opts ...Option,
@@ -61,9 +63,10 @@ func New(
 		netCfg:              netCfg,
 		consensusStateIndex: make(map[consensusID]*consensusState),
 		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
-		validatorStore:      validatorStore,
+		validatorStore:      nodeStorage.ValidatorStore(),
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
+		nodeStorage:         nodeStorage,
 	}
 
 	for _, opt := range opts {

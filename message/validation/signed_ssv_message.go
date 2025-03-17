@@ -67,6 +67,11 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 			return ErrDuplicatedSigner
 		}
 		prevSigner = signer
+
+		// Rule: Reject messages from removed operators
+		if err := mv.validateOperatorExists(signer); err != nil {
+			return err
+		}
 	}
 
 	// Rule: Len(Signers) must be equal to Len(Signatures)
@@ -152,6 +157,24 @@ func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorI
 			e.want = committee
 			return e
 		}
+	}
+
+	return nil
+}
+
+// validateOperatorExists checks if the operator exists and is not removed
+func (mv *messageValidator) validateOperatorExists(operatorID spectypes.OperatorID) error {
+	exists, err := mv.nodeStorage.OperatorsExist(nil, []spectypes.OperatorID{operatorID})
+	if err != nil {
+		e := ErrOperatorValidation
+		e.got = operatorID
+		return e
+	}
+
+	if !exists {
+		e := ErrRemovedOperator
+		e.got = operatorID
+		return e
 	}
 
 	return nil
