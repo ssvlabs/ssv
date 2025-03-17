@@ -66,11 +66,11 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted1"),
-					PublicKey:        []byte("pubkey1"),
+					PublicKey:        phase0.BLSPubKey{1, 2, 3},
 				},
 				{
 					EncryptedPrivKey: []byte("encrypted2"),
-					PublicKey:        []byte("pubkey2"),
+					PublicKey:        phase0.BLSPubKey{4, 5, 6},
 				},
 			},
 			expectedStatusCode: http.StatusOK,
@@ -85,7 +85,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("bad_encrypted"),
-					PublicKey:        []byte("pubkey"),
+					PublicKey:        phase0.BLSPubKey{1, 2, 3},
 				},
 			},
 			expectedStatusCode: http.StatusUnprocessableEntity,
@@ -98,7 +98,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted"),
-					PublicKey:        []byte("pubkey"),
+					PublicKey:        phase0.BLSPubKey{1, 2, 3},
 				},
 			},
 			expectedStatusCode: http.StatusInternalServerError,
@@ -120,7 +120,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/validators/add", func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc("/v1/validators", func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodPost, r.Method)
 
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
@@ -136,7 +136,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				assert.Len(t, req.ShareKeys, len(tc.shares))
 				for i, share := range tc.shares {
 					assert.Equal(t, hex.EncodeToString(share.EncryptedPrivKey), req.ShareKeys[i].EncryptedPrivKey)
-					assert.Equal(t, hex.EncodeToString(share.PublicKey), req.ShareKeys[i].PublicKey)
+					assert.Equal(t, hex.EncodeToString(share.PublicKey[:]), req.ShareKeys[i].PublicKey)
 				}
 
 				w.WriteHeader(tc.expectedStatusCode)
@@ -218,8 +218,8 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/validators/remove", func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
+			s.mux.HandleFunc("/v1/validators", func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodDelete, r.Method)
 
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -275,8 +275,8 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 			name:               "Success",
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: ListValidatorsResponse{
-				"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-				"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+				phase0.BLSPubKey{1, 2, 3},
+				phase0.BLSPubKey{4, 5, 6},
 			},
 			expectedResult: []string{
 				"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
@@ -302,7 +302,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/validators/list", func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc("/v1/validators", func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
@@ -333,7 +333,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 func (s *SSVSignerClientSuite) TestSign() {
 	t := s.T()
 
-	samplePubKey := []byte("sample_pubkey")
+	samplePubKey := phase0.BLSPubKey{1, 1, 1, 1}
 	samplePayload := web3signer.SignRequest{
 		Type: web3signer.TypeAttestation,
 		ForkInfo: web3signer.ForkInfo{
@@ -361,11 +361,11 @@ func (s *SSVSignerClientSuite) TestSign() {
 
 	testCases := []struct {
 		name               string
-		pubKey             []byte
+		pubKey             phase0.BLSPubKey
 		payload            web3signer.SignRequest
 		expectedStatusCode int
 		responseBody       string
-		expectedResult     []byte
+		expectedResult     phase0.BLSSignature
 		expectError        bool
 	}{
 		{
@@ -374,7 +374,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 			payload:            samplePayload,
 			expectedStatusCode: http.StatusOK,
 			responseBody:       "0x1234567890abcdef",
-			expectedResult:     []byte("0x1234567890abcdef"),
+			expectedResult:     phase0.BLSSignature{1, 1, 1, 1},
 			expectError:        false,
 		},
 		{
@@ -398,7 +398,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc(fmt.Sprintf("/v1/validators/sign/%s", hex.EncodeToString(tc.pubKey)), func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(fmt.Sprintf("/v1/validators/sign/%s", tc.pubKey), func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodPost, r.Method)
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -637,7 +637,7 @@ func TestRequestErrors(t *testing.T) {
 	_, err = client.OperatorIdentity(context.Background())
 	assert.Error(t, err)
 
-	_, err = client.OperatorSign(context.Background(), phase0.BLSPubKey{1, 1, 1})
+	_, err = client.OperatorSign(context.Background(), []byte{1, 1, 1})
 	assert.Error(t, err)
 }
 
@@ -653,11 +653,11 @@ func TestResponseHandlingErrors(t *testing.T) {
 
 	_, err := client.AddValidators(context.Background(), ClientShareKeys{
 		EncryptedPrivKey: []byte("test"),
-		PublicKey:        []byte("test"),
+		PublicKey:        phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	_, err = client.RemoveValidators(context.Background(), []byte("test"))
+	_, err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 }
 
