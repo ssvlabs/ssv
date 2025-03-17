@@ -3,6 +3,7 @@ package web3signer
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -62,8 +63,18 @@ func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList []Keystore
 	)
 	logger.Info("importing keystores")
 
+	var keystoreStrings []string
+	for i, keystore := range keystoreList {
+		b, err := json.Marshal(keystore)
+		if err != nil {
+			return nil, fmt.Errorf("marshal keystore index %d: %w", i, err)
+		}
+
+		keystoreStrings = append(keystoreStrings, string(b))
+	}
+
 	payload := ImportKeystoreRequest{
-		Keystores:          keystoreList,
+		Keystores:          keystoreStrings,
 		Passwords:          keystorePasswordList,
 		SlashingProtection: "", // TODO
 	}
