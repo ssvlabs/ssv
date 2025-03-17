@@ -12,8 +12,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+// ErrorResponse is used only by ImportKeystore and DeleteKeystore
 type ErrorResponse struct {
-	Message string `json:"message"`
+	Message string `json:"message,omitempty"`
 }
 
 type ListKeysResponse []phase0.BLSPubKey
