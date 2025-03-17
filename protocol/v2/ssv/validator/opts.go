@@ -32,6 +32,7 @@ type Options struct {
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
 	Exporter            bool
+	ExporterDutyTracing bool
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator

@@ -14,11 +14,12 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/doppelganger"
+	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -28,6 +29,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -37,12 +40,12 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -72,6 +75,7 @@ type ControllerOptions struct {
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"The number of slots to be keep back"`
+	ExporterDutyTracing        bool   `yaml:"ExporterDutyTracing" env:"EXPORTER_DUTY_TRACING" env-default:"true" env-description:"Expose all validator duties to the exporter"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -79,6 +83,7 @@ type ControllerOptions struct {
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
+	DutyTraceCollector         DutyTraceCollector
 	StorageMap                 *storage.ParticipantStores
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
@@ -188,6 +193,17 @@ type controller struct {
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
+
+	traceCollector DutyTraceCollector
+}
+
+type DutyTraceCollector interface {
+	Collect(context.Context, *queue.SSVMessage)
+	StartEvictionJob(context.Context, slotticker.Provider)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
+	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 }
 
 // NewController creates a new validator controller instance
@@ -219,6 +235,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GasLimit:            options.GasLimit,
 		MessageValidator:    options.MessageValidator,
 		Graffiti:            options.Graffiti,
+		ExporterDutyTracing: options.ExporterDutyTracing,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -247,6 +264,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
+		traceCollector:    options.DutyTraceCollector,
 
 		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
@@ -337,7 +355,7 @@ func (c *controller) handleRouterMessages() {
 					v.HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(ctx, c.logger, m)
-				} else if c.validatorOptions.Exporter {
+				} else if c.validatorOptions.Exporter || c.validatorOptions.ExporterDutyTracing {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
@@ -363,8 +381,14 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 }
 
 func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
-	var ncv *committeeObserver
 	ssvMsg := msg.(*queue.SSVMessage)
+
+	if c.validatorOptions.ExporterDutyTracing {
+		c.traceCollector.Collect(c.ctx, ssvMsg)
+		return nil // TODO(Matus): return here or continue?
+	}
+
+	var ncv *committeeObserver
 
 	item := c.getNonCommitteeValidators(ssvMsg.GetID())
 	if item == nil {
@@ -394,9 +418,15 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	} else {
 		ncv = item
 	}
+
+	if !c.validatorOptions.Exporter {
+		return nil
+	}
+
 	if err := c.handleNonCommitteeMessages(ssvMsg, ncv); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -454,7 +484,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		}
 	}
 
-	if c.validatorOptions.Exporter {
+	if c.validatorOptions.Exporter || c.validatorOptions.ExporterDutyTracing {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
 	} else {
@@ -778,7 +808,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.SSVShare = share
 		opts.Operator = operator
 
-		committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
+		committeeOpIDs := ssvtypes.OperatorIDsFromOperators(operator.Committee)
 
 		logger := c.logger.With([]zap.Field{
 			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
