@@ -20,6 +20,13 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
+const (
+	pathValidators       = "/v1/validators"
+	pathValidatorsSign   = "/v1/validators/sign/"
+	pathOperatorIdentity = "/v1/operator/identity"
+	pathOperatorSign     = "/v1/operator/sign"
+)
+
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
@@ -44,13 +51,13 @@ func NewServer(
 		keystorePasswd:  keystorePasswd,
 	}
 
-	r.GET("/v1/validators", server.handleListValidators)
-	r.POST("/v1/validators", server.handleAddValidator)
-	r.DELETE("/v1/validators", server.handleRemoveValidator)
-	r.POST("/v1/validators/sign/{identifier}", server.handleSignValidator)
+	r.GET(pathValidators, server.handleListValidators)
+	r.POST(pathValidators, server.handleAddValidator)
+	r.DELETE(pathValidators, server.handleRemoveValidator)
+	r.POST(pathValidatorsSign+"{identifier}", server.handleSignValidator)
 
-	r.GET("/v1/operator/identity", server.handleOperatorIdentity)
-	r.POST("/v1/operator/sign", server.handleSignOperator)
+	r.GET(pathOperatorIdentity, server.handleOperatorIdentity)
+	r.POST(pathOperatorSign, server.handleSignOperator)
 
 	return server
 }

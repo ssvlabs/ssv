@@ -52,7 +52,7 @@ func (c *Client) ListValidators(ctx context.Context) ([]phase0.BLSPubKey, error)
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path("/v1/validators").
+		Path(pathValidators).
 		ToJSON(&resp).
 		Fetch(ctx)
 	if err != nil {
@@ -80,7 +80,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) ([]web3
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path("/v1/validators").
+		Path(pathValidators).
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
@@ -111,7 +111,7 @@ func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BL
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path("/v1/validators").
+		Path(pathValidators).
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
@@ -132,7 +132,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Pathf("/v1/validators/sign/%s", sharePubKey).
+		Path(pathValidatorsSign + sharePubKey.String()).
 		BodyJSON(payload).
 		Post().
 		ToJSON(&resp).
@@ -149,7 +149,7 @@ func (c *Client) OperatorIdentity(ctx context.Context) (string, error) {
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path("/v1/operator/identity").
+		Path(pathOperatorIdentity).
 		ToString(&resp).
 		Fetch(ctx)
 	if err != nil {
