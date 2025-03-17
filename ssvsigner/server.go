@@ -96,9 +96,10 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	var shareKeystorePasswords []string
 
 	for i, share := range req.ShareKeys {
+		logger := r.logger.With(zap.Int("index", i))
 		encPrivKey, err := hex.DecodeString(strings.TrimPrefix(share.EncryptedPrivKey, "0x"))
 		if err != nil {
-			logger.Warn("Failed to decode share hex", zap.Int("index", i), zap.Error(err))
+			logger.Warn("Failed to decode share hex", zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusBadRequest)
 			r.writeErr(ctx, fmt.Errorf("failed to decode share.EncryptedPrivKey as hex: %w", err))
 			return
@@ -106,7 +107,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		sharePrivKeyHex, err := r.operatorPrivKey.Decrypt(encPrivKey)
 		if err != nil {
-			logger.Warn("Failed to decrypt share", zap.Int("index", i), zap.Error(err))
+			logger.Warn("Failed to decrypt share", zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
 			r.writeErr(ctx, fmt.Errorf("failed to decrypt share: %w", err))
 			return
@@ -114,7 +115,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
 		if err != nil {
-			logger.Warn("Failed to decode share private key hex", zap.Int("index", i), zap.Error(err))
+			logger.Warn("Failed to decode share private key hex", zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 			r.writeErr(ctx, fmt.Errorf("failed to decode share private key from hex %s: %w", string(sharePrivKeyHex), err))
 			return
@@ -122,7 +123,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		sharePrivBLS := &bls.SecretKey{}
 		if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
-			logger.Warn("Failed to deserialize share private key", zap.Int("index", i), zap.Error(err))
+			logger.Warn("Failed to deserialize share private key", zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 			r.writeErr(ctx, fmt.Errorf("failed to deserialize share private key: %w", err))
 			return
@@ -137,7 +138,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, share.PublicKey, r.keystorePasswd)
 		if err != nil {
-			logger.Warn("Failed to generate share keystore", zap.Int("index", i), zap.Error(err))
+			logger.Warn("Failed to generate share keystore", zap.Error(err))
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 			r.writeErr(ctx, fmt.Errorf("failed to generate share keystore: %w", err))
 			return
