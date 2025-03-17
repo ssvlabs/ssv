@@ -23,7 +23,7 @@ import (
 // https://github.com/ssvlabs/ssv/pull/1053
 
 const (
-	defaultStalenessThreshold = 300 * time.Second
+	defaultStalenessThreshold = 400 * time.Second
 )
 
 var (
