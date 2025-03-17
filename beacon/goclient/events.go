@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/jellydator/ttlcache/v3"
@@ -58,16 +59,28 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		strTopics = append(strTopics, string(topic))
 	}
 
-	for _, client := range gc.clients {
-		if err := client.Events(ctx, strTopics, gc.eventHandler); err != nil {
-			gc.log.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
+	isMultiClientListener := !gc.withWeightedAttestationData
+	logger := gc.log.
+		With(zap.Int("clients_len", len(gc.clients))).
+		With(zap.String("topics", strings.Join(strTopics, ", "))).
+		With(zap.Bool("is_multi_client_listener", isMultiClientListener))
+
+	logger.Info("subscribing to events")
+	if isMultiClientListener {
+		if err := gc.multiClient.Events(ctx, strTopics, gc.eventHandler); err != nil {
+			logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
 			return err
+		}
+	} else {
+		for _, client := range gc.clients {
+			if err := client.Events(ctx, strTopics, gc.eventHandler); err != nil {
+				logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
+				return err
+			}
 		}
 	}
 
-	gc.log.
-		With(zap.Int("clients_len", len(gc.clients))).
-		Debug("subscribed to events")
+	logger.Debug("subscribed to events")
 
 	return nil
 }
@@ -88,6 +101,7 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 			logger.Warn("event data is nil")
 			return
 		}
+
 		headEventData, ok := e.Data.(*apiv1.HeadEvent)
 		if !ok {
 			logger.Warn("could not type assert")
