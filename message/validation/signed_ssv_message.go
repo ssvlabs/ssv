@@ -164,14 +164,14 @@ func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorI
 
 // validateOperatorExists checks if the operator exists and is not removed
 func (mv *messageValidator) validateOperatorExists(operatorID spectypes.OperatorID) error {
-	operatorData, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
+	exists, err := mv.nodeStorage.OperatorsExist(nil, []spectypes.OperatorID{operatorID})
 	if err != nil {
 		e := ErrOperatorValidation
 		e.got = operatorID
 		return e
 	}
 
-	if !found || operatorData == nil {
+	if !exists {
 		e := ErrRemovedOperator
 		e.got = operatorID
 		return e

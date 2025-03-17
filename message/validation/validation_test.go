@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -65,14 +63,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
 	nodeStorage.EXPECT().ValidatorStore().Return(validatorStore).AnyTimes()
 
-	// Set up mockNodeStorage to return valid operator data for operator IDs 1-5
+	// Mock operator existence checks for IDs 1-5.
+	// The specific IDs have no special meaning - we just need
+	// validateOperatorExists() to pass these checks during testing.
 	for _, id := range []spectypes.OperatorID{1, 2, 3, 4, 5} {
-		operatorData := &registrystorage.OperatorData{
-			PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
-			OwnerAddress: common.Address{},
-			ID:           id,
-		}
-		nodeStorage.EXPECT().GetOperatorData(gomock.Any(), id).Return(operatorData, true, nil).AnyTimes()
+		nodeStorage.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{id}).
+			Return(true, nil).
+			AnyTimes()
 	}
 
 	committee := maps.Keys(ks.Shares)
