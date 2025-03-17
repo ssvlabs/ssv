@@ -268,6 +268,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,
+			consensusClient.ForkEpochElectra,
 			validation.WithLogger(logger),
 		)
 

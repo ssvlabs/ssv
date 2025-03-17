@@ -52,16 +52,22 @@ const (
 )
 
 const (
-	msgTypeSize       = 8 // uint64
-	maxSignaturesSize = maxSignatures * rsaSignatureSize
-	maxOperatorIDSize = maxSignatures * operatorIDSize
-	maxFullDataSize   = 5243144 // from spectypes.SignedSSVMessage
+	msgTypeSize           = 8 // uint64
+	maxSignaturesSize     = maxSignatures * rsaSignatureSize
+	maxOperatorIDSize     = maxSignatures * operatorIDSize
+	maxFullDataSize       = 5243144 // from old spectypes.SignedSSVMessage
+	pectraMaxFullDataSize = 8388836 // from spectypes.SignedSSVMessage
 )
 
 const (
-	maxPayloadDataSize = max(maxEncodedConsensusMsgSize, maxEncodedPartialSignatureSize)
-	maxSignedMsgSize   = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + identifierSize + maxPayloadDataSize + maxFullDataSize
+	maxPayloadDataSize           = max(maxEncodedConsensusMsgSize, maxEncodedPartialSignatureSize)
+	maxSignedMsgSizeBeforePectra = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + identifierSize + maxPayloadDataSize + maxFullDataSize
+	maxSignedMsgSize             = maxSignaturesSize + maxOperatorIDSize + msgTypeSize + identifierSize + maxPayloadDataSize + pectraMaxFullDataSize
 )
 
-// MaxEncodedMsgSize defines max pubsub message size
+// TODO: Remove this after pectra fork
+// MaxEncodedMsgSizeBeforePectra defines max pubsub message size
+const MaxEncodedMsgSizeBeforePectra = maxSignedMsgSizeBeforePectra + maxSignedMsgSizeBeforePectra/encodingOverheadDivisor + 4
+
+// MaxEncodedMsgSize defines max pubsub message size for pectra
 const MaxEncodedMsgSize = maxSignedMsgSize + maxSignedMsgSize/encodingOverheadDivisor + 4
