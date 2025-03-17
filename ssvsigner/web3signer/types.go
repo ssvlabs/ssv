@@ -23,9 +23,9 @@ type KeyData struct {
 }
 
 type ImportKeystoreRequest struct {
-	Keystores          []Keystore `json:"keystores"`
-	Passwords          []string   `json:"passwords"`
-	SlashingProtection string     `json:"slashing_protection,omitempty"`
+	Keystores          []string `json:"keystores"`
+	Passwords          []string `json:"passwords"`
+	SlashingProtection string   `json:"slashing_protection,omitempty"`
 }
 
 type Keystore map[string]any

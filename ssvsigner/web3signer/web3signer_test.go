@@ -65,48 +65,95 @@ func TestNew(t *testing.T) {
 func TestImportKeystore(t *testing.T) {
 	tests := []struct {
 		name                 string
-		keystoreList         []string
+		keystoreList         []Keystore
 		keystorePasswordList []string
 		statusCode           int
-		responseBody         ImportKeystoreResponse
+		responseBody         string
 		expectedStatuses     []Status
 		expectError          bool
 	}{
 		{
 			name: "Successful import",
-			keystoreList: []string{
-				`{"crypto":{"kdf":{"function":"scrypt","params":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"message":""},"checksum":{"function":"sha256","params":{},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"cipher":{"function":"aes-128-ctr","params":{"iv":"0123456789abcdef0123456789abcdef"},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},"description":"","pubkey":"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789","path":"","uuid":"00000000-0000-0000-0000-000000000000","version":4}`,
+			keystoreList: []Keystore{
+				{
+					"crypto": map[string]any{
+						"kdf": map[string]any{
+							"function": "scrypt",
+							"params": map[string]any{
+								"dklen": 32,
+								"n":     262144,
+								"p":     1,
+								"r":     8,
+								"salt":  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+							},
+							"message": "",
+						},
+						"checksum": map[string]any{
+							"function": "sha256",
+							"params":   map[string]any{},
+							"message":  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+						},
+						"cipher": map[string]any{
+							"function": "aes-128-ctr",
+							"params": map[string]any{
+								"iv": "0123456789abcdef0123456789abcdef",
+							},
+							"message": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+						},
+					},
+					"description": "",
+					"pubkey":      "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					"path":        "",
+					"uuid":        "00000000-0000-0000-0000-000000000000",
+					"version":     4,
+				},
 			},
 			keystorePasswordList: []string{"password123"},
 			statusCode:           http.StatusOK,
-			responseBody: ImportKeystoreResponse{
-				Data: []KeyManagerResponseData{
-					{
-						Status:  "imported",
-						Message: "Key successfully imported",
-					},
-				},
-			},
-			expectedStatuses: []Status{"imported"},
-			expectError:      false,
+			responseBody:         `{"data": {"status": "imported","message": "Key successfully imported"}}`,
+			expectedStatuses:     []Status{"imported"},
+			expectError:          false,
 		},
 		{
 			name: "Failed import",
-			keystoreList: []string{
-				`{"crypto":{"kdf":{"function":"scrypt","params":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"message":""},"checksum":{"function":"sha256","params":{},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"cipher":{"function":"aes-128-ctr","params":{"iv":"0123456789abcdef0123456789abcdef"},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},"description":"","pubkey":"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789","path":"","uuid":"00000000-0000-0000-0000-000000000000","version":4}`,
+			keystoreList: []Keystore{
+				{
+					"crypto": map[string]any{
+						"kdf": map[string]any{
+							"function": "scrypt",
+							"params": map[string]any{
+								"dklen": 32,
+								"n":     262144,
+								"p":     1,
+								"r":     8,
+								"salt":  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+							},
+							"message": "",
+						},
+						"checksum": map[string]any{
+							"function": "sha256",
+							"params":   map[string]any{},
+							"message":  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+						},
+						"cipher": map[string]any{
+							"function": "aes-128-ctr",
+							"params": map[string]any{
+								"iv": "0123456789abcdef0123456789abcdef",
+							},
+							"message": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+						},
+					},
+					"description": "",
+					"pubkey":      "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					"path":        "",
+					"uuid":        "00000000-0000-0000-0000-000000000000",
+					"version":     4,
+				},
 			},
 			keystorePasswordList: []string{"wrongpassword"},
 			statusCode:           http.StatusBadRequest,
-			responseBody: ImportKeystoreResponse{
-				Message: "Failed to import keystore",
-				Data: []KeyManagerResponseData{
-					{
-						Status:  "error",
-						Message: "Invalid password",
-					},
-				},
-			},
-			expectError: true,
+			responseBody:         `{"message": "Failed to import keystore"}`,
+			expectError:          true,
 		},
 	}
 
@@ -119,14 +166,7 @@ func TestImportKeystore(t *testing.T) {
 				var req ImportKeystoreRequest
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
-				var expectedKeystores []Keystore
-				for _, keystoreStr := range tt.keystoreList {
-					var keystore Keystore
-					require.NoError(t, json.Unmarshal([]byte(keystoreStr), &keystore))
-					expectedKeystores = append(expectedKeystores, keystore)
-				}
-
-				if !reflect.DeepEqual(req.Keystores, expectedKeystores) {
+				if !reflect.DeepEqual(req.Keystores, tt.keystoreList) {
 					t.Errorf("Expected keystores %v but got %v", tt.keystoreList, req.Keystores)
 				}
 				if !reflect.DeepEqual(req.Passwords, tt.keystorePasswordList) {
@@ -138,14 +178,7 @@ func TestImportKeystore(t *testing.T) {
 				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
 			})
 
-			var keystores []Keystore
-			for _, keystoreJSON := range tt.keystoreList {
-				var keystore Keystore
-				require.NoError(t, json.Unmarshal([]byte(keystoreJSON), &keystore))
-
-				keystores = append(keystores, keystore)
-			}
-			statuses, err := web3Signer.ImportKeystore(context.Background(), keystores, tt.keystorePasswordList)
+			statuses, err := web3Signer.ImportKeystore(context.Background(), tt.keystoreList, tt.keystorePasswordList)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -164,7 +197,7 @@ func TestDeleteKeystore(t *testing.T) {
 		name             string
 		sharePubKeyList  []phase0.BLSPubKey
 		statusCode       int
-		responseBody     DeleteKeystoreResponse
+		responseBody     string
 		expectedStatuses []Status
 		expectError      bool
 	}{
@@ -173,15 +206,8 @@ func TestDeleteKeystore(t *testing.T) {
 			sharePubKeyList: []phase0.BLSPubKey{
 				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
 			},
-			statusCode: http.StatusOK,
-			responseBody: DeleteKeystoreResponse{
-				Data: []KeyManagerResponseData{
-					{
-						Status:  "deleted",
-						Message: "Key successfully deleted",
-					},
-				},
-			},
+			statusCode:       http.StatusOK,
+			responseBody:     `{"data": {"status": "deleted","message": "Key successfully deleted"}}`,
 			expectedStatuses: []Status{"deleted"},
 			expectError:      false,
 		},
@@ -190,17 +216,9 @@ func TestDeleteKeystore(t *testing.T) {
 			sharePubKeyList: []phase0.BLSPubKey{
 				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
 			},
-			statusCode: http.StatusBadRequest,
-			responseBody: DeleteKeystoreResponse{
-				Message: "Failed to delete keystore",
-				Data: []KeyManagerResponseData{
-					{
-						Status:  "error",
-						Message: "Key not found",
-					},
-				},
-			},
-			expectError: true,
+			statusCode:   http.StatusBadRequest,
+			responseBody: `{"message": "Failed to delete keystore"}`,
+			expectError:  true,
 		},
 	}
 

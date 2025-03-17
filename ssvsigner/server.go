@@ -92,7 +92,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	var shareKeystores []web3signer.Keystore
+	var shareKeystores []string
 	var shareKeystorePasswords []string
 
 	for i, share := range req.ShareKeys {
