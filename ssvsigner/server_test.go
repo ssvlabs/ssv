@@ -112,7 +112,7 @@ func (s *ServerTestSuite) TestListValidators() {
 	s.remoteSigner.listKeysError = nil
 }
 
-func (s *ServerTestSuite) TestAddValidator() {
+func (s *ServerTestSuite) TestAddValidator() { // TODO: fix
 	t := s.T()
 
 	sk := new(bls.SecretKey)

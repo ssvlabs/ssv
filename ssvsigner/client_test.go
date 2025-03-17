@@ -62,7 +62,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		isDecryptionError  bool
 	}{
 		{
-			name: "Success",
+			name: "Success", // TODO: fix
 			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted1"),
@@ -81,7 +81,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			expectError:    false,
 		},
 		{
-			name: "DecryptionError",
+			name: "DecryptionError", // TODO: fix
 			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("bad_encrypted"),
@@ -94,7 +94,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			isDecryptionError:  true,
 		},
 		{
-			name: "ServerError",
+			name: "ServerError", // TODO: fix
 			shares: []ClientShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted"),
@@ -272,7 +272,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 		expectError        bool
 	}{
 		{
-			name:               "Success",
+			name:               "Success", // TODO: fix
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: ListValidatorsResponse{
 				phase0.BLSPubKey{1, 2, 3},
@@ -285,7 +285,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 			expectError: false,
 		},
 		{
-			name:               "EmptyList",
+			name:               "EmptyList", // TODO: fix
 			expectedStatusCode: http.StatusOK,
 			expectedResponse:   ListValidatorsResponse{},
 			expectedResult:     []string{},
@@ -369,7 +369,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 		expectError        bool
 	}{
 		{
-			name:               "Success",
+			name:               "Success", // TODO: fix
 			pubKey:             samplePubKey,
 			payload:            samplePayload,
 			expectedStatusCode: http.StatusOK,
@@ -496,14 +496,14 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 		expectError        bool
 	}{
 		{
-			name:               "Success",
+			name:               "Success", // TODO: fix
 			payload:            samplePayload,
 			expectedStatusCode: http.StatusOK,
 			expectedResult:     expectedSignature,
 			expectError:        false,
 		},
 		{
-			name:               "ServerError",
+			name:               "ServerError", // TODO: fix
 			payload:            samplePayload,
 			expectedStatusCode: http.StatusInternalServerError,
 			expectError:        true,
