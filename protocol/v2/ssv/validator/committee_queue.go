@@ -3,36 +3,32 @@ package validator
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"go.uber.org/zap"
 )
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
-
 	slot, err := msg.Slot()
 	if err != nil {
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
 		return
 	}
 
-	c.mtx.RLock() // read v.Queues
+	// Retrieve or create the queue for the given slot.
+	c.mtx.Lock()
 	q, ok := c.Queues[slot]
-	c.mtx.RUnlock()
 	if !ok {
 		q = queueContainer{
 			Q: queue.New(1000), // TODO alan: get queue opts from options
@@ -43,34 +39,46 @@ func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 				//Quorum:             options.SSVShare.Share,// TODO
 			},
 		}
-		c.mtx.Lock()
 		c.Queues[slot] = q
-		c.mtx.Unlock()
 		logger.Debug("missing queue for slot created", fields.Slot(slot))
 	}
+	c.mtx.Unlock()
 
+	// Push the message.
 	if pushed := q.Q.TryPush(msg); !pushed {
 		msgID := msg.MsgID.String()
 		logger.Warn("❗ dropping message because the queue is full",
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 			zap.String("msg_id", msgID))
-	} else {
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	}
 }
 
-//// StartQueueConsumer start ConsumeQueue with handler
-//func (v *Committee) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
-//	ctx, cancel := context.WithCancel(v.ctx)
-//	defer cancel()
-//
-//	for ctx.Err() == nil {
-//		err := v.ConsumeQueue(logger, msgID, handler)
-//		if err != nil {
-//			logger.Debug("❗ failed consuming queue", zap.Error(err))
-//		}
-//	}
-//}
+func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	// Setting the cancel function separately due the queue could be created in HandleMessage
+	q, found := c.Queues[duty.Slot]
+	if !found {
+		return fmt.Errorf("no queue found for slot %d", duty.Slot)
+	}
+
+	r := c.Runners[duty.Slot]
+	if r == nil {
+		return fmt.Errorf("no runner found for message's slot")
+	}
+
+	// required to stop the queue consumer when timeout message is received by handler
+	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+
+	go func() {
+		defer cancelF()
+		if err := c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r); err != nil {
+			logger.Error("❗failed consuming committee queue", zap.Error(err))
+		}
+	}()
+	return nil
+}
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
@@ -78,7 +86,6 @@ func (c *Committee) ConsumeQueue(
 	ctx context.Context,
 	q queueContainer,
 	logger *zap.Logger,
-	slot phase0.Slot,
 	handler MessageHandler,
 	rnr *runner.CommitteeRunner,
 ) error {

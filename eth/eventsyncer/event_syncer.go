@@ -22,6 +22,10 @@ import (
 // TODO: check if something from these PRs need to be ported:
 // https://github.com/ssvlabs/ssv/pull/1053
 
+const (
+	defaultStalenessThreshold = 300 * time.Second
+)
+
 var (
 	// ErrNodeNotReady is returned when node is not ready.
 	ErrNodeNotReady = fmt.Errorf("node not ready")
@@ -58,7 +62,7 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		eventHandler:    eventHandler,
 
 		logger:             zap.NewNop(),
-		stalenessThreshold: 300 * time.Second,
+		stalenessThreshold: defaultStalenessThreshold,
 	}
 
 	for _, opt := range opts {
