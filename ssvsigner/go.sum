@@ -284,8 +284,8 @@ github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/spaolacci/murmur3 v1.1.0 h1:7c1g84S4BPRrfL5Xrdp6fOJ206sU9y293DDHaoy0bLI=
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
-github.com/ssvlabs/ssv v1.2.1-0.20250313004748-bbb45d1d3fce h1:9JzrxBAi3++jN7UoXQcOin0R+B16xuDIL2qR4ID0VF0=
-github.com/ssvlabs/ssv v1.2.1-0.20250313004748-bbb45d1d3fce/go.mod h1:NpQLQZ/kfND/Tg5DMwhwfawvz3WR9/uyz7rates4yG8=
+github.com/ssvlabs/ssv v1.2.1-0.20250318213811-c9c1ec386275 h1:abx4nawvNynFWWAxxq8l5J8iBep2Q+TtnIoKueCyS8Q=
+github.com/ssvlabs/ssv v1.2.1-0.20250318213811-c9c1ec386275/go.mod h1:TQr9dMahijpPIsR5oI7MZQ8J3q3Q+ZMaylMqSWeZmFc=
 github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c h1:3ijOHIppBuQfi8S43R3IZv9xcfy8KhFjel9gOAIOlT8=
 github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
