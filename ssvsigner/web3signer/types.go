@@ -2,8 +2,8 @@ package web3signer
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+	"strings"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
@@ -104,7 +104,7 @@ type BeaconBlockData struct {
 }
 
 // AggregateAndProof is a union of *phase0.AggregateAndProof or *electra.AggregateAndProof.
-// If Electra is set, Phase0 is ignored.
+// Setting both is not allowed.
 type AggregateAndProof struct {
 	Phase0  *phase0.AggregateAndProof
 	Electra *electra.AggregateAndProof
@@ -127,14 +127,11 @@ func (ap *AggregateAndProof) MarshalJSON() ([]byte, error) {
 }
 
 func (ap *AggregateAndProof) UnmarshalJSON(data []byte) error {
-	electraErr := json.Unmarshal(data, &ap.Electra)
-	phase0Err := json.Unmarshal(data, &ap.Phase0)
-
-	if electraErr != nil && phase0Err != nil {
-		return errors.Join(electraErr, phase0Err)
+	if strings.Contains(string(data), "committee_bits") {
+		return json.Unmarshal(data, &ap.Electra)
 	}
 
-	return nil
+	return json.Unmarshal(data, &ap.Phase0)
 }
 
 type AggregationSlot struct {
