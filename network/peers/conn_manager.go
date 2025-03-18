@@ -63,7 +63,7 @@ func (c connManager) TrimPeers(
 	for _, pid := range net.Peers() {
 		if _, ok := peersToTrim[pid]; ok {
 			if err := c.disconnect(pid, net); err != nil {
-				logger.Error("error closing peer", fields.PeerID(pid), zap.Error(err))
+				logger.Error("error disconnecting from peer", fields.PeerID(pid), zap.Error(err))
 			}
 		}
 	}
