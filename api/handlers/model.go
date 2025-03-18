@@ -41,7 +41,7 @@ type round struct {
 type proposalTrace struct {
 	Round                 uint64               `json:"round"`
 	BeaconRoot            phase0.Root          `json:"ssvRoot"`
-	Signer                spectypes.OperatorID `json:"signer"`
+	Signer                spectypes.OperatorID `json:"leader"`
 	RoundChanges          []roundChange        `json:"roundChangeJustifications"`
 	PrepareJustifications []message            `json:"prepareJustifications"`
 	ReceivedTime          time.Time            `json:"time"`

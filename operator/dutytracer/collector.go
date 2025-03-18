@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sync"
@@ -369,6 +370,7 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 			Signers:      signersSC,
 			ReceivedTime: receivedAt,
 		})
+		c.logger.Info("got sync committee signers", fields.Slot(slot), fields.CommitteeID(committeeID), zap.String("signers", fmt.Sprintf("%v", signersSC)))
 	}
 
 	if len(signersAttester) > 0 {
@@ -405,6 +407,7 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 	// lookup in cache first
 	cacheItem := c.syncCommitteeRootsCache.Get(key)
 	if cacheItem != nil {
+		c.logger.Info("got sync committee root from cache", fields.Slot(slot))
 		return cacheItem.Value(), nil
 	}
 
@@ -487,15 +490,16 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 				trace.Lock()
 				defer trace.Unlock()
 
-				// if len(msg.SignedSSVMessage.FullData) > 0 {
-				// 	// for future: check if it's a proposal message
-				// 	// if not, skip this step
-				// 	root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
-				// 	if err != nil {
-				// 		c.logger.Error("get sync committee root", zap.Error(err))
-				// 	}
-				// 	trace.syncCommitteeRoot = root
-				// }
+				if len(msg.SignedSSVMessage.FullData) > 0 {
+					// for future: check if it's a proposal message
+					// if not, skip this step
+					root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
+					if err != nil {
+						c.logger.Error("get sync committee root", zap.Error(err))
+					}
+					c.logger.Info("got sync committee root", zap.String("root", hex.EncodeToString(root[:])))
+					trace.syncCommitteeRoot = root
+				}
 
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
