@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -29,6 +30,8 @@ import (
 )
 
 type CommitteeObserver struct {
+	sync.Mutex
+
 	msgID             spectypes.MessageID
 	logger            *zap.Logger
 	Storage           *storage.ParticipantStores
@@ -106,7 +109,10 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		return fmt.Errorf("got invalid message %w", err)
 	}
 
-	quorums, err := ncv.processMessage(partialSigMessages)
+	ncv.Lock()
+	defer ncv.Unlock()
+
+	quorums, err := ncv.verifySigAndgetQuorums(partialSigMessages)
 	if err != nil {
 		return fmt.Errorf("could not process SignedPartialSignatureMessage %w", err)
 	}
@@ -214,7 +220,7 @@ type validatorIndexAndRoot struct {
 	Root           phase0.Root
 }
 
-func (ncv *CommitteeObserver) processMessage(
+func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 	signedMsg *spectypes.PartialSignatureMessages,
 ) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
 	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
@@ -317,7 +323,7 @@ func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signat
 	return fmt.Errorf("unknown signer")
 }
 
-func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
+func (ncv *CommitteeObserver) SaveRoots(msg *queue.SSVMessage) error {
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
 		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
