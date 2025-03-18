@@ -13,7 +13,10 @@ import (
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 
 	"github.com/ssvlabs/ssv/operator/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+)
+
+const (
+	keystoreDerivationPath = "m/12381/3600/0/0/0"
 )
 
 // DecryptKeystore decrypts a keystore JSON file using the provided password.
@@ -88,19 +91,17 @@ func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.Op
 	return operatorPrivKey, nil
 }
 
-func GenerateShareKeystore(sharePrivateKey *bls.SecretKey, sharePublicKey phase0.BLSPubKey, passphrase string) (web3signer.Keystore, error) {
+func GenerateShareKeystore(sharePrivateKey *bls.SecretKey, sharePublicKey phase0.BLSPubKey, passphrase string) (map[string]any, error) {
 	keystoreCrypto, err := keystorev4.New().Encrypt(sharePrivateKey.Serialize(), passphrase)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt private key: %w", err)
 	}
 
-	keystoreData := web3signer.Keystore{
+	return map[string]any{
 		"crypto":  keystoreCrypto,
 		"pubkey":  sharePublicKey.String(),
 		"version": 4,
 		"uuid":    uuid.New().String(),
-		"path":    "m/12381/3600/0/0/0",
-	}
-
-	return keystoreData, nil
+		"path":    keystoreDerivationPath,
+	}, nil
 }

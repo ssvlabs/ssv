@@ -2,29 +2,24 @@ package web3signer
 
 import (
 	"context"
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
-	"go.uber.org/zap"
 )
 
 type Web3Signer struct {
-	logger     *zap.Logger
 	baseURL    string
 	httpClient *http.Client
 }
 
-func New(logger *zap.Logger, baseURL string) *Web3Signer {
+func New(baseURL string) *Web3Signer {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	return &Web3Signer{
-		logger:  logger,
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -33,150 +28,67 @@ func New(logger *zap.Logger, baseURL string) *Web3Signer {
 }
 
 // ListKeys lists keys in Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Public-Key/operation/ETH2_LIST
-func (c *Web3Signer) ListKeys(ctx context.Context) ([]phase0.BLSPubKey, error) {
-	logger := c.logger.With(zap.String("request", "ListKeys"))
-	logger.Info("listing keys")
-
-	var resp []phase0.BLSPubKey
+func (c *Web3Signer) ListKeys(ctx context.Context) (ListKeysResponse, error) {
+	var resp ListKeysResponse
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path("/api/v1/eth2/publicKeys").
+		Path(pathPublicKeys).
 		ToJSON(&resp).
 		Fetch(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("web3signer returned an error: %w", err)
-	}
-
-	logger.Info("listed keys", zap.Int("count", len(resp)))
-
-	return resp, nil
+	return resp, c.handleWeb3SignerErr(err)
 }
 
 // ImportKeystore adds a key to Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT
-func (c *Web3Signer) ImportKeystore(ctx context.Context, keystoreList []Keystore, keystorePasswordList []string) ([]Status, error) {
-	logger := c.logger.With(
-		zap.String("request", "ImportKeystore"),
-		zap.Int("count", len(keystoreList)),
-	)
-	logger.Info("importing keystores")
-
-	var keystoreStrings []string
-	for i, keystore := range keystoreList {
-		b, err := json.Marshal(keystore)
-		if err != nil {
-			return nil, fmt.Errorf("marshal keystore index %d: %w", i, err)
-		}
-
-		keystoreStrings = append(keystoreStrings, string(b))
-	}
-
-	payload := ImportKeystoreRequest{
-		Keystores:          keystoreStrings,
-		Passwords:          keystorePasswordList,
-		SlashingProtection: "", // TODO
-	}
-
+func (c *Web3Signer) ImportKeystore(ctx context.Context, req ImportKeystoreRequest) (ImportKeystoreResponse, error) {
 	var resp ImportKeystoreResponse
-	var errResp ErrorResponse
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path("/eth/v1/keystores").
-		BodyJSON(payload).
+		Path(pathKeystores).
+		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
-		ErrorJSON(errResp).
 		Fetch(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("web3signer returned an error (%q): %w", errResp.Message, err)
-	}
-
-	logger.Info("imported keystores")
-
-	var statuses []Status
-	for _, data := range resp.Data {
-		statuses = append(statuses, data.Status)
-	}
-
-	return statuses, nil
+	return resp, c.handleWeb3SignerErr(err)
 }
 
 // DeleteKeystore removes a key from Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#operation/KEYMANAGER_DELETE
-func (c *Web3Signer) DeleteKeystore(ctx context.Context, sharePubKeyList []phase0.BLSPubKey) ([]Status, error) {
-	logger := c.logger.With(
-		zap.String("request", "DeleteKeystore"),
-		zap.Int("count", len(sharePubKeyList)),
-	)
-	logger.Info("deleting keystores")
-
-	payload := DeleteKeystoreRequest{
-		Pubkeys: sharePubKeyList,
-	}
-
+func (c *Web3Signer) DeleteKeystore(ctx context.Context, req DeleteKeystoreRequest) (DeleteKeystoreResponse, error) {
 	var resp DeleteKeystoreResponse
-	var errResp ErrorResponse
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path("/eth/v1/keystores").
-		BodyJSON(payload).
+		Path(pathKeystores).
+		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
-		ErrorJSON(errResp).
 		Fetch(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("web3signer returned an error (%q): %w", errResp.Message, err)
-	}
-
-	logger.Info("deleted keystores")
-
-	var statuses []Status
-	for _, data := range resp.Data {
-		statuses = append(statuses, data.Status)
-	}
-
-	return statuses, nil
+	return resp, c.handleWeb3SignerErr(err)
 }
 
 // Sign signs using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Signing/operation/ETH2_SIGN
-func (c *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload SignRequest) (phase0.BLSSignature, error) {
-	logger := c.logger.With(
-		zap.String("request", "Sign"),
-		zap.String("share_pubkey", sharePubKey.String()),
-		zap.String("type", string(payload.Type)),
-	)
-	logger.Info("signing")
-
-	var resp string
+func (c *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, req SignRequest) (SignResponse, error) {
+	var resp SignResponse
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Pathf("/api/v1/eth2/sign/%s", sharePubKey.String()).
-		BodyJSON(payload).
+		Path(pathSign + sharePubKey.String()).
+		BodyJSON(req).
 		Post().
-		ToString(&resp).
+		ToJSON(&resp).
 		Fetch(ctx)
-	if err != nil {
-		return phase0.BLSSignature{}, fmt.Errorf("web3signer returned an error: %w", err)
+	return resp, c.handleWeb3SignerErr(err)
+}
+
+func (c *Web3Signer) handleWeb3SignerErr(err error) error {
+	if err == nil {
+		return nil
 	}
 
-	sigBytes, err := hex.DecodeString(strings.TrimPrefix(resp, "0x"))
-	if err != nil {
-		logger.Error("failed to decode signature",
-			zap.String("signature", resp),
-			zap.Error(err),
-		)
-		return phase0.BLSSignature{}, fmt.Errorf("decode signature: %w", err)
+	if se := new(requests.ResponseError); errors.As(err, &se) {
+		return HTTPResponseError{Err: err, Status: se.StatusCode}
 	}
 
-	if len(sigBytes) != phase0.SignatureLength {
-		logger.Error("unexpected signature length",
-			zap.Int("length", len(sigBytes)),
-			zap.Int("expected", phase0.SignatureLength),
-		)
-		return phase0.BLSSignature{}, fmt.Errorf("unexpected signature length %d, expected %d", len(sigBytes), phase0.SignatureLength)
-	}
-
-	return phase0.BLSSignature(sigBytes), nil
+	return HTTPResponseError{Err: err, Status: http.StatusInternalServerError}
 }

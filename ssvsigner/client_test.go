@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -120,7 +119,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/validators", func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodPost, r.Method)
 
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
@@ -218,7 +217,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/validators", func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodDelete, r.Method)
 
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
@@ -302,7 +301,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/validators", func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
@@ -398,7 +397,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc(fmt.Sprintf("/v1/validators/sign/%s", tc.pubKey), func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(pathValidatorsSign+tc.pubKey.String(), func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodPost, r.Method)
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -456,7 +455,7 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/operator/identity", func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(pathOperatorIdentity, func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
@@ -513,7 +512,7 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			s.mux = http.NewServeMux()
-			s.mux.HandleFunc("/v1/operator/sign", func(w http.ResponseWriter, r *http.Request) {
+			s.mux.HandleFunc(pathOperatorSign, func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, http.MethodPost, r.Method)
 
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
