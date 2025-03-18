@@ -292,10 +292,12 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 }
 
 // Returns a function that trims currently connected peers if necessary, namely:
-//   - Dropping peers with bad Gossip score.
-//   - Dropping irrelevant peers that don't have any subnet in common.
-//   - Tagging the best MaxPeers-N peers (according to subnets intersection) as Protected,
-//     and then removing the worst peers. But only if we are close to MaxPeers limit.
+//   - dropping peers with bad gossip score
+//   - dropping irrelevant peers that don't have any subnet in common with us
+//   - (when we are close to MaxPeers limit) dropping several peers with the worst score
+//     which is based on how many valuable (dead/solo/duo) subnets a peer contributes
+//   - (when Inbound peers are close to its limit) dropping several Inbound peers with
+//     the worst score
 func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(n.ctx, 60*time.Second)
@@ -304,7 +306,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			_ = n.idx.GetSubnetsStats() // collect metrics
 		}()
 
-		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx, n.trimmedRecently)
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx, n.idx)
 
 		disconnectedCnt := connMgr.DisconnectFromBadPeers(logger, n.host.Network(), n.host.Network().Peers())
 		if disconnectedCnt > 0 {
@@ -333,7 +335,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// execution quality
 		const maxPeersToDrop = 4 // targeting MaxPeers in 60-90 range
 
-		protectEveryOutbound := false
+		trimInboundOnly := false
 
 		// see if we can accept more peer connections already (no need to trim), note we trim not
 		// only when our current connections reach MaxPeers limit exactly but even if we get close
@@ -341,95 +343,73 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 		// in currently connected peer count at that limit boundary
 		connectedPeers = n.host.Network().Peers()
 		if len(connectedPeers) <= n.cfg.MaxPeers-maxPeersToDrop {
-			// we probably don't want to trim then
-
-			// additionally, make sure incoming connections aren't at the limit - since if they are we
-			// actually might want to trim some of them to make sure we re-cycle incoming connections
-			// at least occasionally (note btw, with current implementation there is no guarantee incoming
-			// connections will be trimmed in this case, since we don't differentiate between incoming/outgoing
-			// when trimming)
+			// We probably don't want to trim outgoing connections then, but from time-to-time we want to
+			// trim (and rotate) some incoming connections when inbound limit is hit just to make sure
+			// inbound connections are rotated occasionally in reliable manner.
+			// Note, we don't want to trim incoming connections as often as outgoing connections (since
+			// trimming outgoing connections often helps us discover valuable peers, while it's not really
+			// the case with incoming connections - only slightly so) hence sometimes we randomly skip this
 			in, _ := n.connectionStats()
 			if in < n.inboundLimit() {
 				return // skip trim iteration
 			}
-			// we don't want to trim incoming connections as often as outgoing connections (since trimming
-			// outgoing connections often helps us discover valuable peers, while it's not really the case
-			// with incoming connections - only slightly so), hence we'll only do it 1/5 of the times
 			if rand.Intn(5) > 0 { // nolint: gosec
 				return // skip trim iteration
 			}
-
-			// we decided to trim then but only because we want to rotate some incoming connections, we'd
-			// want to protect all our outgoing connections then since we don't have enough of these
-			protectEveryOutbound = true
+			trimInboundOnly = true
 		}
 
-		// gotta trim some peers then
-		immunityQuota := len(connectedPeers) - maxPeersToDrop
-		protectedPeers := n.PeerProtection(immunityQuota, protectEveryOutbound)
-		for _, p := range connectedPeers {
-			if _, ok := protectedPeers[p]; ok {
-				n.libConnManager.Protect(p, peers.ProtectedTag)
-				continue
-			}
-			n.libConnManager.Unprotect(p, peers.ProtectedTag)
+		inboundBefore, outboundBefore := n.connectionStats()
+		peersToTrim := n.choosePeersToTrim(maxPeersToDrop, trimInboundOnly)
+		connMgr.TrimPeers(ctx, logger, n.host.Network(), peersToTrim)
+		for pid := range peersToTrim {
+			n.trimmedRecently.Set(pid, struct{}{})
 		}
-		connMgr.TrimPeers(ctx, logger, n.host.Network(), maxPeersToDrop) // trim up to maxPeersToDrop
+		inboundAfter, outboundAfter := n.connectionStats()
+		logger.Debug(
+			"trimmed peers",
+			zap.Int("inbound_peers_before_trim", inboundBefore),
+			zap.Int("outbound_peers_before_trim", outboundBefore),
+			zap.Int("inbound_peers_after_trim", inboundAfter),
+			zap.Int("outbound_peers_after_trim", outboundAfter),
+			zap.Any("trimmed_peers", maps.Keys(peersToTrim)),
+		)
 	}
 }
 
-// PeerProtection returns a map of protected peers based on how valuable those peers to us are,
-// peer value is proportional to how much of valuable subnets (dead/solo/duo) he contributes, as
-// defined by peerScore func.
-// Param immunityQuota limits how many peers can be protected at most, it is distributed evenly
-// between inbound and outbound connections to make sure we don't overly protect one connection
-// type (because if we do it can result in connections of other type not getting trimmed frequently
-// enough to be replaced by better connection-candidates).
-// Param protectEveryOutbound signals that we want to protect every outbound connection we have
-// disregarding immunityQuota entirely (when it comes to outbound connections).
-func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool) map[peer.ID]struct{} {
-	myPeersSet := make(map[peer.ID]struct{})
-	for _, tpc := range n.topicsCtrl.Topics() {
-		peerz, err := n.topicsCtrl.Peers(tpc)
-		if err != nil {
-			n.logger.Error(
-				"Cant get peers for topic, skipping to keep the network running",
-				zap.String("topic", tpc),
-				zap.Error(err),
-			)
-			continue
-		}
-		for _, p := range peerz {
-			myPeersSet[p] = struct{}{}
-		}
+// choosePeersToTrim returns a map of peers that are least-valuable to us based on how much
+// (dead/solo/duo) they contribute to us (as defined by peerScore func).
+func (n *p2pNetwork) choosePeersToTrim(trimCnt int, trimInboundOnly bool) map[peer.ID]struct{} {
+	myPeers, err := n.topicsCtrl.Peers("")
+	if err != nil {
+		n.logger.Error("Cant get all of our peers", zap.Error(err))
+		return nil
 	}
 
-	myPeers := maps.Keys(myPeersSet)
 	slices.SortFunc(myPeers, func(a, b peer.ID) int {
-		// sort in desc order (peers with the highest scores come first)
-		if n.peerScore(a) < n.peerScore(b) {
-			return 1
-		}
-		if n.peerScore(a) > n.peerScore(b) {
+		// sort in asc order (peers with the lowest scores come first)
+		aScore := n.peerScore(a)
+		bScore := n.peerScore(b)
+		if aScore < bScore {
 			return -1
+		}
+		if aScore > bScore {
+			return 1
 		}
 		return 0
 	})
 
-	immunityQuotaInbound := immunityQuota / 2
-	immunityQuotaOutbound := immunityQuota - immunityQuotaInbound
-
-	protectedPeers := make(map[peer.ID]struct{})
+	result := make(map[peer.ID]struct{}, trimCnt)
 	for _, p := range myPeers {
-		if immunityQuotaInbound == 0 && immunityQuotaOutbound == 0 {
-			break // can't protect any more peers since we reached our quotas
+		if trimCnt <= 0 {
+			break
 		}
 		pConns := n.host.Network().ConnsToPeer(p)
-		// we shouldn't have more than 1 connection per peer, but if we do we'd want
-		// a warning about it logged, and we'd want to handle it to the best of our ability
+		// we shouldn't have more than 1 connection per peer, but if we do we'd want a
+		// warning about it logged, and we'd want to handle it to the best of our ability
 		if len(pConns) > 1 {
 			n.logger.Error(
-				"PeerProtection: encountered peer we have multiple open connections with (expected 1 at most)",
+				"choosePeersToTrim: encountered peer we have multiple open connections with (expected 1 at most)",
 				zap.String("peer_id", p.String()),
 				zap.Int("connections_count", len(pConns)),
 			)
@@ -438,28 +418,18 @@ func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool
 			connDir := pConn.Stat().Direction
 			if connDir == p2pnet.DirUnknown {
 				n.logger.Error(
-					"PeerProtection: encountered peer connection with direction Unknown",
+					"choosePeersToTrim: encountered peer connection with direction Unknown",
 					zap.String("peer_id", p.String()),
 				)
+			}
+			if connDir == p2pnet.DirOutbound && trimInboundOnly {
 				continue
 			}
-			if connDir == p2pnet.DirInbound {
-				if immunityQuotaInbound > 0 {
-					protectedPeers[p] = struct{}{}
-					immunityQuotaInbound--
-				}
-			}
-			if connDir == p2pnet.DirOutbound {
-				if protectEveryOutbound {
-					protectedPeers[p] = struct{}{}
-				} else if immunityQuotaOutbound > 0 {
-					immunityQuotaOutbound--
-					protectedPeers[p] = struct{}{}
-				}
-			}
+			result[p] = struct{}{}
+			trimCnt--
 		}
 	}
-	return protectedPeers
+	return result
 }
 
 // bootstrapDiscovery starts the required services
