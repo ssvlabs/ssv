@@ -19,11 +19,23 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 )
+
+// Operators defines the minimal interface needed for validation
+type Operators interface {
+	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
+}
+
+// ValidatorStore defines the minimal interface needed for validation
+type ValidatorStore interface {
+	Validator(pubKey []byte) (*ssvtypes.SSVShare, bool)
+	Committee(id spectypes.CommitteeID) (*registrystorage.Committee, bool)
+}
 
 // MessageValidator defines methods for validating pubsub messages.
 type MessageValidator interface {
@@ -36,10 +48,10 @@ type messageValidator struct {
 	netCfg                networkconfig.NetworkConfig
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
-	validatorStore        registrystorage.ValidatorStore
+	validatorStore        ValidatorStore
+	operators             Operators
 	dutyStore             *dutystore.Store
 	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
-	nodeStorage           operatorstorage.Storage
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -53,7 +65,8 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
 	netCfg networkconfig.NetworkConfig,
-	nodeStorage operatorstorage.Storage,
+	validatorStore ValidatorStore,
+	operators Operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
 	opts ...Option,
@@ -63,10 +76,10 @@ func New(
 		netCfg:              netCfg,
 		consensusStateIndex: make(map[consensusID]*consensusState),
 		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
-		validatorStore:      nodeStorage.ValidatorStore(),
+		validatorStore:      validatorStore,
+		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
-		nodeStorage:         nodeStorage,
 	}
 
 	for _, opt := range opts {

@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	mockstorage "github.com/ssvlabs/ssv/operator/storage/mocks"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -81,14 +80,13 @@ func TestTopicManager(t *testing.T) {
 
 		dutyStore := dutystore.New()
 		validatorStore := mocks.NewMockValidatorStore(ctrl)
+		operators := mocks.NewMockOperators(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
-		ns := mockstorage.NewMockStorage(ctrl)
-
-		ns.EXPECT().ValidatorStore().Return(validatorStore).AnyTimes()
 
 		validator := validation.New(
 			networkconfig.TestNetwork,
-			ns,
+			validatorStore,
+			operators,
 			dutyStore,
 			signatureVerifier,
 		)

@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	mockstorage "github.com/ssvlabs/ssv/operator/storage/mocks"
-
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -57,21 +55,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	ks := spectestingutils.Testing4SharesSet()
 	shares := generateShares(t, ks, ns, netCfg)
+
 	dutyStore := dutystore.New()
-
-	nodeStorage := mockstorage.NewMockStorage(ctrl)
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
-	nodeStorage.EXPECT().ValidatorStore().Return(validatorStore).AnyTimes()
-
-	// Mock operator existence checks for IDs 1-5.
-	// The specific IDs have no special meaning - we just need
-	// validateOperatorExists() to pass these checks during testing.
-	for _, id := range []spectypes.OperatorID{1, 2, 3, 4, 5} {
-		nodeStorage.EXPECT().
-			OperatorsExist(gomock.Any(), []spectypes.OperatorID{id}).
-			Return(true, nil).
-			AnyTimes()
-	}
+	operators := mocks.NewMockOperators(ctrl)
 
 	committee := maps.Keys(ks.Shares)
 	slices.Sort(committee)
@@ -122,6 +109,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		return nil, false
 	}).AnyTimes()
 
+	for _, id := range []spectypes.OperatorID{1, 2, 3, 4, 5} {
+		operators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{id}).
+			Return(true, nil).
+			AnyTimes()
+	}
+
 	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 	signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
@@ -137,7 +131,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Message validation happy flow, messages are not ignored or rejected and there are no errors
 	t.Run("happy flow", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
@@ -150,7 +144,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Make sure messages are incremented and throw an ignore message if more than 1 for a commit
 	t.Run("message counts", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -228,7 +222,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send a pubsub message with no data should cause an error
 	t.Run("pubsub message has no data", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -242,7 +236,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send a pubsub message where there is too much data should cause an error
 	t.Run("pubsub data too big", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -267,7 +261,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send a malformed pubsub message (empty message) should return an error
 	t.Run("empty pubsub message", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -288,7 +282,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send a message with incorrect data (unable to decode incorrect message type)
 	t.Run("bad data format", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -304,7 +298,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send a message with no data should return an error
 	t.Run("no data", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -323,7 +317,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send a message where there is too much data should cause an error
 	t.Run("data too big", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -344,7 +338,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send exact allowed data size amount but with invalid data (fails to decode)
 	t.Run("data size borderline / malformed message", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -360,7 +354,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send an invalid SSV message type returns an error
 	t.Run("invalid SSV message type", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -374,7 +368,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Generate random validator and validate it is unknown to the network
 	t.Run("unknown validator", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -396,7 +390,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Generate random committee ID and validate it is unknown to the network
 	t.Run("unknown committee ID", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -413,7 +407,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Make sure messages are dropped if on the incorrect network
 	t.Run("wrong domain", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -433,7 +427,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send message with a value that refers to a non-existent role
 	t.Run("invalid role", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -448,7 +442,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Perform validator registration or voluntary exit with a consensus type message will give an error
 	t.Run("unexpected consensus message", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -472,7 +466,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Ignore messages related to a validator that is liquidated
 	t.Run("liquidated validator", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -488,7 +482,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Ignore messages related to a validator with unknown state
 	t.Run("unknown state validator", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -504,7 +498,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Ignore messages related to a validator that in pending queued state
 	t.Run("pending queued state validator", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -522,7 +516,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	// Don't ignore messages related to a validator that in pending queued state (in case metadata is not updated),
 	// but it is active (activation epoch <= current epoch)
 	t.Run("active validator with pending queued state", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.EstimatedCurrentSlot()
 
@@ -550,7 +544,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Unable to process a message with a validator that is not on the network
 	t.Run("no share metadata", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -565,7 +559,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive error if more than 2 attestation duties in an epoch
 	t.Run("too many duties", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		epoch := phase0.Epoch(1)
 		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
@@ -620,7 +614,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
 			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex + 1, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
 		})
-		validator := New(netCfg, nodeStorage, ds, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 		identifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), spectypes.RoleProposer)
 		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
@@ -633,7 +627,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
 			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
 		})
-		validator = New(netCfg, nodeStorage, ds, signatureVerifier).(*messageValidator)
+		validator = New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot))
 		require.NoError(t, err)
 	})
@@ -649,7 +643,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		ds := dutystore.New()
 
-		validator := New(mockNetworkConfig, nodeStorage, ds, signatureVerifier).(*messageValidator)
+		validator := New(mockNetworkConfig, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
 		encodedMessages, err := messages.Encode()
@@ -685,7 +679,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		ds := dutystore.New()
 		ds.Proposer.Set(epoch, make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0))
 
-		validator := New(mockNetworkConfig, nodeStorage, ds, signatureVerifier).(*messageValidator)
+		validator := New(mockNetworkConfig, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
 		encodedMessages, err := messages.Encode()
@@ -723,7 +717,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving message from operator who is not affiliated with the validator
 	t.Run("signer ID not in committee", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.EstimatedCurrentSlot()
 
@@ -749,7 +743,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving message from operator who is non-existent (operator id 0)
 	t.Run("partial zero signer ID", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -764,7 +758,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving partial signature message from operator who is the incorrect signer
 	t.Run("partial inconsistent signer ID", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -784,7 +778,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive error when "partialSignatureMessages" does not contain any "partialSignatureMessage"
 	t.Run("no partial signature messages", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -802,7 +796,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive error when the partial RSA signature message is not enough bytes
 	t.Run("partial wrong RSA signature size", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -842,7 +836,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						})
 						ds.VoluntaryExit.AddDuty(spectestingutils.TestingDutySlot, phase0.BLSPubKey(shares.active.ValidatorPubKey))
 
-						validator := New(netCfg, nodeStorage, ds, signatureVerifier).(*messageValidator)
+						validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 						messages.Type = msgType
@@ -875,7 +869,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		// Get error when receiving a message with an incorrect message type
 		t.Run("invalid message type", func(t *testing.T) {
-			validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 			messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 			messages.Type = math.MaxUint64
@@ -921,7 +915,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 							{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
 						})
 
-						validator := New(netCfg, nodeStorage, ds, signatureVerifier).(*messageValidator)
+						validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
 						messages.Type = msgType
@@ -954,7 +948,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving QBFT message with an invalid type
 	t.Run("invalid QBFT message type", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
@@ -970,7 +964,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving an incorrect signature size (too small)
 	t.Run("wrong signature size", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
@@ -984,7 +978,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving a message with an empty list of signers
 	t.Run("no signers", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
@@ -999,7 +993,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	// Get error when receiving a message with more signers than committee size.
 	// It tests ErrMoreSignersThanCommitteeSize from knowledge base.
 	t.Run("more signers than committee size", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
@@ -1020,7 +1014,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving a consensus message with zero signer
 	t.Run("consensus zero signer", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
@@ -1034,7 +1028,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving a message with duplicated signers
 	t.Run("non unique signer", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
@@ -1048,7 +1042,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving a message with an operator that does not exist and has not been removed
 	t.Run("operator exists and not removed", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		err := validator.validateSignerExists(1)
 		require.NoError(t, err)
@@ -1056,50 +1050,37 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving a message with an operator that does not exist but has been removed
 	t.Run("operator exists but removed", func(t *testing.T) {
-		localCtrl := gomock.NewController(t)
-		removedOpMockStorage := mockstorage.NewMockStorage(localCtrl)
-
-		removedOpValidatorStore := mocks.NewMockValidatorStore(localCtrl)
-		removedOpMockStorage.EXPECT().ValidatorStore().Return(removedOpValidatorStore).AnyTimes()
 
 		// Configure mock to return false for operator 999, simulating a removed operator
-		removedOpMockStorage.EXPECT().
-			OperatorsExist(gomock.Any(), []spectypes.OperatorID{999}).
-			Return(false, nil)
+		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{999}).Return(false, nil)
 
-		validator := New(netCfg, removedOpMockStorage, dutyStore, signatureVerifier).(*messageValidator)
-
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 		err := validator.validateSignerExists(999)
 		expectedErr := ErrRemovedOperator
 		expectedErr.got = spectypes.OperatorID(999)
+
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Get error when receiving a message with an operator and there is an error during operator validation
 	t.Run("error during operator validation", func(t *testing.T) {
-		localCtrl := gomock.NewController(t)
-		errMockStorage := mockstorage.NewMockStorage(localCtrl)
-
-		errValidatorStore := mocks.NewMockValidatorStore(localCtrl)
-		errMockStorage.EXPECT().ValidatorStore().Return(errValidatorStore).AnyTimes()
-
-		// Configure mock to return an error when checking if operator 1 exists
+		// Configure mock to return an error when checking if operator 6 exists (1-5 are already in the store)
 		// This simulates a storage or network error during validation
-		errMockStorage.EXPECT().
-			OperatorsExist(gomock.Any(), []spectypes.OperatorID{1}).
+		operators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{6}).
 			Return(false, fmt.Errorf("validation error"))
 
-		validator := New(netCfg, errMockStorage, dutyStore, signatureVerifier).(*messageValidator)
-
-		err := validator.validateSignerExists(1)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
+		err := validator.validateSignerExists(6)
 		expectedErr := ErrOperatorValidation
-		expectedErr.got = spectypes.OperatorID(1)
+		expectedErr.got = spectypes.OperatorID(6)
+
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Get error when receiving a message with non-sorted signers
 	t.Run("signers not sorted", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
@@ -1113,7 +1094,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving message with different amount of signers and signatures
 	t.Run("wrong signers/signatures length", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
@@ -1128,7 +1109,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving message from less than quorum size amount of signers
 	t.Run("decided too few signers", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
@@ -1144,7 +1125,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving a non decided message with multiple signers
 	t.Run("non decided with multiple signers", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
@@ -1173,7 +1154,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
 		})
 
-		validator := New(netCfg, nodeStorage, ds, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 		tests := map[spectypes.RunnerRole]time.Time{
 			spectypes.RoleCommittee:                 netCfg.Beacon.GetSlotStartTime(slot + 35),
@@ -1202,7 +1183,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send early message for all roles before the duty start and receive early message error
 	t.Run("early message", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
@@ -1216,7 +1197,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send message from non-leader acting as a leader should receive an error
 	t.Run("not a leader", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
@@ -1230,7 +1211,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send wrong size of data (8 bytes) for a prepare justification message should receive an error
 	t.Run("malformed prepare justification", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
@@ -1247,7 +1228,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send prepare justification message without a proposal message should receive an error
 	t.Run("non-proposal with prepare justification", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1270,7 +1251,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send round change justification message without a proposal message should receive an error
 	t.Run("non-proposal with round change justification", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1293,7 +1274,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send round change justification message with a malformed message (1 byte) should receive an error
 	t.Run("malformed round change justification", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1311,7 +1292,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send message root hash that doesn't match the expected root hash should receive an error
 	t.Run("wrong root hash", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1328,7 +1309,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive proposal from same operator twice with different messages (same round) should receive an error
 	t.Run("double proposal with different data", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1353,7 +1334,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive prepare from same operator twice with different messages (same round) should receive an error
 	t.Run("double prepare", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1376,7 +1357,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive commit from same operator twice with different messages (same round) should receive an error
 	t.Run("double commit", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1398,7 +1379,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive round change from same operator twice with different messages (same round) should receive an error
 	t.Run("double round change", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1420,7 +1401,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Decided with same signers should receive an error
 	t.Run("decided with same signers", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1441,7 +1422,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send message with a slot lower than in the previous message
 	t.Run("slot already advanced", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1464,7 +1445,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send message with a round lower than in the previous message
 	t.Run("round already advanced", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1498,7 +1479,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
 		})
 
-		validator := New(netCfg, nodeStorage, ds, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier).(*messageValidator)
 
 		tests := map[spectypes.RunnerRole]specqbft.Round{
 			spectypes.RoleCommittee:                 13,
@@ -1543,7 +1524,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive an event message from an operator that is not myself should receive an error
 	t.Run("event message", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1559,7 +1540,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a unknown message type from an operator that is not myself should receive an error
 	t.Run("unknown type message", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1576,7 +1557,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a message with a wrong signature
 	t.Run("wrong signature", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, wrongSignatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, wrongSignatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1591,7 +1572,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a message with an incorrect topic
 	t.Run("incorrect topic", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1606,7 +1587,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive nil signed ssv message
 	t.Run("nil signed ssv message", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1618,7 +1599,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive nil ssv message
 	t.Run("nil ssv message", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1633,7 +1614,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive zero round
 	t.Run("zero round", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1649,7 +1630,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a message with no signatures
 	t.Run("no signatures", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1664,7 +1645,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a message with mismatched identifier
 	t.Run("mismatched identifier", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1682,7 +1663,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a prepare/commit message with FullData
 	t.Run("prepare/commit with FullData", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1704,7 +1685,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a non-consensus message with FullData
 	t.Run("non-consensus with FullData", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1721,7 +1702,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a partial signature message with multiple signers
 	t.Run("partial signature with multiple signers", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1739,7 +1720,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a partial signature message with too many signers
 	t.Run("partial signature with too many messages", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1767,7 +1748,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a partial signature message with triple validator index
 	t.Run("partial signature with triple validator index", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1795,7 +1776,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a partial signature message with validator index mismatch
 	t.Run("partial signature with validator index mismatch", func(t *testing.T) {
-		validator := New(netCfg, nodeStorage, dutyStore, signatureVerifier).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 

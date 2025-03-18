@@ -196,7 +196,7 @@ func (mv *messageValidator) validateSignerUnique(signer, prevSigner spectypes.Op
 
 // validateSignerExists checks if the operator exists and is not removed
 func (mv *messageValidator) validateSignerExists(signer spectypes.OperatorID) error {
-	exists, err := mv.nodeStorage.OperatorsExist(nil, []spectypes.OperatorID{signer})
+	exists, err := mv.operators.OperatorsExist(nil, []spectypes.OperatorID{signer})
 	if err != nil {
 		e := ErrOperatorValidation
 		e.got = signer
