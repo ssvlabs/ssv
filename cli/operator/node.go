@@ -356,7 +356,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
 		// Validator duty tracing
-		var collector validator.DutyTraceCollector
+		var collector *dutytracer.Collector
 		if cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
 			logger.Info("exporter duty tracing enabled")
 			dstore := &dutytracer.DutyTraceStoreMetrics{

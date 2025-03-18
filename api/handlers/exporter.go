@@ -28,6 +28,7 @@ type Exporter struct {
 type DutyTraceStore interface {
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
+	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 }
@@ -301,6 +302,20 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		for _, r := range request.Roles {
 			role := spectypes.BeaconRole(r)
 			for _, pubkey := range pubkeys {
+				if isSyncCommitteeRole(role) {
+					committeeID, index, err := e.TraceStore.GetCommitteeID(slot, pubkey)
+					if err != nil {
+						// return api.Error(fmt.Errorf("error getting committee ID: %w", err))
+						continue
+					}
+					duty, err := e.TraceStore.GetCommitteeDuty(slot, committeeID)
+					if err != nil {
+						// return api.Error(fmt.Errorf("error getting duties: %w", err))
+						continue
+					}
+					results = append(results, toValidatorDuty(duty, index, role))
+					continue
+				}
 				duty, err := e.TraceStore.GetValidatorDuties(role, slot, pubkey)
 				if err != nil {
 					// return api.Error(fmt.Errorf("error getting duties: %w", err))
@@ -312,6 +327,21 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	return api.Render(w, r, toValidatorTraceResponse(results))
+}
+
+func toValidatorDuty(duty *model.CommitteeDutyTrace, index phase0.ValidatorIndex, role spectypes.BeaconRole) *dutytracer.ValidatorDutyTrace {
+	return &dutytracer.ValidatorDutyTrace{
+		ValidatorDutyTrace: model.ValidatorDutyTrace{
+			ConsensusTrace: duty.ConsensusTrace,
+			Slot:           duty.Slot,
+			Validator:      index,
+			Role:           role,
+		},
+	}
+}
+
+func isSyncCommitteeRole(role spectypes.BeaconRole) bool {
+	return role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester
 }
 
 func toValidatorTraceResponse(duties []*dutytracer.ValidatorDutyTrace) *validatorTraceResponse {

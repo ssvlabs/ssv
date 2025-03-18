@@ -27,6 +27,20 @@ type DutyTraceStore interface {
 	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
 }
 
+func (a *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
+	index, found := a.validators.ValidatorIndex(pubkey)
+	if !found {
+		return spectypes.CommitteeID{}, 0, fmt.Errorf("validator not found")
+	}
+
+	committeeID, err := a.getCommitteeIDBySlotAndIndex(slot, index)
+	if err != nil {
+		return spectypes.CommitteeID{}, 0, fmt.Errorf("get committee ID: %w", err)
+	}
+
+	return committeeID, index, nil
+}
+
 func (a *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	// lookup in cache
 	validatorSlots, found := a.validatorTraces.Load(pubkey)
@@ -165,7 +179,7 @@ func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.
 	if !found {
 		link, err := c.store.GetCommitteeDutyLink(slot, index)
 		if err != nil {
-			return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link from disk: %w", err)
+			return spectypes.CommitteeID{}, fmt.Errorf("get from disk: %w", err)
 		}
 
 		return link, nil
