@@ -52,6 +52,19 @@ func (e Error) Text() string {
 	return e.text
 }
 
+func (e Error) Unwrap() error {
+	return e.innerErr
+}
+
+func (e Error) Is(target error) bool {
+	var t Error
+	if !errors.As(target, &t) {
+		return false
+	}
+
+	return e.text == t.text
+}
+
 var (
 	ErrWrongDomain                             = Error{text: "wrong domain"}
 	ErrNoShareMetadata                         = Error{text: "share has no metadata"}

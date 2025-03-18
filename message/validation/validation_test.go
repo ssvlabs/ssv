@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -1076,6 +1077,120 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		expectedErr.got = spectypes.OperatorID(6)
 
 		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Test if operators that are removed are correctly filtered out from the message,
+	// allowing validation to proceed with remaining valid operators
+	t.Run("operator removed but continues", func(t *testing.T) {
+		localCtrl := gomock.NewController(t)
+		localMockOperators := mocks.NewMockOperators(localCtrl)
+
+		// For operators 1, 2, and 4 - return true (they exist)
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{1}).
+			Return(true, nil).
+			AnyTimes()
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{2}).
+			Return(true, nil).
+			AnyTimes()
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{4}).
+			Return(true, nil).
+			AnyTimes()
+
+		// For operator 3 - return false (it's removed)
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{3}).
+			Return(false, nil).
+			AnyTimes()
+
+		localValidator := New(netCfg, validatorStore, localMockOperators, dutyStore, signatureVerifier).(*messageValidator)
+
+		testMsg := &spectypes.SignedSSVMessage{
+			OperatorIDs: []spectypes.OperatorID{1, 2, 3, 4},
+			Signatures: [][]byte{
+				bytes.Repeat([]byte{1}, rsaSignatureSize),
+				bytes.Repeat([]byte{2}, rsaSignatureSize),
+				bytes.Repeat([]byte{3}, rsaSignatureSize),
+				bytes.Repeat([]byte{4}, rsaSignatureSize),
+			},
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   committeeIdentifier,
+				Data:    []byte{1, 2, 3},
+			},
+		}
+
+		originalOpCount := len(testMsg.OperatorIDs)
+		originalSigCount := len(testMsg.Signatures)
+
+		err := localValidator.validateSignedSSVMessage(testMsg)
+		require.NoError(t, err)
+
+		// Verify the filtering happened correctly
+		require.Equal(t, originalOpCount-1, len(testMsg.OperatorIDs))
+		require.Equal(t, originalSigCount-1, len(testMsg.Signatures))
+
+		// Verify operator 3 is not in the filtered list
+		require.NotContains(t, testMsg.OperatorIDs, spectypes.OperatorID(3))
+
+		// Verify other operators are still there
+		require.Contains(t, testMsg.OperatorIDs, spectypes.OperatorID(1))
+		require.Contains(t, testMsg.OperatorIDs, spectypes.OperatorID(2))
+		require.Contains(t, testMsg.OperatorIDs, spectypes.OperatorID(4))
+	})
+
+	// Test that validateSignedSSVMessage returns the error from validateSignerExists
+	// when the error is not ErrRemovedOperator
+	t.Run("signer exists error propagation", func(t *testing.T) {
+		localCtrl := gomock.NewController(t)
+		localMockOperators := mocks.NewMockOperators(localCtrl)
+
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{1}).
+			Return(true, nil).
+			AnyTimes()
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{2}).
+			Return(true, nil).
+			AnyTimes()
+
+		// For operator 3, return an error other than ErrRemovedOperator
+		// This simulates a database error or other validation failure
+		customErr := fmt.Errorf("custom validation error")
+
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{3}).
+			Return(false, customErr).
+			AnyTimes()
+
+		localValidator := New(netCfg, validatorStore, localMockOperators, dutyStore, signatureVerifier).(*messageValidator)
+
+		testMsg := &spectypes.SignedSSVMessage{
+			OperatorIDs: []spectypes.OperatorID{1, 2, 3},
+			Signatures: [][]byte{
+				bytes.Repeat([]byte{1}, rsaSignatureSize),
+				bytes.Repeat([]byte{2}, rsaSignatureSize),
+				bytes.Repeat([]byte{3}, rsaSignatureSize),
+			},
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   committeeIdentifier,
+				Data:    []byte{1, 2, 3},
+			},
+		}
+
+		// Validate the message - should return an error since operator 3 returns a non-ErrRemovedOperator error
+		err := localValidator.validateSignedSSVMessage(testMsg)
+
+		require.Error(t, err)
+
+		// Verify that the error is an ErrOperatorValidation error and has operator ID 3
+		var valErr Error
+		require.True(t, errors.As(err, &valErr))
+		require.Equal(t, valErr.got, spectypes.OperatorID(3))
+		require.Equal(t, valErr.text, ErrOperatorValidation.text)
 	})
 
 	// Get error when receiving a message with non-sorted signers
