@@ -201,7 +201,6 @@ func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*
 			Round:      uint64(qbftMsg.Round),
 			BeaconRoot: qbftMsg.Root,
 			Signer:     signedMsg.OperatorIDs[0],
-			// ReceivedTime: toTime(receivedAt),  TODO(matheus): does this make sense? it's the same time
 		}
 
 		traces = append(traces, &justificationTrace)

@@ -112,17 +112,18 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.Vali
 	}
 
 	var signers []spectypes.OperatorID
-	// TODO(matheus) is this correct?
+
 	for _, d := range duty.Decideds {
 		signers = append(signers, d.Signers...)
 	}
 
 	slices.Sort(signers)
+	signers = slices.Compact(signers)
 
 	out = append(out, qbftstorage.ParticipantsRangeEntry{
 		Slot:    slot,
 		PubKey:  pubkey,
-		Signers: slices.Compact(signers),
+		Signers: signers,
 	})
 
 	return out, nil
@@ -136,17 +137,18 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 		}
 
 		var signers []spectypes.OperatorID
-		// TODO(matheus) is this correct? if decideds empty, return err?
+
 		for _, d := range duty.Decideds {
 			signers = append(signers, d.Signers...)
 		}
 
 		slices.Sort(signers)
+		signers = slices.Compact(signers)
 
 		out = append(out, qbftstorage.ParticipantsRangeEntry{
 			Slot:    slot,
 			PubKey:  duty.pubkey,
-			Signers: slices.Compact(signers),
+			Signers: signers,
 		})
 	}
 

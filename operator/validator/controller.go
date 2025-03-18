@@ -385,7 +385,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 
 	if c.validatorOptions.ExporterDutyTracing {
 		c.traceCollector.Collect(c.ctx, ssvMsg)
-		return nil // TODO(Matus): return here or continue?
+		return nil
 	}
 
 	var ncv *committeeObserver
