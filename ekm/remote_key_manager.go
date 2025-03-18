@@ -15,16 +15,16 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	ssz "github.com/ferranbt/fastssz"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -39,7 +39,7 @@ type RemoteKeyManager struct {
 }
 
 type RemoteSigner interface {
-	AddValidators(ctx context.Context, shares ...ssvsigner.ClientShareKeys) ([]web3signer.Status, error)
+	AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) ([]web3signer.Status, error)
 	RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error)
 	Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error)
 	OperatorIdentity(ctx context.Context) (string, error)
@@ -84,13 +84,17 @@ func NewRemoteKeyManager(
 	}, nil
 }
 
-func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey phase0.BLSPubKey) error {
-	shareKeys := ssvsigner.ClientShareKeys{
-		EncryptedPrivKey: encryptedSharePrivKey,
+func (km *RemoteKeyManager) AddShare(
+	ctx context.Context,
+	encryptedSharePrivKey []byte,
+	sharePubKey phase0.BLSPubKey,
+) error {
+	shareKeys := ssvsigner.ShareKeys{
+		EncryptedPrivKey: hexutil.Bytes(encryptedSharePrivKey),
 		PublicKey:        sharePubKey,
 	}
 
-	statuses, err := km.remoteSigner.AddValidators(context.Background(), shareKeys) // TODO: pass context from outside
+	statuses, err := km.remoteSigner.AddValidators(ctx, shareKeys)
 	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
@@ -107,8 +111,8 @@ func (km *RemoteKeyManager) AddShare(encryptedSharePrivKey []byte, sharePubKey p
 	return nil
 }
 
-func (km *RemoteKeyManager) RemoveShare(pubKey phase0.BLSPubKey) error {
-	statuses, err := km.remoteSigner.RemoveValidators(context.Background(), pubKey) // TODO: use context
+func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error {
+	statuses, err := km.remoteSigner.RemoveValidators(ctx, pubKey)
 	if err != nil {
 		return fmt.Errorf("remove validator: %w", err)
 	}

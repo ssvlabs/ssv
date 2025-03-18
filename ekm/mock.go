@@ -18,7 +18,7 @@ type MockRemoteSigner struct {
 	mock.Mock
 }
 
-func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ClientShareKeys) ([]web3signer.Status, error) {
+func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) ([]web3signer.Status, error) {
 	args := m.Called(ctx, shares[0])
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

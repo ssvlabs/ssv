@@ -2,8 +2,8 @@ package web3signer
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+	"strings"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
@@ -12,15 +12,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-type ErrorResponse struct {
-	Message string `json:"message"`
-}
+const (
+	pathPublicKeys = "/api/v1/eth2/publicKeys"
+	pathKeystores  = "/eth/v1/keystores"
+	pathSign       = "/api/v1/eth2/sign/"
+)
 
 type ListKeysResponse []phase0.BLSPubKey
-
-type KeyData struct {
-	ValidatingPubkey phase0.BLSPubKey `json:"validating_pubkey"`
-}
 
 type ImportKeystoreRequest struct {
 	Keystores          []string `json:"keystores"`
@@ -28,10 +26,9 @@ type ImportKeystoreRequest struct {
 	SlashingProtection string   `json:"slashing_protection,omitempty"`
 }
 
-type Keystore map[string]any
-
 type ImportKeystoreResponse struct {
-	Data []KeyManagerResponseData `json:"data"`
+	Data    []KeyManagerResponseData `json:"data"`
+	Message string                   `json:"message,omitempty"`
 }
 
 type DeleteKeystoreRequest struct {
@@ -41,6 +38,7 @@ type DeleteKeystoreRequest struct {
 type DeleteKeystoreResponse struct {
 	Data               []KeyManagerResponseData `json:"data"`
 	SlashingProtection string                   `json:"slashing_protection"`
+	Message            string                   `json:"message,omitempty"`
 }
 
 type KeyManagerResponseData struct {
@@ -103,7 +101,7 @@ type BeaconBlockData struct {
 }
 
 // AggregateAndProof is a union of *phase0.AggregateAndProof or *electra.AggregateAndProof.
-// If Electra is set, Phase0 is ignored.
+// Setting both is not allowed.
 type AggregateAndProof struct {
 	Phase0  *phase0.AggregateAndProof
 	Electra *electra.AggregateAndProof
@@ -126,14 +124,11 @@ func (ap *AggregateAndProof) MarshalJSON() ([]byte, error) {
 }
 
 func (ap *AggregateAndProof) UnmarshalJSON(data []byte) error {
-	electraErr := json.Unmarshal(data, &ap.Electra)
-	phase0Err := json.Unmarshal(data, &ap.Phase0)
-
-	if electraErr != nil && phase0Err != nil {
-		return errors.Join(electraErr, phase0Err)
+	if strings.Contains(string(data), "committee_bits") {
+		return json.Unmarshal(data, &ap.Electra)
 	}
 
-	return nil
+	return json.Unmarshal(data, &ap.Phase0)
 }
 
 type AggregationSlot struct {
@@ -152,4 +147,17 @@ type SyncCommitteeMessage struct {
 type SyncCommitteeAggregatorSelection struct {
 	Slot              phase0.Slot           `json:"slot"`
 	SubcommitteeIndex phase0.CommitteeIndex `json:"subcommittee_index"` // phase0.CommitteeIndex type to marshal to string
+}
+
+type SignResponse struct {
+	Signature phase0.BLSSignature `json:"signature"`
+}
+
+type HTTPResponseError struct {
+	Err    error
+	Status int
+}
+
+func (h HTTPResponseError) Error() string {
+	return fmt.Sprintf("error status %d: %s", h.Status, h.Err.Error())
 }

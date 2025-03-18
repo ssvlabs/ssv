@@ -84,7 +84,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		operatorPrivateKey = pk
 	}
 
-	web3SignerClient := web3signer.New(logger, cli.Web3SignerEndpoint)
+	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint)
 
 	logger.Info("Starting ssv-signer server", zap.String("addr", cli.ListenAddr))
 

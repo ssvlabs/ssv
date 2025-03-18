@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Web3Signer) {
@@ -22,17 +20,11 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 		server.Close()
 	})
 
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
-
-	web3Signer := New(logger, server.URL)
+	web3Signer := New(server.URL)
 	return server, web3Signer
 }
 
 func TestNew(t *testing.T) {
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
-
 	tests := []struct {
 		name    string
 		baseURL string
@@ -49,7 +41,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := New(logger, tt.baseURL)
+			client := New(tt.baseURL)
 			require.NotNil(t, client)
 
 			expectedBaseURL := tt.baseURL
@@ -62,130 +54,125 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestImportKeystore(t *testing.T) {
+func TestListKeys(t *testing.T) {
 	tests := []struct {
-		name                 string
-		keystoreList         []Keystore
-		keystorePasswordList []string
-		statusCode           int
-		responseBody         string
-		expectedStatuses     []Status
-		expectError          bool
+		name        string
+		statusCode  int
+		resp        ListKeysResponse
+		errContains string
 	}{
 		{
-			name: "Successful import",
-			keystoreList: []Keystore{
-				{
-					"crypto": map[string]any{
-						"kdf": map[string]any{
-							"function": "scrypt",
-							"params": map[string]any{
-								"dklen": 32,
-								"n":     262144,
-								"p":     1,
-								"r":     8,
-								"salt":  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-							},
-							"message": "",
-						},
-						"checksum": map[string]any{
-							"function": "sha256",
-							"params":   map[string]any{},
-							"message":  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-						},
-						"cipher": map[string]any{
-							"function": "aes-128-ctr",
-							"params": map[string]any{
-								"iv": "0123456789abcdef0123456789abcdef",
-							},
-							"message": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-						},
-					},
-					"description": "",
-					"pubkey":      "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-					"path":        "",
-					"uuid":        "00000000-0000-0000-0000-000000000000",
-					"version":     4,
-				},
+			name:       "Successful list keys",
+			statusCode: http.StatusOK,
+			resp: ListKeysResponse{
+				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				mustBLSFromString("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 			},
-			keystorePasswordList: []string{"password123"},
-			statusCode:           http.StatusOK,
-			responseBody:         `{"data": {"status": "imported","message": "Key successfully imported"}}`,
-			expectedStatuses:     []Status{"imported"},
-			expectError:          false,
 		},
 		{
-			name: "Failed import",
-			keystoreList: []Keystore{
-				{
-					"crypto": map[string]any{
-						"kdf": map[string]any{
-							"function": "scrypt",
-							"params": map[string]any{
-								"dklen": 32,
-								"n":     262144,
-								"p":     1,
-								"r":     8,
-								"salt":  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-							},
-							"message": "",
-						},
-						"checksum": map[string]any{
-							"function": "sha256",
-							"params":   map[string]any{},
-							"message":  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-						},
-						"cipher": map[string]any{
-							"function": "aes-128-ctr",
-							"params": map[string]any{
-								"iv": "0123456789abcdef0123456789abcdef",
-							},
-							"message": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-						},
-					},
-					"description": "",
-					"pubkey":      "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-					"path":        "",
-					"uuid":        "00000000-0000-0000-0000-000000000000",
-					"version":     4,
-				},
-			},
-			keystorePasswordList: []string{"wrongpassword"},
-			statusCode:           http.StatusBadRequest,
-			responseBody:         `{"message": "Failed to import keystore"}`,
-			expectError:          true,
+			name:       "Empty list",
+			statusCode: http.StatusOK,
+			resp:       ListKeysResponse{},
+		},
+		{
+			name:        "Server error",
+			statusCode:  http.StatusInternalServerError,
+			resp:        ListKeysResponse{},
+			errContains: "unexpected status: 500",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, "/eth/v1/keystores", r.URL.Path)
+				require.Equal(t, pathPublicKeys, r.URL.Path)
+				require.Equal(t, http.MethodGet, r.Method)
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				require.NoError(t, json.NewEncoder(w).Encode(tt.resp))
+			})
+
+			keys, err := web3Signer.ListKeys(context.Background())
+
+			if tt.errContains != "" {
+				require.ErrorContains(t, err, tt.errContains)
+			} else {
+				require.NoError(t, err)
+				require.EqualValues(t, tt.resp, keys)
+			}
+		})
+	}
+}
+
+func TestImportKeystore(t *testing.T) {
+	tests := []struct {
+		name        string
+		req         ImportKeystoreRequest
+		statusCode  int
+		response    ImportKeystoreResponse
+		containsErr string
+	}{
+		{
+			name: "Successful import",
+			req: ImportKeystoreRequest{
+				Keystores: []string{
+					`{"crypto":{"kdf":{"function":"scrypt","params":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"message":""},"checksum":{"function":"sha256","params":{},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"cipher":{"function":"aes-128-ctr","params":{"iv":"0123456789abcdef0123456789abcdef"},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},"description":"","pubkey":"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789","path":"","uuid":"00000000-0000-0000-0000-000000000000","version":4}`,
+				},
+				Passwords: []string{"password123"},
+			},
+			statusCode: http.StatusOK,
+			response: ImportKeystoreResponse{
+				Data: []KeyManagerResponseData{
+					{
+						Status:  "imported",
+						Message: "Key successfully imported",
+					},
+				},
+			},
+		},
+		{
+			name: "Failed import",
+			req: ImportKeystoreRequest{
+				Keystores: []string{
+					`{"crypto":{"kdf":{"function":"scrypt","params":{"dklen":32,"n":262144,"p":1,"r":8,"salt":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"message":""},"checksum":{"function":"sha256","params":{},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},"cipher":{"function":"aes-128-ctr","params":{"iv":"0123456789abcdef0123456789abcdef"},"message":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}},"description":"","pubkey":"0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789","path":"","uuid":"00000000-0000-0000-0000-000000000000","version":4}`,
+				},
+				Passwords: []string{"wrongpassword"},
+			},
+			statusCode: http.StatusBadRequest,
+			response: ImportKeystoreResponse{
+				Message: "failed to import keystore",
+			},
+			containsErr: "error status 400",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, pathKeystores, r.URL.Path)
 				require.Equal(t, http.MethodPost, r.Method)
 
 				var req ImportKeystoreRequest
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
-				if !reflect.DeepEqual(req.Keystores, tt.keystoreList) {
-					t.Errorf("Expected keystores %v but got %v", tt.keystoreList, req.Keystores)
-				}
-				if !reflect.DeepEqual(req.Passwords, tt.keystorePasswordList) {
-					t.Errorf("Expected passwords %v but got %v", tt.keystorePasswordList, req.Passwords)
+				if !reflect.DeepEqual(req, tt.req) {
+					t.Errorf("Expected req %v but got %v", tt.req, req)
 				}
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
-				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
+				require.NoError(t, json.NewEncoder(w).Encode(tt.response))
 			})
 
-			statuses, err := web3Signer.ImportKeystore(context.Background(), tt.keystoreList, tt.keystorePasswordList)
+			data, err := web3Signer.ImportKeystore(context.Background(), tt.req)
 
-			if tt.expectError {
-				require.Error(t, err)
+			if tt.containsErr != "" {
+				require.ErrorContains(t, err, tt.containsErr)
 			} else {
 				require.NoError(t, err)
-				if !reflect.DeepEqual(statuses, tt.expectedStatuses) {
-					t.Errorf("Expected statuses %v but got %v", tt.expectedStatuses, statuses)
+				if !reflect.DeepEqual(data, tt.response) {
+					t.Errorf("Expected resp %v but got %v", tt.response, data)
 				}
 			}
 		})
@@ -194,60 +181,71 @@ func TestImportKeystore(t *testing.T) {
 
 func TestDeleteKeystore(t *testing.T) {
 	tests := []struct {
-		name             string
-		sharePubKeyList  []phase0.BLSPubKey
-		statusCode       int
-		responseBody     string
-		expectedStatuses []Status
-		expectError      bool
+		name                 string
+		req                  DeleteKeystoreRequest
+		statusCode           int
+		response             DeleteKeystoreResponse
+		expectedResponseData []KeyManagerResponseData
+		containsErr          string
 	}{
 		{
 			name: "Successful delete",
-			sharePubKeyList: []phase0.BLSPubKey{
-				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+			req: DeleteKeystoreRequest{
+				Pubkeys: []phase0.BLSPubKey{
+					mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				},
 			},
-			statusCode:       http.StatusOK,
-			responseBody:     `{"data": {"status": "deleted","message": "Key successfully deleted"}}`,
-			expectedStatuses: []Status{"deleted"},
-			expectError:      false,
+			statusCode: http.StatusOK,
+			response: DeleteKeystoreResponse{
+				Data: []KeyManagerResponseData{
+					{
+						Status:  "deleted",
+						Message: "Key successfully deleted",
+					},
+				},
+			},
 		},
 		{
 			name: "Failed delete",
-			sharePubKeyList: []phase0.BLSPubKey{
-				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+			req: DeleteKeystoreRequest{
+				Pubkeys: []phase0.BLSPubKey{
+					mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
+				},
 			},
-			statusCode:   http.StatusBadRequest,
-			responseBody: `{"message": "Failed to delete keystore"}`,
-			expectError:  true,
+			statusCode: http.StatusBadRequest,
+			response: DeleteKeystoreResponse{
+				Message: "failed to delete keystore",
+			},
+			containsErr: "unexpected status: 400",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, "/eth/v1/keystores", r.URL.Path)
+				require.Equal(t, pathKeystores, r.URL.Path)
 				require.Equal(t, http.MethodDelete, r.Method)
 
 				var req DeleteKeystoreRequest
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
-				if !reflect.DeepEqual(req.Pubkeys, tt.sharePubKeyList) {
-					t.Errorf("Expected pubkeys %v but got %v", tt.sharePubKeyList, req.Pubkeys)
+				if !reflect.DeepEqual(req, tt.req) {
+					t.Errorf("Expected req %v but got %v", tt.req, req.Pubkeys)
 				}
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
-				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
+				require.NoError(t, json.NewEncoder(w).Encode(tt.response))
 			})
 
-			statuses, err := web3Signer.DeleteKeystore(context.Background(), tt.sharePubKeyList)
+			resp, err := web3Signer.DeleteKeystore(context.Background(), tt.req)
 
-			if tt.expectError {
-				require.Error(t, err)
+			if tt.containsErr != "" {
+				require.ErrorContains(t, err, tt.containsErr)
 			} else {
 				require.NoError(t, err)
-				if !reflect.DeepEqual(statuses, tt.expectedStatuses) {
-					t.Errorf("Expected statuses %v but got %v", tt.expectedStatuses, statuses)
+				if !reflect.DeepEqual(resp, tt.response) {
+					t.Errorf("Expected resp %v but got %v", tt.response, resp)
 				}
 			}
 		})
@@ -275,7 +273,7 @@ func TestSign(t *testing.T) {
 		sharePubKey    phase0.BLSPubKey
 		payload        SignRequest
 		statusCode     int
-		responseBody   string
+		response       SignResponse
 		expectedResult []byte
 		expectError    bool
 	}{
@@ -284,41 +282,16 @@ func TestSign(t *testing.T) {
 			sharePubKey:    phase0.BLSPubKey{0x01, 0x02, 0x03},
 			payload:        testPayload,
 			statusCode:     http.StatusOK,
-			responseBody:   hex.EncodeToString(bytes.Repeat([]byte{1}, phase0.SignatureLength)),
+			response:       SignResponse{Signature: phase0.BLSSignature(bytes.Repeat([]byte{1}, phase0.SignatureLength))},
 			expectedResult: bytes.Repeat([]byte{1}, phase0.SignatureLength),
 			expectError:    false,
-		},
-		{
-			name:         "Invalid public key",
-			sharePubKey:  phase0.BLSPubKey{0x01, 0x02, 0x03},
-			payload:      testPayload,
-			statusCode:   http.StatusBadRequest,
-			responseBody: `{"message": "Invalid public key"}`,
-			expectError:  true,
-		},
-		{
-			name:         "Server error",
-			sharePubKey:  phase0.BLSPubKey{0x01, 0x02, 0x03},
-			payload:      testPayload,
-			statusCode:   http.StatusInternalServerError,
-			responseBody: `{"message": "Internal server error"}`,
-			expectError:  true,
-		},
-		{
-			name:         "Invalid response format",
-			sharePubKey:  phase0.BLSPubKey{0x01, 0x02, 0x03},
-			payload:      testPayload,
-			statusCode:   http.StatusOK,
-			responseBody: "invalid-hex",
-			expectError:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				expectedPath := fmt.Sprintf("/api/v1/eth2/sign/%s", tt.sharePubKey.String())
-				require.Equal(t, expectedPath, r.URL.Path)
+				require.Equal(t, pathSign+tt.sharePubKey.String(), r.URL.Path)
 				require.Equal(t, http.MethodPost, r.Method)
 
 				var req SignRequest
@@ -327,76 +300,16 @@ func TestSign(t *testing.T) {
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
-				_, err := w.Write([]byte(tt.responseBody))
-				require.NoError(t, err)
+				require.NoError(t, json.NewEncoder(w).Encode(tt.response))
 			})
 
-			result, err := web3Signer.Sign(context.Background(), tt.sharePubKey, tt.payload)
+			resp, err := web3Signer.Sign(context.Background(), tt.sharePubKey, tt.payload)
 
 			if tt.expectError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				require.EqualValues(t, tt.expectedResult, result)
-			}
-		})
-	}
-}
-
-func TestListKeys(t *testing.T) {
-	tests := []struct {
-		name         string
-		statusCode   int
-		responseBody ListKeysResponse
-		expectedKeys []phase0.BLSPubKey
-		expectError  bool
-	}{
-		{
-			name:       "Successful list keys",
-			statusCode: http.StatusOK,
-			responseBody: ListKeysResponse{
-				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
-				mustBLSFromString("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
-			},
-			expectedKeys: []phase0.BLSPubKey{
-				mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"),
-				mustBLSFromString("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
-			},
-			expectError: false,
-		},
-		{
-			name:         "Empty list",
-			statusCode:   http.StatusOK,
-			responseBody: ListKeysResponse{},
-			expectedKeys: []phase0.BLSPubKey{},
-			expectError:  false,
-		},
-		{
-			name:         "Server error",
-			statusCode:   http.StatusInternalServerError,
-			responseBody: ListKeysResponse{},
-			expectError:  true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, "/api/v1/eth2/publicKeys", r.URL.Path)
-				require.Equal(t, http.MethodGet, r.Method)
-
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(tt.statusCode)
-				require.NoError(t, json.NewEncoder(w).Encode(tt.responseBody))
-			})
-
-			keys, err := web3Signer.ListKeys(context.Background())
-
-			if tt.expectError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tt.expectedKeys, keys)
+				require.EqualValues(t, tt.expectedResult, resp.Signature)
 			}
 		})
 	}
