@@ -3,7 +3,6 @@ package validation
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -62,11 +61,9 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return e
 	}
 
-	var filteredOperatorIDs []spectypes.OperatorID
-	var filteredSignatures [][]byte
 	var prevSigner spectypes.OperatorID
 
-	for i, signer := range signedSSVMessage.OperatorIDs {
+	for _, signer := range signedSSVMessage.OperatorIDs {
 		// Rule: Signer can't be zero
 		if err := mv.validateSignerNotZero(signer); err != nil {
 			return err
@@ -80,21 +77,11 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 
 		// Rule: Signer must exist (not removed)
 		if err := mv.validateSignerExists(signer); err != nil {
-			// If operator is removed, skip it and continue with next operator
-			if errors.Is(err, ErrRemovedOperator) {
-				continue
-			}
 			return err
 		}
 
-		filteredOperatorIDs = append(filteredOperatorIDs, signer)
-		filteredSignatures = append(filteredSignatures, signedSSVMessage.Signatures[i])
 		prevSigner = signer
 	}
-
-	// Update the message with filtered operators and signatures
-	signedSSVMessage.OperatorIDs = filteredOperatorIDs
-	signedSSVMessage.Signatures = filteredSignatures
 
 	// Rule: SSVMessage cannot be nil
 	ssvMessage := signedSSVMessage.SSVMessage
