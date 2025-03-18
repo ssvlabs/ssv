@@ -46,7 +46,7 @@ func BenchmarkTracer(b *testing.B) {
 	var until, i int
 	for i = 1; i < b.N; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
-		collector := New(ctx, zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, "BN", true)
+		collector := New(ctx, zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, "BN")
 
 		until = min(i*100, len(traces))
 

@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -171,12 +170,6 @@ func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.
 	}
 
 	return committeeID, nil
-}
-
-func decodeSig(in []byte) (*bls.Sign, error) {
-	sign := new(bls.Sign)
-	err := sign.Deserialize(in)
-	return sign, err
 }
 
 func deepCopyCommitteeDutyTrace(trace *model.CommitteeDutyTrace) *model.CommitteeDutyTrace {

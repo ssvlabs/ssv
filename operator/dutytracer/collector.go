@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -33,11 +33,9 @@ type Collector struct {
 	// validatorIndex:slot:committeeID
 	validatorIndexToCommitteeLinks *TypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]]
 
-	syncCommitteeRootsCache *ttlcache.Cache[phase0.Slot, phase0.Root]
+	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
 
 	beaconNetwork spectypes.BeaconNetwork
-
-	verifyBLSSignatureFn func(*spectypes.PartialSignatureMessages, *spectypes.SignedSSVMessage) error
 
 	store      DutyTraceStore
 	client     DomainDataProvider
@@ -54,7 +52,6 @@ func New(ctx context.Context,
 	client DomainDataProvider,
 	store DutyTraceStore,
 	beaconNetwork spectypes.BeaconNetwork,
-	disableBLSVerfication ...bool,
 ) *Collector {
 
 	tracer := &Collector{
@@ -66,20 +63,15 @@ func New(ctx context.Context,
 		committeeTraces:                NewTypedSyncMap[spectypes.CommitteeID, *TypedSyncMap[phase0.Slot, *committeeDutyTrace]](),
 		validatorTraces:                NewTypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]](),
 		validatorIndexToCommitteeLinks: NewTypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]](),
-		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[phase0.Slot, phase0.Root](ttlRoot)),
-		verifyBLSSignatureFn:           func(*spectypes.PartialSignatureMessages, *spectypes.SignedSSVMessage) error { return nil },
+		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttlRoot)),
 	}
-
-	if len(disableBLSVerfication) == 0 {
-		tracer.verifyBLSSignatureFn = tracer.verifyBLSSignature
-	}
-
-	// TODO(me): remove this
-	tracer.syncCommitteeRootsCache.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, item *ttlcache.Item[phase0.Slot, phase0.Root]) {
-		tracer.logger.Info("sync committee root evicted", fields.Slot(item.Key()), fields.Root(item.Value()))
-	})
 
 	return tracer
+}
+
+type scRootKey struct {
+	slot phase0.Slot
+	root phase0.Root // block root
 }
 
 func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slotticker.Provider) {
@@ -358,19 +350,34 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 	// store the link between validator index and committee id
 	c.saveValidatorToCommitteeLink(slot, msg, committeeID)
 
-	for _, partialSigMsg := range msg.Messages {
-		signerData := model.SignerData{
-			Signers:      []spectypes.OperatorID{partialSigMsg.Signer},
-			ReceivedTime: receivedAt,
-		}
+	signersSC := make([]spectypes.OperatorID, 0, len(msg.Messages))
+	signersAttester := make([]spectypes.OperatorID, 0, len(msg.Messages))
 
+	for _, partialSigMsg := range msg.Messages {
 		if bytes.Equal(trace.syncCommitteeRoot[:], partialSigMsg.SigningRoot[:]) {
-			trace.SyncCommittee = append(trace.SyncCommittee, &signerData)
+			signersSC = append(signersSC, partialSigMsg.Signer)
 			continue
 		}
 
-		// TODO:me (electra) - implement a check for: attestation is correct instead of assuming
-		trace.Attester = append(trace.Attester, &signerData)
+		signersAttester = append(signersAttester, partialSigMsg.Signer)
+	}
+
+	if len(signersSC) > 0 {
+		slices.Sort(signersSC)
+		signersSC = slices.Compact(signersSC)
+		trace.SyncCommittee = append(trace.SyncCommittee, &model.SignerData{
+			Signers:      signersSC,
+			ReceivedTime: receivedAt,
+		})
+	}
+
+	if len(signersAttester) > 0 {
+		slices.Sort(signersAttester)
+		signersAttester = slices.Compact(signersAttester)
+		trace.Attester = append(trace.Attester, &model.SignerData{
+			Signers:      signersAttester,
+			ReceivedTime: receivedAt,
+		})
 	}
 }
 
@@ -386,13 +393,6 @@ func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectype
 }
 
 func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Root, error) {
-	// lookup in cache first
-	cacheItem := c.syncCommitteeRootsCache.Get(slot)
-	if cacheItem != nil {
-		return cacheItem.Value(), nil
-	}
-
-	// call remote and cache the result
 	var beaconVote = new(spectypes.BeaconVote)
 	if err := beaconVote.Decode(in); err != nil {
 		return phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
@@ -400,8 +400,13 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 
 	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
 
-	// get beacon root from cache or compute it
-	// TODO(me): refactor slot:blockRoot -> beaconRoot
+	key := scRootKey{slot: slot, root: beaconVote.BlockRoot}
+
+	// lookup in cache first
+	cacheItem := c.syncCommitteeRootsCache.Get(key)
+	if cacheItem != nil {
+		return cacheItem.Value(), nil
+	}
 
 	epoch := c.beaconNetwork.EstimatedEpochAtSlot(slot)
 
@@ -410,14 +415,14 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 		return phase0.Root{}, fmt.Errorf("get sync committee domain: %w", err)
 	}
 
-	// BeaconRoot
+	// Beacon root
 	signingRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
 	if err != nil {
 		return phase0.Root{}, fmt.Errorf("compute sync committee root: %w", err)
 	}
 
 	// cache the result with the same ttl as the committee
-	_ = c.syncCommitteeRootsCache.Set(slot, signingRoot, ttlCommittee)
+	_ = c.syncCommitteeRootsCache.Set(key, signingRoot, ttlCommittee)
 
 	return signingRoot, nil
 }
@@ -452,42 +457,6 @@ func (c *Collector) toMockState(msg *specqbft.Message, operatorIDs []spectypes.O
 			Committee: committee,
 		},
 	}
-}
-
-func (c *Collector) verifyBLSSignature(pSigMessages *spectypes.PartialSignatureMessages, msg *spectypes.SignedSSVMessage) error {
-	for _, msg := range pSigMessages.Messages {
-		sig, err := decodeSig(msg.PartialSignature)
-		if err != nil {
-			return fmt.Errorf("decode partial signature: %w", err)
-		}
-
-		share, found := c.validators.ValidatorByIndex(msg.ValidatorIndex)
-		if !found {
-			return fmt.Errorf("get share by index: %d", msg.ValidatorIndex)
-		}
-
-		var sharePubkey spectypes.ShareValidatorPK
-
-		found = false
-		for _, cmt := range share.Committee {
-			if cmt.Signer == msg.Signer {
-				sharePubkey = cmt.SharePubKey
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("share not found in committee by signer")
-		}
-
-		err = types.VerifyReconstructedSignature(sig, sharePubkey, msg.SigningRoot)
-		if err != nil {
-			return fmt.Errorf("verify reconstructed signature: %w", err)
-		}
-	}
-
-	return nil
 }
 
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
@@ -598,14 +567,6 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 
 			c.processPartialSigCommittee(startTime, pSigMessages, committeeID)
 
-			return
-		}
-
-		// BLS signature verification for non committee validators
-		// called via a member function to allow disabling during
-		// benchmarking for more accurate readings
-		if err = c.verifyBLSSignatureFn(pSigMessages, msg.SignedSSVMessage); err != nil {
-			c.logger.Error("verify bls signature", zap.Error(err))
 			return
 		}
 
