@@ -59,7 +59,7 @@ type taskExecutor interface {
 }
 
 type DoppelgangerProvider interface {
-	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
+	RemoveValidatorState(ctx context.Context, validatorIndex phase0.ValidatorIndex)
 }
 
 type EventHandler struct {
@@ -291,7 +291,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		validatorPubKey, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
+		validatorPubKey, err := eh.handleValidatorRemoved(ctx, txn, validatorRemovedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 
@@ -321,7 +321,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		sharesToLiquidate, err := eh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
+		sharesToLiquidate, err := eh.handleClusterLiquidated(ctx, txn, clusterLiquidatedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 
@@ -448,12 +448,12 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 	}
 }
 
-func (eh *EventHandler) HandleLocalEvents(localEvents []localevents.Event) error {
+func (eh *EventHandler) HandleLocalEvents(ctx context.Context, localEvents []localevents.Event) error {
 	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
 	for _, event := range localEvents {
-		if err := eh.processLocalEvent(txn, event); err != nil {
+		if err := eh.processLocalEvent(ctx, txn, event); err != nil {
 			return fmt.Errorf("process local event: %w", err)
 		}
 	}
@@ -465,7 +465,7 @@ func (eh *EventHandler) HandleLocalEvents(localEvents []localevents.Event) error
 	return nil
 }
 
-func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Event) error {
+func (eh *EventHandler) processLocalEvent(ctx context.Context, txn basedb.Txn, event localevents.Event) error {
 	switch event.Name {
 	case OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)
@@ -487,13 +487,13 @@ func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Even
 		return nil
 	case ValidatorRemoved:
 		data := event.Data.(contract.ContractValidatorRemoved)
-		if _, err := eh.handleValidatorRemoved(txn, &data); err != nil {
+		if _, err := eh.handleValidatorRemoved(ctx, txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 		return nil
 	case ClusterLiquidated:
 		data := event.Data.(contract.ContractClusterLiquidated)
-		_, err := eh.handleClusterLiquidated(txn, &data)
+		_, err := eh.handleClusterLiquidated(ctx, txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}

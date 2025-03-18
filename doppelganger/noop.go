@@ -20,6 +20,6 @@ func (NoOpHandler) ReportQuorum(ctx context.Context, validatorIndex phase0.Valid
 	// No operation
 }
 
-func (NoOpHandler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
+func (NoOpHandler) RemoveValidatorState(ctx context.Context, validatorIndex phase0.ValidatorIndex) {
 	// No operation
 }

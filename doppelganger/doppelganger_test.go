@@ -130,6 +130,7 @@ func TestProcessLivenessData(t *testing.T) {
 
 func TestRemoveValidatorState(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
+	ctx := context.Background()
 
 	validatorIndex := phase0.ValidatorIndex(123)
 
@@ -143,7 +144,7 @@ func TestRemoveValidatorState(t *testing.T) {
 	require.True(t, exists, "Validator should be present before removal")
 
 	// Remove the validator
-	dg.RemoveValidatorState(validatorIndex)
+	dg.RemoveValidatorState(ctx, validatorIndex)
 
 	// Verify the validator is no longer in the state
 	_, exists = dg.validatorsState[validatorIndex]
@@ -151,7 +152,7 @@ func TestRemoveValidatorState(t *testing.T) {
 
 	// Try to remove a non-existent validator and ensure no panic or error occurs
 	require.NotPanics(t, func() {
-		dg.RemoveValidatorState(phase0.ValidatorIndex(456))
+		dg.RemoveValidatorState(ctx, phase0.ValidatorIndex(456))
 	}, "Removing a non-existent validator should not panic")
 }
 

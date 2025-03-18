@@ -8,6 +8,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -38,7 +39,7 @@ type Provider interface {
 
 	// RemoveValidatorState removes a validator from Doppelganger tracking, clearing its protection status.
 	// Useful when a validator is no longer managed (validator removed or liquidated).
-	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
+	RemoveValidatorState(ctx context.Context, validatorIndex phase0.ValidatorIndex)
 }
 
 // ValidatorProvider represents a provider of validator information.
@@ -112,7 +113,10 @@ func (h *handler) ReportQuorum(ctx context.Context, validatorIndex phase0.Valida
 
 	if !state.safe() {
 		state.observedQuorum = true
-		unsafeValidatorsCounter.Add(ctx, -1)
+
+		validatorsStateCounter.Add(ctx, -1, metric.WithAttributes(unsafeAttribute(true)))
+		validatorsStateCounter.Add(ctx, 1, metric.WithAttributes(unsafeAttribute(false)))
+
 		h.logger.Info("Validator marked as safe due to observed quorum", fields.ValidatorIndex(validatorIndex))
 	}
 }
@@ -141,25 +145,26 @@ func (h *handler) updateDoppelgangerState(ctx context.Context, epoch phase0.Epoc
 	for idx := range h.validatorsState {
 		if _, exists := retrievedValidatorsSet[idx]; !exists {
 			removedValidators = append(removedValidators, uint64(idx))
+
+			unsafe := !h.validatorsState[idx].safe()
+			validatorsStateCounter.Add(ctx, -1, metric.WithAttributes(unsafeAttribute(unsafe)))
+
 			delete(h.validatorsState, idx)
 		}
 	}
 
 	if len(addedValidators) > 0 {
-		validatorsStateCounter.Add(ctx, int64(len(addedValidators)))
-		unsafeValidatorsCounter.Add(ctx, int64(len(addedValidators)))
+		validatorsStateCounter.Add(ctx, int64(len(addedValidators)), metric.WithAttributes(unsafeAttribute(true)))
 		h.logger.Debug("Added validators to Doppelganger state", fields.Epoch(epoch), zap.Uint64s("validator_indices", addedValidators))
 	}
 
 	if len(removedValidators) > 0 {
-		validatorsStateCounter.Add(ctx, -int64(len(removedValidators)))
-		unsafeValidatorsCounter.Add(ctx, -int64(len(removedValidators)))
 		h.logger.Debug("Removed validators from Doppelganger state", fields.Epoch(epoch), zap.Uint64s("validator_indices", removedValidators))
 	}
 }
 
 // RemoveValidatorState removes the validator from the Doppelganger state.
-func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
+func (h *handler) RemoveValidatorState(ctx context.Context, validatorIndex phase0.ValidatorIndex) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -168,9 +173,10 @@ func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 		return
 	}
 
-	delete(h.validatorsState, validatorIndex)
+	unsafe := !h.validatorsState[validatorIndex].safe()
+	validatorsStateCounter.Add(ctx, -1, metric.WithAttributes(unsafeAttribute(unsafe)))
 
-	validatorsStateCounter.Add(context.Background(), -1)
+	delete(h.validatorsState, validatorIndex)
 
 	h.logger.Debug("Removed validator from Doppelganger state", fields.ValidatorIndex(validatorIndex))
 }
@@ -300,7 +306,9 @@ func (h *handler) processLivenessData(ctx context.Context, epoch phase0.Epoch, l
 				fields.ValidatorIndex(response.Index),
 				zap.Uint64("remaining_epochs", uint64(state.remainingEpochs)))
 		} else {
-			unsafeValidatorsCounter.Add(ctx, -1)
+			validatorsStateCounter.Add(ctx, -1, metric.WithAttributes(unsafeAttribute(true)))
+			validatorsStateCounter.Add(ctx, 1, metric.WithAttributes(unsafeAttribute(false)))
+
 			h.logger.Debug("Validator is now safe to sign", fields.ValidatorIndex(response.Index))
 		}
 	}
@@ -319,7 +327,8 @@ func (h *handler) resetDoppelgangerStates(ctx context.Context) {
 		state.resetRemainingEpochs()
 	}
 
-	unsafeValidatorsCounter.Add(ctx, int64(previouslySafeCount))
+	validatorsStateCounter.Add(ctx, int64(previouslySafeCount), metric.WithAttributes(unsafeAttribute(true)))
+	validatorsStateCounter.Add(ctx, -int64(previouslySafeCount), metric.WithAttributes(unsafeAttribute(false)))
 
 	h.logger.Info("All Doppelganger states reset to initial detection epochs")
 }
