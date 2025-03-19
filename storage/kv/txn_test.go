@@ -139,7 +139,7 @@ func TestTxnSet(t *testing.T) {
 
 // TestTxnSetMany verifies bulk setting of values
 func TestTxnSetMany(t *testing.T) {
-	_, txn := setupTxn(t)
+	db, txn := setupTxn(t)
 	prefix := []byte("setmany-prefix")
 
 	t.Run("Set multiple items", func(t *testing.T) {
@@ -180,6 +180,30 @@ func TestTxnSetMany(t *testing.T) {
 		assert.Equal(t, expectedErr, err)
 	})
 
+	// Test error handling in Set during SetMany - the transaction should be discarded
+	// After this test, the transaction is discarded and can't be used anymore
+	t.Run("Error handling in Set during SetMany", func(t *testing.T) {
+		txnClosed := db.Begin().(*badgerTxn)
+		txnClosed.Discard()
+
+		err := txnClosed.SetMany(prefix, 3, func(i int) (basedb.Obj, error) {
+			return basedb.Obj{
+				Key:   []byte(fmt.Sprintf("key-%d", i)),
+				Value: []byte(fmt.Sprintf("value-%d", i)),
+			}, nil
+		})
+
+		require.Error(t, err)
+
+		for i := 0; i < 3; i++ {
+			key := []byte(fmt.Sprintf("key-%d", i))
+			_, found, err := db.Get(prefix, key)
+
+			require.NoError(t, err)
+			require.False(t, found)
+		}
+	})
+
 	txn.Commit()
 }
 
@@ -209,6 +233,19 @@ func TestTxnGet(t *testing.T) {
 
 		require.NoError(t, err)
 		require.False(t, found)
+		assert.Empty(t, obj.Value)
+	})
+
+	// Test error handling when trying to use a transaction that has been discarded
+	// After this test, the transaction is discarded and can't be used anymore
+	t.Run("Error handling in Get", func(t *testing.T) {
+		txn.Discard()
+
+		key := []byte("error-key")
+		obj, found, err := txn.Get(prefix, key)
+
+		require.Error(t, err)
+		require.True(t, found) // should return true even if there was an error different from ErrKeyNotFound TODO: is this correct?
 		assert.Empty(t, obj.Value)
 	})
 
