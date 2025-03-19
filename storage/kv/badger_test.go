@@ -76,7 +76,7 @@ func TestBadger(t *testing.T) {
 func TestBasicOperations(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
 
-	t.Run("set and Get", func(t *testing.T) {
+	t.Run("set and get", func(t *testing.T) {
 		prefix := []byte("test-prefix")
 		key := []byte("test-key")
 		value := []byte("test-value")
@@ -91,7 +91,7 @@ func TestBasicOperations(t *testing.T) {
 		assert.Equal(t, value, obj.Value)
 	})
 
-	t.Run("get Non-Existent", func(t *testing.T) {
+	t.Run("get non-existent", func(t *testing.T) {
 		prefix := []byte("missing-prefix")
 		key := []byte("missing-key")
 
@@ -122,7 +122,7 @@ func TestBasicOperations(t *testing.T) {
 		require.False(t, found)
 	})
 
-	t.Run("dropPrefix", func(t *testing.T) {
+	t.Run("drop prefix", func(t *testing.T) {
 		prefix := []byte("drop-prefix")
 		itemCount := 5
 
@@ -163,9 +163,9 @@ func TestGetAll(t *testing.T) {
 		name      string
 		itemCount int
 	}{
-		{"Small dataset (100 items)", 100},
-		{"Medium dataset (1K items)", 1000},
-		{"Large dataset (5K items)", 5000},
+		{"small dataset (100 items)", 100},
+		{"medium dataset (1K items)", 1000},
+		{"large dataset (5K items)", 5000},
 	}
 
 	for _, tc := range testCases {
@@ -441,7 +441,7 @@ func TestTransactions(t *testing.T) {
 		assert.Equal(t, value, obj.Value)
 	})
 
-	t.Run("begin and Discard", func(t *testing.T) {
+	t.Run("begin and discard", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("discard-prefix")
 		key := []byte("discard-key")
@@ -463,7 +463,7 @@ func TestTransactions(t *testing.T) {
 		require.False(t, found)
 	})
 
-	t.Run("beginRead", func(t *testing.T) {
+	t.Run("begin read", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("read-prefix")
 		key := []byte("read-key")
@@ -491,10 +491,10 @@ func TestTransactions(t *testing.T) {
 		_, found, err = txn.Get(prefix, newKey)
 
 		require.NoError(t, err)
-		require.False(t, found, "Read transaction should not see new data")
+		require.False(t, found)
 	})
 
-	t.Run("transaction GetAll", func(t *testing.T) {
+	t.Run("transaction get all", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("txn-getall-prefix")
 		itemCount := 10
