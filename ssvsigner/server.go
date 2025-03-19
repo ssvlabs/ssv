@@ -316,7 +316,11 @@ func (r *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logge
 		statusCode = he.Status
 	}
 
-	logger.Error("request failed", zap.Error(err), zap.Int("status_code", statusCode))
+	logger.Error("request failed",
+		zap.Error(err),
+		zap.Int("status_code", statusCode),
+		zap.Any("resp", resp),
+	)
 	ctx.SetStatusCode(statusCode)
 	r.writeJSON(ctx, logger, resp)
 }
@@ -352,8 +356,6 @@ func (r *Server) writeJSON(ctx *fasthttp.RequestCtx, logger *zap.Logger, v any) 
 }
 
 func (r *Server) writeErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
-	if _, writeErr := ctx.WriteString(err.Error()); writeErr != nil {
-		logger.Error("failed to write response", zap.Error(writeErr))
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-	}
+	errResp := web3signer.ErrorMessage{Message: err.Error()}
+	r.writeJSON(ctx, logger, errResp)
 }
