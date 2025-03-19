@@ -61,6 +61,16 @@ func setupDataset(t *testing.T, db *BadgerDB, prefix []byte, count int) {
 	}
 }
 
+// TestBadger verifies the Badger method returns the correct underlying badger.DB instance
+func TestBadger(t *testing.T) {
+	db := setupDB(t, basedb.Options{})
+
+	badgerDB := db.Badger()
+
+	require.NotNil(t, badgerDB)
+	assert.Equal(t, badgerDB, db.Badger())
+}
+
 // TestBasicOperations verifies basic CRUD operations work correctly
 func TestBasicOperations(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
