@@ -436,38 +436,6 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 	return signingRoot, nil
 }
 
-//nolint:unused
-func (c *Collector) populateProposer(round *model.RoundTrace, committeeID spectypes.CommitteeID, subMsg *specqbft.Message) {
-	committee, found := c.validators.Committee(committeeID)
-	if !found {
-		c.logger.Error("could not find committee by id", fields.CommitteeID(committeeID))
-		return
-	}
-
-	operatorIDs := committee.Operators
-
-	if len(operatorIDs) > 0 {
-		mockState := c.toMockState(subMsg, operatorIDs)
-		round.Proposer = specqbft.RoundRobinProposer(mockState, subMsg.Round)
-	}
-}
-
-//nolint:unused
-func (c *Collector) toMockState(msg *specqbft.Message, operatorIDs []spectypes.OperatorID) *specqbft.State {
-	// assemble operator IDs into a committee
-	committee := make([]*spectypes.Operator, 0, len(operatorIDs))
-	for _, operatorID := range operatorIDs {
-		committee = append(committee, &spectypes.Operator{OperatorID: operatorID})
-	}
-
-	return &specqbft.State{
-		Height: msg.Height,
-		CommitteeMember: &spectypes.CommitteeMember{
-			Committee: committee,
-		},
-	}
-}
-
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 	start := time.Now()
 
@@ -491,7 +459,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 				var committeeID spectypes.CommitteeID
 				copy(committeeID[:], executorID[16:])
 
-				trace := c.getOrCreateCommitteeTrace(slot, committeeID) // committe id
+				trace := c.getOrCreateCommitteeTrace(slot, committeeID)
 
 				trace.Lock()
 				defer trace.Unlock()
@@ -507,9 +475,6 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 				}
 
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
-
-				// TODO(moshe) populate proposer or not?
-				// n.populateProposer(round, committeeID, subMsg)
 
 				decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
@@ -550,9 +515,6 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 				defer trace.Unlock()
 
 				round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
-
-				// TODO(moshe) populate proposer or not?
-				// n.populateProposer(round, validatorPK, subMsg)
 
 				decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
 				if decided != nil {
