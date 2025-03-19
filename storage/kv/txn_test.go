@@ -98,7 +98,7 @@ func TestTxnSet(t *testing.T) {
 	_, txn := setupTxn(t)
 	prefix := []byte("set-prefix")
 
-	t.Run("Basic set operation", func(t *testing.T) {
+	t.Run("basic set operation", func(t *testing.T) {
 		key := []byte("set-key")
 		value := []byte("set-value")
 
@@ -114,7 +114,7 @@ func TestTxnSet(t *testing.T) {
 		assert.Equal(t, value, obj.Value)
 	})
 
-	t.Run("Overwrite existing value", func(t *testing.T) {
+	t.Run("overwrite existing value", func(t *testing.T) {
 		key := []byte("overwrite-key")
 		value1 := []byte("original-value")
 		value2 := []byte("updated-value")
@@ -142,7 +142,7 @@ func TestTxnSetMany(t *testing.T) {
 	db, txn := setupTxn(t)
 	prefix := []byte("setmany-prefix")
 
-	t.Run("Set multiple items", func(t *testing.T) {
+	t.Run("set multiple items", func(t *testing.T) {
 		itemCount := 10
 
 		err := txn.SetMany(prefix, itemCount, func(i int) (basedb.Obj, error) {
@@ -166,7 +166,7 @@ func TestTxnSetMany(t *testing.T) {
 		}
 	})
 
-	t.Run("Error handling", func(t *testing.T) {
+	t.Run("error handling", func(t *testing.T) {
 		expectedErr := errors.New("generator error")
 
 		err := txn.SetMany(prefix, 5, func(i int) (basedb.Obj, error) {
@@ -182,7 +182,7 @@ func TestTxnSetMany(t *testing.T) {
 
 	// Test error handling in Set during SetMany - the transaction should be discarded
 	// After this test, the transaction is discarded and can't be used anymore
-	t.Run("Error handling in Set during SetMany", func(t *testing.T) {
+	t.Run("error handling in Set during SetMany", func(t *testing.T) {
 		txnClosed := db.Begin().(*badgerTxn)
 		txnClosed.Discard()
 
@@ -212,7 +212,7 @@ func TestTxnGet(t *testing.T) {
 	prefix := []byte("get-prefix")
 	_, txn := setupTxnWithData(t, prefix, 3)
 
-	t.Run("Get existing key", func(t *testing.T) {
+	t.Run("get existing key", func(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			key := []byte(fmt.Sprintf("key-%d", i))
 			expectedValue := []byte(fmt.Sprintf("value-%d", i))
@@ -226,7 +226,7 @@ func TestTxnGet(t *testing.T) {
 		}
 	})
 
-	t.Run("Get non-existent key", func(t *testing.T) {
+	t.Run("get non-existent key", func(t *testing.T) {
 		key := []byte("missing-key")
 
 		obj, found, err := txn.Get(prefix, key)
@@ -238,7 +238,7 @@ func TestTxnGet(t *testing.T) {
 
 	// Test error handling when trying to use a transaction that has been discarded
 	// After this test, the transaction is discarded and can't be used anymore
-	t.Run("Error handling in Get", func(t *testing.T) {
+	t.Run("error handling in Get", func(t *testing.T) {
 		txn.Discard()
 
 		key := []byte("error-key")
@@ -257,7 +257,7 @@ func TestTxnGetMany(t *testing.T) {
 	prefix := []byte("getmany-prefix")
 	_, txn := setupTxnWithData(t, prefix, 10)
 
-	t.Run("Get multiple existing keys", func(t *testing.T) {
+	t.Run("get multiple existing keys", func(t *testing.T) {
 		keysToGet := [][]byte{
 			[]byte("key-1"),
 			[]byte("key-3"),
@@ -291,7 +291,7 @@ func TestTxnGetMany(t *testing.T) {
 		}
 	})
 
-	t.Run("Get with non-existent keys", func(t *testing.T) {
+	t.Run("get with non-existent keys", func(t *testing.T) {
 		keysToGet := [][]byte{
 			[]byte("key-2"),
 			[]byte("non-existent"),
@@ -309,7 +309,7 @@ func TestTxnGetMany(t *testing.T) {
 		assert.Contains(t, results, "key-2")
 	})
 
-	t.Run("Empty keys array", func(t *testing.T) {
+	t.Run("empty keys array", func(t *testing.T) {
 		var count int
 		err := txn.GetMany(prefix, [][]byte{}, func(obj basedb.Obj) error {
 			count++
@@ -320,7 +320,7 @@ func TestTxnGetMany(t *testing.T) {
 		assert.Equal(t, 0, count)
 	})
 
-	t.Run("Iterator error handling", func(t *testing.T) {
+	t.Run("iterator error handling", func(t *testing.T) {
 		expectedErr := errors.New("iterator error")
 
 		err := txn.GetMany(prefix, [][]byte{[]byte("key-0")}, func(obj basedb.Obj) error {
@@ -338,7 +338,7 @@ func TestTxnGetAll(t *testing.T) {
 	prefix := []byte("getall-prefix")
 	_, txn := setupTxnWithData(t, prefix, 20)
 
-	t.Run("Get all items", func(t *testing.T) {
+	t.Run("get all items", func(t *testing.T) {
 		var items []basedb.Obj
 		err := txn.GetAll(prefix, func(i int, obj basedb.Obj) error {
 			items = append(items, obj)
@@ -357,7 +357,7 @@ func TestTxnGetAll(t *testing.T) {
 		assert.Equal(t, 20, len(keys))
 	})
 
-	t.Run("Handler error", func(t *testing.T) {
+	t.Run("handler error", func(t *testing.T) {
 		expectedErr := errors.New("handler error")
 
 		err := txn.GetAll(prefix, func(i int, obj basedb.Obj) error {
@@ -371,7 +371,7 @@ func TestTxnGetAll(t *testing.T) {
 		assert.Equal(t, expectedErr, err)
 	})
 
-	t.Run("Empty prefix", func(t *testing.T) {
+	t.Run("empty prefix", func(t *testing.T) {
 		emptyPrefix := []byte("empty-prefix")
 
 		var items []basedb.Obj
@@ -393,7 +393,7 @@ func TestTxnDelete(t *testing.T) {
 	prefix := []byte("delete-prefix")
 	_, txn := setupTxnWithData(t, prefix, 5)
 
-	t.Run("Delete existing key", func(t *testing.T) {
+	t.Run("delete existing key", func(t *testing.T) {
 		keyToDelete := []byte("key-2")
 
 		_, found, err := txn.Get(prefix, keyToDelete)
@@ -420,7 +420,7 @@ func TestTxnDelete(t *testing.T) {
 		}
 	})
 
-	t.Run("Delete non-existent key", func(t *testing.T) {
+	t.Run("delete non-existent key", func(t *testing.T) {
 		nonExistentKey := []byte("non-existent")
 
 		err := txn.Delete(prefix, nonExistentKey)

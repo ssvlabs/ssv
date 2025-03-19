@@ -76,7 +76,7 @@ func TestBadger(t *testing.T) {
 func TestBasicOperations(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
 
-	t.Run("Set and Get", func(t *testing.T) {
+	t.Run("set and Get", func(t *testing.T) {
 		prefix := []byte("test-prefix")
 		key := []byte("test-key")
 		value := []byte("test-value")
@@ -91,7 +91,7 @@ func TestBasicOperations(t *testing.T) {
 		assert.Equal(t, value, obj.Value)
 	})
 
-	t.Run("Get Non-Existent", func(t *testing.T) {
+	t.Run("get Non-Existent", func(t *testing.T) {
 		prefix := []byte("missing-prefix")
 		key := []byte("missing-key")
 
@@ -102,7 +102,7 @@ func TestBasicOperations(t *testing.T) {
 		assert.Empty(t, obj.Value)
 	})
 
-	t.Run("Delete", func(t *testing.T) {
+	t.Run("delete", func(t *testing.T) {
 		prefix := []byte("delete-prefix")
 		key := []byte("delete-key")
 		value := []byte("delete-value")
@@ -122,7 +122,7 @@ func TestBasicOperations(t *testing.T) {
 		require.False(t, found)
 	})
 
-	t.Run("DropPrefix", func(t *testing.T) {
+	t.Run("dropPrefix", func(t *testing.T) {
 		prefix := []byte("drop-prefix")
 		itemCount := 5
 
@@ -195,7 +195,7 @@ func TestGetAll(t *testing.T) {
 		})
 	}
 
-	t.Run("GetAll with error", func(t *testing.T) {
+	t.Run("getAll with error", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("error-prefix")
 		setupDataset(t, db, prefix, 10)
@@ -212,7 +212,7 @@ func TestGetAll(t *testing.T) {
 		assert.Equal(t, expectedErr, err)
 	})
 
-	t.Run("GetAll empty prefix", func(t *testing.T) {
+	t.Run("getAll empty prefix", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("empty-prefix")
 
@@ -237,7 +237,7 @@ func TestGetMany(t *testing.T) {
 		require.NoError(t, db.Set(prefix, encodeUint64(i+1), encodeUint64(i+1)))
 	}
 
-	t.Run("Get multiple keys", func(t *testing.T) {
+	t.Run("get multiple keys", func(t *testing.T) {
 		results := make([]basedb.Obj, 0)
 		err := db.GetMany(prefix, [][]byte{
 			encodeUint64(1),
@@ -256,7 +256,7 @@ func TestGetMany(t *testing.T) {
 		require.Equal(t, 4, len(results))
 	})
 
-	t.Run("Empty keys array", func(t *testing.T) {
+	t.Run("empty keys array", func(t *testing.T) {
 		results := make([]basedb.Obj, 0)
 		err := db.GetMany(prefix, [][]byte{}, func(obj basedb.Obj) error {
 			results = append(results, obj)
@@ -267,7 +267,7 @@ func TestGetMany(t *testing.T) {
 		require.Empty(t, results)
 	})
 
-	t.Run("Non-existent key", func(t *testing.T) {
+	t.Run("non-existent key", func(t *testing.T) {
 		results := make([]basedb.Obj, 0)
 		err := db.GetMany(prefix, [][]byte{encodeUint64(999)}, func(obj basedb.Obj) error {
 			results = append(results, obj)
@@ -278,7 +278,7 @@ func TestGetMany(t *testing.T) {
 		require.Empty(t, results)
 	})
 
-	t.Run("Iterator error", func(t *testing.T) {
+	t.Run("iterator error", func(t *testing.T) {
 		expectedErr := errors.New("iterator error")
 		err := db.GetMany(prefix, [][]byte{encodeUint64(1)}, func(obj basedb.Obj) error {
 			return expectedErr
@@ -293,7 +293,7 @@ func TestSetMany(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("prefix")
 
-	t.Run("Set multiple items", func(t *testing.T) {
+	t.Run("set multiple items", func(t *testing.T) {
 		var values [][]byte
 		err := db.SetMany(prefix, 10, func(i int) (basedb.Obj, error) {
 			seq := uint64(i + 1)
@@ -313,7 +313,7 @@ func TestSetMany(t *testing.T) {
 		}
 	})
 
-	t.Run("Error in next function", func(t *testing.T) {
+	t.Run("error in next function", func(t *testing.T) {
 		expectedErr := errors.New("next error")
 		err := db.SetMany(prefix, 10, func(i int) (basedb.Obj, error) {
 			if i > 2 {
@@ -354,7 +354,7 @@ func TestCountPrefix(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("count-prefix")
 
-	t.Run("Count existing prefix", func(t *testing.T) {
+	t.Run("count existing prefix", func(t *testing.T) {
 		for i := uint64(0); i < 100; i++ {
 			require.NoError(t, db.Set(prefix, encodeUint64(i+1), encodeUint64(i+1)))
 		}
@@ -365,7 +365,7 @@ func TestCountPrefix(t *testing.T) {
 		require.Equal(t, int64(100), n)
 	})
 
-	t.Run("Count non-existent prefix", func(t *testing.T) {
+	t.Run("count non-existent prefix", func(t *testing.T) {
 		n, err := db.CountPrefix([]byte("nonexistent"))
 
 		require.NoError(t, err)
@@ -382,7 +382,7 @@ func TestUpdate(t *testing.T) {
 
 	require.NoError(t, db.Set(prefix, key, value))
 
-	t.Run("Successful update", func(t *testing.T) {
+	t.Run("successful update", func(t *testing.T) {
 		newValue := []byte("updated-value")
 		err := db.Update(func(txn basedb.Txn) error {
 			return txn.Set(prefix, key, newValue)
@@ -397,7 +397,7 @@ func TestUpdate(t *testing.T) {
 		assert.Equal(t, newValue, obj.Value)
 	})
 
-	t.Run("Error in transaction", func(t *testing.T) {
+	t.Run("error in transaction", func(t *testing.T) {
 		expectedErr := errors.New("transaction error")
 		err := db.Update(func(txn basedb.Txn) error {
 			return expectedErr
@@ -409,7 +409,7 @@ func TestUpdate(t *testing.T) {
 
 // TestTransactions verifies transaction functionality for atomicity and isolation
 func TestTransactions(t *testing.T) {
-	t.Run("Begin and Commit", func(t *testing.T) {
+	t.Run("begin and Commit", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("txn-prefix")
 		key := []byte("txn-key")
@@ -441,7 +441,7 @@ func TestTransactions(t *testing.T) {
 		assert.Equal(t, value, obj.Value)
 	})
 
-	t.Run("Begin and Discard", func(t *testing.T) {
+	t.Run("begin and Discard", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("discard-prefix")
 		key := []byte("discard-key")
@@ -463,7 +463,7 @@ func TestTransactions(t *testing.T) {
 		require.False(t, found)
 	})
 
-	t.Run("BeginRead", func(t *testing.T) {
+	t.Run("beginRead", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("read-prefix")
 		key := []byte("read-key")
@@ -494,7 +494,7 @@ func TestTransactions(t *testing.T) {
 		require.False(t, found, "Read transaction should not see new data")
 	})
 
-	t.Run("Transaction GetAll", func(t *testing.T) {
+	t.Run("transaction GetAll", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("txn-getall-prefix")
 		itemCount := 10
@@ -522,7 +522,7 @@ func TestTransactions(t *testing.T) {
 
 // TestDBCreation verifies different DB creation options work correctly
 func TestDBCreation(t *testing.T) {
-	t.Run("Create disk-based DB", func(t *testing.T) {
+	t.Run("create disk-based DB", func(t *testing.T) {
 		logger := logging.TestLogger(t)
 		dir := setupTempDir(t, "badger-test")
 
@@ -547,7 +547,7 @@ func TestDBCreation(t *testing.T) {
 		assert.Equal(t, value, obj.Value)
 	})
 
-	t.Run("Create with GC enabled", func(t *testing.T) {
+	t.Run("create with GC enabled", func(t *testing.T) {
 		logger := logging.TestLogger(t)
 		dir := setupTempDir(t, "badger-gc-test")
 
@@ -576,7 +576,7 @@ func TestDBCreation(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("Create with reporting", func(t *testing.T) {
+	t.Run("create with reporting", func(t *testing.T) {
 		zapCore, observedLogs := observer.New(zap.DebugLevel)
 		logger := zap.New(zapCore)
 
@@ -627,22 +627,22 @@ func TestHelperFunctions(t *testing.T) {
 	db1 := setupDB(t, basedb.Options{})
 	db2 := setupDB(t, basedb.Options{})
 
-	t.Run("Using with nil", func(t *testing.T) {
+	t.Run("using with nil", func(t *testing.T) {
 		rw := db1.Using(nil)
 		require.Equal(t, db1, rw)
 	})
 
-	t.Run("Using with another DB", func(t *testing.T) {
+	t.Run("using with another DB", func(t *testing.T) {
 		rw := db1.Using(db2)
 		require.Equal(t, db2, rw)
 	})
 
-	t.Run("UsingReader with nil", func(t *testing.T) {
+	t.Run("usingReader with nil", func(t *testing.T) {
 		r := db1.UsingReader(nil)
 		require.Equal(t, db1, r)
 	})
 
-	t.Run("UsingReader with another DB", func(t *testing.T) {
+	t.Run("usingReader with another DB", func(t *testing.T) {
 		r := db1.UsingReader(db2)
 		require.Equal(t, db2, r)
 	})
