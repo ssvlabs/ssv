@@ -120,6 +120,10 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	}
 
 	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	span.SetAttributes(
+		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
+		observability.ValidatorIndexAttribute(duty.ValidatorIndex),
+	)
 
 	const eventMsg = "🧩 got partial signature quorum"
 	span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorSignerAttribute(signedMsg.Messages[0].Signer)))
@@ -129,8 +133,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	)
 
 	r.measurements.PauseDutyFlow()
-	// get block data
-	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+
 	span.AddEvent("submitting aggregate and proof",
 		trace.WithAttributes(
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
