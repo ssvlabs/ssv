@@ -326,6 +326,28 @@ func TestSetMany(t *testing.T) {
 	})
 }
 
+// TestSetMany_SetError verifies that errors from the WriteBatch.Set operation are correctly handled
+// We simulate an error by setting a key that's too large for BadgerDB (exceeds key size limit, usually ~64KB)
+func TestSetMany_SetError(t *testing.T) {
+	db := setupDB(t, basedb.Options{})
+	prefix := []byte("error-set-prefix")
+
+	hugeKey := make([]byte, 100*1024) // 100KB key
+	for i := range hugeKey {
+		hugeKey[i] = byte(i % 256)
+	}
+
+	err := db.SetMany(prefix, 1, func(i int) (basedb.Obj, error) {
+		return basedb.Obj{
+			Key:   hugeKey,
+			Value: []byte("value"),
+		}, nil
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeded")
+}
+
 // TestCountPrefix verifies the CountPrefix method correctly counts items with a given prefix
 func TestCountPrefix(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
