@@ -62,28 +62,6 @@ func setupDataset(t *testing.T, db *BadgerDB, prefix []byte, count int) {
 	}
 }
 
-// TestCreateDB_OpenError verifies error handling when badger.Open fails
-// This test simulates an error by providing a file path instead of a directory
-func TestCreateDB_OpenError(t *testing.T) {
-	logger := logging.TestLogger(t)
-
-	dir := setupTempDir(t, "badger-perm-test")
-
-	badgerPath := filepath.Join(dir, "badger.db")
-	err := os.WriteFile(badgerPath, []byte("not a directory"), 0644)
-	require.NoError(t, err)
-
-	options := basedb.Options{
-		Path: badgerPath,
-	}
-
-	db, err := New(logger, options)
-
-	assert.Nil(t, db)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to open badger")
-}
-
 // TestBadger verifies the Badger method returns the correct underlying badger.DB instance
 func TestBadger(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
@@ -620,6 +598,28 @@ func TestDBCreation(t *testing.T) {
 
 		require.Equal(t, logCountBefore+1, logCountAfter)
 	})
+}
+
+// TestCreationDB_OpenError verifies error handling when badger.Open fails
+// This test simulates an error by providing a file path instead of a directory
+func TestCreationDB_OpenError(t *testing.T) {
+	logger := logging.TestLogger(t)
+
+	dir := setupTempDir(t, "badger-perm-test")
+
+	badgerPath := filepath.Join(dir, "badger.db")
+	err := os.WriteFile(badgerPath, []byte("not a directory"), 0644)
+	require.NoError(t, err)
+
+	options := basedb.Options{
+		Path: badgerPath,
+	}
+
+	db, err := New(logger, options)
+
+	assert.Nil(t, db)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to open badger")
 }
 
 // TestHelperFunctions verifies the Using and UsingReader utility methods work correctly
