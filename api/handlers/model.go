@@ -14,13 +14,14 @@ type validatorTraceResponse struct {
 }
 
 type validatorTrace struct {
-	Slot      phase0.Slot           `json:"slot"`
-	Role      string                `json:"role"`
-	Validator phase0.ValidatorIndex `json:"validator"`
-	Rounds    []round               `json:"consensus"`
-	Decideds  []decided             `json:"decideds"`
-	Pre       []message             `json:"pre"`
-	Post      []message             `json:"post"`
+	Slot        phase0.Slot           `json:"slot"`
+	Role        string                `json:"role"`
+	Validator   phase0.ValidatorIndex `json:"validator"`
+	CommitteeID string                `json:"committeeID,omitempty"`
+	Rounds      []round               `json:"consensus"`
+	Decideds    []decided             `json:"decideds"`
+	Pre         []message             `json:"pre"`
+	Post        []message             `json:"post"`
 }
 
 type decided struct {

@@ -222,7 +222,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 6 - Commit
 		commitMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
-		commitMsg.SignedSSVMessage.OperatorIDs = nil
+		commitMsg.SignedSSVMessage.OperatorIDs = []spectypes.OperatorID{1}
 		collector.Collect(context.Background(), commitMsg)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
@@ -381,8 +381,6 @@ func TestCommitteeDuty(t *testing.T) {
 		assert.Equal(t, committeeID, committeeID)
 	}
 
-	// validators.EXPECT().Committee(committeeID).Return(committee, true)
-
 	{ // TC 2 - Proposal
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
 		tracer.Collect(context.Background(), proposalMsg)
@@ -409,8 +407,6 @@ func TestCommitteeDuty(t *testing.T) {
 		require.Empty(t, round0.RoundChanges)
 	}
 
-	// validators.EXPECT().Committee(committeeID).Return(committee, true)
-
 	{ // TC 3 - Prepare
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
 		tracer.Collect(context.Background(), prepareMsg)
@@ -436,8 +432,6 @@ func TestCommitteeDuty(t *testing.T) {
 		require.Empty(t, round0.Commits)
 		require.Empty(t, round0.RoundChanges)
 	}
-
-	// validators.EXPECT().Committee(committeeID).Return(committee, true)
 
 	{ // TC 4 - Decided
 		decided := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, generateDecidedMessage(t, identifier))
@@ -478,11 +472,9 @@ func TestCommitteeDuty(t *testing.T) {
 		assert.Equal(t, decided0.Round, uint64(1))
 	}
 
-	// validators.EXPECT().Committee(committeeID).Return(committee, true)
-
 	{ // TC 5 - Commit
 		commitMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
-		commitMsg.SignedSSVMessage.OperatorIDs = nil
+		commitMsg.SignedSSVMessage.OperatorIDs = []spectypes.OperatorID{1}
 
 		tracer.Collect(context.Background(), commitMsg)
 
@@ -501,15 +493,13 @@ func TestCommitteeDuty(t *testing.T) {
 		require.NotNil(t, commit0)
 		assert.Equal(t, uint64(1), commit0.Round)
 		assert.Equal(t, wantBeaconRoot, commit0.BeaconRoot)
-		assert.Zero(t, commit0.Signer) //TODO(Moshe)?
+		assert.Equal(t, uint64(1), commit0.Signer)
 		require.NotNil(t, commit0.ReceivedTime)
 
 		require.Empty(t, round0.RoundChanges)
 		require.Len(t, round0.Prepares, 1)
 		require.Len(t, round0.Commits, 1)
 	}
-
-	// validators.EXPECT().Committee(committeeID).Return(committee, true)
 
 	{ // TC 6 - RoundChange
 		roundChangeMsg1 := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
@@ -536,8 +526,6 @@ func TestCommitteeDuty(t *testing.T) {
 		require.Len(t, round0.Prepares, 1)
 		require.Len(t, round0.Commits, 1)
 	}
-
-	// validators.EXPECT().Committee(committeeID).Return(committee, true)
 
 	{ // TC 7 - Second RoundChange
 		roundChangeMsg2 := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)

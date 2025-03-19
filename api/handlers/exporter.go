@@ -313,8 +313,20 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 						// return api.Error(fmt.Errorf("error getting duties: %w", err))
 						continue
 					}
-					results = append(results, toValidatorDuty(duty, index, role))
-					continue
+					if (role == spectypes.BNRoleSyncCommittee && len(duty.SyncCommittee) > 0) ||
+						(role == spectypes.BNRoleAttester && len(duty.Attester) > 0) {
+						cDuty := &dutytracer.ValidatorDutyTrace{
+							CommitteeID: committeeID,
+							ValidatorDutyTrace: model.ValidatorDutyTrace{
+								ConsensusTrace: duty.ConsensusTrace,
+								Slot:           duty.Slot,
+								Validator:      index,
+								Role:           role,
+							},
+						}
+						results = append(results, cDuty)
+						continue
+					}
 				}
 				duty, err := e.TraceStore.GetValidatorDuties(role, slot, pubkey)
 				if err != nil {
@@ -329,25 +341,20 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	return api.Render(w, r, toValidatorTraceResponse(results))
 }
 
-func toValidatorDuty(duty *model.CommitteeDutyTrace, index phase0.ValidatorIndex, role spectypes.BeaconRole) *dutytracer.ValidatorDutyTrace {
-	return &dutytracer.ValidatorDutyTrace{
-		ValidatorDutyTrace: model.ValidatorDutyTrace{
-			ConsensusTrace: duty.ConsensusTrace,
-			Slot:           duty.Slot,
-			Validator:      index,
-			Role:           role,
-		},
-	}
-}
-
 func isSyncCommitteeRole(role spectypes.BeaconRole) bool {
 	return role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester
 }
 
+var zeroCommitteeID spectypes.CommitteeID
+
 func toValidatorTraceResponse(duties []*dutytracer.ValidatorDutyTrace) *validatorTraceResponse {
 	r := new(validatorTraceResponse)
 	for _, t := range duties {
-		r.Data = append(r.Data, toValidatorTrace(&t.ValidatorDutyTrace))
+		trace := toValidatorTrace(&t.ValidatorDutyTrace)
+		if t.CommitteeID != zeroCommitteeID {
+			trace.CommitteeID = hex.EncodeToString(t.CommitteeID[:])
+		}
+		r.Data = append(r.Data, trace)
 	}
 	return r
 }

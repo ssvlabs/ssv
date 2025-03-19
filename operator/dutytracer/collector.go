@@ -71,6 +71,7 @@ func New(ctx context.Context,
 	return tracer
 }
 
+// scRootKey is a key for the sync committee root cache
 type scRootKey struct {
 	slot phase0.Slot
 	root phase0.Root // block root
@@ -285,10 +286,12 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 			}
 		}
 
-		var signer spectypes.OperatorID
-		if len(signedMsg.OperatorIDs) > 0 {
-			signer = signedMsg.OperatorIDs[0]
+		if len(signedMsg.OperatorIDs) == 0 {
+			c.logger.Error("fatal error: no operator ids", fields.Slot(phase0.Slot(msg.Height)))
+			return nil
 		}
+
+		signer := signedMsg.OperatorIDs[0]
 
 		commit := &model.QBFTTrace{
 			Round:        uint64(msg.Round),
@@ -355,36 +358,42 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 	// store the link between validator index and committee id
 	c.saveValidatorToCommitteeLink(slot, msg, committeeID)
 
-	signersSC := make([]spectypes.OperatorID, 0, len(msg.Messages))
-	signersAttester := make([]spectypes.OperatorID, 0, len(msg.Messages))
+	if len(msg.Messages) == 0 {
+		c.logger.Warn("no partial sig messages", fields.Slot(slot), fields.CommitteeID(committeeID))
+		return
+	}
 
+	var isSyncCommittee bool
+
+	if bytes.Equal(trace.syncCommitteeRoot[:], msg.Messages[0].SigningRoot[:]) {
+		isSyncCommittee = true
+	}
+
+	signers := make([]spectypes.OperatorID, 0, len(msg.Messages))
 	for _, partialSigMsg := range msg.Messages {
-		if bytes.Equal(trace.syncCommitteeRoot[:], partialSigMsg.SigningRoot[:]) {
-			signersSC = append(signersSC, partialSigMsg.Signer)
-			continue
-		}
-
-		signersAttester = append(signersAttester, partialSigMsg.Signer)
+		signers = append(signers, partialSigMsg.Signer)
 	}
 
-	if len(signersSC) > 0 {
-		slices.Sort(signersSC)
-		signersSC = slices.Compact(signersSC)
+	slices.Sort(signers)
+	signers = slices.Compact(signers)
+
+	if isSyncCommittee {
 		trace.SyncCommittee = append(trace.SyncCommittee, &model.SignerData{
-			Signers:      signersSC,
+			Signers:      signers,
 			ReceivedTime: receivedAt,
 		})
-		c.logger.Info("got sync committee signers", fields.Slot(slot), fields.CommitteeID(committeeID), zap.String("signers", fmt.Sprintf("%v", signersSC)))
+
+		c.logger.Info("got sync committee signers", fields.Slot(slot), fields.CommitteeID(committeeID), zap.String("signers", fmt.Sprintf("%v", signers)))
+
+		return
 	}
 
-	if len(signersAttester) > 0 {
-		slices.Sort(signersAttester)
-		signersAttester = slices.Compact(signersAttester)
-		trace.Attester = append(trace.Attester, &model.SignerData{
-			Signers:      signersAttester,
-			ReceivedTime: receivedAt,
-		})
-	}
+	trace.Attester = append(trace.Attester, &model.SignerData{
+		Signers:      signers,
+		ReceivedTime: receivedAt,
+	})
+
+	c.logger.Info("got attester signers", fields.Slot(slot), fields.CommitteeID(committeeID), zap.String("signers", fmt.Sprintf("%v", signers)))
 }
 
 func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
@@ -404,31 +413,30 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 		return phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
 	}
 
-	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
-
 	key := scRootKey{slot: slot, root: beaconVote.BlockRoot}
 
 	// lookup in cache first
 	cacheItem := c.syncCommitteeRootsCache.Get(key)
 	if cacheItem != nil {
-		c.logger.Info("got sync committee root from cache", fields.Slot(slot))
 		return cacheItem.Value(), nil
 	}
+
+	c.logger.Info("fetching sync committee root", fields.Slot(slot), fields.Root(beaconVote.BlockRoot))
 
 	epoch := c.beacon.EstimatedEpochAtSlot(slot)
 
 	domain, err := c.client.DomainData(epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
-		return phase0.Root{}, fmt.Errorf("get sync committee domain: %w", err)
+		return phase0.Root{}, fmt.Errorf("get sync committee domain data: %w", err)
 	}
 
 	// Beacon root
+	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
 	signingRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
 	if err != nil {
 		return phase0.Root{}, fmt.Errorf("compute sync committee root: %w", err)
 	}
 
-	// cache the result with the same ttl as the committee
 	ttl := time.Duration(ttlCommitteeRoot) * c.beacon.SlotDurationSec()
 
 	_ = c.syncCommitteeRootsCache.Set(key, signingRoot, ttl)
@@ -470,8 +478,9 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 					root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
 					if err != nil {
 						c.logger.Error("get sync committee root", zap.Error(err))
+					} else {
+						trace.syncCommitteeRoot = root
 					}
-					trace.syncCommitteeRoot = root
 				}
 
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))

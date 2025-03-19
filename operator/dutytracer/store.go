@@ -15,7 +15,8 @@ import (
 
 type ValidatorDutyTrace struct {
 	model.ValidatorDutyTrace
-	pubkey spectypes.ValidatorPK
+	CommitteeID spectypes.CommitteeID
+	pubkey      spectypes.ValidatorPK
 }
 
 type DutyTraceStore interface {
