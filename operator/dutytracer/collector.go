@@ -287,7 +287,7 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 		commit := &model.QBFTTrace{
 			Round:      uint64(msg.Round),
 			BeaconRoot: msg.Root,
-			//  TODO(Moshe/Matheus) - need to get the signer from the message?
+			//  Ask(Matheus) - need to get the signer from the message?
 			// Signer:       signedMsg.OperatorIDs[0],
 			ReceivedTime: receivedAt,
 		}
