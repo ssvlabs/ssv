@@ -3,7 +3,6 @@ package validator
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"sync"
@@ -36,7 +35,7 @@ type Collector struct {
 
 	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
 
-	beaconNetwork spectypes.BeaconNetwork
+	beacon spectypes.BeaconNetwork
 
 	store      DutyTraceStore
 	client     DomainDataProvider
@@ -55,16 +54,18 @@ func New(ctx context.Context,
 	beaconNetwork spectypes.BeaconNetwork,
 ) *Collector {
 
+	ttl := time.Duration(ttlCommitteeRoot) * beaconNetwork.SlotDurationSec()
+
 	tracer := &Collector{
 		logger:                         logger,
 		store:                          store,
 		client:                         client,
-		beaconNetwork:                  beaconNetwork,
+		beacon:                         beaconNetwork,
 		validators:                     validators,
 		committeeTraces:                NewTypedSyncMap[spectypes.CommitteeID, *TypedSyncMap[phase0.Slot, *committeeDutyTrace]](),
 		validatorTraces:                NewTypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]](),
 		validatorIndexToCommitteeLinks: NewTypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]](),
-		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttlRoot)),
+		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttl)),
 	}
 
 	return tracer
@@ -284,11 +285,15 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 			}
 		}
 
+		var signer spectypes.OperatorID
+		if len(signedMsg.OperatorIDs) > 0 {
+			signer = signedMsg.OperatorIDs[0]
+		}
+
 		commit := &model.QBFTTrace{
-			Round:      uint64(msg.Round),
-			BeaconRoot: msg.Root,
-			//  Ask(Matheus) - need to get the signer from the message?
-			// Signer:       signedMsg.OperatorIDs[0],
+			Round:        uint64(msg.Round),
+			BeaconRoot:   msg.Root,
+			Signer:       signer,
 			ReceivedTime: receivedAt,
 		}
 
@@ -410,7 +415,7 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 		return cacheItem.Value(), nil
 	}
 
-	epoch := c.beaconNetwork.EstimatedEpochAtSlot(slot)
+	epoch := c.beacon.EstimatedEpochAtSlot(slot)
 
 	domain, err := c.client.DomainData(epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
@@ -424,7 +429,9 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 	}
 
 	// cache the result with the same ttl as the committee
-	_ = c.syncCommitteeRootsCache.Set(key, signingRoot, ttlCommittee)
+	ttl := time.Duration(ttlCommitteeRoot) * c.beacon.SlotDurationSec()
+
+	_ = c.syncCommitteeRootsCache.Set(key, signingRoot, ttl)
 
 	return signingRoot, nil
 }
@@ -496,7 +503,6 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 					if err != nil {
 						c.logger.Error("get sync committee root", zap.Error(err))
 					}
-					c.logger.Info("got sync committee root", zap.String("root", hex.EncodeToString(root[:])))
 					trace.syncCommitteeRoot = root
 				}
 
