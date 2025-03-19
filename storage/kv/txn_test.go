@@ -394,13 +394,6 @@ func TestTxnDelete(t *testing.T) {
 }
 
 // TestTxnConsistentView verifies that transactions provide a consistent view
-//  1. txn1 is created and sets the value of key to value1, then commits.
-//  2. txn2 and txn3 are both started, and they both see the value value1 for key because txn1 has already committed.
-//  3. txn2 sets the value of key to value2 but does not commit yet.
-//  4. txn3 still sees the value value1 for key because it was started before txn2 made its changes.
-//  5. txn2 commits its changes, so the value of key in the database is now value2.
-//  6. txn3 still sees the value value1 for key because it is operating in its own isolated view of the database state
-//     that was established when it was started.
 func TestTxnConsistentView(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("consistent-prefix")
@@ -443,6 +436,13 @@ func TestTxnConsistentView(t *testing.T) {
 }
 
 // TestTxnIsolation verifies that changes in one transaction don't affect others
+//  1. txn1 is created and sets the value of key to value1, then commits.
+//  2. txn2 and txn3 are both started, and they both see the value value1 for key because txn1 has already committed.
+//  3. txn2 sets the value of key to value2 but does not commit yet.
+//  4. txn3 still sees the value value1 for key because it was started before txn2 made its changes.
+//  5. txn2 commits its changes, so the value of key in the database is now value2.
+//  6. txn3 still sees the value value1 for key because it is operating in its own isolated view of the database state
+//     that was established when it was started.
 func TestTxnIsolation(t *testing.T) {
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("isolation-prefix")
