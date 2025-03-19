@@ -85,11 +85,19 @@ func CommitteeIDAttribute(id types.CommitteeID) attribute.KeyValue {
 }
 
 func DutyCountAttribute(count int) attribute.KeyValue {
-	return attribute.Int("ssv.validator.duty_count", count)
+	return attribute.Int("ssv.validator.duty.count", count)
+}
+
+func BlockRootCountAttribute(count int) attribute.KeyValue {
+	return attribute.Int("ssv.validator.duty.root.count", count)
+}
+
+func ValidatorHasQuorumAttribute(hasQuorum bool) attribute.KeyValue {
+	return attribute.Bool("ssv.validator.has_quorum", hasQuorum)
 }
 
 func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
-	const attrKey = "ssv.validator.msg_type"
+	const attrKey = "ssv.validator.msg.type"
 	switch msgType {
 	case types.SSVConsensusMsgType:
 		return attribute.String(attrKey, "SSVConsensusMsgType")
@@ -105,11 +113,11 @@ func ValidatorMsgTypeAttribute(msgType types.MsgType) attribute.KeyValue {
 }
 
 func ValidatorMsgIDAttribute(msgID types.MessageID) attribute.KeyValue {
-	return attribute.String("ssv.validator.msg_id", msgID.String())
+	return attribute.String("ssv.validator.msg.id", msgID.String())
 }
 
 func ValidatorPartialSigMsgTypeAttribute(msgType types.PartialSigMsgType) attribute.KeyValue {
-	const attrKey = "ssv.validator.partial_sig_msg_type"
+	const attrKey = "ssv.validator.partial_signature_msg.type"
 	switch msgType {
 	case types.ContributionProofs:
 		return attribute.String(attrKey, "ContributionProofs")
@@ -154,7 +162,7 @@ func ValidatorPublicKeyAttribute(pubKey phase0.BLSPubKey) attribute.KeyValue {
 }
 
 func ValidatorEventTypeAttribute(t protocolTypes.EventType) attribute.KeyValue {
-	return attribute.String("ssv.validator.event_type", t.String())
+	return attribute.String("ssv.validator.event.type", t.String())
 }
 
 func NetworkDirectionAttribute(direction network.Direction) attribute.KeyValue {

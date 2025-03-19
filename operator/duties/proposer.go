@@ -136,7 +136,7 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 
 func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.proposer.process_execution", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "proposer.process_execution"),
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconSlotAttribute(slot),

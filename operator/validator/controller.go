@@ -599,7 +599,7 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.execute_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
 			observability.BeaconSlotAttribute(duty.Slot),
@@ -630,7 +630,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			span.SetStatus(codes.Error, err.Error())
 			return
 		}
-		dec.Context = ctx
+		dec.TraceContext = ctx
 		span.AddEvent("pushing message to the queue")
 		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 			const eventMsg = "dropping ExecuteDuty message because the queue is full"
@@ -648,7 +648,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 
 func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.execute_committee_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(duty.Slot),
 			observability.CommitteeIDAttribute(committeeID),

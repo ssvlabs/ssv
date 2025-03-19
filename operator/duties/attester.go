@@ -169,7 +169,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 
 func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.attester.process_execution", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "attester.process_execution"),
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconSlotAttribute(slot),

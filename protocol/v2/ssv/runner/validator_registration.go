@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+
 	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -78,7 +78,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	_, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.runner.process_pre_consensus", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -184,7 +184,7 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 
 func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	_, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.runner.execute_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))

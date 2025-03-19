@@ -15,7 +15,7 @@ import (
 
 func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.on_execute_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "on_execute_duty"),
 		trace.WithAttributes(
 			observability.ValidatorEventTypeAttribute(msg.Type),
 		))
@@ -55,7 +55,7 @@ func (v *Validator) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *
 
 func (c *Committee) OnExecuteDuty(ctx context.Context, logger *zap.Logger, msg *types.EventMsg) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.on_execute_committee_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "on_execute_committee_duty"),
 		trace.WithAttributes(
 			observability.ValidatorEventTypeAttribute(msg.Type),
 		))

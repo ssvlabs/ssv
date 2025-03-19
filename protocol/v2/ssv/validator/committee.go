@@ -94,7 +94,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 // StartDuty starts a new duty for the given slot.
 func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.start_committee_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "start_committee_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
@@ -129,7 +129,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	_, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.prepare_duty_runner", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "prepare_duty_runner"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
@@ -227,13 +227,14 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_committee_message", observabilityNamespace),
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msgType),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
 		),
-		trace.WithLinks(trace.LinkFromContext(msg.Context)))
+		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
 	defer span.End()
 
 	if msg.SignedSSVMessage != nil {

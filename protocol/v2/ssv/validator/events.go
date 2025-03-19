@@ -15,7 +15,7 @@ import (
 )
 
 func (v *Validator) handleEventMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage, dutyRunner runner.Runner) error {
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.handle_event_message", observabilityNamespace))
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "handle_event_message"))
 	defer span.End()
 
 	eventMsg, ok := msg.Body.(*types.EventMsg)
@@ -52,7 +52,7 @@ func (v *Validator) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 }
 
 func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.handle_committee_event_message", observabilityNamespace))
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "handle_committee_event_message"))
 	defer span.End()
 
 	eventMsg, ok := msg.Body.(*types.EventMsg)

@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"fmt"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -22,21 +21,17 @@ var (
 
 	slotDelayHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("scheduler.slot_ticker_delay.duration"),
+			observability.InstrumentName(observabilityNamespace, "scheduler.slot_ticker_delay.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("delay of the slot ticker in seconds"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	dutiesExecutedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("scheduler.executions"),
+			observability.InstrumentName(observabilityNamespace, "scheduler.executions"),
 			metric.WithUnit("{duty}"),
 			metric.WithDescription("total number of duties executed by scheduler")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordDutyExecuted(ctx context.Context, role types.RunnerRole) {
 	dutiesExecutedCounter.Add(ctx, 1,

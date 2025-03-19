@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -79,7 +78,7 @@ func (i *Instance) ForceStop() {
 func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		ctx, span := tracer.Start(ctx,
-			fmt.Sprintf("%s.qbft.instance.start", observabilityNamespace),
+			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
 			trace.WithAttributes(observability.BeaconSlotAttribute(height)))
 		defer span.End()
 

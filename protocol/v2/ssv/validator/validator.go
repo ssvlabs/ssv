@@ -96,7 +96,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.start_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "start_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())),
@@ -143,13 +143,13 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.process_message", observabilityNamespace),
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "process_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msgType),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType())),
-		trace.WithLinks(trace.LinkFromContext(msg.Context)))
-
+		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
 	defer span.End()
 
 	if msgType != message.SSVEventMsgType {

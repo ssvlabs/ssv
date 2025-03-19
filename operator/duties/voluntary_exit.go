@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -108,7 +107,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.voluntary_exit.process_execution", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "voluntary_exit.process_execution"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
 	defer span.End()
 

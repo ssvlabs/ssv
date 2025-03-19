@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -153,7 +152,7 @@ func NewBaseRunner(
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.base_runner.start_new_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "base_runner.start_new_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
@@ -316,7 +315,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 
 func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.base_runner.decide", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "base_runner.decide"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(runner.GetBaseRunner().RunnerRoleType),
 			observability.BeaconSlotAttribute(slot)))
@@ -357,7 +356,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
 	span.AddEvent("register timeout handler")
-	b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
+	b.registerTimeoutHandler(ctx, logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

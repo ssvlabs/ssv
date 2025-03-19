@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -37,41 +36,41 @@ var (
 
 	consensusDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("consensus.duration"),
+			observability.InstrumentName(observabilityNamespace, "consensus.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("consensus duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	preConsensusDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("pre_consensus.duration"),
+			observability.InstrumentName(observabilityNamespace, "pre_consensus.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("pre consensus duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	postConsensusDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("post_consensus.duration"),
+			observability.InstrumentName(observabilityNamespace, "post_consensus.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("post consensus duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	dutyDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("duty.duration"),
+			observability.InstrumentName(observabilityNamespace, "duty.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("duty duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	submissionsGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("submissions"),
+			observability.InstrumentName(observabilityNamespace, "submissions"),
 			metric.WithUnit("{submission}"),
 			metric.WithDescription("number of duty submissions")))
 
 	failedSubmissionCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("submissions.failed"),
+			observability.InstrumentName(observabilityNamespace, "submissions.failed"),
 			metric.WithUnit("{submission}"),
 			metric.WithDescription("total number of failed duty submissions")))
 )
@@ -134,8 +133,4 @@ func recordDutyDuration(ctx context.Context, duration time.Duration, role types.
 			observability.BeaconRoleAttribute(role),
 			observability.DutyRoundAttribute(round),
 		))
-}
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
 }

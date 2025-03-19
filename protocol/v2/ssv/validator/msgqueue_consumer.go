@@ -33,7 +33,7 @@ type queueContainer struct {
 // TODO: get rid of logger, add context
 func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.handle_message", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "handle_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.GetType()),
@@ -44,16 +44,16 @@ func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
-	msg.Context = ctx
+	msg.TraceContext = ctx
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		span.AddEvent("pushing message to queue")
 		if pushed := q.Q.TryPush(msg); !pushed {
-			msgID := msg.MsgID.String()
-			const errMsg = "❗ dropping message because the queue is full"
-			logger.Warn(errMsg,
+			const eventMsg = "❗ dropping message because the queue is full"
+			logger.Warn(eventMsg,
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msg_id", msgID))
-			span.SetStatus(codes.Error, errMsg)
+				zap.String("msg_id", msg.MsgID.String()))
+
+			span.AddEvent(eventMsg)
 		}
 		span.SetStatus(codes.Ok, "")
 	} else {

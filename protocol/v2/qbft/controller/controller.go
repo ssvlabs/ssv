@@ -59,7 +59,7 @@ func NewController(
 // StartNewInstance will start a new QBFT instance, if can't will return error
 func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.controller.start_new_instance", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "controller.start_new_instance"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(height)))
 	defer span.End()
 

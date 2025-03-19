@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
+func (v *Validator) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
 		v.mtx.RLock() // read-lock for v.Queues, v.state
 		defer v.mtx.RUnlock()
@@ -42,6 +43,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
+		dec.TraceContext = ctx
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return
@@ -80,7 +82,7 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 	}, nil
 }
 
-func (c *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
+func (c *Committee) onTimeout(ctx context.Context, logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
 		c.mtx.RLock() // read-lock for c.Queues, c.Runners
 		defer c.mtx.RUnlock()
@@ -106,6 +108,7 @@ func (c *Committee) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
+		dec.TraceContext = ctx
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return

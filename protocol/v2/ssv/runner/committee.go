@@ -90,7 +90,7 @@ func NewCommitteeRunner(
 
 func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.runner.start_new_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "runner.start_new_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))
@@ -225,7 +225,7 @@ func (cr *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.runner.process_consensus", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.SSVMessage.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.SSVMessage.GetType()),
@@ -416,7 +416,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("%s.runner.process_post_consensus", observabilityNamespace),
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
@@ -431,8 +432,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	span.SetAttributes(
-		attribute.Bool("ssv.validator.has_quorum", hasQuorum),
-		attribute.Int("ssv.validator.signatures", len(roots)),
+		observability.ValidatorHasQuorumAttribute(hasQuorum),
+		observability.BlockRootCountAttribute(len(roots)),
 	)
 	logger = logger.With(fields.Slot(signedMsg.Slot))
 
@@ -451,7 +452,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		zap.Bool("quorum", hasQuorum),
 		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
-		zap.Int("sigs", len(roots)),
+		zap.Int("roots", len(roots)),
 		zap.Uint64s("validators", indices))
 
 	if !hasQuorum {
@@ -665,7 +666,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconSlotAttribute(cr.BaseRunner.State.StartingDuty.DutySlot()),
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
-			attribute.String("ssv.validator.duty.block_root", hex.EncodeToString(syncCommitteeMessages[0].BeaconBlockRoot[:])),
+			observability.DutyRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
 			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
 		))
@@ -871,7 +872,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 
 func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.runner.execute_committee_duty", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "runner.execute_committee_duty"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.BeaconSlotAttribute(duty.DutySlot())))

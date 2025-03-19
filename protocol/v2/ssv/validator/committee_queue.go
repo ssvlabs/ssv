@@ -25,7 +25,7 @@ import (
 // TODO: get rid of logger, add context
 func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.handle_committee_message", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.GetType()),
@@ -33,7 +33,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 		))
 	defer span.End()
 
-	msg.Context = ctx
+	msg.TraceContext = ctx
 	slot, err := msg.Slot()
 	if err != nil {
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
@@ -80,7 +80,7 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 	defer c.mtx.Unlock()
 
 	ctx, span := tracer.Start(ctx,
-		fmt.Sprintf("%s.start_consume_queue", observabilityNamespace),
+		observability.InstrumentName(observabilityNamespace, "start_consume_queue"),
 		trace.WithAttributes(
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
