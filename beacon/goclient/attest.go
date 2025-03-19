@@ -260,6 +260,7 @@ func (gc *GoClient) simpleAttestationData(slot phase0.Slot) (*phase0.Attestation
 	logger.With(
 		zap.Duration("elapsed", time.Since(attDataReqStart)),
 		zap.Bool("with_weighted_attestation_data", false),
+		zap.String("client_addr", gc.multiClient.Address()),
 	).Debug("successfully fetched attestation data")
 
 	return resp.Data, nil
