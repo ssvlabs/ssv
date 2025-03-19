@@ -55,9 +55,21 @@ func (s *ServerTestSuite) SetupTest() {
 
 	s.remoteSigner = &testRemoteSigner{
 		listKeysResult: []phase0.BLSPubKey{{1, 2, 3}, {4, 5, 6}},
-		importResult:   []web3signer.Status{web3signer.StatusImported},
-		deleteResult:   []web3signer.Status{web3signer.StatusDeleted},
-		signResult:     phase0.BLSSignature{1, 1, 1},
+		importResult: web3signer.ImportKeystoreResponse{
+			Data: []web3signer.KeyManagerResponseData{
+				{
+					Status: web3signer.StatusImported,
+				},
+			}},
+		deleteResult: web3signer.DeleteKeystoreResponse{
+			Data: []web3signer.KeyManagerResponseData{
+				{
+					Status: web3signer.StatusDeleted,
+				},
+			}},
+		signResult: web3signer.SignResponse{
+			Signature: phase0.BLSSignature{1, 1, 1},
+		},
 	}
 
 	s.password = "testpassword"
@@ -91,28 +103,32 @@ func (s *ServerTestSuite) ServeHTTP(method, path string, body []byte) (*fasthttp
 func (s *ServerTestSuite) TestListValidators() {
 	t := s.T()
 
-	resp, err := s.ServeHTTP("GET", pathValidators, nil)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	t.Run("success", func(t *testing.T) {
+		resp, err := s.ServeHTTP("GET", pathValidators, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
 
-	var response []string
-	err = json.Unmarshal(resp.Body(), &response)
-	require.NoError(t, err)
-	expected := []string{
-		"0x010203000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-		"0x040506000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-	}
-	assert.Equal(t, expected, response)
+		var response []string
+		err = json.Unmarshal(resp.Body(), &response)
+		require.NoError(t, err)
+		expected := []string{
+			"0x010203000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+			"0x040506000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+		}
+		assert.Equal(t, expected, response)
+	})
 
-	s.remoteSigner.listKeysError = errors.New("remote signer error")
-	resp, err = s.ServeHTTP("GET", pathValidators, nil)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+	t.Run("error", func(t *testing.T) {
+		s.remoteSigner.listKeysError = errors.New("remote signer error")
+		resp, err := s.ServeHTTP("GET", pathValidators, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
 
-	s.remoteSigner.listKeysError = nil
+		s.remoteSigner.listKeysError = nil
+	})
 }
 
-func (s *ServerTestSuite) TestAddValidator() { // TODO: fix
+func (s *ServerTestSuite) TestAddValidator() {
 	t := s.T()
 
 	sk := new(bls.SecretKey)
@@ -125,7 +141,7 @@ func (s *ServerTestSuite) TestAddValidator() { // TODO: fix
 	request := AddValidatorRequest{
 		ShareKeys: []ShareKeys{
 			{
-				EncryptedPrivKey: hex.EncodeToString([]byte("encrypted_key")),
+				EncryptedPrivKey: []byte("encrypted_key"),
 				PublicKey:        phase0.BLSPubKey(pubKey),
 			},
 		},
@@ -133,133 +149,165 @@ func (s *ServerTestSuite) TestAddValidator() { // TODO: fix
 	reqBody, err := json.Marshal(request)
 	require.NoError(t, err)
 
-	resp, err := s.ServeHTTP("POST", pathValidators, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	t.Run("success", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", pathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
 
-	var response AddValidatorResponse
-	err = json.Unmarshal(resp.Body(), &response)
-	require.NoError(t, err)
-	assert.Equal(t, []web3signer.Status{web3signer.StatusImported}, response.Statuses)
+		var response web3signer.ImportKeystoreResponse
+		err = json.Unmarshal(resp.Body(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, web3signer.ImportKeystoreResponse{Data: []web3signer.KeyManagerResponseData{{Status: web3signer.StatusImported}}}, response)
+	})
 
-	resp, err = s.ServeHTTP("POST", pathValidators, []byte("{invalid json}"))
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	t.Run("invalid JSON", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", pathValidators, []byte("{invalid json}"))
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	})
 
-	emptyRequest := AddValidatorRequest{
-		ShareKeys: []ShareKeys{},
-	}
-	emptyReqBody, err := json.Marshal(emptyRequest)
-	require.NoError(t, err)
-	resp, err = s.ServeHTTP("POST", pathValidators, emptyReqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	t.Run("empty request body", func(t *testing.T) {
+		emptyRequest := AddValidatorRequest{
+			ShareKeys: []ShareKeys{},
+		}
+		emptyReqBody, err := json.Marshal(emptyRequest)
+		require.NoError(t, err)
+		resp, err := s.ServeHTTP("POST", pathValidators, emptyReqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	})
 
-	invalidPubKeyRequest := AddValidatorRequest{
-		ShareKeys: []ShareKeys{
-			{
-				EncryptedPrivKey: hex.EncodeToString([]byte("encrypted_key")),
-				PublicKey:        phase0.BLSPubKey{},
+	t.Run("invalid public key", func(t *testing.T) {
+		invalidPubKeyRequest := AddValidatorRequest{
+			ShareKeys: []ShareKeys{
+				{
+					EncryptedPrivKey: []byte("encrypted_key"),
+					PublicKey:        phase0.BLSPubKey{},
+				},
 			},
-		},
-	}
-	invalidPubKeyReqBody, err := json.Marshal(invalidPubKeyRequest)
-	require.NoError(t, err)
-	resp, err = s.ServeHTTP("POST", pathValidators, invalidPubKeyReqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+		}
+		invalidPubKeyReqBody, err := json.Marshal(invalidPubKeyRequest)
+		require.NoError(t, err)
+		resp, err := s.ServeHTTP("POST", pathValidators, invalidPubKeyReqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
+	})
 
-	invalidPrivKeyRequest := AddValidatorRequest{
-		ShareKeys: []ShareKeys{
-			{
-				EncryptedPrivKey: "invalid_hex",
-				PublicKey:        phase0.BLSPubKey(pubKey),
+	t.Run("invalid private key", func(t *testing.T) {
+		s.operatorPrivKey.decryptResult = []byte{}
+
+		invalidPrivKeyRequest := AddValidatorRequest{
+			ShareKeys: []ShareKeys{
+				{
+					EncryptedPrivKey: []byte{},
+					PublicKey:        phase0.BLSPubKey(pubKey),
+				},
 			},
-		},
-	}
-	invalidPrivKeyReqBody, err := json.Marshal(invalidPrivKeyRequest)
-	require.NoError(t, err)
-	resp, err = s.ServeHTTP("POST", pathValidators, invalidPrivKeyReqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+		}
+		invalidPrivKeyReqBody, err := json.Marshal(invalidPrivKeyRequest)
+		require.NoError(t, err)
+		resp, err := s.ServeHTTP("POST", pathValidators, invalidPrivKeyReqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
 
-	s.operatorPrivKey.decryptError = errors.New("decryption error")
-	resp, err = s.ServeHTTP("POST", pathValidators, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
+		s.operatorPrivKey.decryptResult = []byte(validBlsKey)
+	})
 
-	s.operatorPrivKey.decryptError = nil
+	t.Run("decryption error", func(t *testing.T) {
+		s.operatorPrivKey.decryptError = errors.New("decryption error")
+		resp, err := s.ServeHTTP("POST", pathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
 
-	s.operatorPrivKey.decryptResult = []byte("not-a-hex-string")
-	resp, err = s.ServeHTTP("POST", pathValidators, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+		s.operatorPrivKey.decryptError = nil
+	})
 
-	s.operatorPrivKey.decryptResult = []byte(validBlsKey)
+	t.Run("invalid decrypt result", func(t *testing.T) {
+		s.operatorPrivKey.decryptResult = []byte("not-a-hex-string")
+		resp, err := s.ServeHTTP("POST", pathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
 
-	differentSk := new(bls.SecretKey)
-	differentSk.SetByCSPRNG()
-	differentBlsKey := fmt.Sprintf("0x%s", hex.EncodeToString(differentSk.Serialize()))
-	s.operatorPrivKey.decryptResult = []byte(differentBlsKey)
+		s.operatorPrivKey.decryptResult = []byte(validBlsKey)
+	})
 
-	resp, err = s.ServeHTTP("POST", pathValidators, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
+	t.Run("different decrypt result", func(t *testing.T) {
+		differentSk := new(bls.SecretKey)
+		differentSk.SetByCSPRNG()
+		differentBlsKey := fmt.Sprintf("0x%s", hex.EncodeToString(differentSk.Serialize()))
+		s.operatorPrivKey.decryptResult = []byte(differentBlsKey)
 
-	s.operatorPrivKey.decryptResult = []byte(validBlsKey)
+		resp, err := s.ServeHTTP("POST", pathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusUnprocessableEntity, resp.StatusCode())
 
-	s.remoteSigner.importError = errors.New("import error")
-	resp, err = s.ServeHTTP("POST", pathValidators, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+		s.operatorPrivKey.decryptResult = []byte(validBlsKey)
+	})
 
-	s.remoteSigner.importError = nil
+	t.Run("import error", func(t *testing.T) {
+		s.remoteSigner.importError = errors.New("import error")
+		resp, err := s.ServeHTTP("POST", pathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+
+		s.remoteSigner.importError = nil
+	})
 }
 
 func (s *ServerTestSuite) TestRemoveValidator() {
 	t := s.T()
 
-	request := RemoveValidatorRequest{
-		PublicKeys: []phase0.BLSPubKey{{1, 2, 3}, {4, 5, 6}},
+	request := web3signer.DeleteKeystoreRequest{
+		Pubkeys: []phase0.BLSPubKey{{1, 2, 3}, {4, 5, 6}},
 	}
 	reqBody, err := json.Marshal(request)
 	require.NoError(t, err)
 
-	resp, err := s.ServeHTTP("DELETE", pathValidators, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	t.Run("success", func(t *testing.T) {
+		resp, err := s.ServeHTTP("DELETE", pathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
 
-	var response RemoveValidatorResponse
-	err = json.Unmarshal(resp.Body(), &response)
-	require.NoError(t, err)
-	assert.Equal(t, []web3signer.Status{web3signer.StatusDeleted}, response.Statuses)
+		var response web3signer.DeleteKeystoreResponse
+		err = json.Unmarshal(resp.Body(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, web3signer.DeleteKeystoreResponse{Data: []web3signer.KeyManagerResponseData{{Status: web3signer.StatusDeleted}}}, response)
+	})
 
-	resp, err = s.ServeHTTP("DELETE", pathValidators, []byte("{invalid json}"))
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	t.Run("invalid JSON", func(t *testing.T) {
+		resp, err := s.ServeHTTP("DELETE", pathValidators, []byte("{invalid json}"))
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	})
 
-	emptyRequest := RemoveValidatorRequest{
-		PublicKeys: []phase0.BLSPubKey{},
-	}
-	emptyReqBody, err := json.Marshal(emptyRequest)
-	require.NoError(t, err)
-	resp, err = s.ServeHTTP("DELETE", pathValidators, emptyReqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	t.Run("empty request", func(t *testing.T) {
+		emptyRequest := web3signer.DeleteKeystoreRequest{
+			Pubkeys: []phase0.BLSPubKey{},
+		}
+		emptyReqBody, err := json.Marshal(emptyRequest)
+		require.NoError(t, err)
+		resp, err := s.ServeHTTP("DELETE", pathValidators, emptyReqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	})
 
-	s.remoteSigner.deleteResult = []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusNotFound}
-	resp, err = s.ServeHTTP("DELETE", pathValidators, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	t.Run("custom delete result", func(t *testing.T) {
+		s.remoteSigner.deleteResult = web3signer.DeleteKeystoreResponse{Data: []web3signer.KeyManagerResponseData{{Status: web3signer.StatusDeleted}, {Status: web3signer.StatusNotFound}}}
+		resp, err := s.ServeHTTP("DELETE", pathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+	})
 
-	s.remoteSigner.deleteResult = []web3signer.Status{web3signer.StatusDeleted}
+	t.Run("custom delete error", func(t *testing.T) {
+		s.remoteSigner.deleteResult = web3signer.DeleteKeystoreResponse{Data: []web3signer.KeyManagerResponseData{{Status: web3signer.StatusDeleted}}}
 
-	s.remoteSigner.deleteError = errors.New("remote signer error")
-	resp, err = s.ServeHTTP("DELETE", pathValidators, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+		s.remoteSigner.deleteError = errors.New("remote signer error")
+		resp, err := s.ServeHTTP("DELETE", pathValidators, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
 
-	s.remoteSigner.deleteError = nil
+		s.remoteSigner.deleteError = nil
+	})
 }
 
 func (s *ServerTestSuite) TestSignValidator() {
@@ -274,46 +322,60 @@ func (s *ServerTestSuite) TestSignValidator() {
 	reqBody, err := json.Marshal(signPayload)
 	require.NoError(t, err)
 
-	resp, err := s.ServeHTTP("POST", pathValidatorsSign+pubKeyHex, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
-	const expectedSignature = `"0x010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"`
-	assert.Equal(t, expectedSignature, string(resp.Body()))
+	t.Run("success", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", pathValidatorsSign+pubKeyHex, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+		const expectedSignature = `{"signature":"0x010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}`
+		assert.Equal(t, expectedSignature, string(resp.Body()))
+	})
 
-	resp, err = s.ServeHTTP("POST", pathValidatorsSign+pubKeyHex, []byte("{invalid json}"))
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	t.Run("invalid JSON", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", pathValidatorsSign+pubKeyHex, []byte("{invalid json}"))
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	})
 
-	resp, err = s.ServeHTTP("POST", pathValidatorsSign, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusNotFound, resp.StatusCode())
+	t.Run("no public key", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", pathValidatorsSign, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusNotFound, resp.StatusCode())
+	})
 
-	resp, err = s.ServeHTTP("POST", pathValidatorsSign+"invalid", reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	t.Run("invalid public key", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", pathValidatorsSign+"invalid", reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
+	})
 
-	s.remoteSigner.signError = errors.New("remote signer error")
-	resp, err = s.ServeHTTP("POST", pathValidatorsSign+pubKeyHex, reqBody)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+	t.Run("remote signer error", func(t *testing.T) {
+		s.remoteSigner.signError = errors.New("remote signer error")
+		resp, err := s.ServeHTTP("POST", pathValidatorsSign+pubKeyHex, reqBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
 
-	s.remoteSigner.signError = nil
+		s.remoteSigner.signError = nil
+	})
 }
 
 func (s *ServerTestSuite) TestOperatorIdentity() {
 	t := s.T()
 
-	resp, err := s.ServeHTTP("GET", pathOperatorIdentity, nil)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
-	assert.Equal(t, "test_pubkey_base64", string(resp.Body()))
+	t.Run("success", func(t *testing.T) {
+		resp, err := s.ServeHTTP("GET", pathOperatorIdentity, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+		assert.Equal(t, "test_pubkey_base64", string(resp.Body()))
+	})
 
-	s.pubKey.base64Error = errors.New("base64 error")
-	resp, err = s.ServeHTTP("GET", pathOperatorIdentity, nil)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+	t.Run("error", func(t *testing.T) {
+		s.pubKey.base64Error = errors.New("base64 error")
+		resp, err := s.ServeHTTP("GET", pathOperatorIdentity, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
 
-	s.pubKey.base64Error = nil
+		s.pubKey.base64Error = nil
+	})
 }
 
 func (s *ServerTestSuite) TestOperatorSign() {
@@ -321,29 +383,37 @@ func (s *ServerTestSuite) TestOperatorSign() {
 
 	messageToSign := []byte("message_to_sign")
 
-	resp, err := s.ServeHTTP("POST", pathOperatorSign, messageToSign)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
-	assert.Equal(t, []byte("signature_bytes"), resp.Body())
+	t.Run("success", func(t *testing.T) {
+		resp, err := s.ServeHTTP("POST", pathOperatorSign, messageToSign)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+		assert.Equal(t, []byte("signature_bytes"), resp.Body())
+	})
 
-	s.operatorPrivKey.signError = errors.New("sign error")
-	resp, err = s.ServeHTTP("POST", pathOperatorSign, messageToSign)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
+	t.Run("error", func(t *testing.T) {
+		s.operatorPrivKey.signError = errors.New("sign error")
+		resp, err := s.ServeHTTP("POST", pathOperatorSign, messageToSign)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
 
-	s.operatorPrivKey.signError = nil
+		s.operatorPrivKey.signError = nil
+	})
 }
 
 func (s *ServerTestSuite) TestRouting() {
 	t := s.T()
 
-	resp, err := s.ServeHTTP("GET", "/non-existent-route", nil)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusNotFound, resp.StatusCode())
+	t.Run("wrong path", func(t *testing.T) {
+		resp, err := s.ServeHTTP("GET", "/non-existent-route", nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusNotFound, resp.StatusCode())
+	})
 
-	resp, err = s.ServeHTTP("PUT", pathValidators, nil)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusMethodNotAllowed, resp.StatusCode())
+	t.Run("wrong method", func(t *testing.T) {
+		resp, err := s.ServeHTTP("PUT", pathValidators, nil)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusMethodNotAllowed, resp.StatusCode())
+	})
 }
 
 func (s *ServerTestSuite) TestHelperMethods() {
@@ -351,17 +421,31 @@ func (s *ServerTestSuite) TestHelperMethods() {
 
 	ctx := &fasthttp.RequestCtx{}
 
-	s.server.writeString(ctx, "test string")
-	assert.Equal(t, "test string", string(ctx.Response.Body()))
+	t.Run("writeString", func(t *testing.T) {
+		s.server.writeString(ctx, zap.L(), "test string")
+		assert.Equal(t, "test string", string(ctx.Response.Body()))
+	})
 
 	ctx.Response.Reset()
-	s.server.writeBytes(ctx, []byte("test bytes"))
-	assert.Equal(t, "test bytes", string(ctx.Response.Body()))
+
+	t.Run("writeBytes", func(t *testing.T) {
+		s.server.writeBytes(ctx, zap.L(), []byte("test bytes"))
+		assert.Equal(t, "test bytes", string(ctx.Response.Body()))
+	})
 
 	ctx.Response.Reset()
-	s.server.writeErr(ctx, errors.New("test error"))
-	assert.Equal(t, "test error", string(ctx.Response.Body()))
 
+	t.Run("writeErr", func(t *testing.T) {
+		s.server.writeErr(ctx, zap.L(), errors.New("test error"))
+		assert.Equal(t, `{"message":"test error"}`, string(ctx.Response.Body()))
+	})
+
+	ctx.Response.Reset()
+
+	t.Run("writeJSON", func(t *testing.T) {
+		s.server.writeJSON(ctx, zap.L(), map[string]any{"a": 1, "b": 2})
+		assert.Equal(t, `{"a":1,"b":2}`, string(ctx.Response.Body()))
+	})
 }
 
 func TestServerSuite(t *testing.T) {
@@ -434,38 +518,38 @@ func (t *testOperatorPrivateKey) Base64() string {
 type testRemoteSigner struct {
 	listKeysResult []phase0.BLSPubKey
 	listKeysError  error
-	importResult   []web3signer.Status
+	importResult   web3signer.ImportKeystoreResponse
 	importError    error
-	deleteResult   []web3signer.Status
+	deleteResult   web3signer.DeleteKeystoreResponse
 	deleteError    error
-	signResult     phase0.BLSSignature
+	signResult     web3signer.SignResponse
 	signError      error
 }
 
-func (t *testRemoteSigner) ListKeys(ctx context.Context) ([]phase0.BLSPubKey, error) {
+func (t *testRemoteSigner) ListKeys(ctx context.Context) (web3signer.ListKeysResponse, error) {
 	if t.listKeysError != nil {
 		return nil, t.listKeysError
 	}
 	return t.listKeysResult, nil
 }
 
-func (t *testRemoteSigner) ImportKeystore(ctx context.Context, keystoreList []web3signer.Keystore, keystorePasswordList []string) ([]web3signer.Status, error) {
+func (t *testRemoteSigner) ImportKeystore(ctx context.Context, req web3signer.ImportKeystoreRequest) (web3signer.ImportKeystoreResponse, error) {
 	if t.importError != nil {
-		return nil, t.importError
+		return web3signer.ImportKeystoreResponse{}, t.importError
 	}
 	return t.importResult, nil
 }
 
-func (t *testRemoteSigner) DeleteKeystore(ctx context.Context, sharePubKeyList []phase0.BLSPubKey) ([]web3signer.Status, error) {
+func (t *testRemoteSigner) DeleteKeystore(ctx context.Context, req web3signer.DeleteKeystoreRequest) (web3signer.DeleteKeystoreResponse, error) {
 	if t.deleteError != nil {
-		return nil, t.deleteError
+		return web3signer.DeleteKeystoreResponse{}, t.deleteError
 	}
 	return t.deleteResult, nil
 }
 
-func (t *testRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
+func (t *testRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, req web3signer.SignRequest) (web3signer.SignResponse, error) {
 	if t.signError != nil {
-		return phase0.BLSSignature{}, t.signError
+		return web3signer.SignResponse{}, t.signError
 	}
 	return t.signResult, nil
 }

@@ -27,7 +27,7 @@ type ImportKeystoreRequest struct {
 }
 
 type ImportKeystoreResponse struct {
-	Data    []KeyManagerResponseData `json:"data"`
+	Data    []KeyManagerResponseData `json:"data,omitempty"`
 	Message string                   `json:"message,omitempty"`
 }
 
@@ -36,8 +36,8 @@ type DeleteKeystoreRequest struct {
 }
 
 type DeleteKeystoreResponse struct {
-	Data               []KeyManagerResponseData `json:"data"`
-	SlashingProtection string                   `json:"slashing_protection"`
+	Data               []KeyManagerResponseData `json:"data,omitempty"`
+	SlashingProtection string                   `json:"slashing_protection,omitempty"`
 	Message            string                   `json:"message,omitempty"`
 }
 
@@ -151,6 +151,10 @@ type SyncCommitteeAggregatorSelection struct {
 
 type SignResponse struct {
 	Signature phase0.BLSSignature `json:"signature"`
+}
+
+type ErrorMessage struct {
+	Message string `json:"message"`
 }
 
 type HTTPResponseError struct {
