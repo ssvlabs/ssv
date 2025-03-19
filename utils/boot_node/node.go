@@ -27,12 +27,12 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's external IP"`
-	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
+	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"Private key for bootnode identity (generated if empty)"`
+	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override bootnode's external IP address"`
+	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for P2P transport"`
 	UDPPort    uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
-	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to the boot node's database"`
-	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet"`
+	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to bootnode database directory"`
+	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to"`
 }
 
 // Node represents the behavior of boot node
