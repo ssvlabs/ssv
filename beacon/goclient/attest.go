@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"net/http"
 	"time"
 
@@ -82,6 +83,11 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 			)
 			return nil, fmt.Errorf("attestation data is nil")
 		}
+
+		gc.log.Debug("successfully fetched attestation data",
+			fields.Slot(resp.Data.Slot),
+			zap.Duration("elapsed", time.Since(attDataReqStart)),
+			zap.String("client_addr", gc.multiClient.Address()))
 
 		// Caching resulting value here (as part of inflight request) guarantees only 1 request
 		// will ever be done for a given slot.
