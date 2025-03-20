@@ -606,6 +606,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			observability.BeaconRoleAttribute(duty.Type),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.ValidatorPublicKeyAttribute(duty.PubKey),
+			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
 			observability.DutyIDAttribute(
 				fields.FormatDutyID(
 					c.networkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), duty.ValidatorIndex)),
