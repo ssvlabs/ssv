@@ -366,13 +366,10 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	ssvMsg := msg.(*queue.SSVMessage)
 
-	if c.validatorOptions.ExporterDutyTracing {
-		c.traceCollector.Collect(c.ctx, ssvMsg)
-		return nil
-	}
+	var ncv *validator.CommitteeObserver
 
-	ncv := c.getNonCommitteeValidators(ssvMsg.GetID())
-	if ncv == nil {
+	item := c.committeeObservers.Get(ssvMsg.GetID())
+	if item == nil || item.Value() == nil {
 		committeeObserverOptions := validator.CommitteeObserverOptions{
 			Logger:            c.logger,
 			NetworkConfig:     c.networkConfig,
@@ -394,6 +391,13 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 		ttl := time.Duration(ttlSlots) * c.beacon.GetBeaconNetwork().SlotDurationSec()
 
 		c.committeeObservers.Set(ssvMsg.GetID(), ncv, ttl)
+	} else {
+		ncv = item.Value()
+	}
+
+	if c.validatorOptions.ExporterDutyTracing {
+		c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
+		return nil
 	}
 
 	if !c.validatorOptions.Exporter {
@@ -431,14 +435,6 @@ func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *vali
 		return ncv.ProcessMessage(msg)
 	}
 
-	return nil
-}
-
-func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *validator.CommitteeObserver {
-	item := c.committeeObservers.Get(messageId)
-	if item != nil {
-		return item.Value()
-	}
 	return nil
 }
 
