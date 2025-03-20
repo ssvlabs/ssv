@@ -24,6 +24,7 @@ type DutyTraceStore interface {
 	SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
 	SaveValidatorDuty(duty *model.ValidatorDutyTrace) error
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
+	GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
 	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
 }
@@ -81,6 +82,31 @@ func (a *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Sl
 		ValidatorDutyTrace: *trace,
 		pubkey:             pubkey,
 	}, nil
+}
+
+func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.CommitteeDutyTrace, err error) {
+	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *TypedSyncMap[phase0.Slot, *committeeDutyTrace]) bool {
+		committeeSlots.Range(func(slot phase0.Slot, dt *committeeDutyTrace) bool {
+			if wantSlot == slot {
+				func() {
+					dt.Lock()
+					defer dt.Unlock()
+					duties = append(duties, deepCopyCommitteeDutyTrace(&dt.CommitteeDutyTrace))
+				}()
+			}
+			return true
+		})
+		return true
+	})
+
+	diskDuties, err := c.store.GetCommitteeDuties(wantSlot)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duties from disk: %w", err)
+	}
+
+	duties = append(duties, diskDuties...)
+
+	return duties, nil
 }
 
 func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {

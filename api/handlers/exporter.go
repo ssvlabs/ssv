@@ -28,6 +28,7 @@ type Exporter struct {
 type DutyTraceStore interface {
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
+	GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
@@ -193,10 +194,9 @@ func transformToParticipantResponse(role spectypes.BeaconRole, entry qbftstorage
 
 func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		From         uint64          `json:"from"`
-		To           uint64          `json:"to"`
-		CommitteeIDs api.HexSlice    `json:"committeeIDs"`
-		Committees   api.Uint64Slice `json:"committees"` // TBD
+		From         uint64       `json:"from"`
+		To           uint64       `json:"to"`
+		CommitteeIDs api.HexSlice `json:"committeeIDs"`
 	}
 
 	if err := api.Bind(r, &request); err != nil {
@@ -207,8 +207,17 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 		return api.BadRequestError(fmt.Errorf("'from' must be less than or equal to 'to'"))
 	}
 
-	if len(request.Committees) == 0 && len(request.CommitteeIDs) == 0 {
-		return api.BadRequestError(fmt.Errorf("committees are required"))
+	if len(request.CommitteeIDs) == 0 {
+		var all []*model.CommitteeDutyTrace
+		for s := request.From; s <= request.To; s++ {
+			slot := phase0.Slot(s)
+			duties, err := e.TraceStore.GetCommitteeDuties(slot)
+			if err != nil {
+				return api.Error(fmt.Errorf("error getting all committee IDs: %w", err))
+			}
+			all = append(duties, duties...)
+		}
+		return api.Render(w, r, toCommitteeTraceResponse(all))
 	}
 
 	var committeeIDs []spectypes.CommitteeID
@@ -219,11 +228,6 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			return api.BadRequestError(fmt.Errorf("invalid committee ID length: %s", hex.EncodeToString(cmt)))
 		}
 		copy(id[:], cmt)
-		committeeIDs = append(committeeIDs, id)
-	}
-
-	if len(committeeIDs) == 0 { // double check
-		id := spectypes.GetCommitteeID(request.Committees)
 		committeeIDs = append(committeeIDs, id)
 	}
 

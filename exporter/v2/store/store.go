@@ -190,6 +190,26 @@ func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
 	return nil
 }
 
+func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
+	prefix := s.makeCommitteeSlotPrefix(slot)
+
+	var duties []*model.CommitteeDutyTrace
+	err := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		duty := new(model.CommitteeDutyTrace)
+		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+			return fmt.Errorf("unmarshall committee duty: %w", err)
+		}
+		duties = append(duties, duty)
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get all committee IDs: %w", err)
+	}
+
+	return duties, nil
+}
+
 var ErrNotFound = errors.New("duty not found")
 
 func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *model.CommitteeDutyTrace, err error) {
