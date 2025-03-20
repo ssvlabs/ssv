@@ -94,7 +94,7 @@ func (p *Prober) probe(ctx context.Context) {
 	p.nodesMu.Lock()
 	for name, node := range p.nodes {
 		wg.Add(1)
-		go func(ctx context.Context, cancel func(), name string, node Node) {
+		go func(name string, node Node) {
 			defer wg.Done()
 
 			var err error
@@ -106,7 +106,7 @@ func (p *Prober) probe(ctx context.Context) {
 				if err != nil {
 					// Update readiness and quit early.
 					healthy.Store(false)
-					cancel()
+					//cancel()
 				}
 			}()
 
@@ -115,7 +115,7 @@ func (p *Prober) probe(ctx context.Context) {
 				p.logger.Error("node is not healthy",
 					zap.String("node", name), zap.Error(err), zap.Any("ctx err", ctx.Err()))
 			}
-		}(ctx, cancel, name, node)
+		}(name, node)
 	}
 	p.nodesMu.Unlock()
 	wg.Wait()
