@@ -182,24 +182,23 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 // period here might be next period
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
 	start := time.Now()
+
 	currentEpoch := h.network.Beacon.EstimatedCurrentEpoch()
-	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
+	firstEpochOfPeriod := h.network.Beacon.FirstEpochOfSyncPeriod(period)
+
+	targetEpoch := currentEpoch
+	isFuturePeriod := firstEpochOfPeriod > currentEpoch
+	if isFuturePeriod {
+		targetEpoch = firstEpochOfPeriod
+	}
 
 	eligibleIndices := h.validatorController.FilterIndices(waitForInitial, func(s *types.SSVShare) bool {
-		return s.IsSyncCommitteeEligible(currentEpoch, h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch)
+		return s.IsSyncCommitteeEligible(targetEpoch, h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch)
 	})
 
 	if len(eligibleIndices) == 0 {
 		h.logger.Debug("no active validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
 		return nil
-	}
-
-	targetEpoch := currentEpoch
-	firstEpochOfPeriod := h.network.Beacon.FirstEpochOfSyncPeriod(period)
-
-	isFuturePeriod := firstEpochOfPeriod > currentEpoch
-	if isFuturePeriod {
-		targetEpoch = firstEpochOfPeriod
 	}
 
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, targetEpoch, eligibleIndices)
@@ -227,6 +226,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	h.prepareDutiesResultLog(period, duties, start)
 
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
+	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
 	if len(subscriptions) > 0 {
 		if deadline, ok := ctx.Deadline(); ok {
