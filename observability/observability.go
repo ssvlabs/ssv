@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"errors"
+	"os"
 
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/otel"
@@ -39,10 +40,16 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 		option(&config)
 	}
 
+	hostName, err := os.Hostname()
+	if err != nil {
+		hostName = "unknown"
+	}
+
 	resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName(appName),
 		semconv.ServiceVersion(appVersion),
+		semconv.HostName(hostName),
 	))
 	if err != nil {
 		err = errors.Join(errors.New("failed to instantiate observability resources"), err)
