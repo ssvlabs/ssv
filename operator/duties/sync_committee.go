@@ -179,13 +179,10 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 }
 
+// period here might be next period
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
 	start := time.Now()
-	firstEpochOfPeriod := h.network.Beacon.FirstEpochOfSyncPeriod(period)
 	currentEpoch := h.network.Beacon.EstimatedCurrentEpoch()
-	if firstEpochOfPeriod < currentEpoch {
-		firstEpochOfPeriod = currentEpoch
-	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
 	eligibleIndices := h.validatorController.FilterIndices(waitForInitial, func(s *types.SSVShare) bool {
@@ -197,7 +194,15 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 		return nil
 	}
 
-	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, firstEpochOfPeriod, eligibleIndices)
+	targetEpoch := currentEpoch
+	firstEpochOfPeriod := h.network.Beacon.FirstEpochOfSyncPeriod(period)
+
+	isFuturePeriod := firstEpochOfPeriod > currentEpoch
+	if isFuturePeriod {
+		targetEpoch = firstEpochOfPeriod
+	}
+
+	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, targetEpoch, eligibleIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
