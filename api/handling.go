@@ -23,7 +23,7 @@ func Handler(h HandlerFunc) http.HandlerFunc {
 			// wrapped inside another error should error, not render.
 			switch e := err.(type) {
 			case render.Renderer:
-				if err := render.Render(w, r, e); err != nil {
+				if err := e.Render(w, r); err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 				}
 			default:
