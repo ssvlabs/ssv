@@ -467,6 +467,11 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 			return v, err
 		}
 
+		if errors.Is(err, ErrNothingToSync) {
+			logger.Debug("client has been synced")
+			return v, nil
+		}
+
 		if err != nil {
 			logger.Error("call failed, switching to the next client",
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
