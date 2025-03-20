@@ -44,7 +44,7 @@ func (s *Server) Run() error {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
-	router.Use(middlewareLogger(s.logger))
+	router.Use(s.middlewareLogger())
 	router.Use(middlewareNodeVersion)
 
 	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
@@ -68,13 +68,13 @@ func (s *Server) Run() error {
 	return server.ListenAndServe()
 }
 
-func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
+func (s *Server) middlewareLogger() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			start := time.Now()
 			defer func() {
-				logger.Debug(
+				s.logger.Debug(
 					"served SSV API request",
 					zap.String("method", r.Method),
 					zap.String("path", r.URL.Path),

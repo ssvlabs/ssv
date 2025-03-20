@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
-	"go.uber.org/zap"
 )
 
 const (
@@ -42,7 +41,7 @@ type ConnectionIndex interface {
 	AtLimit(dir libp2pnetwork.Direction) bool
 
 	// IsBad returns whether the given peer is bad
-	IsBad(logger *zap.Logger, id peer.ID) bool
+	IsBad(id peer.ID) bool
 }
 
 // ScoreIndex is an interface for managing peers scores

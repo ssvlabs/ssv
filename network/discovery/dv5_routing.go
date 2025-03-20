@@ -31,12 +31,12 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 		return opts.Ttl, nil
 	}
 
-	updated, err := dvs.RegisterSubnets(logger, subnet)
+	updated, err := dvs.RegisterSubnets(subnet)
 	if err != nil {
 		return 0, err
 	}
 	if updated {
-		go dvs.PublishENR(logger)
+		go dvs.PublishENR()
 	}
 
 	return opts.Ttl, nil
@@ -54,7 +54,7 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 
 	dvs.discover(ctx, func(e PeerEvent) {
 		cn <- e.AddrInfo
-	}, time.Millisecond, dvs.ssvNodeFilter(logger), dvs.badNodeFilter(logger), dvs.subnetFilter(subnet), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
+	}, time.Millisecond, dvs.ssvNodeFilter(), dvs.badNodeFilter(), dvs.subnetFilter(subnet), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
 
 	return cn, nil
 }
