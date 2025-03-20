@@ -205,7 +205,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 			}
 		}
 	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleSyncCommitteeContribution {
-		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync comittee contribution duty
+		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync committee contribution duty
 		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount

@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 func (v *Validator) handleEventMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage, dutyRunner runner.Runner) error {
@@ -44,12 +43,12 @@ func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 		if err != nil {
 			return err
 		}
-		c.mtx.Lock()
+		c.mtx.RLock()
 		dutyRunner, found := c.Runners[slot]
-		c.mtx.Unlock()
+		c.mtx.RUnlock()
 
 		if !found {
-			logger.Error("no committee runner or queue found for slot", fields.Slot(slot), fields.MessageID(msg.MsgID))
+			logger.Error("timeout event: no committee runner found for slot", fields.Slot(slot), fields.MessageID(msg.MsgID))
 			return nil
 		}
 

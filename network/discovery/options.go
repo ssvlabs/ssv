@@ -4,14 +4,12 @@ import (
 	"crypto/ecdsa"
 	"net"
 
-	"github.com/ssvlabs/ssv/logging"
-	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
-
-	"github.com/ssvlabs/ssv/network/commons"
-
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	compatible_logger "github.com/ssvlabs/ssv/network/discovery/logger"
 	"go.uber.org/zap"
 )
 

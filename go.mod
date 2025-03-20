@@ -4,7 +4,7 @@ go 1.22.6
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.21.7
+	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -21,12 +21,13 @@ require (
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/holiman/uint256 v1.3.2
 	github.com/ilyakaznacheev/cleanenv v1.4.2
-	github.com/jellydator/ttlcache/v3 v3.2.0
+	github.com/jellydator/ttlcache/v3 v3.3.0
 	github.com/libp2p/go-libp2p v0.36.3
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-pubsub v0.12.0
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/multiformats/go-multiaddr v0.13.0
+	github.com/oleiade/lane/v2 v2.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.5
@@ -36,8 +37,8 @@ require (
 	github.com/sanity-io/litter v1.5.6
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.8.1
-	github.com/ssvlabs/eth2-key-manager v1.4.2
-	github.com/ssvlabs/ssv-spec v1.0.2
+	github.com/ssvlabs/eth2-key-manager v1.5.2
+	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -194,7 +195,7 @@ require (
 	github.com/pion/transport/v2 v2.2.10 // indirect
 	github.com/pion/turn/v2 v2.1.6 // indirect
 	github.com/pion/webrtc/v3 v3.3.0 // indirect
-	github.com/pk910/dynamic-ssz v0.0.3 // indirect
+	github.com/pk910/dynamic-ssz v0.0.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polydawn/refmt v0.89.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
@@ -252,9 +253,3 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-// github.com/attestantio/go-eth2-client doesn't support el_offline flag, it causes downtime when EL node is down but CL node is up
-// Using a fix from https://github.com/ssvlabs/go-eth2-client/commits/syncing-el-offline-v0.21.7/ (https://github.com/attestantio/go-eth2-client/pull/192)
-// NOTE: Prysm doesn't set el_offline correctly (https://github.com/prysmaticlabs/prysm/issues/14226),
-// so the fix uses workaround with checking sync distance to check if EL is offline
-replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250203214635-0137e67b3b10

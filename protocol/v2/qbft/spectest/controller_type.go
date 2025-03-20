@@ -11,9 +11,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -25,6 +22,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
@@ -49,8 +48,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 		height++
 	}
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
