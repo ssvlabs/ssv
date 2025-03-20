@@ -469,7 +469,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 
 		if errors.Is(err, ErrNothingToSync) {
 			logger.Debug("client has been synced")
-			return v, nil
+			return v, err
 		}
 
 		if err != nil {
