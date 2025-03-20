@@ -78,8 +78,8 @@ func (p *Prober) probe(ctx context.Context) {
 	}()
 
 	// Query all nodes in parallel.
-	ctx, cancel := context.WithTimeout(ctx, p.interval)
-	defer cancel()
+	//ctx, cancel := context.WithTimeout(ctx, p.interval)
+	//defer cancel()
 
 	start2 := time.Now()
 	defer func() {
