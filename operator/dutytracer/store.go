@@ -311,7 +311,8 @@ func deepCopySigners(committee []*model.SignerData) []*model.SignerData {
 
 func deepCopySignerData(data *model.SignerData) *model.SignerData {
 	return &model.SignerData{
-		Signers:      deepCopyOperatorIDs(data.Signers),
+		Signer:       data.Signer,
+		ValidatorIdx: data.ValidatorIdx,
 		ReceivedTime: data.ReceivedTime,
 	}
 }

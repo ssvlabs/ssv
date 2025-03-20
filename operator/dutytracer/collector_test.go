@@ -365,8 +365,8 @@ func TestCommitteeDuty(t *testing.T) {
 		require.NotEmpty(t, duty.Attester)
 
 		attester := duty.Attester[0]
-		require.NotEmpty(t, attester.Signers)
-		assert.Equal(t, uint64(99), attester.Signers[0])
+		require.NotEmpty(t, attester.Signer)
+		assert.Equal(t, uint64(99), attester.Signer)
 
 		require.NotNil(t, duty.ConsensusTrace)
 		require.Empty(t, duty.Decideds)
@@ -447,8 +447,8 @@ func TestCommitteeDuty(t *testing.T) {
 		require.NotEmpty(t, duty.Attester)
 
 		attester := duty.Attester[0]
-		require.NotEmpty(t, attester.Signers)
-		assert.Equal(t, uint64(99), attester.Signers[0])
+		require.NotEmpty(t, attester.Signer)
+		assert.Equal(t, uint64(99), attester.Signer)
 
 		require.NotNil(t, duty.ConsensusTrace)
 		require.Empty(t, duty.SyncCommittee)

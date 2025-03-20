@@ -162,8 +162,9 @@ type committeeTrace struct {
 }
 
 type committeeMessage struct {
-	Signers      []spectypes.OperatorID `json:"signers"`
-	ReceivedTime time.Time              `json:"time"`
+	Signer       spectypes.OperatorID    `json:"signer"`
+	ValidatorIdx []phase0.ValidatorIndex `json:"validatorIdx"`
+	ReceivedTime time.Time               `json:"time"`
 }
 
 func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
@@ -195,7 +196,8 @@ func toDecideds(d []*model.DecidedTrace) (out []decided) {
 func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
 	for _, mt := range m {
 		out = append(out, committeeMessage{
-			Signers:      mt.Signers,
+			Signer:       mt.Signer,
+			ValidatorIdx: mt.ValidatorIdx,
 			ReceivedTime: toTime(mt.ReceivedTime),
 		})
 	}

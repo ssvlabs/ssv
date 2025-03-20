@@ -369,31 +369,33 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 		isSyncCommittee = true
 	}
 
-	signers := make([]spectypes.OperatorID, 0, len(msg.Messages))
+	signer := msg.Messages[0].Signer
+
+	indices := make([]phase0.ValidatorIndex, 0, len(msg.Messages))
 	for _, partialSigMsg := range msg.Messages {
-		signers = append(signers, partialSigMsg.Signer)
+		indices = append(indices, partialSigMsg.ValidatorIndex)
 	}
 
-	slices.Sort(signers)
-	signers = slices.Compact(signers)
+	if len(indices) > 0 {
+		slices.Sort(indices)
+		indices = slices.Compact(indices)
+	}
 
 	if isSyncCommittee {
 		trace.SyncCommittee = append(trace.SyncCommittee, &model.SignerData{
-			Signers:      signers,
+			Signer:       signer,
+			ValidatorIdx: indices,
 			ReceivedTime: receivedAt,
 		})
-
-		c.logger.Info("got sync committee signers", fields.Slot(slot), fields.CommitteeID(committeeID), zap.String("signers", fmt.Sprintf("%v", signers)))
 
 		return
 	}
 
 	trace.Attester = append(trace.Attester, &model.SignerData{
-		Signers:      signers,
+		Signer:       signer,
+		ValidatorIdx: indices,
 		ReceivedTime: receivedAt,
 	})
-
-	c.logger.Info("got attester signers", fields.Slot(slot), fields.CommitteeID(committeeID), zap.String("signers", fmt.Sprintf("%v", signers)))
 }
 
 func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
