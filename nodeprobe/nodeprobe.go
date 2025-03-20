@@ -67,14 +67,21 @@ func (p *Prober) Run(ctx context.Context) error {
 }
 
 func (p *Prober) probe(ctx context.Context) {
+	start1 := time.Now()
+	defer func() {
+		p.logger.Debug("probe measurement [1]",
+			zap.Duration("took", time.Since(start1)),
+			zap.Any("ctx err", ctx.Err()))
+	}()
+
 	// Query all nodes in parallel.
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
 
-	start := time.Now()
+	start2 := time.Now()
 	defer func() {
-		p.logger.Debug("probe measurement",
-			zap.Duration("took", time.Since(start)),
+		p.logger.Debug("probe measurement [2]",
+			zap.Duration("took", time.Since(start2)),
 			zap.Any("ctx err", ctx.Err()))
 	}()
 
@@ -102,7 +109,8 @@ func (p *Prober) probe(ctx context.Context) {
 
 			err = node.Healthy(ctx)
 			if err != nil {
-				p.logger.Error("node is not healthy", zap.String("node", name), zap.Error(err))
+				p.logger.Error("node is not healthy",
+					zap.String("node", name), zap.Error(err), zap.Any("ctx err", ctx.Err()))
 			}
 		}(name, node)
 	}
