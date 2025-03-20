@@ -297,9 +297,6 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 }
 
 func (ec *ExecutionClient) healthy(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
-	defer cancel()
-
 	start := time.Now()
 	defer func() {
 		ec.logger.Debug("(ec *ExecutionClient) healthy measurement",
