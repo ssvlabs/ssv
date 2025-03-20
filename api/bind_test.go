@@ -303,21 +303,20 @@ func TestInvalidDestinationType(t *testing.T) {
 		{"nil", nil},
 	}
 
-	form := url.Values{}
-	req, err := http.NewRequest("POST", "", strings.NewReader(form.Encode()))
-
-	require.NoError(t, err)
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := Bind(req, tc.dest)
+			form := url.Values{}
+			req, err := http.NewRequest("POST", "", strings.NewReader(form.Encode()))
+
+			require.NoError(t, err)
+
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+			err = Bind(req, tc.dest)
 
 			require.Error(t, err)
-
 			assert.ErrorIs(t, err, errInvalidType)
 		})
 	}
