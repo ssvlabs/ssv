@@ -31,29 +31,26 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
+	meter  = otel.Meter(observabilityName)
 
 	validatorStatusGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("validators.per_status"),
+			observability.InstrumentName(observabilityNamespace, "validators.per_status"),
 			metric.WithDescription("total number of validators by status")))
 
 	validatorsRemovedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("validators.removed"),
+			observability.InstrumentName(observabilityNamespace, "validators.removed"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("total number of validator errors")))
 
 	validatorErrorsCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("errors"),
+			observability.InstrumentName(observabilityNamespace, "errors"),
 			metric.WithUnit("{validator}"),
 			metric.WithDescription("total number of validator errors")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
 	attrName := fmt.Sprintf("%s.status", observabilityNamespace)
