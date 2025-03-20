@@ -79,7 +79,7 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 		return fmt.Errorf("failed to read last processed block: %w", err)
 	}
 	if !found || lastProcessedBlock == nil || lastProcessedBlock.Uint64() == 0 {
-		return fmt.Errorf("last processed block is not set")
+		return nil
 	}
 	if es.lastProcessedBlock != lastProcessedBlock.Uint64() {
 		es.lastProcessedBlock = lastProcessedBlock.Uint64()
