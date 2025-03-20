@@ -299,6 +299,9 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	defer cancel()
 
 	start := time.Now()
+	defer func() {
+		ec.logger.Debug("(ec *ExecutionClient) healthy measurement", zap.Duration("took", time.Since(start)))
+	}()
 	sp, err := ec.SyncProgress(ctx)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)

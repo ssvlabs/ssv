@@ -283,6 +283,11 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 
+	start := time.Now()
+	defer func() {
+		mc.logger.Debug("(mc *MultiClient) Healthy measurement", zap.Duration("took", time.Since(start)))
+	}()
+
 	healthyClients := atomic.Bool{}
 	p := pool.New().WithErrors().WithContext(ctx)
 
