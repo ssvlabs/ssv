@@ -10,7 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// setupTxn creates a transaction for testing
+// setupTxn creates a transaction for testing.
 func setupTxn(t *testing.T) (*BadgerDB, *badgerTxn) {
 	t.Helper()
 	db := setupDB(t, basedb.Options{})
@@ -21,7 +21,7 @@ func setupTxn(t *testing.T) (*BadgerDB, *badgerTxn) {
 	return db, txn.(*badgerTxn)
 }
 
-// setupTxnWithData creates a transaction with some predefined data
+// setupTxnWithData creates a transaction with some predefined data.
 func setupTxnWithData(t *testing.T, prefix []byte, keyCount int) (*BadgerDB, *badgerTxn) {
 	t.Helper()
 	db, txn := setupTxn(t)
@@ -38,8 +38,10 @@ func setupTxnWithData(t *testing.T, prefix []byte, keyCount int) (*BadgerDB, *ba
 	return db, txn
 }
 
-// TestTxnCommit verifies that transaction changes are persisted when committed
+// TestTxnCommit verifies that transaction changes are persisted when committed.
 func TestTxnCommit(t *testing.T) {
+	t.Parallel()
+
 	db, txn := setupTxn(t)
 
 	prefix := []byte("commit-prefix")
@@ -67,8 +69,10 @@ func TestTxnCommit(t *testing.T) {
 	assert.Equal(t, value, obj.Value)
 }
 
-// TestTxnDiscard verifies that transaction changes are abandoned when discarded
+// TestTxnDiscard verifies that transaction changes are abandoned when discarded.
 func TestTxnDiscard(t *testing.T) {
+	t.Parallel()
+
 	db, txn := setupTxn(t)
 
 	prefix := []byte("discard-prefix")
@@ -93,8 +97,10 @@ func TestTxnDiscard(t *testing.T) {
 	require.False(t, found)
 }
 
-// TestTxnSet verifies transaction Set operations
+// TestTxnSet verifies transaction Set operations.
 func TestTxnSet(t *testing.T) {
+	t.Parallel()
+
 	_, txn := setupTxn(t)
 	prefix := []byte("set-prefix")
 
@@ -137,8 +143,10 @@ func TestTxnSet(t *testing.T) {
 	txn.Commit()
 }
 
-// TestTxnSetMany verifies bulk setting of values
+// TestTxnSetMany verifies bulk setting of values.
 func TestTxnSetMany(t *testing.T) {
+	t.Parallel()
+
 	db, txn := setupTxn(t)
 	prefix := []byte("setmany-prefix")
 
@@ -180,8 +188,8 @@ func TestTxnSetMany(t *testing.T) {
 		assert.Equal(t, expectedErr, err)
 	})
 
-	// Test error handling in Set during SetMany - the transaction should be discarded
-	// After this test, the transaction is discarded and can't be used anymore
+	// Test error handling in Set during SetMany - the transaction should be discarded.
+	// After this test, the transaction is discarded and can't be used anymore.
 	t.Run("error handling in Set during SetMany", func(t *testing.T) {
 		txnClosed := db.Begin().(*badgerTxn)
 		txnClosed.Discard()
@@ -207,8 +215,10 @@ func TestTxnSetMany(t *testing.T) {
 	txn.Commit()
 }
 
-// TestTxnGet verifies retrieval of values
+// TestTxnGet verifies retrieval of values.
 func TestTxnGet(t *testing.T) {
+	t.Parallel()
+
 	prefix := []byte("get-prefix")
 	_, txn := setupTxnWithData(t, prefix, 3)
 
@@ -236,8 +246,8 @@ func TestTxnGet(t *testing.T) {
 		assert.Empty(t, obj.Value)
 	})
 
-	// Test error handling when trying to use a transaction that has been discarded
-	// After this test, the transaction is discarded and can't be used anymore
+	// Test error handling when trying to use a transaction that has been discarded.
+	// After this test, the transaction is discarded and can't be used anymore.
 	t.Run("error handling in Get", func(t *testing.T) {
 		txn.Discard()
 
@@ -245,15 +255,17 @@ func TestTxnGet(t *testing.T) {
 		obj, found, err := txn.Get(prefix, key)
 
 		require.Error(t, err)
-		require.True(t, found) // should return true even if there was an error different from ErrKeyNotFound TODO: is this correct?
+		require.True(t, found) // should return true even if there was an error different from ErrKeyNotFound
 		assert.Empty(t, obj.Value)
 	})
 
 	txn.Commit()
 }
 
-// TestTxnGetMany verifies retrieval of multiple values
+// TestTxnGetMany verifies retrieval of multiple values.
 func TestTxnGetMany(t *testing.T) {
+	t.Parallel()
+
 	prefix := []byte("getmany-prefix")
 	_, txn := setupTxnWithData(t, prefix, 10)
 
@@ -333,8 +345,10 @@ func TestTxnGetMany(t *testing.T) {
 	txn.Commit()
 }
 
-// TestTxnGetAll verifies retrieval of all values with a prefix
+// TestTxnGetAll verifies retrieval of all values with a prefix.
 func TestTxnGetAll(t *testing.T) {
+	t.Parallel()
+
 	prefix := []byte("getall-prefix")
 	_, txn := setupTxnWithData(t, prefix, 20)
 
@@ -388,8 +402,10 @@ func TestTxnGetAll(t *testing.T) {
 	txn.Commit()
 }
 
-// TestTxnDelete verifies deletion of values
+// TestTxnDelete verifies deletion of values.
 func TestTxnDelete(t *testing.T) {
+	t.Parallel()
+
 	prefix := []byte("delete-prefix")
 	_, txn := setupTxnWithData(t, prefix, 5)
 
@@ -430,8 +446,10 @@ func TestTxnDelete(t *testing.T) {
 	txn.Commit()
 }
 
-// TestTxnConsistentView verifies that transactions provide a consistent view
+// TestTxnConsistentView verifies that transactions provide a consistent view.
 func TestTxnConsistentView(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("consistent-prefix")
 	key := []byte("consistent-key")
@@ -472,7 +490,7 @@ func TestTxnConsistentView(t *testing.T) {
 	newTxn.Discard()
 }
 
-// TestTxnIsolation verifies that changes in one transaction don't affect others
+// TestTxnIsolation verifies that changes in one transaction don't affect others.
 //  1. txn1 is created and sets the value of key to value1, then commits.
 //  2. txn2 and txn3 are both started, and they both see the value value1 for key because txn1 has already committed.
 //  3. txn2 sets the value of key to value2 but does not commit yet.
@@ -481,6 +499,8 @@ func TestTxnConsistentView(t *testing.T) {
 //  6. txn3 still sees the value value1 for key because it is operating in its own isolated view of the database state
 //     that was established when it was started.
 func TestTxnIsolation(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("isolation-prefix")
 	key := []byte("isolation-key")

@@ -9,8 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHexMarshalJSON tests hex marshaling to JSON
+// TestHexMarshalJSON tests hex marshaling to JSON.
 func TestHexMarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		hex      Hex
@@ -35,15 +37,20 @@ func TestHexMarshalJSON(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			data, err := tc.hex.MarshalJSON()
+
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, string(data))
 		})
 	}
 }
 
-// TestHexUnmarshalJSON tests hex unmarshaling from JSON
+// TestHexUnmarshalJSON tests hex unmarshaling from JSON.
 func TestHexUnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		json     string
@@ -84,6 +91,8 @@ func TestHexUnmarshalJSON(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var h Hex
 			err := h.UnmarshalJSON([]byte(tc.json))
 
@@ -97,8 +106,10 @@ func TestHexUnmarshalJSON(t *testing.T) {
 	}
 }
 
-// TestHexBind tests binding string to Hex
+// TestHexBind tests binding string to Hex.
 func TestHexBind(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		input    string
@@ -133,6 +144,8 @@ func TestHexBind(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var h Hex
 			err := h.Bind(tc.input)
 
@@ -146,8 +159,10 @@ func TestHexBind(t *testing.T) {
 	}
 }
 
-// TestHexSliceBind tests binding string to HexSlice
+// TestHexSliceBind tests binding string to HexSlice.
 func TestHexSliceBind(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		input    string
@@ -186,6 +201,8 @@ func TestHexSliceBind(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var hs HexSlice
 			err := hs.Bind(tc.input)
 
@@ -199,8 +216,10 @@ func TestHexSliceBind(t *testing.T) {
 	}
 }
 
-// TestUint64SliceBind tests binding string to Uint64Slice
+// TestUint64SliceBind tests binding string to Uint64Slice.
 func TestUint64SliceBind(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		input    string
@@ -241,6 +260,8 @@ func TestUint64SliceBind(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var us Uint64Slice
 			err := us.Bind(tc.input)
 
@@ -254,8 +275,10 @@ func TestUint64SliceBind(t *testing.T) {
 	}
 }
 
-// TestRoleBind tests binding string to Role
+// TestRoleBind tests binding string to Role.
 func TestRoleBind(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		input    string
@@ -284,6 +307,7 @@ func TestRoleBind(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var r Role
 			err := r.Bind(tc.input)
 
@@ -297,8 +321,10 @@ func TestRoleBind(t *testing.T) {
 	}
 }
 
-// TestRoleMarshalJSON tests marshaling Role to JSON
+// TestRoleMarshalJSON tests marshaling Role to JSON.
 func TestRoleMarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		role     Role
@@ -318,6 +344,7 @@ func TestRoleMarshalJSON(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			data, err := tc.role.MarshalJSON()
 
 			require.NoError(t, err)
@@ -326,8 +353,10 @@ func TestRoleMarshalJSON(t *testing.T) {
 	}
 }
 
-// TestRoleUnmarshalJSON tests unmarshaling Role from JSON
+// TestRoleUnmarshalJSON tests unmarshaling Role from JSON.
 func TestRoleUnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		json     string
@@ -362,6 +391,8 @@ func TestRoleUnmarshalJSON(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var r Role
 			err := r.UnmarshalJSON([]byte(tc.json))
 
@@ -375,8 +406,10 @@ func TestRoleUnmarshalJSON(t *testing.T) {
 	}
 }
 
-// TestRoleSliceBind tests binding string to RoleSlice
+// TestRoleSliceBind tests binding string to RoleSlice.
 func TestRoleSliceBind(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		input    string
@@ -415,6 +448,8 @@ func TestRoleSliceBind(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var rs RoleSlice
 			err := rs.Bind(tc.input)
 
@@ -428,8 +463,10 @@ func TestRoleSliceBind(t *testing.T) {
 	}
 }
 
-// TestStructWithHexAndRole tests marshaling and unmarshaling a struct with Hex and Role fields
+// TestStructWithHexAndRole tests marshaling and unmarshaling a struct with Hex and Role fields.
 func TestStructWithHexAndRole(t *testing.T) {
+	t.Parallel()
+
 	type TestStruct struct {
 		ID   Hex      `json:"id"`
 		Data Hex      `json:"data"`
@@ -448,10 +485,12 @@ func TestStructWithHexAndRole(t *testing.T) {
 	}
 
 	data, err := json.Marshal(original)
+
 	require.NoError(t, err)
 
 	var parsed TestStruct
 	err = json.Unmarshal(data, &parsed)
+
 	require.NoError(t, err)
 
 	assert.Equal(t, original.ID, parsed.ID)

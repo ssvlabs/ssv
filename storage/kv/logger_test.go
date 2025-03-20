@@ -12,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 )
 
-// setupLoggerTest creates a badgerLogger with an observer for testing
+// setupLoggerTest creates a badgerLogger with an observer for testing.
 func setupLoggerTest(t *testing.T) (*badgerLogger, *observer.ObservedLogs) {
 	t.Helper()
 	core, recorded := observer.New(zapcore.DebugLevel)
@@ -21,9 +21,13 @@ func setupLoggerTest(t *testing.T) (*badgerLogger, *observer.ObservedLogs) {
 	return bLogger, recorded
 }
 
-// Test_newLogger verifies that newLogger correctly creates a badgerLogger with proper naming
+// Test_newLogger verifies that newLogger correctly creates a badgerLogger with proper naming.
 func Test_newLogger(t *testing.T) {
+	t.Parallel()
+
 	t.Run("with regular logger", func(t *testing.T) {
+		t.Parallel()
+
 		logger := zap.NewExample()
 		bl := newLogger(logger)
 
@@ -33,6 +37,8 @@ func Test_newLogger(t *testing.T) {
 	})
 
 	t.Run("with nop logger", func(t *testing.T) {
+		t.Parallel()
+
 		logger := zap.NewNop()
 		bl := newLogger(logger)
 
@@ -41,9 +47,13 @@ func Test_newLogger(t *testing.T) {
 	})
 }
 
-// TestBadgerLogger_Errorf verifies the Errorf method properly logs messages at error level
+// TestBadgerLogger_Errorf verifies the Errorf method properly logs messages at error level.
 func TestBadgerLogger_Errorf(t *testing.T) {
+	t.Parallel()
+
 	t.Run("simple message", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Errorf("test error message")
@@ -55,6 +65,8 @@ func TestBadgerLogger_Errorf(t *testing.T) {
 	})
 
 	t.Run("with format args", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Errorf("test error with args: %s, %d", "string", 123)
@@ -66,6 +78,8 @@ func TestBadgerLogger_Errorf(t *testing.T) {
 	})
 
 	t.Run("with empty message", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Errorf("")
@@ -77,9 +91,13 @@ func TestBadgerLogger_Errorf(t *testing.T) {
 	})
 }
 
-// TestBadgerLogger_Warningf verifies the Warningf method properly logs messages at warning level
+// TestBadgerLogger_Warningf verifies the Warningf method properly logs messages at warning level.
 func TestBadgerLogger_Warningf(t *testing.T) {
+	t.Parallel()
+
 	t.Run("simple message", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Warningf("test warning message")
@@ -91,6 +109,8 @@ func TestBadgerLogger_Warningf(t *testing.T) {
 	})
 
 	t.Run("with format args", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Warningf("test warning with args: %s, %d", "string", 123)
@@ -102,9 +122,13 @@ func TestBadgerLogger_Warningf(t *testing.T) {
 	})
 }
 
-// TestBadgerLogger_Infof verifies the Infof method properly logs messages at info level
+// TestBadgerLogger_Infof verifies the Infof method properly logs messages at info level.
 func TestBadgerLogger_Infof(t *testing.T) {
+	t.Parallel()
+
 	t.Run("simple message", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Infof("test info message")
@@ -116,6 +140,8 @@ func TestBadgerLogger_Infof(t *testing.T) {
 	})
 
 	t.Run("with format args", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Infof("test info with args: %s, %d", "string", 123)
@@ -127,9 +153,13 @@ func TestBadgerLogger_Infof(t *testing.T) {
 	})
 }
 
-// TestBadgerLogger_Debugf verifies the Debugf method properly logs messages at debug level
+// TestBadgerLogger_Debugf verifies the Debugf method properly logs messages at debug level.
 func TestBadgerLogger_Debugf(t *testing.T) {
+	t.Parallel()
+
 	t.Run("simple message", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Debugf("test debug message")
@@ -141,6 +171,8 @@ func TestBadgerLogger_Debugf(t *testing.T) {
 	})
 
 	t.Run("with format args", func(t *testing.T) {
+		t.Parallel()
+
 		bl, logs := setupLoggerTest(t)
 
 		bl.Debugf("test debug with args: %s, %d", "string", 123)

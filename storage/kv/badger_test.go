@@ -20,7 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// setupDB creates a BadgerDB instance for testing with given options and handles cleanup
+// setupDB creates a BadgerDB instance for testing with given options and handles cleanup.
 func setupDB(t *testing.T, options basedb.Options) *BadgerDB {
 	t.Helper()
 	logger := logging.TestLogger(t)
@@ -38,7 +38,7 @@ func setupDB(t *testing.T, options basedb.Options) *BadgerDB {
 	return db
 }
 
-// setupTempDir creates a temporary directory for disk-based DB tests
+// setupTempDir creates a temporary directory for disk-based DB tests.
 func setupTempDir(t *testing.T, prefix string) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", prefix)
@@ -51,7 +51,7 @@ func setupTempDir(t *testing.T, prefix string) string {
 	return dir
 }
 
-// setupDataset populates a database with test data of specified size
+// setupDataset populates a database with test data of specified size.
 func setupDataset(t *testing.T, db *BadgerDB, prefix []byte, count int) {
 	t.Helper()
 	for i := 0; i < count; i++ {
@@ -62,8 +62,10 @@ func setupDataset(t *testing.T, db *BadgerDB, prefix []byte, count int) {
 	}
 }
 
-// TestBadger verifies the Badger method returns the correct underlying badger.DB instance
+// TestBadger verifies the Badger method returns the correct underlying badger.DB instance.
 func TestBadger(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 
 	badgerDB := db.Badger()
@@ -72,8 +74,10 @@ func TestBadger(t *testing.T) {
 	assert.Equal(t, badgerDB, db.Badger())
 }
 
-// TestBasicOperations verifies basic CRUD operations work correctly
+// TestBasicOperations verifies basic CRUD operations work correctly.
 func TestBasicOperations(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 
 	t.Run("set and get", func(t *testing.T) {
@@ -157,8 +161,10 @@ func TestBasicOperations(t *testing.T) {
 	})
 }
 
-// TestGetAll verifies the GetAll method works with different dataset sizes
+// TestGetAll verifies the GetAll method works with different dataset sizes.
 func TestGetAll(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name      string
 		itemCount int
@@ -228,8 +234,10 @@ func TestGetAll(t *testing.T) {
 	})
 }
 
-// TestGetMany verifies the GetMany method retrieves multiple keys correctly
+// TestGetMany verifies the GetMany method retrieves multiple keys correctly.
 func TestGetMany(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("prefix")
 
@@ -288,8 +296,10 @@ func TestGetMany(t *testing.T) {
 	})
 }
 
-// TestSetMany verifies the SetMany method stores multiple items in a single transaction
+// TestSetMany verifies the SetMany method stores multiple items in a single transaction.
 func TestSetMany(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("prefix")
 
@@ -327,9 +337,11 @@ func TestSetMany(t *testing.T) {
 	})
 }
 
-// TestSetMany_SetError verifies that errors from the WriteBatch.Set operation are correctly handled
-// We simulate an error by setting a key that's too large for BadgerDB (exceeds key size limit, usually ~64KB)
+// TestSetMany_SetError verifies that errors from the WriteBatch.Set operation are correctly handled,
+// We simulate an error by setting a key that's too large for BadgerDB (exceeds key size limit, usually ~64KB).
 func TestSetMany_SetError(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("error-set-prefix")
 
@@ -349,8 +361,10 @@ func TestSetMany_SetError(t *testing.T) {
 	assert.Contains(t, err.Error(), "exceeded")
 }
 
-// TestCountPrefix verifies the CountPrefix method correctly counts items with a given prefix
+// TestCountPrefix verifies the CountPrefix method correctly counts items with a given prefix.
 func TestCountPrefix(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("count-prefix")
 
@@ -373,8 +387,10 @@ func TestCountPrefix(t *testing.T) {
 	})
 }
 
-// TestUpdate verifies the Update method correctly modifies existing database entries
+// TestUpdate verifies the Update method correctly modifies existing database entries.
 func TestUpdate(t *testing.T) {
+	t.Parallel()
+
 	db := setupDB(t, basedb.Options{})
 	prefix := []byte("update-prefix")
 	key := []byte("update-key")
@@ -407,8 +423,10 @@ func TestUpdate(t *testing.T) {
 	})
 }
 
-// TestTransactions verifies transaction functionality for atomicity and isolation
+// TestTransactions verifies transaction functionality for atomicity and isolation.
 func TestTransactions(t *testing.T) {
+	t.Parallel()
+
 	t.Run("begin and Commit", func(t *testing.T) {
 		db := setupDB(t, basedb.Options{})
 		prefix := []byte("txn-prefix")
@@ -520,8 +538,10 @@ func TestTransactions(t *testing.T) {
 	})
 }
 
-// TestDBCreation verifies different DB creation options work correctly
+// TestDBCreation verifies different DB creation options work correctly.
 func TestDBCreation(t *testing.T) {
+	t.Parallel()
+
 	t.Run("create disk-based DB", func(t *testing.T) {
 		logger := logging.TestLogger(t)
 		dir := setupTempDir(t, "badger-test")
@@ -622,8 +642,10 @@ func TestCreationDB_OpenError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to open badger")
 }
 
-// TestHelperFunctions verifies the Using and UsingReader utility methods work correctly
+// TestHelperFunctions verifies the Using and UsingReader utility methods work correctly.
 func TestHelperFunctions(t *testing.T) {
+	t.Parallel()
+
 	db1 := setupDB(t, basedb.Options{})
 	db2 := setupDB(t, basedb.Options{})
 
@@ -648,7 +670,7 @@ func TestHelperFunctions(t *testing.T) {
 	})
 }
 
-// encodeUint64 converts uint64 to byte slice using little endian encoding
+// encodeUint64 converts uint64 to byte slice using little endian encoding.
 func encodeUint64(n uint64) []byte {
 	return binary.LittleEndian.AppendUint64(nil, n)
 }

@@ -10,8 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestErrorResponse_Render verifies the Render method sets the correct status code
+// TestErrorResponse_Render verifies the Render method sets the correct status code.
 func TestErrorResponse_Render(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		err      *ErrorResponse
@@ -24,6 +26,8 @@ func TestErrorResponse_Render(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest("GET", "/", nil)
 
@@ -35,8 +39,10 @@ func TestErrorResponse_Render(t *testing.T) {
 	}
 }
 
-// TestErrorResponse_Error verifies the Error method returns the underlying error message
+// TestErrorResponse_Error verifies the Error method returns the underlying error message.
 func TestErrorResponse_Error(t *testing.T) {
+	t.Parallel()
+
 	errMsg := "test error message"
 	baseErr := errors.New(errMsg)
 	resp := ErrorResponse{
@@ -49,8 +55,10 @@ func TestErrorResponse_Error(t *testing.T) {
 	assert.Equal(t, errMsg, resp.Error())
 }
 
-// TestBadRequestError verifies BadRequestError creates the correct ErrorResponse
+// TestBadRequestError verifies BadRequestError creates the correct ErrorResponse.
 func TestBadRequestError(t *testing.T) {
+	t.Parallel()
+
 	errMsg := "invalid input"
 	baseErr := errors.New(errMsg)
 	resp := BadRequestError(baseErr)
@@ -61,8 +69,10 @@ func TestBadRequestError(t *testing.T) {
 	assert.Equal(t, errMsg, resp.Message)
 }
 
-// TestError verifies Error creates the correct ErrorResponse
+// TestError verifies Error creates the correct ErrorResponse.
 func TestError(t *testing.T) {
+	t.Parallel()
+
 	errMsg := "server error"
 	baseErr := errors.New(errMsg)
 	resp := Error(baseErr)
@@ -73,8 +83,10 @@ func TestError(t *testing.T) {
 	assert.Equal(t, errMsg, resp.Message)
 }
 
-// TestErrNotFound verifies ErrNotFound is properly initialized
+// TestErrNotFound verifies ErrNotFound is properly initialized.
 func TestErrNotFound(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, 404, ErrNotFound.Code)
 	assert.Equal(t, "Resource not found.", ErrNotFound.Status)
 	assert.Empty(t, ErrNotFound.Message)

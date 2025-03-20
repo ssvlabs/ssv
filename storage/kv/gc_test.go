@@ -18,6 +18,8 @@ import (
 
 // TestQuickGC_EmptyDB verifies that QuickGC succeeds on an empty database.
 func TestQuickGC_EmptyDB(t *testing.T) {
+	t.Parallel()
+
 	dir := setupTempDir(t, "badger-quickgc-empty")
 	logger := logging.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
@@ -31,6 +33,8 @@ func TestQuickGC_EmptyDB(t *testing.T) {
 
 // TestQuickGC_WithGarbage verifies that QuickGC reclaims garbage after data deletion.
 func TestQuickGC_WithGarbage(t *testing.T) {
+	t.Parallel()
+
 	dir := setupTempDir(t, "badger-quickgc-garbage")
 	logger := logging.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
@@ -54,6 +58,8 @@ func TestQuickGC_WithGarbage(t *testing.T) {
 
 // TestQuickGC_ErrorWhenClosed verifies that QuickGC returns an error when the database is closed.
 func TestQuickGC_ErrorWhenClosed(t *testing.T) {
+	t.Parallel()
+
 	dir := setupTempDir(t, "badger-quickgc-error")
 	logger := logging.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
@@ -65,6 +71,8 @@ func TestQuickGC_ErrorWhenClosed(t *testing.T) {
 
 // TestFullGC_EmptyDB verifies that FullGC succeeds on an empty database.
 func TestFullGC_EmptyDB(t *testing.T) {
+	t.Parallel()
+
 	dir := setupTempDir(t, "badger-fullgc-empty")
 	logger := logging.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
@@ -78,6 +86,8 @@ func TestFullGC_EmptyDB(t *testing.T) {
 
 // TestFullGC_WithGarbage verifies that FullGC reclaims garbage after data deletion.
 func TestFullGC_WithGarbage(t *testing.T) {
+	t.Parallel()
+
 	dir := setupTempDir(t, "badger-fullgc-garbage")
 	logger := logging.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
@@ -101,6 +111,8 @@ func TestFullGC_WithGarbage(t *testing.T) {
 
 // TestFullGC_ErrorWhenClosed verifies that FullGC returns a wrapped error when the database is closed.
 func TestFullGC_ErrorWhenClosed(t *testing.T) {
+	t.Parallel()
+
 	dir := setupTempDir(t, "badger-fullgc-error")
 	logger := logging.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
@@ -116,6 +128,8 @@ func TestFullGC_ErrorWhenClosed(t *testing.T) {
 
 // TestFullGC_ContextCancellation verifies that FullGC exits promptly when the context is cancelled.
 func TestFullGC_ContextCancellation(t *testing.T) {
+	t.Parallel()
+
 	dir := setupTempDir(t, "badger-fullgc-ctx")
 	logger := logging.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
@@ -132,6 +146,8 @@ func TestFullGC_ContextCancellation(t *testing.T) {
 
 // TestGCLock_MutualExclusion verifies that GC operations are mutually exclusive.
 func TestGCLock_MutualExclusion(t *testing.T) {
+	t.Parallel()
+
 	dir := setupTempDir(t, "badger-gc-lock")
 	logger := logging.TestLogger(t)
 	db, err := New(logger, basedb.Options{Path: dir})
@@ -178,6 +194,8 @@ func TestGCLock_MutualExclusion(t *testing.T) {
 
 // TestPeriodicGC verifies that periodic GC cycles are executed and logged correctly.
 func TestPeriodicGC(t *testing.T) {
+	t.Parallel()
+
 	core, logs := observer.New(zapcore.DebugLevel)
 	logger := zap.New(core)
 	dir := setupTempDir(t, "badger-periodic-gc")
@@ -232,6 +250,8 @@ func TestPeriodicGC(t *testing.T) {
 
 // TestPeriodicGC_Cancellation verifies that the periodic GC goroutine exits promptly when the context is cancelled.
 func TestPeriodicGC_Cancellation(t *testing.T) {
+	t.Parallel()
+	
 	logger := logging.TestLogger(t)
 	dir := setupTempDir(t, "badger-periodic-gc-cancel")
 	ctx, cancel := context.WithCancel(context.Background())
