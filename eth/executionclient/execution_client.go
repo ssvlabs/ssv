@@ -114,6 +114,10 @@ func (ec *ExecutionClient) SyncProgress(ctx context.Context) (*ethereum.SyncProg
 }
 
 func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
+	start := time.Now()
+	defer func() {
+		ec.logger.Debug("SyncProgress measurement", zap.Duration("took", time.Since(start)))
+	}()
 	return ec.client.SyncProgress(ctx)
 }
 
