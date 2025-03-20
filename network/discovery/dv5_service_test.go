@@ -2,12 +2,13 @@ package discovery
 
 import (
 	"context"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/ssvlabs/ssv/utils/ttl"
 	"net"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/utils/ttl"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
@@ -129,7 +130,7 @@ func TestCheckPeer(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name+":run", func(t *testing.T) {
-			err := dvs.checkPeer(context.TODO(), logger, PeerEvent{
+			err := dvs.checkPeer(context.TODO(), PeerEvent{
 				Node: test.localNode.Node(),
 			})
 			if test.expectedError != nil {

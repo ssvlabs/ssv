@@ -20,6 +20,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -66,7 +68,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
-	"go.uber.org/zap"
 )
 
 type KeyStore struct {
@@ -707,8 +708,8 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 }
 
 func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
-	istore := ssv_identity.NewIdentityStore(db)
-	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
+	istore := ssv_identity.NewIdentityStore(logger, db)
+	netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}

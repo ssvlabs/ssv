@@ -41,7 +41,7 @@ func TestHandleQuery(t *testing.T) {
 	wg.Wait()
 
 	clientCtx, cancelClientCtx := context.WithCancel(ctx)
-	client := NewWSClient(clientCtx)
+	client := NewWSClient(clientCtx, logger)
 	wg.Add(1)
 	go func() {
 		// sleep so client setup will be finished
@@ -62,7 +62,7 @@ func TestHandleQuery(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}()
-		require.NoError(t, client.StartQuery(logger, addr, "/query"))
+		require.NoError(t, client.StartQuery(addr, "/query"))
 	}()
 
 	wg.Wait()
@@ -84,11 +84,11 @@ func TestHandleStream(t *testing.T) {
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
-	client := NewWSClient(testCtx)
+	client := NewWSClient(testCtx, logger)
 	go func() {
 		// sleep so setup will be finished
 		time.Sleep(100 * time.Millisecond)
-		require.NoError(t, client.StartStream(logger, addr, "/stream"))
+		require.NoError(t, client.StartStream(addr, "/stream"))
 	}()
 
 	go func() {

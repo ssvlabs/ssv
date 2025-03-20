@@ -237,47 +237,47 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	}()
 
 	// Valid peer
-	err := dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NewTestingNode(t)))
+	err := dvs.checkPeer(context.TODO(), ToPeerEvent(NewTestingNode(t)))
 	require.NoError(t, err)
 
 	// No domain
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithoutDomain(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutDomain(t)))
 	require.ErrorContains(t, err, "could not read domain type: not found")
 
 	// No next domain. No error since it's not enforced
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithoutNextDomain(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutNextDomain(t)))
 	require.NoError(t, err)
 
 	// Matching main domain
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
 	require.NoError(t, err)
 
 	// Matching next domain
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
 	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
 
 	// Mismatching domains
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
 	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
 
 	// No subnets
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithoutSubnets(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutSubnets(t)))
 	require.ErrorContains(t, err, "could not read subnets: not found")
 
 	// Zero subnets
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithZeroSubnets(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithZeroSubnets(t)))
 	require.ErrorContains(t, err, "zero subnets")
 
 	// Valid peer but reached limit
 	dvs.conns.(*MockConnection).SetAtLimit(true)
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NewTestingNode(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NewTestingNode(t)))
 	require.ErrorContains(t, err, "reached limit")
 	dvs.conns.(*MockConnection).SetAtLimit(false)
 
 	// Valid peer but no common subnet
 	subnets := make([]byte, len(commons.ZeroSubnets))
 	subnets[10] = 1
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
 }
 
