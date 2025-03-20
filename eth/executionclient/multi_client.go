@@ -320,6 +320,9 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		mc.lastHealthy.Store(time.Now().Unix())
 		return nil
 	}
+
+	mc.logger.Warn("no healthy clients", zap.Duration("took", time.Since(start)), zap.Error(err), zap.Stack("stack"))
+
 	return fmt.Errorf("no healthy clients: %w", err)
 }
 
