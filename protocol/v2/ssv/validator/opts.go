@@ -10,6 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -25,7 +26,7 @@ type Options struct {
 	Storage             *storage.ParticipantStores
 	SSVShare            *ssvtypes.SSVShare
 	Operator            *spectypes.CommitteeMember
-	Signer              spectypes.BeaconSigner
+	Signer              signing.BeaconSigner
 	OperatorSigner      ssvtypes.OperatorSigner
 	DoppelgangerHandler runner.DoppelgangerProvider
 	DutyRunners         runner.ValidatorDutyRunners

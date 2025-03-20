@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+
 	"github.com/pkg/errors"
 )
 
@@ -48,8 +49,8 @@ func GenerateKeys() ([]byte, []byte, error) {
 	return pkPem, skPem, nil
 }
 
-// DecodeKey with secret key (rsa) and hash (base64), return the decrypted key
-func DecodeKey(sk *rsa.PrivateKey, hash []byte) ([]byte, error) {
+// DecryptKey with secret key (rsa) and hash (base64), return the decrypted key
+func DecryptKey(sk *rsa.PrivateKey, hash []byte) ([]byte, error) {
 	decryptedKey, err := rsa.DecryptPKCS1v15(rand.Reader, sk, hash)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decrypt key")

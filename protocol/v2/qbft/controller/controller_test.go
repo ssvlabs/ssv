@@ -13,6 +13,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -40,7 +41,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		BeaconSigner: spectestingutils.NewTestingKeyManager(),
+		BeaconSigner: signing.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 		Network:      spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:        roundtimer.NewTestingTimer(),
 		CutOffRound:  spectestingutils.TestingCutOffRound,

@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,6 +15,7 @@ import (
 )
 
 func (b *BaseRunner) signBeaconObject(
+	ctx context.Context,
 	runner Runner,
 	duty *spectypes.ValidatorDuty,
 	obj ssz.HashRoot,
@@ -28,7 +30,14 @@ func (b *BaseRunner) signBeaconObject(
 	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
 		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
 	}
-	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey, domainType)
+	sig, r, err := runner.GetSigner().SignBeaconObject(
+		ctx,
+		obj,
+		domain,
+		spec.BLSPubKey(runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey),
+		slot,
+		domainType,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}

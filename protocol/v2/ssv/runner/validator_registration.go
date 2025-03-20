@@ -5,8 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -16,8 +17,10 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -26,7 +29,7 @@ type ValidatorRegistrationRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         spectypes.BeaconSigner
+	signer         signing.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
@@ -39,7 +42,7 @@ func NewValidatorRegistrationRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer signing.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	gasLimit uint64,
 ) (Runner, error) {
@@ -161,8 +164,14 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	}
 
 	// sign partial randao
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), vr, duty.DutySlot(),
-		spectypes.DomainApplicationBuilder)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		vr,
+		duty.DutySlot(),
+		spectypes.DomainApplicationBuilder,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign validator registration")
 	}
@@ -252,7 +261,7 @@ func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheck
 	return r.valCheck
 }
 
-func (r *ValidatorRegistrationRunner) GetSigner() spectypes.BeaconSigner {
+func (r *ValidatorRegistrationRunner) GetSigner() signing.BeaconSigner {
 	return r.signer
 }
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

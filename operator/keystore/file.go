@@ -1,10 +1,22 @@
 package keystore
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+	"os"
 	"strings"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/google/uuid"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+
+	"github.com/ssvlabs/ssv/operator/keys"
+)
+
+const (
+	keystoreDerivationPath = "m/12381/3600/0/0/0"
 )
 
 // DecryptKeystore decrypts a keystore JSON file using the provided password.
@@ -48,4 +60,48 @@ func EncryptKeystore(privkey []byte, pubKeyBase64, password string) ([]byte, err
 	}
 
 	return encryptedData, nil
+}
+
+func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.OperatorPrivateKey, error) {
+	// nolint: gosec
+	encryptedJSON, err := os.ReadFile(encryptedPrivateKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not read PEM file: %w", err)
+	}
+
+	// nolint: gosec
+	keyStorePassword, err := os.ReadFile(passwordFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not read password file: %w", err)
+	}
+
+	if len(bytes.TrimSpace(keyStorePassword)) == 0 {
+		return nil, fmt.Errorf("password file is empty")
+	}
+
+	decryptedKeystore, err := DecryptKeystore(encryptedJSON, string(keyStorePassword))
+	if err != nil {
+		return nil, fmt.Errorf("could not decrypt operator private key keystore: %w", err)
+	}
+	operatorPrivKey, err := keys.PrivateKeyFromBytes(decryptedKeystore)
+	if err != nil {
+		return nil, fmt.Errorf("could not extract operator private key from file: %w", err)
+	}
+
+	return operatorPrivKey, nil
+}
+
+func GenerateShareKeystore(sharePrivateKey *bls.SecretKey, sharePublicKey phase0.BLSPubKey, passphrase string) (map[string]any, error) {
+	keystoreCrypto, err := keystorev4.New().Encrypt(sharePrivateKey.Serialize(), passphrase)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt private key: %w", err)
+	}
+
+	return map[string]any{
+		"crypto":  keystoreCrypto,
+		"pubkey":  sharePublicKey.String(),
+		"version": 4,
+		"uuid":    uuid.New().String(),
+		"path":    keystoreDerivationPath,
+	}, nil
 }
