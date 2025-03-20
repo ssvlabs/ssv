@@ -54,8 +54,11 @@ func (p *Prober) Run(ctx context.Context) error {
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
+	p.logger.Debug("starting probing loop", zap.Any("ctx err", ctx.Err()))
 	for {
+		p.logger.Debug("about to probe", zap.Any("ctx err", ctx.Err()))
 		p.probe(ctx)
+		p.logger.Debug("finished  probe", zap.Any("ctx err", ctx.Err()))
 
 		select {
 		case <-ctx.Done():
