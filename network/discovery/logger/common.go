@@ -1,11 +1,10 @@
 package compatible_logger
 
 import (
+	"log/slog"
 	"reflect"
 	"runtime"
 	"slices"
-
-	"golang.org/x/exp/slog"
 )
 
 func AppendRecordAttrsToAttrs(attrs []slog.Attr, groups []string, record *slog.Record) []slog.Attr {

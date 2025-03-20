@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -13,10 +15,9 @@ import (
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"golang.org/x/exp/maps"
 )
 
-//go:generate sszgen -path ./shares.go --objs Share
+//go:generate go tool -modfile=../../tool.mod sszgen -path ./shares.go --objs Share
 
 // sharesPrefix specifies the prefix used for storing Share(s) in DB.
 // Note, previously gob-encoded Share(s) were stored with `shares/` prefix, this has been
@@ -131,7 +132,7 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
 	)
-	if err := storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...); err != nil {
+	if err := storage.validatorStore.handleSharesAdded(slices.Collect(maps.Values(storage.shares))...); err != nil {
 		return nil, nil, err
 	}
 	return storage, storage.validatorStore, nil
@@ -173,7 +174,7 @@ func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.
 	defer s.memoryMtx.RUnlock()
 
 	if len(filters) == 0 {
-		return maps.Values(s.shares)
+		return slices.Collect(maps.Values(s.shares))
 	}
 
 	var shares []*types.SSVShare

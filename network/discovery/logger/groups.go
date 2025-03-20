@@ -1,9 +1,8 @@
 package compatible_logger
 
 import (
+	"log/slog"
 	"slices"
-
-	"golang.org/x/exp/slog"
 )
 
 func AppendAttrsToGroup(groups []string, actualAttrs []slog.Attr, newAttrs ...slog.Attr) []slog.Attr {

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -28,7 +29,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/threshold"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 )
 
 func init() {
@@ -337,13 +337,13 @@ func TestShareStorage_MultipleCommittees(t *testing.T) {
 			for _, share := range s {
 				shares[share.ValidatorIndex] = share
 			}
-			requireValidatorStoreIntegrity(t, storage.ValidatorStore, maps.Values(shares))
+			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
 		}
 		deleteAndVerify := func(share *ssvtypes.SSVShare) {
 			require.NoError(t, storage.Shares.Delete(nil, share.ValidatorPubKey[:]))
 			reopen(t)
 			delete(shares, share.ValidatorIndex)
-			requireValidatorStoreIntegrity(t, storage.ValidatorStore, maps.Values(shares))
+			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
 		}
 
 		share1 := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
