@@ -116,7 +116,9 @@ func (ec *ExecutionClient) SyncProgress(ctx context.Context) (*ethereum.SyncProg
 func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProgress, error) {
 	start := time.Now()
 	defer func() {
-		ec.logger.Debug("SyncProgress measurement", zap.Duration("took", time.Since(start)))
+		ec.logger.Debug("SyncProgress measurement",
+			zap.Duration("took", time.Since(start)),
+			zap.Any("ctx err", ctx.Err()))
 	}()
 	return ec.client.SyncProgress(ctx)
 }
@@ -300,7 +302,9 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 
 	start := time.Now()
 	defer func() {
-		ec.logger.Debug("(ec *ExecutionClient) healthy measurement", zap.Duration("took", time.Since(start)))
+		ec.logger.Debug("(ec *ExecutionClient) healthy measurement",
+			zap.Duration("took", time.Since(start)),
+			zap.Any("ctx err", ctx.Err()))
 	}()
 	sp, err := ec.SyncProgress(ctx)
 	if err != nil {

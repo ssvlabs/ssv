@@ -285,7 +285,9 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 
 	start := time.Now()
 	defer func() {
-		mc.logger.Debug("(mc *MultiClient) Healthy measurement", zap.Duration("took", time.Since(start)))
+		mc.logger.Debug("(mc *MultiClient) Healthy measurement",
+			zap.Duration("took", time.Since(start)),
+			zap.Any("ctx err", ctx.Err()))
 	}()
 
 	healthyClients := atomic.Bool{}
@@ -321,7 +323,11 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 
-	mc.logger.Warn("no healthy clients", zap.Duration("took", time.Since(start)), zap.Error(err), zap.Stack("stack"))
+	mc.logger.Warn("no healthy clients",
+		zap.Duration("took", time.Since(start)),
+		zap.Error(err),
+		zap.Any("ctx err", ctx.Err()),
+		zap.Stack("stack"))
 
 	return fmt.Errorf("no healthy clients: %w", err)
 }

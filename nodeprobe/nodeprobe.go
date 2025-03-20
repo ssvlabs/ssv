@@ -71,6 +71,13 @@ func (p *Prober) probe(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
 
+	start := time.Now()
+	defer func() {
+		p.logger.Debug("probe measurement",
+			zap.Duration("took", time.Since(start)),
+			zap.Any("ctx err", ctx.Err()))
+	}()
+
 	var healthy atomic.Bool
 	healthy.Store(true)
 	var wg sync.WaitGroup
