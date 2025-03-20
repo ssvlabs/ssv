@@ -85,7 +85,7 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
-	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
+	vs := h.validatorProvider.SelfValidators()
 	validatorCommitteeMap := make(validatorCommitteeDutyMap)
 	committeeMap := make(committeeDutiesMap)
 	for _, v := range vs {
