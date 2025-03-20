@@ -40,7 +40,7 @@ var StartBootNodeCmd = &cobra.Command{
 			cfg.LogLevelFormat,
 			cfg.LogFormat,
 			&logging.LogFileOptions{
-				FileName:   cfg.LogFilePath,
+				FilePath:   cfg.LogFilePath,
 				MaxSize:    cfg.LogFileSize,
 				MaxBackups: cfg.LogFileBackups,
 			},

@@ -11,6 +11,7 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
@@ -19,8 +20,6 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/async"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
@@ -30,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/utils/commons"
+	"go.uber.org/zap"
 )
 
 const (
@@ -42,11 +42,14 @@ const (
 	// backoffExponentBase is the base of the backoff exponent
 	backoffExponentBase = 2.0
 	// backoffConnectorCacheSize is the cache size of the backoff connector
-	backoffConnectorCacheSize = 1024
+	backoffConnectorCacheSize = 2048
 	// connectTimeout is the timeout used for connections
 	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
-	connectorQueueSize = 256
+	connectorQueueSize = 2048
+	// inboundLimitRatio is the ratio of inbound connections to the total connections
+	// we allow (both inbound and outbound).
+	inboundLimitRatio = float64(0.5)
 )
 
 // Setup is used to setup the network
@@ -88,18 +91,18 @@ func (n *p2pNetwork) initCfg() error {
 		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
 	}
 	if len(n.cfg.Subnets) > 0 {
-		s := make(records.Subnets, 0)
-		subnets, err := s.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
+		subnets, err := p2pcommons.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
 		if err != nil {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
 		n.fixedSubnets = subnets
 	} else {
-		n.fixedSubnets = make(records.Subnets, p2pcommons.Subnets())
+		n.fixedSubnets = make(p2pcommons.Subnets, p2pcommons.SubnetsCount)
 	}
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer
 	}
+
 	if n.cfg.TopicMaxPeers <= 0 {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
 	}
@@ -109,7 +112,7 @@ func (n *p2pNetwork) initCfg() error {
 
 // IsBadPeer returns whether a peer is bad
 func (n *p2pNetwork) IsBadPeer(peerID peer.ID) bool {
-	if n.idx == nil {
+	if !n.isIdxSet.Load() {
 		return false
 	}
 	return n.idx.IsBad(peerID)
@@ -128,7 +131,14 @@ func (n *p2pNetwork) SetupHost() error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(n.logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit, n.IsBadPeer)
+	n.connGater = connections.NewConnectionGater(
+		n.logger,
+		n.cfg.DisableIPRateLimit,
+		n.connectionsAtLimit,
+		n.IsBadPeer,
+		n.atInboundLimit,
+		n.trimmedRecently,
+	)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -152,14 +162,15 @@ func (n *p2pNetwork) SetupServices() error {
 	if err := n.setupStreamCtrl(); err != nil {
 		return errors.Wrap(err, "could not setup stream controller")
 	}
+	_, err := n.setupPubsub()
+	if err != nil {
+		return errors.Wrap(err, "could not setup topic controller")
+	}
 	if err := n.setupPeerServices(); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
 	if err := n.setupDiscovery(); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
-	}
-	if err := n.setupPubsub(); err != nil {
-		return errors.Wrap(err, "could not setup topic controller")
 	}
 
 	return nil
@@ -181,13 +192,15 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
-		Subnets:     records.Subnets(n.fixedSubnets).String(),
+		Subnets:     p2pcommons.Subnets(n.fixedSubnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute, peers.NewGossipScoreIndex())
+	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.SubnetsCount, 10*time.Minute, peers.NewGossipScoreIndex())
+	n.isIdxSet.Store(true)
+
 	n.logger.Debug("peers index is ready")
 
 	var ids identify.IDService
@@ -229,18 +242,18 @@ func (n *p2pNetwork) setupPeerServices() error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, n.ActiveSubnets, n.idx, n.idx, n.idx, n.discoveredPeersPool)
 	n.host.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 
 	return nil
 }
 
-func (n *p2pNetwork) ActiveSubnets() records.Subnets {
+func (n *p2pNetwork) ActiveSubnets() p2pcommons.Subnets {
 	return n.activeSubnets
 }
 
-func (n *p2pNetwork) FixedSubnets() records.Subnets {
+func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {
 	return n.fixedSubnets
 }
 
@@ -273,13 +286,15 @@ func (n *p2pNetwork) setupDiscovery() error {
 		logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
-		Host:          n.host,
-		DiscV5Opts:    discV5Opts,
-		ConnIndex:     n.idx,
-		SubnetsIdx:    n.idx,
-		HostAddress:   n.cfg.HostAddress,
-		HostDNS:       n.cfg.HostDNS,
-		NetworkConfig: n.cfg.Network,
+		Host:                n.host,
+		DiscV5Opts:          discV5Opts,
+		ConnIndex:           n.idx,
+		SubnetsIdx:          n.idx,
+		HostAddress:         n.cfg.HostAddress,
+		HostDNS:             n.cfg.HostDNS,
+		NetworkConfig:       n.cfg.Network,
+		DiscoveredPeersPool: n.discoveredPeersPool,
+		TrimmedRecently:     n.trimmedRecently,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
@@ -292,7 +307,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 	return nil
 }
 
-func (n *p2pNetwork) setupPubsub() error {
+func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	cfg := &topics.PubSubConfig{
 		NetworkConfig: n.cfg.Network,
 		Host:          n.host,
@@ -327,17 +342,56 @@ func (n *p2pNetwork) setupPubsub() error {
 
 	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), n.idx)
 	if err != nil {
-		return errors.Wrap(err, "could not setup pubsub")
+		return nil, errors.Wrap(err, "could not setup pubsub")
 	}
 
 	n.topicsCtrl = tc
 	n.logger.Debug("topics controller is ready")
-	return nil
+	return tc, nil
 }
 
 func (n *p2pNetwork) connectionsAtLimit() bool {
-	if n.idx == nil {
+	if !n.isIdxSet.Load() {
 		return false
 	}
 	return n.idx.AtLimit(network.DirOutbound)
+}
+
+func (n *p2pNetwork) atInboundLimit() bool {
+	in, _ := n.connectionStats()
+	inboundLimit := n.inboundLimit()
+	if in >= inboundLimit {
+		n.logger.Debug(
+			"Preventing inbound connections due to reaching inbound limit",
+			zap.Int("inbound", in),
+			zap.Int("inbound_limit", inboundLimit),
+			zap.Int("max_peers", n.cfg.MaxPeers),
+		)
+		return true
+	}
+
+	return false
+}
+
+func (n *p2pNetwork) inboundLimit() int {
+	return int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
+}
+
+func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
+	return connectionStats(n.host)
+}
+
+func connectionStats(host host.Host) (inbound, outbound int) {
+	for _, cn := range host.Network().Conns() {
+		dir := cn.Stat().Direction
+		if dir == network.DirUnknown {
+			continue
+		}
+		if dir == network.DirOutbound {
+			outbound++
+		} else {
+			inbound++
+		}
+	}
+	return inbound, outbound
 }

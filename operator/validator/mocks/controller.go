@@ -17,7 +17,7 @@ import (
 	common "github.com/ethereum/go-ethereum/common"
 	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
-	records "github.com/ssvlabs/ssv/network/records"
+	commons "github.com/ssvlabs/ssv/network/commons"
 	duties "github.com/ssvlabs/ssv/operator/duties"
 	validator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -402,10 +402,10 @@ func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
 }
 
 // ActiveSubnets mocks base method.
-func (m *MockP2PNetwork) ActiveSubnets() records.Subnets {
+func (m *MockP2PNetwork) ActiveSubnets() commons.Subnets {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ActiveSubnets")
-	ret0, _ := ret[0].(records.Subnets)
+	ret0, _ := ret[0].(commons.Subnets)
 	return ret0
 }
 
@@ -430,10 +430,10 @@ func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 }
 
 // FixedSubnets mocks base method.
-func (m *MockP2PNetwork) FixedSubnets() records.Subnets {
+func (m *MockP2PNetwork) FixedSubnets() commons.Subnets {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FixedSubnets")
-	ret0, _ := ret[0].(records.Subnets)
+	ret0, _ := ret[0].(commons.Subnets)
 	return ret0
 }
 

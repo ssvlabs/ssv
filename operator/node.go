@@ -27,8 +27,8 @@ import (
 // Options contains options to create the node
 type Options struct {
 	// NetworkName is the network name of this node
-	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
-	CustomDomainType    string `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override the SSV domain type. This is used to isolate the node from the rest of the network. Do not set unless you know what you are doing. This would be incremented by 1 for Alan, for example: 0x01020304 becomes 0x01020305 post-fork."`
+	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.)"`
+	CustomDomainType    string `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"`
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     executionclient.Provider
@@ -140,6 +140,12 @@ func (n *Node) Start() error {
 	go n.feeRecipientCtrl.Start()
 	go n.validatorsCtrl.HandleMetadataUpdates(n.context)
 	go n.validatorsCtrl.ReportValidatorStatuses(n.context)
+
+	go func() {
+		if err := n.validatorOptions.DoppelgangerHandler.Start(n.context); err != nil {
+			n.logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
+		}
+	}()
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))

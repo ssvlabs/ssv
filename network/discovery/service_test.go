@@ -8,11 +8,11 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig networkconfig.NetworkConfig) {
@@ -143,9 +143,8 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	defer cancel()
 
 	opts := testingDiscoveryOptions(t, testNetConfig)
-	service, err := newDiscV5Service(ctx, testLogger, opts)
+	dvs, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
-	dvs := service.(*DiscV5Service)
 
 	// Replace listener
 	localNode := dvs.Self()
@@ -171,10 +170,8 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 
 	opts := testingDiscoveryOptions(t, testNetConfig)
 
-	service, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
-
-	dvs := service.(*DiscV5Service)
 
 	// Replace listener
 	err = dvs.conn.Close()
@@ -278,7 +275,7 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	dvs.conns.(*MockConnection).SetAtLimit(false)
 
 	// Valid peer but no common subnet
-	subnets := make([]byte, len(records.ZeroSubnets))
+	subnets := make([]byte, len(commons.ZeroSubnets))
 	subnets[10] = 1
 	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")

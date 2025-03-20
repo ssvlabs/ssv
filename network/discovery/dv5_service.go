@@ -7,6 +7,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/ssvlabs/ssv/utils/ttl"
+
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -22,8 +24,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-var (
-	defaultDiscoveryInterval = time.Millisecond * 1
+const (
+	defaultDiscoveryInterval = time.Millisecond * 2
 	publishENRTimeout        = time.Minute
 )
 
@@ -61,6 +63,14 @@ type DiscV5Service struct {
 	conns      peers.ConnectionIndex
 	subnetsIdx peers.SubnetsIndex
 
+	// discoveredPeersPool keeps track of recently discovered peers so we can rank them and choose
+	// the best candidates to connect to.
+	discoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
+	// trimmedRecently keeps track of recently trimmed peers so we don't try to connect to these
+	// shortly after we've trimmed these (we still might consider connecting to these once they
+	// are removed from this map after some time passes)
+	trimmedRecently *ttl.Map[peer.ID, struct{}]
+
 	conn       *net.UDPConn
 	sharedConn *SharedUDPConn
 
@@ -70,21 +80,28 @@ type DiscV5Service struct {
 	publishLock chan struct{}
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
+func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (*DiscV5Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		logger:        logger.Named(logging.NameDiscoveryService),
-		ctx:           ctx,
-		cancel:        cancel,
-		conns:         discOpts.ConnIndex,
-		subnetsIdx:    discOpts.SubnetsIdx,
-		networkConfig: discOpts.NetworkConfig,
-		subnets:       discOpts.DiscV5Opts.Subnets,
-		publishLock:   make(chan struct{}, 1),
+		logger:              logger.Named(logging.NameDiscoveryService),
+		ctx:                 ctx,
+		cancel:              cancel,
+		conns:               opts.ConnIndex,
+		subnetsIdx:          opts.SubnetsIdx,
+		networkConfig:       opts.NetworkConfig,
+		subnets:             opts.DiscV5Opts.Subnets,
+		publishLock:         make(chan struct{}, 1),
+		discoveredPeersPool: opts.DiscoveredPeersPool,
+		trimmedRecently:     opts.TrimmedRecently,
 	}
 
-	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
-	if err := dvs.initDiscV5Listener(logger, discOpts); err != nil {
+	logger.Debug(
+		"configuring discv5 discovery",
+		zap.Any("discV5Opts", opts.DiscV5Opts),
+		zap.Any("hostAddress", opts.HostAddress),
+		zap.Any("hostDNS", opts.HostDNS),
+	)
+	if err := dvs.initDiscV5Listener(logger, opts); err != nil {
 		return nil, err
 	}
 	return &dvs, nil
@@ -144,26 +161,36 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	const logFrequency = 10
 	var skippedPeers uint64 = 0
 
-	dvs.discover(dvs.ctx, func(e PeerEvent) {
-		logger := dvs.logger.With(
-			fields.ENR(e.Node),
-			fields.PeerID(e.AddrInfo.ID),
-		)
-		err := dvs.checkPeer(dvs.ctx, logger, e)
-		if err != nil {
-			if skippedPeers%logFrequency == 0 {
-				logger.Debug("skipped discovered peer", zap.Error(err))
+	dvs.discover(
+		dvs.ctx,
+		func(e PeerEvent) {
+			logger := dvs.logger.With(
+				fields.ENR(e.Node),
+				fields.PeerID(e.AddrInfo.ID),
+			)
+			err := dvs.checkPeer(dvs.ctx, logger, e)
+			if err != nil {
+				if skippedPeers%logFrequency == 0 {
+					logger.Debug("skipped discovered peer", zap.Error(err))
+				}
+				skippedPeers++
+				return
 			}
-			skippedPeers++
-			return
-		}
-		handler(e)
-	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
+			handler(e)
+		},
+		defaultDiscoveryInterval,
+		dvs.ssvNodeFilter(),
+		dvs.sharedSubnetsFilter(1),
+		dvs.alreadyDiscoveredFilter(),
+		dvs.badNodeFilter(),
+		dvs.alreadyConnectedFilter(),
+		dvs.recentlyTrimmedFilter(),
+	)
 
 	return nil
 }
 
-var zeroSubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
+var zeroSubnets, _ = commons.FromString(commons.ZeroSubnets)
 
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
@@ -179,16 +206,16 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 	}
 
 	// Get the peer's subnets, skipping if it has none.
-	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	peerSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, nodeSubnets) {
+	if bytes.Equal(zeroSubnets, peerSubnets) {
 		recordPeerSkipped(ctx, skipReasonZeroSubnets)
 		return errors.New("zero subnets")
 	}
 
-	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, peerSubnets)
 
 	// Filters
 	if !dvs.limitNodeFilter(e.Node) {
@@ -198,6 +225,10 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 	if !dvs.sharedSubnetsFilter(1)(e.Node) {
 		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
 		return errors.New("no shared subnets")
+	}
+	if !dvs.alreadyDiscoveredFilter()(e.Node) {
+		recordPeerSkipped(ctx, skipReasonNoSharedSubnets)
+		return errors.New("peer already discovered recently")
 	}
 
 	peerAcceptedCounter.Add(ctx, 1)
@@ -329,7 +360,7 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...uint64) (updated bool, err 
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), subnets, nil)
+	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, subnets, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
@@ -346,7 +377,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...uint64) (updated bool, er
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), nil, subnets)
+	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, nil, subnets)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}

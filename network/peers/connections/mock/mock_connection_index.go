@@ -16,7 +16,7 @@ func (m *MockConnectionIndex) Connectedness(id peer.ID) network.Connectedness {
 }
 
 // CanConnect panics if called
-func (m *MockConnectionIndex) CanConnect(id peer.ID) bool {
+func (m *MockConnectionIndex) CanConnect(id peer.ID) error {
 	panic("CanConnect method is not implemented in MockConnectionIndex")
 }
 

@@ -10,16 +10,18 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -29,13 +31,14 @@ import (
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         beacon.BeaconNode
-	network        specqbft.Network
-	signer         spectypes.BeaconSigner
-	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
-	measurements   measurementsStore
-	graffiti       []byte
+	beacon              beacon.BeaconNode
+	network             specqbft.Network
+	signer              spectypes.BeaconSigner
+	operatorSigner      ssvtypes.OperatorSigner
+	doppelgangerHandler DoppelgangerProvider
+	valCheck            specqbft.ProposedValueCheckF
+	measurements        measurementsStore
+	graffiti            []byte
 }
 
 func NewProposerRunner(
@@ -47,6 +50,7 @@ func NewProposerRunner(
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
+	doppelgangerHandler DoppelgangerProvider,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
@@ -65,13 +69,14 @@ func NewProposerRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		valCheck:       valCheck,
-		operatorSigner: operatorSigner,
-		graffiti:       graffiti,
-		measurements:   NewMeasurementsStore(),
+		beacon:              beacon,
+		network:             network,
+		signer:              signer,
+		operatorSigner:      operatorSigner,
+		doppelgangerHandler: doppelgangerHandler,
+		valCheck:            valCheck,
+		graffiti:            graffiti,
+		measurements:        NewMeasurementsStore(),
 	}, nil
 }
 
@@ -187,9 +192,15 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		}
 	}
 
+	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
+	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
+		return nil
+	}
+
 	msg, err := r.BaseRunner.signBeaconObject(
 		r,
-		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+		duty,
 		blkToSign,
 		cd.Duty.Slot,
 		spectypes.DomainProposer,
@@ -261,6 +272,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.Round(r.GetState().RunningInstance.State.Round))
+
+		r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
 		err = validatorConsensusData.Decode(r.GetState().DecidedValue)
@@ -394,9 +407,15 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	r.measurements.StartDutyFlow()
 	r.measurements.StartPreConsensus()
 
+	proposerDuty := duty.(*spectypes.ValidatorDuty)
+	if !r.doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
+		return nil
+	}
+
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
+	msg, err := r.BaseRunner.signBeaconObject(r, proposerDuty, spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
@@ -514,6 +533,8 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 				return summarizeBlock(b.CapellaBlinded)
 			case spec.DataVersionDeneb:
 				return summarizeBlock(b.DenebBlinded)
+			case spec.DataVersionElectra:
+				return summarizeBlock(b.ElectraBlinded)
 			default:
 				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 			}
@@ -526,6 +547,11 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 				return summary, fmt.Errorf("deneb block contents is nil")
 			}
 			return summarizeBlock(b.Deneb.Block)
+		case spec.DataVersionElectra:
+			if b.Electra == nil {
+				return summary, fmt.Errorf("electra block contents is nil")
+			}
+			return summarizeBlock(b.Electra.Block)
 		default:
 			return summary, fmt.Errorf("unsupported block version %d", b.Version)
 		}
@@ -536,6 +562,8 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summarizeBlock(b.Capella)
 		case spec.DataVersionDeneb:
 			return summarizeBlock(b.Deneb)
+		case spec.DataVersionElectra:
+			return summarizeBlock(b.Electra)
 		default:
 			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 		}
@@ -553,6 +581,16 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
 		summary.Version = spec.DataVersionDeneb
+
+	case *electra.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return summary, fmt.Errorf("block, body or execution payload is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.Version = spec.DataVersionElectra
+
+	case *apiv1electra.BlockContents:
+		return summarizeBlock(b.Block)
 
 	case *apiv1deneb.BlockContents:
 		return summarizeBlock(b.Block)
@@ -572,6 +610,15 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
 		summary.Blinded = true
 		summary.Version = spec.DataVersionDeneb
+
+	case *apiv1electra.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.Blinded = true
+		summary.Version = spec.DataVersionElectra
 	}
+
 	return
 }

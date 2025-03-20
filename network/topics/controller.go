@@ -9,11 +9,10 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.opentelemetry.io/otel/metric"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"go.opentelemetry.io/otel/metric"
+	"go.uber.org/zap"
 )
 
 var (
@@ -27,9 +26,10 @@ type Controller interface {
 	Subscribe(name string) error
 	// Unsubscribe unsubscribes from the given topic
 	Unsubscribe(topicName string, hard bool) error
-	// Peers returns the peers subscribed to the given topic
+	// Peers returns a list of peers we are connected to in the given topic, if topicName
+	// param is an empty string it returns a list of all peers we are connected to.
 	Peers(topicName string) ([]peer.ID, error)
-	// Topics lists all the available topics
+	// Topics lists all topics this node is subscribed to
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
@@ -142,7 +142,7 @@ func (ctrl *topicsCtrl) Close() error {
 	return nil
 }
 
-// Peers returns the peers subscribed to the given topic
+// Peers returns a list of peers we are connected to in the given topic.
 func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	if name == "" {
 		return ctrl.ps.ListPeers(""), nil
@@ -155,7 +155,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	return topic.ListPeers(), nil
 }
 
-// Topics lists all the available topics
+// Topics lists all topics this node is subscribed to
 func (ctrl *topicsCtrl) Topics() []string {
 	topics := ctrl.ps.GetTopics()
 	for i, tp := range topics {

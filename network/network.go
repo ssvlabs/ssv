@@ -5,8 +5,7 @@ import (
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-
-	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/commons"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
@@ -46,12 +45,13 @@ type P2PNetwork interface {
 	// UpdateScoreParams will update the scoring parameters of GossipSub
 	UpdateScoreParams()
 	// ActiveSubnets returns active subnets
-	ActiveSubnets() records.Subnets
+	ActiveSubnets() commons.Subnets
 	// FixedSubnets returns fixed subnets
-	FixedSubnets() records.Subnets
+	FixedSubnets() commons.Subnets
 
 	// used for tests and api
-	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
+	PeersByTopic() map[string][]peer.ID
+	Peers() []peer.ID
 }
 
 // GetValidatorStats returns stats of validators, including the following:

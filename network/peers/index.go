@@ -8,7 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -35,7 +35,7 @@ type ConnectionIndex interface {
 
 	// CanConnect returns whether we can connect to the given peer,
 	// by checking if it is already connected or if we tried to connect to it recently and failed
-	CanConnect(id peer.ID) bool
+	CanConnect(id peer.ID) error
 
 	// AtLimit checks if the node has reached peers limit
 	AtLimit(dir libp2pnetwork.Direction) bool
@@ -99,13 +99,13 @@ type SubnetsStats struct {
 // it keeps track of subnets but doesn't mind regards actual connections that we have.
 type SubnetsIndex interface {
 	// UpdatePeerSubnets updates the given peer's subnets
-	UpdatePeerSubnets(id peer.ID, s records.Subnets) bool
+	UpdatePeerSubnets(id peer.ID, s commons.Subnets) bool
 
 	// GetSubnetPeers returns peers that are interested in the given subnet
 	GetSubnetPeers(s int) []peer.ID
 
 	// GetPeerSubnets returns subnets of the given peer
-	GetPeerSubnets(id peer.ID) records.Subnets
+	GetPeerSubnets(id peer.ID) commons.Subnets
 
 	// GetSubnetsStats collects and returns subnets stats
 	GetSubnetsStats() *SubnetsStats

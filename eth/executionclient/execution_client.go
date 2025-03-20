@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -49,7 +48,6 @@ var _ Provider = &ExecutionClient{}
 
 var (
 	ErrClosed        = fmt.Errorf("closed")
-	ErrUnhealthy     = fmt.Errorf("unhealthy")
 	ErrNotConnected  = fmt.Errorf("not connected")
 	ErrBadInput      = fmt.Errorf("bad input")
 	ErrNothingToSync = errors.New("nothing to sync")
@@ -81,8 +79,6 @@ type ExecutionClient struct {
 	client         *ethclient.Client
 	closed         chan struct{}
 	lastSyncedTime atomic.Int64
-	healthyChMu    sync.Mutex
-	healthyCh      chan struct{}
 }
 
 // New creates a new instance of ExecutionClient.
@@ -98,7 +94,6 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
-		healthyCh:                   make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -246,8 +241,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				return
 			case <-ec.closed:
 				return
-			case <-ec.healthyCh:
-				return
 			default:
 				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
@@ -294,22 +287,7 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 		return nil
 	}
 
-	ec.healthyChMu.Lock()
-	defer ec.healthyChMu.Unlock()
-
-	if err := ec.healthy(ctx); err != nil {
-		close(ec.healthyCh)
-		return fmt.Errorf("unhealthy: %w", err)
-	}
-
-	// Reset the healthyCh channel if it was closed.
-	select {
-	case <-ec.healthyCh:
-	default:
-		ec.healthyCh = make(chan struct{})
-	}
-
-	return nil
+	return ec.healthy(ctx)
 }
 
 func (ec *ExecutionClient) healthy(ctx context.Context) error {
@@ -409,6 +387,21 @@ func (ec *ExecutionClient) isClosed() bool {
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	heads := make(chan *ethtypes.Header)
 
+	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
+	//
+	// We must receive all events as they determine the state of the ssv network, so a discrepancy can result in slashing.
+	// Therefore, we must be sure that we don't miss any log while streaming.
+	//
+	// With SubscribeFilterLogs we cannot specify the block we subscribe from, it always starts at the highest.
+	// So with streaming we had some bugs because of missing blocks:
+	// - first sync history from genesis to block 100, but then stream sometimes starts late at 102 (missed 101)
+	// - inevitably miss blocks during any stream connection interruptions (such as EL restarts)
+	//
+	// Thus, we decided not to rely on log streaming and use SubscribeNewHead + FilterLogs.
+	//
+	// It also allowed us to implement more 'atomic' behaviour easier:
+	// We can revert the tx if there was an error in processing all the events of a block.
+	// So we can restart from this block once everything is good.
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
@@ -425,9 +418,6 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 
 		case <-ec.closed:
 			return fromBlock, ErrClosed
-
-		case <-ec.healthyCh:
-			return fromBlock, ErrUnhealthy
 
 		case err := <-sub.Err():
 			if err == nil {
@@ -467,14 +457,14 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	defer cancel()
 
 	start := time.Now()
-	var err error
-	ec.client, err = ethclient.DialContext(ctx, ec.nodeAddr)
+	client, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "DialContext"),
 			zap.Error(err))
 		return err
 	}
+	ec.client = client
 
 	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
 	return nil
