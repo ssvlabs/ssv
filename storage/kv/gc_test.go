@@ -251,7 +251,7 @@ func TestPeriodicGC(t *testing.T) {
 // TestPeriodicGC_Cancellation verifies that the periodic GC goroutine exits promptly when the context is cancelled.
 func TestPeriodicGC_Cancellation(t *testing.T) {
 	t.Parallel()
-	
+
 	logger := logging.TestLogger(t)
 	dir := setupTempDir(t, "badger-periodic-gc-cancel")
 	ctx, cancel := context.WithCancel(context.Background())
