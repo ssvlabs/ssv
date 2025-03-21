@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
+	"golang.org/x/exp/maps"
 	"net/http"
 	"time"
 
@@ -17,9 +18,8 @@ import (
 type validatorRegistration struct {
 	*api.VersionedSignedValidatorRegistration
 
-	// SubmittedPreviously signifies whether this validator registration has already been
-	// submitted previously.
-	SubmittedPreviously bool
+	// new signifies whether this validator registration has already been submitted previously.
+	new bool
 }
 
 // GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
@@ -62,7 +62,7 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 
 	gc.registrations[pk] = &validatorRegistration{
 		VersionedSignedValidatorRegistration: registration,
-		SubmittedPreviously:                  false,
+		new:                                  true,
 	}
 
 	return nil
@@ -83,99 +83,41 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
 
+			// Select registrations to submit.
+			gc.registrationMu.Lock()
+			allRegistrations := maps.Values(gc.registrations)
+			gc.registrationMu.Unlock()
+
 			registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
-			for _, r := range gc.registrationList() {
+			for _, r := range allRegistrations {
 				validatorPk, err := r.PubKey()
 				if err != nil {
 					gc.log.Error("Failed to get validator pubkey", zap.Error(err), fields.Slot(currentSlot))
 					continue
 				}
-				if !r.SubmittedPreviously || gc.suitableRegistrationSubmissionSlot(validatorPk, currentSlot) {
+
+				// Distribute the registrations evenly across the epoch based on the pubkeys.
+				slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
+				validatorSample := binary.LittleEndian.Uint64(validatorPk[:8])
+				shouldSubmit := validatorSample%gc.network.SlotsPerEpoch() == slotInEpoch
+
+				if r.new || shouldSubmit {
+					r.new = false
 					registrations = append(registrations, r.VersionedSignedValidatorRegistration)
 				}
 			}
-			if len(registrations) == 0 {
-				continue // no validator registrations to submit this time around
-			}
 
-			err := gc.submitRegistrationsBatched(currentSlot, registrations)
-			if err != nil {
-				gc.log.Error("Failed to submit validator registrations", zap.Error(err), fields.Slot(currentSlot))
-				continue
-			}
-
-			err = gc.markRegistrationsSubmitted(registrations)
-			if err != nil {
-				gc.log.Error("Failed to mark validator registrations as submitted", zap.Error(err), fields.Slot(currentSlot))
-				continue
+			// Submit validator registrations.
+			if len(registrations) > 0 {
+				start := time.Now()
+				err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations)
+				recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+				if err != nil {
+					gc.log.Error(clResponseErrMsg, zap.Error(err))
+					continue
+				}
+				gc.log.Info("submitted validator registrations", fields.Slot(currentSlot), fields.Count(len(registrations)), fields.Duration(start))
 			}
 		}
 	}
-}
-
-// suitableRegistrationSubmissionSlot returns true if validator (that corresponds to provided pubkey)
-// is eligible for validator registration submission in the provided slot.
-func (gc *GoClient) suitableRegistrationSubmissionSlot(validatorPk phase0.BLSPubKey, slot phase0.Slot) bool {
-	slotsPerEpoch := gc.network.SlotsPerEpoch()
-	validatorSample := binary.LittleEndian.Uint64(validatorPk[:8])
-	return validatorSample%slotsPerEpoch == uint64(slot)%slotsPerEpoch
-}
-
-func (gc *GoClient) registrationList() []*validatorRegistration {
-	gc.registrationMu.Lock()
-	defer gc.registrationMu.Unlock()
-
-	result := make([]*validatorRegistration, 0, len(gc.registrations))
-	for _, registration := range gc.registrations {
-		result = append(result, registration)
-	}
-	return result
-}
-
-func (gc *GoClient) markRegistrationsSubmitted(submitted []*api.VersionedSignedValidatorRegistration) error {
-	gc.registrationMu.Lock()
-	defer gc.registrationMu.Unlock()
-
-	for _, r := range submitted {
-		pk, err := r.PubKey()
-		if err != nil {
-			return err
-		}
-		gc.registrations[pk].SubmittedPreviously = true
-	}
-	return nil
-}
-
-func (gc *GoClient) submitRegistrationsBatched(slot phase0.Slot, registrations []*api.VersionedSignedValidatorRegistration) error {
-	gc.log.Info("going to submit batch validator registrations",
-		fields.Slot(slot),
-		fields.Count(len(registrations)))
-
-	for len(registrations) != 0 {
-		bs := batchSize
-		if bs > len(registrations) {
-			bs = len(registrations)
-		}
-
-		clientAddress := gc.multiClient.Address()
-		logger := gc.log.With(
-			zap.String("api", "SubmitValidatorRegistrations"),
-			zap.String("client_addr", clientAddress))
-
-		start := time.Now()
-		err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs])
-		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", clientAddress, http.MethodPost, time.Since(start), err)
-		if err != nil {
-			logger.Error(clResponseErrMsg, zap.Error(err))
-			return err
-		}
-
-		registrations = registrations[bs:]
-
-		logger.Info("submitted batched validator registrations",
-			fields.Slot(slot),
-			fields.Count(bs))
-	}
-
-	return nil
 }

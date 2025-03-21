@@ -52,7 +52,11 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				if !h.suitableRegistrationSubmissionSlot(share.ValidatorPubKey, slot) {
+				// Distribute the registrations evenly across multiple epochs based on the pubkeys.
+				registrationSlots := frequencyEpochs * h.network.SlotsPerEpoch()
+				validatorSample := binary.LittleEndian.Uint64(share.ValidatorPubKey[:8])
+				shouldSubmit := validatorSample%registrationSlots != uint64(slot)%registrationSlots
+				if !shouldSubmit {
 					continue
 				}
 
@@ -82,12 +86,4 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			continue
 		}
 	}
-}
-
-// suitableRegistrationSubmissionSlot returns true if validator (that corresponds to provided pubkey)
-// is eligible for validator registration submission in the provided slot.
-func (h *ValidatorRegistrationHandler) suitableRegistrationSubmissionSlot(validatorPk spectypes.ValidatorPK, slot phase0.Slot) bool {
-	registrationSlots := frequencyEpochs * h.network.SlotsPerEpoch()
-	validatorSample := binary.LittleEndian.Uint64(validatorPk[:8])
-	return validatorSample%registrationSlots != uint64(slot)%registrationSlots
 }

@@ -23,10 +23,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	batchSize = 500
-)
-
 // ProposerDuties returns proposer duties for the given epoch.
 func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
 	start := time.Now()
