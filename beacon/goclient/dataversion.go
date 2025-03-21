@@ -2,10 +2,15 @@ package goclient
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+)
+
+var (
+	FarFutureEpoch phase0.Epoch = math.MaxUint64
 )
 
 func (gc *GoClient) DataVersion(epoch phase0.Epoch) spec.DataVersion {

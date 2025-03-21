@@ -31,7 +31,7 @@ type CommitteeObserver struct {
 	msgID             spectypes.MessageID
 	logger            *zap.Logger
 	Storage           *storage.ParticipantStores
-	beaconConfig           networkconfig.Beacon
+	beaconConfig      networkconfig.Beacon
 	ValidatorStore    registrystorage.ValidatorStore
 	newDecidedHandler qbftcontroller.NewDecidedHandler
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
@@ -63,7 +63,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		msgID:             msgID,
 		logger:            opts.Logger,
 		Storage:           opts.Storage,
-		beaconConfig:           opts.NetworkConfig.Beacon,
+		beaconConfig:      opts.NetworkConfig.Beacon,
 		ValidatorStore:    opts.ValidatorStore,
 		newDecidedHandler: opts.NewDecidedHandler,
 		attesterRoots:     opts.AttesterRoots,
@@ -377,7 +377,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *
 
 func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
 	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
-	return int(ncv.networkConfig.SlotsPerEpoch()) + validation.LateSlotAllowance
+	return int(ncv.beaconConfig.SlotsPerEpoch) + validation.LateSlotAllowance
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {

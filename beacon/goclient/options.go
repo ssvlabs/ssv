@@ -7,9 +7,10 @@ import (
 
 // Options for controller struct creation
 type Options struct {
-	Context               context.Context
-	BeaconNodeAddr        string        `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true" env-description:"Beacon node address. Supports multiple comma-separated addresses'"`
-	SyncDistanceTolerance uint64        `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"4" env-description:"The number of out-of-sync slots we can tolerate"`
-	CommonTimeout         time.Duration // Optional.
-	LongTimeout           time.Duration // Optional.
+	Context                     context.Context
+	BeaconNodeAddr              string        `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true" env-description:"Beacon node URL(s). Multiple nodes are supported via semicolon-separated URLs (e.g. 'http://localhost:5052;http://localhost:5053')"`
+	SyncDistanceTolerance       uint64        `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"4" env-description:"Maximum number of slots behind head considered in-sync"`
+	WithWeightedAttestationData bool          `yaml:"WithWeightedAttestationData" env:"WITH_WEIGHTED_ATTESTATION_DATA" env-default:"false" env-description:"Enable attestation data scoring across multiple beacon nodes"`
+	CommonTimeout               time.Duration // Optional.
+	LongTimeout                 time.Duration // Optional.
 }

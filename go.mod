@@ -254,4 +254,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/ssvlabs/eth2-key-manager => github.com/ssvlabs/eth2-key-manager v1.4.3-0.20250310161559-ad7a501f654f
+replace github.com/ssvlabs/eth2-key-manager => github.com/ssvlabs/eth2-key-manager v1.5.4-0.20250321004656-079eb6f1f94f

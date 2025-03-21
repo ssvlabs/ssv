@@ -174,8 +174,6 @@ func (h *handler) Start(ctx context.Context) error {
 	var startEpoch, previousEpoch phase0.Epoch
 	firstRun := true
 	ticker := h.slotTickerProvider()
-	slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -191,10 +189,11 @@ func (h *handler) Start(ctx context.Context) error {
 			validatorIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(currentEpoch))
 			h.updateDoppelgangerState(validatorIndices)
 
+			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch
 			// Perform liveness checks during the first run or at the last slot of the epoch.
 			// This ensures that the beacon node has had enough time to observe blocks and attestations,
 			// preventing delays in marking a validator as safe.
-			if (!firstRun && uint64(currentSlot)%slotsPerEpoch != slotsPerEpoch-1) || startEpoch == currentEpoch {
+			if (!firstRun && currentSlot%slotsPerEpoch != slotsPerEpoch-1) || startEpoch == currentEpoch {
 				continue
 			}
 

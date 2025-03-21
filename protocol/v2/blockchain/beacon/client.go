@@ -53,11 +53,9 @@ type BeaconNode interface {
 	specssv.ValidatorRegistrationCalls
 	specssv.VoluntaryExitCalls
 	specssv.DomainCalls
+	specssv.VersionCalls
 	beaconDuties
 	beaconSubscriber
 	beaconValidator
 	proposer
 }
-
-// TODO: add WithWeightedAttestationData to options:
-// WithWeightedAttestationData bool   `yaml:"WithWeightedAttestationData" env:"WITH_WEIGHTED_ATTESTATION_DATA" env-default:"false" env-description:"Enable attestation data scoring across multiple beacon nodes"`

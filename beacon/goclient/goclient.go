@@ -19,9 +19,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	"github.com/ssvlabs/ssv/logging/fields"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -163,13 +166,13 @@ type GoClient struct {
 	lastProcessedHeadEventSlotLock sync.Mutex
 	lastProcessedHeadEventSlot     phase0.Slot
 
-	genesisForkVersion phase0.Version
+	genesisForkVersion phase0.Version // TODO get from config
 	ForkLock           sync.RWMutex
-	ForkEpochElectra   phase0.Epoch
-	ForkEpochDeneb     phase0.Epoch
-	ForkEpochCapella   phase0.Epoch
-	ForkEpochBellatrix phase0.Epoch
-	ForkEpochAltair    phase0.Epoch
+	ForkEpochElectra   phase0.Epoch // TODO get from config
+	ForkEpochDeneb     phase0.Epoch // TODO get from config
+	ForkEpochCapella   phase0.Epoch // TODO get from config
+	ForkEpochBellatrix phase0.Epoch // TODO get from config
+	ForkEpochAltair    phase0.Epoch // TODO get from config
 }
 
 // New init new client and go-client instance
@@ -189,20 +192,16 @@ func New(
 	}
 
 	client := &GoClient{
-		log:                   logger.Named("consensus_client"),
-		ctx:                   opt.Context,
-		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
-		registrationCache:     make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
-		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
-			opt.Network.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
-		),
+		log:                                logger.Named("consensus_client"),
+		ctx:                                opt.Context,
+		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
+		registrationCache:                  make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{EventTopicHead},
-		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
 		ForkEpochBellatrix: math.MaxUint64,
@@ -240,6 +239,12 @@ func New(
 	}
 
 	client.beaconConfig = beaconConfig
+
+	client.genesisForkVersion = beaconConfig.GenesisForkVersion()
+
+	client.blockRootToSlotCache = ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
+		uint64(beaconConfig.SlotsPerEpoch) * BlockRootToSlotCacheCapacityEpochs),
+	)
 
 	client.attestationDataCache = ttlcache.New(
 		// we only fetch attestation data during the slot of the relevant duty (and never later),
@@ -365,7 +370,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			gc.ForkLock.RLock()
 			gc.log.Info("retrieved fork epochs",
 				zap.String("node_addr", s.Address()),
-				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.network.EstimatedCurrentEpoch()))),
+				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.beaconConfig.EstimatedCurrentEpoch()))),
 				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
 				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
 				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),

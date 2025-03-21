@@ -17,6 +17,9 @@ var SupportedSSVConfigs = map[string]SSV{
 	HoleskyStageSSV.Name: HoleskyStageSSV,
 	LocalTestnetSSV.Name: LocalTestnetSSV,
 	HoleskyE2ESSV.Name:   HoleskyE2ESSV,
+	HoodiSSV.Name:        HoodiSSV,
+	HoodiStageSSV.Name:   HoodiStageSSV,
+	SepoliaSSV.Name:      SepoliaSSV,
 }
 
 func GetSSVConfigByName(name string) (SSV, error) {
