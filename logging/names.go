@@ -24,4 +24,5 @@ const (
 	NameScoreInspector    = "ScoreInspector"
 	NameEventHandler      = "EventHandler"
 	NameDutyFetcher       = "DutyFetcher"
+	NameDoppelganger      = "Doppelganger"
 )

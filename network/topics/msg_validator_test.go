@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -48,7 +49,7 @@ func TestMsgValidator(t *testing.T) {
 	committeeID := share.CommitteeID()
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
-	mv := validation.New(networkconfig.TestingNetworkConfig, ns.ValidatorStore(), dutystore.New(), signatureVerifier)
+	mv := validation.New(networkconfig.TestingNetworkConfig, ns.ValidatorStore(), dutystore.New(), signatureVerifier, phase0.Epoch(0), validation.WithLogger(logger))
 	require.NotNil(t, mv)
 
 	slot := networkconfig.TestingBeaconConfig.EstimatedCurrentSlot()

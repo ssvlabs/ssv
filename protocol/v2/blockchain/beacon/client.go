@@ -3,7 +3,6 @@ package beacon
 import (
 	"context"
 
-	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -20,7 +19,7 @@ type beaconDuties interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
 	ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error)
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
-	eth2client.EventsProvider
+	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error
 }
 
 // beaconSubscriber interface serves all committee subscribe to subnet (p2p topic)
@@ -59,3 +58,6 @@ type BeaconNode interface {
 	beaconValidator
 	proposer
 }
+
+// TODO: add WithWeightedAttestationData to options:
+// WithWeightedAttestationData bool   `yaml:"WithWeightedAttestationData" env:"WITH_WEIGHTED_ATTESTATION_DATA" env-default:"false" env-description:"Enable attestation data scoring across multiple beacon nodes"`

@@ -8,6 +8,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
+// TODO: add networks to supported configs:
+//
+//Hoodi.Name:        Hoodi,
+//HoodiStage.Name:   HoodiStage,
+//Sepolia.Name:      Sepolia,
+
 //go:generate mockgen -package=networkconfig -destination=./mock.go -source=./config.go
 
 type Interface interface { // TODO: rename?

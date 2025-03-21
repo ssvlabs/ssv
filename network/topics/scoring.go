@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -205,7 +206,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
-		opts := params.NewSubnetTopicOpts(cfg.NetworkConfig, totalValidators, commons.Subnets(), topicCommittees)
+		opts := params.NewSubnetTopicOpts(cfg.NetworkConfig, totalValidators, commons.SubnetsCount, topicCommittees)
 
 		// Generate topic parameters
 		tp, err := params.TopicParams(opts)

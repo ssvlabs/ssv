@@ -52,6 +52,11 @@ type Runner interface {
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
 }
 
+type DoppelgangerProvider interface {
+	CanSign(validatorIndex phase0.ValidatorIndex) bool
+	ReportQuorum(validatorIndex phase0.ValidatorIndex)
+}
+
 var _ Runner = new(CommitteeRunner)
 
 type BaseRunner struct {

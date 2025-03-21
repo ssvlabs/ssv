@@ -111,7 +111,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	s.indicesChg = make(chan struct{})
 	s.handlers = handlers
 
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 
 	mockNetworkConfig.EXPECT().GenesisTime().Return(time.Unix(0, 0)).AnyTimes()
 	mockNetworkConfig.EXPECT().SlotDuration().Return(150 * time.Millisecond).AnyTimes()
@@ -364,7 +364,7 @@ func TestScheduler_Run(t *testing.T) {
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 
 	// setup mock duty handler expectations
@@ -413,7 +413,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 	err := s.Start(ctx, logger)
 	require.NoError(t, err)

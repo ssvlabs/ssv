@@ -17,9 +17,8 @@ import (
 	common "github.com/ethereum/go-ethereum/common"
 	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
-	records "github.com/ssvlabs/ssv/network/records"
+	commons "github.com/ssvlabs/ssv/network/commons"
 	duties "github.com/ssvlabs/ssv/operator/duties"
-	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	validator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
@@ -103,20 +102,6 @@ func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex, ownValidator)
 }
 
-// GetOperatorShares mocks base method.
-func (m *MockController) GetOperatorShares() []*types0.SSVShare {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorShares")
-	ret0, _ := ret[0].([]*types0.SSVShare)
-	return ret0
-}
-
-// GetOperatorShares indicates an expected call of GetOperatorShares.
-func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockController)(nil).GetOperatorShares))
-}
-
 // GetValidator mocks base method.
 func (m *MockController) GetValidator(pubKey types.ValidatorPK) (*validator.Validator, bool) {
 	m.ctrl.T.Helper()
@@ -147,6 +132,18 @@ func (m *MockController) GetValidatorStats() (uint64, uint64, uint64, error) {
 func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats))
+}
+
+// HandleMetadataUpdates mocks base method.
+func (m *MockController) HandleMetadataUpdates(ctx context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "HandleMetadataUpdates", ctx)
+}
+
+// HandleMetadataUpdates indicates an expected call of HandleMetadataUpdates.
+func (mr *MockControllerMockRecorder) HandleMetadataUpdates(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleMetadataUpdates", reflect.TypeOf((*MockController)(nil).HandleMetadataUpdates), ctx)
 }
 
 // IndicesChangeChan mocks base method.
@@ -216,15 +213,15 @@ func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 }
 
 // StartValidators mocks base method.
-func (m *MockController) StartValidators(context.Context) {
+func (m *MockController) StartValidators(ctx context.Context) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartValidators")
+	m.ctrl.Call(m, "StartValidators", ctx)
 }
 
 // StartValidators indicates an expected call of StartValidators.
-func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
+func (mr *MockControllerMockRecorder) StartValidators(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidators", reflect.TypeOf((*MockController)(nil).StartValidators))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidators", reflect.TypeOf((*MockController)(nil).StartValidators), ctx)
 }
 
 // StopValidator mocks base method.
@@ -377,20 +374,6 @@ func (mr *MockSharesStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Range", reflect.TypeOf((*MockSharesStorage)(nil).Range), txn, fn)
 }
 
-// UpdateValidatorsMetadata mocks base method.
-func (m *MockSharesStorage) UpdateValidatorsMetadata(arg0 map[types.ValidatorPK]*beacon.ValidatorMetadata) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateValidatorsMetadata indicates an expected call of UpdateValidatorsMetadata.
-func (mr *MockSharesStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorsMetadata), arg0)
-}
-
 // MockP2PNetwork is a mock of P2PNetwork interface.
 type MockP2PNetwork struct {
 	ctrl     *gomock.Controller
@@ -415,10 +398,10 @@ func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
 }
 
 // ActiveSubnets mocks base method.
-func (m *MockP2PNetwork) ActiveSubnets() records.Subnets {
+func (m *MockP2PNetwork) ActiveSubnets() commons.Subnets {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ActiveSubnets")
-	ret0, _ := ret[0].(records.Subnets)
+	ret0, _ := ret[0].(commons.Subnets)
 	return ret0
 }
 
@@ -443,10 +426,10 @@ func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message any) *gomock.Call {
 }
 
 // FixedSubnets mocks base method.
-func (m *MockP2PNetwork) FixedSubnets() records.Subnets {
+func (m *MockP2PNetwork) FixedSubnets() commons.Subnets {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FixedSubnets")
-	ret0, _ := ret[0].(records.Subnets)
+	ret0, _ := ret[0].(commons.Subnets)
 	return ret0
 }
 

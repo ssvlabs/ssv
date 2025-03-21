@@ -98,14 +98,14 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 }
 
 type LogFileOptions struct {
-	FileName   string
+	FilePath   string
 	MaxSize    int
 	MaxBackups int
 }
 
 func (o LogFileOptions) writer(options *LogFileOptions) io.Writer {
 	return &lumberjack.Logger{
-		Filename:   options.FileName,
+		Filename:   options.FilePath,
 		MaxSize:    options.MaxSize, // megabytes
 		MaxBackups: options.MaxBackups,
 		MaxAge:     28, // days

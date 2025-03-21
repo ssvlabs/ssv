@@ -5,12 +5,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -78,6 +78,7 @@ var ConstructBaseRunner = func(
 	km := spectestingutils.NewTestingKeyManager()
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
+	dgHandler := doppelganger.NoOpHandler{}
 
 	var valCheck specqbft.ProposedValueCheckF
 	switch role {
@@ -132,6 +133,7 @@ var ConstructBaseRunner = func(
 			opSigner,
 			valCheck,
 			dutyGuard,
+			dgHandler,
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
@@ -154,6 +156,7 @@ var ConstructBaseRunner = func(
 			net,
 			km,
 			opSigner,
+			dgHandler,
 			valCheck,
 			TestingHighestDecidedSlot,
 			[]byte("graffiti"),
@@ -200,6 +203,7 @@ var ConstructBaseRunner = func(
 			opSigner,
 			valCheck,
 			dutyGuard,
+			dgHandler,
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
@@ -296,6 +300,7 @@ var ConstructBaseRunnerWithShareMap = func(
 
 	km := spectestingutils.NewTestingKeyManager()
 	dutyGuard := validator.NewCommitteeDutyGuard()
+	dgHandler := doppelganger.NoOpHandler{}
 
 	if len(shareMap) > 0 {
 		var keySetInstance *spectestingutils.TestKeySet
@@ -378,6 +383,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			valCheck,
 			dutyGuard,
+			dgHandler,
 		)
 	case spectypes.RoleAggregator:
 		r, err = runner.NewAggregatorRunner(
@@ -400,6 +406,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			net,
 			km,
 			opSigner,
+			dgHandler,
 			valCheck,
 			TestingHighestDecidedSlot,
 			[]byte("graffiti"),
@@ -446,6 +453,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			opSigner,
 			valCheck,
 			dutyGuard,
+			dgHandler,
 		)
 		if r != nil {
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType

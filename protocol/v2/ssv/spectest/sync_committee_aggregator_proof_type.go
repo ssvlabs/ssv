@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
@@ -44,8 +45,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 			lastErr = err
 		}
 	}
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)

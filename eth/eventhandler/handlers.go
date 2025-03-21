@@ -10,6 +10,8 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -17,7 +19,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 // b64 encrypted key length is 256
@@ -380,6 +381,9 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
+		// Remove validator from doppelganger service
+		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
+
 		logger.Debug("processed event")
 		return share.ValidatorPubKey, nil
 	}
@@ -400,6 +404,11 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 	toLiquidate, liquidatedPubKeys, err := eh.processClusterEvent(txn, event.Owner, event.OperatorIds, true)
 	if err != nil {
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
+	}
+
+	// Remove validator shares from doppelganger service
+	for _, share := range toLiquidate {
+		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
 	}
 
 	if len(liquidatedPubKeys) > 0 {

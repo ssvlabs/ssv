@@ -57,14 +57,19 @@ type taskExecutor interface {
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 }
 
+type DoppelgangerProvider interface {
+	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
+}
+
 type EventHandler struct {
-	nodeStorage       nodestorage.Storage
-	taskExecutor      taskExecutor
-	eventParser       eventparser.Parser
-	networkConfig     networkconfig.NetworkConfig
-	operatorDataStore operatordatastore.OperatorDataStore
-	operatorDecrypter keys.OperatorDecrypter
-	keyManager        ekm.KeyManager
+	nodeStorage         nodestorage.Storage
+	taskExecutor        taskExecutor
+	eventParser         eventparser.Parser
+	networkConfig       networkconfig.NetworkConfig
+	operatorDataStore   operatordatastore.OperatorDataStore
+	operatorDecrypter   keys.OperatorDecrypter
+	keyManager          ekm.KeyManager
+	doppelgangerHandler DoppelgangerProvider
 
 	fullNode bool
 	logger   *zap.Logger
@@ -78,17 +83,19 @@ func New(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
+	doppelgangerHandler DoppelgangerProvider,
 	opts ...Option,
 ) (*EventHandler, error) {
 	eh := &EventHandler{
-		nodeStorage:       nodeStorage,
-		taskExecutor:      taskExecutor,
-		eventParser:       eventParser,
-		networkConfig:     networkConfig,
-		operatorDataStore: operatorDataStore,
-		operatorDecrypter: operatorDecrypter,
-		keyManager:        keyManager,
-		logger:            zap.NewNop(),
+		nodeStorage:         nodeStorage,
+		taskExecutor:        taskExecutor,
+		eventParser:         eventParser,
+		networkConfig:       networkConfig,
+		operatorDataStore:   operatorDataStore,
+		operatorDecrypter:   operatorDecrypter,
+		keyManager:          keyManager,
+		doppelgangerHandler: doppelgangerHandler,
+		logger:              zap.NewNop(),
 	}
 
 	for _, opt := range opts {

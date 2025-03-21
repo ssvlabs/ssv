@@ -148,7 +148,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	defer cancel()
 
 	if h.fetchCurrentEpoch {
-		if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch, slot); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 			return
 		}
@@ -156,7 +156,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	}
 
 	if h.fetchNextEpoch && h.shouldFetchNexEpoch(slot) {
-		if err := h.fetchAndProcessDuties(ctx, epoch+1); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch+1, slot); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
 		}
@@ -180,7 +180,7 @@ func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epo
 	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 }
 
-func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
+func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) error {
 	start := time.Now()
 	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
 
@@ -196,6 +196,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.AttesterDuty], 0, len(duties))
+
 	for _, d := range duties {
 		storeDuties = append(storeDuties, dutystore.StoreDuty[eth2apiv1.AttesterDuty]{
 			Slot:           d.Slot,
@@ -214,7 +215,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		fields.Duration(start))
 
 	// calculate subscriptions
-	subscriptions := calculateSubscriptionInfo(duties)
+	subscriptions := calculateSubscriptionInfo(duties, slot)
 	if len(subscriptions) > 0 {
 		if deadline, ok := ctx.Deadline(); ok {
 			go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
@@ -277,9 +278,12 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 }
 
 // calculateSubscriptionInfo calculates the attester subscriptions given a set of duties.
-func calculateSubscriptionInfo(duties []*eth2apiv1.AttesterDuty) []*eth2apiv1.BeaconCommitteeSubscription {
+func calculateSubscriptionInfo(duties []*eth2apiv1.AttesterDuty, slot phase0.Slot) []*eth2apiv1.BeaconCommitteeSubscription {
 	subscriptions := make([]*eth2apiv1.BeaconCommitteeSubscription, 0, len(duties)*2)
 	for _, duty := range duties {
+		if duty.Slot < slot {
+			continue
+		}
 		// Append a subscription for the attester role
 		subscriptions = append(subscriptions, toBeaconCommitteeSubscription(duty, spectypes.BNRoleAttester))
 		// Append a subscription for the aggregator role
