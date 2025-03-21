@@ -80,7 +80,7 @@ type CommitteeDutyTrace struct {
 
 type SignerData struct {
 	Signer       spectypes.OperatorID
-	ValidatorIdx []phase0.ValidatorIndex `ssz-max:"13"`
+	ValidatorIdx []phase0.ValidatorIndex `ssz-max:"1000"`
 	ReceivedTime uint64
 }
 
