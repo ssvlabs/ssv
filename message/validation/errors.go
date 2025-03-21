@@ -62,7 +62,7 @@ var (
 	ErrLateSlotMessage                         = Error{text: "current time is above duty's start +34(committee and aggregator) or +3(else) slots"}
 	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
-	ErrDecidedWithSameSigners                  = Error{text: "decided with same number of signers"}
+	ErrDecidedWithSameSigners                  = Error{text: "decided with same signers"}
 	ErrPubSubDataTooBig                        = Error{text: "pub-sub message data too big"}
 	ErrIncorrectTopic                          = Error{text: "incorrect topic"}
 	ErrNonExistentCommitteeID                  = Error{text: "committee ID doesn't exist"}
