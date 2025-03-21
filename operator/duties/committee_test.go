@@ -150,14 +150,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-				},
-				ValidatorIndex: 1,
-			},
-		}}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -201,14 +194,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-				},
-				ValidatorIndex: 1,
-			},
-		}}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	syncDuties.Set(0, []*eth2apiv1.SyncCommitteeDuty{
 		{
@@ -251,14 +237,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-				},
-				ValidatorIndex: 1,
-			},
-		}}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -309,14 +288,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-				},
-				ValidatorIndex: 1,
-			},
-		}}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -365,32 +337,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 3,
-				},
-			},
-		}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2), activeShare(3)}
 	)
 
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
@@ -467,32 +414,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 5},
-					},
-					ValidatorIndex: 3,
-				},
-			},
-		}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2), activeShare(3)}
 	)
 
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler}, currentSlot)
@@ -569,24 +491,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 5},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -662,16 +567,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-		}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 
 	currentSlot.Set(phase0.Slot(63))
@@ -759,24 +655,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-		}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2)}
 	)
 
 	currentSlot.Set(phase0.Slot(63))
@@ -878,16 +757,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-		}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 
 	attDuties.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
@@ -974,14 +844,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-				},
-				ValidatorIndex: 1,
-			},
-		}}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -1038,14 +901,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
-		activeShares  = []*ssvtypes.SSVShare{{
-			Share: spectypes.Share{
-				Committee: []*spectypes.ShareMember{
-					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-				},
-				ValidatorIndex: 1,
-			},
-		}}
+		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
@@ -1115,30 +971,9 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 		attDuties     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		syncDuties    = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 		activeShares  = []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 1,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 2,
-				},
-			},
-			{
-				Share: spectypes.Share{
-					Committee: []*spectypes.ShareMember{
-						{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
-					},
-					ValidatorIndex: 3,
-				},
-			},
+			activeShare(1),
+			activeShare(2),
+			activeShare(3),
 		}
 	)
 	attDuties.Set(phase0.Epoch(1), []*eth2apiv1.AttesterDuty{
@@ -1187,4 +1022,16 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 	// Stop scheduler & wait for graceful exit.
 	cancel()
 	require.NoError(t, schedulerPool.Wait())
+}
+
+func activeShare(index phase0.ValidatorIndex) *ssvtypes.SSVShare {
+	return &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			Committee: []*spectypes.ShareMember{
+				{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
+			},
+			ValidatorIndex: index,
+		},
+		Status: eth2apiv1.ValidatorStateActiveOngoing,
+	}
 }
