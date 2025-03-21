@@ -484,7 +484,9 @@ func (m *mockShares) Get(_ basedb.Reader, _ []byte) (*types.SSVShare, bool) {
 	return nil, false
 }
 
-func (m *mockShares) Range(_ basedb.Reader, _ func(*types.SSVShare) bool) {}
+func (m *mockShares) Range(_ basedb.Reader, _ func(*types.SSVShare) bool) {
+	// no-op
+}
 
 func (m *mockShares) Save(_ basedb.ReadWriter, _ ...*types.SSVShare) error {
 	return nil
