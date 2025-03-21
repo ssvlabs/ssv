@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
@@ -157,62 +156,47 @@ func TestTimeouts(t *testing.T) {
 }
 
 func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
-	networks := []types.BeaconNetwork{types.MainNetwork, types.HoleskyNetwork, types.PraterNetwork, types.BeaconTestNetwork}
-
-	for _, network := range networks {
-		forkVersion := phase0.Version(beacon.NewNetwork(network).ForkVersion())
-
-		ctx := context.Background()
-		callback := func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-			if r.URL.Path == "/eth/v1/beacon/genesis" {
-				resp2 := json.RawMessage(fmt.Sprintf(`{"data": {
+	ctx := context.Background()
+	version := phase0.Version{0, 0, 0, 0}
+	callback := func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		if r.URL.Path == "/eth/v1/beacon/genesis" {
+			resp2 := json.RawMessage(fmt.Sprintf(`{"data": {
 				"genesis_time": "1606824023",
 				"genesis_validators_root": "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95",
 				"genesis_fork_version": "%s"
-			}}`, forkVersion))
-				return resp2, nil
-			}
-			return resp, nil
+			}}`, version))
+			return resp2, nil
 		}
-
-		server := tests.MockServer(callback)
-		defer server.Close()
-		t.Run(fmt.Sprintf("When genesis versions are the same (%s)", string(network)), func(t *testing.T) {
-			c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
-			require.NoError(t, err, "failed to create client")
-			client := c.(*GoClient)
-
-			output, err := client.assertSameGenesisVersion(forkVersion)
-			require.Equal(t, forkVersion, output)
-			require.NoError(t, err, "failed to assert same genesis version: %s", err)
-		})
+		return resp, nil
 	}
+
+	server := tests.MockServer(callback)
+	defer server.Close()
+
+	c, err := mockClient(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond)
+	require.NoError(t, err, "failed to create client")
+	client := c.(*GoClient)
+
+	output, err := client.assertSameGenesisVersion(version)
+	require.Equal(t, version, output)
+	require.NoError(t, err, "failed to assert same genesis version: %s", err)
 }
 
 func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
-	network := types.MainNetwork
-	networkVersion := phase0.Version(beacon.NewNetwork(network).ForkVersion())
+	ctx := context.Background()
+	server := tests.MockServer(nil)
+	defer server.Close()
+	c, err := mockClient(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond)
+	require.NoError(t, err, "failed to create client")
+	client := c.(*GoClient)
+	forkVersion := phase0.Version{0x01, 0x02, 0x03, 0x04}
 
-	t.Run("When genesis versions are different", func(t *testing.T) {
-		ctx := context.Background()
-		server := tests.MockServer(nil)
-		defer server.Close()
-		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
-		require.NoError(t, err, "failed to create client")
-		client := c.(*GoClient)
-		forkVersion := phase0.Version{0x01, 0x02, 0x03, 0x04}
-
-		output, err := client.assertSameGenesisVersion(forkVersion)
-		require.Equal(t, networkVersion, output, "expected genesis version to be %s, got %s", networkVersion, output)
-		require.Error(t, err, "expected error when genesis versions are different")
-	})
+	output, err := client.assertSameGenesisVersion(forkVersion)
+	require.Equal(t, phase0.Version{}, output, "expected genesis version to be %s, got %s", phase0.Version{}, output)
+	require.Error(t, err, "expected error when genesis versions are different")
 }
 
 func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
-	return mockClientWithNetwork(ctx, serverURL, commonTimeout, longTimeout, types.MainNetwork)
-}
-
-func mockClientWithNetwork(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration, network types.BeaconNetwork) (beacon.BeaconNode, error) {
 	return New(
 		zap.NewNop(),
 		Options{

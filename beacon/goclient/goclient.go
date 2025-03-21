@@ -19,7 +19,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
@@ -107,10 +106,6 @@ type MultiClient interface {
 	eth2client.ValidatorRegistrationsSubmitter
 	eth2client.VoluntaryExitSubmitter
 	eth2client.ValidatorLivenessProvider
-}
-
-type operatorDataStore interface {
-	AwaitOperatorID() spectypes.OperatorID
 }
 
 type EventTopic string
@@ -367,10 +362,14 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				)
 				return
 			}
+
+			epoch := gc.beaconConfig.EstimatedCurrentEpoch()
+			dataVersion := gc.DataVersion(epoch)
+
 			gc.ForkLock.RLock()
 			gc.log.Info("retrieved fork epochs",
 				zap.String("node_addr", s.Address()),
-				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.beaconConfig.EstimatedCurrentEpoch()))),
+				zap.Uint64("current_data_version", uint64(dataVersion)),
 				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
 				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
 				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),

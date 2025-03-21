@@ -18,9 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -440,20 +437,12 @@ func createClient(
 	beaconServerURL string,
 	withWeightedAttestationData bool) (*GoClient, error) {
 	client, err := New(zap.NewNop(),
-		beacon.Options{
+		Options{
 			Context:                     ctx,
-			Network:                     beacon.NewNetwork(types.MainNetwork),
 			BeaconNodeAddr:              beaconServerURL,
 			CommonTimeout:               defaultHardTimeout,
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
-		},
-		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
-		func() slotticker.SlotTicker {
-			return slotticker.New(zap.NewNop(), slotticker.Config{
-				SlotDuration: 12 * time.Second,
-				GenesisTime:  time.Now(),
-			})
 		},
 	)
 	return client, err

@@ -24,8 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 type CommitteeSpecTest struct {
