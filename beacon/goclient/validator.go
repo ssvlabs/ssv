@@ -61,7 +61,7 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 
 	gc.registrations[pk] = &validatorRegistration{
 		VersionedSignedValidatorRegistration: registration,
-		new:                                  false,
+		new:                                  true,
 	}
 
 	return nil
