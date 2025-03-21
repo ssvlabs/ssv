@@ -17,12 +17,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 var (
@@ -461,7 +462,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				// Only mark as safe if this is an attester role
 				// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
 				// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
-				cr.doppelgangerHandler.ReportQuorum(validator)
+				cr.doppelgangerHandler.ReportQuorum(ctx, validator)
 
 				att := sszObject.(*spec.VersionedAttestation)
 				// Insert signature

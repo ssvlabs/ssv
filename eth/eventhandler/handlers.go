@@ -2,6 +2,7 @@ package eventhandler
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -337,7 +338,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 var emptyPK = [48]byte{}
 
-func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
+func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
@@ -382,7 +383,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		}
 
 		// Remove validator from doppelganger service
-		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
+		eh.doppelgangerHandler.RemoveValidatorState(ctx, share.ValidatorIndex)
 
 		logger.Debug("processed event")
 		return share.ValidatorPubKey, nil
@@ -392,7 +393,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	return emptyPK, nil
 }
 
-func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
+func (eh *EventHandler) handleClusterLiquidated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
 		fields.EventName(ClusterLiquidated),
 		fields.TxHash(event.Raw.TxHash),
@@ -408,7 +409,7 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 
 	// Remove validator shares from doppelganger service
 	for _, share := range toLiquidate {
-		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
+		eh.doppelgangerHandler.RemoveValidatorState(ctx, share.ValidatorIndex)
 	}
 
 	if len(liquidatedPubKeys) > 0 {

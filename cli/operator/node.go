@@ -20,6 +20,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -66,7 +68,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
-	"go.uber.org/zap"
 )
 
 type KeyStore struct {
@@ -799,7 +800,7 @@ func syncContractEvents(
 			logger.Fatal("failed to load local events", zap.Error(err))
 		}
 
-		if err := eventHandler.HandleLocalEvents(localEvents); err != nil {
+		if err := eventHandler.HandleLocalEvents(ctx, localEvents); err != nil {
 			logger.Fatal("error occurred while running event data handler", zap.Error(err))
 		}
 	} else {
