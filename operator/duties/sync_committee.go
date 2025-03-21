@@ -179,7 +179,9 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 }
 
-// period here might be next period
+// Period can be current or future.
+// If the period passed is the current period – the sync committee target epoch should be the current epoch.
+// If the period passed is a future period – the sync committee target epoch should be the first epoch of that future period.
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
 	start := time.Now()
 
