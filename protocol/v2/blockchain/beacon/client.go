@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"github.com/attestantio/go-eth2-client/api"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -35,6 +36,7 @@ type beaconSubscriber interface {
 type beaconValidator interface {
 	// GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
 	GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error)
+	SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error
 }
 
 type proposer interface {

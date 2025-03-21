@@ -52,7 +52,7 @@ func (bn *TestingBeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 func (bn *TestingBeaconNodeWrapped) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
+func (bn *TestingBeaconNodeWrapped) EnqueueValidatorRegistrationForSubmission(registration *api.VersionedSignedValidatorRegistration) error {
 	return bn.Bn.SubmitValidatorRegistration(registration)
 }
 func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
