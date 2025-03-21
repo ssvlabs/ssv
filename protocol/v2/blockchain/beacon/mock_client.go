@@ -198,6 +198,20 @@ func (mr *MockbeaconValidatorMockRecorder) GetValidatorData(validatorPubKeys any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorData", reflect.TypeOf((*MockbeaconValidator)(nil).GetValidatorData), validatorPubKeys)
 }
 
+// SubmitValidatorRegistration mocks base method.
+func (m *MockbeaconValidator) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitValidatorRegistration", registration)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitValidatorRegistration indicates an expected call of SubmitValidatorRegistration.
+func (mr *MockbeaconValidatorMockRecorder) SubmitValidatorRegistration(registration any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockbeaconValidator)(nil).SubmitValidatorRegistration), registration)
+}
+
 // Mockproposer is a mock of proposer interface.
 type Mockproposer struct {
 	ctrl     *gomock.Controller
