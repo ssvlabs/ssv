@@ -6,7 +6,6 @@ package exporter
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -1804,7 +1803,7 @@ func (s *SignerData) UnmarshalSSZ(buf []byte) error {
 		if err != nil {
 			return err
 		}
-		s.ValidatorIdx = ssz.ExtendUint64(s.ValidatorIdx, num)
+		s.ValidatorIdx = make([]phase0.ValidatorIndex, num)
 		for ii := 0; ii < num; ii++ {
 			s.ValidatorIdx[ii] = phase0.ValidatorIndex(ssz.UnmarshallUint64(buf[ii*8 : (ii+1)*8]))
 		}
@@ -1842,7 +1841,7 @@ func (s *SignerData) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 		}
 		subIndx := hh.Index()
 		for _, i := range s.ValidatorIdx {
-			hh.AppendUint64(i)
+			hh.AppendUint64(uint64(i))
 		}
 		hh.FillUpTo32()
 		numItems := uint64(len(s.ValidatorIdx))
