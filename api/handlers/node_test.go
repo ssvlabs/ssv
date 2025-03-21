@@ -164,6 +164,7 @@ func TestNodeHandlers(t *testing.T) {
 			handler: api.Handler(node.Identity),
 			verify: func(t *testing.T, body []byte) {
 				var resp nodeIdentity
+
 				require.NoError(t, json.Unmarshal(body, &resp))
 				require.NotEmpty(t, resp.PeerID)
 			},
@@ -175,6 +176,7 @@ func TestNodeHandlers(t *testing.T) {
 			handler: api.Handler(node.Peers),
 			verify: func(t *testing.T, body []byte) {
 				var peers []peerInfo
+
 				require.NoError(t, json.Unmarshal(body, &peers))
 				require.GreaterOrEqual(t, len(peers), 1)
 			},
@@ -197,6 +199,7 @@ func TestNodeHandlers(t *testing.T) {
 						ListenAddresses []string `json:"p2p_listen_addresses"`
 					} `json:"advanced"`
 				}
+
 				require.NoError(t, json.Unmarshal(body, &health))
 			},
 		},
@@ -215,8 +218,6 @@ func TestNodeHandlers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			req, err := http.NewRequest(tt.method, tt.url, nil)
 
 			require.NoError(t, err)
