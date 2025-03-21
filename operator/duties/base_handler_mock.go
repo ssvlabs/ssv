@@ -23,7 +23,6 @@ import (
 type MockdutyHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockdutyHandlerMockRecorder
-	isgomock struct{}
 }
 
 // MockdutyHandlerMockRecorder is the mock recorder for MockdutyHandler.
