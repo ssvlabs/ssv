@@ -107,17 +107,30 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 				}
 			}
 
-			// Submit validator registrations.
-			if len(registrations) > 0 {
-				start := time.Now()
-				err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations)
-				recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
-				if err != nil {
-					gc.log.Error(clResponseErrMsg, zap.Error(err))
-					continue
+			// Submit validator registrations in chunks.
+			// TODO: replace with slices.Chunk after we've upgraded to Go 1.23
+			submitBatched := func() error {
+				const chunkSize = 500
+				for start := 0; start < len(registrations); start += chunkSize {
+					end := min(start+chunkSize, len(registrations))
+					chunk := registrations[start:end]
+
+					reqStart := time.Now()
+					err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, chunk)
+					recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
+					if err != nil {
+						return err
+					}
 				}
-				gc.log.Info("submitted validator registrations", fields.Slot(currentSlot), fields.Count(len(registrations)), fields.Duration(start))
+				return nil
 			}
+			submitBatchedStart := time.Now()
+			err := submitBatched()
+			if err != nil {
+				gc.log.Error(clResponseErrMsg, zap.Error(err))
+				continue
+			}
+			gc.log.Info("successfully submitted validator registrations", fields.Slot(currentSlot), fields.Count(len(registrations)), fields.Duration(submitBatchedStart))
 		}
 	}
 }
