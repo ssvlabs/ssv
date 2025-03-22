@@ -99,7 +99,7 @@ type errorAllRangeMockStore struct {
 	*mockParticipantStore
 }
 
-func (m *errorAllRangeMockStore) GetAllParticipantsInRange(from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *errorAllRangeMockStore) GetAllParticipantsInRange(phase0.Slot, phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	return nil, fmt.Errorf("forced error on GetAllParticipantsInRange")
 }
 

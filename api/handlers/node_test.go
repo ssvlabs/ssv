@@ -23,8 +23,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// createTestNode builds a test Node using a local network.
-func createTestNode(t *testing.T, n int, ctx context.Context) *Node {
+// CreateTestNode builds a test Node using a local network.
+func CreateTestNode(t *testing.T, n int, ctx context.Context) *Node {
 	pks := []string{
 		"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170",
@@ -148,7 +148,7 @@ func TestNodeHandlers(t *testing.T) {
 
 	defer cancel()
 
-	node := createTestNode(t, n, ctx)
+	node := CreateTestNode(t, n, ctx)
 
 	tests := []struct {
 		name    string
