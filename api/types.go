@@ -23,6 +23,13 @@ func (h *Hex) UnmarshalJSON(data []byte) error {
 		return errors.New("invalid hex string")
 	}
 	str := string(data[1 : len(data)-1])
+
+	// initialize as empty slice for "" case instead of nil
+	if str == "" {
+		*h = Hex{}
+		return nil
+	}
+
 	return h.Bind(str)
 }
 
