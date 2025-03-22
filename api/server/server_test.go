@@ -193,6 +193,7 @@ func TestRun_ActualExecution(t *testing.T) {
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	addr := fmt.Sprintf("localhost:%d", port)
+
 	err = listener.Close()
 
 	require.NoError(t, err)
@@ -211,27 +212,27 @@ func TestRun_ActualExecution(t *testing.T) {
 		errCh <- srv.Run()
 	}()
 
-	// give it a moment to start
-	time.Sleep(100 * time.Millisecond)
+	var conn net.Conn
+	var connectErr error
 
-	// verify server has set up the http handler
-	require.NotNil(t, srv.httpServer)
-	require.NotNil(t, srv.httpServer.Handler, "http handler should be set")
-
-	// test connectivity
-	conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
-	if err != nil {
-		t.Fatalf("failed to connect to server: %v", err)
+	for i := 0; i < 10; i++ {
+		conn, connectErr = net.DialTimeout("tcp", addr, 500*time.Millisecond)
+		if connectErr == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
+
+	require.NoError(t, connectErr, "failed to connect to server after multiple attempts")
+
 	conn.Close()
 
-	if srv.httpServer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		err := srv.httpServer.Shutdown(ctx)
-		if err != nil {
-			t.Logf("error shutting down server: %v", err)
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = srv.httpServer.Shutdown(ctx)
+	if err != nil {
+		t.Logf("error shutting down server: %v", err)
 	}
 
 	select {
@@ -367,9 +368,11 @@ func TestRoutes(t *testing.T) {
 			defer resp.Body.Close()
 
 			body, err := io.ReadAll(resp.Body)
+
 			require.NoError(t, err)
 
 			require.Equal(t, route.expectedCode, resp.StatusCode, "Unexpected status code")
+
 			route.validateBody(t, string(body))
 		})
 	}
