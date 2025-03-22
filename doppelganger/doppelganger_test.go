@@ -20,7 +20,7 @@ func newTestDoppelgangerHandler(t *testing.T) *handler {
 	logger := logging.TestLogger(t)
 
 	return NewHandler(&Options{
-		Network:           networkconfig.TestNetwork,
+		Network:           networkconfig.TestingNetworkConfig,
 		BeaconNode:        mockBeaconNode,
 		ValidatorProvider: mockValidatorProvider,
 		Logger:            logger,

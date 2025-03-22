@@ -7,6 +7,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -23,16 +28,12 @@ import (
 	"github.com/ssvlabs/ssv/utils/ttl"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"net"
-	"sync"
-	"testing"
-	"time"
 )
 
 var (
 	testLogger    = zap.NewNop()
 	testCtx       = context.Background()
-	testNetConfig = networkconfig.TestNetwork
+	testNetConfig = networkconfig.TestingNetworkConfig
 
 	testIP             = "127.0.0.1"
 	testBindIP         = "127.0.0.1"
@@ -91,27 +92,30 @@ func testingDiscovery(t *testing.T) *DiscV5Service {
 
 // NetworkConfig with fork epoch
 func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
-	n := networkconfig.HoleskyStage
+	n := networkconfig.HoleskyStageSSV
+
 	return networkconfig.NetworkConfig{
-		Name:                 n.Name,
-		Beacon:               n.Beacon,
-		DomainType:           n.DomainType,
-		GenesisEpoch:         n.GenesisEpoch,
-		RegistrySyncOffset:   n.RegistrySyncOffset,
-		RegistryContractAddr: n.RegistryContractAddr,
-		Bootnodes:            n.Bootnodes,
+		Beacon: networkconfig.TestingBeaconConfig,
+		SSV: networkconfig.SSV{
+			Name:                    n.Name,
+			DomainType:              n.DomainType,
+			RegistrySyncOffset:      n.RegistrySyncOffset,
+			RegistryContractAddr:    n.RegistryContractAddr,
+			Bootnodes:               n.Bootnodes,
+			TotalEthereumValidators: n.TotalEthereumValidators,
+		},
 	}
 }
 
 // NetworkConfig for staying in pre-fork
 func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
+	forkEpoch := networkconfig.TestingBeaconConfig.EstimatedCurrentEpoch() + 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 
 // NetworkConfig for staying in post-fork
 func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
+	forkEpoch := networkconfig.TestingBeaconConfig.EstimatedCurrentEpoch() - 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 
@@ -126,9 +130,9 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 	require.NoError(t, err)
 
 	// Set entries
-	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType)
+	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType())
 	require.NoError(t, err)
-	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.DomainType)
+	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.DomainType())
 	require.NoError(t, err)
 	err = records.SetSubnetsEntry(localNode, mockSubnets(1))
 	require.NoError(t, err)
@@ -138,7 +142,7 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 
 // Testing node
 func NewTestingNode(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, mockSubnets(1))
+	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.DomainType(), true, mockSubnets(1))
 }
 
 func NewTestingNodes(t *testing.T, count int) []*enode.Node {
@@ -150,15 +154,15 @@ func NewTestingNodes(t *testing.T, count int) []*enode.Node {
 }
 
 func NodeWithoutDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, false, spectypes.DomainType{}, true, testNetConfig.DomainType, true, mockSubnets(1))
+	return CustomNode(t, false, spectypes.DomainType{}, true, testNetConfig.DomainType(), true, mockSubnets(1))
 }
 
 func NodeWithoutNextDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, false, spectypes.DomainType{}, true, mockSubnets(1))
+	return CustomNode(t, true, testNetConfig.DomainType(), false, spectypes.DomainType{}, true, mockSubnets(1))
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, false, nil)
+	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.DomainType(), false, nil)
 }
 
 func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
@@ -166,11 +170,11 @@ func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDo
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, zeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.DomainType(), true, zeroSubnets)
 }
 
 func NodeWithCustomSubnets(t *testing.T, subnets []byte) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, subnets)
+	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.DomainType(), true, subnets)
 }
 
 func CustomNode(t *testing.T,

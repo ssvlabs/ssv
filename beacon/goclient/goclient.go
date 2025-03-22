@@ -19,13 +19,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/utils/casts"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -110,10 +108,6 @@ type MultiClient interface {
 	eth2client.ValidatorLivenessProvider
 }
 
-type operatorDataStore interface {
-	AwaitOperatorID() spectypes.OperatorID
-}
-
 type EventTopic string
 
 const (
@@ -122,17 +116,15 @@ const (
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log         *zap.Logger
-	ctx         context.Context
-	network     beaconprotocol.Network
-	clients     []Client
-	multiClient MultiClient
+	log          *zap.Logger
+	ctx          context.Context
+	beaconConfig *networkconfig.Beacon // using pointer to make sure it's fetched
+	clients      []Client
+	multiClient  MultiClient
 	specssv.VersionCalls
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
-
-	operatorDataStore operatorDataStore
 
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
@@ -169,23 +161,21 @@ type GoClient struct {
 	lastProcessedHeadEventSlotLock sync.Mutex
 	lastProcessedHeadEventSlot     phase0.Slot
 
-	genesisForkVersion phase0.Version
+	genesisForkVersion phase0.Version // TODO get from config
 	ForkLock           sync.RWMutex
-	ForkEpochElectra   phase0.Epoch
-	ForkEpochDeneb     phase0.Epoch
-	ForkEpochCapella   phase0.Epoch
-	ForkEpochBellatrix phase0.Epoch
-	ForkEpochAltair    phase0.Epoch
+	ForkEpochElectra   phase0.Epoch // TODO get from config
+	ForkEpochDeneb     phase0.Epoch // TODO get from config
+	ForkEpochCapella   phase0.Epoch // TODO get from config
+	ForkEpochBellatrix phase0.Epoch // TODO get from config
+	ForkEpochAltair    phase0.Epoch // TODO get from config
 }
 
 // New init new client and go-client instance
 func New(
 	logger *zap.Logger,
-	opt beaconprotocol.Options,
-	operatorDataStore operatorDataStore,
-	slotTickerProvider slotticker.Provider,
+	opt Options,
 ) (*GoClient, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
 
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
@@ -197,27 +187,16 @@ func New(
 	}
 
 	client := &GoClient{
-		log:                   logger.Named("consensus_client"),
-		ctx:                   opt.Context,
-		network:               opt.Network,
-		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
-		operatorDataStore:     operatorDataStore,
-		registrationCache:     make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
-		attestationDataCache: ttlcache.New(
-			// we only fetch attestation data during the slot of the relevant duty (and never later),
-			// hence caching it for 2 slots is sufficient
-			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
-		),
-		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
-			opt.Network.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
-		),
+		log:                                logger.Named("consensus_client"),
+		ctx:                                opt.Context,
+		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
+		registrationCache:                  make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{EventTopicHead},
-		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
 		ForkEpochBellatrix: math.MaxUint64,
@@ -249,7 +228,25 @@ func New(
 
 	client.nodeSyncingFn = client.nodeSyncing
 
-	go client.registrationSubmitter(slotTickerProvider)
+	beaconConfig, err := client.fetchBeaconConfig()
+	if err != nil {
+		return nil, fmt.Errorf("fetch spec config: %w", err)
+	}
+
+	client.beaconConfig = beaconConfig
+
+	client.genesisForkVersion = beaconConfig.GenesisForkVersion()
+
+	client.blockRootToSlotCache = ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
+		uint64(beaconConfig.SlotsPerEpoch) * BlockRootToSlotCacheCapacityEpochs),
+	)
+
+	client.attestationDataCache = ttlcache.New(
+		// we only fetch attestation data during the slot of the relevant duty (and never later),
+		// hence caching it for 2 slots is sufficient
+		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * beaconConfig.SlotDuration),
+	)
+
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
@@ -365,10 +362,14 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				)
 				return
 			}
+
+			epoch := gc.beaconConfig.EstimatedCurrentEpoch()
+			dataVersion := gc.DataVersion(epoch)
+
 			gc.ForkLock.RLock()
 			gc.log.Info("retrieved fork epochs",
 				zap.String("node_addr", s.Address()),
-				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.network.EstimatedCurrentEpoch()))),
+				zap.Uint64("current_data_version", uint64(dataVersion)),
 				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
 				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
 				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),
@@ -461,17 +462,4 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())
 
 	return nil
-}
-
-// GetBeaconNetwork returns the beacon network the node is on
-func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
-	return gc.network.BeaconNetwork
-}
-
-// SlotStartTime returns the start time in terms of its unix epoch
-// value.
-func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * casts.DurationFromUint64(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
-	startTime := time.Unix(gc.network.MinGenesisTime(), 0).Add(duration)
-	return startTime
 }

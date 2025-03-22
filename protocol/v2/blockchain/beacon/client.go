@@ -2,7 +2,6 @@ package beacon
 
 import (
 	"context"
-	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -41,31 +40,22 @@ type proposer interface {
 	SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error
 }
 
-// TODO need to handle differently (by spec)
-type signer interface {
-	ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error)
-}
-
 // TODO: remove temp spec intefaces once spec is settled
 
 // BeaconNode interface for all beacon duty calls
 type BeaconNode interface {
-	specssv.BeaconNode // spec beacon interface
+	// TODO: add BeaconConfig method?
+	specssv.AttesterCalls
+	specssv.ProposerCalls
+	specssv.AggregatorCalls
+	specssv.SyncCommitteeCalls
+	specssv.SyncCommitteeContributionCalls
+	specssv.ValidatorRegistrationCalls
+	specssv.VoluntaryExitCalls
+	specssv.DomainCalls
+	specssv.VersionCalls
 	beaconDuties
 	beaconSubscriber
 	beaconValidator
-	signer // TODO need to handle differently
 	proposer
-}
-
-// Options for controller struct creation
-type Options struct {
-	Context                     context.Context
-	Network                     Network
-	BeaconNodeAddr              string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true" env-description:"Beacon node URL(s). Multiple nodes are supported via semicolon-separated URLs (e.g. 'http://localhost:5052;http://localhost:5053')"`
-	SyncDistanceTolerance       uint64 `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"4" env-description:"Maximum number of slots behind head considered in-sync"`
-	WithWeightedAttestationData bool   `yaml:"WithWeightedAttestationData" env:"WITH_WEIGHTED_ATTESTATION_DATA" env-default:"false" env-description:"Enable attestation data scoring across multiple beacon nodes"`
-
-	CommonTimeout time.Duration // Optional.
-	LongTimeout   time.Duration // Optional.
 }

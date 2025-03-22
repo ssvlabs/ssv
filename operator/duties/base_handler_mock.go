@@ -10,13 +10,14 @@
 package duties
 
 import (
-	context "context"
-	reflect "reflect"
+	"context"
+	"reflect"
 
-	networkconfig "github.com/ssvlabs/ssv/networkconfig"
-	slotticker "github.com/ssvlabs/ssv/operator/slotticker"
-	gomock "go.uber.org/mock/gomock"
-	zap "go.uber.org/zap"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 // MockdutyHandler is a mock of dutyHandler interface.
@@ -82,7 +83,7 @@ func (mr *MockdutyHandlerMockRecorder) Name() *gomock.Call {
 }
 
 // Setup mocks base method.
-func (m *MockdutyHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, network networkconfig.NetworkConfig, validatorProvider ValidatorProvider, validatorController ValidatorController, dutiesExecutor DutiesExecutor, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
+func (m *MockdutyHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, network networkconfig.Interface, validatorProvider ValidatorProvider, validatorController ValidatorController, dutiesExecutor DutiesExecutor, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Setup", name, logger, beaconNode, executionClient, network, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange)
 }

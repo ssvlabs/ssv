@@ -238,6 +238,8 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
+	r.GetBaseRunner().NetworkConfig = networkconfig.TestingNetworkConfig
+
 	// override
 	test.PostDutyRunnerState = r
 
@@ -268,7 +270,7 @@ var baseCommitteeWithRunnerSample = func(
 
 	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
+			networkconfig.TestingNetworkConfig,
 			shareMap,
 			controller.NewController(
 				runnerSample.BaseRunner.QBFTController.Identifier,
@@ -293,7 +295,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBaseRunner().BeaconNetwork,
+		networkconfig.TestingBeaconConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,
