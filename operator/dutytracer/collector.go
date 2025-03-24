@@ -483,6 +483,11 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 					} else {
 						trace.syncCommitteeRoot = root
 					}
+
+					c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData)))
+
+					// committee duty will contain the BeaconVote data
+					trace.CommitteeDutyTrace.ProposalData = msg.SignedSSVMessage.FullData
 				}
 
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
@@ -499,28 +504,35 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 
 				trace, roleDutyTrace := c.getOrCreateValidatorTrace(slot, bnRole, validatorPK)
 
-				if msg.MsgType == spectypes.SSVConsensusMsgType {
+				func() {
 					var qbftMsg = new(specqbft.Message)
 					err := qbftMsg.Decode(msg.Data)
 					if err != nil {
 						c.logger.Error("decode validator consensus data", zap.Error(err))
-					} else {
-						if qbftMsg.MsgType == specqbft.ProposalMsgType && roleDutyTrace.Validator == 0 {
-							var data = new(spectypes.ValidatorConsensusData)
-							err := data.Decode(msg.SignedSSVMessage.FullData)
-							if err != nil {
-								c.logger.Error("decode validator proposal data", zap.Error(err))
-							} else {
-								func() {
-									trace.Lock()
-									defer trace.Unlock()
-
-									roleDutyTrace.Validator = data.Duty.ValidatorIndex
-								}()
-							}
-						}
+						return
 					}
-				}
+
+					if qbftMsg.MsgType == specqbft.ProposalMsgType {
+						var data = new(spectypes.ValidatorConsensusData)
+						err := data.Decode(msg.SignedSSVMessage.FullData)
+						if err != nil {
+							c.logger.Error("decode validator proposal data", zap.Error(err))
+							return
+						}
+
+						trace.Lock()
+						defer trace.Unlock()
+
+						if roleDutyTrace.Validator == 0 {
+							roleDutyTrace.Validator = data.Duty.ValidatorIndex
+						}
+
+						c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), zap.Int("size", len(msg.SignedSSVMessage.FullData)))
+
+						// non-committee duty will contain the proposal data
+						roleDutyTrace.ProposalData = data.DataSSZ
+					}
+				}()
 
 				trace.Lock()
 				defer trace.Unlock()

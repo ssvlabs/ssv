@@ -14,6 +14,8 @@ type ValidatorDutyTrace struct {
 	Role      spectypes.BeaconRole
 	Validator phase0.ValidatorIndex
 
+	ProposalData []byte `ssz-max:"4194532"`
+
 	Pre  []*PartialSigTrace `ssz-max:"13"`
 	Post []*PartialSigTrace `ssz-max:"13"`
 }
@@ -73,6 +75,8 @@ type CommitteeDutyTrace struct {
 
 	CommitteeID spectypes.CommitteeID  `ssz-size:"32"`
 	OperatorIDs []spectypes.OperatorID `ssz-max:"13"`
+
+	ProposalData []byte `ssz-max:"4194532"`
 
 	SyncCommittee []*SignerData `ssz-max:"1512"`
 	Attester      []*SignerData `ssz-max:"1512"`
