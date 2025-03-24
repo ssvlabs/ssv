@@ -10,35 +10,43 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// TestNewMetric verifies NewMetric returns the metric when no error occurs.
+// TestNewMetric verifies NewMetric always returns the metric regardless of error.
 func TestNewMetric(t *testing.T) {
 	t.Parallel()
 
-	metricValue := "test-metric"
-	var err error = nil
+	testCases := []struct {
+		name  string
+		value interface{}
+		err   error
+	}{
+		{
+			name:  "no error",
+			value: "test-metric",
+			err:   nil,
+		},
+		{
+			name:  "with error",
+			value: 123,
+			err:   errors.New("test error"),
+		},
+	}
 
-	result := NewMetric(metricValue, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	require.Equal(t, metricValue, result)
+			result := NewMetric(tc.value, tc.err)
+
+			require.Equal(t, tc.value, result)
+		})
+	}
 }
 
-// TestNewMetricError verifies NewMetric returns the metric even when an error occurs.
-func TestNewMetricError(t *testing.T) {
+// TestRecordUint64Value_RangeHandling verifies RecordUint64Value correctly handles values within int64 range.
+func TestRecordUint64Value_RangeHandling(t *testing.T) {
 	t.Parallel()
 
-	metricValue := 123
-	err := errors.New("test error")
-
-	result := NewMetric(metricValue, err)
-
-	require.Equal(t, metricValue, result)
-}
-
-// TestRecordUint64Value verifies RecordUint64Value correctly handles values within int64 range.
-func TestRecordUint64Value(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
+	testCases := []struct {
 		name          string
 		value         uint64
 		shouldRecord  bool
@@ -58,7 +66,7 @@ func TestRecordUint64Value(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

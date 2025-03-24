@@ -28,8 +28,8 @@ func TestInitialize(t *testing.T) {
 	require.NoError(t, shutdown(context.Background()))
 }
 
-// TestInitializeWithMetrics verifies that Initialize with metrics option sets up the meter provider.
-func TestInitializeWithMetrics(t *testing.T) {
+// TestInitialize_WithMetrics verifies that Initialize with metrics option sets up the meter provider.
+func TestInitialize_WithMetrics(t *testing.T) {
 	t.Parallel()
 
 	originalProvider := otel.GetMeterProvider()
@@ -44,8 +44,8 @@ func TestInitializeWithMetrics(t *testing.T) {
 	require.NoError(t, shutdown(context.Background()))
 }
 
-// TestInitializeShutdown verifies the returned shutdown function returns nil.
-func TestInitializeShutdown(t *testing.T) {
+// TestInitialize_Shutdown verifies the returned shutdown function returns nil.
+func TestInitialize_Shutdown(t *testing.T) {
 	t.Parallel()
 
 	shutdown, err := Initialize(testApp, testVersion)
@@ -57,8 +57,8 @@ func TestInitializeShutdown(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestInitializeResourceError verifies error handling when resource creation fails.
-func TestInitializeResourceError(t *testing.T) {
+// TestInitialize_ResourceError verifies error handling when resource creation fails.
+func TestInitialize_ResourceError(t *testing.T) {
 	t.Parallel()
 
 	mockDeps := Dependencies{
@@ -73,8 +73,8 @@ func TestInitializeResourceError(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to instantiate observability resources")
 }
 
-// TestInitializePrometheusError verifies error handling when Prometheus exporter creation fails.
-func TestInitializePrometheusError(t *testing.T) {
+// TestInitialize_PrometheusError verifies error handling when Prometheus exporter creation fails.
+func TestInitialize_PrometheusError(t *testing.T) {
 	t.Parallel()
 
 	mockDeps := Dependencies{

@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// TestBeaconRoleAttribute verifies BeaconRoleAttribute creates correct key-value attribute.
-func TestBeaconRoleAttribute(t *testing.T) {
+// TestBeaconRoleAttribute_Creates verifies BeaconRoleAttribute creates correct key-value attribute.
+func TestBeaconRoleAttribute_Creates(t *testing.T) {
 	t.Parallel()
 
 	role := types.BeaconRole(1)
@@ -23,8 +23,8 @@ func TestBeaconRoleAttribute(t *testing.T) {
 	require.Equal(t, role.String(), attr.Value.AsString())
 }
 
-// TestRunnerRoleAttribute verifies RunnerRoleAttribute creates correct key-value attribute.
-func TestRunnerRoleAttribute(t *testing.T) {
+// TestRunnerRoleAttribute_Creates verifies RunnerRoleAttribute creates correct key-value attribute.
+func TestRunnerRoleAttribute_Creates(t *testing.T) {
 	t.Parallel()
 
 	role := types.RunnerRole(1)
@@ -35,8 +35,8 @@ func TestRunnerRoleAttribute(t *testing.T) {
 	require.Equal(t, role.String(), attr.Value.AsString())
 }
 
-// TestDutyRoundAttribute verifies DutyRoundAttribute creates correct key-value attribute.
-func TestDutyRoundAttribute(t *testing.T) {
+// TestDutyRoundAttribute_Creates verifies DutyRoundAttribute creates correct key-value attribute.
+func TestDutyRoundAttribute_Creates(t *testing.T) {
 	t.Parallel()
 
 	round := qbft.Round(10)
@@ -47,11 +47,11 @@ func TestDutyRoundAttribute(t *testing.T) {
 	require.Equal(t, int64(round), attr.Value.AsInt64())
 }
 
-// TestNetworkDirectionAttribute verifies NetworkDirectionAttribute creates correct key-value attribute.
-func TestNetworkDirectionAttribute(t *testing.T) {
+// TestNetworkDirectionAttribute_Creates verifies NetworkDirectionAttribute creates correct key-value attribute.
+func TestNetworkDirectionAttribute_Creates(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name          string
 		direction     network.Direction
 		expectedValue string
@@ -68,8 +68,7 @@ func TestNetworkDirectionAttribute(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		tc := tc
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -81,26 +80,50 @@ func TestNetworkDirectionAttribute(t *testing.T) {
 	}
 }
 
-// TestUint64AttributeValueInt64 verifies Uint64AttributeValue correctly handles values within int64 range.
-func TestUint64AttributeValueInt64(t *testing.T) {
+// TestUint64AttributeValue_TypeConversion verifies Uint64AttributeValue handles values correctly.
+func TestUint64AttributeValue_TypeConversion(t *testing.T) {
 	t.Parallel()
 
-	var value uint64 = 100
+	testCases := []struct {
+		name           string
+		value          uint64
+		expectedType   attribute.Type
+		checkInt64     bool
+		checkString    bool
+		expectedInt64  int64
+		expectedString string
+	}{
+		{
+			name:          "value within int64 range",
+			value:         100,
+			expectedType:  attribute.INT64,
+			checkInt64:    true,
+			expectedInt64: 100,
+		},
+		{
+			name:           "value exceeds int64 range",
+			value:          uint64(math.MaxInt64) + 1,
+			expectedType:   attribute.STRING,
+			checkString:    true,
+			expectedString: "9223372036854775808",
+		},
+	}
 
-	attrValue := Uint64AttributeValue(value)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	require.Equal(t, attribute.INT64, attrValue.Type())
-	require.Equal(t, int64(value), attrValue.AsInt64())
-}
+			attrValue := Uint64AttributeValue(tc.value)
 
-// TestUint64AttributeValueString verifies Uint64AttributeValue correctly handles values exceeding int64 range.
-func TestUint64AttributeValueString(t *testing.T) {
-	t.Parallel()
+			require.Equal(t, tc.expectedType, attrValue.Type())
 
-	value := uint64(math.MaxInt64) + 1
+			if tc.checkInt64 {
+				require.Equal(t, tc.expectedInt64, attrValue.AsInt64())
+			}
 
-	attrValue := Uint64AttributeValue(value)
-
-	require.Equal(t, attribute.STRING, attrValue.Type())
-	require.Equal(t, "9223372036854775808", attrValue.AsString())
+			if tc.checkString {
+				require.Equal(t, tc.expectedString, attrValue.AsString())
+			}
+		})
+	}
 }
