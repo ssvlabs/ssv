@@ -171,22 +171,60 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	case spectypes.DomainProposer:
 		switch v := obj.(type) {
-		case *capella.BeaconBlock, *deneb.BeaconBlock, *electra.BeaconBlock:
-			return nil, phase0.Root{}, fmt.Errorf("web3signer supports only blinded blocks since bellatrix") // https://github.com/Consensys/web3signer/blob/85ed009955d4a5bbccba5d5248226093987e7f6f/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/BlockRequest.java#L29
-
-		case *apiv1capella.BlindedBeaconBlock:
-			req.Type = web3signer.TypeBlockV2
+		case *capella.BeaconBlock:
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
 				return nil, phase0.Root{}, fmt.Errorf("could not hash beacon block (capella): %w", err)
 			}
 
-			if err := km.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
-				return nil, phase0.Root{}, err
+			req.BeaconBlock = &web3signer.BeaconBlockData{
+				Version: spec.DataVersionCapella,
+				BlockHeader: &phase0.BeaconBlockHeader{
+					Slot:          v.Slot,
+					ProposerIndex: v.ProposerIndex,
+					ParentRoot:    v.ParentRoot,
+					StateRoot:     v.StateRoot,
+					BodyRoot:      bodyRoot,
+				},
+			}
+		case *deneb.BeaconBlock:
+			bodyRoot, err := v.Body.HashTreeRoot()
+			if err != nil {
+				return nil, phase0.Root{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
 			}
 
-			if err = km.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
-				return nil, phase0.Root{}, err
+			req.BeaconBlock = &web3signer.BeaconBlockData{
+				Version: spec.DataVersionDeneb,
+				BlockHeader: &phase0.BeaconBlockHeader{
+					Slot:          v.Slot,
+					ProposerIndex: v.ProposerIndex,
+					ParentRoot:    v.ParentRoot,
+					StateRoot:     v.StateRoot,
+					BodyRoot:      bodyRoot,
+				},
+			}
+
+		case *electra.BeaconBlock:
+			bodyRoot, err := v.Body.HashTreeRoot()
+			if err != nil {
+				return nil, phase0.Root{}, fmt.Errorf("could not hash beacon block (electra): %w", err)
+			}
+
+			req.BeaconBlock = &web3signer.BeaconBlockData{
+				Version: spec.DataVersionElectra,
+				BlockHeader: &phase0.BeaconBlockHeader{
+					Slot:          v.Slot,
+					ProposerIndex: v.ProposerIndex,
+					ParentRoot:    v.ParentRoot,
+					StateRoot:     v.StateRoot,
+					BodyRoot:      bodyRoot,
+				},
+			}
+
+		case *apiv1capella.BlindedBeaconBlock:
+			bodyRoot, err := v.Body.HashTreeRoot()
+			if err != nil {
+				return nil, phase0.Root{}, fmt.Errorf("could not hash blinded beacon block (capella): %w", err)
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
@@ -201,18 +239,9 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 		case *apiv1deneb.BlindedBeaconBlock:
-			req.Type = web3signer.TypeBlockV2
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
-				return nil, phase0.Root{}, fmt.Errorf("could not hash beacon block (deneb): %w", err)
-			}
-
-			if err := km.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
-				return nil, phase0.Root{}, err
-			}
-
-			if err = km.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
-				return nil, phase0.Root{}, err
+				return nil, phase0.Root{}, fmt.Errorf("could not hash blinded beacon block (deneb): %w", err)
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
@@ -227,18 +256,9 @@ func (km *RemoteKeyManager) SignBeaconObject(
 			}
 
 		case *apiv1electra.BlindedBeaconBlock:
-			req.Type = web3signer.TypeBlockV2
 			bodyRoot, err := v.Body.HashTreeRoot()
 			if err != nil {
-				return nil, phase0.Root{}, fmt.Errorf("could not hash beacon block (electra): %w", err)
-			}
-
-			if err := km.IsBeaconBlockSlashable(sharePubkey, v.Slot); err != nil {
-				return nil, phase0.Root{}, err
-			}
-
-			if err = km.UpdateHighestProposal(sharePubkey, v.Slot); err != nil {
-				return nil, phase0.Root{}, err
+				return nil, phase0.Root{}, fmt.Errorf("could not hash blinded beacon block (electra): %w", err)
 			}
 
 			req.BeaconBlock = &web3signer.BeaconBlockData{
@@ -254,6 +274,17 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 		default:
 			return nil, phase0.Root{}, fmt.Errorf("obj type is unknown: %T", obj)
+		}
+
+		req.Type = web3signer.TypeBlockV2
+
+		blockSlot := req.BeaconBlock.BlockHeader.Slot
+		if err := km.IsBeaconBlockSlashable(sharePubkey, blockSlot); err != nil {
+			return nil, phase0.Root{}, err
+		}
+
+		if err = km.UpdateHighestProposal(sharePubkey, blockSlot); err != nil {
+			return nil, phase0.Root{}, err
 		}
 
 	case spectypes.DomainVoluntaryExit:
