@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -38,6 +37,9 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
+	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
+	registrationSlots := h.network.SlotsPerEpoch() * frequencyEpochs
+
 	next := h.ticker.Next()
 	for {
 		select {
@@ -52,11 +54,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				// Distribute the registrations evenly across multiple epochs based on the pubkeys.
-				registrationSlots := frequencyEpochs * h.network.SlotsPerEpoch()
-				validatorSample := binary.LittleEndian.Uint64(share.ValidatorPubKey[:8])
-				shouldSubmit := validatorSample%registrationSlots != uint64(slot)%registrationSlots
-				if !shouldSubmit {
+				if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
 					continue
 				}
 
