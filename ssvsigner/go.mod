@@ -9,7 +9,7 @@ require (
 	github.com/ethereum/go-ethereum v1.14.8
 	github.com/fasthttp/router v1.5.4
 	github.com/herumi/bls-eth-go-binary v1.29.1
-	github.com/ssvlabs/ssv v1.2.1-0.20250318213811-c9c1ec386275
+	github.com/ssvlabs/ssv v1.2.1-0.20250324174200-825379d74f9b
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0
 	go.uber.org/zap v1.27.0
@@ -69,7 +69,7 @@ require (
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/ssvlabs/ssv-spec v0.0.0-20250219144831-3a9cb8e35c0c // indirect
+	github.com/ssvlabs/ssv-spec v1.1.3 // indirect
 	github.com/supranational/blst v0.3.13 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
