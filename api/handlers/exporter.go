@@ -149,12 +149,9 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		case spectypes.BNRoleSyncCommittee:
 			for s := request.From; s <= request.To; s++ {
 				slot := phase0.Slot(s)
-				// TODO(Moshe): do we need role for committee decideds?
 				for _, pubkey := range pubkeys {
 					participantsByPK, err := e.TraceStore.GetCommitteeDecideds(slot, pubkey)
 					if err != nil {
-						// don't stop on error, continue to next slot
-						// return api.Error(fmt.Errorf("get committee participants: %w", err))
 						continue
 					}
 					for _, pr := range participantsByPK {
@@ -167,8 +164,6 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				slot := phase0.Slot(s)
 				participantsByPK, err := e.TraceStore.GetValidatorDecideds(role, slot, pubkeys)
 				if err != nil {
-					// don't stop on error, continue to next slot
-					// return api.Error(fmt.Errorf("get validator participants: %w", err))
 					continue
 				}
 				for _, pr := range participantsByPK {
@@ -237,7 +232,6 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			slot := phase0.Slot(s)
 			duty, err := e.TraceStore.GetCommitteeDuty(slot, cmtID)
 			if err != nil {
-				// return api.Error(fmt.Errorf("error getting duties: %w", err))
 				continue
 			}
 			duties = append(duties, duty)
@@ -309,14 +303,14 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 				if isSyncCommitteeRole(role) {
 					committeeID, index, err := e.TraceStore.GetCommitteeID(slot, pubkey)
 					if err != nil {
-						// return api.Error(fmt.Errorf("error getting committee ID: %w", err))
 						continue
 					}
 					duty, err := e.TraceStore.GetCommitteeDuty(slot, committeeID)
 					if err != nil {
-						// return api.Error(fmt.Errorf("error getting duties: %w", err))
 						continue
 					}
+
+					// de-duplicate SC and Attester duties
 					if (role == spectypes.BNRoleSyncCommittee && len(duty.SyncCommittee) > 0) ||
 						(role == spectypes.BNRoleAttester && len(duty.Attester) > 0) {
 						cDuty := &dutytracer.ValidatorDutyTrace{
@@ -332,9 +326,9 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 						continue
 					}
 				}
+
 				duty, err := e.TraceStore.GetValidatorDuties(role, slot, pubkey)
 				if err != nil {
-					// return api.Error(fmt.Errorf("error getting duties: %w", err))
 					continue
 				}
 				results = append(results, duty)
