@@ -180,17 +180,7 @@ func (n *p2pNetwork) PeersIndex() peers.Index {
 	return n.idx
 }
 
-// Peers returns all peers connected to the network
-func (n *p2pNetwork) Peers() []peer.ID {
-	allPeers, err := n.topicsCtrl.Peers("")
-	if err != nil {
-		n.logger.Error("Cant list all peers", zap.Error(err))
-		return nil
-	}
-	return allPeers
-}
-
-// PeersByTopic returns a map of peers grouped by topic
+// PeersByTopic returns topic->peers we are connected to
 func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
 	tpcs := n.topicsCtrl.Topics()
 	peerz := make(map[string][]peer.ID, len(tpcs))
@@ -592,57 +582,78 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	return n.cfg.TopicMaxPeers
 }
 
-// peerScore calculates a score for peerID based on how valuable this peer's contribution
-// to us assessing each subnet-contribution he makes (as estimated by score func).
+// peerScore calculates peer score based on how valuable this peer would have been if we didn't
+// have him, but then connected with.
 func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
-	result := 0.0
-
-	peerSubnets := n.idx.GetPeerSubnets(peerID)
-	sharedSubnets := commons.SharedSubnets(n.activeSubnets, peerSubnets, 0)
-	for _, subnet := range sharedSubnets {
-		result += n.score(peerID, subnet)
-	}
-
-	return result
-}
-
-// score assesses how valuable the contribution of peerID to specified subnet is by calculating
-// how valuable this peer would have been if we didn't have him, but then connected with.
-func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
-	topic := strconv.Itoa(subnet)
-	subnetPeers, err := n.topicsCtrl.Peers(topic)
-	if err != nil {
-		n.logger.Debug(
-			"cannot score peer with respect to this subnet, assuming zero contribution",
-			zap.String("topic", topic),
-			zap.Error(fmt.Errorf("could not get topic peers: %w", err)),
-		)
-		return 0.0
-	}
-	subnetPeersExcluding := 0
-	for _, p := range subnetPeers {
-		if p != peerID {
-			subnetPeersExcluding++
+	// Compute number of peers we're connected to for each subnet excluding peer with peerID.
+	subnetPeersExcluding := SubnetPeers{}
+	for topic, peers := range n.PeersByTopic() {
+		subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
+		if err != nil {
+			n.logger.Error("failed to parse topic",
+				zap.String("topic", topic), zap.Error(err))
+			continue
+		}
+		if subnet < 0 || subnet >= commons.SubnetsCount {
+			n.logger.Error("invalid topic",
+				zap.String("topic", topic), zap.Int("subnet", int(subnet)))
+			continue
+		}
+		for _, pID := range peers {
+			if pID == peerID {
+				continue
+			}
+			subnetPeersExcluding[subnet]++
 		}
 	}
 
-	const targetPeersPerSubnet = 3
-	return score(targetPeersPerSubnet, subnetPeersExcluding)
+	ownSubnets := n.SubscribedSubnets()
+	peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
+	return subnetPeersExcluding.Score(ownSubnets, peerSubnets)
 }
 
-func score(desired, actual int) float64 {
-	if actual > desired {
-		return float64(desired) / float64(actual) // is always less than 1.0
+// SubnetPeers contains the number of peers we are connected to for each subnet.
+type SubnetPeers [commons.SubnetsCount]uint16
+
+func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
+	var sum SubnetPeers
+	for i := range a {
+		sum[i] = a[i] + b[i]
 	}
-	if actual == desired {
-		return 2.0 // at least 2x better than when `actual > desired`
+	return sum
+}
+
+// Score estimates how many valuable subnets the given peer would contribute.
+// Param ours defines subnets we are interested in.
+// Param theirs defines subnets given peer has to offer.
+func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
+	const (
+		duoSubnetPriority  = 1
+		soloSubnetPriority = 3
+		deadSubnetPriority = 90
+	)
+	score := float64(0)
+	for i := range a {
+		if ours[i] > 0 && theirs[i] > 0 {
+			switch a[i] {
+			case 0:
+				score += deadSubnetPriority
+			case 1:
+				score += soloSubnetPriority
+			case 2:
+				score += duoSubnetPriority
+			}
+		}
 	}
-	// make every unit of difference count, starting with the score of 2.0 (when `actual == desired`)
-	// and increasing exponentially
-	diff := desired - actual
-	result := 2.0
-	for i := 1; i <= diff; i++ {
-		result *= float64(2.0 + i)
+	return score
+}
+
+func (a SubnetPeers) String() string {
+	var b strings.Builder
+	for i, v := range a {
+		if v > 0 {
+			_, _ = fmt.Fprintf(&b, "%d:%d ", i, v)
+		}
 	}
-	return result
+	return b.String()
 }

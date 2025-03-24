@@ -50,10 +50,8 @@ type P2PNetwork interface {
 	ActiveSubnets() commons.Subnets
 	// FixedSubnets returns fixed subnets
 	FixedSubnets() commons.Subnets
-
-	// used for tests and api
+	// PeersByTopic returns topic->peers we are connected to
 	PeersByTopic() map[string][]peer.ID
-	Peers() []peer.ID
 }
 
 // GetValidatorStats returns stats of validators, including the following:
