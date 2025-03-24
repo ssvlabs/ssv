@@ -100,7 +100,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.DutyRootAttribute(root)))
+	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature

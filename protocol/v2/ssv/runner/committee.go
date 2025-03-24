@@ -433,7 +433,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	span.SetAttributes(
 		observability.ValidatorHasQuorumAttribute(hasQuorum),
-		observability.BlockRootCountAttribute(len(roots)),
+		observability.BeaconBlockRootCountAttribute(len(roots)),
 	)
 	logger = logger.With(fields.Slot(signedMsg.Slot))
 
@@ -497,7 +497,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		const eventMsg = "found validators for root"
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconRoleAttribute(role),
-			observability.DutyRootAttribute(root),
+			observability.BeaconBlockRootAttribute(root),
 		))
 		logger.Debug(eventMsg,
 			fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
@@ -666,7 +666,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconSlotAttribute(cr.BaseRunner.State.StartingDuty.DutySlot()),
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
-			observability.DutyRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
+			observability.BeaconBlockRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
 			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
 		))

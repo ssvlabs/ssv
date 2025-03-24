@@ -20,7 +20,6 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -128,7 +127,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	// randao is relevant only for block proposals, no need to check type
-	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.DutyRootAttribute(root)))
+	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
@@ -163,8 +162,8 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		zap.Duration("took", time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
 	span.AddEvent(eventMsg, trace.WithAttributes(
-		attribute.String("ssv.validator.duty.block_hash", blockSummary.Hash.String()),
-		attribute.Bool("ssv.validator.duty.blinded", blockSummary.Blinded),
+		observability.BeaconBlockHashAttribute(blockSummary.Hash),
+		observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
 	))
 
 	byts, err := obj.MarshalSSZ()
@@ -334,7 +333,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 
 	var successfullySubmittedProposals uint8
 	for _, root := range roots {
-		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.DutyRootAttribute(root)))
+		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
@@ -432,8 +431,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		span.AddEvent(eventMsg, trace.WithAttributes(
 			observability.BeaconSlotAttribute(r.BaseRunner.State.StartingDuty.DutySlot()),
 			observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
-			attribute.String("ssv.validator.duty.block_hash", blockSummary.Hash.String()),
-			attribute.Bool("ssv.validator.duty.blinded", blockSummary.Blinded),
+			observability.BeaconBlockHashAttribute(blockSummary.Hash),
+			observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
 		))
 		logger.Info(eventMsg,
 			fields.Slot(validatorConsensusData.Duty.Slot),

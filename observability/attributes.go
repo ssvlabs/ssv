@@ -62,15 +62,15 @@ func DutyIDAttribute(id string) attribute.KeyValue {
 	return attribute.String("ssv.validator.duty.id", id)
 }
 
-func DutyPeriodAttribute(period uint64) attribute.KeyValue {
+func BeaconPeriodAttribute(period uint64) attribute.KeyValue {
 	return attribute.KeyValue{
-		Key:   "ssv.validator.duty.period",
+		Key:   "ssv.beacon.period",
 		Value: Uint64AttributeValue(period),
 	}
 }
 
-func DutyRootAttribute(root [32]byte) attribute.KeyValue {
-	return attribute.String("ssv.validator.duty.root", hex.EncodeToString(root[:]))
+func BeaconBlockRootAttribute(root [32]byte) attribute.KeyValue {
+	return attribute.String("ssv.beacon.block.root", hex.EncodeToString(root[:]))
 }
 
 func CommitteeIndexAttribute(index phase0.CommitteeIndex) attribute.KeyValue {
@@ -88,8 +88,16 @@ func DutyCountAttribute(count int) attribute.KeyValue {
 	return attribute.Int("ssv.validator.duty.count", count)
 }
 
-func BlockRootCountAttribute(count int) attribute.KeyValue {
-	return attribute.Int("ssv.validator.duty.root.count", count)
+func BeaconBlockHashAttribute(hash phase0.Hash32) attribute.KeyValue {
+	return attribute.String("ssv.beacon.block.hash", hash.String())
+}
+
+func BeaconBlockIsBlindedAttribute(isBlinded bool) attribute.KeyValue {
+	return attribute.Bool("ssv.beacon.block.is_blinded", isBlinded)
+}
+
+func BeaconBlockRootCountAttribute(count int) attribute.KeyValue {
+	return attribute.Int("ssv.beacon.block.root.count", count)
 }
 
 func ValidatorHasQuorumAttribute(hasQuorum bool) attribute.KeyValue {

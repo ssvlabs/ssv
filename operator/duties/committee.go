@@ -80,7 +80,7 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconEpochAttribute(epoch),
-			observability.DutyPeriodAttribute(period),
+			observability.BeaconPeriodAttribute(period),
 		))
 	defer span.End()
 

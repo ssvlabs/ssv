@@ -109,7 +109,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
 	// reconstruct selection proof sig
-	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.DutyRootAttribute(root)))
+	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
@@ -282,7 +282,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	span.SetAttributes(
 		observability.ValidatorHasQuorumAttribute(hasQuorum),
-		observability.BlockRootCountAttribute(len(roots)),
+		observability.BeaconBlockRootCountAttribute(len(roots)),
 	)
 
 	if !hasQuorum {
@@ -296,7 +296,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	var successfullySubmittedAggregates uint32
 	for _, root := range roots {
-		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.DutyRootAttribute(root)))
+		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature

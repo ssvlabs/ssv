@@ -169,7 +169,7 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 		observability.InstrumentName(observabilityNamespace, "sync_committee.process_execution"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
-			observability.DutyPeriodAttribute(period),
+			observability.BeaconPeriodAttribute(period),
 		))
 	defer span.End()
 
