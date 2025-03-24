@@ -3,40 +3,42 @@ package observability
 import (
 	"context"
 	"errors"
+	"go.opentelemetry.io/otel/exporters/prometheus"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
-var config Config
-
 func Initialize(appName, appVersion string, options ...Option) (shutdown func(context.Context) error, err error) {
-	shutdown = func(ctx context.Context) error { return nil }
+	cfg := Config{}
+	deps := defaultDependencies()
 
-	for _, option := range options {
-		option(&config)
+	for _, opt := range options {
+		opt(&cfg, &deps)
 	}
 
-	resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
+	shutdown = func(ctx context.Context) error { return nil }
+
+	resources, err := deps.ResourceMerge(resource.Default(), resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName(appName),
 		semconv.ServiceVersion(appVersion),
 	))
+
 	if err != nil {
-		err = errors.Join(errors.New("failed to instantiate observability resources"), err)
-		return shutdown, err
+		return shutdown, errors.Join(errors.New("failed to instantiate observability resources"), err)
 	}
 
-	if config.metricsEnabled {
+	if cfg.metricsEnabled {
 		var promExporter *prometheus.Exporter
-		promExporter, err = prometheus.New()
+		promExporter, err = deps.PrometheusNew()
+
 		if err != nil {
-			err = errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
-			return shutdown, err
+			return shutdown, errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
 		}
+
 		meterProvider := metric.NewMeterProvider(
 			metric.WithResource(resources),
 			metric.WithReader(promExporter),
@@ -45,5 +47,5 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 		shutdown = meterProvider.Shutdown
 	}
 
-	return shutdown, err
+	return shutdown, nil
 }
