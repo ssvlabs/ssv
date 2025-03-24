@@ -475,19 +475,21 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				defer trace.Unlock()
 
 				if len(msg.SignedSSVMessage.FullData) > 0 {
+					// save proposal data
+					if subMsg.MsgType == specqbft.ProposalMsgType {
+						c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData)))
+						// committee duty will contain the BeaconVote data
+						trace.CommitteeDutyTrace.ProposalData = msg.SignedSSVMessage.FullData
+					}
 					// for future: check if it's a proposal message
 					// if not, skip this step
 					root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
 					if err != nil {
 						c.logger.Error("get sync committee root", zap.Error(err))
-					} else {
-						trace.syncCommitteeRoot = root
+						return
 					}
-
-					c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData)))
-
-					// committee duty will contain the BeaconVote data
-					trace.CommitteeDutyTrace.ProposalData = msg.SignedSSVMessage.FullData
+					// save sync committee root
+					trace.syncCommitteeRoot = root
 				}
 
 				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
@@ -527,7 +529,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 							roleDutyTrace.Validator = data.Duty.ValidatorIndex
 						}
 
-						c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), zap.Int("size", len(msg.SignedSSVMessage.FullData)))
+						c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), zap.Int("size", len(data.DataSSZ)))
 
 						// non-committee duty will contain the proposal data
 						roleDutyTrace.ProposalData = data.DataSSZ

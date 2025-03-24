@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -22,6 +23,7 @@ type validatorTrace struct {
 	Decideds    []decided             `json:"decideds"`
 	Pre         []message             `json:"pre"`
 	Post        []message             `json:"post"`
+	Proposal    string                `json:"proposalData,omitempty"`
 }
 
 type decided struct {
@@ -32,11 +34,10 @@ type decided struct {
 }
 
 type round struct {
-	Proposal *proposalTrace `json:"proposal"`
-	// Proposer      spectypes.OperatorID `json:"proposer"` not needed
-	Prepares     []message     `json:"prepares"`
-	Commits      []message     `json:"commits"`
-	RoundChanges []roundChange `json:"roundChanges"`
+	Proposal     *proposalTrace `json:"proposal"`
+	Prepares     []message      `json:"prepares"`
+	Commits      []message      `json:"commits"`
+	RoundChanges []roundChange  `json:"roundChanges"`
 }
 
 type proposalTrace struct {
@@ -69,6 +70,7 @@ func toValidatorTrace(t *model.ValidatorDutyTrace) validatorTrace {
 		Pre:       toMessageTrace(t.Pre),
 		Post:      toMessageTrace(t.Post),
 		Rounds:    toRounds(t.Rounds),
+		Proposal:  fmt.Sprintf("%x", t.ProposalData),
 		Decideds:  toDecideds(t.Decideds),
 	}
 }
@@ -88,7 +90,6 @@ func toMessageTrace(m []*model.PartialSigTrace) (out []message) {
 func toRounds(r []*model.RoundTrace) (out []round) {
 	for _, rt := range r {
 		out = append(out, round{
-			// Proposer:      rt.Proposer,
 			Proposal:     toProposalTrace(rt.ProposalTrace),
 			Prepares:     toUIMessageTrace(rt.Prepares),
 			Commits:      toUIMessageTrace(rt.Commits),
@@ -158,7 +159,7 @@ type committeeTrace struct {
 	Attester      []committeeMessage `json:"attester"`
 
 	CommitteeID string `json:"committeeID"`
-	// OperatorIDs []spectypes.OperatorID `json:"operatorIDs"` not needed?
+	Proposal    string `json:"proposalData,omitempty"`
 }
 
 type committeeMessage struct {
@@ -176,7 +177,7 @@ func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
 		Attester:      toCommitteePost(t.Attester),
 		CommitteeID:   hex.EncodeToString(t.CommitteeID[:]),
-		// OperatorIDs: t.OperatorIDs,
+		Proposal:      fmt.Sprintf("%x", t.ProposalData),
 	}
 }
 
