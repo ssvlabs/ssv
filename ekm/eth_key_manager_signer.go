@@ -34,6 +34,9 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// TODO: rename this file to local_key_manager.go
+//  It's left as eth_key_manager_signer.go to see the changes on PR review.
+
 type LocalKeyManager struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
