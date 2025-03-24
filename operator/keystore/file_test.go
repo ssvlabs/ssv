@@ -13,10 +13,14 @@ import (
 	"github.com/ssvlabs/ssv/operator/keys"
 )
 
+const (
+	testPassword     = "password"
+	testPubKeyBase64 = "base64EncodedPublicKey"
+)
+
 func TestDecryptKeystoreWithInvalidData(t *testing.T) {
-	password := "password"
-	encryptedJSONData := []byte(`{"version":4,"pubKey":"base64EncodedPublicKey","crypto":{"kdf":"scrypt","checksum":{"function":"sha256","params":{"dklen":32,"salt":"base64EncodedSalt"},"message":"base64EncodedMessage"},"cipher":{"function":"aes-128-ctr","params":{"iv":"base64EncodedIV"},"message":"base64EncodedEncryptedMessage"},"kdfparams":{"n":262144,"r":8,"p":1,"salt":"base64EncodedSalt"}}}`)
-	_, err := DecryptKeystore(encryptedJSONData, password)
+	encryptedJSONData := []byte(`{"version":4,"pubKey":"` + testPubKeyBase64 + `","crypto":{"kdf":"scrypt","checksum":{"function":"sha256","params":{"dklen":32,"salt":"base64EncodedSalt"},"message":"base64EncodedMessage"},"cipher":{"function":"aes-128-ctr","params":{"iv":"base64EncodedIV"},"message":"base64EncodedEncryptedMessage"},"kdfparams":{"n":262144,"r":8,"p":1,"salt":"base64EncodedSalt"}}}`)
+	_, err := DecryptKeystore(encryptedJSONData, testPassword)
 	require.Error(t, err)
 }
 
@@ -28,17 +32,16 @@ func TestDecryptKeystoreWithEmptyPassword(t *testing.T) {
 }
 
 func TestEncryptKeystoreWithValidData(t *testing.T) {
-	password := "password"
 	privkey := []byte("privateKey")
-	pubKeyBase64 := "base64EncodedPublicKey"
-	data, err := EncryptKeystore(privkey, pubKeyBase64, password)
+
+	data, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
 	require.Nil(t, err)
 	var jsonData map[string]interface{}
 	err = json.Unmarshal(data, &jsonData)
 	require.Nil(t, err)
-	require.Equal(t, pubKeyBase64, jsonData["pubKey"])
+	require.Equal(t, testPubKeyBase64, jsonData["pubKey"])
 
-	decrtypted, err := DecryptKeystore(data, password)
+	decrtypted, err := DecryptKeystore(data, testPassword)
 	require.Nil(t, err)
 	require.Equal(t, privkey, decrtypted)
 }
@@ -46,8 +49,8 @@ func TestEncryptKeystoreWithValidData(t *testing.T) {
 func TestEncryptKeystoreWithEmptyPassword(t *testing.T) {
 	password := ""
 	privkey := []byte("privateKey")
-	pubKeyBase64 := "base64EncodedPublicKey"
-	_, err := EncryptKeystore(privkey, pubKeyBase64, password)
+
+	_, err := EncryptKeystore(privkey, testPubKeyBase64, password)
 	require.NotNil(t, err)
 }
 
@@ -98,16 +101,15 @@ func TestLoadOperatorKeystore(t *testing.T) {
 	})
 
 	t.Run("fails if PrivateKeyFromBytes returns an error", func(t *testing.T) {
-		password := "password"
 		privkey := []byte("privateKey")
-		pubKeyBase64 := "base64EncodedPublicKey"
-		keystore, err := EncryptKeystore(privkey, pubKeyBase64, password)
+
+		keystore, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
 		require.Nil(t, err)
 
 		tmpEncryptedFile := createTempFile(t, "bad-for-privkey-", ".json", keystore)
 		defer os.Remove(tmpEncryptedFile)
 
-		tmpPasswordFile := createTempFile(t, "valid-password-", ".txt", []byte(password))
+		tmpPasswordFile := createTempFile(t, "valid-password-", ".txt", []byte(testPassword))
 		defer os.Remove(tmpPasswordFile)
 
 		result, err := LoadOperatorKeystore(tmpEncryptedFile, tmpPasswordFile)
@@ -120,15 +122,13 @@ func TestLoadOperatorKeystore(t *testing.T) {
 		privKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		password := "password"
-		pubKeyBase64 := "base64EncodedPublicKey"
-		keystore, err := EncryptKeystore(privKey.Bytes(), pubKeyBase64, password)
+		keystore, err := EncryptKeystore(privKey.Bytes(), testPubKeyBase64, testPassword)
 		require.Nil(t, err)
 
 		tmpEncryptedFile := createTempFile(t, "valid-encrypted-", ".json", keystore)
 		defer os.Remove(tmpEncryptedFile)
 
-		tmpPasswordFile := createTempFile(t, "valid-password-", ".txt", []byte(password))
+		tmpPasswordFile := createTempFile(t, "valid-password-", ".txt", []byte(testPassword))
 		defer os.Remove(tmpPasswordFile)
 
 		result, err := LoadOperatorKeystore(tmpEncryptedFile, tmpPasswordFile)
