@@ -446,7 +446,7 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 	return signingRoot, nil
 }
 
-func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
+func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) {
 	start := time.Now()
 
 	tracerInFlightMessageCounter.Add(ctx, 1)
@@ -551,6 +551,18 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage) {
 		if err != nil {
 			c.logger.Error("decode partial signature messages", zap.Error(err))
 			return
+		}
+
+		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
+			if err := pSigMessages.Validate(); err != nil {
+				c.logger.Error("validate partial sig", zap.Error(err))
+				return
+			}
+
+			if err := verifySig(pSigMessages); err != nil {
+				c.logger.Error("verify partial sig", zap.Error(err))
+				return
+			}
 		}
 
 		executorID := msg.MsgID.GetDutyExecutorID()

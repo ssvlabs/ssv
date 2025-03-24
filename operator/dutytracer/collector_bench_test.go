@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -55,12 +56,16 @@ func BenchmarkTracer(b *testing.B) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				collector.Collect(context.Background(), msg)
+				collector.Collect(context.Background(), msg, dummyVerify)
 			}()
 		}
 		wg.Wait()
 		cancel()
 	}
+}
+
+func dummyVerify(*spectypes.PartialSignatureMessages) error {
+	return nil
 }
 
 func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {

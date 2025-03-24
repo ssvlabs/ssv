@@ -64,9 +64,10 @@ func TestValidatorDuty(t *testing.T) {
 	partSigMessagesData, err := partSigMessages.Encode()
 	require.NoError(t, err)
 
+	dummyVerify := func(*spectypes.PartialSignatureMessages) error { return nil }
 	{ // TC 1 - PartialSig - Aggregator - pre-consensus
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		collector.Collect(context.Background(), partSigMsg)
+		collector.Collect(context.Background(), partSigMsg, dummyVerify)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -91,7 +92,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC 2 - PartialSig - Aggregator - post-consensus
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		collector.Collect(context.Background(), partSigMsg)
+		collector.Collect(context.Background(), partSigMsg, dummyVerify)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -117,7 +118,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 3 - Proposal
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
-		collector.Collect(context.Background(), proposalMsg)
+		collector.Collect(context.Background(), proposalMsg, dummyVerify)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -165,7 +166,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 4 - Prepare
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
-		collector.Collect(context.Background(), prepareMsg)
+		collector.Collect(context.Background(), prepareMsg, dummyVerify)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -192,7 +193,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 5 - Decided
 		decidedMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
-		collector.Collect(context.Background(), decidedMsg)
+		collector.Collect(context.Background(), decidedMsg, dummyVerify)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -223,7 +224,7 @@ func TestValidatorDuty(t *testing.T) {
 	{ // TC - 6 - Commit
 		commitMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
 		commitMsg.SignedSSVMessage.OperatorIDs = []spectypes.OperatorID{1}
-		collector.Collect(context.Background(), commitMsg)
+		collector.Collect(context.Background(), commitMsg, dummyVerify)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -250,7 +251,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 7 - RoundChange
 		roundChangeMsg := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
-		collector.Collect(context.Background(), roundChangeMsg)
+		collector.Collect(context.Background(), roundChangeMsg, dummyVerify)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -279,7 +280,7 @@ func TestValidatorDuty(t *testing.T) {
 	{ // TC - 8 - Second RoundChange
 		roundChangeMsg := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		roundChangeMsg.Body.(*specqbft.Message).Round = 2
-		collector.Collect(context.Background(), roundChangeMsg)
+		collector.Collect(context.Background(), roundChangeMsg, dummyVerify)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -353,7 +354,7 @@ func TestCommitteeDuty(t *testing.T) {
 		require.NoError(t, err)
 
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		tracer.Collect(context.Background(), partSigMsg)
+		tracer.Collect(context.Background(), partSigMsg, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -383,7 +384,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 	{ // TC 2 - Proposal
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
-		tracer.Collect(context.Background(), proposalMsg)
+		tracer.Collect(context.Background(), proposalMsg, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -409,7 +410,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 	{ // TC 3 - Prepare
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
-		tracer.Collect(context.Background(), prepareMsg)
+		tracer.Collect(context.Background(), prepareMsg, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -435,7 +436,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 	{ // TC 4 - Decided
 		decided := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, generateDecidedMessage(t, identifier))
-		tracer.Collect(context.Background(), decided)
+		tracer.Collect(context.Background(), decided, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -476,7 +477,7 @@ func TestCommitteeDuty(t *testing.T) {
 		commitMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
 		commitMsg.SignedSSVMessage.OperatorIDs = []spectypes.OperatorID{1}
 
-		tracer.Collect(context.Background(), commitMsg)
+		tracer.Collect(context.Background(), commitMsg, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -503,7 +504,7 @@ func TestCommitteeDuty(t *testing.T) {
 
 	{ // TC 6 - RoundChange
 		roundChangeMsg1 := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
-		tracer.Collect(context.Background(), roundChangeMsg1)
+		tracer.Collect(context.Background(), roundChangeMsg1, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
@@ -531,7 +532,7 @@ func TestCommitteeDuty(t *testing.T) {
 		roundChangeMsg2 := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		roundChangeMsg2.Body.(*specqbft.Message).Round = 2
 
-		tracer.Collect(context.Background(), roundChangeMsg2)
+		tracer.Collect(context.Background(), roundChangeMsg2, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)
