@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
@@ -34,7 +33,7 @@ var (
 
 func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 	return simulator.NewBackend(
-		types.GenesisAlloc{
+		ethtypes.GenesisAlloc{
 			testAddr: {Balance: big.NewInt(10000000000000000)},
 		},
 		simulated.WithBlockGasLimit(10000000),
@@ -467,7 +466,7 @@ func TestSimSSV(t *testing.T) {
 	require.NoError(t, err)
 
 	// Emit event OperatorAdded
-	tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
+	tx, err := boundContract.RegisterOperator(auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
 	require.NoError(t, err)
 	sim.Commit()
 	receipt, err := sim.Client().TransactionReceipt(ctx, tx.Hash())
@@ -480,7 +479,7 @@ func TestSimSSV(t *testing.T) {
 	require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
 	// Emit event OperatorRemoved
-	tx, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 1)
+	tx, err = boundContract.RemoveOperator(auth, 1)
 	require.NoError(t, err)
 	sim.Commit()
 	receipt, err = sim.Client().TransactionReceipt(ctx, tx.Hash())
@@ -493,7 +492,7 @@ func TestSimSSV(t *testing.T) {
 	require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
 	// Emit event ValidatorAdded
-	tx, err = boundContract.SimcontractTransactor.RegisterValidator(
+	tx, err = boundContract.RegisterValidator(
 		auth, ethcommon.Hex2Bytes("0x1"),
 		[]uint64{1, 2, 3},
 		ethcommon.Hex2Bytes("0x2"),
@@ -517,7 +516,7 @@ func TestSimSSV(t *testing.T) {
 	require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 	// Emit event ValidatorRemoved
-	tx, err = boundContract.SimcontractTransactor.RemoveValidator(
+	tx, err = boundContract.RemoveValidator(
 		auth,
 		ethcommon.Hex2Bytes("0x1"),
 		[]uint64{1, 2, 3},
@@ -540,7 +539,7 @@ func TestSimSSV(t *testing.T) {
 	require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 	// Emit event ClusterLiquidated
-	tx, err = boundContract.SimcontractTransactor.Liquidate(
+	tx, err = boundContract.Liquidate(
 		auth,
 		ethcommon.HexToAddress("0x1"),
 		[]uint64{1, 2, 3},
@@ -563,7 +562,7 @@ func TestSimSSV(t *testing.T) {
 	require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
 	// Emit event ClusterReactivated
-	tx, err = boundContract.SimcontractTransactor.Reactivate(
+	tx, err = boundContract.Reactivate(
 		auth,
 		[]uint64{1, 2, 3},
 		big.NewInt(100_000_000),
@@ -586,7 +585,7 @@ func TestSimSSV(t *testing.T) {
 	require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
 	// Emit event FeeRecipientAddressUpdated
-	tx, err = boundContract.SimcontractTransactor.SetFeeRecipientAddress(
+	tx, err = boundContract.SetFeeRecipientAddress(
 		auth,
 		ethcommon.HexToAddress("0x1"),
 	)
