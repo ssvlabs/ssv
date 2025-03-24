@@ -1,6 +1,6 @@
 //go:build linux
 
-package types
+package keys
 
 import (
 	"crypto"
