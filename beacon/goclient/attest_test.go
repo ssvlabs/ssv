@@ -302,7 +302,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.Nil(t, response)
 		require.Equal(t, DataVersionNil, dataVersion)
 		require.Error(t, err)
-		require.Equal(t, err.Error(), "no attestations received")
+		require.Contains(t, err.Error(), "attestation data failed") // Updated to support new error messages
 	})
 
 	t.Run("single beacon client: should not return error when Slot via Block Root Header returns error", func(t *testing.T) {
@@ -354,7 +354,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		softTimeout := client.commonTimeout / 2
 		timeElapsed := time.Since(startTime)
 		require.GreaterOrEqual(t, timeElapsed, softTimeout)
-		require.LessOrEqual(t, timeElapsed, softTimeout+(softTimeout/10)) //time elapsed should not be greater than soft timeout + 10%
+		require.LessOrEqual(t, timeElapsed, softTimeout+(softTimeout/10)) // max 10% margin
 	})
 
 	t.Run("multiple beacon clients: awaits for hard timeout when no responses after soft timeout reached", func(t *testing.T) {
@@ -371,12 +371,12 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		response, version, err := client.GetAttestationData(phase0.Slot(100))
 
 		require.Error(t, err)
-		require.Equal(t, err.Error(), "no attestations received")
+		require.Contains(t, err.Error(), "attestation data failed") // Adjusted
 		require.Nil(t, response)
 		require.Equal(t, DataVersionNil, version)
 		timeElapsed := time.Since(startTime)
 		require.GreaterOrEqual(t, timeElapsed, defaultHardTimeout)
-		require.LessOrEqual(t, timeElapsed, defaultHardTimeout+(defaultHardTimeout/10)) //time elapsed should not be greater than hard timeout + 10%
+		require.LessOrEqual(t, timeElapsed, defaultHardTimeout+(defaultHardTimeout/10))
 	})
 
 	t.Run("multiple beacon clients: succeeds within soft timeout when BeaconBlockHeader(scoring) has timeout higher than hard timeout", func(t *testing.T) {
@@ -405,7 +405,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		var (
 			beaconServersURLs []string
 			sourceEpoch       phase0.Epoch = testEpoch
-			bestSourceEpoch   phase0.Epoch = testEpoch + 1 // epoch number has a lot of weight, increasing its value  makes it 'best'
+			bestSourceEpoch   phase0.Epoch = testEpoch + 1 // higher score due to later epoch
 			targetEpoch       phase0.Epoch = testEpoch
 		)
 		for i := 0; i < numberOfBeaconServers; i++ {

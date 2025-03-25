@@ -55,48 +55,146 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 }
 
 // GetAttestationData returns attestation data for a given slot.
-// Multiple calls for the same slot are joined into a single request, after which
-// the result is cached for a short duration, deep copied and returned
-func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
-	*phase0.AttestationData,
-	spec.DataVersion,
-	error,
-) {
-	// Have to make beacon node request and cache the result.
+//
+// Multiple calls for the same slot are deduplicated and joined into a single inflight request.
+// The result is then cached for a short duration and reused for subsequent calls.
+//
+// If the VOUCH feature (weighted attestation data) is disabled, the function fetches
+// attestation data using the simple method only.
+//
+// When VOUCH is enabled, this method concurrently executes both the weighted and
+// simple strategies. The weighted strategy is given a soft timeout window to respond.
+// If both complete in time, their results are compared using a scoring mechanism.
+// The better result is selected. If only one returns in time, that result is used as a fallback.
+//
+// Logging is used to track which strategy was selected for each slot, enabling downstream
+// observability via tools like Loki without introducing production metrics (counters).
+//
+// This approach ensures safe rollout of the VOUCH mechanism with performance protections.
+//
+// [EXPERIMENTAL]: This concurrent fallback mechanism is a hotfix to validate the
+// performance of the weighted scoring algorithm in production conditions.
+func (gc *GoClient) GetAttestationData(slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
-		// Check cache.
-		cachedResult := gc.attestationDataCache.Get(slot)
-		if cachedResult != nil {
-			return cachedResult.Value(), nil
+		// Check the in-memory cache first to avoid duplicate requests.
+		if cached := gc.attestationDataCache.Get(slot); cached != nil {
+			return cached.Value(), nil
 		}
+
+		// If VOUCH is disabled, run only the simple path and return early.
+		if !gc.withWeightedAttestationData {
+			data, err := gc.simpleAttestationData(slot)
+			if err != nil {
+				return nil, err
+			}
+			gc.attestationDataCache.Set(slot, data, ttlcache.DefaultTTL)
+			return data, nil
+		}
+
+		// VOUCH is enabled: run both weighted and simple paths concurrently.
+		weightedCh := make(chan *phase0.AttestationData, 1)
+		simpleCh := make(chan *phase0.AttestationData, 1)
+		weightedErrCh := make(chan error, 1)
+		simpleErrCh := make(chan error, 1)
+
+		// Apply soft timeout context to the weighted (VOUCH) strategy.
+		softCtx, softCancel := context.WithTimeout(gc.ctx, gc.weightedAttestationDataSoftTimeout)
+		defer softCancel()
+
+		// Launch weightedAttestationData in a goroutine.
+		go func() {
+			data, err := gc.weightedAttestationData(slot)
+			if err != nil {
+				weightedErrCh <- err
+				return
+			}
+			weightedCh <- data
+		}()
+
+		// Launch simpleAttestationData in a goroutine.
+		go func() {
+			data, err := gc.simpleAttestationData(slot)
+			if err != nil {
+				simpleErrCh <- err
+				return
+			}
+			simpleCh <- data
+		}()
+
 		var (
-			attestationData *phase0.AttestationData
-			err             error
+			weightedResult *phase0.AttestationData
+			simpleResult   *phase0.AttestationData
+			weightedErr    error
+			simpleErr      error
 		)
-		if gc.withWeightedAttestationData {
-			attestationData, err = gc.weightedAttestationData(slot)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			attestationData, err = gc.simpleAttestationData(slot)
-			if err != nil {
-				return nil, err
-			}
+
+		// Wait for weighted result or soft timeout.
+		select {
+		case weightedResult = <-weightedCh:
+			// weighted returned within soft timeout
+		case <-softCtx.Done():
+			// soft timeout reached; do not wait longer
 		}
 
-		// Caching resulting value here (as part of inflight request) guarantees only 1 request
-		// will ever be done for a given slot.
-		gc.attestationDataCache.Set(slot, attestationData, ttlcache.DefaultTTL)
+		// Wait for the simple path to complete (always required).
+		select {
+		case simpleResult = <-simpleCh:
+		case simpleErr = <-simpleErrCh:
+		}
 
-		return attestationData, nil
+		// Capture weighted error, if it exists and wasn’t already received.
+		select {
+		case weightedErr = <-weightedErrCh:
+		default:
+		}
+
+		// If both responses are available, compare and choose the better one.
+		if weightedResult != nil && simpleResult != nil {
+			weightedScore := gc.scoreAttestationData(gc.ctx, weightedResult, gc.log)
+			simpleScore := gc.scoreAttestationData(gc.ctx, simpleResult, gc.log)
+
+			if weightedScore > simpleScore {
+				gc.log.With(fields.Slot(slot)).Debug("Chosen attestation method: weightedAttestationData")
+				gc.attestationDataCache.Set(slot, weightedResult, ttlcache.DefaultTTL)
+				return weightedResult, nil
+			}
+
+			gc.log.With(fields.Slot(slot)).Debug("Chosen attestation method: simpleAttestationData")
+			gc.attestationDataCache.Set(slot, simpleResult, ttlcache.DefaultTTL)
+			return simpleResult, nil
+		}
+
+		// If only weighted succeeded
+		if weightedResult != nil {
+			gc.log.With(fields.Slot(slot)).Debug("Fallback to weightedAttestationData")
+			gc.attestationDataCache.Set(slot, weightedResult, ttlcache.DefaultTTL)
+			return weightedResult, nil
+		}
+
+		// If only simple succeeded
+		if simpleResult != nil {
+			gc.log.With(fields.Slot(slot)).Debug("Fallback to simpleAttestationData")
+			gc.attestationDataCache.Set(slot, simpleResult, ttlcache.DefaultTTL)
+			return simpleResult, nil
+		}
+
+		// If both methods failed, return appropriate error
+		if weightedErr != nil {
+			return nil, fmt.Errorf("weighted attestation data failed: %w", weightedErr)
+		}
+		if simpleErr != nil {
+			return nil, fmt.Errorf("simple attestation data failed: %w", simpleErr)
+		}
+
+		// Defensive fallback — shouldn't happen
+		return nil, fmt.Errorf("both attestation data methods failed")
 	})
+
 	if err != nil {
 		return nil, DataVersionNil, err
 	}
 
 	return result, spec.DataVersionPhase0, nil
-
 }
 
 func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.AttestationData, error) {
@@ -259,6 +357,7 @@ func (gc *GoClient) simpleAttestationData(slot phase0.Slot) (*phase0.Attestation
 
 	logger.With(
 		zap.Duration("elapsed", time.Since(attDataReqStart)),
+		zap.String("block_root", resp.Data.BeaconBlockRoot.String()), // Add the block_root to the log for simple attestation data method
 		zap.Bool("with_weighted_attestation_data", false),
 	).Debug("successfully fetched attestation data")
 
