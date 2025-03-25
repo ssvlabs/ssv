@@ -35,7 +35,7 @@ type SSVSignerClientSuite struct {
 func (s *SSVSignerClientSuite) SetupTest() {
 	var err error
 	s.logger, err = zap.NewDevelopment()
-	require.NoError(s.T(), err, "Failed to create logger")
+	s.Require().NoError(err, "Failed to create logger")
 
 	s.mux = http.NewServeMux()
 	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -144,19 +144,22 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				require.NoError(t, err, "Failed to unmarshal request body")
 
 				assert.Len(t, req.ShareKeys, len(tc.shares))
+
 				for i, share := range tc.shares {
-					assert.EqualValues(t, share.EncryptedPrivKey, req.ShareKeys[i].EncryptedPrivKey)
+					assert.Equal(t, share.EncryptedPrivKey, req.ShareKeys[i].EncryptedPrivKey)
 					assert.EqualValues(t, share.PublicKey[:], req.ShareKeys[i].PublicKey)
 				}
 
 				w.WriteHeader(tc.expectedStatusCode)
-				if tc.expectedStatusCode == http.StatusUnprocessableEntity {
+
+				switch tc.expectedStatusCode {
+				case http.StatusUnprocessableEntity:
 					w.Write([]byte("Decryption error"))
-				} else if tc.expectedStatusCode == http.StatusOK {
+				case http.StatusOK:
 					respBytes, err := json.Marshal(tc.expectedResponse)
 					require.NoError(t, err, "Failed to marshal response")
 					w.Write(respBytes)
-				} else {
+				default:
 					w.Write([]byte("Server error"))
 				}
 			})
@@ -165,9 +168,11 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 			if tc.expectError {
 				assert.Error(t, err, "Expected an error")
+
 				if tc.isDecryptionError {
 					var decryptErr ShareDecryptionError
-					assert.True(t, errors.As(err, &decryptErr), "Expected a ShareDecryptionError")
+
+					assert.ErrorAs(t, err, &decryptErr, "Expected a ShareDecryptionError")
 				}
 			} else {
 				assert.NoError(t, err, "Unexpected error")
@@ -176,6 +181,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -251,11 +257,13 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				require.NoError(t, err, "Failed to unmarshal request body")
 
 				assert.Len(t, req.Pubkeys, len(tc.pubKeys))
+
 				for i, pubKey := range tc.pubKeys {
 					assert.Equal(t, pubKey, req.Pubkeys[i])
 				}
 
 				w.WriteHeader(tc.expectedStatusCode)
+
 				if tc.expectedStatusCode == http.StatusOK {
 					respBytes, err := json.Marshal(tc.expectedResponse)
 					require.NoError(t, err, "Failed to marshal response")
@@ -276,6 +284,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -319,6 +328,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 				assert.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
+
 				if tc.expectedStatusCode == http.StatusOK {
 					respBytes, err := json.Marshal(tc.expectedResponse)
 					require.NoError(t, err, "Failed to marshal response")
@@ -339,6 +349,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -416,8 +427,10 @@ func (s *SSVSignerClientSuite) TestSign() {
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 				var req web3signer.SignRequest
+
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err, "Failed to read request body")
+
 				defer r.Body.Close()
 
 				err = json.Unmarshal(body, &req)
@@ -438,6 +451,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -473,6 +487,7 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 				assert.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
+
 				if tc.expectedStatusCode == http.StatusOK {
 					w.Write([]byte(tc.expectedResult))
 				} else {
@@ -491,6 +506,7 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -536,6 +552,7 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 				assert.Equal(t, tc.payload, body)
 
 				w.WriteHeader(tc.expectedStatusCode)
+
 				if tc.expectedStatusCode == http.StatusOK {
 					w.Write(tc.expectedResult)
 				} else {
@@ -554,6 +571,7 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -623,10 +641,12 @@ func TestRequestErrors(t *testing.T) {
 		if !ok {
 			t.Fatal("Could not create hijacker")
 		}
+
 		conn, _, err := hijacker.Hijack()
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		conn.Close()
 	}))
 	defer server.Close()

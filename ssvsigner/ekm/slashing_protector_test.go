@@ -244,6 +244,7 @@ func TestSlashing_Attestation(t *testing.T) {
 	}
 
 	var baseEpoch phase0.Epoch = 10
+
 	createAttestationData := func(sourceEpoch, targetEpoch phase0.Epoch) *phase0.AttestationData {
 		return &phase0.AttestationData{
 			Source: &phase0.Checkpoint{
@@ -363,6 +364,7 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 
 	signAttestation := func(wg *sync.WaitGroup, errChan chan error) {
 		defer wg.Done()
+
 		sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			attestationData,
@@ -385,11 +387,14 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 
 	// Set up concurrency.
 	const goroutineCount = 1000
+
 	var wg sync.WaitGroup
+
 	errChan := make(chan error, goroutineCount)
 
-	for i := 0; i < goroutineCount; i++ {
+	for range goroutineCount {
 		wg.Add(1)
+
 		go signAttestation(&wg, errChan)
 	}
 
@@ -399,11 +404,13 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 
 	// Count errors and successes.
 	var slashableErrors, successCount int
+
 	for err := range errChan {
 		if err != nil {
 			if err.Error() != "slashable attestation (HighestAttestationVote), not signing" {
 				require.Fail(t, "unexpected error: %v", err)
 			}
+
 			slashableErrors++
 		} else {
 			successCount++
@@ -436,6 +443,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	// Define function to concurrently attempt signing.
 	signBeaconBlock := func(wg *sync.WaitGroup, errChan chan error) {
 		defer wg.Done()
+
 		sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			blockContents.Block,
@@ -458,11 +466,14 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 
 	// Set up concurrency.
 	const goroutineCount = 1000
+
 	var wg sync.WaitGroup
+
 	errChan := make(chan error, goroutineCount)
 
-	for i := 0; i < goroutineCount; i++ {
+	for range goroutineCount {
 		wg.Add(1)
+
 		go signBeaconBlock(&wg, errChan)
 	}
 
@@ -472,11 +483,13 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 
 	// Count errors and successes.
 	var slashableErrors, successCount int
+
 	for err := range errChan {
 		if err != nil {
 			if err.Error() != "slashable proposal (HighestProposalVote), not signing" {
 				require.Fail(t, "unexpected error: %v", err)
 			}
+
 			slashableErrors++
 		} else {
 			successCount++
@@ -499,8 +512,10 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 		sk *bls.SecretKey
 		pk *bls.PublicKey
 	}
+
 	var testValidators []testValidator
-	for i := 0; i < 3; i++ {
+
+	for range 3 {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 		pk := sk.GetPublicKey()
@@ -509,6 +524,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 
 	// Initialize key manager and add shares for each validator
 	km, network := testKeyManager(t, nil, operatorPrivateKey)
+
 	for _, validator := range testValidators {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
@@ -529,22 +545,28 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 		signs int
 		errs  int
 	}
+
 	validatorResults := make(map[string]*validatorResult)
 	for _, v := range testValidators {
 		validatorResults[v.pk.SerializeToHexStr()] = &validatorResult{}
 	}
+
 	var mu sync.Mutex
 
 	// Run signing attempts in parallel for each validator
 	const goroutinesPerValidator = 100
+
 	var wg sync.WaitGroup
 
 	for _, validator := range testValidators {
 		validator := validator // capture range variable
-		for i := 0; i < goroutinesPerValidator; i++ {
+
+		for range goroutinesPerValidator {
 			wg.Add(1)
+
 			go func() {
 				defer wg.Done()
+
 				sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
 					ctx,
 					attestationData,
@@ -553,8 +575,10 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 					currentSlot,
 					spectypes.DomainAttester,
 				)
+
 				mu.Lock()
 				defer mu.Unlock()
+
 				result := validatorResults[validator.pk.SerializeToHexStr()]
 				if err != nil {
 					result.errs++
@@ -593,8 +617,10 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 		sk *bls.SecretKey
 		pk *bls.PublicKey
 	}
+
 	var testValidators []testValidator
-	for i := 0; i < 3; i++ { // Adjust the number of validators as needed
+
+	for range 3 { // Adjust the number of validators as needed
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 		pk := sk.GetPublicKey()
@@ -603,6 +629,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 
 	// Initialize key manager and add shares for each validator
 	km, network := testKeyManager(t, nil, operatorPrivateKey)
+
 	for _, validator := range testValidators {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
@@ -621,22 +648,28 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 		signs int
 		errs  int
 	}
+
 	validatorResults := make(map[string]*validatorResult)
 	for _, v := range testValidators {
 		validatorResults[v.pk.SerializeToHexStr()] = &validatorResult{}
 	}
+
 	var mu sync.Mutex
 
 	// Run signing attempts in parallel for each validator
 	const goroutinesPerValidator = 100
+
 	var wg sync.WaitGroup
 
 	for _, validator := range testValidators {
 		validator := validator // capture range variable
-		for i := 0; i < goroutinesPerValidator; i++ {
+
+		for range goroutinesPerValidator {
 			wg.Add(1)
+
 			go func() {
 				defer wg.Done()
+
 				sigBytes, root, err := km.(*LocalKeyManager).SignBeaconObject(
 					ctx,
 					blockContents.Block,
@@ -645,8 +678,10 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 					currentSlot,
 					spectypes.DomainProposer,
 				)
+
 				mu.Lock()
 				defer mu.Unlock()
+
 				result := validatorResults[validator.pk.SerializeToHexStr()]
 				if err != nil {
 					result.errs++

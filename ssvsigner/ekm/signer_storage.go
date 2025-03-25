@@ -64,12 +64,12 @@ func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *
 	return &storage{
 		db:      db,
 		network: network,
-		logger:  logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
+		logger:  logger.Named(logging.NameSignerStorage).Named(prefix + "storage"),
 		lock:    sync.RWMutex{},
 	}
 }
 
-// SetEncryptionKey Add a new method to the storage type
+// SetEncryptionKey Add a new method to the storage type.
 func (s *storage) SetEncryptionKey(newKey string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -116,7 +116,7 @@ func (s *storage) SaveWallet(wallet core.Wallet) error {
 	return s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), data)
 }
 
-// OpenWallet returns nil,err if no wallet was found
+// OpenWallet returns nil,err if no wallet was found.
 func (s *storage) OpenWallet() (core.Wallet, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -141,12 +141,12 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 	return ret, nil
 }
 
-// ListAccounts returns an empty array for no accounts
+// ListAccounts returns an empty array for no accounts.
 func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
 	return s.ListAccountsTxn(nil)
 }
 
-// ListAccountsTxn returns an empty array for no accounts
+// ListAccountsTxn returns an empty array for no accounts.
 func (s *storage) ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -184,15 +184,16 @@ func (s *storage) SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAcc
 	if err != nil {
 		return err
 	}
+
 	return s.db.Using(rw).Set(s.objPrefix(accountsPrefix), []byte(key), encryptedValue)
 }
 
-// SaveAccount saves the given account
+// SaveAccount saves the given account.
 func (s *storage) SaveAccount(account core.ValidatorAccount) error {
 	return s.SaveAccountTxn(nil, account)
 }
 
-// DeleteAccount deletes account by uuid
+// DeleteAccount deletes account by uuid.
 func (s *storage) DeleteAccount(accountID uuid.UUID) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -203,7 +204,7 @@ func (s *storage) DeleteAccount(accountID uuid.UUID) error {
 
 var ErrCantDecrypt = errors.New("can't decrypt stored wallet, wrong password?")
 
-// OpenAccount returns nil,nil if no account was found
+// OpenAccount returns nil,nil if no account was found.
 func (s *storage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()

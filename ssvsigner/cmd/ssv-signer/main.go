@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -8,7 +9,6 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/valyala/fasthttp"
-
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner"
@@ -62,7 +62,7 @@ func run(logger *zap.Logger, cli CLI) error {
 	// PrivateKeyFile and PasswordFile use the same 'and' group,
 	// so setting them as 'required' wouldn't allow to start with PrivateKey.
 	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
-		return fmt.Errorf("neither private key nor keystore provided")
+		return errors.New("neither private key nor keystore provided")
 	}
 
 	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {

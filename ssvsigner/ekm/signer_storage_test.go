@@ -48,11 +48,12 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 
 func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
 	threshold.Init()
+
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
+
 	index := 1
 
-	//signerStorage := getWalletStorage(t)
 	signerStorage, done := newStorageForTest(t)
 
 	wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
@@ -67,9 +68,10 @@ func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
 func TestOpeningAccounts(t *testing.T) {
 	wallet, _, done := testWallet(t)
 	defer done()
+
 	seed := _byteArray("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1fff")
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		testName := fmt.Sprintf("adding and fetching account: %d", i)
 		t.Run(testName, func(t *testing.T) {
 			// create
@@ -113,7 +115,7 @@ func TestNonExistingWallet(t *testing.T) {
 	defer done()
 
 	w, err := signerStorage.OpenWallet()
-	require.NotNil(t, err)
+	require.Error(t, err)
 	require.EqualError(t, err, "could not find wallet")
 	require.Nil(t, w)
 }
@@ -150,7 +152,6 @@ func TestWalletStorage(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-
 			wallet, signerStorage, done := testWallet(t)
 			defer done()
 
@@ -164,7 +165,7 @@ func TestWalletStorage(t *testing.T) {
 			err := signerStorage.SaveWallet(wallet)
 			if err != nil {
 				if test.error != nil {
-					require.Equal(t, test.error.Error(), err.Error())
+					require.Equal(t, test.Error(), err.Error())
 				} else {
 					t.Error(err)
 				}
@@ -175,7 +176,7 @@ func TestWalletStorage(t *testing.T) {
 			fetched, err := signerStorage.OpenWallet()
 			if err != nil {
 				if test.error != nil {
-					require.Equal(t, test.error.Error(), err.Error())
+					require.Equal(t, test.Error(), err.Error())
 				} else {
 					t.Error(err)
 				}
@@ -256,7 +257,7 @@ func TestSavingProposal(t *testing.T) {
 			require.NotNil(t, proposal)
 
 			// test equal
-			require.EqualValues(t, test.proposal, proposal)
+			require.Equal(t, test.proposal, proposal)
 		})
 	}
 }
@@ -330,7 +331,7 @@ func TestSavingAttestation(t *testing.T) {
 			require.NoError(t, err)
 			bRoot, err := test.att.HashTreeRoot()
 			require.NoError(t, err)
-			require.EqualValues(t, aRoot, bRoot)
+			require.Equal(t, aRoot, bRoot)
 		})
 	}
 }
@@ -404,7 +405,7 @@ func TestSavingHighestAttestation(t *testing.T) {
 			require.NoError(t, err)
 			bRoot, err := test.att.HashTreeRoot()
 			require.NoError(t, err)
-			require.EqualValues(t, aRoot, bRoot)
+			require.Equal(t, aRoot, bRoot)
 		})
 	}
 }
@@ -458,7 +459,7 @@ func TestRemovingHighestAttestation(t *testing.T) {
 			require.NoError(t, err)
 			bRoot, err := test.att.HashTreeRoot()
 			require.NoError(t, err)
-			require.EqualValues(t, aRoot, bRoot)
+			require.Equal(t, aRoot, bRoot)
 
 			// remove
 			err = signerStorage.RemoveHighestAttestation(test.account.ValidatorPublicKey())
@@ -506,7 +507,7 @@ func TestRemovingHighestProposal(t *testing.T) {
 			require.NotNil(t, proposal)
 
 			// test equal
-			require.EqualValues(t, test.proposal, proposal)
+			require.Equal(t, test.proposal, proposal)
 
 			// remove
 			err = signerStorage.RemoveHighestProposal(test.account.ValidatorPublicKey())
@@ -528,7 +529,7 @@ func TestListAccounts(t *testing.T) {
 	accounts, err := signerStorage.ListAccounts()
 
 	require.NoError(t, err)
-	require.Equal(t, 1, len(accounts))
+	require.Len(t, accounts, 1)
 }
 
 func TestName(t *testing.T) {

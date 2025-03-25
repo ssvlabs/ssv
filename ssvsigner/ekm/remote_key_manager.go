@@ -125,6 +125,7 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPu
 	if err := km.RemoveHighestAttestation(pubKey); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
 	}
+
 	if err := km.RemoveHighestProposal(pubKey); err != nil {
 		return fmt.Errorf("could not remove highest proposal: %w", err)
 	}
@@ -269,6 +270,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	if err != nil {
 		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("remote signer: %w", err)
 	}
+
 	return sig[:], root, nil
 }
 

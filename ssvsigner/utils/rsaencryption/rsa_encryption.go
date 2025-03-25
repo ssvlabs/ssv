@@ -11,15 +11,15 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
-	"fmt"
 
 	"github.com/pkg/errors"
 )
 
 var keySize = 2048
 
-// GenerateKeys using rsa random generate keys and return []byte bas64
+// GenerateKeys using rsa random generate keys and return []byte bas64.
 func GenerateKeys() ([]byte, []byte, error) {
 	// generate random private key (secret)
 	sk, err := rsa.GenerateKey(rand.Reader, keySize)
@@ -49,7 +49,7 @@ func GenerateKeys() ([]byte, []byte, error) {
 	return pkPem, skPem, nil
 }
 
-// DecryptKey with secret key (rsa) and hash (base64), return the decrypted key
+// DecryptKey with secret key (rsa) and hash (base64), return the decrypted key.
 func DecryptKey(sk *rsa.PrivateKey, hash []byte) ([]byte, error) {
 	decryptedKey, err := rsa.DecryptPKCS1v15(rand.Reader, sk, hash)
 	if err != nil {
@@ -58,10 +58,10 @@ func DecryptKey(sk *rsa.PrivateKey, hash []byte) ([]byte, error) {
 	return decryptedKey, nil
 }
 
-// HashRsaKey return sha256 hash of rsa private key
+// HashRsaKey return sha256 hash of rsa private key.
 func HashRsaKey(keyBytes []byte) (string, error) {
 	hash := sha256.Sum256(keyBytes)
-	keyString := fmt.Sprintf("%x", hash)
+	keyString := hex.EncodeToString(hash[:])
 	return keyString, nil
 }
 
@@ -86,7 +86,7 @@ func parsePrivateKey(derBytes []byte) (*rsa.PrivateKey, error) {
 	return parsedSk, nil
 }
 
-// ConvertPemToPublicKey return rsa public key from public key pem
+// ConvertPemToPublicKey return rsa public key from public key pem.
 func ConvertPemToPublicKey(pubPem []byte) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode(pubPem)
 	if block == nil {
@@ -105,7 +105,7 @@ func ConvertPemToPublicKey(pubPem []byte) (*rsa.PublicKey, error) {
 	}
 }
 
-// PrivateKeyToByte converts privateKey to []byte
+// PrivateKeyToByte converts privateKey to []byte.
 func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 	return pem.EncodeToMemory(
 		&pem.Block{
@@ -115,7 +115,7 @@ func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 	)
 }
 
-// ExtractPublicKey get public key from private key and return base64 encoded public key
+// ExtractPublicKey get public key from private key and return base64 encoded public key.
 func ExtractPublicKey(pk *rsa.PublicKey) (string, error) {
 	pkBytes, err := x509.MarshalPKIXPublicKey(pk)
 	if err != nil {
@@ -131,7 +131,7 @@ func ExtractPublicKey(pk *rsa.PublicKey) (string, error) {
 	return base64.StdEncoding.EncodeToString(pemByte), nil
 }
 
-// ExtractPrivateKey gets private key and returns base64 encoded private key
+// ExtractPrivateKey gets private key and returns base64 encoded private key.
 func ExtractPrivateKey(sk *rsa.PrivateKey) string {
 	pemByte := pem.EncodeToMemory(
 		&pem.Block{

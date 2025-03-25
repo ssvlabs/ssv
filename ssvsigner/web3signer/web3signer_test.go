@@ -16,11 +16,13 @@ import (
 
 func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Web3Signer) {
 	server := httptest.NewServer(handler)
+
 	t.Cleanup(func() {
 		server.Close()
 	})
 
 	web3Signer := New(server.URL)
+
 	return server, web3Signer
 }
 
@@ -99,7 +101,7 @@ func TestListKeys(t *testing.T) {
 				require.ErrorContains(t, err, tt.errContains)
 			} else {
 				require.NoError(t, err)
-				require.EqualValues(t, tt.resp, keys)
+				require.Equal(t, tt.resp, keys)
 			}
 		})
 	}
@@ -154,6 +156,7 @@ func TestImportKeystore(t *testing.T) {
 				require.Equal(t, http.MethodPost, r.Method)
 
 				var req ImportKeystoreRequest
+
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
 				if !reflect.DeepEqual(req, tt.req) {
@@ -171,6 +174,7 @@ func TestImportKeystore(t *testing.T) {
 				require.ErrorContains(t, err, tt.containsErr)
 			} else {
 				require.NoError(t, err)
+
 				if !reflect.DeepEqual(data, tt.response) {
 					t.Errorf("Expected resp %v but got %v", tt.response, data)
 				}
@@ -227,6 +231,7 @@ func TestDeleteKeystore(t *testing.T) {
 				require.Equal(t, http.MethodDelete, r.Method)
 
 				var req DeleteKeystoreRequest
+
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
 				if !reflect.DeepEqual(req, tt.req) {
@@ -244,6 +249,7 @@ func TestDeleteKeystore(t *testing.T) {
 				require.ErrorContains(t, err, tt.containsErr)
 			} else {
 				require.NoError(t, err)
+
 				if !reflect.DeepEqual(resp, tt.response) {
 					t.Errorf("Expected resp %v but got %v", tt.response, resp)
 				}
@@ -295,6 +301,7 @@ func TestSign(t *testing.T) {
 				require.Equal(t, http.MethodPost, r.Method)
 
 				var req SignRequest
+
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 				require.Equal(t, tt.payload, req)
 

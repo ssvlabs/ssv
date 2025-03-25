@@ -75,9 +75,6 @@ func (p *privateKey) Sign(data []byte) ([]byte, error) {
 		return []byte{}, err
 	}
 
-	//var sig [256]byte
-	//copy(sig[:], signature)
-
 	return signature, nil
 }
 

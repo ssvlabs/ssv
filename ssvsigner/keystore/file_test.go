@@ -28,21 +28,22 @@ func TestDecryptKeystoreWithEmptyPassword(t *testing.T) {
 	password := ""
 	encryptedJSONData := []byte(`{"valid":"data"}`)
 	_, err := DecryptKeystore(encryptedJSONData, password)
-	require.NotNil(t, err)
+	require.Error(t, err)
 }
 
 func TestEncryptKeystoreWithValidData(t *testing.T) {
 	privkey := []byte("privateKey")
 
 	data, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
-	require.Nil(t, err)
+	require.NoError(t, err)
+
 	var jsonData map[string]interface{}
 	err = json.Unmarshal(data, &jsonData)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, testPubKeyBase64, jsonData["pubKey"])
 
 	decrtypted, err := DecryptKeystore(data, testPassword)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, privkey, decrtypted)
 }
 
@@ -51,7 +52,7 @@ func TestEncryptKeystoreWithEmptyPassword(t *testing.T) {
 	privkey := []byte("privateKey")
 
 	_, err := EncryptKeystore(privkey, testPubKeyBase64, password)
-	require.NotNil(t, err)
+	require.Error(t, err)
 }
 
 func TestLoadOperatorKeystore(t *testing.T) {
@@ -104,7 +105,7 @@ func TestLoadOperatorKeystore(t *testing.T) {
 		privkey := []byte("privateKey")
 
 		keystore, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		tmpEncryptedFile := createTempFile(t, "bad-for-privkey-", ".json", keystore)
 		defer os.Remove(tmpEncryptedFile)
@@ -123,7 +124,7 @@ func TestLoadOperatorKeystore(t *testing.T) {
 		require.NoError(t, err)
 
 		keystore, err := EncryptKeystore(privKey.Bytes(), testPubKeyBase64, testPassword)
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		tmpEncryptedFile := createTempFile(t, "valid-encrypted-", ".json", keystore)
 		defer os.Remove(tmpEncryptedFile)
@@ -143,6 +144,7 @@ func TestGenerateShareKeystore(t *testing.T) {
 	t.Run("succeeds with valid BLS key and passphrase", func(t *testing.T) {
 		sharePrivateKey := new(bls.SecretKey)
 		sharePrivateKey.SetByCSPRNG()
+
 		sharePublicKey := phase0.BLSPubKey{0x12, 0x34, 0x56}
 		passphrase := "supersecretpassphrase"
 
@@ -160,14 +162,14 @@ func TestGenerateShareKeystore(t *testing.T) {
 
 		pubkeyVal, ok := keystore["pubkey"].(string)
 		require.True(t, ok, "pubkey should be a string")
-		require.EqualValues(t, sharePublicKey.String(), pubkeyVal, "pubkey should match")
+		require.Equal(t, sharePublicKey.String(), pubkeyVal, "pubkey should match")
 	})
 }
 
 func createTempFile(t *testing.T, prefix, suffix string, data []byte) string {
 	t.Helper()
 
-	tmpFile, err := os.CreateTemp("", prefix+"*"+suffix)
+	tmpFile, err := os.CreateTemp(t.TempDir(), prefix+"*"+suffix)
 	require.NoError(t, err, "unable to create temporary file")
 
 	_, writeErr := tmpFile.Write(data)

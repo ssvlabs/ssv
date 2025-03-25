@@ -43,7 +43,7 @@ type LocalKeyManager struct {
 	SlashingProtector
 }
 
-// NewLocalKeyManager returns a new instance of LocalKeyManager
+// NewLocalKeyManager returns a new instance of LocalKeyManager.
 func NewLocalKeyManager(
 	logger *zap.Logger,
 	db basedb.Database,

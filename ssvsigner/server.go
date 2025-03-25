@@ -153,7 +153,7 @@ func (r *Server) keystoreJSONFromEncryptedShare(encryptedPrivKey hexutil.Bytes, 
 	}
 
 	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {
-		return "", fmt.Errorf("derived public key does not match expected public key")
+		return "", errors.New("derived public key does not match expected public key")
 	}
 
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, r.keystorePasswd)
@@ -293,7 +293,7 @@ func (r *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
 	if len(payload) == 0 {
 		logger.Warn("request has no payload")
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("request payload is empty"))
+		r.writeErr(ctx, logger, errors.New("request payload is empty"))
 		return
 	}
 

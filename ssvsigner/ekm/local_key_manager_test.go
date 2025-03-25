@@ -83,8 +83,10 @@ func TestEncryptedKeyManager(t *testing.T) {
 
 	// Create account with key 1.
 	threshold.Init()
+
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
+
 	index := 0
 	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
@@ -248,6 +250,7 @@ func TestSignBeaconObject(t *testing.T) {
 				},
 			},
 		}
+
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			beaconBlock,
@@ -479,5 +482,5 @@ func TestEkmListAccounts(t *testing.T) {
 	km, _ := testKeyManager(t, nil, operatorPrivateKey)
 	accounts, err := km.(*LocalKeyManager).ListAccounts()
 	require.NoError(t, err)
-	require.Equal(t, 2, len(accounts))
+	require.Len(t, accounts, 2)
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -34,10 +33,10 @@ type ServerTestSuite struct {
 func (s *ServerTestSuite) SetupTest() {
 	var err error
 	s.logger, err = zap.NewDevelopment()
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 
 	err = bls.Init(bls.BLS12_381)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 
 	s.pubKey = &testOperatorPublicKey{
 		pubKeyBase64: "test_pubkey_base64",
@@ -83,6 +82,7 @@ func (s *ServerTestSuite) ServeHTTP(method, path string, body []byte) (*fasthttp
 
 	req.Header.SetMethod(method)
 	req.SetRequestURI(path)
+
 	if len(body) > 0 {
 		req.SetBody(body)
 		req.Header.SetContentType("application/json")
@@ -111,6 +111,7 @@ func (s *ServerTestSuite) TestListValidators() {
 		var response []string
 		err = json.Unmarshal(resp.Body(), &response)
 		require.NoError(t, err)
+
 		expected := []string{
 			"0x010203000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
 			"0x040506000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -135,7 +136,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 	sk.SetByCSPRNG()
 	pubKey := sk.GetPublicKey().Serialize()
 
-	validBlsKey := fmt.Sprintf("0x%s", hex.EncodeToString(sk.Serialize()))
+	validBlsKey := "0x" + hex.EncodeToString(sk.Serialize())
 	s.operatorPrivKey.decryptResult = []byte(validBlsKey)
 
 	request := AddValidatorRequest{
@@ -234,7 +235,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 	t.Run("different decrypt result", func(t *testing.T) {
 		differentSk := new(bls.SecretKey)
 		differentSk.SetByCSPRNG()
-		differentBlsKey := fmt.Sprintf("0x%s", hex.EncodeToString(differentSk.Serialize()))
+		differentBlsKey := "0x" + hex.EncodeToString(differentSk.Serialize())
 		s.operatorPrivKey.decryptResult = []byte(differentBlsKey)
 
 		resp, err := s.ServeHTTP("POST", pathValidators, reqBody)
@@ -326,8 +327,10 @@ func (s *ServerTestSuite) TestSignValidator() {
 		resp, err := s.ServeHTTP("POST", pathValidatorsSign+pubKeyHex, reqBody)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+
 		const expectedSignature = `{"signature":"0x010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}`
-		assert.Equal(t, expectedSignature, string(resp.Body()))
+
+		assert.JSONEq(t, expectedSignature, string(resp.Body()))
 	})
 
 	t.Run("invalid JSON", func(t *testing.T) {
@@ -437,7 +440,7 @@ func (s *ServerTestSuite) TestHelperMethods() {
 
 	t.Run("writeErr", func(t *testing.T) {
 		s.server.writeErr(ctx, zap.L(), errors.New("test error"))
-		assert.Equal(t, `{"message":"test error"}`, string(ctx.Response.Body()))
+		assert.JSONEq(t, `{"message":"test error"}`, string(ctx.Response.Body()))
 	})
 
 	ctx.Response.Reset()
