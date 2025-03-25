@@ -41,7 +41,7 @@ func (test *CommitteeSpecTest) TestName() string {
 }
 
 func (test *CommitteeSpecTest) FullName() string {
-	return strings.Replace(test.ParentName+"_"+test.Name, " ", "_", -1)
+	return strings.ReplaceAll(test.ParentName+"_"+test.Name, " ", "_")
 }
 
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest

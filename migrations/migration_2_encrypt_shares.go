@@ -6,8 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
-
+	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 
 	"go.uber.org/zap"

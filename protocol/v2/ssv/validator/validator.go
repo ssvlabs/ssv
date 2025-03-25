@@ -18,8 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -37,7 +37,7 @@ type Validator struct {
 
 	Operator       *spectypes.CommitteeMember
 	Share          *ssvtypes.SSVShare
-	Signer         signing.BeaconSigner
+	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
 	Queues map[spectypes.RunnerRole]queueContainer

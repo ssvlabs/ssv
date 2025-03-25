@@ -27,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
 	"github.com/ssvlabs/ssv/doppelganger"
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
@@ -52,8 +51,6 @@ import (
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/operator/keys"
-	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -64,11 +61,14 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 type KeyStore struct {

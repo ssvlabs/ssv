@@ -1,4 +1,4 @@
-package signing
+package ekm
 
 import (
 	"context"

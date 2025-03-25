@@ -10,7 +10,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 const (

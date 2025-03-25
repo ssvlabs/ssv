@@ -41,11 +41,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -73,7 +73,7 @@ type ControllerOptions struct {
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:"Enable data export functionality"`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"Number of slots to retain in export data"`
-	BeaconSigner               signing.BeaconSigner
+	BeaconSigner               ekm.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
@@ -158,7 +158,7 @@ type controller struct {
 	ibftStorageMap    *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
-	beaconSigner   signing.BeaconSigner
+	beaconSigner   ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 
 	operatorDataStore operatordatastore.OperatorDataStore

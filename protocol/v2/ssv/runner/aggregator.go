@@ -18,8 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type AggregatorRunner struct {
@@ -27,7 +27,7 @@ type AggregatorRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         signing.BeaconSigner
+	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
@@ -42,7 +42,7 @@ func NewAggregatorRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
@@ -382,7 +382,7 @@ func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *AggregatorRunner) GetSigner() signing.BeaconSigner {
+func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *AggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

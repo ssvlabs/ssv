@@ -16,7 +16,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 func TestSlashing(t *testing.T) {

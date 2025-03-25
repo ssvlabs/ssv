@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	testingspace "github.com/ssvlabs/ssv/utils/rsaencryption/testingspace"
+	testingspace "github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption/testingspace"
 )
 
 func TestGenerateKeys(t *testing.T) {

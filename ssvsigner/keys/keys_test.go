@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/operator/keys"
-	rsatesting "github.com/ssvlabs/ssv/utils/rsaencryption/testingspace"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	rsatesting "github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption/testingspace"
 )
 
 const sampleRSAPublicKey = `

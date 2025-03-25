@@ -12,7 +12,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 
-	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 const (

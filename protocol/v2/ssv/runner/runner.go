@@ -16,15 +16,15 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
-	GetSigner() signing.BeaconSigner
+	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
 }

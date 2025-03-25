@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
 )
 
 type OperatorPublicKey interface {

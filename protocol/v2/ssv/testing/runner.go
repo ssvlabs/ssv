@@ -17,8 +17,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -76,7 +76,7 @@ var ConstructBaseRunner = func(
 	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 	identifier := spectypes.NewMsgID(spectypes.JatoTestnet, spectestingutils.TestingValidatorPubKey[:], role)
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
-	km := signing.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	operator := spectestingutils.TestingCommitteeMember(keySet)
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 	dgHandler := doppelganger.NoOpHandler{}
@@ -304,7 +304,7 @@ var ConstructBaseRunnerWithShareMap = func(
 	var valCheck specqbft.ProposedValueCheckF
 	var contr *controller.Controller
 
-	km := signing.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 	dutyGuard := validator.NewCommitteeDutyGuard()
 	dgHandler := doppelganger.NoOpHandler{}
 
@@ -338,7 +338,7 @@ var ConstructBaseRunnerWithShareMap = func(
 
 		net = spectestingutils.NewTestingNetwork(1, keySetInstance.OperatorKeys[1])
 
-		km = signing.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
+		km = ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())
 		committeeMember := spectestingutils.TestingCommitteeMember(keySetInstance)
 		opSigner = spectestingutils.NewOperatorSigner(keySetInstance, committeeMember.OperatorID)
 

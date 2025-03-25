@@ -10,8 +10,8 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/operator/keys"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 

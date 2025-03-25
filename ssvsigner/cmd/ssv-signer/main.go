@@ -11,9 +11,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/operator/keys"
-	"github.com/ssvlabs/ssv/operator/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 

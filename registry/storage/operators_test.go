@@ -11,10 +11,10 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 func TestStorage_SaveAndGetOperatorData(t *testing.T) {
