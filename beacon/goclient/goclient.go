@@ -117,7 +117,8 @@ type operatorDataStore interface {
 type EventTopic string
 
 const (
-	EventTopicHead EventTopic = "head"
+	EventTopicHead  EventTopic = "head"
+	EventTopicBlock EventTopic = "block"
 )
 
 // GoClient implementing Beacon struct
@@ -166,8 +167,8 @@ type GoClient struct {
 	headEventSubscribers []subscriber[*apiv1.HeadEvent]
 	supportedTopics      []EventTopic
 
-	lastProcessedHeadEventSlotLock sync.Mutex
-	lastProcessedHeadEventSlot     phase0.Slot
+	lastProcessedEventSlotLock sync.Mutex
+	lastProcessedEventSlot     phase0.Slot
 
 	genesisForkVersion phase0.Version
 	ForkLock           sync.RWMutex
