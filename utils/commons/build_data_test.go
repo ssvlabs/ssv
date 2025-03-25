@@ -1,7 +1,6 @@
 package commons
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,8 +9,6 @@ import (
 // TestSetBuildData verifies that SetBuildData correctly sets the application name and version,
 // and that GetBuildData returns the properly formatted string in the format "app:version".
 func TestSetBuildData(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		name     string
 		app      string
@@ -20,9 +17,9 @@ func TestSetBuildData(t *testing.T) {
 	}{
 		{
 			name:     "set custom app and version",
-			app:      appName,
-			version:  version,
-			expected: fmt.Sprintf("%s:%s", appName, version),
+			app:      "SSV-Node",
+			version:  "latest",
+			expected: "SSV-Node:latest",
 		},
 		{
 			name:     "set empty values",
@@ -34,9 +31,8 @@ func TestSetBuildData(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			SetBuildData(tt.app, tt.version)
+
 			assert.Equal(t, tt.expected, GetBuildData())
 		})
 	}
@@ -45,8 +41,6 @@ func TestSetBuildData(t *testing.T) {
 // TestGetNodeVersion verifies that GetNodeVersion correctly returns the version portion
 // of the build data after it has been set via SetBuildData.
 func TestGetNodeVersion(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		name     string
 		version  string
@@ -66,8 +60,6 @@ func TestGetNodeVersion(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			SetBuildData("SSV-Node", tt.version)
 			assert.Equal(t, tt.expected, GetNodeVersion())
 		})
