@@ -1,10 +1,55 @@
 #!/bin/bash
+set -e
 
 # Enable BuildKit
 export DOCKER_BUILDKIT=1
 
-# Extract the Git tag from the SOURCE_COMMIT
-APP_VERSION=$(git describe --tags "${SOURCE_COMMIT}")
+# Check if IMAGE_NAME is set
+if [ -z "${IMAGE_NAME}" ]; then
+  echo -e "\033[1;31mERROR:\033[0m IMAGE_NAME environment variable is not set"
+  echo -e "Usage: \033[1;36mIMAGE_NAME=your/image:tag $0 [push|local]\033[0m"
+  exit 1
+fi
 
-# Pass the Git tag as a build argument
-docker build --build-arg APP_VERSION="${APP_VERSION}" -t "${IMAGE_NAME}" .
+# Determine build mode (push or local)
+BUILD_MODE="${1:-local}"  # default: local
+
+if [ -n "${SOURCE_COMMIT}" ]; then
+  # Extract Git tag when running on Docker Hub
+  APP_VERSION=$(git describe --tags "${SOURCE_COMMIT}" 2>/dev/null || echo "latest")
+  echo "Using SOURCE_COMMIT=${SOURCE_COMMIT}"
+else
+  # Extract Git tag when running locally
+  APP_VERSION=$(git describe --tags 2>/dev/null || echo "latest")
+fi
+
+echo "Building ${IMAGE_NAME} with APP_VERSION=${APP_VERSION}"
+
+# Ensure QEMU is set up for cross-platform emulation
+docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+# Create and configure buildx builder
+docker buildx rm multiplatform-builder 2>/dev/null || true
+docker buildx create --name multiplatform-builder --driver docker-container --use
+docker buildx inspect multiplatform-builder --bootstrap
+
+# Build for multiple platforms based on mode
+if [ "$BUILD_MODE" = "push" ]; then
+  echo "Building and pushing to registry..."
+  docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    --build-arg APP_VERSION="${APP_VERSION}" \
+    --push \
+    -t "${IMAGE_NAME}" .
+else
+  echo "Building and saving locally..."
+  docker buildx build \
+    --platform linux/amd64,linux/arm64 \
+    --build-arg APP_VERSION="${APP_VERSION}" \
+    --output "type=oci,dest=./image-${APP_VERSION}.tar" \
+    -t "${IMAGE_NAME}" .
+
+  echo -e "\033[1;32mImage saved to ./image-${APP_VERSION}.tar\033[0m"
+fi
+
+echo -e "\033[1;32mBuild complete!\033[0m"

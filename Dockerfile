@@ -18,22 +18,21 @@ RUN apt-get update                                                        && \
 RUN go version
 
 WORKDIR /go/src/github.com/ssvlabs/ssv/
-COPY go.mod .
-COPY go.sum .
+COPY go.mod go.sum ./
+
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
   go mod download
 
-## Note TARGETARCH is a crucial variable:
-##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
-
-ARG APP_VERSION
-ARG TARGETARCH
 
 #
 # STEP 2: Build executable binary
 #
 FROM preparer AS builder
+
+## Note TARGETARCH is a crucial variable:
+##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
+ARG TARGETARCH
 
 # Copy files and install app
 COPY . .
