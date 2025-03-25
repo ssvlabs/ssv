@@ -16,7 +16,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"

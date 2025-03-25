@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	rsatesting "github.com/ssvlabs/ssv/ssvsigner/rsaencryption/testingspace"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsatesting"
 )
 
 func TestRun_InvalidWeb3SignerEndpoint(t *testing.T) {
@@ -15,7 +15,7 @@ func TestRun_InvalidWeb3SignerEndpoint(t *testing.T) {
 	cli := CLI{
 		ListenAddr:         ":8080",
 		Web3SignerEndpoint: "invalid-url",
-		PrivateKey:         base64.StdEncoding.EncodeToString([]byte(rsatesting.SkPem)),
+		PrivateKey:         base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)),
 	}
 
 	err := run(logger, cli)
@@ -68,7 +68,7 @@ func TestRun_FailedServerStart(t *testing.T) {
 	cli := CLI{
 		ListenAddr:         ":999999",
 		Web3SignerEndpoint: "http://example.com",
-		PrivateKey:         base64.StdEncoding.EncodeToString([]byte(rsatesting.SkPem)),
+		PrivateKey:         base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)),
 	}
 
 	err := run(logger, cli)

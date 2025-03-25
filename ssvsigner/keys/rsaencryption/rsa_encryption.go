@@ -1,8 +1,3 @@
-// TODO: replace ExtractPublicKeyPemBase64 it with ExtractPublicKeyPem
-// In fact, we never use base64 representation of public key except of case
-// when we use it as a key for database.
-// So PEM should be encrypted to base64 only and inside database layer
-
 package rsaencryption
 
 import (

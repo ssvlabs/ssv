@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	rsatesting "github.com/ssvlabs/ssv/ssvsigner/rsaencryption/testingspace"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsatesting"
 )
 
 const sampleRSAPublicKey = `
@@ -68,7 +68,7 @@ func TestSignVerify(t *testing.T) {
 }
 
 func TestBase64Encoding(t *testing.T) {
-	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.SkPem)))
+	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
 	require.NoError(t, err, "Failed to parse private key")
 
 	encodedPrivKey := privKey.Base64()
@@ -89,7 +89,7 @@ func TestBase64Encoding(t *testing.T) {
 }
 
 func TestStorageHash(t *testing.T) {
-	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.SkPem)))
+	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
 	require.NoError(t, err, "Failed to parse private key")
 
 	hash := privKey.StorageHash()
@@ -98,7 +98,7 @@ func TestStorageHash(t *testing.T) {
 }
 
 func TestEKMHash(t *testing.T) {
-	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.SkPem)))
+	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
 	require.NoError(t, err, "Failed to parse private key")
 
 	hash := privKey.EKMHash()

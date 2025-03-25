@@ -23,7 +23,7 @@ import (
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )

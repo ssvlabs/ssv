@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	rsatesting "github.com/ssvlabs/ssv/ssvsigner/rsaencryption/testingspace"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsatesting"
 )
 
 func TestGenerateKeys(t *testing.T) {
@@ -20,13 +20,13 @@ func TestGenerateKeys(t *testing.T) {
 }
 
 func TestDecryptRSA(t *testing.T) {
-	sk, err := PEMToPrivateKey([]byte(rsatesting.SkPem))
+	sk, err := PEMToPrivateKey([]byte(rsatesting.PrivKeyPEM))
 	require.NoError(t, err)
 
-	hash, err := base64.StdEncoding.DecodeString(rsatesting.EncryptedKeyBase64)
+	data, err := base64.StdEncoding.DecodeString(rsatesting.PrivKeyBase64)
 	require.NoError(t, err)
 
-	key, err := DecryptRSA(sk, hash)
+	key, err := DecryptRSA(sk, data)
 	require.NoError(t, err)
 	require.Equal(t, "626d6a13ae5b1458c310700941764f3841f279f9c8de5f4ba94abd01dc082517", string(key))
 }
