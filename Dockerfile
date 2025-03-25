@@ -24,7 +24,12 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
   go mod download
 
+## Note TARGETARCH is a crucial variable:
+##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
+
 ARG APP_VERSION
+ARG TARGETARCH
+
 #
 # STEP 2: Build executable binary
 #
@@ -37,7 +42,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
   COMMIT=$(git rev-parse HEAD) && \
   VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
-  CGO_ENABLED=1 GOOS=linux go install \
+  CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go install \
   -tags="blst_enabled" \
   -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
   ./cmd/ssvnode
