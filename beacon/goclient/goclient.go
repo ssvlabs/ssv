@@ -217,7 +217,7 @@ func New(
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHead},
+		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
 		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
