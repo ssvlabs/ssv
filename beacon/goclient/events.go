@@ -105,56 +105,60 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 		return
 	}
 
+	logger := gc.log.With(zap.String("topic", e.Topic))
+	logger.Debug("event received")
+
+	if e.Data == nil {
+		logger.Warn("event data is nil")
+		return
+	}
+
 	switch EventTopic(e.Topic) {
 	case EventTopicHead:
-		logger := gc.log.
-			With(zap.String("topic", e.Topic))
-		logger.Debug("event received")
-
-		if e.Data == nil {
-			logger.Warn("event data is nil")
-			return
-		}
-
-		headEventData, ok := e.Data.(*apiv1.HeadEvent)
+		eventData, ok := e.Data.(*apiv1.HeadEvent)
 		if !ok {
 			logger.Warn("could not type assert")
 			return
 		}
 
-		gc.lastProcessedHeadEventSlotLock.Lock()
-		if headEventData.Slot <= gc.lastProcessedHeadEventSlot {
-			logger.
-				With(zap.Uint64("event_slot", uint64(headEventData.Slot))).
-				With(zap.Uint64("last_processed_slot", uint64(gc.lastProcessedHeadEventSlot))).
-				Debug("event slot is lower or equal than last processed slot")
-			gc.lastProcessedHeadEventSlotLock.Unlock()
-			return
-		}
-
-		gc.lastProcessedHeadEventSlot = headEventData.Slot
-		gc.lastProcessedHeadEventSlotLock.Unlock()
-
-		cacheItem := gc.blockRootToSlotCache.Set(headEventData.Block, headEventData.Slot, ttlcache.NoTTL)
-		logger.
-			With(zap.Int64("cache_item_version", cacheItem.Version())).
-			With(fields.Slot(headEventData.Slot)).
-			With(fields.BlockRoot(headEventData.Block)).
-			Info("block root to slot cache updated")
-
 		gc.subscribersLock.RLock()
 		defer gc.subscribersLock.RUnlock()
-
 		for _, sub := range gc.headEventSubscribers {
 			logger = logger.With(zap.String("subscriber_identifier", sub.Identifier))
 
 			select {
-			case sub.Channel <- headEventData:
+			case sub.Channel <- eventData:
 				logger.Info("event broadcasted")
 			default:
 				logger.Warn("subscriber channel full, dropping the message")
 			}
 		}
+	case EventTopicBlock:
+		eventData, ok := e.Data.(*apiv1.BlockEvent)
+		if !ok {
+			logger.Warn("could not type assert")
+			return
+		}
+
+		gc.lastProcessedEventSlotLock.Lock()
+		if eventData.Slot <= gc.lastProcessedEventSlot {
+			logger.
+				With(zap.Uint64("event_slot", uint64(eventData.Slot))).
+				With(zap.Uint64("last_processed_slot", uint64(gc.lastProcessedEventSlot))).
+				Debug("event slot is lower or equal than last processed slot")
+			gc.lastProcessedEventSlotLock.Unlock()
+			return
+		}
+
+		gc.lastProcessedEventSlot = eventData.Slot
+		gc.lastProcessedEventSlotLock.Unlock()
+
+		cacheItem := gc.blockRootToSlotCache.Set(eventData.Block, eventData.Slot, ttlcache.NoTTL)
+		logger.
+			With(zap.Int64("cache_item_version", cacheItem.Version())).
+			With(fields.Slot(eventData.Slot)).
+			With(fields.BlockRoot(eventData.Block)).
+			Info("block root to slot cache updated")
 	default:
 		gc.log.
 			With(zap.String("topic", e.Topic)).
