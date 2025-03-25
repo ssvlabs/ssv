@@ -226,6 +226,7 @@ func deepCopyCommitteeDutyTrace(trace *model.CommitteeDutyTrace) *model.Committe
 		OperatorIDs:   deepCopyOperatorIDs(trace.OperatorIDs),
 		SyncCommittee: deepCopySigners(trace.SyncCommittee),
 		Attester:      deepCopySigners(trace.Attester),
+		ProposalData:  deepCopyProposalData(trace.ProposalData),
 	}
 }
 
@@ -355,12 +356,19 @@ func deepCopyValidatorDutyTrace(trace *model.ValidatorDutyTrace) *model.Validato
 			Rounds:   trace.Rounds,
 			Decideds: trace.Decideds,
 		},
-		Slot:      trace.Slot,
-		Role:      trace.Role,
-		Validator: trace.Validator,
-		Pre:       deepCopyPartialSigs(trace.Pre),
-		Post:      deepCopyPartialSigs(trace.Post),
+		Slot:         trace.Slot,
+		Role:         trace.Role,
+		Validator:    trace.Validator,
+		Pre:          deepCopyPartialSigs(trace.Pre),
+		Post:         deepCopyPartialSigs(trace.Post),
+		ProposalData: deepCopyProposalData(trace.ProposalData),
 	}
+}
+
+func deepCopyProposalData(data []byte) []byte {
+	copy := make([]byte, len(data))
+	copy = append(copy, data...)
+	return copy
 }
 
 func deepCopyPartialSigs(partialSigs []*model.PartialSigTrace) []*model.PartialSigTrace {

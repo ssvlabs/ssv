@@ -91,6 +91,7 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 			c.evictValidatorCommitteeLinks(currentSlot)
 			// remove old SC roots
 			c.syncCommitteeRootsCache.DeleteExpired()
+			c.logger.Info("evicted duty traces to disk", fields.Slot(currentSlot))
 		}
 	}
 }
@@ -533,7 +534,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						roleDutyTrace.Validator = data.Duty.ValidatorIndex
 					}
 
-					c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), zap.Int("size", len(data.DataSSZ)))
+					c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), fields.ValidatorIndex(data.Duty.ValidatorIndex), zap.Int("size", len(data.DataSSZ)))
 
 					// non-committee duty will contain the proposal data
 					roleDutyTrace.ProposalData = data.DataSSZ
