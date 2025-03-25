@@ -1,6 +1,7 @@
 package goclient
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -98,8 +99,9 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 
 				// Distribute the registrations evenly across the epoch based on the pubkeys.
 				slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
-				validatorSample := binary.LittleEndian.Uint64(validatorPk[:8])
-				shouldSubmit := validatorSample%gc.network.SlotsPerEpoch() == slotInEpoch
+				validatorHash := sha256.Sum256(validatorPk[:])
+				validatorDescriptor := binary.LittleEndian.Uint64(validatorHash[:8])
+				shouldSubmit := validatorDescriptor%gc.network.SlotsPerEpoch() == slotInEpoch
 
 				if r.new || shouldSubmit {
 					r.new = false
