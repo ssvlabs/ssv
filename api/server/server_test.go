@@ -145,42 +145,6 @@ func TestNew(t *testing.T) {
 	require.Equal(t, exporter, server.exporter)
 }
 
-// TestRun_ServerConfiguration tests that Run properly configures the HTTP server.
-func TestRun_ServerConfiguration(t *testing.T) {
-	t.Parallel()
-
-	logger := zaptest.NewLogger(t)
-
-	ts := setupTestServer(t)
-	defer ts.Close()
-
-	handler := ts.Config.Handler
-
-	srv := New(
-		logger,
-		":8080",
-		&handlers.Node{},
-		&handlers.Validators{},
-		&handlers.Exporter{},
-	)
-
-	// simulate part of Run by creating the http server
-	srv.httpServer = &http.Server{
-		Addr:              srv.addr,
-		Handler:           handler,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       12 * time.Second,
-		WriteTimeout:      12 * time.Second,
-	}
-
-	require.NotNil(t, srv.httpServer)
-	require.Equal(t, ":8080", srv.httpServer.Addr)
-	require.Equal(t, 10*time.Second, srv.httpServer.ReadHeaderTimeout)
-	require.Equal(t, 12*time.Second, srv.httpServer.ReadTimeout)
-	require.Equal(t, 12*time.Second, srv.httpServer.WriteTimeout)
-	require.Equal(t, handler, srv.httpServer.Handler)
-}
-
 // TestRun_ActualExecution tests that the Run method starts a server.
 func TestRun_ActualExecution(t *testing.T) {
 	if testing.Short() {
