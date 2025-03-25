@@ -45,22 +45,6 @@ func New(
 
 // Run starts the server and blocks until it's shut down.
 func (s *Server) Run() error {
-	router := s.setupRouter()
-
-	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
-
-	s.httpServer = &http.Server{
-		Addr:              s.addr,
-		Handler:           router,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       12 * time.Second,
-		WriteTimeout:      12 * time.Second,
-	}
-	return s.httpServer.ListenAndServe()
-}
-
-// setupRouter creates and configures a chi router with all middleware and routes.
-func (s *Server) setupRouter() *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
@@ -78,7 +62,16 @@ func (s *Server) setupRouter() *chi.Mux {
 	router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 	router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 
-	return router
+	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
+
+	s.httpServer = &http.Server{
+		Addr:              s.addr,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       12 * time.Second,
+		WriteTimeout:      12 * time.Second,
+	}
+	return s.httpServer.ListenAndServe()
 }
 
 // middlewareLogger creates a middleware that logs API requests.
