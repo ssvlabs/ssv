@@ -119,7 +119,7 @@ func TestHexBind(t *testing.T) {
 		{
 			name:     "empty string",
 			input:    "",
-			expected: nil,
+			expected: Hex{},
 			hasError: false,
 		},
 		{
