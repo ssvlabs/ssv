@@ -25,13 +25,9 @@ fi
 
 echo "Building ${IMAGE_NAME} with APP_VERSION=${APP_VERSION}"
 
-# Ensure QEMU is set up for cross-platform emulation
-docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-
 # Create and configure buildx builder
 docker buildx rm multiplatform-builder 2>/dev/null || true
-docker buildx create --name multiplatform-builder --driver docker-container --use
-docker buildx inspect multiplatform-builder --bootstrap
+docker buildx create --name multiplatform-builder --driver docker-container --bootstrap --use
 
 # Build for multiple platforms based on mode
 if [ "$BUILD_MODE" = "push" ]; then
