@@ -253,7 +253,6 @@ func New(
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
-	logger.Info("starting event listener")
 	if err := client.startEventListener(opt.Context); err != nil {
 		return nil, errors.Wrap(err, "failed to launch event listener")
 	}
