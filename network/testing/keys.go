@@ -11,7 +11,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/rsaencryption"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -51,7 +51,7 @@ func CreateKeysFromKeySet(ks *spectestingutils.TestKeySet) ([]NodeKeys, error) {
 			return nil, err
 		}
 
-		pk, err := keys.PrivateKeyFromBytes(rsaencryption.PrivateKeyToByte(op))
+		pk, err := keys.PrivateKeyFromBytes(rsaencryption.PrivateKeyToPEM(op))
 		if err != nil {
 			return nil, err
 		}

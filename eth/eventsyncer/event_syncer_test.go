@@ -37,7 +37,7 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -94,7 +94,7 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate operator key
-	opPubKey, _, err := rsaencryption.GenerateKeys()
+	opPubKey, _, err := rsaencryption.GenerateRSAKeyPairPEM()
 	require.NoError(t, err)
 
 	pkstr := base64.StdEncoding.EncodeToString(opPubKey)
@@ -213,17 +213,12 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	privKeyHash, err := privKey.StorageHash()
-	if err != nil {
-		logger.Fatal("failed to hash operator private key", zap.Error(err))
-	}
-
 	encodedPubKey, err := privKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	if err := nodeStorage.SavePrivateKeyHash(privKeyHash); err != nil {
+	if err := nodeStorage.SavePrivateKeyHash(privKey.StorageHash()); err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
 

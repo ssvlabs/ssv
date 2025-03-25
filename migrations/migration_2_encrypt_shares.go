@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 
 	"go.uber.org/zap"
@@ -27,7 +27,7 @@ var migration_2_encrypt_shares = Migration{
 			if !found {
 				return completed(txn)
 			}
-			operatorKey, err := rsaencryption.PemToPrivateKey(obj.Value)
+			operatorKey, err := rsaencryption.PEMToPrivateKey(obj.Value)
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
 			}

@@ -502,12 +502,12 @@ func (t *testOperatorPrivateKey) Decrypt(encryptedData []byte) ([]byte, error) {
 	return t.decryptResult, nil
 }
 
-func (t *testOperatorPrivateKey) StorageHash() (string, error) {
-	return t.storageHash, nil
+func (t *testOperatorPrivateKey) StorageHash() string {
+	return t.storageHash
 }
 
-func (t *testOperatorPrivateKey) EKMHash() (string, error) {
-	return t.ekmHash, nil
+func (t *testOperatorPrivateKey) EKMHash() string {
+	return t.ekmHash
 }
 
 func (t *testOperatorPrivateKey) Bytes() []byte {

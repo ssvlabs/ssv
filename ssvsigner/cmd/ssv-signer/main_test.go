@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	rsatesting "github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption/testingspace"
+	rsatesting "github.com/ssvlabs/ssv/ssvsigner/rsaencryption/testingspace"
 )
 
 func TestRun_InvalidWeb3SignerEndpoint(t *testing.T) {

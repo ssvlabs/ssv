@@ -14,7 +14,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/holiman/uint256"
-	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
@@ -78,8 +77,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	privateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	encryptionKey, err := privateKey.EKMHash()
-	require.NoError(t, err)
+	encryptionKey := privateKey.EKMHash()
 
 	// Create account with key 1.
 	threshold.Init()
@@ -120,8 +118,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	privateKey2, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	encryptionKey2, err := privateKey2.EKMHash()
-	require.NoError(t, err)
+	encryptionKey2 := privateKey2.EKMHash()
 
 	// Load account with key 2 (should fail).
 	wallet2, err := signerStorage.OpenWallet()
@@ -129,7 +126,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	err = signerStorage.SetEncryptionKey(encryptionKey2)
 	require.NoError(t, err)
 	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
-	require.True(t, errors.Is(err, ErrCantDecrypt))
+	require.ErrorContains(t, err, "decrypt stored wallet")
 
 	// Retry with key 1 (should succeed).
 	wallet3, err := signerStorage.OpenWallet()

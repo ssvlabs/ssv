@@ -23,7 +23,7 @@ import (
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -339,11 +339,11 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectyp
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		opPubKey, privateKey, err := rsaencryption.GenerateKeys()
+		opPubKey, privateKey, err := rsaencryption.GenerateRSAKeyPairPEM()
 		if err != nil {
 			panic(err)
 		}
-		pk, err := rsaencryption.PemToPrivateKey(privateKey)
+		pk, err := rsaencryption.PEMToPrivateKey(privateKey)
 		if err != nil {
 			panic(err)
 		}

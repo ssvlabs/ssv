@@ -64,7 +64,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -796,10 +796,7 @@ func saveOperatorPrivKey(
 		return fmt.Errorf("could not get hashed private key: %w", err)
 	}
 
-	configStoragePrivKeyHash, err := operatorPrivKey.StorageHash()
-	if err != nil {
-		return fmt.Errorf("could not hash private key: %w", err)
-	}
+	configStoragePrivKeyHash := operatorPrivKey.StorageHash()
 
 	// Backwards compatibility for the old hashing method,
 	// which was hashing the text from the configuration directly,
@@ -808,10 +805,7 @@ func saveOperatorPrivKey(
 	if err != nil {
 		return fmt.Errorf("could not decode private key: %w", err)
 	}
-	configStoragePrivKeyLegacyHash, err := rsaencryption.HashRsaKey(cliPrivKeyDecoded)
-	if err != nil {
-		return fmt.Errorf("could not hash private key: %w", err)
-	}
+	configStoragePrivKeyLegacyHash := rsaencryption.HashKeyBytes(cliPrivKeyDecoded)
 
 	if !found {
 		if err := nodeStorage.SavePrivateKeyHash(configStoragePrivKeyHash); err != nil {

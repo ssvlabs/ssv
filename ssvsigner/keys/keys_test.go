@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	rsatesting "github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption/testingspace"
+	rsatesting "github.com/ssvlabs/ssv/ssvsigner/rsaencryption/testingspace"
 )
 
 const sampleRSAPublicKey = `
@@ -92,8 +92,7 @@ func TestStorageHash(t *testing.T) {
 	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.SkPem)))
 	require.NoError(t, err, "Failed to parse private key")
 
-	hash, err := privKey.StorageHash()
-	require.NoError(t, err, "Failed to compute storage hash")
+	hash := privKey.StorageHash()
 	require.NotEmpty(t, hash, "Storage hash should not be empty")
 	require.Equal(t, "eaba9e5320c1ef8023d74103e6b6e9828afce89442f2755cde217c06ccacf74a", hash, "Storage hash does not match expected value")
 }
@@ -102,8 +101,7 @@ func TestEKMHash(t *testing.T) {
 	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.SkPem)))
 	require.NoError(t, err, "Failed to parse private key")
 
-	hash, err := privKey.EKMHash()
-	require.NoError(t, err, "Failed to compute EKM hash")
+	hash := privKey.EKMHash()
 	require.NotEmpty(t, hash, "EKM hash should not be empty")
 	require.Equal(t, "6db24021c74d4f5784a0c1a6a519f9ffcb3996be5c0a3d9d4a6d8a567f9cc38a", hash, "EKM hash does not match expected value")
 }

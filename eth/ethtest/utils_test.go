@@ -257,13 +257,7 @@ func setupOperatorStorage(
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	privKey := operator.privateKey
-	privKeyHash, err := privKey.StorageHash()
-	if err != nil {
-		logger.Fatal("failed to encode operator private key", zap.Error(err))
-	}
-
-	if err := nodeStorage.SavePrivateKeyHash(privKeyHash); err != nil {
+	if err := nodeStorage.SavePrivateKeyHash(operator.privateKey.StorageHash()); err != nil {
 		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 

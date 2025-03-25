@@ -11,7 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
@@ -126,7 +126,7 @@ func TestStorage_ListOperators(t *testing.T) {
 
 	n := 5
 	for i := 0; i < n; i++ {
-		pk, _, err := rsaencryption.GenerateKeys()
+		pk, _, err := rsaencryption.GenerateRSAKeyPairPEM()
 		require.NoError(t, err)
 		operator := storage.OperatorData{
 			PublicKey: pk,
@@ -158,7 +158,7 @@ func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
 	// prepare storage test fixture
 	n := 5
 	for i := 0; i < n; i++ {
-		pk, _, err := rsaencryption.GenerateKeys()
+		pk, _, err := rsaencryption.GenerateRSAKeyPairPEM()
 		require.NoError(t, err)
 		operator := storage.OperatorData{
 			PublicKey: pk,
