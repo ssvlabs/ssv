@@ -21,6 +21,7 @@ import (
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
@@ -36,8 +37,6 @@ const (
 	// Client timeouts.
 	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
 	DefaultLongTimeout   = time.Second * 60 // For long requests.
-
-	BlockRootToSlotCacheCapacityEpochs = 64
 
 	clResponseErrMsg            = "Consensus client returned an error"
 	clNilResponseErrMsg         = "Consensus client returned a nil response"
@@ -101,7 +100,6 @@ type MultiClient interface {
 	eth2client.BeaconBlockRootProvider
 	eth2client.SyncCommitteeContributionProvider
 	eth2client.SyncCommitteeContributionsSubmitter
-	eth2client.BeaconBlockHeadersProvider
 	eth2client.ValidatorsProvider
 	eth2client.ProposalPreparationsSubmitter
 	eth2client.EventsProvider
@@ -109,16 +107,6 @@ type MultiClient interface {
 	eth2client.VoluntaryExitSubmitter
 	eth2client.ValidatorLivenessProvider
 }
-
-type operatorDataStore interface {
-	AwaitOperatorID() spectypes.OperatorID
-}
-
-type EventTopic string
-
-const (
-	EventTopicHead EventTopic = "head"
-)
 
 // GoClient implementing Beacon struct
 type GoClient struct {
@@ -132,7 +120,7 @@ type GoClient struct {
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
-	operatorDataStore operatorDataStore
+	operatorDataStore operatordatastore.OperatorDataStore
 
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
@@ -141,33 +129,14 @@ type GoClient struct {
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
 	attestationReqInflight singleflight.Group[phase0.Slot, *phase0.AttestationData]
+
 	// attestationDataCache helps reuse recently fetched attestation data.
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
 	// data regardless of the requested committeeIndex.
-	attestationDataCache               *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
-	weightedAttestationDataSoftTimeout time.Duration
-	weightedAttestationDataHardTimeout time.Duration
-
-	// blockRootToSlotReqInflight helps prevent duplicate BeaconBlockHeader requests
-	// from running in parallel.
-	blockRootToSlotReqInflight singleflight.Group[phase0.Root, phase0.Slot]
-	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
-	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
-	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
-	// intended for cases where some objects within the application may need to fetch attestation data for more than one slot.
-	blockRootToSlotCache *ttlcache.Cache[phase0.Root, phase0.Slot]
+	attestationDataCache *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
 
 	commonTimeout time.Duration
 	longTimeout   time.Duration
-
-	withWeightedAttestationData bool
-
-	subscribersLock      sync.RWMutex
-	headEventSubscribers []subscriber[*apiv1.HeadEvent]
-	supportedTopics      []EventTopic
-
-	lastProcessedHeadEventSlotLock sync.Mutex
-	lastProcessedHeadEventSlot     phase0.Slot
 
 	genesisForkVersion phase0.Version
 	ForkLock           sync.RWMutex
@@ -182,7 +151,7 @@ type GoClient struct {
 func New(
 	logger *zap.Logger,
 	opt beaconprotocol.Options,
-	operatorDataStore operatorDataStore,
+	operatorDataStore operatordatastore.OperatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
@@ -202,22 +171,15 @@ func New(
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		operatorDataStore:     operatorDataStore,
-		registrationCache:     make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
+		registrationCache:     map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
 		),
-		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
-			opt.Network.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
-		),
-		commonTimeout:                      commonTimeout,
-		longTimeout:                        longTimeout,
-		withWeightedAttestationData:        opt.WithWeightedAttestationData,
-		weightedAttestationDataSoftTimeout: commonTimeout / 2,
-		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHead},
-		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
+		commonTimeout:      commonTimeout,
+		longTimeout:        longTimeout,
+		genesisForkVersion: phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
 		ForkEpochBellatrix: math.MaxUint64,
@@ -226,11 +188,11 @@ func New(
 		ForkEpochElectra:   math.MaxUint64,
 	}
 
-	if opt.BeaconNodeAddr == "" {
+	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
+	if len(beaconAddrList) == 0 {
 		return nil, fmt.Errorf("no beacon node address provided")
 	}
 
-	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	for _, beaconAddr := range beaconAddrList {
 		if err := client.addSingleClient(opt.Context, beaconAddr); err != nil {
 			return nil, err
@@ -252,10 +214,6 @@ func New(
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
-
-	if err := client.startEventListener(opt.Context); err != nil {
-		return nil, errors.Wrap(err, "failed to launch event listener")
-	}
 
 	return client, nil
 }
@@ -473,4 +431,17 @@ func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
 	duration := time.Second * casts.DurationFromUint64(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(gc.network.MinGenesisTime(), 0).Add(duration)
 	return startTime
+}
+
+func (gc *GoClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
+	if err := gc.multiClient.Events(ctx, topics, handler); err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Events"),
+			zap.Error(err),
+		)
+
+		return err
+	}
+
+	return nil
 }

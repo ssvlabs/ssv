@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -15,8 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestHealthy(t *testing.T) {
@@ -26,7 +30,11 @@ func TestHealthy(t *testing.T) {
 	)
 
 	ctx := context.Background()
+<<<<<<< HEAD
 	undialableServer := tests.MockServer(nil)
+=======
+	undialableServer := mockServer(t, nil)
+>>>>>>> parent of a22dafc26 (feat(attestation data) - Weighted attestation data (#2018))
 	c, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
 
@@ -79,7 +87,11 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to dial.
 	{
+<<<<<<< HEAD
 		undialableServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+=======
+		undialableServer := mockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+>>>>>>> parent of a22dafc26 (feat(attestation data) - Weighted attestation data (#2018))
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
@@ -89,7 +101,11 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to the Validators request.
 	{
+<<<<<<< HEAD
 		unresponsiveServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+=======
+		unresponsiveServer := mockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+>>>>>>> parent of a22dafc26 (feat(attestation data) - Weighted attestation data (#2018))
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
 				time.Sleep(longTimeout / 2)
@@ -119,7 +135,11 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to proposer duties request.
 	{
+<<<<<<< HEAD
 		unresponsiveServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+=======
+		unresponsiveServer := mockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+>>>>>>> parent of a22dafc26 (feat(attestation data) - Weighted attestation data (#2018))
 			switch r.URL.Path {
 			case "/eth/v1/validator/duties/proposer/" + fmt.Sprint(mockServerEpoch):
 				time.Sleep(longTimeout * 2)
@@ -135,7 +155,11 @@ func TestTimeouts(t *testing.T) {
 
 	// Fast enough.
 	{
+<<<<<<< HEAD
 		fastServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+=======
+		fastServer := mockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+>>>>>>> parent of a22dafc26 (feat(attestation data) - Weighted attestation data (#2018))
 			time.Sleep(commonTimeout / 2)
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
@@ -175,7 +199,11 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 			return resp, nil
 		}
 
+<<<<<<< HEAD
 		server := tests.MockServer(callback)
+=======
+		server := mockServer(t, callback)
+>>>>>>> parent of a22dafc26 (feat(attestation data) - Weighted attestation data (#2018))
 		defer server.Close()
 		t.Run(fmt.Sprintf("When genesis versions are the same (%s)", string(network)), func(t *testing.T) {
 			c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
@@ -195,7 +223,11 @@ func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
 
 	t.Run("When genesis versions are different", func(t *testing.T) {
 		ctx := context.Background()
+<<<<<<< HEAD
 		server := tests.MockServer(nil)
+=======
+		server := mockServer(t, nil)
+>>>>>>> parent of a22dafc26 (feat(attestation data) - Weighted attestation data (#2018))
 		defer server.Close()
 		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
 		require.NoError(t, err, "failed to create client")
@@ -222,7 +254,43 @@ func mockClientWithNetwork(ctx context.Context, serverURL string, commonTimeout,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		},
-		tests.MockDataStore{},
-		tests.MockSlotTickerProvider,
+		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
+		func() slotticker.SlotTicker {
+			return slotticker.New(zap.NewNop(), slotticker.Config{
+				SlotDuration: 12 * time.Second,
+				GenesisTime:  time.Now(),
+			})
+		},
 	)
+}
+
+type requestCallback = func(r *http.Request, resp json.RawMessage) (json.RawMessage, error)
+
+func mockServer(t *testing.T, onRequestFn requestCallback) *httptest.Server {
+	var mockResponses map[string]json.RawMessage
+	f, err := os.Open("testdata/mock-beacon-responses.json")
+	require.NoError(t, err)
+	require.NoError(t, json.NewDecoder(f).Decode(&mockResponses))
+
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("mock server handling request: %s", r.URL.Path)
+
+		resp, ok := mockResponses[r.URL.Path]
+		if !ok {
+			require.FailNowf(t, "unexpected request", "unexpected request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var err error
+		if onRequestFn != nil {
+			resp, err = onRequestFn(r, resp)
+			require.NoError(t, err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(resp); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	}))
 }

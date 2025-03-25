@@ -336,7 +336,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -358,7 +358,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for attester duties to be fetched again for the current epoch
@@ -420,7 +420,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -442,7 +442,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: trigger indices change
@@ -511,7 +511,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -534,7 +534,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for no action to be taken
@@ -593,7 +593,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -616,7 +616,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: trigger indices change
@@ -686,7 +686,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -708,7 +708,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for attester duties to be fetched again for the current epoch
@@ -776,7 +776,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
@@ -798,7 +798,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: trigger indices change
@@ -886,7 +886,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 			Slot: currentSlot.Get(),
 		},
 	}
-	scheduler.HandleHeadEvent(logger)(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
 
