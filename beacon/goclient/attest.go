@@ -144,6 +144,14 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			).Debug("response received")
 
 			if bestAttestationData == nil || resp.score > bestScore {
+				if resp.score > bestScore {
+					logger.Info("updating best attestation data because of higher score",
+						zap.String("client_addr", resp.clientAddr),
+						zap.Float64("score", resp.score),
+						fields.Root(resp.attestationData.BeaconBlockRoot),
+						fields.Slot(resp.attestationData.Slot),
+					)
+				}
 				bestAttestationData = resp.attestationData
 				bestScore = resp.score
 				bestClientAddr = resp.clientAddr
