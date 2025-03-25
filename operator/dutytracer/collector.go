@@ -459,94 +459,98 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		if subMsg, ok := msg.Body.(*specqbft.Message); ok {
-			slot := phase0.Slot(subMsg.Height)
-			msgID := spectypes.MessageID(subMsg.Identifier[:])
-			executorID := msgID.GetDutyExecutorID()
+		subMsg, ok := msg.Body.(*specqbft.Message)
+		if !ok {
+			return
+		}
 
-			switch role := msgID.GetRoleType(); role {
-			case spectypes.RoleCommittee:
-				var committeeID spectypes.CommitteeID
-				copy(committeeID[:], executorID[16:])
+		slot := phase0.Slot(subMsg.Height)
+		msgID := spectypes.MessageID(subMsg.Identifier[:])
+		executorID := msgID.GetDutyExecutorID()
 
-				trace := c.getOrCreateCommitteeTrace(slot, committeeID)
+		switch role := msgID.GetRoleType(); role {
+		case spectypes.RoleCommittee:
+			var committeeID spectypes.CommitteeID
+			copy(committeeID[:], executorID[16:])
 
-				trace.Lock()
-				defer trace.Unlock()
+			trace := c.getOrCreateCommitteeTrace(slot, committeeID)
 
-				if len(msg.SignedSSVMessage.FullData) > 0 {
-					// save proposal data
-					if subMsg.MsgType == specqbft.ProposalMsgType {
-						c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData)))
-						// committee duty will contain the BeaconVote data
-						trace.CommitteeDutyTrace.ProposalData = msg.SignedSSVMessage.FullData
-					}
-					// for future: check if it's a proposal message
-					// if not, skip this step
-					root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
+			trace.Lock()
+			defer trace.Unlock()
+
+			if len(msg.SignedSSVMessage.FullData) > 0 {
+				// save proposal data
+				if subMsg.MsgType == specqbft.ProposalMsgType {
+					c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData)))
+					// committee duty will contain the BeaconVote data
+					trace.CommitteeDutyTrace.ProposalData = msg.SignedSSVMessage.FullData
+				}
+				// for future: check if it's a proposal message
+				// if not, skip this step
+				root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
+				if err != nil {
+					c.logger.Error("get sync committee root", zap.Error(err))
+					return
+				}
+				// save sync committee root
+				trace.syncCommitteeRoot = root
+			}
+
+			round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
+
+			decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
+			if decided != nil {
+				trace.Decideds = append(trace.Decideds, decided)
+			}
+		default:
+			var validatorPK spectypes.ValidatorPK
+			copy(validatorPK[:], executorID)
+
+			bnRole := toBNRole(role)
+
+			trace, roleDutyTrace := c.getOrCreateValidatorTrace(slot, bnRole, validatorPK)
+
+			func() {
+				var qbftMsg = new(specqbft.Message)
+				err := qbftMsg.Decode(msg.Data)
+				if err != nil {
+					c.logger.Error("decode validator consensus data", zap.Error(err))
+					return
+				}
+
+				if qbftMsg.MsgType == specqbft.ProposalMsgType {
+					var data = new(spectypes.ValidatorConsensusData)
+					err := data.Decode(msg.SignedSSVMessage.FullData)
 					if err != nil {
-						c.logger.Error("get sync committee root", zap.Error(err))
+						c.logger.Error("decode validator proposal data", zap.Error(err))
 						return
 					}
-					// save sync committee root
-					trace.syncCommitteeRoot = root
-				}
 
-				round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
+					trace.Lock()
+					defer trace.Unlock()
 
-				decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
-				if decided != nil {
-					trace.Decideds = append(trace.Decideds, decided)
-				}
-			default:
-				var validatorPK spectypes.ValidatorPK
-				copy(validatorPK[:], executorID)
-
-				bnRole := toBNRole(role)
-
-				trace, roleDutyTrace := c.getOrCreateValidatorTrace(slot, bnRole, validatorPK)
-
-				func() {
-					var qbftMsg = new(specqbft.Message)
-					err := qbftMsg.Decode(msg.Data)
-					if err != nil {
-						c.logger.Error("decode validator consensus data", zap.Error(err))
-						return
+					if roleDutyTrace.Validator == 0 {
+						roleDutyTrace.Validator = data.Duty.ValidatorIndex
 					}
 
-					if qbftMsg.MsgType == specqbft.ProposalMsgType {
-						var data = new(spectypes.ValidatorConsensusData)
-						err := data.Decode(msg.SignedSSVMessage.FullData)
-						if err != nil {
-							c.logger.Error("decode validator proposal data", zap.Error(err))
-							return
-						}
+					c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), zap.Int("size", len(data.DataSSZ)))
 
-						trace.Lock()
-						defer trace.Unlock()
-
-						if roleDutyTrace.Validator == 0 {
-							roleDutyTrace.Validator = data.Duty.ValidatorIndex
-						}
-
-						c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), zap.Int("size", len(data.DataSSZ)))
-
-						// non-committee duty will contain the proposal data
-						roleDutyTrace.ProposalData = data.DataSSZ
-					}
-				}()
-
-				trace.Lock()
-				defer trace.Unlock()
-
-				round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
-
-				decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
-				if decided != nil {
-					roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
+					// non-committee duty will contain the proposal data
+					roleDutyTrace.ProposalData = data.DataSSZ
 				}
+			}()
+
+			trace.Lock()
+			defer trace.Unlock()
+
+			round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
+
+			decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
+			if decided != nil {
+				roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
 			}
 		}
+
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := new(spectypes.PartialSignatureMessages)
 		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
