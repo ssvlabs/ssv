@@ -364,6 +364,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 
 func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
 	slot, err, _ := gc.blockRootToSlotReqInflight.Do(root, func() (phase0.Slot, error) {
+		var slot phase0.Slot
 		cacheResult := gc.blockRootToSlotCache.Get(root)
 		if cacheResult != nil {
 			cachedSlot := cacheResult.Value()
@@ -371,7 +372,8 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 				With(zap.Uint64("cached_slot", uint64(cachedSlot))).
 				With(zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
 				Debug("obtained slot from cache")
-			return cachedSlot, nil
+			// return cachedSlot, nil
+			slot = cachedSlot
 		}
 
 		logger.Debug("slot was not found in cache. Fetching from the client")
@@ -383,14 +385,16 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 			Block: root.String(),
 		})
 		if err != nil {
-			return 0, fmt.Errorf("failed to fetch block header from the client: %w", err)
+			logger.With(zap.Error(err)).Error("failed to fetch block header from the client")
+			return slot, nil
 		}
 
-		slot := blockResponse.Data.Header.Message.Slot
+		slot = blockResponse.Data.Header.Message.Slot
 		gc.blockRootToSlotCache.Set(root, slot, ttlcache.NoTTL)
-		logger.
-			With(zap.Uint64("cached_slot", uint64(slot))).
-			Info("block root to slot cache updated")
+		logger.With(
+			zap.Uint64("cached_slot", uint64(slot)),
+			zap.String("client_addr", client.Address())).
+			Info("block root to slot cache updated from headers")
 
 		return slot, nil
 	})
