@@ -60,7 +60,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 	}
 
 	pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -91,7 +91,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 	}
 
 	pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -139,7 +139,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
 		signerClient:      mockRemoteSigner,
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 		operatorPubKey:    mockOperatorPublicKey,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 	}
@@ -169,7 +169,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 	}
 
 	slot := phase0.Slot(123)
@@ -703,7 +703,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 	}
 
 	slot := phase0.Slot(123)
@@ -747,7 +747,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -794,7 +794,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -850,7 +850,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -906,7 +906,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -962,7 +962,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1039,7 +1039,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1116,7 +1116,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1195,7 +1195,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1274,7 +1274,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1378,7 +1378,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1484,7 +1484,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: mockSlashingProtector,
+			slashingProtector: mockSlashingProtector,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1511,7 +1511,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: mockSlashingProtector,
+			slashingProtector: mockSlashingProtector,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1540,7 +1540,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1572,7 +1572,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 	}
 
 	s.Run("RemoveValidatorsError", func() {
@@ -1594,7 +1594,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: mockSlashingProtector,
+			slashingProtector: mockSlashingProtector,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1617,7 +1617,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1643,7 +1643,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
-			SlashingProtector: slashingMock,
+			slashingProtector: slashingMock,
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1749,7 +1749,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 	}
 
 	mockFork := &phase0.Fork{
@@ -1867,7 +1867,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 	}
 
 	mockFork := &phase0.Fork{
@@ -2044,7 +2044,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
-		SlashingProtector: mockSlashingProtector,
+		slashingProtector: mockSlashingProtector,
 	}
 
 	mockFork := &phase0.Fork{
