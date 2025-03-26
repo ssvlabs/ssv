@@ -8,7 +8,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"golang.org/x/exp/maps"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -21,7 +20,7 @@ type validatorRegistration struct {
 	*api.VersionedSignedValidatorRegistration
 
 	// new signifies whether this validator registration has already been submitted previously.
-	new atomic.Bool
+	new bool
 }
 
 // GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
@@ -62,12 +61,10 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 	gc.registrationMu.Lock()
 	defer gc.registrationMu.Unlock()
 
-	r := &validatorRegistration{
+	gc.registrations[pk] = &validatorRegistration{
 		VersionedSignedValidatorRegistration: registration,
-		new:                                  atomic.Bool{},
+		new:                                  true,
 	}
-	r.new.Store(true)
-	gc.registrations[pk] = r
 
 	return nil
 }
@@ -106,8 +103,8 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 				validatorDescriptor := binary.LittleEndian.Uint64(validatorHash[:8])
 				shouldSubmit := validatorDescriptor%gc.network.SlotsPerEpoch() == slotInEpoch
 
-				if r.new.Load() || shouldSubmit {
-					r.new.Store(false)
+				if r.new || shouldSubmit {
+					r.new = false
 					registrations = append(registrations, r.VersionedSignedValidatorRegistration)
 				}
 			}
