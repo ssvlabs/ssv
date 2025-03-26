@@ -4,17 +4,33 @@ set -eo pipefail
 # Enable Docker BuildKit
 export DOCKER_BUILDKIT=1
 
-# Platform(s) to build for
+# Platforms to build for
 PLATFORMS="linux/amd64,linux/arm64"
 
-# Extract the Git tag from the SOURCE_COMMIT
+# Check if SOURCE_COMMIT is set
+if [ -z "${SOURCE_COMMIT}" ]; then
+  echo "SOURCE_COMMIT not set. Unable to determine version."
+fi
+
+# Check if IMAGE_NAME is set
+if [ -z "${IMAGE_NAME}" ]; then
+  echo "IMAGE_NAME is not set. Please set the IMAGE_NAME environment variable."
+  exit 1
+fi
+
 APP_VERSION=$(git describe --tags "${SOURCE_COMMIT}")
 
 echo "Building image version ${APP_VERSION} for platforms: ${PLATFORMS}"
 
+# Ensure build scripts are executable
+chmod +x tools/cross-compiler/scripts/*.sh
+
 # Create and configure buildx builder
-docker buildx rm ssv-multiplatform-builder  2>/dev/null || true
+echo "Creating and configuring buildx builder..."
+docker buildx rm ssv-multiplatform-builder 2>/dev/null || true
 docker buildx create --name ssv-multiplatform-builder --driver docker-container --bootstrap --use
+
+echo "Building and pushing image: ${IMAGE_NAME}"
 
 # Build and push for multiple architectures
 docker buildx build \
@@ -24,4 +40,14 @@ docker buildx build \
     --push \
     .
 
-echo "Build and push completed successfully!"
+# Check if the build was successful
+if [ $? -eq 0 ]; then
+  echo "Build and push completed successfully!"
+else
+  echo "Build failed. Check the error messages above."
+  exit 1
+fi
+
+# Show images that have been built
+echo "Images built:"
+docker buildx imagetools inspect "${IMAGE_NAME}" || true

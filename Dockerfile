@@ -1,21 +1,17 @@
 #
-# STEP 1: Prepare environment
+# STEP 1: Prepare environment with cross-compilation tools
 #
-FROM golang:1.22 AS preparer
+FROM --platform=$BUILDPLATFORM golang:1.22 AS preparer
 
-RUN apt-get update                                                        && \
-  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  curl \
-  git \
-  zip \
-  unzip \
-  g++ \
-  gcc-aarch64-linux-gnu \
-  bzip2 \
-  make \
-  && rm -rf /var/lib/apt/lists/*
+# Copy our build scripts
+COPY tools/cross-compiler/scripts /tmp/scripts
+RUN chmod +x /tmp/scripts/*.sh
 
-RUN go version
+# Install dependencies for cross-compilation
+RUN /tmp/scripts/install_deps.sh
+
+# Create compiler wrappers to handle cross-compilation flags
+RUN /tmp/scripts/create_wrappers.sh
 
 WORKDIR /go/src/github.com/ssvlabs/ssv/
 COPY go.mod go.sum ./
@@ -30,24 +26,25 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 FROM preparer AS builder
 
-## Note TARGETARCH is a crucial variable:
+## Note BUILDPLATFORM and TARGETARCH are crucial variables:
 ##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
 ARG TARGETARCH
 
-# Copy files and install app
+# Copy files and app sources
 COPY . .
 
+# Build the binary using our build script
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
-  COMMIT=$(git rev-parse HEAD) && \
-  VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
-  CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go install \
-  -tags="blst_enabled" \
-  -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
-  ./cmd/ssvnode
+  /tmp/scripts/build.sh "${TARGETARCH}" /go/bin/ssvnode
+
+# Show the built binary for verification
+RUN ls -la /go/bin/
 
 #
-# STEP 3: Prepare image to run the binary
+# STEP 3: Prepare minimal image to run the binary
 #
 FROM golang:1.22 AS runner
 
@@ -62,12 +59,10 @@ COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
 COPY ./Makefile .env* ./
 COPY config/* ./config/
 
-
-# Expose port for load balancing
+# Expose ports
 EXPOSE 5678 5000 4000/udp
 
 # Force using Go's DNS resolver because Alpine's DNS resolver (when netdns=cgo) may cause issues.
 ENV GODEBUG="netdns=go"
 
 #ENTRYPOINT ["/go/bin/ssvnode"]
-
