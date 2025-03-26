@@ -363,47 +363,38 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 }
 
 func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
-	slot, err, _ := gc.blockRootToSlotReqInflight.Do(root, func() (phase0.Slot, error) {
-		logger := logger.With(
-			zap.String("client_addr", client.Address()),
-			fields.BlockRoot(root),
-		)
+	var slot phase0.Slot
+	cacheResult := gc.blockRootToSlotCache.Get(root)
+	if cacheResult != nil {
+		cachedSlot := cacheResult.Value()
+		logger.
+			With(zap.Uint64("cached_slot", uint64(cachedSlot))).
+			With(zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
+			Debug("obtained slot from cache")
+		// return cachedSlot, nil
+		slot = cachedSlot
+	} else {
+		logger.Debug("slot was not found in cache. Fetching from the client")
+	}
 
-		var slot phase0.Slot
-		cacheResult := gc.blockRootToSlotCache.Get(root)
-		if cacheResult != nil {
-			cachedSlot := cacheResult.Value()
-			logger.
-				With(zap.Uint64("cached_slot", uint64(cachedSlot))).
-				With(zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
-				Debug("obtained slot from cache")
-			// return cachedSlot, nil
-			slot = cachedSlot
-		} else {
-			logger.Debug("slot was not found in cache. Fetching from the client")
-		}
+	timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationSoftTimeout/2)
+	defer cancel()
 
-		timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationSoftTimeout/2)
-		defer cancel()
-
-		blockResponse, err := client.BeaconBlockHeader(timeoutContext, &api.BeaconBlockHeaderOpts{
-			Block: root.String(),
-		})
-		if err != nil {
-			logger.With(zap.Error(err)).Error("failed to fetch block header from the client")
-			return slot, nil
-		}
-
-		slot = blockResponse.Data.Header.Message.Slot
-		gc.blockRootToSlotCache.Set(root, slot, ttlcache.NoTTL)
-		logger.With(
-			zap.Uint64("cached_slot", uint64(slot))).
-			Info("block root to slot cache updated from headers")
-
-		return slot, nil
+	blockResponse, err := client.BeaconBlockHeader(timeoutContext, &api.BeaconBlockHeaderOpts{
+		Block: root.String(),
 	})
+	if err != nil {
+		logger.With(zap.Error(err)).Error("failed to fetch block header from the client")
+		return slot, nil
+	}
 
-	return slot, err
+	slot = blockResponse.Data.Header.Message.Slot
+	gc.blockRootToSlotCache.Set(root, slot, ttlcache.NoTTL)
+	logger.With(
+		zap.Uint64("cached_slot", uint64(slot))).
+		Info("block root to slot cache updated from headers")
+
+	return slot, nil
 }
 
 func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
