@@ -40,7 +40,6 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   CGO_ENABLED=1 GOOS=linux go install -C ./ssvsigner/cmd/ssv-signer \
   -tags="blst_enabled" \
   -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" 
-#RUN go install -C ./ssvsigner/cmd/ssv-signer
 
 ##
 # STEP 3: Prepare image to run the binary

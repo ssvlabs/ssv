@@ -18,21 +18,21 @@ type MockRemoteSigner struct {
 	mock.Mock
 }
 
-func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) ([]web3signer.Status, error) {
+func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) error {
 	args := m.Called(ctx, shares[0])
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return args.Error(1)
 	}
-	return args.Get(0).([]web3signer.Status), args.Error(1)
+	return args.Error(1)
 }
 
-func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error) {
+func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error {
 	args := m.Called(ctx, sharePubKeys)
 	result := args.Get(0)
 	if result == nil {
-		return nil, args.Error(1)
+		return args.Error(1)
 	}
-	return result.([]web3signer.Status), args.Error(1)
+	return args.Error(1)
 }
 
 func (m *MockRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {

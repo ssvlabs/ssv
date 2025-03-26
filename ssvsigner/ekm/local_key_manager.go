@@ -40,7 +40,7 @@ type LocalKeyManager struct {
 	signer            signer.ValidatorSigner
 	domain            spectypes.DomainType
 	operatorDecrypter keys.OperatorDecrypter
-	SlashingProtector
+	slashingProtector
 }
 
 // NewLocalKeyManager returns a new instance of LocalKeyManager.
@@ -49,7 +49,7 @@ func NewLocalKeyManager(
 	db basedb.Database,
 	network networkconfig.NetworkConfig,
 	operatorPrivKey keys.OperatorPrivateKey,
-) (KeyManager, error) {
+) (*LocalKeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if err := signerStore.SetEncryptionKey(operatorPrivKey.EKMHash()); err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func NewLocalKeyManager(
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		domain:            network.DomainType,
-		SlashingProtector: NewSlashingProtector(logger, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
 	}, nil
 }

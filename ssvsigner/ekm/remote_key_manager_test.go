@@ -56,7 +56,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      s.client,
+		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -87,7 +87,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      s.client,
+		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -112,7 +112,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 func (s *RemoteKeyManagerTestSuite) TestSignWithMockedOperatorKey() {
 	rm := &RemoteKeyManager{
 		logger:          s.logger,
-		remoteSigner:    s.client,
+		signerClient:    s.client,
 		consensusClient: s.consensusClient,
 		getOperatorId:   func() spectypes.OperatorID { return 1 },
 		operatorPubKey:  &MockOperatorPublicKey{},
@@ -138,7 +138,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      mockRemoteSigner,
+		signerClient:      mockRemoteSigner,
 		SlashingProtector: mockSlashingProtector,
 		operatorPubKey:    mockOperatorPublicKey,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -165,7 +165,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      s.client,
+		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -699,7 +699,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      s.client,
+		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -743,7 +743,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -790,7 +790,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -846,7 +846,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -902,7 +902,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -958,7 +958,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1035,7 +1035,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1112,7 +1112,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1191,7 +1191,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1270,7 +1270,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1374,7 +1374,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1480,7 +1480,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1507,7 +1507,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1536,7 +1536,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1568,7 +1568,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      s.client,
+		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -1590,7 +1590,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1613,7 +1613,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1639,7 +1639,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
 			netCfg:            networkconfig.TestNetwork,
-			remoteSigner:      clientMock,
+			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
@@ -1688,7 +1688,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessage() {
 	rm := &RemoteKeyManager{
 		logger:        zap.NewNop(),
 		netCfg:        networkconfig.TestNetwork,
-		remoteSigner:  mockRemoteSigner,
+		signerClient:  mockRemoteSigner,
 		getOperatorId: func() spectypes.OperatorID { return 1 },
 	}
 
@@ -1715,7 +1715,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessageErrors() {
 
 	rm := &RemoteKeyManager{
 		logger:       s.logger,
-		remoteSigner: mockRemoteSigner,
+		signerClient: mockRemoteSigner,
 	}
 
 	message := &spectypes.SSVMessage{
@@ -1745,7 +1745,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      s.client,
+		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -1863,7 +1863,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      s.client,
+		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
@@ -2040,7 +2040,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
 		netCfg:            networkconfig.TestNetwork,
-		remoteSigner:      s.client,
+		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},

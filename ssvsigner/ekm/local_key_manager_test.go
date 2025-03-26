@@ -154,7 +154,7 @@ func TestSignBeaconObject(t *testing.T) {
 	require.NoError(t, km.AddShare(context.Background(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
-	highestProposal := currentSlot + MinSPProposalSlotGap + 1
+	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	t.Run("Sign Deneb block", func(t *testing.T) {
 		var beaconBlock = &deneb.BeaconBlock{

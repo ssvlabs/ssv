@@ -31,22 +31,22 @@ import (
 type RemoteKeyManager struct {
 	logger          *zap.Logger
 	netCfg          networkconfig.NetworkConfig
-	remoteSigner    RemoteSigner
-	consensusClient ConsensusClient
+	signerClient    signerClient
+	consensusClient consensusClient
 	getOperatorId   func() spectypes.OperatorID
 	operatorPubKey  keys.OperatorPublicKey
-	SlashingProtector
+	slashingProtector
 }
 
-type RemoteSigner interface {
-	AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) ([]web3signer.Status, error)
-	RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error)
+type signerClient interface {
+	AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) error
+	RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error
 	Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error)
 	OperatorIdentity(ctx context.Context) (string, error)
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
 }
 
-type ConsensusClient interface {
+type consensusClient interface {
 	ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error)
 	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)
 }
@@ -54,8 +54,8 @@ type ConsensusClient interface {
 func NewRemoteKeyManager(
 	logger *zap.Logger,
 	netCfg networkconfig.NetworkConfig,
-	remoteSigner RemoteSigner,
-	consensusClient ConsensusClient,
+	signerClient signerClient,
+	consensusClient consensusClient,
 	db basedb.Database,
 	networkConfig networkconfig.NetworkConfig,
 	getOperatorId func() spectypes.OperatorID,
@@ -63,7 +63,7 @@ func NewRemoteKeyManager(
 	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	operatorPubKeyString, err := remoteSigner.OperatorIdentity(context.Background()) // TODO: use context
+	operatorPubKeyString, err := signerClient.OperatorIdentity(context.Background()) // TODO: use context
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
 	}
@@ -76,9 +76,9 @@ func NewRemoteKeyManager(
 	return &RemoteKeyManager{
 		logger:            logger,
 		netCfg:            netCfg,
-		remoteSigner:      remoteSigner,
+		signerClient:      signerClient,
 		consensusClient:   consensusClient,
-		SlashingProtector: NewSlashingProtector(logger, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, signerStore, protection),
 		getOperatorId:     getOperatorId,
 		operatorPubKey:    operatorPubKey,
 	}, nil
@@ -94,14 +94,8 @@ func (km *RemoteKeyManager) AddShare(
 		PublicKey:        sharePubKey,
 	}
 
-	statuses, err := km.remoteSigner.AddValidators(ctx, shareKeys)
-	if err != nil {
+	if err := km.signerClient.AddValidators(ctx, shareKeys); err != nil {
 		return fmt.Errorf("add validator: %w", err)
-	}
-
-	// AddValidators validates response length.
-	if statuses[0] != web3signer.StatusImported {
-		return fmt.Errorf("unexpected status %s", statuses[0])
 	}
 
 	if err := km.BumpSlashingProtection(sharePubKey); err != nil {
@@ -112,14 +106,8 @@ func (km *RemoteKeyManager) AddShare(
 }
 
 func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error {
-	statuses, err := km.remoteSigner.RemoveValidators(ctx, pubKey)
-	if err != nil {
+	if err := km.signerClient.RemoveValidators(ctx, pubKey); err != nil {
 		return fmt.Errorf("remove validator: %w", err)
-	}
-
-	// RemoveValidators validates response length.
-	if statuses[0] != web3signer.StatusDeleted {
-		return fmt.Errorf("received status %s", statuses[0])
 	}
 
 	if err := km.RemoveHighestAttestation(pubKey); err != nil {
@@ -266,7 +254,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	req.SigningRoot = root
 
-	sig, err := km.remoteSigner.Sign(ctx, sharePubkey, req)
+	sig, err := km.signerClient.Sign(ctx, sharePubkey, req)
 	if err != nil {
 		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("remote signer: %w", err)
 	}
@@ -419,13 +407,11 @@ func (km *RemoteKeyManager) handleDomainProposer(
 }
 
 func (km *RemoteKeyManager) getForkInfo(ctx context.Context, epoch phase0.Epoch) (web3signer.ForkInfo, error) {
-	// ForkSchedule result is cached in the client and updated once in a while.
 	currentFork, err := km.consensusClient.ForkAtEpoch(ctx, epoch)
 	if err != nil {
 		return web3signer.ForkInfo{}, fmt.Errorf("get current fork: %w", err)
 	}
 
-	// Genesis result is cached in the client and updated once in a while.
 	genesis, err := km.consensusClient.Genesis(ctx)
 	if err != nil {
 		return web3signer.ForkInfo{}, fmt.Errorf("get genesis: %w", err)
@@ -438,7 +424,7 @@ func (km *RemoteKeyManager) getForkInfo(ctx context.Context, epoch phase0.Epoch)
 }
 
 func (km *RemoteKeyManager) Sign(payload []byte) ([]byte, error) {
-	return km.remoteSigner.OperatorSign(context.Background(), payload) // TODO: use context
+	return km.signerClient.OperatorSign(context.Background(), payload) // TODO: use context
 }
 
 func (km *RemoteKeyManager) Public() keys.OperatorPublicKey {
@@ -451,7 +437,7 @@ func (km *RemoteKeyManager) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte
 		return nil, err
 	}
 
-	return km.remoteSigner.OperatorSign(context.Background(), encodedMsg) // TODO: use context
+	return km.signerClient.OperatorSign(context.Background(), encodedMsg) // TODO: use context
 }
 
 func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {

@@ -12,10 +12,20 @@ type ShareDecryptionError error
 
 type KeyManager interface {
 	BeaconSigner
-	SlashingProtector
-	// AddShare decrypts and saves an encrypted share private key
+	slashingProtector
+
+	// AddShare registers a validator share (public and encrypted private key) with the key manager.
+	// Implementations should always call BumpSlashingProtection during this process.
+	// It ensures slashing protection records (attestation and proposal) are present and up to date,
+	// updating them only if they are missing or fall below a minimal safe threshold.
+	// This prevents the validator from signing messages that could be considered slashable
+	// due to absent or outdated protection data.
 	AddShare(ctx context.Context, encryptedSharePrivKey []byte, sharePubKey phase0.BLSPubKey) error
-	// RemoveShare removes a share key
+
+	// RemoveShare unregisters a validator share from the key manager and deletes its associated
+	// slashing protection records (attestation and proposal) from the store.
+	// Implementations are expected to perform this cleanup to prevent stale protection data
+	// from persisting after the validator is no longer active, and to support safe re-adding later.
 	RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error
 }
 

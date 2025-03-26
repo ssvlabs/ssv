@@ -59,7 +59,7 @@ func (c *Client) ListValidators(ctx context.Context) ([]phase0.BLSPubKey, error)
 	return resp, err
 }
 
-func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) ([]web3signer.Status, error) {
+func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
 	encodedShares := make([]ShareKeys, 0, len(shares))
 	for _, share := range shares {
 		encodedShares = append(encodedShares, ShareKeys{
@@ -85,26 +85,27 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) ([]web3
 		Fetch(ctx)
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		return nil, ShareDecryptionError(errors.New(errStr))
+		return ShareDecryptionError(errors.New(errStr))
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return fmt.Errorf("request failed: %w", err)
 	}
 
 	if len(resp.Data) != len(shares) {
-		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(shares))
+		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(shares))
 	}
 
-	var statuses []web3signer.Status
 	for _, data := range resp.Data {
-		statuses = append(statuses, data.Status)
+		if data.Status != web3signer.StatusImported {
+			return fmt.Errorf("unexpected status %s", data.Status)
+		}
 	}
 
-	return statuses, nil
+	return nil
 }
 
-func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error) {
+func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error {
 	req := web3signer.DeleteKeystoreRequest{
 		Pubkeys: sharePubKeys,
 	}
@@ -119,19 +120,20 @@ func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BL
 		ToJSON(&resp).
 		Fetch(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return fmt.Errorf("request failed: %w", err)
 	}
 
 	if len(resp.Data) != len(sharePubKeys) {
-		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(sharePubKeys))
+		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(sharePubKeys))
 	}
 
-	var statuses []web3signer.Status
 	for _, data := range resp.Data {
-		statuses = append(statuses, data.Status)
+		if data.Status != web3signer.StatusDeleted {
+			return fmt.Errorf("received status %s", data.Status)
+		}
 	}
 
-	return statuses, nil
+	return nil
 }
 
 func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {

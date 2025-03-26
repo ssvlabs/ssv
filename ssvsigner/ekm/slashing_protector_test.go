@@ -38,9 +38,9 @@ func TestSlashing(t *testing.T) {
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
 	currentEpoch := network.Beacon.EstimatedEpochAtSlot(currentSlot)
 
-	highestTarget := currentEpoch + MinSPAttestationEpochGap + 1
+	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
-	highestProposal := currentSlot + MinSPProposalSlotGap + 1
+	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	attestationData := &phase0.AttestationData{
 		Slot:            currentSlot,
@@ -357,7 +357,7 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
 	currentEpoch := network.Beacon.EstimatedEpochAtSlot(currentSlot)
 
-	highestTarget := currentEpoch + MinSPAttestationEpochGap + 1
+	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
 
 	attestationData := buildAttestationData(currentSlot, highestSource, highestTarget)
@@ -435,7 +435,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	require.NoError(t, sk1.SetHexString(sk1Str))
 
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
-	highestProposal := currentSlot + MinSPProposalSlotGap + 1
+	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	blockContents := testingutils.TestingBlockContentsDeneb
 	blockContents.Block.Slot = highestProposal
@@ -535,7 +535,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
 	currentEpoch := network.Beacon.EstimatedEpochAtSlot(currentSlot)
 
-	highestTarget := currentEpoch + MinSPAttestationEpochGap + 1
+	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
 
 	attestationData := buildAttestationData(currentSlot, highestSource, highestTarget)
@@ -638,7 +638,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 	}
 
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
-	highestProposal := currentSlot + MinSPProposalSlotGap + 1
+	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	blockContents := testingutils.TestingBlockContentsDeneb
 	blockContents.Block.Slot = highestProposal

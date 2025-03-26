@@ -230,12 +230,13 @@ func (s *storage) SavePrivateKeyHash(hashedKey string) error {
 func (s *storage) GetPublicKey() (string, bool, error) {
 	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(pubkeyDBKey))
 	if !found {
-		return "", found, nil
+		return "", false, nil
 	}
 	if err != nil {
-		return "", found, err
+		return "", false, err
 	}
-	return string(obj.Value), found, nil
+
+	return string(obj.Value), true, nil
 }
 
 // SavePublicKey saves operator public key.

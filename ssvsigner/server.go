@@ -90,8 +90,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	var req AddValidatorRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("unmarshal request body", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("failed to parse request: %w", err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
 
@@ -103,8 +102,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(share.EncryptedPrivKey, share.PublicKey)
 		if err != nil {
 			logger.Warn("get keystore from encrypted share", zap.Int("index", i), zap.Error(err))
-			ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
-			r.writeErr(ctx, logger, fmt.Errorf("get keystore from encrypted share index %d: %w", i, err))
+			r.writeJSONErr(ctx, logger, fasthttp.StatusUnprocessableEntity, fmt.Errorf("get keystore from encrypted share index %d: %w", i, err))
 			return
 		}
 
@@ -177,8 +175,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	var req web3signer.DeleteKeystoreRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("unmarshal request body", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("failed to parse request: %w", err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
 
@@ -216,8 +213,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	var req web3signer.SignRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("unmarshal request body", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("unmarshal request body: %w", err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("unmarshal request body: %w", err))
 		return
 	}
 
@@ -227,8 +223,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	blsPubKey, err := r.extractShareKey(identifierValue)
 	if err != nil {
 		logger.Warn("extract share key", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("extract share key: %w", err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("extract share key: %w", err))
 		return
 	}
 
@@ -270,8 +265,7 @@ func (r *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
 	pubKeyB64, err := r.operatorPrivKey.Public().Base64()
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, logger, err)
+		r.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
 		return
 	}
 
@@ -292,16 +286,14 @@ func (r *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
 
 	if len(payload) == 0 {
 		logger.Warn("request has no payload")
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, errors.New("request payload is empty"))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, errors.New("request payload is empty"))
 		return
 	}
 
 	signature, err := r.operatorPrivKey.Sign(payload)
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, logger, err)
+		r.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
 		return
 	}
 
@@ -344,18 +336,25 @@ func (r *Server) writeJSON(ctx *fasthttp.RequestCtx, logger *zap.Logger, v any) 
 	if err != nil {
 		logger.Error("failed to marshal JSON", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, logger, err)
-		return
+		errResp := web3signer.ErrorMessage{Message: err.Error()}
+		b, err = json.Marshal(errResp)
+		if err != nil {
+			logger.Error("failed to marshal JSON error", zap.Error(err))
+			r.writeString(ctx, logger, fmt.Sprintf("failed to marshal JSON error: %v", err))
+			return
+		}
 	}
 
+	ctx.SetContentType("application/json")
 	if _, err := ctx.Write(b); err != nil {
 		logger.Error("failed to write response", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 	}
-	ctx.SetContentType("application/json")
 }
 
-func (r *Server) writeErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
+// writeJSONErr calls writeJSON, so it shouldn't be called from writeJSON
+func (r *Server) writeJSONErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, statusCode int, err error) {
+	ctx.SetStatusCode(statusCode)
 	errResp := web3signer.ErrorMessage{Message: err.Error()}
 	r.writeJSON(ctx, logger, errResp)
 }

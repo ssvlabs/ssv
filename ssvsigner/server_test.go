@@ -16,7 +16,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -438,8 +437,8 @@ func (s *ServerTestSuite) TestHelperMethods() {
 
 	ctx.Response.Reset()
 
-	t.Run("writeErr", func(t *testing.T) {
-		s.server.writeErr(ctx, zap.L(), errors.New("test error"))
+	t.Run("writeJSONErr", func(t *testing.T) {
+		s.server.writeJSONErr(ctx, zap.L(), fasthttp.StatusInternalServerError, errors.New("test error"))
 		assert.JSONEq(t, `{"message":"test error"}`, string(ctx.Response.Body()))
 	})
 
