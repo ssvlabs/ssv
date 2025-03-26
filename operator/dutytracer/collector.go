@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -97,10 +98,11 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 }
 
 /*
-all validatorDutyTrace objects contain a collection of model.ValidatorDutyTrace(s) - one per role.
+all validatorDutyTrace objects contain a collection of model.ValidatorDutyTrace(s) - per each role.
 so when we request a certain trace we return both of them:
 - validatorDutyTrace object contains the lock
-- the model.* ValidatorDutyTrace the data that we enrich subsequently
+- the model.* ValidatorDutyTrace that has the data that we enrich subsequently
+.LoadOrStore is being used to take care of the case when two goroutines try to create the same trace at the same time
 */
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace) {
 	validatorSlots, found := c.validatorTraces.Load(vPubKey)
@@ -142,10 +144,10 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 	return traces, roleDutyTrace
 }
 
-func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole) {
+func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
 	switch r {
 	case spectypes.RoleCommittee:
-		panic("unexpected committee role") // TODO(me): replace by error?
+		return spectypes.BNRoleUnknown, errors.New("unexpected committee role")
 	case spectypes.RoleProposer:
 		bnRole = spectypes.BNRoleProposer
 	case spectypes.RoleAggregator:
@@ -262,7 +264,7 @@ func (c *Collector) createProposalTrace(receivedAt uint64, msg *specqbft.Message
 	}
 }
 
-func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) *model.DecidedTrace {
+func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) (*model.DecidedTrace, error) {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		round.ProposalTrace = c.createProposalTrace(receivedAt, msg, signedMsg)
@@ -278,26 +280,23 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 		round.Prepares = append(round.Prepares, prepare)
 
 	case specqbft.CommitMsgType:
+		if len(signedMsg.OperatorIDs) == 0 {
+			return nil, errors.New("no operator IDs")
+		}
+
 		if len(signedMsg.OperatorIDs) > 1 {
 			return &model.DecidedTrace{
 				Round:        uint64(msg.Round),
 				BeaconRoot:   msg.Root,
 				Signers:      signedMsg.OperatorIDs,
 				ReceivedTime: receivedAt,
-			}
+			}, nil
 		}
-
-		if len(signedMsg.OperatorIDs) == 0 {
-			c.logger.Error("fatal error: no operator ids", fields.Slot(phase0.Slot(msg.Height)))
-			return nil
-		}
-
-		signer := signedMsg.OperatorIDs[0]
 
 		commit := &model.QBFTTrace{
 			Round:        uint64(msg.Round),
 			BeaconRoot:   msg.Root,
-			Signer:       signer,
+			Signer:       signedMsg.OperatorIDs[0],
 			ReceivedTime: receivedAt,
 		}
 
@@ -309,16 +308,16 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 		round.RoundChanges = append(round.RoundChanges, roundChangeTrace)
 	}
 
-	return nil
+	return nil, nil // we're exhausting all cases in the switch
 }
 
-func (c *Collector) processPartialSigValidator(receivedAt uint64, msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, pubkey spectypes.ValidatorPK) {
-	var (
-		role = toBNRole(ssvMsg.MsgID.GetRoleType())
-		slot = msg.Slot
-	)
+func (c *Collector) processPartialSigValidator(receivedAt uint64, msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, pubkey spectypes.ValidatorPK) error {
+	role, err := toBNRole(ssvMsg.MsgID.GetRoleType())
+	if err != nil {
+		return err
+	}
 
-	trace, roleDutyTrace := c.getOrCreateValidatorTrace(slot, role, pubkey)
+	trace, roleDutyTrace := c.getOrCreateValidatorTrace(msg.Slot, role, pubkey)
 
 	trace.Lock()
 	defer trace.Unlock()
@@ -336,33 +335,33 @@ func (c *Collector) processPartialSigValidator(receivedAt uint64, msg *spectypes
 
 	if msg.Type == spectypes.PostConsensusPartialSig {
 		roleDutyTrace.Post = append(roleDutyTrace.Post, tr)
-		return
+		return nil
 	}
 
 	roleDutyTrace.Pre = append(roleDutyTrace.Pre, tr)
+
+	return nil
 }
 
-func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
+func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) error {
 	slot := msg.Slot
 
 	trace := c.getOrCreateCommitteeTrace(slot, committeeID)
 	trace.Lock()
 	defer trace.Unlock()
 
-	{ // TODO(moshe) confirm is needed
-		cmt, found := c.validators.Committee(committeeID)
-		if found && len(cmt.Operators) > 0 {
-			trace.OperatorIDs = cmt.Operators
-		}
+	// add operator ids to the trace
+	cmt, found := c.validators.Committee(committeeID)
+	if found && len(cmt.Operators) > 0 {
+		trace.OperatorIDs = cmt.Operators
+	}
+
+	if len(msg.Messages) == 0 {
+		return fmt.Errorf("no partial sig messages")
 	}
 
 	// store the link between validator index and committee id
 	c.saveValidatorToCommitteeLink(slot, msg, committeeID)
-
-	if len(msg.Messages) == 0 {
-		c.logger.Warn("no partial sig messages", fields.Slot(slot), fields.CommitteeID(committeeID))
-		return
-	}
 
 	var isSyncCommittee bool
 
@@ -377,10 +376,8 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 		indices = append(indices, partialSigMsg.ValidatorIndex)
 	}
 
-	if len(indices) > 0 {
-		slices.Sort(indices)
-		indices = slices.Compact(indices)
-	}
+	slices.Sort(indices)
+	indices = slices.Compact(indices)
 
 	if isSyncCommittee {
 		trace.SyncCommittee = append(trace.SyncCommittee, &model.SignerData{
@@ -389,7 +386,7 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 			ReceivedTime: receivedAt,
 		})
 
-		return
+		return nil
 	}
 
 	trace.Attester = append(trace.Attester, &model.SignerData{
@@ -397,6 +394,8 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 		ValidatorIdx: indices,
 		ReceivedTime: receivedAt,
 	})
+
+	return nil
 }
 
 func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
@@ -447,7 +446,7 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 	return signingRoot, nil
 }
 
-func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) {
+func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
 	start := time.Now()
 
 	tracerInFlightMessageCounter.Add(ctx, 1)
@@ -462,7 +461,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 	case spectypes.SSVConsensusMsgType:
 		subMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
-			return
+			return nil
 		}
 
 		slot := phase0.Slot(subMsg.Height)
@@ -482,7 +481,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			if len(msg.SignedSSVMessage.FullData) > 0 {
 				// save proposal data
 				if subMsg.MsgType == specqbft.ProposalMsgType {
-					c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData)))
+					c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData))) // TODO(me): remove this
 					// committee duty will contain the BeaconVote data
 					trace.CommitteeDutyTrace.ProposalData = msg.SignedSSVMessage.FullData
 				}
@@ -490,8 +489,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				// if not, skip this step
 				root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
 				if err != nil {
-					c.logger.Error("get sync committee root", zap.Error(err))
-					return
+					return fmt.Errorf("get sync committee root: %w", err)
 				}
 				// save sync committee root
 				trace.syncCommitteeRoot = root
@@ -499,7 +497,10 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 			round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
-			decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
+			decided, err := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
+			if err != nil {
+				return err
+			}
 			if decided != nil {
 				trace.Decideds = append(trace.Decideds, decided)
 			}
@@ -507,7 +508,10 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			var validatorPK spectypes.ValidatorPK
 			copy(validatorPK[:], executorID)
 
-			bnRole := toBNRole(role)
+			bnRole, err := toBNRole(role)
+			if err != nil {
+				return err
+			}
 
 			trace, roleDutyTrace := c.getOrCreateValidatorTrace(slot, bnRole, validatorPK)
 
@@ -515,7 +519,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				var qbftMsg = new(specqbft.Message)
 				err := qbftMsg.Decode(msg.Data)
 				if err != nil {
-					c.logger.Error("decode validator consensus data", zap.Error(err))
+					c.logger.Error("decode validator consensus data", zap.Error(err), fields.Slot(slot), fields.Validator(validatorPK[:]))
 					return
 				}
 
@@ -523,7 +527,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					var data = new(spectypes.ValidatorConsensusData)
 					err := data.Decode(msg.SignedSSVMessage.FullData)
 					if err != nil {
-						c.logger.Error("decode validator proposal data", zap.Error(err))
+						c.logger.Error("decode validator proposal data", zap.Error(err), fields.Slot(slot), fields.Validator(validatorPK[:]))
 						return
 					}
 
@@ -534,7 +538,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						roleDutyTrace.Validator = data.Duty.ValidatorIndex
 					}
 
-					c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), fields.ValidatorIndex(data.Duty.ValidatorIndex), zap.Int("size", len(data.DataSSZ)))
+					c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), fields.ValidatorIndex(data.Duty.ValidatorIndex), zap.Int("size", len(data.DataSSZ))) // TODO(me): remove this
 
 					// non-committee duty will contain the proposal data
 					roleDutyTrace.ProposalData = data.DataSSZ
@@ -546,7 +550,10 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 			round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
 
-			decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
+			decided, err := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
+			if err != nil {
+				return err
+			}
 			if decided != nil {
 				roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
 			}
@@ -556,19 +563,16 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 		pSigMessages := new(spectypes.PartialSignatureMessages)
 		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
 		if err != nil {
-			c.logger.Error("decode partial signature messages", zap.Error(err))
-			return
+			return fmt.Errorf("decode partial signature messages: %w", err)
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
 			if err := pSigMessages.Validate(); err != nil {
-				c.logger.Error("validate partial sig", zap.Error(err))
-				return
+				return fmt.Errorf("validate partial sig: %w", err)
 			}
 
 			if err := verifySig(pSigMessages); err != nil {
-				c.logger.Error("verify partial sig", zap.Error(err))
-				return
+				return fmt.Errorf("verify partial sig: %w", err)
 			}
 		}
 
@@ -578,16 +582,16 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			var committeeID spectypes.CommitteeID
 			copy(committeeID[:], executorID[16:])
 
-			c.processPartialSigCommittee(startTime, pSigMessages, committeeID)
-
-			return
+			return c.processPartialSigCommittee(startTime, pSigMessages, committeeID)
 		}
 
 		var validatorPK spectypes.ValidatorPK
 		copy(validatorPK[:], executorID)
 
-		c.processPartialSigValidator(startTime, pSigMessages, msg, validatorPK)
+		return c.processPartialSigValidator(startTime, pSigMessages, msg, validatorPK)
 	}
+
+	return nil
 }
 
 type validatorDutyTrace struct {

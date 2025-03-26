@@ -396,8 +396,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	}
 
 	if c.validatorOptions.ExporterDutyTracing {
-		c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
-		return nil
+		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
 	}
 
 	if !c.validatorOptions.Exporter {

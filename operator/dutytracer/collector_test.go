@@ -67,7 +67,8 @@ func TestValidatorDuty(t *testing.T) {
 	dummyVerify := func(*spectypes.PartialSignatureMessages) error { return nil }
 	{ // TC 1 - PartialSig - Aggregator - pre-consensus
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		collector.Collect(context.Background(), partSigMsg, dummyVerify)
+		err := collector.Collect(context.Background(), partSigMsg, dummyVerify)
+		require.NoError(t, err)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -92,7 +93,8 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC 2 - PartialSig - Aggregator - post-consensus
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
-		collector.Collect(context.Background(), partSigMsg, dummyVerify)
+		err := collector.Collect(context.Background(), partSigMsg, dummyVerify)
+		require.NoError(t, err)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -118,7 +120,8 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 3 - Proposal
 		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
-		collector.Collect(context.Background(), proposalMsg, dummyVerify)
+		err := collector.Collect(context.Background(), proposalMsg, dummyVerify)
+		require.NoError(t, err)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -166,7 +169,8 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 4 - Prepare
 		prepareMsg := buildConsensusMsg(identifier, specqbft.PrepareMsgType, slot, nil)
-		collector.Collect(context.Background(), prepareMsg, dummyVerify)
+		err := collector.Collect(context.Background(), prepareMsg, dummyVerify)
+		require.NoError(t, err)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -193,7 +197,8 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 5 - Decided
 		decidedMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
-		collector.Collect(context.Background(), decidedMsg, dummyVerify)
+		err := collector.Collect(context.Background(), decidedMsg, dummyVerify)
+		require.NoError(t, err)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -224,7 +229,8 @@ func TestValidatorDuty(t *testing.T) {
 	{ // TC - 6 - Commit
 		commitMsg := buildConsensusMsg(identifier, specqbft.CommitMsgType, slot, nil)
 		commitMsg.SignedSSVMessage.OperatorIDs = []spectypes.OperatorID{1}
-		collector.Collect(context.Background(), commitMsg, dummyVerify)
+		err := collector.Collect(context.Background(), commitMsg, dummyVerify)
+		require.NoError(t, err)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -251,7 +257,8 @@ func TestValidatorDuty(t *testing.T) {
 
 	{ // TC - 7 - RoundChange
 		roundChangeMsg := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
-		collector.Collect(context.Background(), roundChangeMsg, dummyVerify)
+		err := collector.Collect(context.Background(), roundChangeMsg, dummyVerify)
+		require.NoError(t, err)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
@@ -280,7 +287,8 @@ func TestValidatorDuty(t *testing.T) {
 	{ // TC - 8 - Second RoundChange
 		roundChangeMsg := buildConsensusMsg(identifier, specqbft.RoundChangeMsgType, slot, nil)
 		roundChangeMsg.Body.(*specqbft.Message).Round = 2
-		collector.Collect(context.Background(), roundChangeMsg, dummyVerify)
+		err := collector.Collect(context.Background(), roundChangeMsg, dummyVerify)
+		require.NoError(t, err)
 
 		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
 		require.NoError(t, err)
