@@ -364,6 +364,11 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 
 func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
 	slot, err, _ := gc.blockRootToSlotReqInflight.Do(root, func() (phase0.Slot, error) {
+		logger := logger.With(
+			zap.String("client_addr", client.Address()),
+			fields.BlockRoot(root),
+		)
+
 		var slot phase0.Slot
 		cacheResult := gc.blockRootToSlotCache.Get(root)
 		if cacheResult != nil {
@@ -392,8 +397,7 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 		slot = blockResponse.Data.Header.Message.Slot
 		gc.blockRootToSlotCache.Set(root, slot, ttlcache.NoTTL)
 		logger.With(
-			zap.Uint64("cached_slot", uint64(slot)),
-			zap.String("client_addr", client.Address())).
+			zap.Uint64("cached_slot", uint64(slot))).
 			Info("block root to slot cache updated from headers")
 
 		return slot, nil
