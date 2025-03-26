@@ -26,6 +26,10 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// signer_storage.go provides a concrete implementation of Storage (backed by
+// basedb.Database) to store wallet and slashing data. It also supports optional
+// encryption of the stored data via SetEncryptionKey.
+
 const (
 	prefix                = "signer_data-"
 	walletPrefix          = prefix + "wallet-"
@@ -52,6 +56,12 @@ type Storage interface {
 	BeaconNetwork() beacon.BeaconNetwork
 }
 
+// storage is an internal struct implementing the Storage interface. It uses
+// a basedb.Database for persistence, locks for concurrency protection, and
+// an optional encryption key to secure stored wallet/account data.
+//
+// The object keys are prefixed by network name and entity name
+// (walletPrefix, highestAttPrefix, etc.).
 type storage struct {
 	db            basedb.Database
 	network       beacon.BeaconNetwork
@@ -69,7 +79,8 @@ func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *
 	}
 }
 
-// SetEncryptionKey Add a new method to the storage type.
+// SetEncryptionKey sets the encryption key used to encrypt/decrypt account
+// data. If no key is set (empty), the data is stored in plaintext.
 func (s *storage) SetEncryptionKey(newKey string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -116,7 +127,8 @@ func (s *storage) SaveWallet(wallet core.Wallet) error {
 	return s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), data)
 }
 
-// OpenWallet returns nil,err if no wallet was found.
+// OpenWallet returns the main HD wallet if present, otherwise an error.
+// The returned wallet is configured with this storage as its backend.
 func (s *storage) OpenWallet() (core.Wallet, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -141,7 +153,8 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 	return ret, nil
 }
 
-// ListAccounts returns an empty array for no accounts.
+// ListAccounts returns all validator accounts known to the wallet storage.
+// If no accounts are found, returns an empty slice with no error.
 func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
 	return s.ListAccountsTxn(nil)
 }
@@ -239,11 +252,11 @@ func (s *storage) decodeAccount(byts []byte) (core.ValidatorAccount, error) {
 	return ret, nil
 }
 
-// SetEncryptor sets the given encryptor to the wallet.
-func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {
+// SetEncryptor sets the given encryptor to the wallet. It's a no-op to match the core.AccountStorage interface.
+func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {}
 
-}
-
+// SaveHighestAttestation persists the highest known AttestationData for the
+// given public key. Used to ensure we do not sign slashable attestations.
 func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.AttestationData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -264,6 +277,8 @@ func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.Atte
 	return s.db.Set(s.objPrefix(highestAttPrefix), pubKey, data)
 }
 
+// RetrieveHighestAttestation fetches the stored highest attestation data.
+// Returns attestation data, whether it was found, and error.
 func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -299,6 +314,8 @@ func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
 	return s.db.Delete(s.objPrefix(highestAttPrefix), pubKey)
 }
 
+// SaveHighestProposal stores the highest known proposal slot for the given
+// public key to prevent slashable block proposals.
 func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -317,6 +334,8 @@ func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	return s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, data)
 }
 
+// RetrieveHighestProposal loads the highest proposal slot from storage.
+// Returns attestation data, whether it was found, and error.
 func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()

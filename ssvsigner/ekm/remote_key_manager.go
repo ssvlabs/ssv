@@ -28,6 +28,12 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// RemoteKeyManager implements KeyManager by delegating signing operations to
+// a remote signing service (via signerClient). Validator shares are
+// registered or removed on the remote side, while minimal slashing protection
+// data is still maintained locally to prevent slashable requests.
+//
+// RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
 	logger          *zap.Logger
 	netCfg          networkconfig.NetworkConfig
@@ -51,6 +57,9 @@ type consensusClient interface {
 	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)
 }
 
+// NewRemoteKeyManager returns a RemoteKeyManager that fetches the operator's public
+// identity from the signerClient, sets up local slashing protection, and uses
+// the provided consensusClient to get the current fork/genesis for sign requests.
 func NewRemoteKeyManager(
 	logger *zap.Logger,
 	netCfg networkconfig.NetworkConfig,
@@ -84,6 +93,9 @@ func NewRemoteKeyManager(
 	}, nil
 }
 
+// AddShare registers a validator share with the remote service via signerClient.AddValidators
+// and then calls BumpSlashingProtection on the local store. If remote or local operations
+// fail, returns an error.
 func (km *RemoteKeyManager) AddShare(
 	ctx context.Context,
 	encryptedSharePrivKey []byte,
@@ -105,6 +117,9 @@ func (km *RemoteKeyManager) AddShare(
 	return nil
 }
 
+// RemoveShare unregisters a validator share with the remote service and removes
+// its highest attestation/proposal data locally. If the remote or local operations
+// fail, returns an error.
 func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error {
 	if err := km.signerClient.RemoveValidators(ctx, pubKey); err != nil {
 		return fmt.Errorf("remove validator: %w", err)
@@ -121,6 +136,9 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPu
 	return nil
 }
 
+// SignBeaconObject checks slashing conditions locally for attestation and beacon block,
+// then constructs a SignRequest for the remote signerClient. If slashable, returns an error immediately.
+// Otherwise, forwards to the remote service. It returns signature as well as the computed signing root.
 func (km *RemoteKeyManager) SignBeaconObject(
 	ctx context.Context,
 	obj ssz.HashRoot,

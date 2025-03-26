@@ -34,6 +34,19 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// LocalKeyManager implements KeyManager by storing and operating on BLS keys locally.
+// It relies on eth2-key-manager for signing and performing slashing checks before signing.
+//
+// It uses the operator's private key to decrypt incoming shares.
+//
+// The underlying wallet data is stored in the provided db.
+// Signing along with slashing protection are managed with eth2-key-manager's signer.SimpleSigner.
+//
+// For external slashing protection checks and updates it uses SlashingProtector with the same
+// slashingprotection.NewNormalProtection instance as signer.SimpleSigner.
+//
+// All slashing checks are performed prior to any signing attempt. If a slashable
+// condition is detected, the signing method will return an error.
 type LocalKeyManager struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
@@ -43,7 +56,7 @@ type LocalKeyManager struct {
 	slashingProtector
 }
 
-// NewLocalKeyManager returns a new instance of LocalKeyManager.
+// NewLocalKeyManager returns a new LocalKeyManager.
 func NewLocalKeyManager(
 	logger *zap.Logger,
 	db basedb.Database,
@@ -88,6 +101,12 @@ func NewLocalKeyManager(
 	}, nil
 }
 
+// SignBeaconObject implements BeaconSigner. It locks the wallet, checks
+// domain type, converts the input object to the correct versioned data,
+// runs, then delegates slashing protection checks for attestations and blocks
+// as well as signing to eth2-key-manager's signer.
+//
+// It returns the signature and the computed root on success.
 func (km *LocalKeyManager) SignBeaconObject(
 	_ context.Context,
 	obj ssz.HashRoot,
@@ -215,6 +234,10 @@ func (km *LocalKeyManager) signBeaconObject(obj ssz.HashRoot, domain phase0.Doma
 	}
 }
 
+// AddShare decrypts the provided share private key (encryptedSharePrivKey)
+// using the operatorDecrypter, verifies that it matches sharePubKey, and
+// saves it to the local wallet. It also calls BumpSlashingProtection to
+// ensure slashing records for this share are up to date.
 func (km *LocalKeyManager) AddShare(_ context.Context, encryptedSharePrivKey []byte, sharePubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
@@ -241,7 +264,7 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedSharePrivKey []b
 		if err := km.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
-		if err := km.saveShare(sharePrivKey.Serialize()); err != nil {
+		if err := km.saveShare(sharePrivKey); err != nil {
 			return fmt.Errorf("could not save share: %w", err)
 		}
 	}
@@ -249,7 +272,10 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedSharePrivKey []b
 	return nil
 }
 
-func (km *LocalKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error {
+// RemoveShare removes the share from the local wallet, clears the associated
+// slashing-protection records (highest attestation/proposal) for the given
+// public key, and returns an error on any storage issue.
+func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
@@ -273,8 +299,8 @@ func (km *LocalKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPub
 	return nil
 }
 
-func (km *LocalKeyManager) saveShare(privKey []byte) error {
-	key, err := core.NewHDKeyFromPrivateKey(privKey, "")
+func (km *LocalKeyManager) saveShare(privKey *bls.SecretKey) error {
+	key, err := core.NewHDKeyFromPrivateKey(privKey.Serialize(), "")
 	if err != nil {
 		return fmt.Errorf("could not generate HDKey: %w", err)
 	}

@@ -9,6 +9,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// slashing_protector.go provides SlashingProtector, a wrapper around
+// eth2-key-manager's NormalProtection that enforces slot/epoch
+// updates (BumpSlashingProtection) preventing slashable signings.
+
 const (
 	// minSPAttestationEpochGap is the minimum epoch distance used for slashing protection in attestations.
 	// It defines the smallest allowable gap between the source and target epochs in an existing attestation
@@ -26,13 +30,16 @@ type slashingProtector interface {
 	RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error)
 	RemoveHighestAttestation(pubKey phase0.BLSPubKey) error
 	RemoveHighestProposal(pubKey phase0.BLSPubKey) error
-	IsAttestationSlashable(pubKey phase0.BLSPubKey, data *phase0.AttestationData) error
-	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	UpdateHighestAttestation(pubKey phase0.BLSPubKey, attestation *phase0.AttestationData) error
 	UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error
+	IsAttestationSlashable(pubKey phase0.BLSPubKey, data *phase0.AttestationData) error
+	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
 }
 
+// SlashingProtector manages both the local store for highest attestation/proposal
+// and calls into eth2-key-manager's NormalProtection to check if an attestation
+// or proposal is slashable.
 type SlashingProtector struct {
 	logger      *zap.Logger
 	signerStore Storage

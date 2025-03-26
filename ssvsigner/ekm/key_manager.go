@@ -10,6 +10,9 @@ import (
 
 type ShareDecryptionError error
 
+// KeyManager is the main interface for managing validator shares and performing slashing protection.
+// It embeds BeaconSigner (for signing beacon messages and checking whether attestation or beacon block are slashable)
+// and slashingProtector (for slashing checks and updates).
 type KeyManager interface {
 	BeaconSigner
 	slashingProtector
@@ -29,8 +32,14 @@ type KeyManager interface {
 	RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error
 }
 
+// BeaconSigner provides methods for signing beacon-chain objects.
+// Attestations and blocks are checked for slashing conditions
+// through the slashingProtector interface before signing.
+//
+// SignBeaconObject distinguishes object types by the passed domainType.
 type BeaconSigner interface {
-	// SignBeaconObject returns signature and root.
+	// SignBeaconObject returns the signature for the given object along with
+	// the computed root. If slashable, it should return an error.
 	SignBeaconObject(
 		ctx context.Context,
 		obj ssz.HashRoot,
