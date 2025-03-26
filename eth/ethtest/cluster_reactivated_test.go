@@ -69,7 +69,7 @@ func (input *testClusterReactivatedInput) produce() {
 
 	for _, event := range input.events {
 		// Call the contract method
-		_, err = input.boundContract.SimcontractTransactor.Reactivate(
+		_, err = input.boundContract.Reactivate(
 			event.auth,
 			event.opsIds,
 			big.NewInt(100_000_000),
