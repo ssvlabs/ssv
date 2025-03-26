@@ -38,6 +38,7 @@ type messageValidator struct {
 	validatorStore        storage.ValidatorStore
 	dutyStore             *dutystore.Store
 	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+	pectraForkEpoch       phase0.Epoch
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -54,6 +55,7 @@ func New(
 	validatorStore storage.ValidatorStore,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
+	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
@@ -64,6 +66,7 @@ func New(
 		validatorStore:      validatorStore,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
+		pectraForkEpoch:     pectraForkEpoch,
 	}
 
 	for _, opt := range opts {

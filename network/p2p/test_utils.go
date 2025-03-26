@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/testing"
@@ -43,11 +43,11 @@ type LocalNet struct {
 
 // WithBootnode adds a bootnode to the network
 func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := commons.GenNetworkKey()
+	bnSk, err := p2pcommons.GenNetworkKey()
 	if err != nil {
 		return err
 	}
-	isk, err := commons.ECDSAPrivToInterface(bnSk)
+	isk, err := p2pcommons.ECDSAPrivToInterface(bnSk)
 	if err != nil {
 		return err
 	}
@@ -184,6 +184,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		nodeStorage.ValidatorStore(),
 		dutyStore,
 		signatureVerifier,
+		phase0.Epoch(0),
 	)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
@@ -209,6 +210,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,
+			phase0.Epoch(0),
 			validation.WithSelfAccept(selfPeerID, true),
 		)
 	}
