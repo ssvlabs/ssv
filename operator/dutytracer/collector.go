@@ -78,7 +78,7 @@ type scRootKey struct {
 	root phase0.Root // block root
 }
 
-func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slotticker.Provider) {
+func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slotticker.Provider, offset phase0.Slot) {
 	c.logger.Info("start duty tracer cache to disk evictor")
 	ticker := tickerProvider()
 	for {
@@ -86,13 +86,25 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
-			currentSlot := ticker.Slot()
-			c.evictCommitteeTraces(currentSlot)
-			c.evictValidatorTraces(currentSlot)
-			c.evictValidatorCommitteeLinks(currentSlot)
+			currentSlot := ticker.Slot() + offset // optional offset
+
+			//
+			committeThreshold := currentSlot - ttlCommittee
+			evicted := c.evictCommitteeTraces(committeThreshold)
+			c.logger.Info("evicted committee duty traces to disk", fields.Slot(committeThreshold), zap.Int("count", evicted))
+
+			// evict validator traces
+			validatorThreshold := currentSlot - ttlValidator
+			evicted = c.evictValidatorTraces(validatorThreshold)
+			c.logger.Info("evicted validator duty traces to disk", fields.Slot(validatorThreshold), zap.Int("count", evicted))
+
+			// evict validator committee links
+			mappingThreshold := currentSlot - ttlMapping
+			evicted = c.evictValidatorCommitteeLinks(mappingThreshold)
+			c.logger.Info("evicted links to disk", fields.Slot(mappingThreshold), zap.Int("count", evicted))
+
 			// remove old SC roots
 			c.syncCommitteeRootsCache.DeleteExpired()
-			c.logger.Info("evicted duty traces to disk", fields.Slot(currentSlot))
 		}
 	}
 }

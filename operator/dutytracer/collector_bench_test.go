@@ -56,7 +56,7 @@ func BenchmarkTracer(b *testing.B) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				collector.Collect(context.Background(), msg, dummyVerify)
+				_ = collector.Collect(context.Background(), msg, dummyVerify)
 			}()
 		}
 		wg.Wait()

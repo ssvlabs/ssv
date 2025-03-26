@@ -5,38 +5,20 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 // TTL in slots for each role
 const (
-	ttlCommittee                 = 4
-	ttlProposer                  = 4
-	ttlSyncCommitteeContribution = 4
-	ttlValidatorRegistration     = 4
-	ttlVoluntaryExit             = 4
+	ttlCommittee = 4
+	ttlValidator = 4
 
 	ttlMapping       = 4
 	ttlCommitteeRoot = 4
 )
 
-func getTTL(role spectypes.BeaconRole) phase0.Slot {
-	switch role {
-	case spectypes.BNRoleProposer:
-		return ttlProposer
-	case spectypes.BNRoleAggregator:
-		return ttlSyncCommitteeContribution
-	case spectypes.BNRoleValidatorRegistration:
-		return ttlValidatorRegistration
-	case spectypes.BNRoleVoluntaryExit:
-		return ttlVoluntaryExit
-	}
-	return ttlProposer
-}
-
-func (c *Collector) evictValidatorCommitteeLinks(slot phase0.Slot) {
-	threshold := slot - getTTL(ttlMapping)
-
+func (c *Collector) evictValidatorCommitteeLinks(threshold phase0.Slot) (totalSaved int) {
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]) bool {
 		for slot := threshold; ; slot-- {
 			committeeID, found := slotToCommittee.Load(slot)
@@ -49,16 +31,18 @@ func (c *Collector) evictValidatorCommitteeLinks(slot phase0.Slot) {
 				return true
 			}
 
+			totalSaved++
+
 			slotToCommittee.Delete(slot)
 		}
 
 		return true
 	})
+
+	return
 }
 
-func (c *Collector) evictCommitteeTraces(currentSlot phase0.Slot) {
-	threshold := currentSlot - getTTL(ttlCommittee)
-
+func (c *Collector) evictCommitteeTraces(threshold phase0.Slot) (totalSaved int) {
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *TypedSyncMap[phase0.Slot, *committeeDutyTrace]) bool {
 		for slot := threshold; ; slot-- {
 			trace, found := slotToTraceMap.Load(slot)
@@ -66,48 +50,65 @@ func (c *Collector) evictCommitteeTraces(currentSlot phase0.Slot) {
 				break
 			}
 
-			trace.Lock()
-			defer trace.Unlock()
+			// lock only for copying
+			var local *model.CommitteeDutyTrace
+			func() {
+				trace.Lock()
+				defer trace.Unlock()
+				local = deepCopyCommitteeDutyTrace(&trace.CommitteeDutyTrace)
+			}()
 
-			if err := c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace); err != nil {
+			if err := c.store.SaveCommitteeDuty(local); err != nil {
 				c.logger.Error("save committee duty to disk", zap.Error(err))
 				continue
 			}
+
+			totalSaved++
 
 			slotToTraceMap.Delete(slot)
 		}
 
 		return true
 	})
+
+	return
 }
 
-func (c *Collector) evictValidatorTraces(slot phase0.Slot) {
+func (c *Collector) evictValidatorTraces(threshold phase0.Slot) (totalSaved int) {
 	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *TypedSyncMap[phase0.Slot, *validatorDutyTrace]) bool {
-		threshold := slot - getTTL(ttlCommittee)
 		for slot := threshold; ; slot-- {
 			trace, found := slotToTraceMap.Load(slot)
 			if !found {
 				break
 			}
 
-			trace.Lock()
-			defer trace.Unlock()
+			// lock only for copying
+			var roles []*model.ValidatorDutyTrace
+			func() {
+				trace.Lock()
+				defer trace.Unlock()
+
+				for _, role := range trace.Roles {
+					roles = append(roles, deepCopyValidatorDutyTrace(role))
+				}
+			}()
 
 			var savedCount int
 
-			for _, trace := range trace.Roles {
-				// TODO: confirm it makes sense
+			for _, role := range roles {
+				// TODO(me): confirm it makes sense
 				// in case some duties do not have the validator index set
-				if trace.Validator == 0 {
+				if role.Validator == 0 {
+					c.logger.Info("got trace with missing validator index", fields.Validator(pk[:]), fields.Slot(slot))
 					index, found := c.validators.ValidatorIndex(pk)
 					if !found {
-						c.logger.Error("no validator index", fields.Validator(pk[:]))
+						continue
 					} else {
-						trace.Validator = index
+						role.Validator = index
 					}
 				}
 
-				if err := c.store.SaveValidatorDuty(trace); err != nil {
+				if err := c.store.SaveValidatorDuty(role); err != nil {
 					c.logger.Error("save validator duties to disk", zap.Error(err))
 					continue
 				}
@@ -115,12 +116,18 @@ func (c *Collector) evictValidatorTraces(slot phase0.Slot) {
 				savedCount++
 			}
 
+			totalSaved += savedCount
+
 			// if all were saved, remove the slot; otherwise, keep it for the next iteration
-			if savedCount == len(trace.Roles) {
+			if savedCount == len(roles) {
 				slotToTraceMap.Delete(slot)
+			} else {
+				c.logger.Info("not all validator duties were saved", fields.Validator(pk[:]))
 			}
 		}
 
 		return true
 	})
+
+	return
 }

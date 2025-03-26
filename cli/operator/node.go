@@ -19,6 +19,8 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -68,7 +70,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
-	"go.uber.org/zap"
 )
 
 type KeyStore struct {
@@ -367,7 +368,7 @@ var StartNodeCmd = &cobra.Command{
 				nodeStorage.ValidatorStore(), consensusClient,
 				dstore, networkConfig.Beacon.GetBeaconNetwork())
 
-			go collector.StartEvictionJob(cmd.Context(), slotTickerProvider)
+			go collector.StartEvictionJob(cmd.Context(), slotTickerProvider, 0)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector

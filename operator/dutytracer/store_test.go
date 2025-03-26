@@ -104,7 +104,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	require.Equal(t, committeeID2, cmt2)
 
 	// evict validator committee mapping in slot 4 and lower
-	thresholdSlot := phase0.Slot(4 + ttlMapping)
+	thresholdSlot := phase0.Slot(4)
 	tracer.evictValidatorCommitteeLinks(thresholdSlot)
 
 	// check that slot 3 and 4 are evicted from cache
@@ -262,10 +262,10 @@ func TestCommitteeDutyStore(t *testing.T) {
 		}
 	}
 
-	// step 2: evict traces at slot 8
+	// step 2: evict traces at threshold 4
 	// meaning that slot 3 and 4 should be evicted to disk
 	// but slot 7 should be in memory
-	slot8 := phase0.Slot(8) // 8 - ttl(4) = 4
+	slot8 := phase0.Slot(4)
 	tracer.evictCommitteeTraces(slot8)
 	tracer.evictValidatorCommitteeLinks(slot8)
 
@@ -419,8 +419,8 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{5}, dd[0].Signers)
 
-	// evict traces for slot 6 - meaning that slot 3 and 4 should be evicted (tolernace=2)
-	slot6 := phase0.Slot(8)
+	// evict slot 3 and 4
+	slot6 := phase0.Slot(4)
 	tracer.evictValidatorTraces(slot6)
 
 	var inMem = make(map[phase0.Slot]struct{})
