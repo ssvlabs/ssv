@@ -63,7 +63,7 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 // attestation data using the simple method only.
 //
 // When VOUCH is enabled, this method concurrently executes both the weighted and
-// simple strategies. The weighted strategy is given a soft timeout window to respond.
+// simple strategies. The weighted strategy is given a hard timeout window to respond.
 // If both complete in time, their results are compared using a scoring mechanism.
 // The better result is selected. If only one returns in time, that result is used as a fallback.
 //
@@ -98,7 +98,7 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (*phase0.AttestationDat
 		simpleErrCh := make(chan error, 1)
 
 		// Apply soft timeout context to the weighted (VOUCH) strategy.
-		softCtx, softCancel := context.WithTimeout(gc.ctx, gc.weightedAttestationDataSoftTimeout)
+		hardCtx, softCancel := context.WithTimeout(gc.ctx, gc.weightedAttestationDataHardTimeout) // changed to hard timeout (prior was soft) for vouch strategy
 		defer softCancel()
 
 		// Launch weightedAttestationData in a goroutine.
@@ -129,11 +129,19 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (*phase0.AttestationDat
 		)
 
 		// Wait for weighted result or soft timeout.
+		weightedTimeout := false // used to indicate if the weighted path hit timeout
+
 		select {
 		case weightedResult = <-weightedCh:
-			// weighted returned within soft timeout
-		case <-softCtx.Done():
-			// soft timeout reached; do not wait longer
+			// weighted returned within hard timeout
+		case <-hardCtx.Done():
+			// hard timeout reached; log (includes time out value) and notify fallback path
+			weightedTimeout = true // assign true to flag
+			gc.log.With(
+				fields.Slot(slot),
+				zap.Duration("timeout", gc.weightedAttestationDataHardTimeout),
+			).Warn("weighted attestation timed out before completing")
+			weightedErrCh <- fmt.Errorf("weighted attestation data timed out (hard timeout)") // sending timed out as error to weighted error channel
 		}
 
 		// Wait for the simple path to complete (always required).
@@ -154,26 +162,33 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (*phase0.AttestationDat
 			simpleScore := gc.scoreAttestationData(gc.ctx, simpleResult, gc.log)
 
 			if weightedScore > simpleScore {
-				gc.log.With(fields.Slot(slot)).Debug("Chosen attestation method: weightedAttestationData")
+				gc.log.With(fields.Slot(slot)).Debug("chosen attestation method: weightedAttestationData")
 				gc.attestationDataCache.Set(slot, weightedResult, ttlcache.DefaultTTL)
 				return weightedResult, nil
 			}
 
-			gc.log.With(fields.Slot(slot)).Debug("Chosen attestation method: simpleAttestationData")
+			gc.log.With(fields.Slot(slot)).Debug("chosen attestation method: simpleAttestationData")
 			gc.attestationDataCache.Set(slot, simpleResult, ttlcache.DefaultTTL)
 			return simpleResult, nil
 		}
 
 		// If only weighted succeeded
 		if weightedResult != nil {
-			gc.log.With(fields.Slot(slot)).Debug("Fallback to weightedAttestationData")
+			gc.log.With(fields.Slot(slot)).Debug("fallback to weightedAttestationData")
 			gc.attestationDataCache.Set(slot, weightedResult, ttlcache.DefaultTTL)
 			return weightedResult, nil
 		}
 
 		// If only simple succeeded
 		if simpleResult != nil {
-			gc.log.With(fields.Slot(slot)).Debug("Fallback to simpleAttestationData")
+			reason := "weighted_error" // default reason
+			if weightedTimeout {
+				reason = "weighted_timeout" // unless `weightedTimeout` flag is set to true
+			}
+			gc.log.With(
+				fields.Slot(slot),
+				zap.String("fallback_reason", reason),
+			).Debug("fallback to simpleAttestationData")
 			gc.attestationDataCache.Set(slot, simpleResult, ttlcache.DefaultTTL)
 			return simpleResult, nil
 		}
