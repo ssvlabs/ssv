@@ -158,16 +158,27 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (*phase0.AttestationDat
 
 		// If both responses are available, compare and choose the better one.
 		if weightedResult != nil && simpleResult != nil {
+			// Score both results.
 			weightedScore := gc.scoreAttestationData(gc.ctx, weightedResult, gc.log)
 			simpleScore := gc.scoreAttestationData(gc.ctx, simpleResult, gc.log)
 
 			if weightedScore > simpleScore {
-				gc.log.With(fields.Slot(slot)).Debug("chosen attestation method: weightedAttestationData")
+				// ✨ Added score values to log for observability
+				gc.log.With(
+					fields.Slot(slot),
+					zap.Float64("weighted_score", weightedScore), // New
+					zap.Float64("simple_score", simpleScore),     // New
+				).Debug("chosen attestation method: weightedAttestationData")
 				gc.attestationDataCache.Set(slot, weightedResult, ttlcache.DefaultTTL)
 				return weightedResult, nil
 			}
 
-			gc.log.With(fields.Slot(slot)).Debug("chosen attestation method: simpleAttestationData")
+			// ✨ Added score values to log for observability
+			gc.log.With(
+				fields.Slot(slot),
+				zap.Float64("weighted_score", weightedScore), // New
+				zap.Float64("simple_score", simpleScore),     // New
+			).Debug("chosen attestation method: simpleAttestationData")
 			gc.attestationDataCache.Set(slot, simpleResult, ttlcache.DefaultTTL)
 			return simpleResult, nil
 		}
