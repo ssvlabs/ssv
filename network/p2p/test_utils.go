@@ -16,7 +16,6 @@ import (
 
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/testing"
@@ -44,11 +43,11 @@ type LocalNet struct {
 
 // WithBootnode adds a bootnode to the network
 func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := commons.GenNetworkKey()
+	bnSk, err := p2pcommons.GenNetworkKey()
 	if err != nil {
 		return err
 	}
-	isk, err := commons.ECDSAPrivToInterface(bnSk)
+	isk, err := p2pcommons.ECDSAPrivToInterface(bnSk)
 	if err != nil {
 		return err
 	}
