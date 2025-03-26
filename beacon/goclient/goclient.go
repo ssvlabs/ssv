@@ -34,8 +34,9 @@ const (
 	DataVersionNil spec.DataVersion = math.MaxUint64
 
 	// Client timeouts.
-	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
-	DefaultLongTimeout   = time.Second * 60 // For long requests.
+	DefaultCommonTimeout                  = time.Second * 5  // For dialing and most requests.
+	DefaultLongTimeout                    = time.Second * 60 // For long requests.
+	DefaultWeightedAttestationSoftTimeout = time.Second * 1  // For weighted attestation data requests.
 
 	BlockRootToSlotCacheCapacityEpochs = 64
 
@@ -145,9 +146,8 @@ type GoClient struct {
 	// attestationDataCache helps reuse recently fetched attestation data.
 	// AttestationData is cached by slot only, because Beacon nodes should return the same
 	// data regardless of the requested committeeIndex.
-	attestationDataCache               *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
-	weightedAttestationDataSoftTimeout time.Duration
-	weightedAttestationDataHardTimeout time.Duration
+	attestationDataCache           *ttlcache.Cache[phase0.Slot, *phase0.AttestationData]
+	weightedAttestationSoftTimeout time.Duration
 
 	// blockRootToSlotReqInflight helps prevent duplicate BeaconBlockHeader requests
 	// from running in parallel.
@@ -196,6 +196,10 @@ func New(
 	if longTimeout == 0 {
 		longTimeout = DefaultLongTimeout
 	}
+	weightedAttestationSoftTimeout := opt.WeightedAttestationSoftTimeout
+	if weightedAttestationSoftTimeout == 0 {
+		weightedAttestationSoftTimeout = DefaultWeightedAttestationSoftTimeout
+	}
 
 	client := &GoClient{
 		log:                   logger.Named("consensus_client"),
@@ -212,13 +216,12 @@ func New(
 		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
 			opt.Network.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
 		),
-		commonTimeout:                      commonTimeout,
-		longTimeout:                        longTimeout,
-		withWeightedAttestationData:        opt.WithWeightedAttestationData,
-		weightedAttestationDataSoftTimeout: commonTimeout / 2,
-		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
-		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
+		commonTimeout:                  commonTimeout,
+		longTimeout:                    longTimeout,
+		withWeightedAttestationData:    opt.WithWeightedAttestation,
+		weightedAttestationSoftTimeout: weightedAttestationSoftTimeout,
+		supportedTopics:                []EventTopic{EventTopicHead, EventTopicBlock},
+		genesisForkVersion:             phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
 		ForkEpochBellatrix: math.MaxUint64,

@@ -396,7 +396,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.NotNil(t, response)
 		require.Equal(t, spec.DataVersionPhase0, version)
 		timeElapsed := time.Since(startTime)
-		require.LessOrEqual(t, timeElapsed, client.weightedAttestationDataSoftTimeout)
+		require.LessOrEqual(t, timeElapsed, client.weightedAttestationSoftTimeout)
 	})
 
 	t.Run("multiple beacon clients: responses are correctly weighted", func(t *testing.T) {
@@ -451,12 +451,13 @@ func createClient(
 	withWeightedAttestationData bool) (*GoClient, error) {
 	client, err := New(zap.NewNop(),
 		beacon.Options{
-			Context:                     ctx,
-			Network:                     beacon.NewNetwork(types.MainNetwork),
-			BeaconNodeAddr:              beaconServerURL,
-			CommonTimeout:               defaultHardTimeout,
-			LongTimeout:                 time.Second,
-			WithWeightedAttestationData: withWeightedAttestationData,
+			Context:                        ctx,
+			Network:                        beacon.NewNetwork(types.MainNetwork),
+			BeaconNodeAddr:                 beaconServerURL,
+			CommonTimeout:                  defaultHardTimeout,
+			LongTimeout:                    time.Second,
+			WithWeightedAttestation:        withWeightedAttestationData,
+			WeightedAttestationSoftTimeout: time.Second,
 		},
 		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
 		func() slotticker.SlotTicker {
