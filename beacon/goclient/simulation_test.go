@@ -30,10 +30,10 @@ func TestSimulation(t *testing.T) {
 
 		// Beacon nodes to use for the benchmark.
 		beaconNodes = map[string]string{
-			"geth-lh-1":    "http://mainnet-geth-lh-1-beacon-a.ethereum.svc:5052",
-			"geth-teku-2":  "http://mainnet-geth-teku-2-beacon-b.ethereum.svc:5052",
-			"nethermind-3": "http://mainnet-nethermind-lh-3-beacon-c.ethereum.svc:5052",
-			"nethermind-4": "http://mainnet-nethermind-teku-4-beacon-d.ethereum.svc:5052",
+			"geth-lh-1":    "http://mainnet-geth-lh-1-a-beacon.ethereum.svc:5052",
+			"geth-teku-2":  "http://mainnet-geth-teku-2-b-beacon.ethereum.svc:5052",
+			"nethermind-3": "http://mainnet-nethermind-lh-3-c-beacon.ethereum.svc:5052",
+			"nethermind-4": "http://mainnet-nethermind-teku-4-d-beacon.ethereum.svc:5052",
 		}
 	)
 
