@@ -23,7 +23,7 @@ type KeyManager interface {
 	// updating them only if they are missing or fall below a minimal safe threshold.
 	// This prevents the validator from signing messages that could be considered slashable
 	// due to absent or outdated protection data.
-	AddShare(ctx context.Context, encryptedSharePrivKey []byte, sharePubKey phase0.BLSPubKey) error
+	AddShare(ctx context.Context, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
 	// RemoveShare unregisters a validator share from the key manager and deletes its associated
 	// slashing protection records (attestation and proposal) from the store.
@@ -44,12 +44,12 @@ type BeaconSigner interface {
 		ctx context.Context,
 		obj ssz.HashRoot,
 		domain phase0.Domain,
-		pk phase0.BLSPubKey,
+		pubKey phase0.BLSPubKey,
 		slot phase0.Slot,
-		domainType phase0.DomainType,
+		signatureDomain phase0.DomainType,
 	) (spectypes.Signature, phase0.Root, error)
 	// IsAttestationSlashable returns error if attestation is slashable
-	IsAttestationSlashable(pk phase0.BLSPubKey, data *phase0.AttestationData) error
+	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	// IsBeaconBlockSlashable returns error if the given block is slashable
-	IsBeaconBlockSlashable(pk phase0.BLSPubKey, slot phase0.Slot) error
+	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 }

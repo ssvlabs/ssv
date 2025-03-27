@@ -70,7 +70,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 
 	status := []web3signer.Status{web3signer.StatusImported}
 	s.client.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
-		PublicKey:        pubKey,
+		PubKey:           pubKey,
 		EncryptedPrivKey: encShare,
 	}).Return(status, nil)
 
@@ -1491,7 +1491,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		encShare := []byte("encrypted_share_data")
 
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
-			PublicKey:        pubKey,
+			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
 		}).Return(nil, errors.New("add validators error")).Once()
 
@@ -1519,7 +1519,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		status := []web3signer.Status{web3signer.StatusError}
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
-			PublicKey:        pubKey,
+			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
 		}).Return(status, nil).Once()
 
@@ -1548,7 +1548,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		status := []web3signer.Status{web3signer.StatusImported}
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
-			PublicKey:        pubKey,
+			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
 		}).Return(status, nil).Once()
 

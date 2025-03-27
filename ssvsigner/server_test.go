@@ -142,7 +142,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 		ShareKeys: []ShareKeys{
 			{
 				EncryptedPrivKey: []byte("encrypted_key"),
-				PublicKey:        phase0.BLSPubKey(pubKey),
+				PubKey:           phase0.BLSPubKey(pubKey),
 			},
 		},
 	}
@@ -182,7 +182,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 			ShareKeys: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted_key"),
-					PublicKey:        phase0.BLSPubKey{},
+					PubKey:           phase0.BLSPubKey{},
 				},
 			},
 		}
@@ -200,7 +200,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 			ShareKeys: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte{},
-					PublicKey:        phase0.BLSPubKey(pubKey),
+					PubKey:           phase0.BLSPubKey(pubKey),
 				},
 			},
 		}

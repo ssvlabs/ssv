@@ -49,7 +49,7 @@ type Storage interface {
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
-	SetEncryptionKey(newKey string) error
+	SetEncryptionKey(hexKey string) error
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 
@@ -79,14 +79,15 @@ func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *
 	}
 }
 
-// SetEncryptionKey sets the encryption key used to encrypt/decrypt account
-// data. If no key is set (empty), the data is stored in plaintext.
-func (s *storage) SetEncryptionKey(newKey string) error {
+// SetEncryptionKey sets the hex-encoded encryption key used
+// to encrypt/decrypt account data. If no key is set (empty),
+// the data is stored in plaintext.
+func (s *storage) SetEncryptionKey(hexKey string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	// Decode hexadecimal string into byte array
-	keyBytes, err := hex.DecodeString(newKey)
+	keyBytes, err := hex.DecodeString(hexKey)
 	if err != nil {
 		return errors.New("the key must be a valid hexadecimal string")
 	}
@@ -394,7 +395,7 @@ func (s *storage) encryptData(objectValue []byte) ([]byte, error) {
 	return encryptedData, nil
 }
 
-func (s *storage) encrypt(data []byte) ([]byte, error) {
+func (s *storage) encrypt(plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(s.encryptionKey)
 	if err != nil {
 		return nil, err
@@ -407,10 +408,10 @@ func (s *storage) encrypt(data []byte) ([]byte, error) {
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, err
 	}
-	return gcm.Seal(nonce, nonce, data, nil), nil
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
-func (s *storage) decrypt(data []byte) ([]byte, error) {
+func (s *storage) decrypt(nonceCipherText []byte) ([]byte, error) {
 	block, err := aes.NewCipher(s.encryptionKey)
 	if err != nil {
 		return nil, err
@@ -420,11 +421,11 @@ func (s *storage) decrypt(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	nonceSize := gcm.NonceSize()
-	if len(data) < nonceSize {
+	if len(nonceCipherText) < nonceSize {
 		return nil, errors.New("malformed ciphertext")
 	}
 
-	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+	nonce, ciphertext := nonceCipherText[:nonceSize], nonceCipherText[nonceSize:]
 	// #nosec G407 false positive: https://github.com/securego/gosec/issues/1211
 	return gcm.Open(nil, nonce, ciphertext, nil)
 }

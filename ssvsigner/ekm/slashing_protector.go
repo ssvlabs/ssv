@@ -30,9 +30,9 @@ type slashingProtector interface {
 	RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error)
 	RemoveHighestAttestation(pubKey phase0.BLSPubKey) error
 	RemoveHighestProposal(pubKey phase0.BLSPubKey) error
-	UpdateHighestAttestation(pubKey phase0.BLSPubKey, attestation *phase0.AttestationData) error
+	UpdateHighestAttestation(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error
-	IsAttestationSlashable(pubKey phase0.BLSPubKey, data *phase0.AttestationData) error
+	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
 }
@@ -78,8 +78,8 @@ func (sp *SlashingProtector) RemoveHighestProposal(pubKey phase0.BLSPubKey) erro
 	return sp.signerStore.RemoveHighestProposal(pubKey[:])
 }
 
-func (sp *SlashingProtector) IsAttestationSlashable(pk phase0.BLSPubKey, data *phase0.AttestationData) error {
-	if val, err := sp.protection.IsSlashableAttestation(pk[:], data); err != nil || val != nil {
+func (sp *SlashingProtector) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
+	if val, err := sp.protection.IsSlashableAttestation(pubKey[:], attData); err != nil || val != nil {
 		if err != nil {
 			return err
 		}
@@ -88,8 +88,8 @@ func (sp *SlashingProtector) IsAttestationSlashable(pk phase0.BLSPubKey, data *p
 	return nil
 }
 
-func (sp *SlashingProtector) IsBeaconBlockSlashable(pk phase0.BLSPubKey, slot phase0.Slot) error {
-	status, err := sp.protection.IsSlashableProposal(pk[:], slot)
+func (sp *SlashingProtector) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+	status, err := sp.protection.IsSlashableProposal(pubKey[:], slot)
 	if err != nil {
 		return err
 	}
@@ -100,8 +100,8 @@ func (sp *SlashingProtector) IsBeaconBlockSlashable(pk phase0.BLSPubKey, slot ph
 	return nil
 }
 
-func (sp *SlashingProtector) UpdateHighestAttestation(pubKey phase0.BLSPubKey, attestation *phase0.AttestationData) error {
-	return sp.protection.UpdateHighestAttestation(pubKey[:], attestation)
+func (sp *SlashingProtector) UpdateHighestAttestation(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
+	return sp.protection.UpdateHighestAttestation(pubKey[:], attData)
 }
 
 func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error {

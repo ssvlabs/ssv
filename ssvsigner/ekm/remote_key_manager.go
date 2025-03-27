@@ -98,19 +98,19 @@ func NewRemoteKeyManager(
 // fail, returns an error.
 func (km *RemoteKeyManager) AddShare(
 	ctx context.Context,
-	encryptedSharePrivKey []byte,
-	sharePubKey phase0.BLSPubKey,
+	encryptedPrivKey []byte,
+	pubKey phase0.BLSPubKey,
 ) error {
 	shareKeys := ssvsigner.ShareKeys{
-		EncryptedPrivKey: hexutil.Bytes(encryptedSharePrivKey),
-		PublicKey:        sharePubKey,
+		EncryptedPrivKey: hexutil.Bytes(encryptedPrivKey),
+		PubKey:           pubKey,
 	}
 
 	if err := km.signerClient.AddValidators(ctx, shareKeys); err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
 
-	if err := km.BumpSlashingProtection(sharePubKey); err != nil {
+	if err := km.BumpSlashingProtection(pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 

@@ -24,5 +24,5 @@ type AddValidatorRequest struct {
 
 type ShareKeys struct {
 	EncryptedPrivKey hexutil.Bytes
-	PublicKey        phase0.BLSPubKey
+	PubKey           phase0.BLSPubKey
 }

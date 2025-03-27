@@ -64,7 +64,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
 	for _, share := range shares {
 		encodedShares = append(encodedShares, ShareKeys{
 			EncryptedPrivKey: share.EncryptedPrivKey,
-			PublicKey:        share.PublicKey,
+			PubKey:           share.PubKey,
 		})
 	}
 
@@ -105,9 +105,9 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
 	return nil
 }
 
-func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error {
+func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) error {
 	req := web3signer.DeleteKeystoreRequest{
-		Pubkeys: sharePubKeys,
+		Pubkeys: pubKeys,
 	}
 
 	var resp web3signer.DeleteKeystoreResponse
@@ -123,8 +123,8 @@ func (c *Client) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BL
 		return fmt.Errorf("request failed: %w", err)
 	}
 
-	if len(resp.Data) != len(sharePubKeys) {
-		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(sharePubKeys))
+	if len(resp.Data) != len(pubKeys) {
+		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(pubKeys))
 	}
 
 	for _, data := range resp.Data {

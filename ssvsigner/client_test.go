@@ -66,7 +66,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted1"),
-					PublicKey:        phase0.BLSPubKey{1, 2, 3},
+					PubKey:           phase0.BLSPubKey{1, 2, 3},
 				},
 			},
 			expectedStatusCode: http.StatusOK,
@@ -85,7 +85,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("bad_encrypted"),
-					PublicKey:        phase0.BLSPubKey{1, 2, 3},
+					PubKey:           phase0.BLSPubKey{1, 2, 3},
 				},
 			},
 			expectedStatusCode: http.StatusUnprocessableEntity,
@@ -98,7 +98,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted"),
-					PublicKey:        phase0.BLSPubKey{1, 2, 3},
+					PubKey:           phase0.BLSPubKey{1, 2, 3},
 				},
 			},
 			expectedStatusCode: http.StatusInternalServerError,
@@ -136,7 +136,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 				for i, share := range tc.shares {
 					assert.Equal(t, share.EncryptedPrivKey, req.ShareKeys[i].EncryptedPrivKey)
-					assert.EqualValues(t, share.PublicKey[:], req.ShareKeys[i].PublicKey)
+					assert.EqualValues(t, share.PubKey[:], req.ShareKeys[i].PubKey)
 				}
 
 				w.WriteHeader(tc.expectedStatusCode)
@@ -634,7 +634,7 @@ func TestRequestErrors(t *testing.T) {
 
 	err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
-		PublicKey:        phase0.BLSPubKey{1, 1, 1},
+		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
@@ -663,7 +663,7 @@ func TestResponseHandlingErrors(t *testing.T) {
 
 	err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
-		PublicKey:        phase0.BLSPubKey{1, 1, 1},
+		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 

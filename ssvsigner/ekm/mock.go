@@ -26,8 +26,8 @@ func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclien
 	return args.Error(1)
 }
 
-func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error {
-	args := m.Called(ctx, sharePubKeys)
+func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) error {
+	args := m.Called(ctx, pubKeys)
 	result := args.Get(0)
 	if result == nil {
 		return args.Error(1)

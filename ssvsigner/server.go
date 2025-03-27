@@ -99,7 +99,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	var importKeystoreReq web3signer.ImportKeystoreRequest
 
 	for i, share := range req.ShareKeys {
-		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(share.EncryptedPrivKey, share.PublicKey)
+		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(share.EncryptedPrivKey, share.PubKey)
 		if err != nil {
 			logger.Warn("get keystore from encrypted share", zap.Int("index", i), zap.Error(err))
 			r.writeJSONErr(ctx, logger, fasthttp.StatusUnprocessableEntity, fmt.Errorf("get keystore from encrypted share index %d: %w", i, err))
@@ -123,7 +123,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		if data.Status != web3signer.StatusImported {
 			logger.Warn("unexpected keystore status",
 				zap.String("status", string(data.Status)),
-				zap.Stringer("share_pubkey", req.ShareKeys[i].PublicKey),
+				zap.Stringer("share_pubkey", req.ShareKeys[i].PubKey),
 			)
 		} else {
 			importedCount++
