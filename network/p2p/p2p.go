@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
@@ -89,7 +88,7 @@ type p2pNetwork struct {
 	msgResolver  topics.MsgPeersResolver
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
-	connGater    connmgr.ConnectionGater
+	connGater    connmgrcore.ConnectionGater
 	trustedPeers []*peer.AddrInfo
 
 	state int32

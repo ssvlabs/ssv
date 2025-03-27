@@ -152,7 +152,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		// Handle the message.
 		if err := handler(ctx, logger, msg); err != nil {
 			v.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.SSVMessage.MsgType),
+				fields.MessageType(msg.MsgType),
 				zap.Error(err))
 		}
 	}
@@ -163,7 +163,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.SSVMessage.MsgType {
+	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := msg.Body.(*specqbft.Message)
 

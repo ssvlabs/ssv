@@ -11,7 +11,7 @@ import (
 // DecryptKeystore decrypts a keystore JSON file using the provided password.
 func DecryptKeystore(encryptedJSONData []byte, password string) ([]byte, error) {
 	if strings.TrimSpace(password) == "" {
-		return nil, fmt.Errorf("Password required for decrypting keystore")
+		return nil, fmt.Errorf("password required for decrypting keystore")
 	}
 
 	// Unmarshal the JSON-encoded data
@@ -32,7 +32,7 @@ func DecryptKeystore(encryptedJSONData []byte, password string) ([]byte, error) 
 // EncryptKeystore encrypts a private key using the provided password, adds in the public key and returns the encrypted keystore JSON data.
 func EncryptKeystore(privkey []byte, pubKeyBase64, password string) ([]byte, error) {
 	if strings.TrimSpace(password) == "" {
-		return nil, fmt.Errorf("Password required for encrypting keystore")
+		return nil, fmt.Errorf("password required for encrypting keystore")
 	}
 
 	// Encrypt the private key using keystorev4

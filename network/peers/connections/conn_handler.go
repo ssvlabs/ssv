@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -112,7 +111,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		ch.peerInfos.AddPeerInfo(pid, conn.RemoteMultiaddr(), conn.Stat().Direction)
 
 		// Connection is inbound -> Wait for successful handshake request.
-		if conn.Stat().Direction == network.DirInbound {
+		if conn.Stat().Direction == libp2pnetwork.DirInbound {
 			// Wait for peer to initiate handshake.
 			logger.Debug("waiting for peer to initiate handshake")
 			start := time.Now()
@@ -137,7 +136,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 						break Wait
 					}
 
-					if net.Connectedness(pid) != network.Connected {
+					if net.Connectedness(pid) != libp2pnetwork.Connected {
 						return errors.New("lost connection")
 					}
 				}

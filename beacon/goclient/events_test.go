@@ -22,7 +22,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	t.Run("Should launch event listener when go client is instantiated", func(t *testing.T) {
 		eventsEndpointSubscribedCh := make(chan any)
 
-		server := tests.MockServer(t, func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		server := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if strings.Contains(r.URL.Path, "/eth/v1/events") {
 				eventsEndpointSubscribedCh <- struct{}{}
 			}
@@ -45,7 +45,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	})
 
 	t.Run("Should create subscriber", func(t *testing.T) {
-		server := tests.MockServer(t, nil)
+		server := tests.MockServer(nil)
 		client := eventsTestClient(t, server.URL)
 		defer server.Close()
 
@@ -59,7 +59,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	})
 
 	t.Run("Should not create subscriber and return error when supported topics does not contain HeadEventTopic", func(t *testing.T) {
-		server := tests.MockServer(t, nil)
+		server := tests.MockServer(nil)
 		client := eventsTestClient(t, server.URL)
 		client.supportedTopics = []EventTopic{}
 		defer server.Close()

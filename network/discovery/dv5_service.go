@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	defaultDiscoveryInterval = time.Millisecond * 1
+	defaultDiscoveryInterval = time.Millisecond * 2
 	publishENRTimeout        = time.Minute
 )
 

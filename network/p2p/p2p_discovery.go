@@ -169,7 +169,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					}
 					cooldown := min(retryCooldownMax, retryCooldownMin*time.Duration(discoveredPeer.Tries))
 					peerRelevance := min(1, float64(waited)/float64(cooldown))
-					peerScore *= math.Pow(peerRelevance, 2)
+					peerScore *= peerRelevance * peerRelevance
 				}
 
 				// Push the peer.

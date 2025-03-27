@@ -162,7 +162,7 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 	stats.Connected = make([]int, len(stats.PeersCount))
 	var sumConnected int
 	for subnet := range stats.PeersCount {
-		peers := pi.SubnetsIndex.GetSubnetPeers(subnet)
+		peers := pi.GetSubnetPeers(subnet)
 		connectedCount := 0
 		for _, p := range peers {
 			if pi.Connectedness(p) == libp2pnetwork.Connected {

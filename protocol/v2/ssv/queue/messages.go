@@ -206,7 +206,7 @@ func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
 	switch {
 	case isDecidedMessage(state, m):
 		return 2
-	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
+	case isConsensusMessage && specqbft.MessageType(m.MsgType) == specqbft.CommitMsgType:
 		return 1
 	}
 	return 0
@@ -295,7 +295,7 @@ func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight in
 	switch {
 	case isDecidedMessage(state, m):
 		return 2
-	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
+	case isConsensusMessage && specqbft.MessageType(m.MsgType) == specqbft.CommitMsgType:
 		return 1
 	}
 	return 0
