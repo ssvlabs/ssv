@@ -88,7 +88,7 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 		case <-ticker.Next():
 			currentSlot := ticker.Slot() + offset // optional offset
 
-			//
+			// evict committee traces
 			committeThreshold := currentSlot - ttlCommittee
 			evicted := c.evictCommitteeTraces(committeThreshold)
 			c.logger.Info("evicted committee duty traces to disk", fields.Slot(committeThreshold), zap.Int("count", evicted))
@@ -101,7 +101,7 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 			// evict validator committee links
 			mappingThreshold := currentSlot - ttlMapping
 			evicted = c.evictValidatorCommitteeLinks(mappingThreshold)
-			c.logger.Info("evicted links to disk", fields.Slot(mappingThreshold), zap.Int("count", evicted))
+			c.logger.Info("evicted validator mappings to disk", fields.Slot(mappingThreshold), zap.Int("count", evicted))
 
 			// remove old SC roots
 			c.syncCommitteeRootsCache.DeleteExpired()
@@ -154,25 +154,6 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 	traces.Roles = append(traces.Roles, roleDutyTrace)
 
 	return traces, roleDutyTrace
-}
-
-func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
-	switch r {
-	case spectypes.RoleCommittee:
-		return spectypes.BNRoleUnknown, errors.New("unexpected committee role")
-	case spectypes.RoleProposer:
-		bnRole = spectypes.BNRoleProposer
-	case spectypes.RoleAggregator:
-		bnRole = spectypes.BNRoleAggregator
-	case spectypes.RoleSyncCommitteeContribution:
-		bnRole = spectypes.BNRoleSyncCommitteeContribution
-	case spectypes.RoleValidatorRegistration:
-		bnRole = spectypes.BNRoleValidatorRegistration
-	case spectypes.RoleVoluntaryExit:
-		bnRole = spectypes.BNRoleVoluntaryExit
-	}
-
-	return
 }
 
 func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) *committeeDutyTrace {
@@ -604,6 +585,25 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 	}
 
 	return nil
+}
+
+func toBNRole(r spectypes.RunnerRole) (bnRole spectypes.BeaconRole, err error) {
+	switch r {
+	case spectypes.RoleCommittee:
+		return spectypes.BNRoleUnknown, errors.New("unexpected committee role")
+	case spectypes.RoleProposer:
+		bnRole = spectypes.BNRoleProposer
+	case spectypes.RoleAggregator:
+		bnRole = spectypes.BNRoleAggregator
+	case spectypes.RoleSyncCommitteeContribution:
+		bnRole = spectypes.BNRoleSyncCommitteeContribution
+	case spectypes.RoleValidatorRegistration:
+		bnRole = spectypes.BNRoleValidatorRegistration
+	case spectypes.RoleVoluntaryExit:
+		bnRole = spectypes.BNRoleVoluntaryExit
+	}
+
+	return
 }
 
 type validatorDutyTrace struct {

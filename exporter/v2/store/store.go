@@ -69,7 +69,7 @@ func (s *DutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace)
 	})
 }
 
-func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (duty *model.ValidatorDutyTrace, err error) {
+func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
 	prefix := s.makeValidatorPrefix(slot, role, index)
 	obj, found, err := s.db.Get(prefix, nil)
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.Beaco
 		return nil, fmt.Errorf("get validator duty from disk: %w", ErrNotFound)
 	}
 
-	duty = new(model.ValidatorDutyTrace)
+	duty := new(model.ValidatorDutyTrace)
 	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
 		return nil, fmt.Errorf("unmarshall validator duty: %w", err)
 	}
@@ -112,28 +112,10 @@ func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.Val
 		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link: %w", err)
 	}
 	if !found {
-		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link from disk: %w", ErrNotFound)
+		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link: %w", ErrNotFound)
 	}
 
 	return spectypes.CommitteeID(obj.Value), nil
-}
-
-func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, mappings map[phase0.ValidatorIndex]spectypes.CommitteeID) error {
-	tx := s.db.Begin()
-	defer tx.Discard()
-
-	for index, id := range mappings {
-		prefix := s.makeValidatorCommitteePrefix(slot, index)
-		if err := s.db.Using(tx).Set(prefix, nil, id[:]); err != nil {
-			return fmt.Errorf("save committee duty link: %w", err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
 }
 
 func (s *DutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
@@ -173,14 +155,6 @@ func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
 
 	if err = s.db.Using(tx).Set(prefix, nil, value); err != nil {
 		return fmt.Errorf("save committee duty: %w", err)
-	}
-
-	prefixes := s.makeCommiteeOperatorPrefixes(duty.Slot, duty.OperatorIDs)
-
-	for _, ref := range prefixes {
-		if err = s.db.Using(tx).Set(ref, nil, prefix); err != nil {
-			return fmt.Errorf("save committee duty index: %w", err)
-		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -230,39 +204,6 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 	return
 }
 
-func (s *DutyTraceStore) GetCommitteeDutiesByOperator(indices []spectypes.OperatorID, slot phase0.Slot) (out []*model.CommitteeDutyTrace, err error) {
-	prefixes := s.makeCommiteeOperatorPrefixes(slot, indices)
-	keys := make([][]byte, 0)
-
-	tx := s.db.BeginRead()
-	defer tx.Discard()
-
-	for _, prefix := range prefixes {
-		obj, found, err := s.db.Get(prefix, nil)
-		if err != nil {
-			return nil, fmt.Errorf("get committee duty index: %w", err)
-		}
-		if !found {
-			return nil, fmt.Errorf("committee duty index not found")
-		}
-		keys = append(keys, obj.Value)
-	}
-
-	err = s.db.GetMany(nil, keys, func(obj basedb.Obj) error {
-		duty := new(model.CommitteeDutyTrace)
-		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
-			return fmt.Errorf("unmarshall committee duty: %w", err)
-		}
-		out = append(out, duty)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return
-}
-
 // role + slot + ?index
 func (s *DutyTraceStore) makeValidatorPrefix(slot phase0.Slot, role spectypes.BeaconRole, index ...phase0.ValidatorIndex) []byte {
 	prefix := make([]byte, 0, len(validatorDutyTraceKey)+4+1)
@@ -290,19 +231,6 @@ func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.Comm
 	prefix = append(prefix, slotToByteSlice(slot)...)
 	prefix = append(prefix, id[:]...)
 	return prefix
-}
-
-// slot + index
-func (s *DutyTraceStore) makeCommiteeOperatorPrefixes(slot phase0.Slot, ii []spectypes.OperatorID) (keys [][]byte) {
-	for _, index := range ii {
-		prefix := make([]byte, 0, len(commiteeOperatorIndexKey)+4+8)
-		prefix = append(prefix, []byte(commiteeOperatorIndexKey)...)
-		prefix = append(prefix, slotToByteSlice(slot)...)
-		prefix = append(prefix, uInt64ToByteSlice(index)...)
-		keys = append(keys, prefix)
-	}
-
-	return
 }
 
 // slot + index

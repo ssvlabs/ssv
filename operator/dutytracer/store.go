@@ -19,6 +19,7 @@ type ValidatorDutyTrace struct {
 	pubkey      spectypes.ValidatorPK
 }
 
+// implemented by DutyStoreMetrics
 type DutyTraceStore interface {
 	SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
 	SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
