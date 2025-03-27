@@ -144,6 +144,13 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			).Debug("response received")
 
 			if bestAttestationData == nil || resp.score > bestScore {
+				if bestAttestationData != nil {
+					logger.Info("updating best attestation data because of higher score",
+						zap.String("client_addr", resp.clientAddr),
+						zap.Float64("score", resp.score),
+						fields.Root(resp.attestationData.BeaconBlockRoot),
+					)
+				}
 				bestAttestationData = resp.attestationData
 				bestScore = resp.score
 				bestClientAddr = resp.clientAddr
@@ -312,7 +319,7 @@ func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
 	}
 
 	logger.Debug("scoring attestation data")
-	score := gc.scoreAttestationData(ctx, attestationData, logger)
+	score := gc.scoreAttestationData(ctx, client, attestationData, logger)
 
 	respCh <- &attestationDataResponse{
 		clientAddr:      addr,
@@ -324,53 +331,97 @@ func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
 // scoreAttestationData generates a score for attestation data.
 // The score is relative to the reward expected from the contents of the attestation.
 func (gc *GoClient) scoreAttestationData(ctx context.Context,
+	client Client,
 	attestationData *phase0.AttestationData,
 	logger *zap.Logger,
 ) float64 {
 	logger = logger.With(
 		fields.BlockRoot(attestationData.BeaconBlockRoot),
 		zap.Uint64("attestation_data_slot", uint64(attestationData.Slot)))
+
 	// Initial score is based on height of source and target epochs.
 	score := float64(attestationData.Source.Epoch + attestationData.Target.Epoch)
+	logger.
+		With(zap.Float64("base_score", score)).
+		Info("base score was set. Fetching slot for block root")
 
-	// Increase score based on the nearness of the head slot.
-	slot, err := gc.blockRootToSlot(attestationData.BeaconBlockRoot, logger)
-	if err != nil {
-		logger.
-			With(zap.Error(err)).
-			Error("failed to obtain slot for block root")
-	} else {
-		score += float64(1) / float64(1+attestationData.Slot-slot)
-	}
+	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
+	defer cancel()
 
-	logger.With(
-		zap.Uint64("head_slot", uint64(slot)),
-		zap.Uint64("source_epoch", uint64(attestationData.Source.Epoch)),
-		zap.Uint64("target_epoch", uint64(attestationData.Target.Epoch)),
-		zap.Float64("score", score),
-	).Debug("scored attestation data")
+	ticker := time.NewTicker(time.Millisecond * 100)
+	defer ticker.Stop()
 
-	return score
-}
+	var (
+		retries uint8
+		start   = time.Now()
+	)
 
-func (gc *GoClient) blockRootToSlot(root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
-	slot, err, _ := gc.blockRootToSlotReqInflight.Do(root, func() (phase0.Slot, error) {
-		cacheResult := gc.blockRootToSlotCache.Get(root)
-		if cacheResult != nil {
-			cachedSlot := cacheResult.Value()
-			logger.
-				With(zap.Uint64("cached_slot", uint64(cachedSlot))).
-				With(zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
-				Debug("obtained slot from cache")
-			return cachedSlot, nil
+	for {
+		slot, err := gc.blockRootToSlot(ctx, client, attestationData.BeaconBlockRoot, logger)
+		if err == nil {
+			// Increase score based on the nearness of the head slot.
+			score += float64(1) / float64(1+attestationData.Slot-slot)
+			logger.With(
+				zap.Duration("elapsed", time.Since(start)),
+				zap.Uint64("head_slot", uint64(slot)),
+				zap.Uint64("source_epoch", uint64(attestationData.Source.Epoch)),
+				zap.Uint64("target_epoch", uint64(attestationData.Target.Epoch)),
+				zap.Float64("score", score),
+			).Debug("scored attestation data")
+
+			return score
 		}
 
-		logger.Debug("slot was not found in cache, returning: '0'")
+		logger.
+			With(zap.Error(err)).
+			Warn("failed to obtain slot for block root")
+		select {
+		case <-ctx.Done():
+			logger.
+				With(zap.Uint8("retry_count", retries)).
+				With(zap.Duration("total_elapsed", time.Since(start))).
+				Error("timeout for obtaining slot for block root was reached. Returning base score")
+			return score
+		case <-ticker.C:
+			retries++
+			logger.
+				With(zap.Uint8("retry_count", retries)).
+				With(zap.Duration("total_elapsed", time.Since(start))).
+				Warn("retrying to obtain slot for block root")
+		}
+	}
+}
 
-		return 0, nil
+func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root phase0.Root, logger *zap.Logger) (phase0.Slot, error) {
+	cacheResult := gc.blockRootToSlotCache.Get(root)
+	if cacheResult != nil {
+		cachedSlot := cacheResult.Value()
+		logger.
+			With(zap.Uint64("cached_slot", uint64(cachedSlot))).
+			With(zap.Int("cache_len", gc.blockRootToSlotCache.Len())).
+			Debug("obtained slot from cache")
+		return cachedSlot, nil
+	}
+
+	logger.Debug("slot was not found in cache. Fetching from the client")
+
+	timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/4)
+	defer cancel()
+
+	blockResponse, err := client.BeaconBlockHeader(timeoutContext, &api.BeaconBlockHeaderOpts{
+		Block: root.String(),
 	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch block header from the client: %w", err)
+	}
 
-	return slot, err
+	slot := blockResponse.Data.Header.Message.Slot
+	gc.blockRootToSlotCache.Set(root, slot, ttlcache.NoTTL)
+	logger.
+		With(zap.Uint64("cached_slot", uint64(slot))).
+		Debug("block root to slot cache updated from the BeaconBlockHeader call")
+
+	return slot, nil
 }
 
 func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
