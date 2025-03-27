@@ -12,8 +12,6 @@ import (
 	"fmt"
 )
 
-const keySize = 2048
-
 // GenerateKeyPairPEM generates a new RSA key pair (2048 bits),
 // and returns the PEM-encoded public and private keys.
 //
@@ -22,7 +20,8 @@ const keySize = 2048
 //
 // The returned error is always expected to be nil as long as keySize remains to be correct.
 func GenerateKeyPairPEM() ([]byte, []byte, error) {
-	// generate random private key (secret)
+	const keySize = 2048
+
 	sk, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate RSA key: %w", err)

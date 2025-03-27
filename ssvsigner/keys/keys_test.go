@@ -1,12 +1,12 @@
-package keys_test
+package keys
 
 import (
+	"crypto/rsa"
 	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsatesting"
 )
 
@@ -23,11 +23,11 @@ QwIDAQAB
 `
 
 func TestGeneratePrivateKey(t *testing.T) {
-	privKey1, err := keys.GeneratePrivateKey()
+	privKey1, err := GeneratePrivateKey()
 	require.NoError(t, err, "Failed to generate private key 1")
 	require.NotNil(t, privKey1, "Generated private key 1 is nil")
 
-	privKey2, err := keys.GeneratePrivateKey()
+	privKey2, err := GeneratePrivateKey()
 	require.NoError(t, err, "Failed to generate private key 2")
 	require.NotNil(t, privKey2, "Generated private key 2 is nil")
 
@@ -35,7 +35,7 @@ func TestGeneratePrivateKey(t *testing.T) {
 }
 
 func TestEncryptDecrypt(t *testing.T) {
-	privKey, err := keys.GeneratePrivateKey()
+	privKey, err := GeneratePrivateKey()
 	require.NoError(t, err, "Failed to generate private key")
 
 	pubKey := privKey.Public()
@@ -49,8 +49,19 @@ func TestEncryptDecrypt(t *testing.T) {
 	require.Equal(t, originalText, decryptedText, "Original and decrypted text do not match")
 }
 
+func TestPrivateKey_Decrypt_InvalidCiphertext(t *testing.T) {
+	privKey, err := GeneratePrivateKey()
+	require.NoError(t, err)
+
+	invalidCiphertext := []byte("invalid ciphertext")
+
+	decrypted, err := privKey.Decrypt(invalidCiphertext)
+	require.Nil(t, decrypted)
+	require.ErrorContains(t, err, "decryption error")
+}
+
 func TestSignVerify(t *testing.T) {
-	privKey, err := keys.GeneratePrivateKey()
+	privKey, err := GeneratePrivateKey()
 	require.NoError(t, err, "Failed to generate private key")
 
 	pubKey := privKey.Public()
@@ -67,8 +78,20 @@ func TestSignVerify(t *testing.T) {
 	require.Error(t, err, "Verification should fail for altered data")
 }
 
+func TestSign_Error(t *testing.T) {
+	privKey := &privateKey{privKey: &rsa.PrivateKey{
+		PublicKey:   rsa.PublicKey{},
+		D:           nil,
+		Primes:      nil,
+		Precomputed: rsa.PrecomputedValues{},
+	}}
+
+	_, err := privKey.Sign([]byte("test"))
+	require.ErrorContains(t, err, "missing public modulus")
+}
+
 func TestBase64Encoding(t *testing.T) {
-	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
+	privKey, err := PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
 	require.NoError(t, err, "Failed to parse private key")
 
 	encodedPrivKey := privKey.Base64()
@@ -89,7 +112,7 @@ func TestBase64Encoding(t *testing.T) {
 }
 
 func TestStorageHash(t *testing.T) {
-	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
+	privKey, err := PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
 	require.NoError(t, err, "Failed to parse private key")
 
 	hash := privKey.StorageHash()
@@ -98,7 +121,7 @@ func TestStorageHash(t *testing.T) {
 }
 
 func TestEKMHash(t *testing.T) {
-	privKey, err := keys.PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
+	privKey, err := PrivateKeyFromString(base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)))
 	require.NoError(t, err, "Failed to parse private key")
 
 	hash := privKey.EKMHash()
@@ -107,7 +130,49 @@ func TestEKMHash(t *testing.T) {
 }
 
 func TestPublicKeyFromString(t *testing.T) {
-	pubKey, err := keys.PublicKeyFromString(base64.StdEncoding.EncodeToString([]byte(sampleRSAPublicKey)))
+	pubKey, err := PublicKeyFromString(base64.StdEncoding.EncodeToString([]byte(sampleRSAPublicKey)))
 	require.NoError(t, err, "Failed to parse public key")
 	require.NotNil(t, pubKey, "Parsed public key is nil")
+}
+
+func TestPublicKeyFromString_Base64DecodeError(t *testing.T) {
+	invalidBase64 := "invalid base64"
+
+	pubKey, err := PublicKeyFromString(invalidBase64)
+	require.Error(t, err)
+	require.Nil(t, pubKey)
+}
+
+func TestPublicKeyFromString_PEMError(t *testing.T) {
+	invalidPEMInBase64 := base64.StdEncoding.EncodeToString([]byte("Not a valid PEM block for RSA public key"))
+
+	pubKey, err := PublicKeyFromString(invalidPEMInBase64)
+	require.Nil(t, pubKey)
+	require.ErrorContains(t, err, "no PEM block found")
+}
+
+func TestPrivateKeyFromString_Base64DecodeError(t *testing.T) {
+	invalidBase64 := "invalid base64"
+
+	privKey, err := PrivateKeyFromString(invalidBase64)
+	require.Error(t, err)
+	require.Nil(t, privKey)
+	require.Contains(t, err.Error(), "decode base64:")
+}
+
+func TestPrivateKeyFromString_PEMError(t *testing.T) {
+	invalidPEMInBase64 := base64.StdEncoding.EncodeToString([]byte("Not a valid RSA key PEM block"))
+
+	privKey, err := PrivateKeyFromString(invalidPEMInBase64)
+	require.Error(t, err)
+	require.Nil(t, privKey)
+	require.Contains(t, err.Error(), "pem to private key:")
+}
+
+func TestPublicKey_Base64_MalformedKey(t *testing.T) {
+	invalidPub := &publicKey{pubKey: &rsa.PublicKey{N: nil, E: 0}}
+
+	s, err := invalidPub.Base64()
+	require.Error(t, err)
+	require.Empty(t, s)
 }
