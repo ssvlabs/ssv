@@ -40,10 +40,12 @@ import (
 // It uses the operator's private key to decrypt incoming shares.
 //
 // The underlying wallet data is stored in the provided db.
-// Signing along with slashing protection are managed with eth2-key-manager's signer.SimpleSigner.
+// Signing along with slashing protection are managed with eth2-key-manager's slashingprotection.NewNormalProtection.
 //
-// For external slashing protection checks and updates it uses SlashingProtector with the same
-// slashingprotection.NewNormalProtection instance as signer.SimpleSigner.
+// There are two wrappers for slashingprotection.NewNormalProtection:
+//   - signer.SimpleSigner for internal checks and updates
+//     (we cannot use SlashingProtector because slashing protection is embedded to signing methods)
+//   - SlashingProtector for external checks and updates
 //
 // All slashing checks are performed prior to any signing attempt. If a slashable
 // condition is detected, the signing method will return an error.
