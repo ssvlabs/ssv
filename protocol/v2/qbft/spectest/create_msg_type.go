@@ -5,13 +5,13 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv-spec/qbft"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 type CreateMsgSpecTest struct {
@@ -20,7 +20,7 @@ type CreateMsgSpecTest struct {
 	Value [32]byte
 	// ISSUE 217: rename to value
 	StateValue                                       []byte
-	Round                                            qbft.Round
+	Round                                            specqbft.Round
 	RoundChangeJustifications, PrepareJustifications []*spectypes.SignedSSVMessage
 	CreateType                                       string
 	ExpectedRoot                                     string
@@ -98,12 +98,12 @@ func createRoundChange(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, er
 	state := &specqbft.State{
 		CommitteeMember:  spectestingutils.TestingCommitteeMember(ks),
 		ID:               []byte{1, 2, 3, 4},
-		PrepareContainer: qbft.NewMsgContainer(),
+		PrepareContainer: specqbft.NewMsgContainer(),
 	}
 	signer := spectestingutils.NewOperatorSigner(ks, 1)
 
 	if len(test.PrepareJustifications) > 0 {
-		prepareMsg, err := qbft.DecodeMessage(test.PrepareJustifications[0].SSVMessage.Data)
+		prepareMsg, err := specqbft.DecodeMessage(test.PrepareJustifications[0].SSVMessage.Data)
 		if err != nil {
 			return nil, err
 		}

@@ -42,7 +42,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -404,7 +403,8 @@ func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *comm
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
-	if msg.MsgType == spectypes.SSVConsensusMsgType {
+	switch msg.MsgType {
+	case spectypes.SSVConsensusMsgType:
 		// Process proposal messages for committee consensus only to get the roots
 		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
 			return nil
@@ -416,7 +416,7 @@ func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *comm
 		}
 
 		return ncv.OnProposalMsg(msg)
-	} else if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
+	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return err
@@ -713,7 +713,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
 	vc, ok := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
 	if ok {
-		vc.RemoveShare(v.Share.Share.ValidatorIndex)
+		vc.RemoveShare(v.Share.ValidatorIndex)
 		if len(vc.Shares) == 0 {
 			deletedCommittee := c.validatorsMap.RemoveCommittee(v.Share.CommitteeID())
 			if deletedCommittee == nil {
@@ -778,7 +778,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.SSVShare = share
 		opts.Operator = operator
 
-		committeeOpIDs := types.OperatorIDsFromOperators(operator.Committee)
+		committeeOpIDs := ssvtypes.OperatorIDsFromOperators(operator.Committee)
 
 		logger := c.logger.With([]zap.Field{
 			zap.String("committee", fields.FormatCommittee(committeeOpIDs)),
@@ -1112,7 +1112,7 @@ func SetupRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.SSVShare.Share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(options.NetworkConfig.DomainType, options.SSVShare.ValidatorPubKey[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
@@ -1126,15 +1126,15 @@ func SetupRunners(
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex, options.SSVShare.SharePubKey)
+			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.ValidatorPubKey, options.SSVShare.ValidatorIndex, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role], err = runner.NewProposerRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti)
 		case spectypes.RoleAggregator:
-			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex)
+			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.ValidatorPubKey, options.SSVShare.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
 			runners[role], err = runner.NewAggregatorRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
 		case spectypes.RoleSyncCommitteeContribution:
-			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.ValidatorIndex)
+			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig.Beacon.GetBeaconNetwork(), options.SSVShare.ValidatorPubKey, options.SSVShare.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:

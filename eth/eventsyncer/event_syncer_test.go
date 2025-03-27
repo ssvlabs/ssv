@@ -106,7 +106,7 @@ func TestEventSyncer(t *testing.T) {
 	const chainLength = 30
 	for i := 0; i <= chainLength; i++ {
 		// Emit event OperatorAdded
-		tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, pckd, big.NewInt(100_000_000))
+		tx, err := boundContract.RegisterOperator(auth, pckd, big.NewInt(100_000_000))
 		require.NoError(t, err)
 		sim.Commit()
 		receipt, err := sim.Client().TransactionReceipt(ctx, tx.Hash())

@@ -227,7 +227,7 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	}
 	var meshMessageDeliveriesWeight float64
 	if meshScoringEnabled {
-		meshMessageDeliveriesWeight = -(opts.maxScore() / (opts.Topic.TopicWeight * math.Pow(meshMessageDeliveriesThreshold, 2)))
+		meshMessageDeliveriesWeight = -(opts.maxScore() / (opts.Topic.TopicWeight * meshMessageDeliveriesThreshold * meshMessageDeliveriesThreshold))
 	}
 	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * opts.Topic.MeshDeliveryCapFactor
 

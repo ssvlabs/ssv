@@ -5,18 +5,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ssvlabs/ssv/network/discovery"
-	"github.com/ssvlabs/ssv/utils/ttl"
-
-	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
@@ -115,7 +114,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		ch.peerInfos.AddPeerInfo(pid, conn.RemoteMultiaddr(), conn.Stat().Direction)
 
 		// Connection is inbound -> Wait for successful handshake request.
-		if conn.Stat().Direction == network.DirInbound {
+		if conn.Stat().Direction == libp2pnetwork.DirInbound {
 			// Wait for peer to initiate handshake.
 			logger.Debug("waiting for peer to initiate handshake")
 			start := time.Now()
@@ -140,7 +139,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 						break Wait
 					}
 
-					if net.Connectedness(pid) != network.Connected {
+					if net.Connectedness(pid) != libp2pnetwork.Connected {
 						return errors.New("lost connection")
 					}
 				}

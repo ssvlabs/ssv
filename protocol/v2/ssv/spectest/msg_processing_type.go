@@ -50,7 +50,7 @@ func (test *MsgProcessingSpecTest) TestName() string {
 }
 
 func (test *MsgProcessingSpecTest) FullName() string {
-	return strings.Replace(test.ParentName+"_"+test.Name, " ", "_", -1)
+	return strings.ReplaceAll(test.ParentName+"_"+test.Name, " ", "_")
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
@@ -315,7 +315,7 @@ func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*
 			SignedSSVMessage: msg,
 			SSVMessage:       &spectypes.SSVMessage{},
 		}
-		dmsg.SSVMessage.MsgType = spectypes.SSVConsensusMsgType
+		dmsg.MsgType = spectypes.SSVConsensusMsgType
 	} else {
 		dmsg, err = queue.DecodeSignedSSVMessage(msg)
 	}
