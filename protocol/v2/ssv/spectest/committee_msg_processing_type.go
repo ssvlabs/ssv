@@ -11,17 +11,17 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/ssv"
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 type CommitteeSpecTest struct {
@@ -31,7 +31,7 @@ type CommitteeSpecTest struct {
 	Input                  []interface{} // Can be a types.Duty or a *types.SignedSSVMessage
 	PostDutyCommitteeRoot  string
 	PostDutyCommittee      spectypes.Root `json:"-"` // Field is ignored by encoding/json
-	OutputMessages         []*types.PartialSignatureMessages
+	OutputMessages         []*spectypes.PartialSignatureMessages
 	BeaconBroadcastedRoots []string
 	ExpectedError          string
 }
@@ -41,7 +41,7 @@ func (test *CommitteeSpecTest) TestName() string {
 }
 
 func (test *CommitteeSpecTest) FullName() string {
-	return strings.Replace(test.ParentName+"_"+test.Name, " ", "_", -1)
+	return strings.ReplaceAll(test.ParentName+"_"+test.Name, " ", "_")
 }
 
 // RunAsPartOfMultiTest runs the test as part of a MultiCommitteeSpecTest
@@ -54,7 +54,7 @@ func (test *CommitteeSpecTest) RunAsPartOfMultiTest(t *testing.T) {
 		require.NoError(t, lastErr)
 	}
 
-	broadcastedMsgs := make([]*types.SignedSSVMessage, 0)
+	broadcastedMsgs := make([]*spectypes.SignedSSVMessage, 0)
 	broadcastedRoots := make([]phase0.Root, 0)
 	for _, runner := range test.Committee.Runners {
 		network := runner.GetNetwork().(*spectestingutils.TestingNetwork)
@@ -162,7 +162,7 @@ func (tests *MultiCommitteeSpecTest) overrideStateComparison(t *testing.T) {
 }
 
 func (tests *MultiCommitteeSpecTest) GetPostState(logger *zap.Logger) (interface{}, error) {
-	ret := make(map[string]types.Root, len(tests.Tests))
+	ret := make(map[string]spectypes.Root, len(tests.Tests))
 	for _, test := range tests.Tests {
 		err := test.runPreTesting(logger)
 		if err != nil && test.ExpectedError != err.Error() {
