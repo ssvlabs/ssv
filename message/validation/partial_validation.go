@@ -9,7 +9,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -145,7 +144,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	signerStateBySlot := state.GetOrCreate(signer)
 
 	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
-	if role != types.RoleCommittee { // Rule only for validator runners
+	if role != spectypes.RoleCommittee { // Rule only for validator runners
 		maxSlot := signerStateBySlot.MaxSlot()
 		if maxSlot != 0 && maxSlot > partialSignatureMessages.Slot {
 			e := ErrSlotAlreadyAdvanced
@@ -206,7 +205,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 				return ErrTripleValidatorIndexInPartialSignatures
 			}
 		}
-	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == types.RoleSyncCommitteeContribution {
+	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleSyncCommitteeContribution {
 		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync committee contribution duty
 		if partialSignatureMessageCount > maxSignatures {
 			e := ErrTooManyPartialSignatureMessages

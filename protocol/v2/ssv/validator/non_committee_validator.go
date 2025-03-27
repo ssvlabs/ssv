@@ -19,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -49,7 +48,7 @@ type CommitteeObserverOptions struct {
 	Storage           *storage.ParticipantStores
 	Operator          *spectypes.CommitteeMember
 	OperatorSigner    ssvtypes.OperatorSigner
-	NewDecidedHandler qbftctrl.NewDecidedHandler
+	NewDecidedHandler qbftcontroller.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore
 	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
@@ -89,7 +88,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	partialSigMessages := &spectypes.PartialSignatureMessages{}
-	if err := partialSigMessages.Decode(msg.SSVMessage.GetData()); err != nil {
+	if err := partialSigMessages.Decode(msg.GetData()); err != nil {
 		return fmt.Errorf("failed to get partial signature message from network message %w", err)
 	}
 	if partialSigMessages.Type != spectypes.PostConsensusPartialSig {

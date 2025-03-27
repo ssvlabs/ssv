@@ -391,9 +391,9 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		const numberOfBeaconServers = 3
 		var (
 			beaconServersURLs []string
-			sourceEpoch       phase0.Epoch = testEpoch
-			bestSourceEpoch   phase0.Epoch = testEpoch + 1 // epoch number has a lot of weight, increasing its value  makes it 'best'
-			targetEpoch       phase0.Epoch = testEpoch
+			sourceEpoch       = testEpoch
+			bestSourceEpoch   = testEpoch + 1 // epoch number has a lot of weight, increasing its value  makes it 'best'
+			targetEpoch       = testEpoch
 		)
 		for i := 0; i < numberOfBeaconServers; i++ {
 			lastServer := i == numberOfBeaconServers-1

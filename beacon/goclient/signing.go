@@ -34,7 +34,8 @@ func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
 }
 
 func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
-	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
+	switch domain {
+	case spectypes.DomainApplicationBuilder: // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
 			CurrentVersion:        gc.BeaconConfig().GenesisForkVersion(),
@@ -47,7 +48,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[:], domain[:])
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
-	} else if domain == spectypes.DomainVoluntaryExit {
+	case spectypes.DomainVoluntaryExit:
 		return gc.computeVoluntaryExitDomain()
 	}
 

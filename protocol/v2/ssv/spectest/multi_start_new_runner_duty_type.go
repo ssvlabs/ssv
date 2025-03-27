@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
@@ -61,7 +60,7 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 				continue
 			}
 
-			msg1 := &types.PartialSignatureMessages{}
+			msg1 := &spectypes.PartialSignatureMessages{}
 			require.NoError(t, msg1.Decode(msg.Data))
 			msg2 := test.OutputMessages[index]
 			require.Len(t, msg1.Messages, len(msg2.Messages))

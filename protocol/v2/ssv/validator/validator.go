@@ -199,7 +199,7 @@ func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
-	if len(msg.SSVMessage.GetData()) == 0 {
+	if len(msg.GetData()) == 0 {
 		return errors.New("msg data is invalid")
 	}
 

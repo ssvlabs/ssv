@@ -164,7 +164,7 @@ func TestWalletStorage(t *testing.T) {
 			err := signerStorage.SaveWallet(wallet)
 			if err != nil {
 				if test.error != nil {
-					require.Equal(t, test.error.Error(), err.Error())
+					require.Equal(t, test.Error(), err.Error())
 				} else {
 					t.Error(err)
 				}
@@ -175,7 +175,7 @@ func TestWalletStorage(t *testing.T) {
 			fetched, err := signerStorage.OpenWallet()
 			if err != nil {
 				if test.error != nil {
-					require.Equal(t, test.error.Error(), err.Error())
+					require.Equal(t, test.Error(), err.Error())
 				} else {
 					t.Error(err)
 				}
