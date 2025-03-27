@@ -339,7 +339,7 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectyp
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		opPubKey, privateKey, err := rsaencryption.GenerateRSAKeyPairPEM()
+		opPubKey, privateKey, err := rsaencryption.GenerateKeyPairPEM()
 		if err != nil {
 			panic(err)
 		}

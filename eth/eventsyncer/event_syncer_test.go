@@ -94,7 +94,7 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate operator key
-	opPubKey, _, err := rsaencryption.GenerateRSAKeyPairPEM()
+	opPubKey, _, err := rsaencryption.GenerateKeyPairPEM()
 	require.NoError(t, err)
 
 	pkstr := base64.StdEncoding.EncodeToString(opPubKey)

@@ -12,14 +12,16 @@ import (
 	"fmt"
 )
 
-var keySize = 2048
+const keySize = 2048
 
-// GenerateRSAKeyPairPEM generates a new RSA key pair (2048 bits),
+// GenerateKeyPairPEM generates a new RSA key pair (2048 bits),
 // and returns the PEM-encoded public and private keys.
 //
 // The public key is returned in PKIX format with type "RSA PUBLIC KEY".
 // The private key is returned in PKCS#1 format with type "RSA PRIVATE KEY".
-func GenerateRSAKeyPairPEM() ([]byte, []byte, error) {
+//
+// The returned error is always expected to be nil as long as keySize remains to be correct.
+func GenerateKeyPairPEM() ([]byte, []byte, error) {
 	// generate random private key (secret)
 	sk, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
@@ -35,12 +37,12 @@ func GenerateRSAKeyPairPEM() ([]byte, []byte, error) {
 	return pkPem, skPem, nil
 }
 
-// DecryptRSA decrypts the given RSA-encrypted key using the provided private key,
+// Decrypt decrypts the given RSA-encrypted key using the provided private key,
 // and returns the original plaintext key.
 //
 // The input must be a ciphertext encrypted with the corresponding RSA public key,
 // and should match the PKCS#1 v1.5 padding format.
-func DecryptRSA(sk *rsa.PrivateKey, encryptedKey []byte) ([]byte, error) {
+func Decrypt(sk *rsa.PrivateKey, encryptedKey []byte) ([]byte, error) {
 	return rsa.DecryptPKCS1v15(rand.Reader, sk, encryptedKey)
 }
 
