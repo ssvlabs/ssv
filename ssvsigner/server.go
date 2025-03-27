@@ -33,14 +33,12 @@ type Server struct {
 	operatorPrivKey keys.OperatorPrivateKey
 	remoteSigner    remoteSigner
 	router          *router.Router
-	keystorePasswd  string
 }
 
 func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
 	remoteSigner remoteSigner,
-	keystorePasswd string,
 ) *Server {
 	r := router.New()
 
@@ -49,7 +47,6 @@ func NewServer(
 		operatorPrivKey: operatorPrivKey,
 		remoteSigner:    remoteSigner,
 		router:          r,
-		keystorePasswd:  keystorePasswd,
 	}
 
 	r.GET(pathValidators, server.handleListValidators)
@@ -99,15 +96,30 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	var importKeystoreReq web3signer.ImportKeystoreRequest
 
 	for i, share := range req.ShareKeys {
-		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(share.EncryptedPrivKey, share.PubKey)
+		logger := logger.With(zap.Stringer("share_pubkey", share.PubKey))
+
+		// The password is used to encrypt a keystore and to decrypt and save it in web3signer afterwards.
+		// So, there's no need to store the password. We can just generate a random password for each keystore.
+		keystorePassword := r.generateRandomPassword()
+
+		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(
+			share.EncryptedPrivKey,
+			share.PubKey,
+			keystorePassword,
+		)
 		if err != nil {
-			logger.Warn("get keystore from encrypted share", zap.Int("index", i), zap.Error(err))
-			r.writeJSONErr(ctx, logger, fasthttp.StatusUnprocessableEntity, fmt.Errorf("get keystore from encrypted share index %d: %w", i, err))
+			logger.Warn("get keystore from encrypted share", zap.Error(err))
+			r.writeJSONErr(
+				ctx,
+				logger,
+				fasthttp.StatusUnprocessableEntity,
+				fmt.Errorf("get keystore from encrypted share index %d: %w", i, err),
+			)
 			return
 		}
 
 		importKeystoreReq.Keystores = append(importKeystoreReq.Keystores, keystoreJSON)
-		importKeystoreReq.Passwords = append(importKeystoreReq.Passwords, r.keystorePasswd)
+		importKeystoreReq.Passwords = append(importKeystoreReq.Passwords, keystorePassword)
 	}
 
 	resp, err := r.remoteSigner.ImportKeystore(ctx, importKeystoreReq)
@@ -134,7 +146,11 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	r.writeJSON(ctx, logger, resp)
 }
 
-func (r *Server) keystoreJSONFromEncryptedShare(encryptedPrivKey hexutil.Bytes, sharePubKey phase0.BLSPubKey) (string, error) {
+func (r *Server) keystoreJSONFromEncryptedShare(
+	encryptedPrivKey hexutil.Bytes,
+	sharePubKey phase0.BLSPubKey,
+	keystorePassword string,
+) (string, error) {
 	sharePrivKeyHex, err := r.operatorPrivKey.Decrypt(encryptedPrivKey)
 	if err != nil {
 		return "", fmt.Errorf("decrypt share: %w", err)
@@ -154,7 +170,7 @@ func (r *Server) keystoreJSONFromEncryptedShare(encryptedPrivKey hexutil.Bytes, 
 		return "", errors.New("derived public key does not match expected public key")
 	}
 
-	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, r.keystorePasswd)
+	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
 		return "", fmt.Errorf("generate share keystore: %w", err)
 	}
@@ -165,6 +181,10 @@ func (r *Server) keystoreJSONFromEncryptedShare(encryptedPrivKey hexutil.Bytes, 
 	}
 
 	return string(keystoreJSON), nil
+}
+
+func (r *Server) generateRandomPassword() string {
+	return "password" // TODO
 }
 
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {

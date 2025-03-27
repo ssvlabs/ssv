@@ -18,12 +18,11 @@ import (
 )
 
 type CLI struct {
-	ListenAddr              string `env:"LISTEN_ADDR" default:":8080" required:""` // TODO: finalize port
-	Web3SignerEndpoint      string `env:"WEB3SIGNER_ENDPOINT" required:""`
-	PrivateKey              string `env:"PRIVATE_KEY" xor:"keys" required:""`
-	PrivateKeyFile          string `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files"`
-	PasswordFile            string `env:"PASSWORD_FILE" and:"files"`
-	ShareKeystorePassphrase string `env:"SHARE_KEYSTORE_PASSPHRASE" default:"password" required:""` // TODO: finalize default password
+	ListenAddr         string `env:"LISTEN_ADDR" default:":8080" required:""` // TODO: finalize port
+	Web3SignerEndpoint string `env:"WEB3SIGNER_ENDPOINT" required:""`
+	PrivateKey         string `env:"PRIVATE_KEY" xor:"keys" required:""`
+	PrivateKeyFile     string `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files"`
+	PasswordFile       string `env:"PASSWORD_FILE" and:"files"`
 }
 
 func main() {
@@ -52,7 +51,6 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.String("private_key_file", cli.PrivateKeyFile),
 		zap.String("password_file", cli.PasswordFile),
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
-		zap.Bool("got_share_keystore_passphrase", cli.ShareKeystorePassphrase != ""),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
@@ -88,7 +86,7 @@ func run(logger *zap.Logger, cli CLI) error {
 
 	logger.Info("Starting ssv-signer server", zap.String("addr", cli.ListenAddr))
 
-	srv := ssvsigner.NewServer(logger, operatorPrivateKey, web3SignerClient, cli.ShareKeystorePassphrase)
+	srv := ssvsigner.NewServer(logger, operatorPrivateKey, web3SignerClient)
 	if err := fasthttp.ListenAndServe(cli.ListenAddr, srv.Handler()); err != nil {
 		return fmt.Errorf("listen on %v: %w", cli.ListenAddr, err)
 	}
