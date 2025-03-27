@@ -1045,7 +1045,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("operator exists and not removed", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		err := validator.validateSignerExists(1)
+		err := validator.validateSignerIsKnown(1)
 		require.NoError(t, err)
 	})
 
@@ -1056,7 +1056,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{999}).Return(false, nil)
 
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
-		err := validator.validateSignerExists(999)
+		err := validator.validateSignerIsKnown(999)
 		expectedErr := ErrUnknownOperator
 		expectedErr.got = spectypes.OperatorID(999)
 
@@ -1072,14 +1072,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Return(false, fmt.Errorf("validation error"))
 
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
-		err := validator.validateSignerExists(6)
+		err := validator.validateSignerIsKnown(6)
 		expectedErr := ErrOperatorValidation
 		expectedErr.got = spectypes.OperatorID(6)
 
 		require.ErrorIs(t, err, expectedErr)
 	})
 
-	// Test that validateSignedSSVMessage returns the error from validateSignerExists
+	// Test that validateSignedSSVMessage returns the error from validateSignerIsKnown
 	// when the error is not ErrUnknownOperator
 	t.Run("signer exists error propagation", func(t *testing.T) {
 		localCtrl := gomock.NewController(t)

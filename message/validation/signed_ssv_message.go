@@ -75,8 +75,8 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 			return err
 		}
 
-		// Rule: Signer must exist (not removed)
-		if err := mv.validateSignerExists(signer); err != nil {
+		// Rule: Signer must exist
+		if err := mv.validateSignerIsKnown(signer); err != nil {
 			return err
 		}
 
@@ -181,8 +181,8 @@ func (mv *messageValidator) validateSignerUnique(signer, prevSigner spectypes.Op
 	return nil
 }
 
-// validateSignerExists checks if the operator exists.
-func (mv *messageValidator) validateSignerExists(signer spectypes.OperatorID) error {
+// validateSignerIsKnown checks if the signer is known.
+func (mv *messageValidator) validateSignerIsKnown(signer spectypes.OperatorID) error {
 	exists, err := mv.operators.OperatorsExist(nil, []spectypes.OperatorID{signer})
 	if err != nil {
 		e := ErrOperatorValidation
