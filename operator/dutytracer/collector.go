@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -41,6 +42,9 @@ type Collector struct {
 	store      DutyTraceStore
 	client     DomainDataProvider
 	validators registrystorage.ValidatorStore
+
+	currentSlot     atomic.Uint64
+	lastEvictedSlot atomic.Uint64
 }
 
 type DomainDataProvider interface {
@@ -88,6 +92,7 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 		case <-ticker.Next():
 			currentSlot := ticker.Slot() + offset // optional offset
 
+			c.currentSlot.Store(uint64(currentSlot))
 			// evict committee traces
 			committeThreshold := currentSlot - ttlCommittee
 			evicted := c.evictCommitteeTraces(committeThreshold)
@@ -105,6 +110,8 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 
 			// remove old SC roots
 			c.syncCommitteeRootsCache.DeleteExpired()
+
+			c.lastEvictedSlot.Store(uint64(validatorThreshold))
 		}
 	}
 }
@@ -117,6 +124,10 @@ so when we request a certain trace we return both of them:
 .LoadOrStore is being used to take care of the case when two goroutines try to create the same trace at the same time
 */
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace) {
+	if uint64(slot) <= c.lastEvictedSlot.Load() {
+		c.logger.Warn("validator trace late arrival", fields.Slot(slot), zap.Uint64("lastEvictedSlot", c.lastEvictedSlot.Load()), zap.Uint64("currentSlot", c.currentSlot.Load()))
+	}
+
 	validatorSlots, found := c.validatorTraces.Load(vPubKey)
 	if !found {
 		validatorSlots, _ = c.validatorTraces.LoadOrStore(vPubKey, NewTypedSyncMap[phase0.Slot, *validatorDutyTrace]())
@@ -157,6 +168,10 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 }
 
 func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) *committeeDutyTrace {
+	if uint64(slot) <= c.lastEvictedSlot.Load() {
+		c.logger.Warn("committee trace late arrival", fields.Slot(slot), zap.Uint64("lastEvictedSlot", c.lastEvictedSlot.Load()), zap.Uint64("currentSlot", c.currentSlot.Load()))
+	}
+
 	committeeSlots, found := c.committeeTraces.Load(committeeID)
 	if !found {
 		committeeSlots, _ = c.committeeTraces.LoadOrStore(committeeID, NewTypedSyncMap[phase0.Slot, *committeeDutyTrace]())
@@ -474,7 +489,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			if len(msg.SignedSSVMessage.FullData) > 0 {
 				// save proposal data
 				if subMsg.MsgType == specqbft.ProposalMsgType {
-					c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData))) // TODO(me): remove this
+					// c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData))) // TODO(me): remove this
 					// committee duty will contain the BeaconVote data
 					trace.CommitteeDutyTrace.ProposalData = msg.SignedSSVMessage.FullData
 				}
@@ -520,7 +535,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					var data = new(spectypes.ValidatorConsensusData)
 					err := data.Decode(msg.SignedSSVMessage.FullData)
 					if err != nil {
-						c.logger.Error("decode validator proposal data", zap.Error(err), fields.Slot(slot), fields.Validator(validatorPK[:]))
+						// c.logger.Error("decode validator proposal data", zap.Error(err), fields.Slot(slot), fields.Validator(validatorPK[:]))
 						return
 					}
 
