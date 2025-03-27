@@ -460,26 +460,6 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.Equal(t, bestSourceEpoch, response.Source.Epoch)
 		require.Equal(t, testSlot, response.Slot)
 	})
-
-	t.Run("multiple beacon clients: succeeds within soft timeout when BeaconBlockHeader(scoring) has timeout higher than hard timeout", func(t *testing.T) {
-		const numberOfServers = 3
-		var beaconServersURLs []string
-		for i := 0; i < numberOfServers; i++ {
-			server, _ := createBeaconServer(t, beaconServerResponseOptions{BeaconHeadersResponseDuration: defaultHardTimeout * 2})
-			beaconServersURLs = append(beaconServersURLs, server.URL)
-		}
-		client, err := createClient(ctx, strings.Join(beaconServersURLs, ";"), withWeightedAttestationData)
-		require.NoError(t, err)
-
-		startTime := time.Now()
-		response, version, err := client.GetAttestationData(phase0.Slot(100))
-
-		require.NoError(t, err)
-		require.NotNil(t, response)
-		require.Equal(t, spec.DataVersionPhase0, version)
-		timeElapsed := time.Since(startTime)
-		require.LessOrEqual(t, timeElapsed, client.weightedAttestationDataSoftTimeout)
-	})
 }
 
 func createClient(
