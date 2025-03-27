@@ -25,7 +25,6 @@ type ServerTestSuite struct {
 	operatorPrivKey *testOperatorPrivateKey
 	remoteSigner    *testRemoteSigner
 	server          *Server
-	password        string
 	pubKey          *testOperatorPublicKey
 }
 
@@ -70,9 +69,7 @@ func (s *ServerTestSuite) SetupTest() {
 		},
 	}
 
-	s.password = "testpassword"
-
-	s.server = NewServer(s.logger, s.operatorPrivKey, s.remoteSigner, s.password)
+	s.server = NewServer(s.logger, s.operatorPrivKey, s.remoteSigner)
 }
 
 func (s *ServerTestSuite) ServeHTTP(method, path string, body []byte) (*fasthttp.Response, error) {
