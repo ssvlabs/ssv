@@ -1103,7 +1103,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Return(false, customErr).
 			AnyTimes()
 
-		localValidator := New(netCfg, validatorStore, localMockOperators, dutyStore, signatureVerifier).(*messageValidator)
+		localValidator := New(netCfg, validatorStore, localMockOperators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
 		testMsg := &spectypes.SignedSSVMessage{
 			OperatorIDs: []spectypes.OperatorID{1, 2, 3},

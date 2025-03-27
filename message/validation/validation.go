@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"slices"
 	"sync"
 	"time"
@@ -54,7 +53,6 @@ type messageValidator struct {
 	dutyStore             *dutystore.Store
 	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 	pectraForkEpoch       phase0.Epoch
-	nodeStorage           operatorstorage.Storage
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
