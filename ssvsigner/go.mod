@@ -1,3 +1,9 @@
+// ssvsigner intentionally has its own go.mod because it's designed to be moved to a separate repository in the future.
+// To make local development easier, it's recommended to add the ssvsigner directory to the go.work file:
+// use (
+// 	.
+// 	./ssvsigner
+// )
 module github.com/ssvlabs/ssv/ssvsigner
 
 go 1.22.6
