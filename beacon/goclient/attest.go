@@ -143,7 +143,7 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 				zap.Int("errored", errored),
 			).Debug("response received")
 
-			if bestAttestationData == nil || resp.score > bestScore {
+			if resp.score > bestScore {
 				if bestAttestationData != nil {
 					logger.Info("updating best attestation data because of higher score",
 						zap.String("client_addr", resp.clientAddr),
@@ -411,8 +411,13 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 	blockResponse, err := client.BeaconBlockHeader(timeoutContext, &api.BeaconBlockHeaderOpts{
 		Block: root.String(),
 	})
+
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch block header from the client: %w", err)
+	}
+
+	if !isBlockHeaderResponseValid(blockResponse) {
+		return 0, fmt.Errorf("block header response was not valid")
 	}
 
 	slot := blockResponse.Data.Header.Message.Slot
@@ -422,6 +427,13 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 		Debug("block root to slot cache updated from the BeaconBlockHeader call")
 
 	return slot, nil
+}
+
+func isBlockHeaderResponseValid(response *api.Response[*eth2apiv1.BeaconBlockHeader]) bool {
+	if response == nil || response.Data == nil || response.Data.Header == nil || response.Data.Header.Message == nil {
+		return false
+	}
+	return true
 }
 
 func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
