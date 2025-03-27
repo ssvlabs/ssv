@@ -130,7 +130,7 @@ var (
 	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 	ErrEncodeOperators                         = Error{text: "encode operators", reject: true}
-	ErrUnknownOperator                         = Error{text: "operator is unknown", reject: true}
+	ErrUnknownOperator                         = Error{text: "operator is unknown"}
 	ErrOperatorValidation                      = Error{text: "failed to validate operator data"}
 )
 
