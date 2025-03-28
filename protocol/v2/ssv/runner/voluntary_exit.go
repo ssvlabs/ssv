@@ -16,8 +16,8 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // ValidatorDuty runner for validator voluntary exit duty
@@ -26,7 +26,7 @@ type VoluntaryExitRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         signing.BeaconSigner
+	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
@@ -39,7 +39,7 @@ func NewVoluntaryExitRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 ) (Runner, error) {
 
@@ -233,7 +233,7 @@ func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *VoluntaryExitRunner) GetSigner() signing.BeaconSigner {
+func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *VoluntaryExitRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

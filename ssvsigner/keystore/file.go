@@ -3,6 +3,7 @@ package keystore
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,7 +13,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 
-	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 const (
@@ -22,7 +23,7 @@ const (
 // DecryptKeystore decrypts a keystore JSON file using the provided password.
 func DecryptKeystore(encryptedJSONData []byte, password string) ([]byte, error) {
 	if strings.TrimSpace(password) == "" {
-		return nil, fmt.Errorf("Password required for decrypting keystore")
+		return nil, errors.New("password required for decrypting keystore")
 	}
 
 	// Unmarshal the JSON-encoded data
@@ -43,7 +44,7 @@ func DecryptKeystore(encryptedJSONData []byte, password string) ([]byte, error) 
 // EncryptKeystore encrypts a private key using the provided password, adds in the public key and returns the encrypted keystore JSON data.
 func EncryptKeystore(privkey []byte, pubKeyBase64, password string) ([]byte, error) {
 	if strings.TrimSpace(password) == "" {
-		return nil, fmt.Errorf("Password required for encrypting keystore")
+		return nil, errors.New("password required for encrypting keystore")
 	}
 
 	// Encrypt the private key using keystorev4
@@ -63,26 +64,27 @@ func EncryptKeystore(privkey []byte, pubKeyBase64, password string) ([]byte, err
 }
 
 func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.OperatorPrivateKey, error) {
-	// nolint: gosec
+	//nolint: gosec
 	encryptedJSON, err := os.ReadFile(encryptedPrivateKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("could not read PEM file: %w", err)
 	}
 
-	// nolint: gosec
+	//nolint: gosec
 	keyStorePassword, err := os.ReadFile(passwordFile)
 	if err != nil {
 		return nil, fmt.Errorf("could not read password file: %w", err)
 	}
 
 	if len(bytes.TrimSpace(keyStorePassword)) == 0 {
-		return nil, fmt.Errorf("password file is empty")
+		return nil, errors.New("password file is empty")
 	}
 
 	decryptedKeystore, err := DecryptKeystore(encryptedJSON, string(keyStorePassword))
 	if err != nil {
 		return nil, fmt.Errorf("could not decrypt operator private key keystore: %w", err)
 	}
+
 	operatorPrivKey, err := keys.PrivateKeyFromBytes(decryptedKeystore)
 	if err != nil {
 		return nil, fmt.Errorf("could not extract operator private key from file: %w", err)

@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ssvlabs/ssv/operator/keystore"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 var generateOperatorKeysCmd = &cobra.Command{

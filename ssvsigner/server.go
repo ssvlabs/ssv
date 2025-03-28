@@ -16,8 +16,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/operator/keys"
-	"github.com/ssvlabs/ssv/operator/keystore"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -33,14 +33,12 @@ type Server struct {
 	operatorPrivKey keys.OperatorPrivateKey
 	remoteSigner    remoteSigner
 	router          *router.Router
-	keystorePasswd  string
 }
 
 func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
 	remoteSigner remoteSigner,
-	keystorePasswd string,
 ) *Server {
 	r := router.New()
 
@@ -49,7 +47,6 @@ func NewServer(
 		operatorPrivKey: operatorPrivKey,
 		remoteSigner:    remoteSigner,
 		router:          r,
-		keystorePasswd:  keystorePasswd,
 	}
 
 	r.GET(pathValidators, server.handleListValidators)
@@ -90,8 +87,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	var req AddValidatorRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("unmarshal request body", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("failed to parse request: %w", err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
 
@@ -100,16 +96,30 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	var importKeystoreReq web3signer.ImportKeystoreRequest
 
 	for i, share := range req.ShareKeys {
-		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(share.EncryptedPrivKey, share.PublicKey)
+		logger := logger.With(zap.Stringer("share_pubkey", share.PubKey))
+
+		// The password is used to encrypt a keystore and to decrypt and save it in web3signer afterwards.
+		// So, there's no need to store the password. We can just generate a random password for each keystore.
+		keystorePassword := r.generateRandomPassword()
+
+		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(
+			share.EncryptedPrivKey,
+			share.PubKey,
+			keystorePassword,
+		)
 		if err != nil {
-			logger.Warn("get keystore from encrypted share", zap.Int("index", i), zap.Error(err))
-			ctx.SetStatusCode(fasthttp.StatusUnprocessableEntity)
-			r.writeErr(ctx, logger, fmt.Errorf("get keystore from encrypted share index %d: %w", i, err))
+			logger.Warn("get keystore from encrypted share", zap.Error(err))
+			r.writeJSONErr(
+				ctx,
+				logger,
+				fasthttp.StatusUnprocessableEntity,
+				fmt.Errorf("get keystore from encrypted share index %d: %w", i, err),
+			)
 			return
 		}
 
 		importKeystoreReq.Keystores = append(importKeystoreReq.Keystores, keystoreJSON)
-		importKeystoreReq.Passwords = append(importKeystoreReq.Passwords, r.keystorePasswd)
+		importKeystoreReq.Passwords = append(importKeystoreReq.Passwords, keystorePassword)
 	}
 
 	resp, err := r.remoteSigner.ImportKeystore(ctx, importKeystoreReq)
@@ -125,7 +135,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		if data.Status != web3signer.StatusImported {
 			logger.Warn("unexpected keystore status",
 				zap.String("status", string(data.Status)),
-				zap.Stringer("share_pubkey", req.ShareKeys[i].PublicKey),
+				zap.Stringer("share_pubkey", req.ShareKeys[i].PubKey),
 			)
 		} else {
 			importedCount++
@@ -136,7 +146,11 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	r.writeJSON(ctx, logger, resp)
 }
 
-func (r *Server) keystoreJSONFromEncryptedShare(encryptedPrivKey hexutil.Bytes, sharePubKey phase0.BLSPubKey) (string, error) {
+func (r *Server) keystoreJSONFromEncryptedShare(
+	encryptedPrivKey hexutil.Bytes,
+	sharePubKey phase0.BLSPubKey,
+	keystorePassword string,
+) (string, error) {
 	sharePrivKeyHex, err := r.operatorPrivKey.Decrypt(encryptedPrivKey)
 	if err != nil {
 		return "", fmt.Errorf("decrypt share: %w", err)
@@ -153,10 +167,10 @@ func (r *Server) keystoreJSONFromEncryptedShare(encryptedPrivKey hexutil.Bytes, 
 	}
 
 	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {
-		return "", fmt.Errorf("derived public key does not match expected public key")
+		return "", errors.New("derived public key does not match expected public key")
 	}
 
-	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, r.keystorePasswd)
+	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
 		return "", fmt.Errorf("generate share keystore: %w", err)
 	}
@@ -169,6 +183,10 @@ func (r *Server) keystoreJSONFromEncryptedShare(encryptedPrivKey hexutil.Bytes, 
 	return string(keystoreJSON), nil
 }
 
+func (r *Server) generateRandomPassword() string {
+	return "password" // TODO
+}
+
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleRemoveValidator"))
 
@@ -177,8 +195,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	var req web3signer.DeleteKeystoreRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("unmarshal request body", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("failed to parse request: %w", err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
 
@@ -216,8 +233,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	var req web3signer.SignRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("unmarshal request body", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("unmarshal request body: %w", err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("unmarshal request body: %w", err))
 		return
 	}
 
@@ -227,8 +243,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	blsPubKey, err := r.extractShareKey(identifierValue)
 	if err != nil {
 		logger.Warn("extract share key", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("extract share key: %w", err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("extract share key: %w", err))
 		return
 	}
 
@@ -270,8 +285,7 @@ func (r *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
 	pubKeyB64, err := r.operatorPrivKey.Public().Base64()
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, logger, err)
+		r.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
 		return
 	}
 
@@ -292,16 +306,14 @@ func (r *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
 
 	if len(payload) == 0 {
 		logger.Warn("request has no payload")
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		r.writeErr(ctx, logger, fmt.Errorf("request payload is empty"))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, errors.New("request payload is empty"))
 		return
 	}
 
 	signature, err := r.operatorPrivKey.Sign(payload)
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, logger, err)
+		r.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
 		return
 	}
 
@@ -344,18 +356,25 @@ func (r *Server) writeJSON(ctx *fasthttp.RequestCtx, logger *zap.Logger, v any) 
 	if err != nil {
 		logger.Error("failed to marshal JSON", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		r.writeErr(ctx, logger, err)
-		return
+		errResp := web3signer.ErrorMessage{Message: err.Error()}
+		b, err = json.Marshal(errResp)
+		if err != nil {
+			logger.Error("failed to marshal JSON error", zap.Error(err))
+			r.writeString(ctx, logger, fmt.Sprintf("failed to marshal JSON error: %v", err))
+			return
+		}
 	}
 
+	ctx.SetContentType("application/json")
 	if _, err := ctx.Write(b); err != nil {
 		logger.Error("failed to write response", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 	}
-	ctx.SetContentType("application/json")
 }
 
-func (r *Server) writeErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, err error) {
+// writeJSONErr calls writeJSON, so it shouldn't be called from writeJSON
+func (r *Server) writeJSONErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, statusCode int, err error) {
+	ctx.SetStatusCode(statusCode)
 	errResp := web3signer.ErrorMessage{Message: err.Error()}
 	r.writeJSON(ctx, logger, errResp)
 }

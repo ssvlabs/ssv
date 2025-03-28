@@ -20,10 +20,10 @@ func (b *BaseRunner) signBeaconObject(
 	duty *spectypes.ValidatorDuty,
 	obj ssz.HashRoot,
 	slot spec.Slot,
-	domainType spec.DomainType,
+	signatureDomain spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
 	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
-	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
+	domain, err := runner.GetBeaconNode().DomainData(epoch, signatureDomain)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get beacon domain")
 	}
@@ -36,7 +36,7 @@ func (b *BaseRunner) signBeaconObject(
 		domain,
 		spec.BLSPubKey(runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey),
 		slot,
-		domainType,
+		signatureDomain,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")

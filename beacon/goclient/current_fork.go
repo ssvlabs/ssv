@@ -13,6 +13,8 @@ import (
 
 func (gc *GoClient) ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) {
 	start := time.Now()
+	// ForkSchedule result is cached in the client and updated once in a while.
+	// So calling this method often shouldn't worsen the performance.
 	schedule, err := gc.multiClient.ForkSchedule(ctx, &api.ForkScheduleOpts{})
 	recordRequestDuration(gc.ctx, "ForkSchedule", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {

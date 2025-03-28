@@ -2,6 +2,7 @@ package web3signer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -113,7 +114,7 @@ func (ap *AggregateAndProof) MarshalJSON() ([]byte, error) {
 	}
 
 	if ap.Phase0 != nil && ap.Electra != nil {
-		return nil, fmt.Errorf("both phase0 and electra cannot be set")
+		return nil, errors.New("both phase0 and electra cannot be set")
 	}
 
 	if ap.Electra != nil {

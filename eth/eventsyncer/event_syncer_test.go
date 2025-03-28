@@ -22,7 +22,6 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/ssvlabs/ssv/doppelganger"
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -31,15 +30,16 @@ import (
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 var (
@@ -94,7 +94,7 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate operator key
-	opPubKey, _, err := rsaencryption.GenerateKeys()
+	opPubKey, _, err := rsaencryption.GenerateKeyPairPEM()
 	require.NoError(t, err)
 
 	pkstr := base64.StdEncoding.EncodeToString(opPubKey)
@@ -106,7 +106,7 @@ func TestEventSyncer(t *testing.T) {
 	const chainLength = 30
 	for i := 0; i <= chainLength; i++ {
 		// Emit event OperatorAdded
-		tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, pckd, big.NewInt(100_000_000))
+		tx, err := boundContract.RegisterOperator(auth, pckd, big.NewInt(100_000_000))
 		require.NoError(t, err)
 		sim.Commit()
 		receipt, err := sim.Client().TransactionReceipt(ctx, tx.Hash())
@@ -213,17 +213,12 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	privKeyHash, err := privKey.StorageHash()
-	if err != nil {
-		logger.Fatal("failed to hash operator private key", zap.Error(err))
-	}
-
 	encodedPubKey, err := privKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	if err := nodeStorage.SavePrivateKeyHash(privKeyHash); err != nil {
+	if err := nodeStorage.SavePrivateKeyHash(privKey.StorageHash()); err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
 

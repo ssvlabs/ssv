@@ -10,7 +10,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 func dutyValueCheck(
@@ -40,7 +40,7 @@ func dutyValueCheck(
 }
 
 func BeaconVoteValueCheckF(
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	slot phase0.Slot,
 	sharePublicKeys []phase0.BLSPubKey,
 	estimatedCurrentEpoch phase0.Epoch,
@@ -80,7 +80,7 @@ func BeaconVoteValueCheckF(
 }
 
 func ProposerValueCheckF(
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	network spectypes.BeaconNetwork,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
@@ -119,7 +119,7 @@ func ProposerValueCheckF(
 }
 
 func AggregatorValueCheckF(
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	network spectypes.BeaconNetwork,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
@@ -141,7 +141,7 @@ func AggregatorValueCheckF(
 }
 
 func SyncCommitteeContributionValueCheckF(
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	network spectypes.BeaconNetwork,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,

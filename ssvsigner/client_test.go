@@ -35,7 +35,7 @@ type SSVSignerClientSuite struct {
 func (s *SSVSignerClientSuite) SetupTest() {
 	var err error
 	s.logger, err = zap.NewDevelopment()
-	require.NoError(s.T(), err, "Failed to create logger")
+	s.Require().NoError(err, "Failed to create logger")
 
 	s.mux = http.NewServeMux()
 	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +58,6 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		shares             []ShareKeys
 		expectedStatusCode int
 		expectedResponse   web3signer.ImportKeystoreResponse
-		expectedResult     []web3signer.Status
 		expectError        bool
 		isDecryptionError  bool
 	}{
@@ -67,11 +66,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted1"),
-					PublicKey:        phase0.BLSPubKey{1, 2, 3},
-				},
-				{
-					EncryptedPrivKey: []byte("encrypted2"),
-					PublicKey:        phase0.BLSPubKey{4, 5, 6},
+					PubKey:           phase0.BLSPubKey{1, 2, 3},
 				},
 			},
 			expectedStatusCode: http.StatusOK,
@@ -81,21 +76,16 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 						Status:  web3signer.StatusImported,
 						Message: "imported",
 					},
-					{
-						Status:  web3signer.StatusDuplicated,
-						Message: "duplicate",
-					},
 				},
 			},
-			expectedResult: []web3signer.Status{web3signer.StatusImported, web3signer.StatusDuplicated},
-			expectError:    false,
+			expectError: false,
 		},
 		{
 			name: "DecryptionError", // TODO: fix
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("bad_encrypted"),
-					PublicKey:        phase0.BLSPubKey{1, 2, 3},
+					PubKey:           phase0.BLSPubKey{1, 2, 3},
 				},
 			},
 			expectedStatusCode: http.StatusUnprocessableEntity,
@@ -108,7 +98,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted"),
-					PublicKey:        phase0.BLSPubKey{1, 2, 3},
+					PubKey:           phase0.BLSPubKey{1, 2, 3},
 				},
 			},
 			expectedStatusCode: http.StatusInternalServerError,
@@ -122,8 +112,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			expectedResponse: web3signer.ImportKeystoreResponse{
 				Data: []web3signer.KeyManagerResponseData{},
 			},
-			expectedResult: []web3signer.Status(nil),
-			expectError:    false,
+			expectError: false,
 		},
 	}
 
@@ -144,38 +133,43 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				require.NoError(t, err, "Failed to unmarshal request body")
 
 				assert.Len(t, req.ShareKeys, len(tc.shares))
+
 				for i, share := range tc.shares {
-					assert.EqualValues(t, share.EncryptedPrivKey, req.ShareKeys[i].EncryptedPrivKey)
-					assert.EqualValues(t, share.PublicKey[:], req.ShareKeys[i].PublicKey)
+					assert.Equal(t, share.EncryptedPrivKey, req.ShareKeys[i].EncryptedPrivKey)
+					assert.EqualValues(t, share.PubKey[:], req.ShareKeys[i].PubKey)
 				}
 
 				w.WriteHeader(tc.expectedStatusCode)
-				if tc.expectedStatusCode == http.StatusUnprocessableEntity {
+
+				switch tc.expectedStatusCode {
+				case http.StatusUnprocessableEntity:
 					w.Write([]byte("Decryption error"))
-				} else if tc.expectedStatusCode == http.StatusOK {
+				case http.StatusOK:
 					respBytes, err := json.Marshal(tc.expectedResponse)
 					require.NoError(t, err, "Failed to marshal response")
 					w.Write(respBytes)
-				} else {
+				default:
 					w.Write([]byte("Server error"))
 				}
 			})
 
-			result, err := s.client.AddValidators(context.Background(), tc.shares...)
+			err := s.client.AddValidators(context.Background(), tc.shares...)
 
 			if tc.expectError {
 				assert.Error(t, err, "Expected an error")
+
 				if tc.isDecryptionError {
 					var decryptErr ShareDecryptionError
-					assert.True(t, errors.As(err, &decryptErr), "Expected a ShareDecryptionError")
+
+					assert.ErrorAs(t, err, &decryptErr, "Expected a ShareDecryptionError")
 				}
 			} else {
 				assert.NoError(t, err, "Unexpected error")
-				assert.Equal(t, tc.expectedResult, result)
 			}
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -188,14 +182,12 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 		pubKeys            []phase0.BLSPubKey
 		expectedStatusCode int
 		expectedResponse   web3signer.DeleteKeystoreResponse
-		expectedResult     []web3signer.Status
 		expectError        bool
 	}{
 		{
 			name: "Success",
 			pubKeys: []phase0.BLSPubKey{
 				{1, 2, 3},
-				{4, 5, 6},
 			},
 			expectedStatusCode: http.StatusOK,
 			expectedResponse: web3signer.DeleteKeystoreResponse{
@@ -204,14 +196,9 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 						Status:  web3signer.StatusDeleted,
 						Message: "deleted",
 					},
-					{
-						Status:  web3signer.StatusNotFound,
-						Message: "not_found",
-					},
 				},
 			},
-			expectedResult: []web3signer.Status{web3signer.StatusDeleted, web3signer.StatusNotFound},
-			expectError:    false,
+			expectError: false,
 		},
 		{
 			name: "ServerError",
@@ -229,8 +216,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 			expectedResponse: web3signer.DeleteKeystoreResponse{
 				Data: []web3signer.KeyManagerResponseData{},
 			},
-			expectedResult: []web3signer.Status(nil),
-			expectError:    false,
+			expectError: false,
 		},
 	}
 
@@ -251,11 +237,13 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				require.NoError(t, err, "Failed to unmarshal request body")
 
 				assert.Len(t, req.Pubkeys, len(tc.pubKeys))
+
 				for i, pubKey := range tc.pubKeys {
 					assert.Equal(t, pubKey, req.Pubkeys[i])
 				}
 
 				w.WriteHeader(tc.expectedStatusCode)
+
 				if tc.expectedStatusCode == http.StatusOK {
 					respBytes, err := json.Marshal(tc.expectedResponse)
 					require.NoError(t, err, "Failed to marshal response")
@@ -265,17 +253,17 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				}
 			})
 
-			result, err := s.client.RemoveValidators(context.Background(), tc.pubKeys...)
+			err := s.client.RemoveValidators(context.Background(), tc.pubKeys...)
 
 			if tc.expectError {
 				assert.Error(t, err, "Expected an error")
 			} else {
 				assert.NoError(t, err, "Unexpected error")
-				assert.Equal(t, tc.expectedResult, result)
 			}
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -319,6 +307,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 				assert.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
+
 				if tc.expectedStatusCode == http.StatusOK {
 					respBytes, err := json.Marshal(tc.expectedResponse)
 					require.NoError(t, err, "Failed to marshal response")
@@ -339,6 +328,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -416,8 +406,10 @@ func (s *SSVSignerClientSuite) TestSign() {
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 				var req web3signer.SignRequest
+
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err, "Failed to read request body")
+
 				defer r.Body.Close()
 
 				err = json.Unmarshal(body, &req)
@@ -438,6 +430,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -473,6 +466,7 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 				assert.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
+
 				if tc.expectedStatusCode == http.StatusOK {
 					w.Write([]byte(tc.expectedResult))
 				} else {
@@ -491,6 +485,7 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -536,6 +531,7 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 				assert.Equal(t, tc.payload, body)
 
 				w.WriteHeader(tc.expectedStatusCode)
+
 				if tc.expectedStatusCode == http.StatusOK {
 					w.Write(tc.expectedResult)
 				} else {
@@ -554,6 +550,7 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+
 		s.serverHits = 0
 	}
 }
@@ -623,23 +620,25 @@ func TestRequestErrors(t *testing.T) {
 		if !ok {
 			t.Fatal("Could not create hijacker")
 		}
+
 		conn, _, err := hijacker.Hijack()
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		conn.Close()
 	}))
 	defer server.Close()
 
 	client := NewClient(server.URL)
 
-	_, err := client.AddValidators(context.Background(), ShareKeys{
+	err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
-		PublicKey:        phase0.BLSPubKey{1, 1, 1},
+		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	_, err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
+	err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 
 	_, err = client.Sign(context.Background(), phase0.BLSPubKey{1, 1, 1}, web3signer.SignRequest{})
@@ -662,13 +661,13 @@ func TestResponseHandlingErrors(t *testing.T) {
 
 	client := NewClient(server.URL)
 
-	_, err := client.AddValidators(context.Background(), ShareKeys{
+	err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
-		PublicKey:        phase0.BLSPubKey{1, 1, 1},
+		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	_, err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
+	err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 }
 

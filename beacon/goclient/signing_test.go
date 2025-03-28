@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -27,7 +26,7 @@ func Test_computeVoluntaryExitDomain(t *testing.T) {
 			zap.NewNop(),
 			beacon.Options{
 				Context:        ctx,
-				Network:        beacon.NewNetwork(types.MainNetwork),
+				Network:        beacon.NewNetwork(spectypes.MainNetwork),
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,

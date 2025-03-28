@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -16,8 +15,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/operator/keys"
-
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -27,17 +25,16 @@ type ServerTestSuite struct {
 	operatorPrivKey *testOperatorPrivateKey
 	remoteSigner    *testRemoteSigner
 	server          *Server
-	password        string
 	pubKey          *testOperatorPublicKey
 }
 
 func (s *ServerTestSuite) SetupTest() {
 	var err error
 	s.logger, err = zap.NewDevelopment()
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 
 	err = bls.Init(bls.BLS12_381)
-	require.NoError(s.T(), err)
+	s.Require().NoError(err)
 
 	s.pubKey = &testOperatorPublicKey{
 		pubKeyBase64: "test_pubkey_base64",
@@ -72,9 +69,7 @@ func (s *ServerTestSuite) SetupTest() {
 		},
 	}
 
-	s.password = "testpassword"
-
-	s.server = NewServer(s.logger, s.operatorPrivKey, s.remoteSigner, s.password)
+	s.server = NewServer(s.logger, s.operatorPrivKey, s.remoteSigner)
 }
 
 func (s *ServerTestSuite) ServeHTTP(method, path string, body []byte) (*fasthttp.Response, error) {
@@ -83,6 +78,7 @@ func (s *ServerTestSuite) ServeHTTP(method, path string, body []byte) (*fasthttp
 
 	req.Header.SetMethod(method)
 	req.SetRequestURI(path)
+
 	if len(body) > 0 {
 		req.SetBody(body)
 		req.Header.SetContentType("application/json")
@@ -111,6 +107,7 @@ func (s *ServerTestSuite) TestListValidators() {
 		var response []string
 		err = json.Unmarshal(resp.Body(), &response)
 		require.NoError(t, err)
+
 		expected := []string{
 			"0x010203000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
 			"0x040506000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -135,14 +132,14 @@ func (s *ServerTestSuite) TestAddValidator() {
 	sk.SetByCSPRNG()
 	pubKey := sk.GetPublicKey().Serialize()
 
-	validBlsKey := fmt.Sprintf("0x%s", hex.EncodeToString(sk.Serialize()))
+	validBlsKey := "0x" + hex.EncodeToString(sk.Serialize())
 	s.operatorPrivKey.decryptResult = []byte(validBlsKey)
 
 	request := AddValidatorRequest{
 		ShareKeys: []ShareKeys{
 			{
 				EncryptedPrivKey: []byte("encrypted_key"),
-				PublicKey:        phase0.BLSPubKey(pubKey),
+				PubKey:           phase0.BLSPubKey(pubKey),
 			},
 		},
 	}
@@ -182,7 +179,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 			ShareKeys: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted_key"),
-					PublicKey:        phase0.BLSPubKey{},
+					PubKey:           phase0.BLSPubKey{},
 				},
 			},
 		}
@@ -200,7 +197,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 			ShareKeys: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte{},
-					PublicKey:        phase0.BLSPubKey(pubKey),
+					PubKey:           phase0.BLSPubKey(pubKey),
 				},
 			},
 		}
@@ -234,7 +231,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 	t.Run("different decrypt result", func(t *testing.T) {
 		differentSk := new(bls.SecretKey)
 		differentSk.SetByCSPRNG()
-		differentBlsKey := fmt.Sprintf("0x%s", hex.EncodeToString(differentSk.Serialize()))
+		differentBlsKey := "0x" + hex.EncodeToString(differentSk.Serialize())
 		s.operatorPrivKey.decryptResult = []byte(differentBlsKey)
 
 		resp, err := s.ServeHTTP("POST", pathValidators, reqBody)
@@ -326,8 +323,10 @@ func (s *ServerTestSuite) TestSignValidator() {
 		resp, err := s.ServeHTTP("POST", pathValidatorsSign+pubKeyHex, reqBody)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusOK, resp.StatusCode())
+
 		const expectedSignature = `{"signature":"0x010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}`
-		assert.Equal(t, expectedSignature, string(resp.Body()))
+
+		assert.JSONEq(t, expectedSignature, string(resp.Body()))
 	})
 
 	t.Run("invalid JSON", func(t *testing.T) {
@@ -435,9 +434,9 @@ func (s *ServerTestSuite) TestHelperMethods() {
 
 	ctx.Response.Reset()
 
-	t.Run("writeErr", func(t *testing.T) {
-		s.server.writeErr(ctx, zap.L(), errors.New("test error"))
-		assert.Equal(t, `{"message":"test error"}`, string(ctx.Response.Body()))
+	t.Run("writeJSONErr", func(t *testing.T) {
+		s.server.writeJSONErr(ctx, zap.L(), fasthttp.StatusInternalServerError, errors.New("test error"))
+		assert.JSONEq(t, `{"message":"test error"}`, string(ctx.Response.Body()))
 	})
 
 	ctx.Response.Reset()
@@ -499,12 +498,12 @@ func (t *testOperatorPrivateKey) Decrypt(encryptedData []byte) ([]byte, error) {
 	return t.decryptResult, nil
 }
 
-func (t *testOperatorPrivateKey) StorageHash() (string, error) {
-	return t.storageHash, nil
+func (t *testOperatorPrivateKey) StorageHash() string {
+	return t.storageHash
 }
 
-func (t *testOperatorPrivateKey) EKMHash() (string, error) {
-	return t.ekmHash, nil
+func (t *testOperatorPrivateKey) EKMHash() string {
+	return t.ekmHash
 }
 
 func (t *testOperatorPrivateKey) Bytes() []byte {

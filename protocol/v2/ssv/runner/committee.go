@@ -23,8 +23,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var (
@@ -40,7 +40,7 @@ type CommitteeRunner struct {
 	BaseRunner          *BaseRunner
 	network             specqbft.Network
 	beacon              beacon.BeaconNode
-	signer              signing.BeaconSigner
+	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	valCheck            specqbft.ProposedValueCheckF
 	DutyGuard           CommitteeDutyGuard
@@ -56,7 +56,7 @@ func NewCommitteeRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	dutyGuard CommitteeDutyGuard,
@@ -128,7 +128,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
-		signer         signing.BeaconSigner
+		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       specqbft.ProposedValueCheckF
 	}
@@ -153,7 +153,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
-		signer         signing.BeaconSigner
+		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       specqbft.ProposedValueCheckF
 	}
@@ -190,7 +190,7 @@ func (cr *CommitteeRunner) GetNetwork() specqbft.Network {
 	return cr.network
 }
 
-func (cr *CommitteeRunner) GetBeaconSigner() signing.BeaconSigner {
+func (cr *CommitteeRunner) GetBeaconSigner() ekm.BeaconSigner {
 	return cr.signer
 }
 
@@ -791,7 +791,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	return nil
 }
 
-func (cr *CommitteeRunner) GetSigner() signing.BeaconSigner {
+func (cr *CommitteeRunner) GetSigner() ekm.BeaconSigner {
 	return cr.signer
 }
 

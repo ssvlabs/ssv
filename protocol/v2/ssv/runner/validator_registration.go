@@ -20,8 +20,8 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -29,7 +29,7 @@ type ValidatorRegistrationRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         signing.BeaconSigner
+	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
@@ -42,7 +42,7 @@ func NewValidatorRegistrationRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	gasLimit uint64,
 ) (Runner, error) {
@@ -261,7 +261,7 @@ func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheck
 	return r.valCheck
 }
 
-func (r *ValidatorRegistrationRunner) GetSigner() signing.BeaconSigner {
+func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

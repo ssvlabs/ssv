@@ -66,8 +66,7 @@ Release file example:
 - Run `./cmd/ssv-signer` passing the following arguments:
   - `LISTEN_ADDR` - address to listen on (`:8080` by default [TODO: needs changing?])
   - `WEB3SIGNER_ENDPOINT` - `web3signer`'s address from the previous step 
-  - `PRIVATE_KEY` or (`PRIVATE_KEY_FILE` and `PASSWORD_FILE`) - operator private key or path to operator keystore and password
-  - `SHARE_KEYSTORE_PASSPHRASE` - password used to encrypt share keystore (`password` by default [TODO: needs changing?])
+  - `PRIVATE_KEY` or (`PRIVATE_KEY_FILE` and `PASSWORD_FILE`) - operator private key or path to operator keystore and password files
 
 Example:
 

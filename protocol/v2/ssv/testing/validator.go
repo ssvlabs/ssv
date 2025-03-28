@@ -11,9 +11,9 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) *validator.Validator {
@@ -30,7 +30,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex),
 			},
-			Signer:   signing.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+			Signer:   ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
 			Operator: spectestingutils.TestingCommitteeMember(keySet),
 			DutyRunners: map[spectypes.RunnerRole]runner.Runner{
 				spectypes.RoleCommittee:                 CommitteeRunner(logger, keySet),

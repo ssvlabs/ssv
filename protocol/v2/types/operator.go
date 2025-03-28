@@ -20,18 +20,18 @@ type OperatorSigner interface {
 	GetOperatorID() spectypes.OperatorID
 }
 
-type Signer interface {
+type signer interface {
 	Sign(data []byte) ([]byte, error)
 }
 
 type SsvOperatorSigner struct {
-	Signer
+	signer
 	GetOperatorIdF func() spectypes.OperatorID
 }
 
-func NewSsvOperatorSigner(signer Signer, getOperatorId func() spectypes.OperatorID) *SsvOperatorSigner {
+func NewSsvOperatorSigner(signer signer, getOperatorId func() spectypes.OperatorID) *SsvOperatorSigner {
 	return &SsvOperatorSigner{
-		Signer:         signer,
+		signer:         signer,
 		GetOperatorIdF: getOperatorId,
 	}
 }

@@ -25,8 +25,8 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ProposerRunner struct {
@@ -34,7 +34,7 @@ type ProposerRunner struct {
 
 	beacon              beacon.BeaconNode
 	network             specqbft.Network
-	signer              signing.BeaconSigner
+	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
 	valCheck            specqbft.ProposedValueCheckF
@@ -49,7 +49,7 @@ func NewProposerRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer signing.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	doppelgangerHandler DoppelgangerProvider,
 	valCheck specqbft.ProposedValueCheckF,
@@ -127,7 +127,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.graffiti, fullSig)
 	if err != nil {
-		logger.Error("❌ failed to get blinded beacon block",
+		logger.Error("❌ failed to get beacon block",
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			fields.BlockTime(time.Since(start)),
 			zap.Error(err))
@@ -487,7 +487,7 @@ func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ProposerRunner) GetSigner() signing.BeaconSigner {
+func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 

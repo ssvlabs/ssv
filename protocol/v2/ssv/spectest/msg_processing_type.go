@@ -24,10 +24,10 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type MsgProcessingSpecTest struct {
@@ -51,7 +51,7 @@ func (test *MsgProcessingSpecTest) TestName() string {
 }
 
 func (test *MsgProcessingSpecTest) FullName() string {
-	return strings.Replace(test.ParentName+"_"+test.Name, " ", "_", -1)
+	return strings.ReplaceAll(test.ParentName+"_"+test.Name, " ", "_")
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
@@ -121,7 +121,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
 				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
-					test.Runner.GetSigner().(*signing.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
+					test.Runner.GetSigner().(*ekm.TestingKeyManagerAdapter).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}
 		}
@@ -316,7 +316,7 @@ func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*
 			SignedSSVMessage: msg,
 			SSVMessage:       &spectypes.SSVMessage{},
 		}
-		dmsg.SSVMessage.MsgType = spectypes.SSVConsensusMsgType
+		dmsg.MsgType = spectypes.SSVConsensusMsgType
 	} else {
 		dmsg, err = queue.DecodeSignedSSVMessage(msg)
 	}

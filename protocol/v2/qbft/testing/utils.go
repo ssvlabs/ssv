@@ -13,12 +13,12 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/signing"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *qbft.Config {
 	return &qbft.Config{
-		BeaconSigner: signing.NewTestingKeyManagerAdapter(testingutils.NewTestingKeyManager()),
+		BeaconSigner: ekm.NewTestingKeyManagerAdapter(testingutils.NewTestingKeyManager()),
 		Domain:       testingutils.TestingSSVDomainType,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
