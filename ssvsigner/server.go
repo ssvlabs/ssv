@@ -328,7 +328,7 @@ func (r *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logge
 		statusCode = he.Status
 	}
 
-	logger.Error("request failed",
+	logger.Error("web3signer request failed",
 		zap.Error(err),
 		zap.Int("status_code", statusCode),
 		zap.Any("resp", resp),
