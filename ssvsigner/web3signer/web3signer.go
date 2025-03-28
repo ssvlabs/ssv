@@ -1,7 +1,9 @@
 package web3signer
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -9,17 +11,20 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
+	"go.uber.org/zap"
 )
 
 type Web3Signer struct {
+	logger     *zap.Logger
 	baseURL    string
 	httpClient *http.Client
 }
 
-func New(baseURL string) *Web3Signer {
+func New(logger *zap.Logger, baseURL string) *Web3Signer {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	return &Web3Signer{
+		logger:  logger.Named("web3signer"),
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -41,15 +46,30 @@ func (c *Web3Signer) ListKeys(ctx context.Context) (ListKeysResponse, error) {
 
 // ImportKeystore adds a key to Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT
 func (c *Web3Signer) ImportKeystore(ctx context.Context, req ImportKeystoreRequest) (ImportKeystoreResponse, error) {
-	var resp ImportKeystoreResponse
+	reqJSON, _ := json.Marshal(req)
+
+	var buf bytes.Buffer
+
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathKeystores).
 		BodyJSON(req).
 		Post().
-		ToJSON(&resp).
+		ToBytesBuffer(&buf).
 		Fetch(ctx)
+
+	c.logger.Info("ImportKeystore debug",
+		zap.ByteString("req", reqJSON),
+		zap.ByteString("resp", buf.Bytes()),
+		zap.Error(err))
+
+	var resp ImportKeystoreResponse
+	if err := json.Unmarshal(buf.Bytes(), &resp); err != nil {
+		c.logger.Error("ImportKeystore failed to unmarshal JSON", zap.Error(err))
+		return ImportKeystoreResponse{}, c.handleWeb3SignerErr(err)
+	}
+
 	return resp, c.handleWeb3SignerErr(err)
 }
 
