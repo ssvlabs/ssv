@@ -41,7 +41,3 @@ func metricName(name string) string {
 func stageAttribute(stage stage) attribute.KeyValue {
 	return attribute.String("ssv.validator.stage", string(stage))
 }
-
-func roleAttribute(role string) attribute.KeyValue {
-	return attribute.String(observability.RunnerRoleAttrKey, role)
-}
