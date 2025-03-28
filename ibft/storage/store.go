@@ -53,28 +53,22 @@ func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole, ne
 	// Persist in-memory participants to DB once every slot.
 	slotTicker := slotTickerProvider()
 	go func() {
-		next := slotTicker.Next()
-		for {
-			select {
-			case <-next:
-				slot := slotTicker.Slot()
-				next = slotTicker.Next()
-
-				// Flush previous slot participants.
-				st.cacheMu.Lock()
-				start := time.Now()
-				for pk, participants := range st.cachedParticipants {
-					if err := st.saveParticipants(pk, st.cachedSlot, participants); err != nil {
-						logger.Error("failed to save participants", fields.Validator(pk[:]), zap.Error(err))
-					}
+		for range slotTicker.Next() {
+			slot := slotTicker.Slot()
+			// Flush previous slot participants.
+			st.cacheMu.Lock()
+			start := time.Now()
+			for pk, participants := range st.cachedParticipants {
+				if err := st.saveParticipants(pk, st.cachedSlot, participants); err != nil {
+					logger.Error("failed to save participants", fields.Validator(pk[:]), zap.Error(err))
 				}
-				logger.Debug("saved slot participants", fields.Slot(st.cachedSlot), fields.Took(time.Since(start)))
-
-				// Reset cache for new slot.
-				st.cachedParticipants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
-				st.cachedSlot = slot
-				st.cacheMu.Unlock()
 			}
+			logger.Debug("saved slot participants", fields.Slot(st.cachedSlot), fields.Took(time.Since(start)))
+
+			// Reset cache for new slot.
+			st.cachedParticipants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
+			st.cachedSlot = slot
+			st.cacheMu.Unlock()
 		}
 	}()
 

@@ -18,6 +18,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -34,8 +35,15 @@ func TestRemoveSlot(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return slotticker.New(zap.NewNop(), slotticker.Config{
+			SlotDuration: 5 * time.Second,
+			GenesisTime:  time.Now(),
+		})
+	}
+
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(db, role))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -115,8 +123,15 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return slotticker.New(zap.NewNop(), slotticker.Config{
+			SlotDuration: 5 * time.Second,
+			GenesisTime:  time.Now(),
+		})
+	}
+
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(db, role))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 

@@ -422,32 +422,6 @@ func (c *controller) getCommitteeObserver(msgID spectypes.MessageID) *committeeO
 	return newObserver
 }
 
-func (c *controller) handleCommitteeObserverMessage(msg *queue.SSVMessage, observer *committeeObserver) error {
-	switch msg.GetType() {
-	case spectypes.SSVConsensusMsgType:
-		// Process proposal messages for committee consensus only to get the roots
-		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
-			return nil
-		}
-
-		subMsg, ok := msg.Body.(*specqbft.Message)
-		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
-			return nil
-		}
-
-		return observer.OnProposalMsg(msg)
-	case spectypes.SSVPartialSignatureMsgType:
-		pSigMessages := &spectypes.PartialSignatureMessages{}
-		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return fmt.Errorf("failed to decode partial signature messages: %w", err)
-		}
-
-		return observer.ProcessMessage(msg)
-	default:
-		return nil
-	}
-}
-
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators(ctx context.Context) {
 	// TODO: Pass context whereever the execution flow may be blocked.
