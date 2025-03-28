@@ -13,6 +13,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -36,6 +37,7 @@ type Collector struct {
 	validatorIndexToCommitteeLinks *TypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]]
 
 	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
+	syncCommitteeRootsSf    singleflight.Group
 
 	beacon spectypes.BeaconNetwork
 
@@ -425,7 +427,6 @@ func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectype
 		slotToCommittee.Store(slot, committeeID)
 	}
 }
-
 func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Root, error) {
 	var beaconVote = new(spectypes.BeaconVote)
 	if err := beaconVote.Decode(in); err != nil {
@@ -440,27 +441,41 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 		return cacheItem.Value(), nil
 	}
 
-	c.logger.Info("fetching sync committee root", fields.Slot(slot), fields.Root(beaconVote.BlockRoot))
+	// Use singleflight to ensure only one goroutine computes the root for a given key
+	sfKey := fmt.Sprintf("%d-%s", slot, beaconVote.BlockRoot.String())
+	val, err, _ := c.syncCommitteeRootsSf.Do(sfKey, func() (any, error) {
+		// Check cache again in case another goroutine has populated it while we were waiting
+		if cacheItem := c.syncCommitteeRootsCache.Get(key); cacheItem != nil {
+			return cacheItem.Value(), nil
+		}
 
-	epoch := c.beacon.EstimatedEpochAtSlot(slot)
+		c.logger.Info("fetching sync committee root", fields.Slot(slot), fields.Root(beaconVote.BlockRoot))
 
-	domain, err := c.client.DomainData(epoch, spectypes.DomainSyncCommittee)
+		epoch := c.beacon.EstimatedEpochAtSlot(slot)
+
+		domain, err := c.client.DomainData(epoch, spectypes.DomainSyncCommittee)
+		if err != nil {
+			return phase0.Root{}, fmt.Errorf("get sync committee domain data: %w", err)
+		}
+
+		// Beacon root
+		blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
+		signingRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
+		if err != nil {
+			return phase0.Root{}, fmt.Errorf("compute sync committee root: %w", err)
+		}
+
+		ttl := time.Duration(ttlCommitteeRoot) * c.beacon.SlotDurationSec()
+		_ = c.syncCommitteeRootsCache.Set(key, signingRoot, ttl)
+
+		return signingRoot, nil
+	})
+
 	if err != nil {
-		return phase0.Root{}, fmt.Errorf("get sync committee domain data: %w", err)
+		return phase0.Root{}, err
 	}
 
-	// Beacon root
-	blockRoot := spectypes.SSZBytes(beaconVote.BlockRoot[:])
-	signingRoot, err := spectypes.ComputeETHSigningRoot(blockRoot, domain)
-	if err != nil {
-		return phase0.Root{}, fmt.Errorf("compute sync committee root: %w", err)
-	}
-
-	ttl := time.Duration(ttlCommitteeRoot) * c.beacon.SlotDurationSec()
-
-	_ = c.syncCommitteeRootsCache.Set(key, signingRoot, ttl)
-
-	return signingRoot, nil
+	return val.(phase0.Root), nil
 }
 
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
