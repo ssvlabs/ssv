@@ -34,9 +34,7 @@ This will:
 2. Build the SSV node for both amd64 and arm64 architectures
 3. Push the resulting multi-architecture image
 
-### Environment Variables
-
-The build process requires the following environment variables:
+Required environment variables:
 
 - `IMAGE_NAME`: The full name and tag for the Docker image to be built and pushed
 - `SOURCE_COMMIT`: Git commit to be used as the image label
