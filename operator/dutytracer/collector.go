@@ -123,9 +123,11 @@ so when we request a certain trace we return both of them:
 - the model.* ValidatorDutyTrace that has the data that we enrich subsequently
 .LoadOrStore is being used to take care of the case when two goroutines try to create the same trace at the same time
 */
-func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace) {
+func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace, error) {
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
+		// TODO: remove this once we have a proper way to handle late arrival
 		c.logger.Warn("validator trace late arrival", fields.Slot(slot), zap.Uint64("lastEvictedSlot", c.lastEvictedSlot.Load()), zap.Uint64("currentSlot", c.currentSlot.Load()))
+		return nil, nil, fmt.Errorf("validator trace late arrival")
 	}
 
 	validatorSlots, found := c.validatorTraces.Load(vPubKey)
@@ -144,7 +146,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 			Roles: []*model.ValidatorDutyTrace{roleDutyTrace},
 		}
 		traces, _ = validatorSlots.LoadOrStore(slot, newTrace)
-		return traces, roleDutyTrace
+		return traces, roleDutyTrace, nil
 	}
 
 	traces.Lock()
@@ -153,7 +155,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 	// find the trace for the role
 	for _, t := range traces.Roles {
 		if t.Role == role {
-			return traces, t
+			return traces, t, nil
 		}
 	}
 
@@ -164,12 +166,13 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 	}
 	traces.Roles = append(traces.Roles, roleDutyTrace)
 
-	return traces, roleDutyTrace
+	return traces, roleDutyTrace, nil
 }
 
-func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) *committeeDutyTrace {
+func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, error) {
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
 		c.logger.Warn("committee trace late arrival", fields.Slot(slot), zap.Uint64("lastEvictedSlot", c.lastEvictedSlot.Load()), zap.Uint64("currentSlot", c.currentSlot.Load()))
+		return nil, fmt.Errorf("committee trace late arrival")
 	}
 
 	committeeSlots, found := c.committeeTraces.Load(committeeID)
@@ -190,7 +193,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 		committeeTrace, _ = committeeSlots.LoadOrStore(slot, trace)
 	}
 
-	return committeeTrace
+	return committeeTrace, nil
 }
 
 func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*model.QBFTTrace {
@@ -325,7 +328,10 @@ func (c *Collector) processPartialSigValidator(receivedAt uint64, msg *spectypes
 		return err
 	}
 
-	trace, roleDutyTrace := c.getOrCreateValidatorTrace(msg.Slot, role, pubkey)
+	trace, roleDutyTrace, err := c.getOrCreateValidatorTrace(msg.Slot, role, pubkey)
+	if err != nil {
+		return err
+	}
 
 	trace.Lock()
 	defer trace.Unlock()
@@ -354,7 +360,10 @@ func (c *Collector) processPartialSigValidator(receivedAt uint64, msg *spectypes
 func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) error {
 	slot := msg.Slot
 
-	trace := c.getOrCreateCommitteeTrace(slot, committeeID)
+	trace, err := c.getOrCreateCommitteeTrace(slot, committeeID)
+	if err != nil {
+		return err
+	}
 	trace.Lock()
 	defer trace.Unlock()
 
@@ -481,7 +490,10 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			var committeeID spectypes.CommitteeID
 			copy(committeeID[:], executorID[16:])
 
-			trace := c.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, err := c.getOrCreateCommitteeTrace(slot, committeeID)
+			if err != nil {
+				return err
+			}
 
 			trace.Lock()
 			defer trace.Unlock()
@@ -521,7 +533,10 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				return err
 			}
 
-			trace, roleDutyTrace := c.getOrCreateValidatorTrace(slot, bnRole, validatorPK)
+			trace, roleDutyTrace, err := c.getOrCreateValidatorTrace(slot, bnRole, validatorPK)
+			if err != nil {
+				return err
+			}
 
 			func() {
 				var qbftMsg = new(specqbft.Message)
