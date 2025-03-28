@@ -144,6 +144,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 		Path(pathValidatorsSign + sharePubKey.String()).
 		BodyJSON(payload).
 		Post().
+		Accept("application/json").
 		ToJSON(&resp).
 		Fetch(ctx)
 	if err != nil {
