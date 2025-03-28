@@ -12,17 +12,17 @@ import (
 	"github.com/ssvlabs/ssv-spec/types"
 )
 
-// BeaconRoleAttribute creates a key-value attribute for the beacon role.
+const (
+	RunnerRoleAttrKey = "ssv.runner.role"
+)
+
 func BeaconRoleAttribute(role types.BeaconRole) attribute.KeyValue {
 	const eventNameAttrName = "ssv.beacon.role"
 	return attribute.String(eventNameAttrName, role.String())
 }
 
-// RunnerRoleAttribute creates a key-value attribute for the runner role.
-// TODO: replace string with types.RunnerRole when compatible with MessageID.GetRoleType()
-func RunnerRoleAttribute(role string) attribute.KeyValue {
-	const runnerRoleAttrKey = "ssv.runner.role"
-	return attribute.String(runnerRoleAttrKey, role)
+func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
+	return attribute.String(RunnerRoleAttrKey, role.String())
 }
 
 func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {

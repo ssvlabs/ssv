@@ -29,9 +29,9 @@ func TestRunnerRoleAttribute_Creates(t *testing.T) {
 
 	role := types.RunnerRole(1)
 
-	attr := RunnerRoleAttribute(role.String())
+	attr := RunnerRoleAttribute(role)
 
-	require.Equal(t, "ssv.runner.role", string(attr.Key))
+	require.Equal(t, RunnerRoleAttrKey, string(attr.Key))
 	require.Equal(t, role.String(), attr.Value.AsString())
 }
 

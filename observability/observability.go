@@ -2,7 +2,7 @@ package observability
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 
 	"go.opentelemetry.io/otel"
@@ -28,14 +28,15 @@ func Initialize(appName, appVersion string, options ...Option) (shutdown func(co
 	))
 
 	if err != nil {
-		return shutdown, fmt.Errorf("failed to instantiate observability resources: %w", err)
+		return shutdown, errors.Join(errors.New("failed to instantiate observability resources"), err)
 	}
 
 	if cfg.metricsEnabled {
 		var promExporter *prometheus.Exporter
 		promExporter, err = deps.PrometheusNew()
+
 		if err != nil {
-			return shutdown, fmt.Errorf("failed to instantiate metric Prometheus exporter: %w", err)
+			return shutdown, errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
 		}
 
 		meterProvider := metric.NewMeterProvider(
