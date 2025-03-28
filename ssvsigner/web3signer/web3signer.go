@@ -76,6 +76,7 @@ func (c *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, req
 		Path(pathSign + sharePubKey.String()).
 		BodyJSON(req).
 		Post().
+		Accept("application/json").
 		ToJSON(&resp).
 		Fetch(ctx)
 	return resp, c.handleWeb3SignerErr(err)
