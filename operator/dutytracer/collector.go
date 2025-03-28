@@ -503,7 +503,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				if subMsg.MsgType == specqbft.ProposalMsgType {
 					// c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData))) // TODO(me): remove this
 					// committee duty will contain the BeaconVote data
-					trace.CommitteeDutyTrace.ProposalData = msg.SignedSSVMessage.FullData
+					trace.ProposalData = msg.SignedSSVMessage.FullData
 				}
 				// for future: check if it's a proposal message
 				// if not, skip this step

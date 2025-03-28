@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	store "github.com/ssvlabs/ssv/exporter/v2/store"
@@ -94,23 +93,23 @@ func TestSaveValidatorDutyTrace(t *testing.T) {
 	require.NoError(t, store.SaveValidatorDuty(trace1))
 	require.NoError(t, store.SaveValidatorDuty(trace2))
 
-	trace, err := store.GetValidatorDuty(phase0.Slot(1), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	trace, err := store.GetValidatorDuty(phase0.Slot(1), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
 	assert.True(t, validatorDutiesAreEqual(trace1, trace))
 
-	trace, err = store.GetValidatorDuty(phase0.Slot(2), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	trace, err = store.GetValidatorDuty(phase0.Slot(2), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
 	assert.True(t, validatorDutiesAreEqual(trace2, trace))
 
-	_, err = store.GetValidatorDuty(phase0.Slot(3), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	_, err = store.GetValidatorDuty(phase0.Slot(3), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.Error(t, err)
 
-	traces, err := store.GetAllValidatorDuties(types.BNRoleAttester, phase0.Slot(1))
+	traces, err := store.GetAllValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace1, traces[0]))
 
-	traces, err = store.GetAllValidatorDuties(types.BNRoleAttester, phase0.Slot(2))
+	traces, err = store.GetAllValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace2, traces[0]))
@@ -128,23 +127,23 @@ func TestSaveValidatorDuties(t *testing.T) {
 	store := store.New(db)
 	require.NoError(t, store.SaveValidatorDuties([]*model.ValidatorDutyTrace{trace1, trace2}))
 
-	trace, err := store.GetValidatorDuty(phase0.Slot(1), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	trace, err := store.GetValidatorDuty(phase0.Slot(1), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
 	assert.True(t, validatorDutiesAreEqual(trace1, trace))
 
-	trace, err = store.GetValidatorDuty(phase0.Slot(2), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	trace, err = store.GetValidatorDuty(phase0.Slot(2), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
 	assert.True(t, validatorDutiesAreEqual(trace2, trace))
 
-	_, err = store.GetValidatorDuty(phase0.Slot(3), types.BNRoleAttester, phase0.ValidatorIndex(39393))
+	_, err = store.GetValidatorDuty(phase0.Slot(3), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.Error(t, err)
 
-	traces, err := store.GetAllValidatorDuties(types.BNRoleAttester, phase0.Slot(1))
+	traces, err := store.GetAllValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace1, traces[0]))
 
-	traces, err = store.GetAllValidatorDuties(types.BNRoleAttester, phase0.Slot(2))
+	traces, err = store.GetAllValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace2, traces[0]))
@@ -153,7 +152,7 @@ func TestSaveValidatorDuties(t *testing.T) {
 func makeVTrace(slot phase0.Slot) *model.ValidatorDutyTrace {
 	return &model.ValidatorDutyTrace{
 		Slot:      slot,
-		Role:      types.BNRoleAttester,
+		Role:      spectypes.BNRoleAttester,
 		Validator: phase0.ValidatorIndex(39393),
 	}
 }

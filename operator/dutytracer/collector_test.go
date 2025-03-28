@@ -132,9 +132,9 @@ func TestValidatorDuty(t *testing.T) {
 		assert.Equal(t, vIndex, duty.Validator)
 
 		require.NotNil(t, duty.ConsensusTrace)
-		assert.Len(t, duty.ConsensusTrace.Rounds, 1)
+		assert.Len(t, duty.Rounds, 1)
 
-		round := duty.ConsensusTrace.Rounds[0]
+		round := duty.Rounds[0]
 		require.NotNil(t, round)
 		require.Len(t, duty.Rounds, 1)
 
@@ -181,9 +181,9 @@ func TestValidatorDuty(t *testing.T) {
 		assert.Equal(t, vIndex, duty.Validator)
 
 		require.NotNil(t, duty.ConsensusTrace)
-		assert.Len(t, duty.ConsensusTrace.Rounds, 1)
+		assert.Len(t, duty.Rounds, 1)
 
-		round := duty.ConsensusTrace.Rounds[0]
+		round := duty.Rounds[0]
 		require.NotNil(t, round)
 		require.Len(t, round.Prepares, 1)
 
@@ -209,9 +209,9 @@ func TestValidatorDuty(t *testing.T) {
 		assert.Equal(t, vIndex, duty.Validator)
 
 		require.NotNil(t, duty.ConsensusTrace)
-		assert.Len(t, duty.ConsensusTrace.Rounds, 1)
+		assert.Len(t, duty.Rounds, 1)
 
-		round := duty.ConsensusTrace.Rounds[0]
+		round := duty.Rounds[0]
 		require.NotNil(t, round)
 
 		require.Len(t, duty.Decideds, 1)
@@ -241,9 +241,9 @@ func TestValidatorDuty(t *testing.T) {
 		assert.Equal(t, vIndex, duty.Validator)
 
 		require.NotNil(t, duty.ConsensusTrace)
-		assert.Len(t, duty.ConsensusTrace.Rounds, 1)
+		assert.Len(t, duty.Rounds, 1)
 
-		round := duty.ConsensusTrace.Rounds[0]
+		round := duty.Rounds[0]
 		require.NotNil(t, round)
 
 		require.Len(t, round.Commits, 1)
@@ -269,9 +269,9 @@ func TestValidatorDuty(t *testing.T) {
 		assert.Equal(t, vIndex, duty.Validator)
 
 		require.NotNil(t, duty.ConsensusTrace)
-		assert.Len(t, duty.ConsensusTrace.Rounds, 1)
+		assert.Len(t, duty.Rounds, 1)
 
-		round := duty.ConsensusTrace.Rounds[0]
+		round := duty.Rounds[0]
 		require.NotNil(t, round)
 		require.NotNil(t, round.RoundChanges)
 		require.Len(t, round.RoundChanges, 1)
@@ -299,9 +299,9 @@ func TestValidatorDuty(t *testing.T) {
 		assert.Equal(t, vIndex, duty.Validator)
 
 		require.NotNil(t, duty.ConsensusTrace)
-		assert.Len(t, duty.ConsensusTrace.Rounds, 2)
+		assert.Len(t, duty.Rounds, 2)
 
-		round := duty.ConsensusTrace.Rounds[0]
+		round := duty.Rounds[0]
 		require.NotNil(t, round)
 		require.NotNil(t, round.RoundChanges)
 		require.Len(t, round.RoundChanges, 1)
@@ -405,10 +405,10 @@ func TestCommitteeDuty(t *testing.T) {
 		require.NotNil(t, round0)
 		require.NotNil(t, round0.ProposalTrace)
 		require.NotNil(t, round0.ProposalTrace.QBFTTrace)
-		assert.Equal(t, uint64(1), round0.ProposalTrace.QBFTTrace.Round)
+		assert.Equal(t, uint64(1), round0.ProposalTrace.Round)
 
-		assert.Equal(t, wantBeaconRoot, round0.ProposalTrace.QBFTTrace.BeaconRoot)
-		assert.Equal(t, uint64(1), round0.ProposalTrace.QBFTTrace.Signer)
+		assert.Equal(t, wantBeaconRoot, round0.ProposalTrace.BeaconRoot)
+		assert.Equal(t, uint64(1), round0.ProposalTrace.Signer)
 		require.NotNil(t, round0.ProposalTrace.ReceivedTime)
 
 		require.Empty(t, round0.Prepares)
