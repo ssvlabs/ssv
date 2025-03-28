@@ -113,10 +113,10 @@ func (o *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 		return fmt.Errorf("got invalid message %w", err)
 	}
 
-	ncv.Lock()
-	defer ncv.Unlock()
+	o.Lock()
+	defer o.Unlock()
 
-	quorums, err := ncv.verifySigAndgetQuorums(partialSigMessages)
+	quorums, err := o.verifySigAndGetQuorums(partialSigMessages)
 	if err != nil {
 		return fmt.Errorf("could not process SignedPartialSignatureMessage %w", err)
 	}
@@ -259,7 +259,7 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 	return nil
 }
 
-func (ncv *CommitteeObserver) verifySigAndgetQuorums(
+func (o *CommitteeObserver) verifySigAndGetQuorums(
 	signedMsg *spectypes.PartialSignatureMessages,
 ) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
 	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
@@ -286,7 +286,7 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 			slotValidators[msg.ValidatorIndex] = container
 		}
 		if container.HasSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot) {
-			_ = ncv.resolveDuplicateSignature(container, msg, validator)
+			_ = o.resolveDuplicateSignature(container, msg, validator)
 		} else {
 			container.AddSignature(msg)
 		}
@@ -322,7 +322,7 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 // copied from BaseRunner
-func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) (err error) {
+func (o *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) (err error) {
 	// Check previous signature validity
 	var previousSignature spectypes.Signature
 	previousSignature, err = container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
@@ -369,7 +369,7 @@ func (o *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signatur
 	return fmt.Errorf("unknown signer")
 }
 
-func (ncv *CommitteeObserver) SaveRoots(msg *queue.SSVMessage) error {
+func (o *CommitteeObserver) SaveRoots(msg *queue.SSVMessage) error {
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
 		o.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))

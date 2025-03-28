@@ -365,6 +365,14 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	ssvMsg := msg.(*queue.SSVMessage)
 	observer := c.getCommitteeObserver(ssvMsg.GetID())
 
+	if c.validatorOptions.ExporterDutyTracing {
+		return c.traceCollector.Collect(c.ctx, ssvMsg, observer.VerifySig)
+	}
+
+	if !c.validatorOptions.Exporter {
+		return nil
+	}
+
 	if err := c.handleCommitteeObserverMessage(ssvMsg, observer); err != nil {
 		return fmt.Errorf("failed to handle committee observer message: %w", err)
 	}
