@@ -1132,13 +1132,13 @@ func (c *controller) ForkListener(logger *zap.Logger) {
 			GenesisTime:  c.networkConfig.GetGenesisTime(),
 		})
 
-		next := slotTicker.NextWait()
+		next := slotTicker.NextTick()
 		for {
 			select {
 			case <-c.ctx.Done():
 				return
 			case <-next:
-				next = slotTicker.NextWait()
+				next = slotTicker.NextTick()
 				if c.networkConfig.PastAlanFork() {
 					// Cancel genesis context to stop the genesis validators.
 					c.cancelGenesisCtx()

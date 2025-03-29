@@ -13,16 +13,16 @@ import (
 type Provider func() SlotTicker
 
 // SlotTicker provides a way to keep track of Ethereum slots as they change over time.
-// Note, the caller is RESPONSIBLE for calling NextWait method periodically in order for
+// Note, the caller is RESPONSIBLE for calling NextTick method periodically in order for
 // SlotTicker to advance forward (to keep ticking) to newer slots.
 type SlotTicker interface {
-	// NextWait returns a channel that will relay 1 tick signalling that "freshest" slot has started.
-	// It advances SlotTicker slot number (which keeps track of the "freshest" slot value from
-	// Ethereum perspective) potentially jumping several slots ahead and returns a channel that
-	// will signal once the time corresponding to that "freshest" slot comes.
-	NextWait() <-chan time.Time
-	// NextSlot returns the next slot number SlotTicker will tick on (that tick happens at time
-	// signalled by NextWait).
+	// NextTick returns a channel that will relay 1 tick signalling that "freshest" slot has started.
+	// It advances slot number SlotTicker keeps track of (potentially jumping several slots ahead)
+	// and returns a channel that will signal once the time corresponding to that "freshest" slot
+	// comes.
+	NextTick() <-chan time.Time
+	// NextSlot returns the next slot number SlotTicker will tick on (corresponding to the tick
+	// that happens upon NextTick signal).
 	NextSlot() phase0.Slot
 }
 
@@ -74,9 +74,9 @@ func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvi
 	}
 }
 
-// NextWait implements SlotTicker.NextWait.
+// NextTick implements SlotTicker.NextTick.
 // Note, this method is not thread-safe.
-func (s *slotTicker) NextWait() <-chan time.Time {
+func (s *slotTicker) NextTick() <-chan time.Time {
 	timeSinceGenesis := time.Since(s.genesisTime)
 	if timeSinceGenesis < 0 {
 		// we are waiting for slotTicker to tick at s.genesisTime (signalling 0th slot start)

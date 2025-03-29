@@ -269,7 +269,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 		select {
 		case <-gc.ctx.Done():
 			return
-		case <-ticker.NextWait():
+		case <-ticker.NextTick():
 			gc.submitRegistrationsFromCache(ticker.NextSlot(), operatorID)
 		}
 	}

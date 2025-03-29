@@ -268,7 +268,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.ticker.NextWait():
+		case <-s.ticker.NextTick():
 			slot := s.ticker.NextSlot()
 
 			delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
@@ -480,7 +480,7 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committee
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
-// the start of slot), or for head block event that might come in even sooner than one-third of the slot passes.
+// slot start time), or for head block event that might come in even sooner than one-third of the slot passes.
 func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {

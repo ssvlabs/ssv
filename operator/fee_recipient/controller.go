@@ -70,7 +70,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger) {
 	firstTimeSubmitted := false
 	ticker := rc.slotTickerProvider()
 	for {
-		<-ticker.NextWait()
+		<-ticker.NextTick()
 		slot := ticker.NextSlot()
 		// submit if first time or if first slot in epoch
 		if firstTimeSubmitted && uint64(slot)%rc.network.SlotsPerEpoch() != (rc.network.SlotsPerEpoch()/2) {

@@ -65,7 +65,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 	h.fetchNextEpoch = true
 
-	next := h.ticker.NextWait()
+	next := h.ticker.NextTick()
 	for {
 		select {
 		case <-ctx.Done():
@@ -73,7 +73,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 		case <-next:
 			slot := h.ticker.NextSlot()
-			next = h.ticker.NextWait()
+			next = h.ticker.NextTick()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))

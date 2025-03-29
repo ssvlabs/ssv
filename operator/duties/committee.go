@@ -45,7 +45,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
-	next := h.ticker.NextWait()
+	next := h.ticker.NextTick()
 	for {
 		select {
 		case <-ctx.Done():
@@ -53,7 +53,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 
 		case <-next:
 			slot := h.ticker.NextSlot()
-			next = h.ticker.NextWait()
+			next = h.ticker.NextTick()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
