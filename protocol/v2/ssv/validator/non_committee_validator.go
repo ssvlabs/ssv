@@ -308,12 +308,12 @@ func (o *CommitteeObserver) verifySigAndGetQuorums(
 		}
 	}
 
-	ncv.pruneOldSlots(currentSlot)
+	o.pruneOldSlots(currentSlot)
 
 	return quorums, nil
 }
 
-func (ncv *CommitteeObserver) pruneOldSlots(currentSlot phase0.Slot) {
+func (o *CommitteeObserver) pruneOldSlots(currentSlot phase0.Slot) {
 	// Remove older slots container
 	if len(o.postConsensusContainer) >= o.postConsensusContainerCapacity() {
 		// #nosec G115 -- capacity must be low epoch not to cause overflow
