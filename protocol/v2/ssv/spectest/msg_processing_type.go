@@ -11,13 +11,13 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -31,6 +31,7 @@ import (
 
 type MsgProcessingSpecTest struct {
 	Name                    string
+	ParentName              string
 	Runner                  runner.Runner
 	Duty                    spectypes.Duty
 	Messages                []*spectypes.SignedSSVMessage
@@ -46,6 +47,10 @@ type MsgProcessingSpecTest struct {
 
 func (test *MsgProcessingSpecTest) TestName() string {
 	return test.Name
+}
+
+func (test *MsgProcessingSpecTest) FullName() string {
+	return strings.ReplaceAll(test.ParentName+"_"+test.Name, " ", "_")
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
@@ -147,8 +152,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
@@ -279,6 +283,7 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetOperatorSigner(),
 			runnerSample.GetValCheckF(),
 			committeeDutyGuard,
+			runnerSample.GetDoppelgangerHandler(),
 		)
 		return r.(*runner.CommitteeRunner), err
 	}
@@ -310,7 +315,7 @@ func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*
 			SignedSSVMessage: msg,
 			SSVMessage:       &spectypes.SSVMessage{},
 		}
-		dmsg.SSVMessage.MsgType = spectypes.SSVConsensusMsgType
+		dmsg.MsgType = spectypes.SSVConsensusMsgType
 	} else {
 		dmsg, err = queue.DecodeSignedSSVMessage(msg)
 	}

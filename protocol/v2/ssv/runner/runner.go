@@ -12,6 +12,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -48,6 +49,11 @@ type Runner interface {
 	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
+}
+
+type DoppelgangerProvider interface {
+	CanSign(validatorIndex phase0.ValidatorIndex) bool
+	ReportQuorum(validatorIndex phase0.ValidatorIndex)
 }
 
 var _ Runner = new(CommitteeRunner)
@@ -291,7 +297,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 	return true, nil
 }
 
-func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
+func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
 	byts, err := input.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode input data for consensus")
@@ -301,7 +307,9 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, slot phase0.Slot,
 		return errors.Wrap(err, "input data invalid")
 	}
 
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
+	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
+		ctx,
+		logger,
 		specqbft.Height(slot),
 		byts,
 	); err != nil {

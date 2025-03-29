@@ -155,7 +155,7 @@ func (rc *recipientController) toProposalPreparation(shares []*types.SSVShare) (
 		if !found {
 			copy(feeRecipient[:], share.OwnerAddress.Bytes())
 		}
-		m[share.BeaconMetadata.Index] = feeRecipient
+		m[share.ValidatorIndex] = feeRecipient
 	}
 
 	return m, nil

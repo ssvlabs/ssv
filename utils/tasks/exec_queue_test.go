@@ -42,8 +42,6 @@ func TestExecQueue_Stop(t *testing.T) {
 	var i int64
 	q := NewExecutionQueue(1 * time.Millisecond)
 
-	go q.Start()
-
 	var wg sync.WaitGroup
 	wg.Add(1)
 	q.Queue(func() error {
@@ -52,6 +50,8 @@ func TestExecQueue_Stop(t *testing.T) {
 		return nil
 	})
 	require.Equal(t, 1, len(q.(*executionQueue).getWaiting()))
+
+	go q.Start()
 	wg.Wait()
 	require.Equal(t, 0, len(q.(*executionQueue).getWaiting()))
 

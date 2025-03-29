@@ -13,7 +13,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec"
@@ -29,6 +28,7 @@ import (
 type MockbeaconDuties struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconDutiesMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconDutiesMockRecorder is the mock recorder for MockbeaconDuties.
@@ -63,20 +63,6 @@ func (mr *MockbeaconDutiesMockRecorder) AttesterDuties(ctx, epoch, validatorIndi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttesterDuties", reflect.TypeOf((*MockbeaconDuties)(nil).AttesterDuties), ctx, epoch, validatorIndices)
 }
 
-// Events mocks base method.
-func (m *MockbeaconDuties) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Events indicates an expected call of Events.
-func (mr *MockbeaconDutiesMockRecorder) Events(ctx, topics, handler any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockbeaconDuties)(nil).Events), ctx, topics, handler)
-}
-
 // ProposerDuties mocks base method.
 func (m *MockbeaconDuties) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*v1.ProposerDuty, error) {
 	m.ctrl.T.Helper()
@@ -90,6 +76,20 @@ func (m *MockbeaconDuties) ProposerDuties(ctx context.Context, epoch phase0.Epoc
 func (mr *MockbeaconDutiesMockRecorder) ProposerDuties(ctx, epoch, validatorIndices any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDuties", reflect.TypeOf((*MockbeaconDuties)(nil).ProposerDuties), ctx, epoch, validatorIndices)
+}
+
+// SubscribeToHeadEvents mocks base method.
+func (m *MockbeaconDuties) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *v1.HeadEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier, ch)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeToHeadEvents indicates an expected call of SubscribeToHeadEvents.
+func (mr *MockbeaconDutiesMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier, ch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockbeaconDuties)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier, ch)
 }
 
 // SyncCommitteeDuties mocks base method.
@@ -111,6 +111,7 @@ func (mr *MockbeaconDutiesMockRecorder) SyncCommitteeDuties(ctx, epoch, indices 
 type MockbeaconSubscriber struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconSubscriberMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconSubscriberMockRecorder is the mock recorder for MockbeaconSubscriber.
@@ -162,6 +163,7 @@ func (mr *MockbeaconSubscriberMockRecorder) SubmitSyncCommitteeSubscriptions(ctx
 type MockbeaconValidator struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconValidatorMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconValidatorMockRecorder is the mock recorder for MockbeaconValidator.
@@ -200,6 +202,7 @@ func (mr *MockbeaconValidatorMockRecorder) GetValidatorData(validatorPubKeys any
 type Mockproposer struct {
 	ctrl     *gomock.Controller
 	recorder *MockproposerMockRecorder
+	isgomock struct{}
 }
 
 // MockproposerMockRecorder is the mock recorder for Mockproposer.
@@ -237,6 +240,7 @@ func (mr *MockproposerMockRecorder) SubmitProposalPreparation(feeRecipients any)
 type Mocksigner struct {
 	ctrl     *gomock.Controller
 	recorder *MocksignerMockRecorder
+	isgomock struct{}
 }
 
 // MocksignerMockRecorder is the mock recorder for Mocksigner.
@@ -275,6 +279,7 @@ func (mr *MocksignerMockRecorder) ComputeSigningRoot(object, domain any) *gomock
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNodeMockRecorder
+	isgomock struct{}
 }
 
 // MockBeaconNodeMockRecorder is the mock recorder for MockBeaconNode.
@@ -324,6 +329,20 @@ func (mr *MockBeaconNodeMockRecorder) ComputeSigningRoot(object, domain any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ComputeSigningRoot", reflect.TypeOf((*MockBeaconNode)(nil).ComputeSigningRoot), object, domain)
 }
 
+// DataVersion mocks base method.
+func (m *MockBeaconNode) DataVersion(epoch phase0.Epoch) spec.DataVersion {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DataVersion", epoch)
+	ret0, _ := ret[0].(spec.DataVersion)
+	return ret0
+}
+
+// DataVersion indicates an expected call of DataVersion.
+func (mr *MockBeaconNodeMockRecorder) DataVersion(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DataVersion", reflect.TypeOf((*MockBeaconNode)(nil).DataVersion), epoch)
+}
+
 // DomainData mocks base method.
 func (m *MockBeaconNode) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	m.ctrl.T.Helper()
@@ -339,24 +358,10 @@ func (mr *MockBeaconNodeMockRecorder) DomainData(epoch, domain any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainData", reflect.TypeOf((*MockBeaconNode)(nil).DomainData), epoch, domain)
 }
 
-// Events mocks base method.
-func (m *MockBeaconNode) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Events indicates an expected call of Events.
-func (mr *MockBeaconNodeMockRecorder) Events(ctx, topics, handler any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockBeaconNode)(nil).Events), ctx, topics, handler)
-}
-
 // GetAttestationData mocks base method.
-func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
+func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAttestationData", slot, committeeIndex)
+	ret := m.ctrl.Call(m, "GetAttestationData", slot)
 	ret0, _ := ret[0].(*phase0.AttestationData)
 	ret1, _ := ret[1].(spec.DataVersion)
 	ret2, _ := ret[2].(error)
@@ -364,9 +369,9 @@ func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot, committeeIndex pha
 }
 
 // GetAttestationData indicates an expected call of GetAttestationData.
-func (mr *MockBeaconNodeMockRecorder) GetAttestationData(slot, committeeIndex any) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) GetAttestationData(slot any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAttestationData", reflect.TypeOf((*MockBeaconNode)(nil).GetAttestationData), slot, committeeIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAttestationData", reflect.TypeOf((*MockBeaconNode)(nil).GetAttestationData), slot)
 }
 
 // GetBeaconBlock mocks base method.
@@ -493,7 +498,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitAggregateSelectionProof(slot, commit
 }
 
 // SubmitAttestations mocks base method.
-func (m *MockBeaconNode) SubmitAttestations(attestations []*phase0.Attestation) error {
+func (m *MockBeaconNode) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitAttestations", attestations)
 	ret0, _ := ret[0].(error)
@@ -563,7 +568,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitProposalPreparation(feeRecipients an
 }
 
 // SubmitSignedAggregateSelectionProof mocks base method.
-func (m *MockBeaconNode) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
+func (m *MockBeaconNode) SubmitSignedAggregateSelectionProof(msg *spec.VersionedSignedAggregateAndProof) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitSignedAggregateSelectionProof", msg)
 	ret0, _ := ret[0].(error)
@@ -619,17 +624,17 @@ func (mr *MockBeaconNodeMockRecorder) SubmitSyncMessages(msgs any) *gomock.Call 
 }
 
 // SubmitValidatorRegistration mocks base method.
-func (m *MockBeaconNode) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+func (m *MockBeaconNode) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitValidatorRegistration", pubkey, feeRecipient, sig)
+	ret := m.ctrl.Call(m, "SubmitValidatorRegistration", registration)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitValidatorRegistration indicates an expected call of SubmitValidatorRegistration.
-func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistration(pubkey, feeRecipient, sig any) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistration(registration any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeaconNode)(nil).SubmitValidatorRegistration), pubkey, feeRecipient, sig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeaconNode)(nil).SubmitValidatorRegistration), registration)
 }
 
 // SubmitVoluntaryExit mocks base method.
@@ -644,6 +649,20 @@ func (m *MockBeaconNode) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVolunta
 func (mr *MockBeaconNodeMockRecorder) SubmitVoluntaryExit(voluntaryExit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitVoluntaryExit", reflect.TypeOf((*MockBeaconNode)(nil).SubmitVoluntaryExit), voluntaryExit)
+}
+
+// SubscribeToHeadEvents mocks base method.
+func (m *MockBeaconNode) SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *v1.HeadEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeToHeadEvents", ctx, subscriberIdentifier, ch)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeToHeadEvents indicates an expected call of SubscribeToHeadEvents.
+func (mr *MockBeaconNodeMockRecorder) SubscribeToHeadEvents(ctx, subscriberIdentifier, ch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToHeadEvents", reflect.TypeOf((*MockBeaconNode)(nil).SubscribeToHeadEvents), ctx, subscriberIdentifier, ch)
 }
 
 // SyncCommitteeDuties mocks base method.

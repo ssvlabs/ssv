@@ -19,9 +19,10 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/ssvlabs/ssv/exporter/convert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -32,14 +33,12 @@ import (
 	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestSSVMapping(t *testing.T) {
 	path, err := os.Getwd()
 	require.NoError(t, err)
-	jsonTests, err := protocoltesting.GetSSVMappingSpecTestJSON(path, "ssv")
+	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
 	logger := logging.TestLogger(t)
@@ -367,7 +366,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
-	base.DomainType = networkconfig.TestNetwork.AlanDomainType
+	base.DomainType = networkconfig.TestNetwork.DomainType
 
 	logger := logging.TestLogger(t)
 
@@ -384,14 +383,14 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	}
 
 	if (ret.GetBaseRunner().DomainType == spectypes.DomainType{}) {
-		ret.GetBaseRunner().DomainType = networkconfig.TestNetwork.AlanDomainType
+		ret.GetBaseRunner().DomainType = networkconfig.TestNetwork.DomainType
 	}
 
 	return ret
 }
 
 func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *spectestingutils.TestKeySet) *controller.Controller {
-	config := qbfttesting.TestingConfig(logger, ks, convert.RoleCommittee)
+	config := qbfttesting.TestingConfig(logger, ks)
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		contr.Identifier,
@@ -466,7 +465,7 @@ func baseRunnerForRole(logger *zap.Logger, role spectypes.RunnerRole, base *runn
 		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
 		ret.(*runner.VoluntaryExitRunner).BaseRunner = base
 		return ret
-	case testingutils.UnknownDutyType:
+	case spectestingutils.UnknownDutyType:
 		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)
 		ret.(*runner.CommitteeRunner).BaseRunner = base
 		return ret
@@ -578,7 +577,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 			break
 		}
 
-		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), testingutils.KeySetForShare(shareInstance))
+		fixedRunner := fixRunnerForRun(t, committeeMap["Runners"].(map[string]interface{})[fmt.Sprintf("%v", slot)].(map[string]interface{}), spectestingutils.KeySetForShare(shareInstance))
 		c.Runners[slot] = fixedRunner.(*runner.CommitteeRunner)
 	}
 

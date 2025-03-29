@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
@@ -50,32 +49,22 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
+				if uint64(share.ValidatorIndex)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
 					continue
 				}
 
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey[:])
-				if !h.network.PastAlanForkAtEpoch(epoch) {
-					h.dutiesExecutor.ExecuteGenesisDuties(h.logger, []*genesisspectypes.Duty{{
-						Type:           genesisspectypes.BNRoleValidatorRegistration,
-						ValidatorIndex: share.ValidatorIndex,
-						PubKey:         pk,
-						Slot:           slot,
-						// no need for other params
-					}})
-				} else {
-					h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{
-						Type:           spectypes.BNRoleValidatorRegistration,
-						ValidatorIndex: share.ValidatorIndex,
-						PubKey:         pk,
-						Slot:           slot,
-						// no need for other params
-					}})
-				}
+				h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					ValidatorIndex: share.ValidatorIndex,
+					PubKey:         pk,
+					Slot:           slot,
+					// no need for other params
+				}})
 
 				vrs = append(vrs, ValidatorRegistration{
-					ValidatorIndex: share.BeaconMetadata.Index,
+					ValidatorIndex: share.ValidatorIndex,
 					FeeRecipient:   hex.EncodeToString(share.FeeRecipientAddress[:]),
 				})
 			}

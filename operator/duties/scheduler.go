@@ -8,15 +8,11 @@ import (
 	"sync"
 	"time"
 
-	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
@@ -32,19 +28,6 @@ import (
 
 //go:generate mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
 
-var slotDelayHistogram = promauto.NewHistogram(prometheus.HistogramOpts{
-	Name:    "slot_ticker_delay_milliseconds",
-	Help:    "The delay in milliseconds of the slot ticker",
-	Buckets: []float64{5, 10, 20, 100, 500, 5000}, // Buckets in milliseconds. Adjust as per your needs.
-})
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(slotDelayHistogram); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
-
 const (
 	// blockPropagationDelay time to propagate around the nodes
 	// before kicking off duties for the block's slot.
@@ -53,14 +36,12 @@ const (
 
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
-	ExecuteGenesisDuties(logger *zap.Logger, duties []*genesisspectypes.Duty)
 	ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty)
 	ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap)
 }
 
 // DutyExecutor is an interface for executing duty.
 type DutyExecutor interface {
-	ExecuteGenesisDuty(logger *zap.Logger, duty *genesisspectypes.Duty)
 	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
 	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 }
@@ -69,9 +50,9 @@ type BeaconNode interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
 	ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error)
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
-	Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error
 	SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error
 	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
+	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error
 }
 
 type ExecutionClient interface {
@@ -82,6 +63,7 @@ type ExecutionClient interface {
 type ValidatorProvider interface {
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	Validator(pubKey []byte) (*types.SSVShare, bool)
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
@@ -175,10 +157,9 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	logger = logger.Named(logging.NameDutyScheduler)
 	logger.Info("duty scheduler started")
 
-	// Subscribe to head events. This allows us to go early for attestations & sync committees if a block arrives,
-	// as well as re-request duties if there is a change in beacon block.
-	if err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger)); err != nil {
-		return fmt.Errorf("failed to subscribe to head events: %w", err)
+	logger.Info("subscribing to head events")
+	if err := s.listenToHeadEvents(ctx, logger); err != nil {
+		return fmt.Errorf("failed to listen to head events: %w", err)
 	}
 
 	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
@@ -221,6 +202,40 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
 	go reorgFeed.FanOut(ctx, s.reorg)
+
+	return nil
+}
+
+func (s *Scheduler) listenToHeadEvents(ctx context.Context, logger *zap.Logger) error {
+	headEventHandler := s.HandleHeadEvent(logger)
+
+	// Subscribe to head events. This allows us to go early for attestations & sync committees if a block arrives,
+	// as well as re-request duties if there is a change in beacon block.
+	ch := make(chan *eth2apiv1.HeadEvent, 32)
+	err := s.beaconNode.SubscribeToHeadEvents(ctx, "duty_scheduler", ch)
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to head events: %w", err)
+	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case headEvent := <-ch:
+				if headEvent == nil {
+					logger.Warn("head event was nil, skipping")
+					continue
+				}
+				logger.
+					With(fields.Slot(headEvent.Slot)).
+					With(fields.BlockRoot(headEvent.Block)).
+					Info("received head event. Processing...")
+
+				headEventHandler(headEvent)
+			}
+		}
+	}()
 
 	return nil
 }
@@ -291,39 +306,32 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 }
 
 // HandleHeadEvent handles the "head" events from the beacon node.
-func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Event) {
-	return func(event *eth2apiv1.Event) {
-		if event.Data == nil {
-			return
-		}
-
+func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.HeadEvent) {
+	return func(event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
-
-		data := event.Data.(*eth2apiv1.HeadEvent)
-
 		// we are interested only in events for the current slot, but to account for wall-clock
 		// differences the next slot after "what we think is the current one" can also be valid
-		if data.Slot != s.network.Beacon.EstimatedCurrentSlot() &&
-			data.Slot != s.network.Beacon.EstimatedCurrentSlot()+1 {
+		if event.Slot != s.network.Beacon.EstimatedCurrentSlot() &&
+			event.Slot != s.network.Beacon.EstimatedCurrentSlot()+1 {
 			return
 		}
 
 		// check for reorg
-		epoch := s.network.Beacon.EstimatedEpochAtSlot(data.Slot)
-		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, data.Slot, data.Slot%32+1)
+		epoch := s.network.Beacon.EstimatedEpochAtSlot(event.Slot)
+		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, event.Slot, event.Slot%32+1)
 		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
 			if epoch > s.lastBlockEpoch {
 				// Change of epoch.
 				// Ensure that the new previous dependent root is the same as the old current root.
 				if !bytes.Equal(s.previousDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.currentDutyDependentRoot[:], data.PreviousDutyDependentRoot[:]) {
+					!bytes.Equal(s.currentDutyDependentRoot[:], event.PreviousDutyDependentRoot[:]) {
 					logger.Debug("🔀 Previous duty dependent root has changed on epoch transition",
 						zap.String("old_current_dependent_root", fmt.Sprintf("%#x", s.currentDutyDependentRoot[:])),
-						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", data.PreviousDutyDependentRoot[:])))
+						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:     data.Slot,
+						Slot:     event.Slot,
 						Previous: true,
 					}
 				}
@@ -331,26 +339,26 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 				// Same epoch
 				// Ensure that the previous dependent roots are the same.
 				if !bytes.Equal(s.previousDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.previousDutyDependentRoot[:], data.PreviousDutyDependentRoot[:]) {
+					!bytes.Equal(s.previousDutyDependentRoot[:], event.PreviousDutyDependentRoot[:]) {
 					logger.Debug("🔀 Previous duty dependent root has changed",
 						zap.String("old_previous_dependent_root", fmt.Sprintf("%#x", s.previousDutyDependentRoot[:])),
-						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", data.PreviousDutyDependentRoot[:])))
+						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:     data.Slot,
+						Slot:     event.Slot,
 						Previous: true,
 					}
 				}
 
 				// Ensure that the current dependent roots are the same.
 				if !bytes.Equal(s.currentDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
+					!bytes.Equal(s.currentDutyDependentRoot[:], event.CurrentDutyDependentRoot[:]) {
 					logger.Debug("🔀 Current duty dependent root has changed",
 						zap.String("old_current_dependent_root", fmt.Sprintf("%#x", s.currentDutyDependentRoot[:])),
-						zap.String("new_current_dependent_root", fmt.Sprintf("%#x", data.CurrentDutyDependentRoot[:])))
+						zap.String("new_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:    data.Slot,
+						Slot:    event.Slot,
 						Current: true,
 					}
 				}
@@ -358,12 +366,12 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		}
 
 		s.lastBlockEpoch = epoch
-		s.previousDutyDependentRoot = data.PreviousDutyDependentRoot
-		s.currentDutyDependentRoot = data.CurrentDutyDependentRoot
+		s.previousDutyDependentRoot = event.PreviousDutyDependentRoot
+		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
 		delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(data.Slot).Add(delay)
+		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
@@ -373,30 +381,12 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 
 			s.waitCond.L.Lock()
 			// we only want to increase s.headSlot (and never decrease it)
-			if data.Slot > s.headSlot {
-				s.headSlot = data.Slot
+			if event.Slot > s.headSlot {
+				s.headSlot = event.Slot
 			}
 			s.waitCond.Broadcast()
 			s.waitCond.L.Unlock()
 		}
-	}
-}
-
-func (s *Scheduler) ExecuteGenesisDuties(logger *zap.Logger, duties []*genesisspectypes.Duty) {
-	for _, duty := range duties {
-		duty := duty
-		logger := s.loggerWithGenesisDutyContext(logger, duty)
-		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
-		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
-		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
-		go func() {
-			if duty.Type == genesisspectypes.BNRoleAttester || duty.Type == genesisspectypes.BNRoleSyncCommittee {
-				s.waitOneThirdOrValidBlock(duty.Slot)
-			}
-			s.dutyExecutor.ExecuteGenesisDuty(logger, duty)
-		}()
 	}
 }
 
@@ -409,11 +399,12 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
+			recordDutyExecuted(ctx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}()
 	}
@@ -431,24 +422,13 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
+			recordDutyExecuted(ctx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
-}
-
-// loggerWithGenesisDutyContext returns an instance of logger with the given genesis duty's information
-func (s *Scheduler) loggerWithGenesisDutyContext(logger *zap.Logger, duty *genesisspectypes.Duty) *zap.Logger {
-	return logger.
-		With(zap.Stringer(fields.FieldRole, duty.Type)).
-		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
-		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot))).
-		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information

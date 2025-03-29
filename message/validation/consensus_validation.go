@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -41,8 +40,6 @@ func (mv *messageValidator) validateConsensusMessage(
 		e.innerErr = err
 		return nil, e
 	}
-
-	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.OperatorIDs))
 
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeInfo.operatorIDs); err != nil {
 		return consensusMessage, err
@@ -269,7 +266,8 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
-	if err := mv.validateBeaconDuty(role, msgSlot, validatorIndices); err != nil {
+	randaoMsg := false
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), msgSlot, validatorIndices, randaoMsg); err != nil {
 		return err
 	}
 
@@ -442,7 +440,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	return nil
 }
 
-func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) types.OperatorID {
+func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) spectypes.OperatorID {
 	firstRoundIndex := uint64(0)
 	if height != specqbft.FirstHeight {
 		firstRoundIndex += uint64(height) % uint64(len(committee))

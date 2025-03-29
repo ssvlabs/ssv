@@ -52,10 +52,6 @@ type Validator struct {
 func NewValidator(pctx context.Context, cancel func(), options Options) *Validator {
 	options.defaults()
 
-	if options.Metrics == nil {
-		options.Metrics = &NopMetrics{}
-	}
-
 	v := &Validator{
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
@@ -81,7 +77,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		role := dutyRunner.GetBaseRunner().RunnerRoleType
 
 		v.Queues[role] = queueContainer{
-			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
+			Q: queue.New(options.QueueSize),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,
@@ -202,7 +198,7 @@ func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
-	if len(msg.SSVMessage.GetData()) == 0 {
+	if len(msg.GetData()) == 0 {
 		return errors.New("msg data is invalid")
 	}
 

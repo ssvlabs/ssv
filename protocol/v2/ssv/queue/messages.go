@@ -207,7 +207,7 @@ func scoreMessageSubtype(state *State, m *SSVMessage, relativeHeight int) int {
 	switch {
 	case isDecidedMessage(state, m):
 		return 2
-	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
+	case isConsensusMessage && specqbft.MessageType(m.MsgType) == specqbft.CommitMsgType:
 		return 1
 	}
 	return 0
@@ -296,26 +296,8 @@ func scoreCommitteeMessageSubtype(state *State, m *SSVMessage, relativeHeight in
 	switch {
 	case isDecidedMessage(state, m):
 		return 2
-	case isConsensusMessage && specqbft.MessageType(m.SSVMessage.MsgType) == specqbft.CommitMsgType:
+	case isConsensusMessage && specqbft.MessageType(m.MsgType) == specqbft.CommitMsgType:
 		return 1
-	}
-	return 0
-}
-
-// scoreCommitteeConsensusType returns an integer score for the type of committee consensus message.
-// When given a non-consensus message, scoreConsensusType returns 0.
-func scoreCommitteeConsensusType(m *SSVMessage) int {
-	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
-		switch qbftMsg.MsgType {
-		case specqbft.CommitMsgType:
-			return 4
-		case specqbft.RoundChangeMsgType:
-			return 3
-		case specqbft.ProposalMsgType:
-			return 2
-		case specqbft.PrepareMsgType:
-			return 1
-		}
 	}
 	return 0
 }

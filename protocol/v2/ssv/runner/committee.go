@@ -6,23 +6,23 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-bitfield"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 var (
@@ -35,18 +35,17 @@ type CommitteeDutyGuard interface {
 }
 
 type CommitteeRunner struct {
-	BaseRunner     *BaseRunner
-	network        specqbft.Network
-	beacon         beacon.BeaconNode
-	signer         spectypes.BeaconSigner
-	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
-	DutyGuard      CommitteeDutyGuard
+	BaseRunner          *BaseRunner
+	network             specqbft.Network
+	beacon              beacon.BeaconNode
+	signer              spectypes.BeaconSigner
+	operatorSigner      ssvtypes.OperatorSigner
+	valCheck            specqbft.ProposedValueCheckF
+	DutyGuard           CommitteeDutyGuard
+	doppelgangerHandler DoppelgangerProvider
+	measurements        measurementsStore
 
 	submittedDuties map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}
-
-	started time.Time
-	metrics metrics.ConsensusMetrics
 }
 
 func NewCommitteeRunner(
@@ -59,6 +58,7 @@ func NewCommitteeRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	dutyGuard CommitteeDutyGuard,
+	doppelgangerHandler DoppelgangerProvider,
 ) (Runner, error) {
 	if len(share) == 0 {
 		return nil, errors.New("no shares")
@@ -66,19 +66,20 @@ func NewCommitteeRunner(
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
-			DomainType:     networkConfig.AlanDomainType,
+			DomainType:     networkConfig.DomainType,
 			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
 			Share:          share,
 			QBFTController: qbftController,
 		},
-		beacon:          beacon,
-		network:         network,
-		signer:          signer,
-		operatorSigner:  operatorSigner,
-		valCheck:        valCheck,
-		submittedDuties: make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
-		metrics:         metrics.NewConsensusMetrics(spectypes.RoleCommittee),
-		DutyGuard:       dutyGuard,
+		beacon:              beacon,
+		network:             network,
+		signer:              signer,
+		operatorSigner:      operatorSigner,
+		valCheck:            valCheck,
+		submittedDuties:     make(map[spectypes.BeaconRole]map[phase0.ValidatorIndex]struct{}),
+		DutyGuard:           dutyGuard,
+		doppelgangerHandler: doppelgangerHandler,
+		measurements:        NewMeasurementsStore(),
 	}, nil
 }
 
@@ -210,8 +211,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return nil
 	}
 
-	cr.metrics.EndConsensus()
-	cr.metrics.StartPostConsensus()
+	cr.measurements.EndConsensus()
+	recordConsensusDuration(ctx, cr.measurements.ConsensusTime(), spectypes.RoleCommittee)
+
+	cr.measurements.StartPostConsensus()
 	// decided means consensus is done
 
 	duty := cr.BaseRunner.State.StartingDuty
@@ -222,17 +225,33 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	beaconVote := decidedValue.(*spectypes.BeaconVote)
-	validDuties := 0
-	for _, duty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
-		if err := cr.DutyGuard.ValidDuty(duty.Type, spectypes.ValidatorPK(duty.PubKey), duty.DutySlot()); err != nil {
-			logger.Warn("duty is no longer valid", fields.Validator(duty.PubKey[:]), fields.BeaconRole(duty.Type), zap.Error(err))
+	totalAttesterDuties := 0
+	totalSyncCommitteeDuties := 0
+	blockedAttesterDuties := 0
+
+	epoch := cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
+	version := cr.beacon.DataVersion(epoch)
+
+	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
+			logger.Warn("duty is no longer valid", fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
 			continue
 		}
-		switch duty.Type {
+
+		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
-			validDuties++
-			attestationData := constructAttestationData(beaconVote, duty)
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, attestationData, duty.DutySlot(),
+			totalAttesterDuties++
+
+			// Doppelganger protection applies only to attester duties since they are slashable.
+			// Sync committee duties are not slashable, so they are always allowed.
+			if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
+				logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(validatorDuty.ValidatorIndex))
+				blockedAttesterDuties++
+				continue
+			}
+
+			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, attestationData, validatorDuty.DutySlot(),
 				spectypes.DomainAttester)
 			if err != nil {
 				return errors.Wrap(err, "failed signing attestation data")
@@ -245,29 +264,43 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				return errors.Wrap(err, "failed to hash attestation data")
 			}
 			logger.Debug("signed attestation data",
-				zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
-				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
+				zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
+				zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
 				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
 				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)
 		case spectypes.BNRoleSyncCommittee:
-			validDuties++
+			totalSyncCommitteeDuties++
+
 			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, spectypes.SSZBytes(blockRoot[:]), duty.DutySlot(),
+			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, spectypes.SSZBytes(blockRoot[:]), validatorDuty.DutySlot(),
 				spectypes.DomainSyncCommittee)
 			if err != nil {
 				return errors.Wrap(err, "failed signing sync committee message")
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 		default:
-			return fmt.Errorf("invalid duty type: %s", duty.Type)
+			return fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}
 	}
-	if validDuties == 0 {
+
+	if totalAttesterDuties == 0 && totalSyncCommitteeDuties == 0 {
 		cr.BaseRunner.State.Finished = true
 		return ErrNoValidDuties
+	}
+
+	// Avoid sending an empty message if all attester duties were blocked due to Doppelganger protection
+	// and no sync committee duties exist.
+	//
+	// We do not mark the state as finished here because post-consensus messages must still be processed,
+	// allowing validators to be marked as safe once sufficient consensus is reached.
+	if totalAttesterDuties == blockedAttesterDuties && totalSyncCommitteeDuties == 0 {
+		logger.Debug("Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties.",
+			zap.Int("attester_duties", totalAttesterDuties),
+			zap.Int("blocked_attesters", blockedAttesterDuties))
+		return nil
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -297,8 +330,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	return nil
 
+	return nil
 }
 
 // TODO finish edge case where some roots may be missing
@@ -316,7 +349,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		signers[i] = msg.Signer
 		indices[i] = uint64(msg.ValidatorIndex)
 	}
-	logger = logger.With(fields.ConsensusTime(cr.metrics.GetConsensusTime()))
+	logger = logger.With(fields.ConsensusTime(cr.measurements.ConsensusTime()))
 
 	logger.Debug("🧩 got partial signatures",
 		zap.Bool("quorum", quorum),
@@ -340,7 +373,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	var anyErr error
-	attestationsToSubmit := make(map[phase0.ValidatorIndex]*phase0.Attestation)
+	attestationsToSubmit := make(map[phase0.ValidatorIndex]*spec.VersionedAttestation)
 	syncCommitteeMessagesToSubmit := make(map[phase0.ValidatorIndex]*altair.SyncCommitteeMessage)
 
 	// Get unique roots to avoid repetition
@@ -425,36 +458,67 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				syncCommitteeMessagesToSubmit[validator] = syncMsg
 
 			} else if role == spectypes.BNRoleAttester {
-				att := sszObject.(*phase0.Attestation)
+				// Only mark as safe if this is an attester role
+				// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
+				// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
+				cr.doppelgangerHandler.ReportQuorum(validator)
+
+				att := sszObject.(*spec.VersionedAttestation)
 				// Insert signature
-				att.Signature = specSig
+				att, err = specssv.VersionedAttestationWithSignature(att, specSig)
+				if err != nil {
+					anyErr = errors.Wrap(err, "could not insert signature in versioned attestation")
+					continue
+				}
 
 				attestationsToSubmit[validator] = att
 			}
 		}
 	}
-	cr.metrics.EndPostConsensus()
-	logger = logger.With(fields.PostConsensusTime(cr.metrics.GetPostConsensusTime()))
+
+	cr.measurements.EndPostConsensus()
+	recordPostConsensusDuration(ctx, cr.measurements.PostConsensusTime(), spectypes.RoleCommittee)
+
+	logger = logger.With(fields.PostConsensusTime(cr.measurements.PostConsensusTime()))
 
 	// Submit multiple attestations
-	attestations := make([]*phase0.Attestation, 0, len(attestationsToSubmit))
+	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
 	for _, att := range attestationsToSubmit {
 		attestations = append(attestations, att)
 	}
+
+	cr.measurements.EndDutyFlow()
 
 	if len(attestations) > 0 {
 		submissionStart := time.Now()
 		if err := cr.beacon.SubmitAttestations(attestations); err != nil {
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
+			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
+		recordDutyDuration(ctx, cr.measurements.DutyDurationTime(), spectypes.BNRoleAttester, cr.BaseRunner.State.RunningInstance.State.Round)
+
+		attestationsCount := len(attestations)
+		if attestationsCount <= math.MaxUint32 {
+			recordSuccessfulSubmission(ctx,
+				uint32(attestationsCount),
+				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				spectypes.BNRoleAttester)
+		}
+
+		attData, err := attestations[0].Data()
+		if err != nil {
+			return errors.Wrap(err, "could not get attestation data")
+			// TODO return error?
+		}
 		logger.Info("✅ successfully submitted attestations",
+			fields.Epoch(cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
-			fields.BlockRoot(attestations[0].Data.BeaconBlockRoot),
+			fields.BlockRoot(attData.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.started)))
+			fields.TotalConsensusTime(time.Since(cr.measurements.consensusStart)))
 
 		// Record successful submissions
 		for validator := range attestationsToSubmit {
@@ -472,14 +536,26 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		submissionStart := time.Now()
 		if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
 			logger.Error("❌ failed to submit sync committee", zap.Error(err))
+			recordFailedSubmission(ctx, spectypes.BNRoleSyncCommittee)
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
+
+		recordDutyDuration(ctx, cr.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
+
+		syncMsgsCount := len(syncCommitteeMessages)
+		if syncMsgsCount <= math.MaxUint32 {
+			recordSuccessfulSubmission(ctx,
+				uint32(syncMsgsCount),
+				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				spectypes.BNRoleSyncCommittee)
+		}
+
 		logger.Info("✅ successfully submitted sync committee",
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.started)))
+			fields.TotalConsensusTime(time.Since(cr.measurements.consensusStart)))
 
 		// Record successful submissions
 		for validator := range syncCommitteeMessagesToSubmit {
@@ -578,11 +654,11 @@ func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot,
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *zap.Logger) (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot, error error,
+	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, error error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
-	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]ssz.HashRoot)
+	beaconObjects = make(map[phase0.ValidatorIndex]map[[32]byte]interface{})
 	duty := cr.BaseRunner.State.StartingDuty
 	// TODO DecidedValue should be interface??
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
@@ -590,6 +666,11 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 	if err := beaconVote.Decode(beaconVoteData); err != nil {
 		return nil, nil, nil, errors.Wrap(err, "could not decode beacon vote")
 	}
+
+	slot := duty.DutySlot()
+	epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
+
+	dataVersion := cr.beacon.DataVersion(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {
@@ -605,12 +686,11 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			// Attestation object
-			attestationData := constructAttestationData(beaconVote, validatorDuty)
-			aggregationBitfield := bitfield.NewBitlist(validatorDuty.CommitteeLength)
-			aggregationBitfield.SetBitAt(validatorDuty.ValidatorCommitteeIndex, true)
-			unSignedAtt := &phase0.Attestation{
-				Data:            attestationData,
-				AggregationBits: aggregationBitfield,
+			attestationData := constructAttestationData(beaconVote, validatorDuty, dataVersion)
+			attestationResponse, err := specssv.ConstructVersionedAttestationWithoutSignature(attestationData, dataVersion, validatorDuty)
+			if err != nil {
+				logger.Debug("failed to construct attestation", zap.Error(err))
+				continue
 			}
 
 			// Root
@@ -629,9 +709,9 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			// Add to map
 			attestationMap[validatorDuty.ValidatorIndex] = root
 			if _, ok := beaconObjects[validatorDuty.ValidatorIndex]; !ok {
-				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]ssz.HashRoot)
+				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]interface{})
 			}
-			beaconObjects[validatorDuty.ValidatorIndex][root] = unSignedAtt
+			beaconObjects[validatorDuty.ValidatorIndex][root] = attestationResponse
 		case spectypes.BNRoleSyncCommittee:
 			// Sync committee beacon object
 			syncMsg := &altair.SyncCommitteeMessage{
@@ -657,7 +737,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			// Set root and beacon object
 			syncCommitteeMap[validatorDuty.ValidatorIndex] = root
 			if _, ok := beaconObjects[validatorDuty.ValidatorIndex]; !ok {
-				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]ssz.HashRoot)
+				beaconObjects[validatorDuty.ValidatorIndex] = make(map[[32]byte]interface{})
 			}
 			beaconObjects[validatorDuty.ValidatorIndex][root] = syncMsg
 		default:
@@ -668,11 +748,12 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 }
 
 func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	cr.measurements.StartDutyFlow()
+
 	start := time.Now()
 	slot := duty.DutySlot()
-	// We set committeeIndex to 0 for simplicity, there is no need to specify it exactly because
-	// all 64 Ethereum committees assigned to this slot will get the same data to attest for.
-	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot, 0)
+
+	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
@@ -681,8 +762,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		fields.Slot(slot),
 	)
 
-	cr.started = time.Now()
-	cr.metrics.StartConsensus()
+	cr.measurements.StartConsensus()
 
 	vote := &spectypes.BeaconVote{
 		BlockRoot: attData.BeaconBlockRoot,
@@ -690,7 +770,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Target:    attData.Target,
 	}
 
-	if err := cr.BaseRunner.decide(logger, cr, duty.DutySlot(), vote); err != nil {
+	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil
@@ -700,16 +780,24 @@ func (cr *CommitteeRunner) GetSigner() spectypes.BeaconSigner {
 	return cr.signer
 }
 
+func (cr *CommitteeRunner) GetDoppelgangerHandler() DoppelgangerProvider {
+	return cr.doppelgangerHandler
+}
+
 func (cr *CommitteeRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
 	return cr.operatorSigner
 }
 
-func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.ValidatorDuty) *phase0.AttestationData {
-	return &phase0.AttestationData{
+func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.ValidatorDuty, version spec.DataVersion) *phase0.AttestationData {
+	attData := &phase0.AttestationData{
 		Slot:            duty.Slot,
 		Index:           duty.CommitteeIndex,
 		BeaconBlockRoot: vote.BlockRoot,
 		Source:          vote.Source,
 		Target:          vote.Target,
 	}
+	if version >= spec.DataVersionElectra {
+		attData.Index = 0 // EIP-7549: Index should be set to 0
+	}
+	return attData
 }
