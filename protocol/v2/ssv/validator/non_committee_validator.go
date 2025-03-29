@@ -250,6 +250,8 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 		}
 	}
 
+	ncv.pruneOldSlots(currentSlot)
+
 	return nil
 }
 
@@ -296,6 +298,12 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 		}
 	}
 
+	ncv.pruneOldSlots(currentSlot)
+
+	return quorums, nil
+}
+
+func (ncv *CommitteeObserver) pruneOldSlots(currentSlot phase0.Slot) {
 	// Remove older slots container
 	if len(ncv.postConsensusContainer) >= ncv.postConsensusContainerCapacity() {
 		// #nosec G115 -- capacity must be low epoch not to cause overflow
@@ -306,8 +314,6 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 			}
 		}
 	}
-
-	return quorums, nil
 }
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
