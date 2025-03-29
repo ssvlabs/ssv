@@ -2,6 +2,7 @@ package kv
 
 import (
 	"context"
+
 	"github.com/cockroachdb/pebble"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
@@ -150,7 +151,7 @@ func (pdb *PebbleDB) GetAll(prefix []byte, iterator func(int, basedb.Obj) error)
 			continue
 		}
 		err = iterator(i, basedb.Obj{
-			Key:   iter.Key(),
+			Key:   iter.Key()[len(prefix):],
 			Value: v,
 		})
 		if err != nil {
