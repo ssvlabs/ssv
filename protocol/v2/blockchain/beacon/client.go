@@ -68,4 +68,7 @@ type Options struct {
 
 	CommonTimeout time.Duration // Optional.
 	LongTimeout   time.Duration // Optional.
+
+	// TODO: revert simulation test
+	MaxHeaderFetchRetries int
 }

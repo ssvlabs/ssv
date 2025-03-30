@@ -174,6 +174,9 @@ type GoClient struct {
 	ForkEpochCapella   phase0.Epoch
 	ForkEpochBellatrix phase0.Epoch
 	ForkEpochAltair    phase0.Epoch
+
+	// TODO: revert simulation test
+	maxHeaderFetchRetries int
 }
 
 // New init new client and go-client instance
@@ -217,11 +220,12 @@ func New(
 		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
 		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
-		ForkEpochAltair:    math.MaxUint64,
-		ForkEpochBellatrix: math.MaxUint64,
-		ForkEpochCapella:   math.MaxUint64,
-		ForkEpochDeneb:     math.MaxUint64,
-		ForkEpochElectra:   math.MaxUint64,
+		ForkEpochAltair:       math.MaxUint64,
+		ForkEpochBellatrix:    math.MaxUint64,
+		ForkEpochCapella:      math.MaxUint64,
+		ForkEpochDeneb:        math.MaxUint64,
+		ForkEpochElectra:      math.MaxUint64,
+		maxHeaderFetchRetries: opt.MaxHeaderFetchRetries,
 	}
 
 	if opt.BeaconNodeAddr == "" {

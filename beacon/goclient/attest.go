@@ -391,6 +391,15 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 				With(zap.Int("retry_count", retries)).
 				With(zap.Duration("total_elapsed", time.Since(start))).
 				Warn("retrying to obtain slot for block root")
+
+			// TODO: revert simulation test
+			if gc.maxHeaderFetchRetries > 0 && retries >= gc.maxHeaderFetchRetries {
+				logger.
+					With(zap.Int("retry_count", retries)).
+					With(zap.Duration("total_elapsed", time.Since(start))).
+					Error("max retries for obtaining slot for block root was reached. Returning base score")
+				return score
+			}
 		}
 	}
 }
