@@ -268,7 +268,7 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 	logger := gc.log.With(zap.String("api", "SubmitBlindedProposal"))
 
 	submissions := atomic.Int32{}
-	p := pool.New().WithErrors().WithContext(gc.ctx)
+	p := pool.New().WithErrors().WithContext(gc.ctx).WithMaxGoroutines(len(gc.clients))
 	for _, client := range gc.clients {
 		client := client
 		p.Go(func(ctx context.Context) error {

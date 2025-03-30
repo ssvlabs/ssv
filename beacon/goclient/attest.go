@@ -385,7 +385,7 @@ func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation
 	logger := gc.log.With(zap.String("api", "SubmitAttestations"))
 
 	submissions := atomic.Int32{}
-	p := pool.New().WithErrors().WithContext(gc.ctx)
+	p := pool.New().WithErrors().WithContext(gc.ctx).WithMaxGoroutines(len(gc.clients))
 	for _, client := range gc.clients {
 		client := client
 		p.Go(func(ctx context.Context) error {
