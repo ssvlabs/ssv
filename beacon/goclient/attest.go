@@ -138,7 +138,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			succeeded++
 			logger.With(
 				zap.Duration("elapsed", time.Since(started)),
-				fields.Slot(slot),
 				zap.String("client_addr", resp.clientAddr),
 				zap.Int("succeeded", succeeded),
 				zap.Int("errored", errored),
@@ -153,7 +152,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 			errored++
 			logger.With(
 				zap.Duration("elapsed", time.Since(started)),
-				fields.Slot(slot),
 				zap.String("client_addr", err.clientAddr),
 				zap.Int("succeeded", succeeded),
 				zap.Int("errored", errored),
@@ -164,7 +162,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 
 			logger.With(
 				zap.Duration("elapsed", time.Since(started)),
-				fields.Slot(slot),
 				zap.Int("succeeded", succeeded),
 				zap.Int("errored", errored),
 				zap.Int("soft_timed_out", softTimedOut),
@@ -179,7 +176,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 				succeeded++
 				logger.With(
 					zap.Duration("elapsed", time.Since(started)),
-					fields.Slot(slot),
 					zap.String("client_addr", resp.clientAddr),
 					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
@@ -193,7 +189,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 				errored++
 				logger.With(
 					zap.Duration("elapsed", time.Since(started)),
-					fields.Slot(slot),
 					zap.String("client_addr", err.clientAddr),
 					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
@@ -213,7 +208,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 
 	resultLogger := logger.With(
 		zap.Duration("elapsed", time.Since(started)),
-		fields.Slot(slot),
 		zap.Int("succeeded", succeeded),
 		zap.Int("errored", errored),
 		zap.Int("soft_timed_out", softTimedOut),
@@ -226,7 +220,6 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 	}
 
 	resultLogger.With(
-		fields.Slot(slot),
 		zap.String("client_addr", bestClientAddr),
 		zap.Float64("score", bestScore)).
 		Debug("successfully fetched attestation data")
@@ -265,7 +258,6 @@ func (gc *GoClient) simpleAttestationData(slot phase0.Slot) (*phase0.Attestation
 	}
 
 	logger.With(
-		fields.Slot(slot),
 		zap.Duration("elapsed", time.Since(attDataReqStart)),
 		zap.Bool("with_weighted_attestation_data", false),
 		zap.String("client_addr", gc.multiClient.Address()),
