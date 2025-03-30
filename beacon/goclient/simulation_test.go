@@ -93,7 +93,7 @@ func TestSimulation(t *testing.T) {
 
 		retries := 0
 		if retrying {
-			retries = i
+			retries = 10
 		}
 		weightedClient, err := New(
 			logger.Named("Client."+weightedClientName),
