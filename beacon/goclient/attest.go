@@ -490,28 +490,28 @@ func (gc *GoClient) multiClientSubmit(
 	return nil
 }
 
-// SubmitAttestations implements Beacon interface
-func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
-	return gc.multiClientSubmit("SubmitAttestations", func(ctx context.Context, client Client) error {
-		return client.SubmitAttestations(ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
-	})
-}
-
-// SubmitAttestations implements Beacon interface
+// // SubmitAttestations implements Beacon interface and sends attestations to all clients concurrently
 // func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
-// 	clientAddress := gc.multiClient.Address()
-// 	logger := gc.log.With(
-// 		zap.String("api", "SubmitAttestations"),
-// 		zap.String("client_addr", clientAddress))
-
-// 	start := time.Now()
-// 	err := gc.multiClient.SubmitAttestations(gc.ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
-// 	recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
-// 	if err != nil {
-// 		logger.Error(clResponseErrMsg, zap.Error(err))
-// 		return err
-// 	}
-
-// 	logger.Debug("consensus client submitted attestations")
-// 	return nil
+// 	return gc.multiClientSubmit("SubmitAttestations", func(ctx context.Context, client Client) error {
+// 		return client.SubmitAttestations(ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
+// 	})
 // }
+
+// SubmitAttestations implements Beacon interface and sends attestations to the first client that succeeds
+func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitAttestations"),
+		zap.String("client_addr", clientAddress))
+
+	start := time.Now()
+	err := gc.multiClient.SubmitAttestations(gc.ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
+	recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
+	if err != nil {
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
+	}
+
+	logger.Debug("consensus client submitted attestations")
+	return nil
+}
