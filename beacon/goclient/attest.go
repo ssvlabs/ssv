@@ -14,8 +14,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/sourcegraph/conc/pool"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/utils/pool"
 	"go.uber.org/zap"
 )
 
