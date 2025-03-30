@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
@@ -13,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/utils/pool"
 	"go.uber.org/zap"
 )
 
@@ -379,19 +382,41 @@ func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitAttestations"),
-		zap.String("client_addr", clientAddress))
+	logger := gc.log.With(zap.String("api", "SubmitAttestations"))
 
-	start := time.Now()
-	err := gc.multiClient.SubmitAttestations(gc.ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
-	recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
-	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
+	submissions := atomic.Int32{}
+	p := pool.New().WithErrors().WithContext(gc.ctx)
+	for _, client := range gc.clients {
+		client := client
+		p.Go(func(ctx context.Context) error {
+			clientAddress := client.Address()
+			logger := logger.With(zap.String("client_addr", clientAddress))
+
+			start := time.Now()
+			err := client.SubmitAttestations(ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
+			recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
+
+			if err != nil {
+				logger.Error("client failed to submit attestations",
+					zap.Error(err))
+				return fmt.Errorf("client failed to submit attestations (%s): %w", clientAddress, err)
+			}
+
+			logger.Debug("client submitted attestations", fields.Duration(start))
+			submissions.Add(1)
+			return nil
+		})
 	}
-
-	logger.Debug("consensus client submitted attestations")
+	err := p.Wait()
+	if submissions.Load() > 0 {
+		// At least one client has submitted the attestations successfully,
+		// so we can return without error.
+		return nil
+	}
+	if err != nil {
+		logger.Error("failed to submit attestations",
+			zap.Error(err))
+		return fmt.Errorf("failed to submit attestations")
+	}
 	return nil
 }
