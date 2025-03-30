@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/utils/atomic"
+	"github.com/ssvlabs/ssv/utils/pool"
 	"go.uber.org/zap"
 )
 
@@ -441,6 +443,58 @@ func isBlockHeaderResponseValid(response *api.Response[*eth2apiv1.BeaconBlockHea
 func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 	return zap.String("weighted_data_request_id", id.String())
 }
+
+// multiClientSubmit is a generic function that submits data to multiple clients concurrently.
+// If any client succeeds, the remaining submissions are cancelled.
+// Returns nil if at least one client successfully submitted the data.
+func (gc *GoClient) multiClientSubmit(
+	operationName string,
+	submitFunc func(ctx context.Context, client Client) error,
+) error {
+	logger := gc.log.With(zap.String("api", operationName))
+
+	submissions := atomic.Int32{}
+	p := pool.New().WithErrors().WithContext(gc.ctx)
+	for _, client := range gc.clients {
+		client := client
+		p.Go(func(ctx context.Context) error {
+			clientAddress := client.Address()
+			logger := logger.With(zap.String("client_addr", clientAddress))
+
+			start := time.Now()
+			err := submitFunc(ctx, client)
+			recordRequestDuration(ctx, operationName, clientAddress, http.MethodPost, time.Since(start), err)
+			if err != nil {
+				logger.Debug("consensus client returned an error while submitting. As at least one node must submit successfully, it's expected that some nodes may fail to submit.",
+					zap.Error(err))
+				return err
+			}
+
+			logger.Debug("consensus client submitted successfully")
+
+			submissions.Add(1)
+			return nil
+		})
+	}
+	err := p.Wait()
+	if submissions.Load() > 0 {
+		// At least one client has submitted successfully,
+		// so we can return without error.
+		return nil
+	}
+	if err != nil {
+		logger.Error("no consensus clients have been able to submit. See adjacent logs for error details.")
+		return fmt.Errorf("no consensus clients have been able to submit %s", operationName)
+	}
+	return nil
+}
+
+// // SubmitAttestations implements Beacon interface
+// func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
+// 	return gc.multiClientSubmit("SubmitAttestations", func(ctx context.Context, client Client) error {
+// 		return client.SubmitAttestations(ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
+// 	})
+// }
 
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
