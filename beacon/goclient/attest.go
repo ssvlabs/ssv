@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -12,9 +13,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/sourcegraph/conc/pool"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/utils/atomic"
-	"github.com/ssvlabs/ssv/utils/pool"
 	"go.uber.org/zap"
 )
 
@@ -490,28 +490,28 @@ func (gc *GoClient) multiClientSubmit(
 	return nil
 }
 
-// // SubmitAttestations implements Beacon interface
-// func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
-// 	return gc.multiClientSubmit("SubmitAttestations", func(ctx context.Context, client Client) error {
-// 		return client.SubmitAttestations(ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
-// 	})
-// }
-
 // SubmitAttestations implements Beacon interface
 func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitAttestations"),
-		zap.String("client_addr", clientAddress))
-
-	start := time.Now()
-	err := gc.multiClient.SubmitAttestations(gc.ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
-	recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
-	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
-	}
-
-	logger.Debug("consensus client submitted attestations")
-	return nil
+	return gc.multiClientSubmit("SubmitAttestations", func(ctx context.Context, client Client) error {
+		return client.SubmitAttestations(ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
+	})
 }
+
+// SubmitAttestations implements Beacon interface
+// func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
+// 	clientAddress := gc.multiClient.Address()
+// 	logger := gc.log.With(
+// 		zap.String("api", "SubmitAttestations"),
+// 		zap.String("client_addr", clientAddress))
+
+// 	start := time.Now()
+// 	err := gc.multiClient.SubmitAttestations(gc.ctx, &api.SubmitAttestationsOpts{Attestations: attestations})
+// 	recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
+// 	if err != nil {
+// 		logger.Error(clResponseErrMsg, zap.Error(err))
+// 		return err
+// 	}
+
+// 	logger.Debug("consensus client submitted attestations")
+// 	return nil
+// }
