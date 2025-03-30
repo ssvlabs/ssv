@@ -81,7 +81,7 @@ func TestSimulation(t *testing.T) {
 	nodeAddrs := maps.Values(beaconNodes)
 	retryingClients := weightedClients / 2
 	for i := 1; i <= weightedClients; i++ {
-		retrying := i < retryingClients
+		retrying := i <= retryingClients
 		withRetriesLabel := ""
 		if retrying {
 			withRetriesLabel = "-retries"
