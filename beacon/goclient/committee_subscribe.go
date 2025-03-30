@@ -8,7 +8,7 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/ssvlabs/ssv/utils/pool"
+	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 )
 
