@@ -454,7 +454,7 @@ func (gc *GoClient) multiClientSubmit(
 	logger := gc.log.With(zap.String("api", operationName))
 
 	submissions := atomic.Int32{}
-	p := pool.New().WithErrors().WithContext(gc.ctx)
+	p := pool.New().WithErrors().WithContext(gc.ctx).WithMaxGoroutines(len(gc.clients))
 	for _, client := range gc.clients {
 		client := client
 		p.Go(func(ctx context.Context) error {
@@ -465,12 +465,12 @@ func (gc *GoClient) multiClientSubmit(
 			err := submitFunc(ctx, client)
 			recordRequestDuration(ctx, operationName, clientAddress, http.MethodPost, time.Since(start), err)
 			if err != nil {
-				logger.Debug("consensus client returned an error while submitting. As at least one node must submit successfully, it's expected that some nodes may fail to submit.",
+				logger.Debug("a client failed to submit",
 					zap.Error(err))
 				return err
 			}
 
-			logger.Debug("consensus client submitted successfully")
+			logger.Debug("a client submitted successfully")
 
 			submissions.Add(1)
 			return nil
@@ -483,8 +483,9 @@ func (gc *GoClient) multiClientSubmit(
 		return nil
 	}
 	if err != nil {
-		logger.Error("no consensus clients have been able to submit. See adjacent logs for error details.")
-		return fmt.Errorf("no consensus clients have been able to submit %s", operationName)
+		logger.Error("all clients failed to submit",
+			zap.Error(err))
+		return fmt.Errorf("failed to submit %s", operationName)
 	}
 	return nil
 }
