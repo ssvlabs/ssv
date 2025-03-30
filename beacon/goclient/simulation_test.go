@@ -261,8 +261,49 @@ func TestSimulation(t *testing.T) {
 			continue
 		}
 
+		// Log client traces for this slot as JSON.
+		tracesMutex.RLock()
+		slotTraces := make(map[string]*clientTrace)
+		for clientName, clientTraces := range traces {
+			slotTraces[clientName] = clientTraces[slot]
+		}
+		tracesMutex.RUnlock()
+		logger.Debug("Slot traces", zap.Any("slot", slot), zap.Any("traces", slotTraces))
+
+		// Print per-slot performance table
+		fmt.Println()
+		fmt.Printf("Slot %d (iteration %d)\n", slot, checkedSlots)
+		slotTbl := table.New(os.Stdout)
+		slotTbl.AddRow("Client", "Attestation", "Correct", "Block Event", "Att. Time", "Event Time")
+
+		slotClientNames := maps.Keys(clients)
+		sort.Strings(slotClientNames)
+
+		for _, clientName := range slotClientNames {
+			tracesMutex.RLock()
+			trace, ok := traces[clientName][slot]
+			tracesMutex.RUnlock()
+
+			if !ok {
+				slotTbl.AddRow(clientName, "✗", "✗", "✗", "-", "-")
+				continue
+			}
+
+			isCorrect := trace.attestation && trace.attestationBlockRoot == root
+			slotTbl.AddRow(
+				clientName,
+				boolMark(trace.attestation),
+				boolMark(isCorrect),
+				boolMark(trace.blockEvent),
+				shortDuration(trace.attestationDuration),
+				shortDuration(trace.blockEventDuration),
+			)
+		}
+		slotTbl.Render()
+		fmt.Println()
+
+		// Update cumulative stats
 		for clientName := range clients {
-			// Use read lock when accessing traces
 			tracesMutex.RLock()
 			trace, ok := traces[clientName][slot]
 			tracesMutex.RUnlock()
@@ -283,11 +324,11 @@ func TestSimulation(t *testing.T) {
 			}
 		}
 
-		// Print an aqua table with the performance of each client.
+		// Print cumulative stats table
 		tbl := table.New(os.Stdout)
-		tbl.AddRow("Client", "Attestations", "Correctness", "Events")
+		tbl.AddRow("Client", "Attestations", "Correctness", "Block Events")
 
-		// Sort by correct votes.
+		// Sort by correct votes
 		clientNames := maps.Keys(clientPerformances)
 		sort.Slice(clientNames, func(i, j int) bool {
 			return clientPerformances[clientNames[i]].correctAttestations > clientPerformances[clientNames[j]].correctAttestations
@@ -313,7 +354,7 @@ func TestSimulation(t *testing.T) {
 				fmt.Sprintf("%d/%d (%s)", performance.blockEvents, checkedSlots, shortDuration(blockEventDuration)))
 		}
 		fmt.Println()
-		fmt.Printf("Slot %d (iteration %d)\n", slot, checkedSlots)
+		fmt.Printf("Cumulative Status\n")
 		tbl.Render()
 
 		// Free memory.
@@ -328,4 +369,11 @@ func TestSimulation(t *testing.T) {
 
 func shortDuration(d time.Duration) string {
 	return fmt.Sprintf("%.4fs", d.Seconds())
+}
+
+func boolMark(b bool) string {
+	if b {
+		return "✅"
+	}
+	return "❌"
 }
