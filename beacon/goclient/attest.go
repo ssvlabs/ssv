@@ -3,9 +3,10 @@ package goclient
 import (
 	"context"
 	"fmt"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"net/http"
 	"time"
+
+	"github.com/ssvlabs/ssv/logging/fields"
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -87,8 +88,8 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 		gc.log.Debug("successfully fetched attestation data",
 			fields.Slot(resp.Data.Slot),
 			zap.Duration("elapsed", time.Since(attDataReqStart)),
-			zap.String("client_addr", gc.multiClient.Address()))
-
+			zap.String("client_addr", gc.multiClient.Address()),
+			fields.BlockRoot(resp.Data.BeaconBlockRoot))
 		// Caching resulting value here (as part of inflight request) guarantees only 1 request
 		// will ever be done for a given slot.
 		gc.attestationDataCache.Set(slot, resp.Data, ttlcache.DefaultTTL)
