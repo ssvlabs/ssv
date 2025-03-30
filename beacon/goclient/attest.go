@@ -143,7 +143,7 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 				zap.Int("errored", errored),
 			).Debug("response received")
 
-			if resp.score > bestScore {
+			if bestAttestationData == nil || resp.score > bestScore {
 				if bestAttestationData != nil {
 					logger.Info("updating best attestation data because of higher score",
 						zap.String("client_addr", resp.clientAddr),
@@ -320,6 +320,7 @@ func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
 		return
 	}
 
+	logger = logger.With(fields.BlockRoot(attestationData.BeaconBlockRoot))
 	logger.Debug("scoring attestation data")
 	score := gc.scoreAttestationData(ctx, client, attestationData, logger)
 
@@ -354,7 +355,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	defer ticker.Stop()
 
 	var (
-		retries uint8
+		retries int
 		start   = time.Now()
 	)
 
@@ -380,14 +381,14 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 		select {
 		case <-ctx.Done():
 			logger.
-				With(zap.Uint8("retry_count", retries)).
+				With(zap.Int("retry_count", retries)).
 				With(zap.Duration("total_elapsed", time.Since(start))).
 				Error("timeout for obtaining slot for block root was reached. Returning base score")
 			return score
 		case <-ticker.C:
 			retries++
 			logger.
-				With(zap.Uint8("retry_count", retries)).
+				With(zap.Int("retry_count", retries)).
 				With(zap.Duration("total_elapsed", time.Since(start))).
 				Warn("retrying to obtain slot for block root")
 		}
@@ -405,9 +406,9 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 		return cachedSlot, nil
 	}
 
-	logger.Debug("slot was not found in cache. Fetching from the client")
+	logger.Debug("slot was not found in cache, fetching from the client")
 
-	timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/4)
+	timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/5)
 	defer cancel()
 
 	blockResponse, err := client.BeaconBlockHeader(timeoutContext, &api.BeaconBlockHeaderOpts{
@@ -432,10 +433,7 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 }
 
 func isBlockHeaderResponseValid(response *api.Response[*eth2apiv1.BeaconBlockHeader]) bool {
-	if response == nil || response.Data == nil || response.Data.Header == nil || response.Data.Header.Message == nil {
-		return false
-	}
-	return true
+	return response != nil && response.Data != nil && response.Data.Header != nil && response.Data.Header.Message != nil
 }
 
 func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
