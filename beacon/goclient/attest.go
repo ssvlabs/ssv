@@ -467,7 +467,7 @@ func (gc *GoClient) multiClientSubmit(
 			if err != nil {
 				logger.Debug("a client failed to submit",
 					zap.Error(err))
-				return err
+				return fmt.Errorf("client %s failed to submit %s: %w", clientAddress, operationName, err)
 			}
 
 			logger.Debug("a client submitted successfully")
