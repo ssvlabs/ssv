@@ -9,10 +9,9 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"go.uber.org/zap"
 )
 
 type SyncCommitteeHandler struct {
@@ -71,15 +70,15 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 		h.fetchNextPeriod = true
 	}
 
-	next := h.ticker.Next()
+	next := h.ticker.NextTick()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
-			next = h.ticker.Next()
+			slot := h.ticker.NextSlot()
+			next = h.ticker.NextTick()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)

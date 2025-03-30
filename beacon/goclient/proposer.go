@@ -21,10 +21,9 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
+	"go.uber.org/zap"
 )
 
 const (
@@ -432,8 +431,8 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 		select {
 		case <-gc.ctx.Done():
 			return
-		case <-ticker.Next():
-			gc.submitRegistrationsFromCache(ticker.Slot(), operatorID)
+		case <-ticker.NextTick():
+			gc.submitRegistrationsFromCache(ticker.NextSlot(), operatorID)
 		}
 	}
 }

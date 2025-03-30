@@ -35,15 +35,15 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	// should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
 	registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
 
-	next := h.ticker.Next()
+	next := h.ticker.NextTick()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-next:
-			slot := h.ticker.Slot()
-			next = h.ticker.Next()
+			slot := h.ticker.NextSlot()
+			next = h.ticker.NextTick()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(validatorRegistrationEpochInterval))
 
@@ -73,10 +73,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				zap.Any("validator_registrations", vrs))
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
 	}
 }

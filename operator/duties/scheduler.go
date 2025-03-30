@@ -14,8 +14,6 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -25,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
@@ -284,8 +283,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.ticker.Next():
-			slot := s.ticker.Slot()
+		case <-s.ticker.NextTick():
+			slot := s.ticker.NextSlot()
 
 			delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
 			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
@@ -293,13 +292,15 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 
 			if waitDuration > 0 {
 				time.Sleep(waitDuration)
-
-				// Lock the mutex before broadcasting
-				s.waitCond.L.Lock()
-				s.headSlot = slot
-				s.waitCond.Broadcast()
-				s.waitCond.L.Unlock()
 			}
+
+			s.waitCond.L.Lock()
+			// we only want to increase s.headSlot (and never decrease it)
+			if slot > s.headSlot {
+				s.headSlot = slot
+			}
+			s.waitCond.Broadcast()
+			s.waitCond.L.Unlock()
 		}
 	}
 }
@@ -308,7 +309,10 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.HeadEvent) {
 	return func(event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
-		if event.Slot != s.network.Beacon.EstimatedCurrentSlot() {
+		// we are interested only in events for the current slot, but to account for wall-clock
+		// differences the next slot after "what we think is the current one" can also be valid
+		if event.Slot != s.network.Beacon.EstimatedCurrentSlot() &&
+			event.Slot != s.network.Beacon.EstimatedCurrentSlot()+1 {
 			return
 		}
 
@@ -376,7 +380,10 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 			time.Sleep(s.blockPropagateDelay)
 
 			s.waitCond.L.Lock()
-			s.headSlot = event.Slot
+			// we only want to increase s.headSlot (and never decrease it)
+			if event.Slot > s.headSlot {
+				s.headSlot = event.Slot
+			}
 			s.waitCond.Broadcast()
 			s.waitCond.L.Unlock()
 		}
@@ -452,9 +459,9 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committee
 		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
-// waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
+// waitOneThirdOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
+// slot start time), or for head block event that might come in even sooner than one-third of the slot passes.
 func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
-	// Wait for the event or signal
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {
 		s.waitCond.Wait()

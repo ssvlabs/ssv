@@ -63,8 +63,8 @@ func (i *participantStorage) PruneContinously(ctx context.Context, logger *zap.L
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.Next():
-			threshold := ticker.Slot() - retain - 1
+		case <-ticker.NextTick():
+			threshold := ticker.NextSlot() - retain - 1
 			count, err := i.removeSlotAt(threshold)
 			if err != nil {
 				logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threshold))

@@ -10,20 +10,19 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 type MockSlotTicker interface {
-	Next() <-chan time.Time
-	Slot() phase0.Slot
+	NextTick() <-chan time.Time
+	NextSlot() phase0.Slot
 	Subscribe() chan phase0.Slot
 }
 
@@ -54,11 +53,11 @@ func (m *mockSlotTicker) start() {
 	}()
 }
 
-func (m *mockSlotTicker) Next() <-chan time.Time {
+func (m *mockSlotTicker) NextTick() <-chan time.Time {
 	return m.timeChan
 }
 
-func (m *mockSlotTicker) Slot() phase0.Slot {
+func (m *mockSlotTicker) NextSlot() phase0.Slot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.slot
