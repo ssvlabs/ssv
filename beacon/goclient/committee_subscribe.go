@@ -16,7 +16,7 @@ import (
 func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error {
 	logger := gc.log.With(zap.String("api", "SubmitBeaconCommitteeSubscriptions"))
 
-	var submissions int32
+	submissions := atomic.Int32{}
 	p := pool.New().WithErrors().WithContext(gc.ctx).WithMaxGoroutines(len(gc.clients))
 	for _, client := range gc.clients {
 		client := client
@@ -35,12 +35,12 @@ func (gc *GoClient) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subs
 			}
 
 			logger.Debug("client submitted beacon committee subscriptions", zap.Duration("duration", time.Since(start)))
-			atomic.AddInt32(&submissions, 1)
+			submissions.Add(1)
 			return nil
 		})
 	}
 	err := p.Wait()
-	if atomic.LoadInt32(&submissions) > 0 {
+	if submissions.Load() > 0 {
 		// At least one client has submitted the subscriptions successfully,
 		// so we can return without error.
 		return nil
