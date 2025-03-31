@@ -169,19 +169,20 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 			err := dvs.checkPeer(dvs.ctx, logger, e)
 			if err != nil {
 				if v := logCache.Get(e.AddrInfo.ID); v == nil {
-				// This log is triggered very often, however, we need it, so it's shown once per peer ID per 2 epochs.
-				logger.Debug("skipped discovered peer",
-					fields.ENR(e.Node),
-					fields.PeerID(e.AddrInfo.ID),
-					zap.Duration("rate_limit", logTTL),
-					zap.Error(err),
-				)
-				logCache.Set(e.AddrInfo.ID, struct{}{}, ttlcache.DefaultTTL)
-			}
+					// This log is triggered very often, however, we need it, so it's shown once per peer ID per 2 epochs.
+					logger.Debug("skipped discovered peer",
+						fields.ENR(e.Node),
+						fields.PeerID(e.AddrInfo.ID),
+						zap.Duration("rate_limit", logTTL),
+						zap.Error(err),
+					)
+					logCache.Set(e.AddrInfo.ID, struct{}{}, ttlcache.DefaultTTL)
+				}
 
-			return
-		}
-		handler(e)},
+				return
+			}
+			handler(e)
+		},
 		defaultDiscoveryInterval,
 		dvs.ssvNodeFilter(logger),
 		dvs.sharedSubnetsFilter(1),
