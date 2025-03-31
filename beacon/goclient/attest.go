@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -12,6 +13,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/sourcegraph/conc/pool"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 )
@@ -437,7 +439,53 @@ func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 	return zap.String("weighted_data_request_id", id.String())
 }
 
-// SubmitAttestations implements Beacon interface
+// multiClientSubmit is a generic function that submits data to multiple clients concurrently.
+// If any client succeeds, the remaining submissions are cancelled.
+// Returns nil if at least one client successfully submitted the data.
+func (gc *GoClient) multiClientSubmit(
+	operationName string,
+	submitFunc func(ctx context.Context, client Client) error,
+) error {
+	logger := gc.log.With(zap.String("api", operationName))
+
+	submissions := atomic.Int32{}
+	p := pool.New().WithErrors().WithContext(gc.ctx).WithMaxGoroutines(len(gc.clients))
+	for _, client := range gc.clients {
+		client := client
+		p.Go(func(ctx context.Context) error {
+			clientAddress := client.Address()
+			logger := logger.With(zap.String("client_addr", clientAddress))
+
+			start := time.Now()
+			err := submitFunc(ctx, client)
+			recordRequestDuration(ctx, operationName, clientAddress, http.MethodPost, time.Since(start), err)
+			if err != nil {
+				logger.Debug("a client failed to submit",
+					zap.Error(err))
+				return fmt.Errorf("client %s failed to submit %s: %w", clientAddress, operationName, err)
+			}
+
+			logger.Debug("a client submitted successfully")
+
+			submissions.Add(1)
+			return nil
+		})
+	}
+	err := p.Wait()
+	if submissions.Load() > 0 {
+		// At least one client has submitted successfully,
+		// so we can return without error.
+		return nil
+	}
+	if err != nil {
+		logger.Error("all clients failed to submit",
+			zap.Error(err))
+		return fmt.Errorf("failed to submit %s", operationName)
+	}
+	return nil
+}
+
+// SubmitAttestations implements Beacon interface and sends attestations to the first client that succeeds
 func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
 	clientAddress := gc.multiClient.Address()
 	logger := gc.log.With(
