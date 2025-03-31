@@ -30,8 +30,9 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
-	router.Use(middlewareLogger(zaptest.NewLogger(t)))
-	router.Use(middlewareNodeVersion)
+	srv := &Server{logger: zaptest.NewLogger(t)}
+	router.Use(srv.middlewareLogger())
+	router.Use(srv.middlewareNodeVersion)
 
 	nodeIdentityHandler := func(w http.ResponseWriter, r *http.Request) {
 		err := api.Render(w, r, map[string]interface{}{
@@ -214,7 +215,8 @@ func TestMiddlewareLogger(t *testing.T) {
 	t.Parallel()
 
 	logger := zaptest.NewLogger(t)
-	m := middlewareLogger(logger)
+	srv := &Server{logger: logger}
+	m := srv.middlewareLogger()
 
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -240,7 +242,8 @@ func TestMiddlewareNodeVersion(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := middlewareNodeVersion(nextHandler)
+	srv := &Server{}
+	handler := srv.middlewareNodeVersion(nextHandler)
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()

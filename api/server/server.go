@@ -50,7 +50,7 @@ func (s *Server) Run() error {
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
 	router.Use(s.middlewareLogger())
-	router.Use(middlewareNodeVersion)
+	router.Use(s.middlewareNodeVersion)
 
 	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
 	router.Get("/v1/node/peers", api.Handler(s.node.Peers))
@@ -98,7 +98,7 @@ func (s *Server) middlewareLogger() func(next http.Handler) http.Handler {
 }
 
 // middlewareNodeVersion adds the SSV node version as a response header.
-func middlewareNodeVersion(next http.Handler) http.Handler {
+func (s *Server) middlewareNodeVersion(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-SSV-Node-Version", commons.GetNodeVersion())
 		next.ServeHTTP(w, r)
