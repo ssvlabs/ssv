@@ -20,8 +20,8 @@ import (
 
 type (
 	score struct {
-		baseScore       uint64
-		supplementScore float64
+		BaseScore       uint64
+		SupplementScore float64
 	}
 
 	attestationDataResponse struct {
@@ -37,7 +37,7 @@ type (
 )
 
 func (s score) Total() float64 {
-	return float64(s.baseScore) + s.supplementScore
+	return float64(s.BaseScore) + s.SupplementScore
 }
 
 // AttesterDuties returns attester duties for a given epoch.
@@ -267,13 +267,13 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 }
 
 func shouldUpdateAttestationData(oldScore score, newScore score) bool {
-	if newScore.baseScore > oldScore.baseScore {
+	if newScore.BaseScore > oldScore.BaseScore {
 		return true
 	}
 
 	if newScore.Total() > oldScore.Total() {
 		// '0' supplementScore means failure
-		if oldScore.supplementScore != 0 || newScore.supplementScore == 1 {
+		if oldScore.SupplementScore != 0 || newScore.SupplementScore == 1 {
 			return true
 		}
 	}
@@ -409,8 +409,8 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 			// Increase score based on the nearness of the head slot.
 			supplementScore := float64(1) / float64(1+attestationData.Slot-slot)
 			score := score{
-				baseScore:       baseScore,
-				supplementScore: supplementScore,
+				BaseScore:       baseScore,
+				SupplementScore: supplementScore,
 			}
 
 			logger.With(
@@ -433,7 +433,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 				With(zap.Uint32("try", retries)).
 				With(zap.Duration("total_elapsed", time.Since(start))).
 				Error("timeout for obtaining slot for block root was reached. Returning base score")
-			return score{baseScore: baseScore}
+			return score{BaseScore: baseScore}
 		case <-ticker.C:
 			retries++
 			logger.
