@@ -31,7 +31,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
 	srv := &Server{logger: zaptest.NewLogger(t)}
-	router.Use(srv.middlewareLogger())
+	router.Use(srv.middlewareLogger)
 	router.Use(srv.middlewareNodeVersion)
 
 	nodeIdentityHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +216,7 @@ func TestMiddlewareLogger(t *testing.T) {
 
 	logger := zaptest.NewLogger(t)
 	srv := &Server{logger: logger}
-	m := srv.middlewareLogger()
+	m := srv.middlewareLogger
 
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

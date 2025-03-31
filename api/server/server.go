@@ -49,7 +49,7 @@ func (s *Server) Run() error {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
-	router.Use(s.middlewareLogger())
+	router.Use(s.middlewareLogger)
 	router.Use(s.middlewareNodeVersion)
 
 	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
@@ -75,26 +75,23 @@ func (s *Server) Run() error {
 }
 
 // middlewareLogger creates a middleware that logs API requests.
-func (s *Server) middlewareLogger() func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		fn := func(w http.ResponseWriter, r *http.Request) {
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			start := time.Now()
-			defer func() {
-				s.logger.Debug(
-					"served SSV API request",
-					zap.String("method", r.Method),
-					zap.String("path", r.URL.Path),
-					zap.Int("status", ww.Status()),
-					zap.Int64("request_length", r.ContentLength),
-					zap.Int("response_length", ww.BytesWritten()),
-					zap.Duration("took", time.Since(start)),
-				)
-			}()
-			next.ServeHTTP(ww, r)
-		}
-		return http.HandlerFunc(fn)
-	}
+func (s *Server) middlewareLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		start := time.Now()
+		defer func() {
+			s.logger.Debug(
+				"served SSV API request",
+				zap.String("method", r.Method),
+				zap.String("path", r.URL.Path),
+				zap.Int("status", ww.Status()),
+				zap.Int64("request_length", r.ContentLength),
+				zap.Int("response_length", ww.BytesWritten()),
+				zap.Duration("took", time.Since(start)),
+			)
+		}()
+		next.ServeHTTP(ww, r)
+	})
 }
 
 // middlewareNodeVersion adds the SSV node version as a response header.
