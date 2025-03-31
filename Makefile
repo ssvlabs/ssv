@@ -160,7 +160,7 @@ tools:
 	$(GET_TOOL) go.uber.org/mock/mockgen
 	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
 	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
-	$(GET_TOOL) github.com/golangci/golangci-lint/cmd/golangci-lint
+	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	$(RUN_TOOL)
 
 .PHONY: format
