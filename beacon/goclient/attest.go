@@ -19,10 +19,15 @@ import (
 )
 
 type (
+	score struct {
+		baseScore       uint64
+		supplementScore float64
+	}
+
 	attestationDataResponse struct {
 		clientAddr      string
 		attestationData *phase0.AttestationData
-		score           float64
+		score           score
 	}
 
 	attestationDataError struct {
@@ -30,6 +35,10 @@ type (
 		err        error
 	}
 )
+
+func (s score) Total() float64 {
+	return float64(s.baseScore) + s.supplementScore
+}
 
 // AttesterDuties returns attester duties for a given epoch.
 func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
@@ -129,7 +138,7 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 		errored,
 		softTimedOut,
 		hardTimedOut int
-		bestScore           float64
+		bestScore           score
 		bestAttestationData *phase0.AttestationData
 		bestClientAddr      string
 	)
@@ -145,14 +154,20 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 				zap.Int("errored", errored),
 			).Debug("response received")
 
-			if bestAttestationData == nil || resp.score > bestScore {
-				if bestAttestationData != nil {
-					logger.Info("updating best attestation data because of higher score",
-						zap.String("client_addr", resp.clientAddr),
-						zap.Float64("score", resp.score),
-						fields.Root(resp.attestationData.BeaconBlockRoot),
-					)
-				}
+			if bestAttestationData == nil {
+				bestAttestationData = resp.attestationData
+				bestScore = resp.score
+				bestClientAddr = resp.clientAddr
+				continue
+			}
+
+			if shouldUpdateAttestationData(bestScore, resp.score) {
+				logger.Info("updating best attestation data because of higher score",
+					zap.String("client_addr", resp.clientAddr),
+					zap.Any("new_score", resp.score),
+					zap.Any("old_score", bestScore),
+					fields.Root(resp.attestationData.BeaconBlockRoot),
+				)
 				bestAttestationData = resp.attestationData
 				bestScore = resp.score
 				bestClientAddr = resp.clientAddr
@@ -189,7 +204,20 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
 				).Debug("response received")
-				if bestAttestationData == nil || resp.score > bestScore {
+				if bestAttestationData == nil {
+					bestAttestationData = resp.attestationData
+					bestScore = resp.score
+					bestClientAddr = resp.clientAddr
+					continue
+				}
+
+				if shouldUpdateAttestationData(bestScore, resp.score) {
+					logger.Info("updating best attestation data because of higher score",
+						zap.String("client_addr", resp.clientAddr),
+						zap.Any("new_score", resp.score),
+						zap.Any("old_score", bestScore),
+						fields.Root(resp.attestationData.BeaconBlockRoot),
+					)
 					bestAttestationData = resp.attestationData
 					bestScore = resp.score
 					bestClientAddr = resp.clientAddr
@@ -230,10 +258,25 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 
 	resultLogger.With(
 		zap.String("client_addr", bestClientAddr),
-		zap.Float64("score", bestScore)).
+		zap.Any("score", bestScore)).
 		Debug("successfully fetched attestation data")
 
 	return bestAttestationData, nil
+}
+
+func shouldUpdateAttestationData(oldScore score, newScore score) bool {
+	if newScore.baseScore > oldScore.baseScore {
+		return true
+	}
+
+	if newScore.Total() > oldScore.Total() {
+		// '0' supplementScore means failure
+		if oldScore.supplementScore != 0 || newScore.supplementScore == 1 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func shouldWaitForAttestationDataResponse(responded, errored, timedOut, requestsTotal int) bool {
@@ -340,11 +383,11 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	client Client,
 	attestationData *phase0.AttestationData,
 	logger *zap.Logger,
-) float64 {
-	// Initial score is based on height of source and target epochs.
-	score := float64(attestationData.Source.Epoch + attestationData.Target.Epoch)
+) score {
+	// Initial baseScore is based on height of source and target epochs.
+	baseScore := uint64(attestationData.Source.Epoch) + uint64(attestationData.Target.Epoch)
 	logger.
-		With(zap.Float64("base_score", score)).
+		With(zap.Uint64("base_score", baseScore)).
 		Info("base score was set. Fetching slot for block root")
 
 	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
@@ -362,16 +405,19 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 		slot, err := gc.blockRootToSlot(ctx, client, attestationData.BeaconBlockRoot, logger)
 		if err == nil {
 			// Increase score based on the nearness of the head slot.
-			score += float64(1) / float64(1+attestationData.Slot-slot)
+			supplementScore := float64(1) / float64(1+attestationData.Slot-slot)
 			logger.With(
 				zap.Duration("elapsed", time.Since(start)),
 				zap.Uint64("head_slot", uint64(slot)),
 				zap.Uint64("source_epoch", uint64(attestationData.Source.Epoch)),
 				zap.Uint64("target_epoch", uint64(attestationData.Target.Epoch)),
-				zap.Float64("score", score),
+				zap.Uint64("score", baseScore),
 			).Debug("scored attestation data")
 
-			return score
+			return score{
+				baseScore:       baseScore,
+				supplementScore: supplementScore,
+			}
 		}
 
 		logger.
@@ -383,7 +429,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 				With(zap.Uint32("try", retries)).
 				With(zap.Duration("total_elapsed", time.Since(start))).
 				Error("timeout for obtaining slot for block root was reached. Returning base score")
-			return score
+			return score{baseScore: baseScore}
 		case <-ticker.C:
 			retries++
 			logger.
