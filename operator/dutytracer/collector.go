@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
@@ -127,7 +128,7 @@ so when we request a certain trace we return both of them:
 */
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace, error) {
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		return nil, nil, fmt.Errorf("validator trace late arrival: trace slot(%d): last evicted(%d)", slot, c.lastEvictedSlot.Load())
+		return nil, nil, fmt.Errorf("validator(%s) late arrival, trace slot(%d), last evicted(%d)", hex.EncodeToString(vPubKey[:]), slot, c.lastEvictedSlot.Load())
 	}
 
 	validatorSlots, found := c.validatorTraces.Load(vPubKey)
@@ -171,7 +172,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 
 func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, error) {
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		return nil, fmt.Errorf("committee trace late arrival: trace slot(%d): last evicted(%d)", slot, c.lastEvictedSlot.Load())
+		return nil, fmt.Errorf("committee(%s) late arrival, trace slot(%d), last evicted(%d)", hex.EncodeToString(committeeID[:]), slot, c.lastEvictedSlot.Load())
 	}
 
 	committeeSlots, found := c.committeeTraces.Load(committeeID)
