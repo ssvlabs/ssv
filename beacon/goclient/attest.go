@@ -405,7 +405,7 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 		return cachedSlot, nil
 	}
 
-	logger.Debug("slot was not found in cache. Fetching from the client")
+	logger.Debug("slot was not found in cache, fetching from the client")
 
 	timeoutContext, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/4)
 	defer cancel()
