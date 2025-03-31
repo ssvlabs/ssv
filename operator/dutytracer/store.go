@@ -44,12 +44,11 @@ func (a *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorP
 	return committeeID, index, nil
 }
 
-func (a *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
+func (a *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	// lookup in cache
 	validatorSlots, found := a.validatorTraces.Load(pubkey)
 	if !found {
-		// should only happen if we request a validator duty right after startup
-		return nil, errors.New("validator not found")
+		return a.getValidatorDutiesFromDisk(role, slot, pubkey)
 	}
 
 	traces, found := validatorSlots.Load(slot)
@@ -69,6 +68,10 @@ func (a *Collector) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Sl
 	}
 
 	// go to disk for the older ones
+	return a.getValidatorDutiesFromDisk(role, slot, pubkey)
+}
+
+func (a *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	vIndex, found := a.validators.ValidatorIndex(pubkey)
 	if !found {
 		return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
@@ -113,13 +116,12 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.Co
 func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
 	committeeSlots, found := c.committeeTraces.Load(committeeID)
 	if !found {
-		// after "warm-up" there is always going to be a committee key in the map
-		return nil, errors.New("committee not found")
+		return c.getCommitteeDutyFromDisk(slot, committeeID)
 	}
 
 	trace, found := committeeSlots.Load(slot)
 	if !found {
-		trace, err := c.store.GetCommitteeDuty(slot, committeeID)
+		trace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
 		if err != nil {
 			return nil, fmt.Errorf("get committee duty from disk: %w", err)
 		}
@@ -135,6 +137,15 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 	defer trace.Unlock()
 
 	return deepCopyCommitteeDutyTrace(&trace.CommitteeDutyTrace), nil
+}
+
+func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
+	trace, err := c.store.GetCommitteeDuty(slot, committeeID)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duty from disk: %w", err)
+	}
+
+	return trace, nil
 }
 
 func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
@@ -173,9 +184,9 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.Vali
 
 func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubkeys []spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
 	for _, pubkey := range pubkeys {
-		duty, err := c.GetValidatorDuties(role, slot, pubkey)
+		duty, err := c.GetValidatorDuty(role, slot, pubkey)
 		if err != nil {
-			return nil, fmt.Errorf("get validator duties for decideds: %w", err)
+			return nil, fmt.Errorf("get validator duty for decideds: %w", err)
 		}
 
 		var signers []spectypes.OperatorID
@@ -200,20 +211,24 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
 	slotToCommittee, found := c.validatorIndexToCommitteeLinks.Load(index)
 	if !found {
-		return spectypes.CommitteeID{}, fmt.Errorf("committee not found by index: %d", index)
+		return c.getCommitteeIDFromDisk(slot, index)
 	}
 
 	committeeID, found := slotToCommittee.Load(slot)
 	if !found {
-		link, err := c.store.GetCommitteeDutyLink(slot, index)
-		if err != nil {
-			return spectypes.CommitteeID{}, fmt.Errorf("get from disk: %w", err)
-		}
-
-		return link, nil
+		return c.getCommitteeIDFromDisk(slot, index)
 	}
 
 	return committeeID, nil
+}
+
+func (c *Collector) getCommitteeIDFromDisk(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
+	link, err := c.store.GetCommitteeDutyLink(slot, index)
+	if err != nil {
+		return spectypes.CommitteeID{}, fmt.Errorf("get from disk: %w", err)
+	}
+
+	return link, nil
 }
 
 func deepCopyCommitteeDutyTrace(trace *model.CommitteeDutyTrace) *model.CommitteeDutyTrace {

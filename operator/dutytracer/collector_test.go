@@ -70,7 +70,7 @@ func TestValidatorDuty(t *testing.T) {
 		err := collector.Collect(context.Background(), partSigMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 
@@ -96,7 +96,7 @@ func TestValidatorDuty(t *testing.T) {
 		err := collector.Collect(context.Background(), partSigMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 
@@ -123,7 +123,7 @@ func TestValidatorDuty(t *testing.T) {
 		err := collector.Collect(context.Background(), proposalMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 
@@ -172,7 +172,7 @@ func TestValidatorDuty(t *testing.T) {
 		err := collector.Collect(context.Background(), prepareMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 
@@ -200,7 +200,7 @@ func TestValidatorDuty(t *testing.T) {
 		err := collector.Collect(context.Background(), decidedMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 
@@ -232,7 +232,7 @@ func TestValidatorDuty(t *testing.T) {
 		err := collector.Collect(context.Background(), commitMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 
@@ -260,7 +260,7 @@ func TestValidatorDuty(t *testing.T) {
 		err := collector.Collect(context.Background(), roundChangeMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 
@@ -290,7 +290,7 @@ func TestValidatorDuty(t *testing.T) {
 		err := collector.Collect(context.Background(), roundChangeMsg, dummyVerify)
 		require.NoError(t, err)
 
-		duty, err := collector.GetValidatorDuties(bnRole, slot, validatorPK)
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
 		require.NoError(t, err)
 		require.NotNil(t, duty)
 

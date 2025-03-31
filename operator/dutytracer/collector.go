@@ -127,8 +127,6 @@ so when we request a certain trace we return both of them:
 */
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace, error) {
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		// TODO: remove this once we have a proper way to handle late arrival
-		c.logger.Warn("validator trace late arrival", fields.Slot(slot), zap.Uint64("lastEvictedSlot", c.lastEvictedSlot.Load()), zap.Uint64("currentSlot", c.currentSlot.Load()))
 		return nil, nil, fmt.Errorf("validator trace late arrival")
 	}
 
@@ -173,7 +171,6 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 
 func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, error) {
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		c.logger.Warn("committee trace late arrival", fields.Slot(slot), zap.Uint64("lastEvictedSlot", c.lastEvictedSlot.Load()), zap.Uint64("currentSlot", c.currentSlot.Load()))
 		return nil, fmt.Errorf("committee trace late arrival")
 	}
 
