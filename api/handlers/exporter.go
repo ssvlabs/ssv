@@ -26,7 +26,7 @@ type Exporter struct {
 }
 
 type DutyTraceStore interface {
-	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
+	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
@@ -208,7 +208,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			slot := phase0.Slot(s)
 			duties, err := e.TraceStore.GetCommitteeDuties(slot)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting all committee IDs: %w", err))
+				return api.Error(fmt.Errorf("error getting all committee duties: %w", err))
 			}
 			all = append(duties, duties...)
 		}
@@ -232,7 +232,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			slot := phase0.Slot(s)
 			duty, err := e.TraceStore.GetCommitteeDuty(slot, cmtID)
 			if err != nil {
-				continue
+				return api.Error(fmt.Errorf("error getting committee duty: %w", err))
 			}
 			duties = append(duties, duty)
 		}
@@ -303,11 +303,11 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 				if isSyncCommitteeRole(role) {
 					committeeID, index, err := e.TraceStore.GetCommitteeID(slot, pubkey)
 					if err != nil {
-						continue
+						return api.Error(fmt.Errorf("error getting committee ID: %w", err))
 					}
 					duty, err := e.TraceStore.GetCommitteeDuty(slot, committeeID)
 					if err != nil {
-						continue
+						return api.Error(fmt.Errorf("error getting committee duty: %w", err))
 					}
 
 					// de-duplicate SC and Attester duties
@@ -327,9 +327,9 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 					}
 				}
 
-				duty, err := e.TraceStore.GetValidatorDuties(role, slot, pubkey)
+				duty, err := e.TraceStore.GetValidatorDuty(role, slot, pubkey)
 				if err != nil {
-					continue
+					return api.Error(fmt.Errorf("error getting validator duties: %w", err))
 				}
 				results = append(results, duty)
 			}

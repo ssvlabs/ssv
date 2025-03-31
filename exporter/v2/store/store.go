@@ -76,7 +76,7 @@ func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.Beaco
 		return nil, fmt.Errorf("get validator duty: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("get validator duty from disk: %w", ErrNotFound)
+		return nil, ErrNotFound
 	}
 
 	duty := new(model.ValidatorDutyTrace)
@@ -112,7 +112,7 @@ func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.Val
 		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link: %w", err)
 	}
 	if !found {
-		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link: %w", ErrNotFound)
+		return spectypes.CommitteeID{}, ErrNotFound
 	}
 
 	return spectypes.CommitteeID(obj.Value), nil
@@ -193,7 +193,7 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 		return nil, fmt.Errorf("get committee duty: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("get committee duty from db: %w", ErrNotFound)
+		return nil, ErrNotFound
 	}
 
 	duty = new(model.CommitteeDutyTrace)
