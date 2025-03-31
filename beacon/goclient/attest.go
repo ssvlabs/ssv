@@ -143,7 +143,7 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 				zap.Int("errored", errored),
 			).Debug("response received")
 
-			if resp.score > bestScore {
+			if bestAttestationData == nil || resp.score > bestScore {
 				if bestAttestationData != nil {
 					logger.Info("updating best attestation data because of higher score",
 						zap.String("client_addr", resp.clientAddr),
