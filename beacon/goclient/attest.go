@@ -320,6 +320,8 @@ func (gc *GoClient) fetchWeightedAttestationData(ctx context.Context,
 		return
 	}
 
+	logger = logger.With(fields.BlockRoot(attestationData.BeaconBlockRoot))
+
 	logger.Debug("scoring attestation data")
 	score := gc.scoreAttestationData(ctx, client, attestationData, logger)
 
@@ -337,10 +339,6 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	attestationData *phase0.AttestationData,
 	logger *zap.Logger,
 ) float64 {
-	logger = logger.With(
-		fields.BlockRoot(attestationData.BeaconBlockRoot),
-		zap.Uint64("attestation_data_slot", uint64(attestationData.Slot)))
-
 	// Initial score is based on height of source and target epochs.
 	score := float64(attestationData.Source.Epoch + attestationData.Target.Epoch)
 	logger.
