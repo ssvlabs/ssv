@@ -13,13 +13,15 @@ import (
 
 	"github.com/ssvlabs/ssv/utils/ttl"
 
-	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
+	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -37,8 +39,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
-	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 )
 
 // network states
@@ -89,7 +89,7 @@ type p2pNetwork struct {
 	msgResolver  topics.MsgPeersResolver
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
-	connGater    connmgr.ConnectionGater
+	connGater    connmgrcore.ConnectionGater
 	trustedPeers []*peer.AddrInfo
 
 	state int32
@@ -136,6 +136,7 @@ func New(
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeCommittees:        hashmap.New[string, validatorStatus](),
+		activeSubnets:           make([]byte, commons.SubnetsCount),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
