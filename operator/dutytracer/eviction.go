@@ -11,11 +11,11 @@ import (
 
 // TTL in slots for each role
 const (
-	ttlCommittee = 4
-	ttlValidator = 4
+	ttlCommittee = 6
+	ttlValidator = 6
 
-	ttlMapping       = 4
-	ttlCommitteeRoot = 4
+	ttlMapping       = 6
+	ttlCommitteeRoot = 6
 )
 
 func (c *Collector) evictValidatorCommitteeLinks(threshold phase0.Slot) (totalSaved int) {
