@@ -352,7 +352,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	defer ticker.Stop()
 
 	var (
-		retries uint8
+		retries uint32
 		start   = time.Now()
 	)
 
@@ -378,14 +378,14 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 		select {
 		case <-ctx.Done():
 			logger.
-				With(zap.Uint8("retry_count", retries)).
+				With(zap.Uint32("try", retries)).
 				With(zap.Duration("total_elapsed", time.Since(start))).
 				Error("timeout for obtaining slot for block root was reached. Returning base score")
 			return score
 		case <-ticker.C:
 			retries++
 			logger.
-				With(zap.Uint8("retry_count", retries)).
+				With(zap.Uint32("try", retries)).
 				With(zap.Duration("total_elapsed", time.Since(start))).
 				Warn("retrying to obtain slot for block root")
 		}
