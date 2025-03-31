@@ -238,7 +238,7 @@ require (
 	golang.org/x/term v0.28.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
-	golang.org/x/xerrors v0.0.0-20240716161551-93cc26a95ae9 // indirect
+	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.13.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
