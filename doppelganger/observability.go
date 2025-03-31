@@ -32,6 +32,6 @@ func metricName(name string) string {
 }
 
 func unsafeAttribute(isUnsafe bool) attribute.KeyValue {
-	const attrName = "ssv.doppelganger.unsafe"
+	const attrName = observabilityNamespace + ".unsafe"
 	return attribute.Bool(attrName, isUnsafe)
 }
