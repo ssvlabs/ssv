@@ -297,21 +297,9 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitProposal"),
-		zap.String("client_addr", clientAddress))
-
-	start := time.Now()
-	err := gc.multiClient.SubmitProposal(gc.ctx, opts)
-	recordRequestDuration(gc.ctx, "SubmitProposal", clientAddress, http.MethodPost, time.Since(start), err)
-	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
-	}
-
-	logger.Debug("consensus client submitted beacon block")
-	return nil
+	return gc.multiClientSubmit("SubmitProposal", func(ctx context.Context, client Client) error {
+		return client.SubmitProposal(gc.ctx, opts)
+	})
 }
 
 func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
