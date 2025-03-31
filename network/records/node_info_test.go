@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +19,7 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			Subnets:       AllSubnets,
+			Subnets:       commons.AllSubnets,
 		},
 	}
 
@@ -40,7 +41,7 @@ func TestNodeInfo_Marshal_Unmarshal(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			Subnets:       AllSubnets,
+			Subnets:       commons.AllSubnets,
 		},
 	}
 

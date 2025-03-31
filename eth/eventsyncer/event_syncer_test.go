@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
@@ -105,7 +106,7 @@ func TestEventSyncer(t *testing.T) {
 	const chainLength = 30
 	for i := 0; i <= chainLength; i++ {
 		// Emit event OperatorAdded
-		tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, pckd, big.NewInt(100_000_000))
+		tx, err := boundContract.RegisterOperator(auth, pckd, big.NewInt(100_000_000))
 		require.NoError(t, err)
 		sim.Commit()
 		receipt, err := sim.Client().TransactionReceipt(ctx, tx.Hash())
@@ -177,6 +178,8 @@ func setupEventHandler(
 
 	parser := eventparser.New(contractFilterer)
 
+	dgHandler := doppelganger.NoOpHandler{}
+
 	eh, err := eventhandler.New(
 		nodeStorage,
 		parser,
@@ -186,6 +189,7 @@ func setupEventHandler(
 		privateKey,
 		keyManager,
 		bc,
+		dgHandler,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger))
 
@@ -255,15 +259,15 @@ func TestBlockBelowThreshold(t *testing.T) {
 		require.ErrorIs(t, err, err1)
 	})
 
-	t.Run("fails if outside threashold", func(t *testing.T) {
-		header := &ethtypes.Header{Time: uint64(time.Now().Add(-151 * time.Second).Unix())}
+	t.Run("fails if outside threshold", func(t *testing.T) {
+		header := &ethtypes.Header{Time: uint64(time.Now().Add(-(defaultStalenessThreshold + time.Second)).Unix())}
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
 		err := s.blockBelowThreshold(ctx, big.NewInt(1))
 		require.Error(t, err)
 	})
 
 	t.Run("success", func(t *testing.T) {
-		header := &ethtypes.Header{Time: uint64(time.Now().Add(-149 * time.Second).Unix())}
+		header := &ethtypes.Header{Time: uint64(time.Now().Add(-(defaultStalenessThreshold - time.Second)).Unix())}
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
 		err := s.blockBelowThreshold(ctx, big.NewInt(1))
 		require.NoError(t, err)
