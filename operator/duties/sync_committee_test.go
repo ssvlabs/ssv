@@ -8,16 +8,14 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 func setupSyncCommitteeDutiesMock(
@@ -670,13 +668,13 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	ticker.Send(currentSlot.Get())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
-	// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration
-	startTime := time.Now()
+	// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration when
+	// Beacon head event is observed (block arrival)
 	currentSlot.Set(phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.Get())
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
+	startTime := time.Now()
 	ticker.Send(currentSlot.Get())
 
 	// STEP 4: trigger head event (block arrival)
