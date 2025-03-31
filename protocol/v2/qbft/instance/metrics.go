@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+	"github.com/ssvlabs/ssv-spec/types"
 	"time"
 
 	"github.com/ssvlabs/ssv-spec/qbft"
@@ -11,10 +12,10 @@ import (
 
 type metrics struct {
 	stageStart time.Time
-	role       string
+	role       types.RunnerRole
 }
 
-func newMetrics(role string) *metrics {
+func newMetrics(role types.RunnerRole) *metrics {
 	return &metrics{
 		role: role,
 	}
@@ -30,7 +31,7 @@ func (m *metrics) EndStageProposal(ctx context.Context, round qbft.Round) {
 		time.Since(m.stageStart).Seconds(),
 		metric.WithAttributes(
 			stageAttribute(proposalStage),
-			roleAttribute(m.role),
+			observability.RunnerRoleAttribute(m.role),
 			observability.DutyRoundAttribute(round)))
 	m.stageStart = time.Now()
 }
@@ -41,7 +42,7 @@ func (m *metrics) EndStagePrepare(ctx context.Context, round qbft.Round) {
 		time.Since(m.stageStart).Seconds(),
 		metric.WithAttributes(
 			stageAttribute(prepareStage),
-			roleAttribute(m.role),
+			observability.RunnerRoleAttribute(m.role),
 			observability.DutyRoundAttribute(round)))
 	m.stageStart = time.Now()
 }
@@ -52,7 +53,7 @@ func (m *metrics) EndStageCommit(ctx context.Context, round qbft.Round) {
 		time.Since(m.stageStart).Seconds(),
 		metric.WithAttributes(
 			stageAttribute(commitStage),
-			roleAttribute(m.role),
+			observability.RunnerRoleAttribute(m.role),
 			observability.DutyRoundAttribute(round)))
 	m.stageStart = time.Now()
 }
