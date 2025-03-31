@@ -203,7 +203,9 @@ func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.Attestati
 					zap.String("client_addr", resp.clientAddr),
 					zap.Int("succeeded", succeeded),
 					zap.Int("errored", errored),
+					zap.Any("score", resp.score),
 				).Debug("response received")
+
 				if bestAttestationData == nil {
 					bestAttestationData = resp.attestationData
 					bestScore = resp.score
@@ -406,18 +408,20 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 		if err == nil {
 			// Increase score based on the nearness of the head slot.
 			supplementScore := float64(1) / float64(1+attestationData.Slot-slot)
+			score := score{
+				baseScore:       baseScore,
+				supplementScore: supplementScore,
+			}
+
 			logger.With(
 				zap.Duration("elapsed", time.Since(start)),
 				zap.Uint64("head_slot", uint64(slot)),
 				zap.Uint64("source_epoch", uint64(attestationData.Source.Epoch)),
 				zap.Uint64("target_epoch", uint64(attestationData.Target.Epoch)),
-				zap.Uint64("score", baseScore),
+				zap.Any("score", score),
 			).Debug("scored attestation data")
 
-			return score{
-				baseScore:       baseScore,
-				supplementScore: supplementScore,
-			}
+			return score
 		}
 
 		logger.
