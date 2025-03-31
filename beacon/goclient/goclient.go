@@ -160,6 +160,8 @@ type GoClient struct {
 
 	withWeightedAttestationData bool
 
+	withParallelSubmissions bool
+
 	subscribersLock      sync.RWMutex
 	headEventSubscribers []subscriber[*apiv1.HeadEvent]
 	supportedTopics      []EventTopic
@@ -212,6 +214,7 @@ func New(
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
+		withParallelSubmissions:            opt.WithParallelSubmissions,
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
