@@ -22,15 +22,11 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
-
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
 	"github.com/ssvlabs/ssv/message/validation"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 // TestP2pNetwork_MessageValidation tests p2pNetwork would score peers according
@@ -149,7 +145,6 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Prepare a pool of broadcasters.
-	mu := sync.Mutex{}
 	height := atomic.Int64{}
 	roleBroadcasts := map[spectypes.RunnerRole]int{}
 	broadcasters := pool.New().WithErrors().WithContext(ctx)
@@ -158,9 +153,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			for i := 0; i < 12; i++ {
 				role := roles[i%len(roles)]
 
-				mu.Lock()
+				mtx.Lock()
 				roleBroadcasts[role]++
-				mu.Unlock()
+				mtx.Unlock()
 
 				msgID, msg := dummyMsg(t, hex.EncodeToString(shares[rand.Intn(len(shares))].ValidatorPubKey[:]), int(height.Add(1)), role)
 				err := node.Broadcast(msgID, msg)
@@ -192,10 +187,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	// Wait for the broadcasters to finish.
 	err := broadcasters.Wait()
 	require.NoError(t, err)
-	time.Sleep(1 * time.Second)
 
 	// Assert that the messages were distributed as expected.
-	time.Sleep(7 * time.Second)
+	time.Sleep(8 * time.Second)
 
 	interval := 100 * time.Millisecond
 	for i := 0; i < nodeCount; i++ {
@@ -246,11 +240,10 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			index NodeIndex
 			score float64
 		}
-		peers := make([]peerScore, 0, node.PeerScores.SlowLen())
-		node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
+		peers := make([]peerScore, 0)
+		for index, snapshot := range *node.PeerScores.Load() {
 			peers = append(peers, peerScore{index, snapshot.Score})
-			return true
-		})
+		}
 		sort.Slice(peers, func(i, j int) bool {
 			return peers[i].score > peers[j].score
 		})
@@ -321,7 +314,7 @@ type NodeIndex int
 type VirtualNode struct {
 	Index      NodeIndex
 	Network    *p2pNetwork
-	PeerScores *hashmap.Map[NodeIndex, *pubsub.PeerScoreSnapshot]
+	PeerScores atomic.Pointer[map[NodeIndex]*pubsub.PeerScoreSnapshot]
 }
 
 func (n *VirtualNode) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
@@ -360,19 +353,16 @@ func CreateVirtualNet(
 				return
 			}
 
-			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
-				node.PeerScores.Delete(index)
-				return true
-			})
+			peerScoresUpdated := make(map[NodeIndex]*pubsub.PeerScoreSnapshot, len(peerMap))
 			for peerID, peerScore := range peerMap {
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
 					t.Fatalf("peer not found (%s)", peerID)
 					return
 				}
-				node.PeerScores.Set(peerNode.Index, peerScore)
+				peerScoresUpdated[peerNode.Index] = peerScore
 			}
-
+			node.PeerScores.Store(&peerScoresUpdated)
 		},
 		PeerScoreInspectorInterval: time.Millisecond * 5,
 		Shares:                     shares,
@@ -384,9 +374,8 @@ func CreateVirtualNet(
 
 	for i, node := range ln.Nodes {
 		vn.Nodes = append(vn.Nodes, &VirtualNode{
-			Index:      NodeIndex(i),
-			Network:    node.(*p2pNetwork),
-			PeerScores: hashmap.New[NodeIndex, *pubsub.PeerScoreSnapshot](), //{}make(map[NodeIndex]*pubsub.PeerScoreSnapshot),
+			Index:   NodeIndex(i),
+			Network: node.(*p2pNetwork),
 		})
 	}
 	doneSetup.Store(true)
@@ -418,23 +407,18 @@ func generateShares(t *testing.T, count int) []*ssvtypes.SSVShare {
 
 	for i := 0; i < count; i++ {
 		validatorIndex := phase0.ValidatorIndex(i)
-		specShare := *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), validatorIndex)
+		domainShare := *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), validatorIndex)
 
 		var pk spectypes.ValidatorPK
 		_, err := cryptorand.Read(pk[:])
 		require.NoError(t, err)
 
-		specShare.ValidatorPubKey = pk
+		domainShare.ValidatorPubKey = pk
 
 		share := &ssvtypes.SSVShare{
-			Share: specShare,
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-					Index:  validatorIndex,
-				},
-				Liquidated: false,
-			},
+			Share:      domainShare,
+			Status:     eth2apiv1.ValidatorStateActiveOngoing,
+			Liquidated: false,
 		}
 
 		shares = append(shares, share)

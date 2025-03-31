@@ -6,18 +6,15 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
-
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
-var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role convert.RunnerRole) *qbft.Config {
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *qbft.Config {
 	return &qbft.Config{
 		BeaconSigner: testingutils.NewTestingKeyManager(),
 		Domain:       testingutils.TestingSSVDomainType,
@@ -35,7 +32,6 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage:     TestingStores(logger).Get(role),
 		Network:     testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:       roundtimer.NewTestingTimer(),
 		CutOffRound: testingutils.TestingCutOffRound,

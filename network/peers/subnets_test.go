@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"math/rand"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
 	nettesting "github.com/ssvlabs/ssv/network/testing"
 	"github.com/stretchr/testify/require"
 )
@@ -26,11 +26,11 @@ func TestSubnetsIndex(t *testing.T) {
 		pids = append(pids, pid)
 	}
 
-	sAll, err := records.Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
+	sAll, err := commons.FromString("0xffffffffffffffffffffffffffffffff")
 	require.NoError(t, err)
-	sNone, err := records.Subnets{}.FromString("0x00000000000000000000000000000000")
+	sNone, err := commons.FromString("0x00000000000000000000000000000000")
 	require.NoError(t, err)
-	sPartial, err := records.Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
+	sPartial, err := commons.FromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
 	subnetsIdx := NewSubnetsIndex(128)
@@ -61,8 +61,8 @@ func TestSubnetsIndex(t *testing.T) {
 
 func TestSubnetsDistributionScores(t *testing.T) {
 	nsubnets := 128
-	mysubnets := make(records.Subnets, nsubnets)
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	mysubnets := make(commons.Subnets, nsubnets)
+	allSubs, _ := commons.FromString(commons.AllSubnets)
 	for sub := range allSubs {
 		if sub%2 == 0 {
 			mysubnets[sub] = byte(0)
@@ -117,6 +117,116 @@ func TestSubnetScore(t *testing.T) {
 			if math.Abs(score-tc.expected) > 1e-6 {
 				t.Errorf("Expected score to be %f, got %f", tc.expected, score)
 			}
+		})
+	}
+}
+
+func TestUpdatePeerSubnets_Removal(t *testing.T) {
+	generateTestPeers := func(t *testing.T, count int) []peer.ID {
+		nks, err := nettesting.CreateKeys(count)
+		require.NoError(t, err)
+
+		var pids []peer.ID
+		for _, nk := range nks {
+			sk, err := commons.ECDSAPrivToInterface(nk.NetKey)
+			require.NoError(t, err)
+			pid, err := peer.IDFromPrivateKey(sk)
+			require.NoError(t, err)
+			pids = append(pids, pid)
+		}
+		return pids
+	}
+
+	getSubnet := func(t *testing.T, subnetHex string) commons.Subnets {
+		require.Len(t, subnetHex, 32, "subnetHex must be 32 characters long, got %d", len(subnetHex))
+		s, err := commons.FromString(subnetHex)
+		require.NoError(t, err)
+		return s
+	}
+
+	generateSubnetString := func(subnetIndices ...int) string {
+		bytes := make([]byte, 16)
+		for _, idx := range subnetIndices {
+			if idx < 0 || idx >= 128 {
+				continue
+			}
+			byteIndex := idx / 8
+			bitIndex := idx % 8
+			bytes[byteIndex] |= 1 << bitIndex
+		}
+		return hex.EncodeToString(bytes)
+	}
+
+	tests := []struct {
+		name            string
+		numPeers        int
+		peerToRemoveIdx int
+		initialSubnets  string
+		removeSubnets   string
+		expectedPeers   []int
+	}{
+		{
+			name:            "RemoveFirstPeer",
+			numPeers:        3,
+			peerToRemoveIdx: 0,
+			initialSubnets:  generateSubnetString(0), // Subnet 0
+			removeSubnets:   generateSubnetString(),  // No subnets
+			expectedPeers:   []int{1, 2},
+		},
+		{
+			name:            "RemoveMiddlePeer",
+			numPeers:        4,
+			peerToRemoveIdx: 2,
+			initialSubnets:  generateSubnetString(0), // Subnet 0
+			removeSubnets:   generateSubnetString(),  // No subnets
+			expectedPeers:   []int{0, 1, 3},
+		},
+		{
+			name:            "RemoveLastPeer",
+			numPeers:        3,
+			peerToRemoveIdx: 2,
+			initialSubnets:  generateSubnetString(0), // Subnet 0
+			removeSubnets:   generateSubnetString(),  // No subnets
+			expectedPeers:   []int{0, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			subnetsIdx := NewSubnetsIndex(128)
+			pids := generateTestPeers(t, tt.numPeers)
+			subnetID := 0
+			sInitial := getSubnet(t, tt.initialSubnets)
+			sRemove := getSubnet(t, tt.removeSubnets)
+
+			emptySubnet := generateSubnetString()
+			if tt.initialSubnets != emptySubnet {
+				for _, pid := range pids {
+					updated := subnetsIdx.UpdatePeerSubnets(pid, sInitial)
+					require.True(t, updated)
+				}
+
+				peersInSubnet := subnetsIdx.GetSubnetPeers(subnetID)
+				require.ElementsMatch(t, pids, peersInSubnet)
+			}
+
+			var peerToRemove peer.ID
+			if tt.peerToRemoveIdx < len(pids) {
+				peerToRemove = pids[tt.peerToRemoveIdx]
+			} else {
+				extraPids := generateTestPeers(t, 1)
+				peerToRemove = extraPids[0]
+			}
+
+			updated := subnetsIdx.UpdatePeerSubnets(peerToRemove, sRemove)
+			require.True(t, updated)
+
+			peersInSubnet := subnetsIdx.GetSubnetPeers(subnetID)
+			expectedPeers := make([]peer.ID, len(tt.expectedPeers))
+			for i, idx := range tt.expectedPeers {
+				expectedPeers[i] = pids[idx]
+			}
+			require.ElementsMatch(t, expectedPeers, peersInSubnet)
 		})
 	}
 }

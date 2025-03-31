@@ -7,16 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/registry/storage"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
-
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/registry/storage"
+	"go.uber.org/zap"
 )
 
 // DefaultScoringConfig returns the default scoring config
@@ -39,7 +37,6 @@ type topicScoreSnapshot struct {
 func scoreInspector(logger *zap.Logger,
 	scoreIdx peers.ScoreIndex,
 	logFrequency int,
-	metrics Metrics,
 	peerConnected func(pid peer.ID) bool,
 	peerScoreParams *pubsub.PeerScoreParams,
 	topicScoreParamsFactory func(string) *pubsub.TopicScoreParams,
@@ -54,16 +51,6 @@ func scoreInspector(logger *zap.Logger,
 			peerScores[pid] = ps.Score
 		}
 		gossipScoreIndex.SetScores(peerScores)
-
-		// Skip if it's not time to log yet.
-		if inspections%logFrequency != 0 {
-			inspections++
-			return
-		}
-		inspections++
-
-		// Reset metrics before updating them.
-		metrics.ResetPeerScores()
 
 		// Use a "scope cache" for getting a topic's score parameters
 		// otherwise, the factory method would be called multiple times for the same topic
@@ -147,12 +134,13 @@ func scoreInspector(logger *zap.Logger,
 			p7 := peerScores.BehaviourPenalty
 			w7 := peerScoreParams.BehaviourPenaltyWeight
 
-			// Update metrics.
-			metrics.PeerScore(pid, peerScores.Score)
-			metrics.PeerP4Score(pid, p4Impact)
-
 			// Short logs per topic https://github.com/ssvlabs/ssv/issues/1666
 			invalidMessagesStats := formatInvalidMessageStats(filtered)
+
+			if inspections%logFrequency != 0 {
+				// Don't log yet.
+				continue
+			}
 
 			// Log.
 			fields := []zap.Field{
@@ -185,6 +173,8 @@ func scoreInspector(logger *zap.Logger,
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}
 		}
+
+		inspections++
 	}
 }
 
@@ -216,30 +206,9 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
-		opts := params.NewSubnetTopicOpts(totalValidators, commons.Subnets(), topicCommittees)
+		opts := params.NewSubnetTopicOpts(totalValidators, commons.SubnetsCount, topicCommittees)
 
 		// Generate topic parameters
-		tp, err := params.TopicParams(opts)
-		if err != nil {
-			logger.Debug("ignoring topic score params", zap.Error(err))
-			return nil
-		}
-		return tp
-	}
-}
-
-// topicScoreParams factory for creating scoring params for topics
-func validatorTopicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsub.TopicScoreParams {
-	return func(t string) *pubsub.TopicScoreParams {
-		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
-		if err != nil {
-			logger.Debug("could not read stats: active validators")
-			return nil
-		}
-		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
-			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
-		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOptsValidators(totalValidators, commons.Subnets())
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))

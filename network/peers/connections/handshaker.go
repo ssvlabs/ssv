@@ -9,14 +9,14 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
+	"go.uber.org/zap"
 )
 
 // errPeerWasFiltered is thrown when a peer is filtered during handshake
@@ -29,7 +29,7 @@ var errConsumingMessage = errors.New("error consuming message")
 type HandshakeFilter func(senderID peer.ID, sni *records.NodeInfo) error
 
 // SubnetsProvider returns the subnets of or node
-type SubnetsProvider func() records.Subnets
+type SubnetsProvider func() commons.Subnets
 
 // Handshaker is the interface for handshaking with peers.
 // it uses node info protocol to exchange information with other nodes and decide whether we want to connect.
@@ -54,38 +54,38 @@ type handshaker struct {
 	ids        identify.IDService
 	net        libp2pnetwork.Network
 
-	domainTypeProvider networkconfig.DomainTypeProvider
-	subnetsProvider    SubnetsProvider
+	domainType      spectypes.DomainType
+	subnetsProvider SubnetsProvider
 }
 
 // HandshakerCfg is the configuration for creating an handshaker instance
 type HandshakerCfg struct {
-	Network            libp2pnetwork.Network
-	Streams            streams.StreamController
-	NodeInfos          peers.NodeInfoIndex
-	PeerInfos          peers.PeerInfoIndex
-	ConnIdx            peers.ConnectionIndex
-	SubnetsIdx         peers.SubnetsIndex
-	IDService          identify.IDService
-	OperatorSigner     keys.OperatorSigner
-	DomainTypeProvider networkconfig.DomainTypeProvider
-	SubnetsProvider    SubnetsProvider
+	Network         libp2pnetwork.Network
+	Streams         streams.StreamController
+	NodeInfos       peers.NodeInfoIndex
+	PeerInfos       peers.PeerInfoIndex
+	ConnIdx         peers.ConnectionIndex
+	SubnetsIdx      peers.SubnetsIndex
+	IDService       identify.IDService
+	OperatorSigner  keys.OperatorSigner
+	DomainType      spectypes.DomainType
+	SubnetsProvider SubnetsProvider
 }
 
 // NewHandshaker creates a new instance of handshaker
 func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []HandshakeFilter) Handshaker {
 	h := &handshaker{
-		ctx:                ctx,
-		streams:            cfg.Streams,
-		nodeInfos:          cfg.NodeInfos,
-		connIdx:            cfg.ConnIdx,
-		subnetsIdx:         cfg.SubnetsIdx,
-		ids:                cfg.IDService,
-		filters:            filters,
-		peerInfos:          cfg.PeerInfos,
-		subnetsProvider:    cfg.SubnetsProvider,
-		domainTypeProvider: cfg.DomainTypeProvider,
-		net:                cfg.Network,
+		ctx:             ctx,
+		streams:         cfg.Streams,
+		nodeInfos:       cfg.NodeInfos,
+		connIdx:         cfg.ConnIdx,
+		subnetsIdx:      cfg.SubnetsIdx,
+		ids:             cfg.IDService,
+		filters:         filters,
+		peerInfos:       cfg.PeerInfos,
+		subnetsProvider: cfg.SubnetsProvider,
+		domainType:      cfg.DomainType,
+		net:             cfg.Network,
 	}
 	return h
 }
@@ -134,7 +134,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			if r := recover(); r != nil {
 				err = errors.Errorf("panic: %v", r)
 			}
-			h.updatePeerInfo(logger, pid, err)
+			h.updatePeerInfo(pid, err)
 		}()
 
 		// Handle the handshake request.
@@ -170,7 +170,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err
 		if r := recover(); r != nil {
 			err = errors.Errorf("panic: %v", r)
 		}
-		h.updatePeerInfo(logger, pid, err)
+		h.updatePeerInfo(pid, err)
 	}()
 
 	nodeInfo, err = h.requestNodeInfo(logger, conn)
@@ -187,7 +187,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err
 	return
 }
 
-func (h *handshaker) updatePeerInfo(logger *zap.Logger, pid peer.ID, handshakeErr error) {
+func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 	h.peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
 		info.LastHandshake = time.Now()
 		info.LastHandshakeError = handshakeErr
@@ -197,7 +197,7 @@ func (h *handshaker) updatePeerInfo(logger *zap.Logger, pid peer.ID, handshakeEr
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
 	if ni.Metadata != nil {
-		subnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
+		subnets, err := commons.FromString(ni.Metadata.Subnets)
 		if err == nil {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {
@@ -243,8 +243,7 @@ func (h *handshaker) applyFilters(sender peer.ID, ni *records.NodeInfo) error {
 func (h *handshaker) sealedNodeRecord() ([]byte, error) {
 	// Update DomainType.
 	h.nodeInfos.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-		dt := h.domainTypeProvider.DomainType()
-		self.NetworkID = "0x" + hex.EncodeToString(dt[:])
+		self.NetworkID = "0x" + hex.EncodeToString(h.domainType[:])
 		return self
 	})
 

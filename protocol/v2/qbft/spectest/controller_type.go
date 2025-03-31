@@ -2,6 +2,7 @@ package qbft
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -10,22 +11,19 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
@@ -50,8 +48,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 		height++
 	}
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
@@ -60,7 +57,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), convert.RoleCommittee)
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet())
 	return qbfttesting.NewTestingQBFTController(
 		spectestingutils.Testing4SharesSet(),
 		identifier[:],
@@ -93,7 +90,7 @@ func testProcessMsg(
 	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decided, err := contr.ProcessMsg(logger, msg)
+		decided, err := contr.ProcessMsg(context.TODO(), logger, msg)
 		if err != nil {
 			lastErr = err
 		}
@@ -149,7 +146,7 @@ func testBroadcastedDecided(
 }
 
 func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(logger, height, runData.InputValue)
+	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err

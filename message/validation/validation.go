@@ -15,15 +15,13 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/message/signatureverifier"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
+	"go.uber.org/zap"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -34,13 +32,13 @@ type MessageValidator interface {
 
 type messageValidator struct {
 	logger                *zap.Logger
-	metrics               metricsreporter.MetricsReporter
 	netCfg                networkconfig.NetworkConfig
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
 	validatorStore        storage.ValidatorStore
 	dutyStore             *dutystore.Store
 	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+	pectraForkEpoch       phase0.Epoch
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -57,17 +55,18 @@ func New(
 	validatorStore storage.ValidatorStore,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
+	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
 		logger:              zap.NewNop(),
-		metrics:             metricsreporter.NewNop(),
 		netCfg:              netCfg,
 		consensusStateIndex: make(map[consensusID]*consensusState),
 		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
 		validatorStore:      validatorStore,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
+		pectraForkEpoch:     pectraForkEpoch,
 	}
 
 	for _, opt := range opts {
@@ -85,22 +84,26 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 
 // Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
 		return mv.validateSelf(pmsg)
 	}
 
-	reportDone := mv.reportPubSubMetrics(pmsg)
-	defer reportDone()
+	validationStart := time.Now()
+	defer func() {
+		messageValidationDurationHistogram.Record(ctx, time.Since(validationStart).Seconds())
+	}()
+
+	recordMessage(ctx)
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
-		return mv.handleValidationError(peerID, decodedMessage, err)
+		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage
 
-	return mv.handleValidationSuccess(decodedMessage)
+	return mv.handleValidationSuccess(ctx, decodedMessage)
 }
 
 func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
@@ -231,7 +234,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}, nil
 	}
 
-	validator, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
+	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
 	if !exists {
 		e := ErrUnknownValidator
 		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
@@ -239,30 +242,30 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is liquidated
-	if validator.Liquidated {
+	if share.Liquidated {
 		return CommitteeInfo{}, ErrValidatorLiquidated
 	}
 
-	if validator.BeaconMetadata == nil {
+	if !share.HasBeaconMetadata() {
 		return CommitteeInfo{}, ErrNoShareMetadata
 	}
 
 	// Rule: If validator is not active
-	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
-		e.got = validator.BeaconMetadata.Status.String()
+		e.got = share.Status.String()
 		return CommitteeInfo{}, e
 	}
 
 	var operators []spectypes.OperatorID
-	for _, c := range validator.Committee {
+	for _, c := range share.Committee {
 		operators = append(operators, c.Signer)
 	}
 
 	return CommitteeInfo{
 		operatorIDs: operators,
-		indices:     []phase0.ValidatorIndex{validator.BeaconMetadata.Index},
-		committeeID: validator.CommitteeID(),
+		indices:     []phase0.ValidatorIndex{share.ValidatorIndex},
+		committeeID: share.CommitteeID(),
 	}, nil
 }
 
@@ -284,20 +287,4 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	}
 
 	return mv.consensusStateIndex[id]
-}
-
-func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {
-	mv.metrics.ActiveMsgValidation(pmsg.GetTopic())
-	mv.metrics.MessagesReceivedFromPeer(pmsg.ReceivedFrom)
-	mv.metrics.MessagesReceivedTotal()
-	mv.metrics.MessageSize(len(pmsg.GetData()))
-
-	start := time.Now()
-
-	return func() {
-		sinceStart := time.Since(start)
-
-		mv.metrics.MessageValidationDuration(sinceStart)
-		mv.metrics.ActiveMsgValidationDone(pmsg.GetTopic())
-	}
 }

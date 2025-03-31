@@ -31,6 +31,7 @@ import (
 
 type MsgProcessingSpecTest struct {
 	Name                    string
+	ParentName              string
 	Runner                  runner.Runner
 	Duty                    spectypes.Duty
 	Messages                []*spectypes.SignedSSVMessage
@@ -46,6 +47,10 @@ type MsgProcessingSpecTest struct {
 
 func (test *MsgProcessingSpecTest) TestName() string {
 	return test.Name
+}
+
+func (test *MsgProcessingSpecTest) FullName() string {
+	return strings.ReplaceAll(test.ParentName+"_"+test.Name, " ", "_")
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
@@ -100,7 +105,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				}
 			}
 		} else {
-			lastErr = c.StartDuty(logger, test.Duty.(*spectypes.CommitteeDuty))
+			lastErr = c.StartDuty(ctx, logger, test.Duty.(*spectypes.CommitteeDuty))
 		}
 
 		for _, msg := range test.Messages {
@@ -109,7 +114,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = c.ProcessMessage(logger, dmsg)
+			err = c.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -126,7 +131,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 		v.Network = test.Runner.GetNetwork()
 
 		if !test.DontStartDuty {
-			lastErr = v.StartDuty(logger, test.Duty)
+			lastErr = v.StartDuty(ctx, logger, test.Duty)
 		}
 		for _, msg := range test.Messages {
 			dmsg, err := wrapSignedSSVMessageToDecodedSSVMessage(msg)
@@ -134,7 +139,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 				continue
 			}
-			err = v.ProcessMessage(logger, dmsg)
+			err = v.ProcessMessage(ctx, logger, dmsg)
 			if err != nil {
 				lastErr = err
 			}
@@ -147,8 +152,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	ctx := context.Background()
 	v, c, lastErr := test.runPreTesting(ctx, logger)
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
@@ -248,7 +252,7 @@ var baseCommitteeWithRunnerSample = func(
 	logger *zap.Logger,
 	keySetMap map[phase0.ValidatorIndex]*spectestingutils.TestKeySet,
 	runnerSample *runner.CommitteeRunner,
-	committeeDutyGuard runner.CommitteeDutyGuard,
+	committeeDutyGuard *validator.CommitteeDutyGuard,
 ) *validator.Committee {
 
 	var keySetSample *spectestingutils.TestKeySet
@@ -279,6 +283,7 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetOperatorSigner(),
 			runnerSample.GetValCheckF(),
 			committeeDutyGuard,
+			runnerSample.GetDoppelgangerHandler(),
 		)
 		return r.(*runner.CommitteeRunner), err
 	}
@@ -292,6 +297,7 @@ var baseCommitteeWithRunnerSample = func(
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,
+		committeeDutyGuard,
 	)
 
 	return c
@@ -309,7 +315,7 @@ func wrapSignedSSVMessageToDecodedSSVMessage(msg *spectypes.SignedSSVMessage) (*
 			SignedSSVMessage: msg,
 			SSVMessage:       &spectypes.SSVMessage{},
 		}
-		dmsg.SSVMessage.MsgType = spectypes.SSVConsensusMsgType
+		dmsg.MsgType = spectypes.SSVConsensusMsgType
 	} else {
 		dmsg, err = queue.DecodeSignedSSVMessage(msg)
 	}

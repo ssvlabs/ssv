@@ -27,7 +27,6 @@
     - [Run](#run)
       - [Local network with 4 nodes with Docker Compose](#local-network-with-4-nodes-with-docker-compose)
       - [Local network with 4 nodes for debugging with Docker Compose](#local-network-with-4-nodes-for-debugging-with-docker-compose)
-      - [Prometheus and Grafana for local network](#prometheus-and-grafana-for-local-network)
   - [Coding Standards](#coding-standards)
 
 ## Usage
@@ -183,7 +182,8 @@ By using this script, developers can simulate a real SSV environment, run multip
 The script simplifies configuration by automatically generating YAML files for each operator and an 'events.yaml' file. The 'events.yaml' emulates a 'happy flow' scenario, which includes the registration of four operators and one validator
 
 1. Download the executable version 1.0.1 from [ssv-keys](https://github.com/ssvlabs/ssv-keys/releases/tag/v1.0.1).
-    - After downloading, follow these [steps](https://github.com/ssvlabs/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
+
+   - After downloading, follow these [steps](https://github.com/ssvlabs/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
 
 2. Generate a local configuration using the provided [script](../scripts/generate_local_config.sh).
 
@@ -254,9 +254,9 @@ These steps offer a detailed manual alternative to the script. They provide a st
    ```
 
 9. Finally, build and run 4 local nodes with the following command:
-    ```bash
-    docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
-    ```
+   ```bash
+   docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
+   ```
 
 ### Run
 
@@ -273,17 +273,6 @@ $ make docker-all
 ```shell
 $ make docker-debug
 ```
-
-#### Prometheus and Grafana for local network
-
-In order to spin up local prometheus and grafana use:
-
-```shell
-$ make docker-monitor
-```
-
-For a grafana dashboard, use the [SSV Operator dashboard](../monitoring/grafana/dashboard_ssv_operator.json) as
-explained in [monitoring/README.md#grafana](../monitoring/README.md#grafana)
 
 ## Coding Standards
 

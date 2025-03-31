@@ -161,7 +161,7 @@ Once the committee reaches consensus, the nodes will publish the decided message
 
 Consensus messages are being sent in the network over pubsub topics (see [subnets](#subnets))
 
-More information regarding the protocol can be found in [iBFT annotated paper (By Blox)](/ibft/IBFT.md)
+More information regarding the protocol can be found in [iBFT annotated paper (By SSV)](/ibft/IBFT.md)
 
 ### Message Structure
 
