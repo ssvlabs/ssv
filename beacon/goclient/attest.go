@@ -432,10 +432,7 @@ func (gc *GoClient) blockRootToSlot(ctx context.Context, client Client, root pha
 }
 
 func isBlockHeaderResponseValid(response *api.Response[*eth2apiv1.BeaconBlockHeader]) bool {
-	if response == nil || response.Data == nil || response.Data.Header == nil || response.Data.Header.Message == nil {
-		return false
-	}
-	return true
+	return response != nil && response.Data != nil && response.Data.Header != nil && response.Data.Header.Message != nil
 }
 
 func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
