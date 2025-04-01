@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/iqbft/storage"
+	observabilityName      = "github.com/ssvlabs/ssv/ibft/storage"
 	observabilityNamespace = "ssv.storage"
 )
 
