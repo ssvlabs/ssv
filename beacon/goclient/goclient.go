@@ -135,9 +135,12 @@ type GoClient struct {
 
 	operatorDataStore operatorDataStore
 
-	registrationMu       sync.Mutex
-	registrationLastSlot phase0.Slot
-	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
+	// registrationMu synchronises access to registrations
+	registrationMu sync.Mutex
+	// registrations is a set of validator-registrations (their latest versions) to be sent to
+	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
+	// participating validators
+	registrations map[phase0.BLSPubKey]*validatorRegistration
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
@@ -203,7 +206,7 @@ func New(
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		operatorDataStore:     operatorDataStore,
-		registrationCache:     make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
+		registrations:         map[phase0.BLSPubKey]*validatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient

@@ -533,7 +533,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.measurements.consensusStart)),
+			fields.TotalConsensusTime(cr.measurements.ConsensusTime()),
 			fields.Count(attestationsCount),
 		)
 
@@ -572,7 +572,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.measurements.consensusStart)),
+			fields.TotalConsensusTime(cr.measurements.ConsensusTime()),
 			fields.Count(syncMsgsCount),
 		)
 
