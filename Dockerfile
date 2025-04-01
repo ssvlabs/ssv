@@ -1,7 +1,7 @@
 #
 # STEP 1: Base image with common dependencies
 #
-FROM golang:1.22 AS base
+FROM golang:1.24 AS base
 
 # Install essential build tools
 RUN apt-get update && \
@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # STEP 3: Prepare image to run the binary
 #
-FROM golang:1.22 AS runner
+FROM golang:1.24 AS runner
 
 # Install minimal runtime dependencies
 RUN apt-get update && \
