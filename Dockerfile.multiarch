@@ -1,3 +1,5 @@
+# Dockerfile: Orchestrates multi-architecture builds via hooks/build
+# Supports cross-compilation for amd64/arm64/arm targets with proper CGO settings
 #
 # Global build arguments
 #
