@@ -15,8 +15,6 @@ import (
 	"go.uber.org/zap"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/storage.go -source=./storage.go
-
 var HashedPrivateKey = "hashed-private-key"
 
 var (
