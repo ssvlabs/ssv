@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ssvlabs/ssv/utils/hashmap"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
@@ -177,8 +179,8 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// nonCommittees is a cache of initialized committeeObserver instances
-	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
+	// committeeObservers is a cache of initialized committeeObserver instances
+	committeesObservers      *hashmap.Map[spectypes.MessageID, *committeeObserver] // todo: need to evict?
 	committeesObserversMutex sync.Mutex
 	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
@@ -258,9 +260,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
-		committeesObservers: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](cacheTTL),
-		),
+		committeesObservers: hashmap.New[spectypes.MessageID, *committeeObserver](),
 		attesterRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
@@ -277,8 +277,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageValidator: options.MessageValidator,
 	}
 
-	// Start automatic expired item deletion in nonCommitteeValidators.
-	go ctrl.committeesObservers.Start()
 	// Delete old root and domain entries.
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
@@ -353,57 +351,79 @@ func (c *controller) handleRouterMessages() {
 	}
 }
 
-var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
-	spectypes.RoleCommittee:  64,
-	spectypes.RoleProposer:   4,
-	spectypes.RoleAggregator: 4,
-	//spectypes.BNRoleSyncCommittee:             4,
-	spectypes.RoleSyncCommitteeContribution: 4,
-}
+// TODO: ecivt committeeObserver of dead committees by time or event
+//var committeeObserverValidatorTTLs = map[spectypes.RunnerRole]int{
+//	spectypes.RoleCommittee:                 64,
+//	spectypes.RoleProposer:                  4,
+//	spectypes.RoleAggregator:                4,
+//	spectypes.RoleSyncCommitteeContribution: 4,
+//}
 
-func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
-	var ncv *committeeObserver
-	ssvMsg := msg.(*queue.SSVMessage)
+func (c *controller) handleWorkerMessages(netmsg network.DecodedSSVMessage) error {
+	msg := netmsg.(*queue.SSVMessage)
+	// Validate message should be processed
+	switch msg.GetType() {
+	case spectypes.SSVConsensusMsgType:
+		// Process proposal messages for committee consensus only to get the roots
+		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
+			return nil
+		}
 
-	item := c.getNonCommitteeValidators(ssvMsg.GetID())
-	if item == nil {
-		committeeObserverOptions := validator.CommitteeObserverOptions{
-			Logger:            c.logger,
-			NetworkConfig:     c.networkConfig,
-			ValidatorStore:    c.validatorStore,
-			Network:           c.validatorOptions.Network,
-			Storage:           c.validatorOptions.Storage,
-			FullNode:          c.validatorOptions.FullNode,
-			Operator:          c.validatorOptions.Operator,
-			OperatorSigner:    c.validatorOptions.OperatorSigner,
-			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
-			AttesterRoots:     c.attesterRoots,
-			SyncCommRoots:     c.syncCommRoots,
-			DomainCache:       c.domainCache,
+		subMsg, ok := msg.Body.(*specqbft.Message)
+		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
+			return nil
 		}
-		ncv = &committeeObserver{
-			CommitteeObserver: validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions),
+		return c.getCommitteeObserver(msg.GetID()).OnProposalMsg(msg)
+	case spectypes.SSVPartialSignatureMsgType:
+		pSigMessages := &spectypes.PartialSignatureMessages{}
+		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
+			return fmt.Errorf("failed to decode partial signature messages: %w", err)
 		}
-		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
-		c.committeesObservers.Set(
-			ssvMsg.GetID(),
-			ncv,
-			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-		)
-	} else {
-		ncv = item
-	}
-	if err := c.handleNonCommitteeMessages(ssvMsg, ncv); err != nil {
-		return err
+
+		return c.getCommitteeObserver(msg.GetID()).ProcessMessage(msg)
 	}
 	return nil
 }
 
-func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *committeeObserver) error {
+func (c *controller) getCommitteeObserver(msgID spectypes.MessageID) *committeeObserver {
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
-	switch msg.MsgType {
+	// Check if the observer already exists
+	existingObserver, ok := c.committeesObservers.Get(msgID)
+	if ok {
+		return existingObserver
+	}
+
+	// Create a new committee observer if it doesn't exist
+	committeeObserverOptions := validator.CommitteeObserverOptions{
+		Logger:            c.logger,
+		NetworkConfig:     c.networkConfig,
+		ValidatorStore:    c.validatorStore,
+		Network:           c.validatorOptions.Network,
+		Storage:           c.validatorOptions.Storage,
+		FullNode:          c.validatorOptions.FullNode,
+		Operator:          c.validatorOptions.Operator,
+		OperatorSigner:    c.validatorOptions.OperatorSigner,
+		NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+		AttesterRoots:     c.attesterRoots,
+		SyncCommRoots:     c.syncCommRoots,
+		DomainCache:       c.domainCache,
+	}
+	newObserver := &committeeObserver{
+		CommitteeObserver: validator.NewCommitteeObserver(msgID, committeeObserverOptions),
+	}
+
+	c.committeesObservers.Set(
+		msgID,
+		newObserver,
+	)
+
+	return newObserver
+}
+
+func (c *controller) handleCommitteeObserverMessage(msg *queue.SSVMessage, observer *committeeObserver) error {
+	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
 		// Process proposal messages for committee consensus only to get the roots
 		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
@@ -415,24 +435,17 @@ func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *comm
 			return nil
 		}
 
-		return ncv.OnProposalMsg(msg)
+		return observer.OnProposalMsg(msg)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return err
+			return fmt.Errorf("failed to decode partial signature messages: %w", err)
 		}
 
-		return ncv.ProcessMessage(msg)
+		return observer.ProcessMessage(msg)
+	default:
+		return nil
 	}
-	return nil
-}
-
-func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *committeeObserver {
-	item := c.committeesObservers.Get(messageId)
-	if item != nil {
-		return item.Value()
-	}
-	return nil
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
