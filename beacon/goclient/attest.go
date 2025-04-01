@@ -353,7 +353,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 	score := float64(attestationData.Source.Epoch + attestationData.Target.Epoch)
 	logger.
 		With(zap.Float64("base_score", score)).
-		Info("base score was set. Fetching slot for block root")
+		Debug("base score was set. Fetching slot for block root")
 
 	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout/2)
 	defer cancel()
@@ -447,8 +447,7 @@ func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 	return zap.String("weighted_data_request_id", id.String())
 }
 
-// multiClientSubmit is a generic function that submits data to multiple clients concurrently.
-// If any client succeeds, the remaining submissions are cancelled.
+// multiClientSubmit is a generic function that submits data to multiple beacon clients concurrently.
 // Returns nil if at least one client successfully submitted the data.
 func (gc *GoClient) multiClientSubmit(
 	operationName string,
