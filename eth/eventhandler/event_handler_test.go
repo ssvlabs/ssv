@@ -1237,7 +1237,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Should return MalformedEventError and no changes to the state
 		t.Run("test OperatorRemoved incorrect operator ID", func(t *testing.T) {
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 100500)
+			_, err = boundContract.RemoveOperator(auth, 100500)
 			require.NoError(t, err)
 			sim.Commit()
 
@@ -1281,7 +1281,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Call the contract method
 			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
-			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
 
 			sim.Commit()
@@ -1313,7 +1313,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Now start the OperatorRemoved event handling
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 4)
+			_, err = boundContract.RemoveOperator(auth, 4)
 			require.NoError(t, err)
 			sim.Commit()
 
