@@ -70,8 +70,7 @@ func (pdb *PebbleDB) Set(prefix, key, value []byte) error {
 }
 
 func (pdb *PebbleDB) Delete(prefix, key []byte) error {
-
-	return pdb.db.Delete(key, pebble.Sync)
+	return pdb.db.Delete(append(prefix, key...), pebble.Sync)
 }
 
 func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
@@ -193,6 +192,7 @@ func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
 	if err != nil {
 		return 0, nil
 	}
+	defer func() { _ = iter.Close() }()
 	count := int64(0)
 	for iter.First(); iter.Valid(); iter.Next() {
 		count++
