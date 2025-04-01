@@ -37,7 +37,7 @@ func TestRemoveSlot(t *testing.T) {
 
 	slotTickerProvider := func() slotticker.SlotTicker {
 		return slotticker.New(zap.NewNop(), slotticker.Config{
-			SlotDuration: 5 * time.Second,
+			SlotDuration: 12 * time.Second,
 			GenesisTime:  time.Now(),
 		})
 	}
