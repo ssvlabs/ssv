@@ -1,73 +1,68 @@
 #
-# Global build arguments
+# STEP 1: Base image with common dependencies
 #
-## Note BUILDPLATFORM and TARGETARCH are crucial variables:
-##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
-ARG BUILDPLATFORM
-ARG TARGETPLATFORM
-ARG TARGETARCH
+FROM golang:1.22 AS base
 
-#
-# STEP 1: Prepare environment
-#
-FROM golang:1.22 AS preparer
-
+# Install essential build tools
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      curl git zip unzip g++ gcc-aarch64-linux-gnu bzip2 make && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+      curl git ca-certificates make \
+      zip unzip bzip2 g++ && \
     rm -rf /var/lib/apt/lists/*
 
+# Set working directory for the build
 WORKDIR /go/src/github.com/ssvlabs/ssv/
+
+# Cache dependencies
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg,mode=0755 \
-    go mod download
+    --mount=type=cache,mode=0755,target=/go/pkg \
+    go mod download && go mod verify
 
 #
-# STEP 2: Build executable binary
+# STEP 2: Build the application
 #
-FROM preparer AS builder
+FROM base AS builder
 
+## Note TARGETARCH is crucial variable:
+##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
+ARG TARGETARCH
+
+# Copy source code
 COPY . .
 
+# Build the application
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg,mode=0755 \
+    --mount=type=cache,mode=0755,target=/go/pkg \
     COMMIT=$(git rev-parse HEAD) && \
     VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
-    CGO_ENABLED=1 GOOS=linux GOARCH=${TARGETARCH} go install -tags="blst_enabled" \
-      -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
+    CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH \
+    go install \
+      -tags="blst_enabled" \
+      -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags '-static -lm'" \
       ./cmd/ssvnode
 
 #
-# STEP 3: Prepare runtime dependencies
+# STEP 3: Prepare image to run the binary
 #
-FROM debian:stable-slim AS deps
+FROM golang:1.22 AS runner
 
+# Install minimal runtime dependencies
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      dnsutils ca-certificates && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+    dnsutils && \
     rm -rf /var/lib/apt/lists/*
 
-#
-# STEP 4: Final minimal image
-#
-FROM scratch AS runner
-
-# Copy SSL certificates from deps stage
-COPY --from=deps /etc/ssl/certs /etc/ssl/certs
-
+# Copy binary and configuration
 WORKDIR /
-
-# Copy the compiled binary and configuration files
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
 COPY ./Makefile .env* ./
-COPY config/ ./config/
+COPY config/* ./config/
 
-# Expose necessary ports
+# Expose port for load balancing
 EXPOSE 5678 5000 4000/udp
 
 # Force using Go's DNS resolver
 ENV GODEBUG="netdns=go"
 
-# Start the SSV node when container runs
 #ENTRYPOINT ["/go/bin/ssvnode"]

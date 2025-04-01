@@ -1,94 +1,80 @@
 #
 # Global build arguments
 #
+## Note BUILDPLATFORM and TARGETARCH are crucial variables:
+##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 ARG TARGETARCH
 
 #
-# STEP 1: Get cross-compilation tools from tonistiigi/xx
-#
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:latest AS xx
-
-#
-# STEP 2: Base image with common dependencies
+# STEP 1: Base image with common dependencies
 #
 FROM --platform=$BUILDPLATFORM golang:1.22 AS base
 
 # Install essential build tools
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-      curl git ca-certificates make && \
+      curl git ca-certificates make gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
+      gcc-arm-linux-gnueabihf libc6-dev-armhf-cross gcc-x86-64-linux-gnu libc6-dev-amd64-cross \
+      zip unzip bzip2 && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy cross-compilation tools from xx stage
-COPY --from=xx / /
-
-# Set working directory and cache dependencies
+# Set working directory for the build
 WORKDIR /go/src/github.com/ssvlabs/ssv/
+
+# Cache dependencies
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,mode=0755,target=/go/pkg \
     go mod download && go mod verify
 
 #
-# STEP 3: Build the application with cross-compilation
+# STEP 2: Build the application with cross-compilation
 #
 FROM base AS builder
-RUN echo "Building on $BUILDPLATFORM for $TARGETPLATFORM"
 
-# Copy full application source
+# Copy source code
 COPY . .
 
-# Install target-specific build tools using xx-apt-get
-RUN xx-apt-get install -y --no-install-recommends \
-      gcc g++ libc6-dev zip unzip bzip2 && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,mode=0755,target=/go/pkg \
+# Set up compiler based on target architecture
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+      export CC=x86_64-linux-gnu-gcc; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+      export CC=aarch64-linux-gnu-gcc; \
+    elif [ "$TARGETARCH" = "arm" ]; then \
+      export CC=arm-linux-gnueabihf-gcc; \
+    fi && \
     COMMIT=$(git rev-parse HEAD) && \
     VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
     echo "Building version: $VERSION (commit: $COMMIT)" && \
-    CGO_ENABLED=1 xx-go build \
+    CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH \
+    go install \
       -tags="blst_enabled" \
       -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags '-static -lm'" \
-      -o /go/bin/ssvnode \
       ./cmd/ssvnode
 
-# Verify binary architecture and list file details
-RUN xx-verify /go/bin/ssvnode && ls -la /go/bin/ssvnode
-
 #
-# STEP 4: Prepare runtime dependencies
+# STEP 3: Prepare image to run the binary
 #
-FROM debian:stable-slim AS deps
+FROM golang:1.22 AS runner
 
+# Install minimal runtime dependencies
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-      dnsutils ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+  dnsutils && \
+  rm -rf /var/lib/apt/lists/*
 
-#
-# STEP 5: Final minimal image
-#
-FROM scratch AS runner
-
-# Copy SSL certificates from deps stage
-COPY --from=deps /etc/ssl/certs /etc/ssl/certs
-
+# Copy binary and configuration
 WORKDIR /
-
-# Copy the compiled binary and configuration files
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
 COPY ./Makefile .env* ./
 COPY config/* ./config/
 
-# Expose necessary ports
+# Expose port for load balancing
 EXPOSE 5678 5000 4000/udp
 
-# Force using Go's DNS resolver
+# Force using Go's DNS resolver because Alpine's DNS resolver (when netdns=cgo) may cause issues.
 ENV GODEBUG="netdns=go"
 
-# Start the SSV node when container runs
 #ENTRYPOINT ["/go/bin/ssvnode"]
