@@ -227,5 +227,5 @@ func (s *operatorsStorage) DropOperators() error {
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
 func buildOperatorKey(id spectypes.OperatorID) []byte {
-	return append(operatorsPrefix, []byte("/"+strconv.FormatUint(id, 10))...)
+	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(id, 10))}, []byte("/"))
 }
