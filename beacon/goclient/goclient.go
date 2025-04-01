@@ -215,7 +215,7 @@ func New(
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
 		withParallelSubmissions:            opt.WithParallelSubmissions,
-		weightedAttestationDataSoftTimeout: commonTimeout / 2,
+		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
 		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),

@@ -31,7 +31,7 @@ var (
 	epochs = []phase0.Epoch{318584, 318585, 318586, 318587, 318588}
 
 	defaultHardTimeout = time.Second * 2
-	defaultSoftTimeout = defaultHardTimeout / 2
+	defaultSoftTimeout = time.Duration(float64(defaultHardTimeout) / 2.5)
 
 	// roots is a bunch of random roots.
 	roots = []string{
@@ -384,8 +384,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		startTime := time.Now()
 		client.GetAttestationData(phase0.Slot(100))
 
-		softTimeout := client.commonTimeout / 2
-		require.Less(t, time.Since(startTime), softTimeout)
+		require.Less(t, time.Since(startTime), defaultSoftTimeout)
 	})
 
 	t.Run("multiple beacon clients: awaits for soft timeout when one of the servers is a slow responder", func(t *testing.T) {
@@ -405,10 +404,9 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		_, _, err = client.GetAttestationData(phase0.Slot(100))
 
 		require.NoError(t, err)
-		softTimeout := client.commonTimeout / 2
 		timeElapsed := time.Since(startTime)
-		require.GreaterOrEqual(t, timeElapsed, softTimeout)
-		require.LessOrEqual(t, timeElapsed, softTimeout+(softTimeout/10)) //time elapsed should not be greater than soft timeout + 10%
+		require.GreaterOrEqual(t, timeElapsed, defaultSoftTimeout)
+		require.LessOrEqual(t, timeElapsed, defaultSoftTimeout+(defaultSoftTimeout/10)) //time elapsed should not be greater than soft timeout + 10%
 	})
 
 	t.Run("multiple beacon clients: awaits for hard timeout when no responses after soft timeout reached", func(t *testing.T) {
