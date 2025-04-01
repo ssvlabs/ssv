@@ -82,7 +82,7 @@ func getRoundChangeJustification(state *specqbft.State, prepareMsgContainer *spe
 	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
 	ret := make([]*specqbft.ProcessingMessage, 0)
 	for _, msg := range prepareMsgs {
-		if err := validSignedPrepareForHeightRoundAndRoot(
+		if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 			msg,
 			state.Height,
 			state.LastPreparedRound,
@@ -100,9 +100,9 @@ func getRoundChangeJustification(state *specqbft.State, prepareMsgContainer *spe
 	return ret, nil
 }
 
-// validSignedPrepareForHeightRoundAndRoot known in dafny spec as validSignedPrepareForHeightRoundAndDigest
+// validSignedPrepareForHeightRoundAndRootIgnoreSignature known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndRoot(
+func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	msg *specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
@@ -146,7 +146,7 @@ func validSignedPrepareForHeightRoundAndRootVerifySignature(
 	root [32]byte,
 	operators []*spectypes.Operator) error {
 
-	if err := validSignedPrepareForHeightRoundAndRoot(msg, height, round, root, operators); err != nil {
+	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, height, round, root, operators); err != nil {
 		return err
 	}
 
