@@ -213,8 +213,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			dutyStore,
 			signatureVerifier,
 			phase0.Epoch(0),
-			validation.WithSelfPID(selfPeerID),
-			validation.WithSelfAccept(true),
+			validation.WithSelfAccept(selfPeerID, true),
 		)
 	}
 
