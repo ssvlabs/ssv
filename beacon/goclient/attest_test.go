@@ -31,6 +31,7 @@ var (
 	epochs = []phase0.Epoch{318584, 318585, 318586, 318587, 318588}
 
 	defaultHardTimeout = time.Second * 2
+	defaultSoftTimeout = defaultHardTimeout / 2
 
 	// roots is a bunch of random roots.
 	roots = []string{
@@ -278,6 +279,30 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.NotZero(t, slotRequests)
 	})
 
+	t.Run("single beacon client: returns response provided by server when soft timeout reached", func(t *testing.T) {
+		const testSlot = phase0.Slot(100)
+		beaconServer, serverHandledRequests := createBeaconServer(t, beaconServerResponseOptions{
+			AttestationDataResponseDuration: time.Duration(float64(defaultSoftTimeout) * 1.1),
+		})
+		client, err := createClient(ctx, beaconServer.URL, withWeightedAttestationData)
+		require.NoError(t, err)
+
+		response, dataVersion, err := client.GetAttestationData(testSlot)
+
+		require.NoError(t, err)
+		require.Equal(t, spec.DataVersionPhase0, dataVersion)
+		require.NotNil(t, response)
+		require.Contains(t, roots, "0x"+hex.EncodeToString(response.BeaconBlockRoot[:]))
+		require.Contains(t, roots, "0x"+hex.EncodeToString(response.Source.Root[:]))
+		require.Contains(t, roots, "0x"+hex.EncodeToString(response.Target.Root[:]))
+		require.Contains(t, epochs, response.Target.Epoch)
+		require.Contains(t, epochs, response.Source.Epoch)
+		require.Equal(t, testSlot, response.Slot)
+		slotRequests, contains := serverHandledRequests.Get(testSlot)
+		require.True(t, contains)
+		require.NotZero(t, slotRequests)
+	})
+
 	t.Run("single beacon client: does not await soft timeout", func(t *testing.T) {
 		beaconServer, _ := createBeaconServer(t, beaconServerResponseOptions{WithAttestationDataEndpointError: false})
 		client, err := createClient(ctx, beaconServer.URL, withWeightedAttestationData)
@@ -287,8 +312,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		_, _, err = client.GetAttestationData(phase0.Slot(100))
 
 		require.NoError(t, err)
-		softTimeout := client.commonTimeout / 2
-		require.Less(t, time.Since(startTime), softTimeout)
+		require.Less(t, time.Since(startTime), defaultSoftTimeout)
 	})
 
 	t.Run("single beacon client: returns error when server responds with error", func(t *testing.T) {
