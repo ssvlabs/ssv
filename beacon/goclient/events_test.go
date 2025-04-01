@@ -20,9 +20,14 @@ import (
 func TestSubscribeToHeadEvents(t *testing.T) {
 	t.Run("Should launch event listener when go client is instantiated", func(t *testing.T) {
 		eventsEndpointSubscribedCh := make(chan any)
-
+		var subscribedTopics []string
 		server := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if strings.Contains(r.URL.Path, "/eth/v1/events") {
+				queryValues := r.URL.Query()
+				require.True(t, queryValues.Has("topics"))
+
+				topics := queryValues["topics"]
+				subscribedTopics = append(subscribedTopics, topics...)
 				eventsEndpointSubscribedCh <- struct{}{}
 			}
 			return resp, nil
@@ -36,6 +41,9 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 		for {
 			select {
 			case <-eventsEndpointSubscribedCh:
+				assert.Len(t, subscribedTopics, 2)
+				assert.Contains(t, subscribedTopics, "block")
+				assert.Contains(t, subscribedTopics, "head")
 				return
 			case <-time.After(time.Second * 5):
 				t.Fatalf("timed out waiting for events endpoint to be subscribed")
