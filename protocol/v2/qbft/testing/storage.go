@@ -3,9 +3,12 @@ package testing
 import (
 	"context"
 	"sync"
+	"time"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"go.uber.org/zap"
@@ -38,5 +41,11 @@ var allRoles = []spectypes.BeaconRole{
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
-	return qbftstorage.NewStoresFromRoles(getDB(logger), allRoles...)
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return slotticker.New(logger, slotticker.Config{
+			SlotDuration: 5 * time.Second,
+			GenesisTime:  time.Now(),
+		})
+	}
+	return qbftstorage.NewStoresFromRoles(logger, networkconfig.HoleskyStage, getDB(logger), slotTickerProvider, allRoles...)
 }
