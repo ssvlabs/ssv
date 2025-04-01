@@ -21,7 +21,7 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.2
-	github.com/ssvlabs/ssv v1.2.1-0.20250327013322-bf8bb53c5035
+	github.com/ssvlabs/ssv v1.2.1-0.20250401225352-15838e7df7cb
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0
@@ -62,7 +62,7 @@ require (
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
-	github.com/libp2p/go-libp2p v0.36.4 // indirect
+	github.com/libp2p/go-libp2p v0.36.5 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
@@ -95,7 +95,7 @@ require (
 	github.com/wealdtech/go-eth2-util v1.8.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.uber.org/mock v0.4.0 // indirect
+	go.uber.org/mock v0.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa // indirect
