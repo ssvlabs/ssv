@@ -155,8 +155,8 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 		}
 
 		noTTLOpt := ttlcache.WithTTL[phase0.Root, phase0.Slot](ttlcache.NoTTL)
-		_, isUpdated := gc.blockRootToSlotCache.GetOrSet(eventData.Block, eventData.Slot, noTTLOpt)
-		if isUpdated {
+		_, exists := gc.blockRootToSlotCache.GetOrSet(eventData.Block, eventData.Slot, noTTLOpt)
+		if !exists {
 			logger.
 				With(fields.Slot(eventData.Slot)).
 				With(fields.BlockRoot(eventData.Block)).
