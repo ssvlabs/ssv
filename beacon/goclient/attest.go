@@ -376,7 +376,7 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 			} else {
 				logger.
 					With(zap.Float64("denominator", denominator)).
-					Warn("denominator had unexpected value, score was not be updated")
+					Warn("denominator had unexpected value, score was not updated")
 			}
 
 			logger.With(
