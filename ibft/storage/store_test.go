@@ -37,7 +37,7 @@ func TestRemoveSlot(t *testing.T) {
 
 	slotTickerProvider := func() slotticker.SlotTicker {
 		return slotticker.New(zap.NewNop(), slotticker.Config{
-			SlotDuration: 5 * time.Second,
+			SlotDuration: 60 * time.Second, //
 			GenesisTime:  time.Now(),
 		})
 	}
@@ -123,12 +123,13 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	ctrl := gomock.NewController(t)
+	ticker := mockslotticker.NewMockSlotTicker(ctrl)
 	slotTickerProvider := func() slotticker.SlotTicker {
-		return slotticker.New(zap.NewNop(), slotticker.Config{
-			SlotDuration: 5 * time.Second,
-			GenesisTime:  time.Now(),
-		})
+		return ticker
 	}
+
+	ticker.EXPECT().Next().Return(nil).MaxTimes(1)
 
 	ibftStorage := NewStores()
 	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
@@ -190,9 +191,6 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	// test
 	ctx, cancel := context.WithCancel(context.Background())
-
-	ctrl := gomock.NewController(t)
-	ticker := mockslotticker.NewMockSlotTicker(ctrl)
 
 	mockTimeChan := make(chan time.Time)
 	mockSlotChan := make(chan phase0.Slot)
