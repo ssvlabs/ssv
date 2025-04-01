@@ -11,22 +11,16 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/sourcegraph/conc/pool"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-)
-
-const (
-	batchSize = 500
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -118,6 +112,17 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 				return nil, DataVersionNil, fmt.Errorf("deneb blinded block execution payload header is nil")
 			}
 			return beaconBlock.DenebBlinded, beaconBlock.Version, nil
+		case spec.DataVersionElectra:
+			if beaconBlock.ElectraBlinded == nil {
+				return nil, DataVersionNil, fmt.Errorf("electra blinded block is nil")
+			}
+			if beaconBlock.ElectraBlinded.Body == nil {
+				return nil, DataVersionNil, fmt.Errorf("electra blinded block body is nil")
+			}
+			if beaconBlock.ElectraBlinded.Body.ExecutionPayloadHeader == nil {
+				return nil, DataVersionNil, fmt.Errorf("electra blinded block execution payload header is nil")
+			}
+			return beaconBlock.ElectraBlinded, beaconBlock.Version, nil
 		default:
 			return nil, DataVersionNil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
 		}
@@ -149,7 +154,20 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload is nil")
 		}
 		return beaconBlock.Deneb, beaconBlock.Version, nil
-
+	case spec.DataVersionElectra:
+		if beaconBlock.Electra == nil {
+			return nil, DataVersionNil, fmt.Errorf("electra block contents is nil")
+		}
+		if beaconBlock.Electra.Block == nil {
+			return nil, DataVersionNil, fmt.Errorf("electra block is nil")
+		}
+		if beaconBlock.Electra.Block.Body == nil {
+			return nil, DataVersionNil, fmt.Errorf("electra block body is nil")
+		}
+		if beaconBlock.Electra.Block.Body.ExecutionPayload == nil {
+			return nil, DataVersionNil, fmt.Errorf("electra block execution payload is nil")
+		}
+		return beaconBlock.Electra, beaconBlock.Version, nil
 	default:
 		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
 	}
@@ -182,6 +200,20 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 			Message: block.Deneb,
 		}
 		copy(signedBlock.Deneb.Signature[:], sig[:])
+	case spec.DataVersionElectra:
+		if block.Electra == nil {
+			return fmt.Errorf("electra block contents is nil")
+		}
+		if block.Electra.Body == nil {
+			return fmt.Errorf("electra block body is nil")
+		}
+		if block.Electra.Body.ExecutionPayloadHeader == nil {
+			return fmt.Errorf("electra block execution payload header is nil")
+		}
+		signedBlock.Electra = &apiv1electra.SignedBlindedBeaconBlock{
+			Message: block.Electra,
+		}
+		copy(signedBlock.Electra.Signature[:], sig[:])
 	default:
 		return fmt.Errorf("unknown block version")
 	}
@@ -295,6 +327,27 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 			Blobs:     block.Deneb.Blobs,
 		}
 		copy(signedBlock.Deneb.SignedBlock.Signature[:], sig[:])
+	case spec.DataVersionElectra:
+		if block.Electra == nil {
+			return fmt.Errorf("electra block contents is nil")
+		}
+		if block.Electra.Block == nil {
+			return fmt.Errorf("electra block is nil")
+		}
+		if block.Electra.Block.Body == nil {
+			return fmt.Errorf("electra block body is nil")
+		}
+		if block.Electra.Block.Body.ExecutionPayload == nil {
+			return fmt.Errorf("electra block execution payload header is nil")
+		}
+		signedBlock.Electra = &apiv1electra.SignedBlockContents{
+			SignedBlock: &electra.SignedBeaconBlock{
+				Message: block.Electra.Block,
+			},
+			KZGProofs: block.Electra.KZGProofs,
+			Blobs:     block.Electra.Blobs,
+		}
+		copy(signedBlock.Electra.SignedBlock.Signature[:], sig[:])
 	default:
 		return fmt.Errorf("unknown block version")
 	}
@@ -320,10 +373,6 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 	return nil
 }
 
-func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
-	return gc.updateBatchRegistrationCache(registration)
-}
-
 func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 	var preparations []*eth2apiv1.ProposalPreparation
 	for index, recipient := range feeRecipients {
@@ -347,113 +396,5 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 	}
 
 	logger.Debug("consensus client submitted proposal preparation")
-	return nil
-}
-
-func (gc *GoClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
-	pk, err := registration.PubKey()
-	if err != nil {
-		return err
-	}
-
-	gc.registrationMu.Lock()
-	defer gc.registrationMu.Unlock()
-
-	gc.registrationCache[pk] = registration
-	return nil
-}
-
-func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
-	operatorID := gc.operatorDataStore.AwaitOperatorID()
-
-	ticker := slotTickerProvider()
-	for {
-		select {
-		case <-gc.ctx.Done():
-			return
-		case <-ticker.Next():
-			gc.submitRegistrationsFromCache(ticker.Slot(), operatorID)
-		}
-	}
-}
-
-func (gc *GoClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operatorID spectypes.OperatorID) {
-	slotsPerEpoch := gc.network.SlotsPerEpoch()
-
-	// Lock:
-	// - getting and updating last slot to avoid multiple submission (both should be an atomic action but cannot be done with CAS)
-	// - getting and updating registration cache
-	gc.registrationMu.Lock()
-
-	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
-	operatorSubmissionSlotModulo := operatorID % slotsPerEpoch
-
-	hasRegistrations := len(gc.registrationCache) != 0
-	operatorSubmissionSlot := uint64(currentSlot)%slotsPerEpoch == operatorSubmissionSlotModulo
-	oneEpochPassed := slotsSinceLastRegistration >= phase0.Slot(slotsPerEpoch)
-	twoEpochsAndOperatorDelayPassed := uint64(slotsSinceLastRegistration) >= slotsPerEpoch*2+operatorSubmissionSlotModulo
-
-	if hasRegistrations && (oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed) {
-		gc.registrationLastSlot = currentSlot
-		registrations := gc.registrationList()
-
-		// Release lock after building a registrations list for submission.
-		gc.registrationMu.Unlock()
-
-		if err := gc.submitBatchedRegistrations(currentSlot, registrations); err != nil {
-			gc.log.Error("Failed to submit validator registrations",
-				zap.Error(err),
-				fields.Slot(currentSlot))
-		}
-
-		return
-	}
-
-	gc.registrationMu.Unlock()
-}
-
-// registrationList is not thread-safe
-func (gc *GoClient) registrationList() []*api.VersionedSignedValidatorRegistration {
-	result := make([]*api.VersionedSignedValidatorRegistration, 0)
-
-	for _, registration := range gc.registrationCache {
-		result = append(result, registration)
-	}
-
-	return result
-}
-
-func (gc *GoClient) submitBatchedRegistrations(slot phase0.Slot, registrations []*api.VersionedSignedValidatorRegistration) error {
-	gc.log.Info("going to submit batch validator registrations",
-		fields.Slot(slot),
-		fields.Count(len(registrations)))
-
-	for len(registrations) != 0 {
-		bs := batchSize
-		if bs > len(registrations) {
-			bs = len(registrations)
-		}
-
-		clientAddress := gc.multiClient.Address()
-		logger := gc.log.With(
-			zap.String("api", "SubmitValidatorRegistrations"),
-			zap.String("client_addr", clientAddress))
-
-		// TODO: Do we need to submit them to all nodes?
-		start := time.Now()
-		err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs])
-		recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", clientAddress, http.MethodPost, time.Since(start), err)
-		if err != nil {
-			logger.Error(clResponseErrMsg, zap.Error(err))
-			return err
-		}
-
-		registrations = registrations[bs:]
-
-		logger.Info("submitted batched validator registrations",
-			fields.Slot(slot),
-			fields.Count(bs))
-	}
-
 	return nil
 }

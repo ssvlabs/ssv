@@ -21,6 +21,11 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	ekmcore "github.com/ssvlabs/eth2-key-manager/core"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -42,9 +47,6 @@ import (
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 var (
@@ -153,7 +155,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Call the contract method
 			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
-			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
 
 		}
@@ -260,7 +262,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Should return MalformedEventError and no changes to the state
 		t.Run("test OperatorRemoved incorrect operator ID", func(t *testing.T) {
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 100500)
+			_, err = boundContract.RemoveOperator(auth, 100500)
 			require.NoError(t, err)
 			sim.Commit()
 
@@ -305,7 +307,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Call the contract method
 			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
-			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
 
 			sim.Commit()
@@ -337,7 +339,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Now start the OperatorRemoved event handling
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 4)
+			_, err = boundContract.RemoveOperator(auth, 4)
 			require.NoError(t, err)
 			sim.Commit()
 
@@ -378,7 +380,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, registrystorage.Nonce(0), nonce)
 
 		// Call the contract method
-		_, err = boundContract.SimcontractTransactor.RegisterValidator(
+		_, err = boundContract.RegisterValidator(
 			auth,
 			validatorData1.masterPubKey.Serialize(),
 			[]uint64{1, 2, 3, 4},
@@ -429,7 +431,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			malformedSharesData := sharesData2[:len(sharesData2)-1]
 
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			_, err = boundContract.RegisterValidator(
 				auth,
 				validatorData2.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -479,7 +481,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			malformedSharesData[len(malformedSharesData)-1] ^= 1
 
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			_, err = boundContract.RegisterValidator(
 				auth,
 				validatorData2.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -534,7 +536,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			malformedSharesData[pubKeysOffset+encryptedKeyLength-1] ^= 1
 
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			_, err = boundContract.RegisterValidator(
 				auth,
 				validatorData3.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -583,7 +585,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			sharesData3, err = generateSharesData(validatorData3, ops, testAddr, 4)
 			require.NoError(t, err)
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			_, err = boundContract.RegisterValidator(
 				auth,
 				validatorData3.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -633,7 +635,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			sharesData4, err := generateSharesData(validatorData4, ops, testAddr2, 0)
 			require.NoError(t, err)
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			_, err = boundContract.RegisterValidator(
 				authTestAddr2,
 				validatorData4.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -685,7 +687,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Corrupt the public key
 			pk[len(pk)-1] ^= 1
 
-			_, err = boundContract.SimcontractTransactor.ExitValidator(
+			_, err = boundContract.ExitValidator(
 				auth,
 				pk,
 				[]uint64{1, 2, 3, 4},
@@ -712,7 +714,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Run("ValidatorExited incorrect owner address", func(t *testing.T) {
 			wrongAuth, _ := bind.NewKeyedTransactorWithChainID(wrongPk, big.NewInt(1337))
 
-			_, err = boundContract.SimcontractTransactor.ExitValidator(
+			_, err = boundContract.ExitValidator(
 				wrongAuth,
 				validatorData1.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -751,7 +753,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
 
-			_, err = boundContract.SimcontractTransactor.ExitValidator(
+			_, err = boundContract.ExitValidator(
 				auth,
 				validatorData1.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -790,7 +792,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Corrupt the public key
 			pk[len(pk)-1] ^= 1
 
-			_, err = boundContract.SimcontractTransactor.RemoveValidator(
+			_, err = boundContract.RemoveValidator(
 				auth,
 				pk,
 				[]uint64{1, 2, 3, 4},
@@ -828,7 +830,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Run("ValidatorRemoved incorrect owner address", func(t *testing.T) {
 			wrongAuth, _ := bind.NewKeyedTransactorWithChainID(wrongPk, big.NewInt(1337))
 
-			_, err = boundContract.SimcontractTransactor.RemoveValidator(
+			_, err = boundContract.RemoveValidator(
 				wrongAuth,
 				validatorData1.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -874,7 +876,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NotNil(t, valShare)
 			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
 
-			_, err = boundContract.SimcontractTransactor.RemoveValidator(
+			_, err = boundContract.RemoveValidator(
 				auth,
 				validatorData1.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -916,7 +918,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
 	// slashing protection data is not deleted
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
-		_, err = boundContract.SimcontractTransactor.Liquidate(
+		_, err = boundContract.Liquidate(
 			auth,
 			testAddr,
 			[]uint64{1, 2, 3, 4},
@@ -977,7 +979,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// **  storedEpoch = max(nextEpoch, storedEpoch)  **
 	// Validate that slashing protection data stored epoch is nextEpoch and NOT storedEpoch
 	t.Run("test ClusterReactivated event handle", func(t *testing.T) {
-		_, err = boundContract.SimcontractTransactor.Reactivate(
+		_, err = boundContract.Reactivate(
 			auth,
 			[]uint64{1, 2, 3, 4},
 			big.NewInt(100_000_000),
@@ -1027,7 +1029,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// Liquidated event is far in the future
 	// in order to simulate stored far in the future slashing protection data
 	t.Run("test ClusterLiquidated event handle - far in the future", func(t *testing.T) {
-		_, err = boundContract.SimcontractTransactor.Liquidate(
+		_, err = boundContract.Liquidate(
 			auth,
 			testAddr,
 			[]uint64{1, 2, 3, 4},
@@ -1061,7 +1063,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// **  storedEpoch = max(nextEpoch, storedEpoch)  **
 	// Validate that slashing protection data stored epoch is storedEpoch and NOT nextEpoch
 	t.Run("test ClusterReactivated event handle - far in the future", func(t *testing.T) {
-		_, err = boundContract.SimcontractTransactor.Reactivate(
+		_, err = boundContract.Reactivate(
 			auth,
 			[]uint64{1, 2, 3, 4},
 			big.NewInt(100_000_000),
@@ -1122,7 +1124,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, fee recipient is correct
 	t.Run("test FeeRecipientAddressUpdated event handle", func(t *testing.T) {
-		_, err = boundContract.SimcontractTransactor.SetFeeRecipientAddress(
+		_, err = boundContract.SetFeeRecipientAddress(
 			auth,
 			testAddr2,
 		)
@@ -1169,11 +1171,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Call the RegisterOperator contract method
 			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
-			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
 
 			// Call the OperatorRemoved contract method
-			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, op.id)
+			_, err = boundContract.RemoveOperator(auth, op.id)
 			require.NoError(t, err)
 
 			sim.Commit()
@@ -1225,7 +1227,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Nil(t, valShare)
 
 			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			_, err = boundContract.RegisterValidator(
 				auth,
 				validatorData4.masterPubKey.Serialize(),
 				[]uint64{1, 2, 3, 4},
@@ -1240,7 +1242,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			_, err = boundContract.SimcontractTransactor.RemoveValidator(
+			_, err = boundContract.RemoveValidator(
 				auth,
 				valPubKey,
 				[]uint64{1, 2, 3, 4},
@@ -1292,7 +1294,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.True(t, exists)
 			require.NotNil(t, share)
 			require.False(t, share.Liquidated)
-			_, err = boundContract.SimcontractTransactor.Liquidate(
+			_, err = boundContract.Liquidate(
 				auth,
 				testAddr,
 				[]uint64{1, 2, 3, 4},
@@ -1305,7 +1307,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			_, err = boundContract.SimcontractTransactor.Reactivate(
+			_, err = boundContract.Reactivate(
 				auth,
 				[]uint64{1, 2, 3, 4},
 				big.NewInt(100_000_000),
@@ -1366,6 +1368,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		return nil, nil, err
 	}
 
+	dgHandler := doppelganger.NoOpHandler{}
+
 	if useMockCtrl {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
@@ -1387,6 +1391,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operator.privateKey,
 			keyManager,
 			bc,
+			dgHandler,
 			WithFullNode(),
 			WithLogger(logger),
 		)
@@ -1425,6 +1430,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operator.privateKey,
 		keyManager,
 		bc,
+		dgHandler,
 		WithFullNode(),
 		WithLogger(logger))
 	if err != nil {

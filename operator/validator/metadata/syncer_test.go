@@ -10,17 +10,16 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 const (
@@ -95,7 +94,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			noSubnets, err := records.Subnets{}.FromString("0x00000000000000000000000000000000")
+			noSubnets, err := commons.FromString("0x00000000000000000000000000000000")
 			require.NoError(t, err)
 
 			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork.Beacon, beaconNode, noSubnets)
@@ -332,8 +331,8 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
 		metadata := ValidatorMap{
-			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
-			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			share1.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			share2.ValidatorPubKey: &beacon.ValidatorMetadata{},
 		}
 
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil)
@@ -472,7 +471,7 @@ func TestSyncer_Stream(t *testing.T) {
 			}
 
 			expected := ValidatorMap{
-				share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{
+				share1.ValidatorPubKey: &beacon.ValidatorMetadata{
 					Index:           1,
 					Status:          eth2apiv1.ValidatorStateActiveOngoing,
 					ActivationEpoch: 0,
@@ -663,7 +662,7 @@ func TestWithUpdateInterval(t *testing.T) {
 	// Define the interval we want to set
 	interval := testSyncInterval * 2
 
-	noSubnets, err := records.Subnets{}.FromString("0x00000000000000000000000000000000")
+	noSubnets, err := commons.FromString("0x00000000000000000000000000000000")
 	require.NoError(t, err)
 
 	// Create an Syncer with the WithSyncInterval option
