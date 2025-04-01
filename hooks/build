@@ -37,7 +37,3 @@ docker buildx build \
   --build-arg APP_VERSION="${APP_VERSION}" \
   --push \
   .
-
-# Show images that have been built
-echo "Images built:"
-docker buildx imagetools inspect "${IMAGE_NAME}"
