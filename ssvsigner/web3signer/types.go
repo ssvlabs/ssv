@@ -98,7 +98,7 @@ const (
 )
 
 type BeaconBlockData struct {
-	Version     spec.DataVersion          `json:"version"`
+	Version     DataVersion               `json:"version"`
 	BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
 }
 
