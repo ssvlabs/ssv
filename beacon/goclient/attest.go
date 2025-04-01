@@ -370,7 +370,15 @@ func (gc *GoClient) scoreAttestationData(ctx context.Context,
 		slot, err := gc.blockRootToSlot(ctx, client, attestationData.BeaconBlockRoot, logger)
 		if err == nil {
 			// Increase score based on the nearness of the head slot.
-			score += float64(1) / float64(1+attestationData.Slot-slot)
+			denominator := float64(1 + attestationData.Slot - slot)
+			if denominator > 0 {
+				score += float64(1) / denominator
+			} else {
+				logger.
+					With(zap.Float64("denominator", denominator)).
+					Warn("denominator had unexpected value, score was not be updated")
+			}
+
 			logger.With(
 				zap.Duration("elapsed", time.Since(start)),
 				zap.Uint64("head_slot", uint64(slot)),
