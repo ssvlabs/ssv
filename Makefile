@@ -28,8 +28,8 @@ ifeq ($(COVERAGE),true)
 endif
 UNFORMATTED=$(shell gofmt -l .)
 
-GET_TOOL=go get -modfile=tool.mod -tool
-RUN_TOOL=go tool -modfile=tool.mod
+GET_TOOL=go get -tool
+RUN_TOOL=go tool
 
 #Lint
 .PHONY: lint
