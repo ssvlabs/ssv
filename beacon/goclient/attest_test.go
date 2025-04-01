@@ -100,7 +100,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 		slot1 := phase0.Slot(12345678)
 		slot2 := phase0.Slot(12345679)
 
-		server, serverGotRequests := createBeaconServer(t, beaconServerResponseOptions{WithAttestationDataEndpointError: false})
+		server, serverGotRequests := createBeaconServer(t, beaconServerResponseOptions{})
 
 		client, err := createClient(ctx, server.URL, withWeightedAttestationData)
 		require.NoError(t, err)
@@ -186,6 +186,19 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 		reqCntSlot2, ok := serverGotRequests.Get(slot2)
 		require.True(t, ok)
 		require.Equal(t, 1, reqCntSlot2)
+	})
+
+	t.Run("returns error when server responds with error", func(t *testing.T) {
+		beaconServer, _ := createBeaconServer(t, beaconServerResponseOptions{WithAttestationDataEndpointError: true})
+		client, err := createClient(ctx, beaconServer.URL, withWeightedAttestationData)
+		require.NoError(t, err)
+
+		response, dataVersion, err := client.GetAttestationData(phase0.Slot(100))
+
+		require.Nil(t, response)
+		require.Equal(t, DataVersionNil, dataVersion)
+		require.Error(t, err)
+		require.Equal(t, err.Error(), "failed to get attestation data: GET failed with status 500")
 	})
 
 	t.Run("concurrency: race conditions and deadlocks", func(t *testing.T) {
