@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go mod download && go mod verify
 
 #
-# STEP 2: Build the application
+# STEP 2: Build executable binary
 #
 FROM base AS builder
 
@@ -62,7 +62,7 @@ COPY config/* ./config/
 # Expose port for load balancing
 EXPOSE 5678 5000 4000/udp
 
-# Force using Go's DNS resolver
+# Force using Go's DNS resolver because Alpine's DNS resolver (when netdns=cgo) may cause issues.
 ENV GODEBUG="netdns=go"
 
 #ENTRYPOINT ["/go/bin/ssvnode"]
