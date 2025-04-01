@@ -317,7 +317,7 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("single beacon client: populates boolRootToSlot cache", func(t *testing.T) {
+	t.Run("single beacon client: populates blockRootToSlot cache", func(t *testing.T) {
 		expectedCachedSlot := phase0.Slot(500)
 		beaconServer, _ := createBeaconServer(t, beaconServerResponseOptions{
 			SlotReturnedFromHeaderEndpoint: expectedCachedSlot,
