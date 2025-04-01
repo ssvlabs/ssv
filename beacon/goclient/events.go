@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
@@ -121,6 +122,19 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 			return
 		}
 
+		gc.lastProcessedEventSlotLock.Lock()
+		if eventData.Slot <= gc.lastProcessedEventSlot {
+			logger.
+				With(zap.Uint64("event_slot", uint64(eventData.Slot))).
+				With(zap.Uint64("last_processed_slot", uint64(gc.lastProcessedEventSlot))).
+				Debug("event slot is lower or equal than last processed slot")
+			gc.lastProcessedEventSlotLock.Unlock()
+			return
+		}
+
+		gc.lastProcessedEventSlot = eventData.Slot
+		gc.lastProcessedEventSlotLock.Unlock()
+
 		gc.subscribersLock.RLock()
 		defer gc.subscribersLock.RUnlock()
 		for _, sub := range gc.headEventSubscribers {
@@ -140,25 +154,14 @@ func (gc *GoClient) eventHandler(e *apiv1.Event) {
 			return
 		}
 
-		gc.lastProcessedEventSlotLock.Lock()
-		if eventData.Slot <= gc.lastProcessedEventSlot {
+		noTTLOpt := ttlcache.WithTTL[phase0.Root, phase0.Slot](ttlcache.NoTTL)
+		_, isUpdated := gc.blockRootToSlotCache.GetOrSet(eventData.Block, eventData.Slot, noTTLOpt)
+		if isUpdated {
 			logger.
-				With(zap.Uint64("event_slot", uint64(eventData.Slot))).
-				With(zap.Uint64("last_processed_slot", uint64(gc.lastProcessedEventSlot))).
-				Debug("event slot is lower or equal than last processed slot")
-			gc.lastProcessedEventSlotLock.Unlock()
-			return
+				With(fields.Slot(eventData.Slot)).
+				With(fields.BlockRoot(eventData.Block)).
+				Info("block root to slot cache updated")
 		}
-
-		gc.lastProcessedEventSlot = eventData.Slot
-		gc.lastProcessedEventSlotLock.Unlock()
-
-		cacheItem := gc.blockRootToSlotCache.Set(eventData.Block, eventData.Slot, ttlcache.NoTTL)
-		logger.
-			With(zap.Int64("cache_item_version", cacheItem.Version())).
-			With(fields.Slot(eventData.Slot)).
-			With(fields.BlockRoot(eventData.Block)).
-			Info("block root to slot cache updated")
 	default:
 		gc.log.
 			With(zap.String("topic", e.Topic)).
