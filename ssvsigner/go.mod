@@ -6,7 +6,7 @@
 // )
 module github.com/ssvlabs/ssv/ssvsigner
 
-go 1.22.6
+go 1.24
 
 require (
 	github.com/alecthomas/kong v1.8.1
