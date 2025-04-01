@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/pebble"
+	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
 )
@@ -48,7 +49,7 @@ func (pdb *PebbleDB) Close() error {
 func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 
 	b, closer, err := pdb.db.Get(append(prefix, key...))
-	if err == pebble.ErrNotFound {
+	if errors.Is(err, pebble.ErrNotFound) {
 		return basedb.Obj{}, false, nil
 	}
 	if err != nil {
@@ -57,7 +58,8 @@ func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	// PebbleDB returned slice is valid until closer.Close() is called
 	// hence we copy
 	//
-	defer closer.Close()
+	defer func() { _ = closer.Close() }()
+
 	out := make([]byte, len(b))
 	copy(out, b)
 	return basedb.Obj{Key: key, Value: out}, true, nil
@@ -83,7 +85,7 @@ func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.
 		value, closer, err := pdb.db.Get(fullKey)
 		if err != nil {
 			// If the key isn't found, skip it.
-			if err == pebble.ErrNotFound {
+			if errors.Is(err, pebble.ErrNotFound) {
 				continue
 			}
 			return err
@@ -141,7 +143,7 @@ func (pdb *PebbleDB) GetAll(prefix []byte, iterator func(int, basedb.Obj) error)
 	if err != nil {
 		return err
 	}
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 	i := 0
 	// SeekPrefixGE starts prefix iteration mode.
 	for iter.First(); iter.Valid(); iter.Next() {
@@ -205,7 +207,7 @@ func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
 		return err
 	}
 
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 	for iter.First(); iter.Valid(); iter.Next() {
 		if err := batch.Delete(iter.Key(), nil); err != nil {
 			return err
