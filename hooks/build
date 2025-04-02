@@ -4,12 +4,7 @@ set -eo pipefail
 # Multi-architecture build script for SSV node using Dockerfile.multiarch
 
 export DOCKER_BUILDKIT=1
-
-if [ -z "${IMAGE_NAME}" ]; then
-  echo "Error: IMAGE_NAME environment variable must be set."
-  echo "Usage: IMAGE_NAME=your-registry/your-image:tag ./hooks/build"
-  exit 1
-fi
+export DOCKER_CLI_EXPERIMENTAL=enabled
 
 if [ -n "${SOURCE_COMMIT}" ]; then
   APP_VERSION=$(git describe --tags "${SOURCE_COMMIT}")
@@ -24,16 +19,13 @@ echo "  Image: ${IMAGE_NAME}"
 echo "  Commit: ${SOURCE_COMMIT}"
 echo "  Version: ${APP_VERSION}"
 
-PLATFORMS="linux/amd64,linux/arm64"
-echo "Target Platforms: ${PLATFORMS}"
-
 docker buildx rm ssv-multiplatform-builder 2>/dev/null || true
-docker buildx create --use --name ssv-multiplatform-builder --driver docker-container --bootstrap
+docker buildx create --name ssv-multiplatform-builder --driver docker-container --use
 
 docker buildx build \
-  --platform "${PLATFORMS}" \
+  --platform linux/amd64,linux/arm64 \
   --tag "${IMAGE_NAME}" \
-  --file Dockerfile.multiarch \
   --build-arg APP_VERSION="${APP_VERSION}" \
+  --file Dockerfile.multiarch \
   --push \
   .
