@@ -63,6 +63,11 @@ func SetupMockNetworkConfig(t *testing.T, currentSlot *SlotValue) *networkconfig
 			return exampleConfig.EstimatedEpochAtSlot(slot)
 		},
 	).AnyTimes()
+	mockNetworkConfig.EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(
+		func(v time.Time) phase0.Slot {
+			return exampleConfig.EstimatedSlotAtTime(v)
+		},
+	).AnyTimes()
 	mockNetworkConfig.EXPECT().FirstSlotAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
 			return exampleConfig.FirstSlotAtEpoch(epoch)
