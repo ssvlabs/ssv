@@ -193,7 +193,6 @@ func New(
 		log:                                logger.Named("consensus_client"),
 		ctx:                                opt.Context,
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		operatorDataStore:                  operatorDataStore,
 		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,

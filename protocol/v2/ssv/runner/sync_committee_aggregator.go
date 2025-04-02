@@ -316,7 +316,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
 	recordSuccessfulSubmission(ctx,
 		successfullySubmittedContributions,
-		r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
+		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
 		spectypes.BNRoleSyncCommitteeContribution)
 
 	return nil
@@ -329,7 +329,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(contrib alt
 		SelectionProof:  proof,
 	}
 
-	epoch := r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 	dContribAndProof, err := r.GetBeaconNode().DomainData(epoch, spectypes.DomainContributionAndProof)
 	if err != nil {
 		return nil, phase0.Root{}, errors.Wrap(err, "could not get domain data")

@@ -1053,7 +1053,7 @@ func SetupCommitteeRunners(
 
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		// Create a committee runner.
-		epoch := options.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot)
+		epoch := options.NetworkConfig.EstimatedEpochAtSlot(slot)
 		valCheck := ssv.BeaconVoteValueCheckF(options.Signer, slot, attestingValidators, epoch)
 		crunner, err := runner.NewCommitteeRunner(
 			options.NetworkConfig,

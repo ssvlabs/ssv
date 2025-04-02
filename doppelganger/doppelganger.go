@@ -180,7 +180,7 @@ func (h *handler) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.network.EstimatedEpochAtSlot(currentSlot)
 
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))

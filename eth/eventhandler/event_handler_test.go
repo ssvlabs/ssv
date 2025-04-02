@@ -961,8 +961,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch()-1, highestAttestation.Source.Epoch)
-		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch(), highestAttestation.Target.Epoch)
+		require.Equal(t, netCfg.EstimatedCurrentEpoch()-1, highestAttestation.Source.Epoch)
+		require.Equal(t, netCfg.EstimatedCurrentEpoch(), highestAttestation.Target.Epoch)
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
@@ -1010,13 +1010,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch()-1, highestAttestation.Source.Epoch)
-		require.Equal(t, netCfg.Beacon.EstimatedCurrentEpoch(), highestAttestation.Target.Epoch)
+		require.Equal(t, netCfg.EstimatedCurrentEpoch()-1, highestAttestation.Source.Epoch)
+		require.Equal(t, netCfg.EstimatedCurrentEpoch(), highestAttestation.Target.Epoch)
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, netCfg.Beacon.EstimatedCurrentSlot(), highestProposal)
+		require.Equal(t, netCfg.EstimatedCurrentSlot(), highestProposal)
 
 		blockNum++
 	})
@@ -1101,8 +1101,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Greater(t, highestAttestation.Source.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Greater(t, highestAttestation.Target.Epoch, netCfg.Beacon.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Greater(t, highestAttestation.Source.Epoch, netCfg.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Greater(t, highestAttestation.Target.Epoch, netCfg.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 		require.NoError(t, err)

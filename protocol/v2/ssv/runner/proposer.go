@@ -350,7 +350,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
 	recordSuccessfulSubmission(ctx,
 		uint32(successfullySubmittedProposals),
-		r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
+		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
 		spectypes.BNRoleProposer)
 
 	return nil
@@ -369,7 +369,7 @@ func (r *ProposerRunner) decidedBlindedBlock() bool {
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 
@@ -413,7 +413,7 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 	}
 
 	// sign partial randao
-	epoch := r.BaseRunner.NetworkConfig.Beacon.EstimatedEpochAtSlot(duty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 	msg, err := r.BaseRunner.signBeaconObject(r, proposerDuty, spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")

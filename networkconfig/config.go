@@ -64,7 +64,7 @@ func (n NetworkConfig) DomainType() spectypes.DomainType {
 }
 
 func (n NetworkConfig) BeaconNetwork() string {
-	return n.Beacon.NetworkName
+	return n.NetworkName
 }
 
 func (n NetworkConfig) SyncCommitteeSize() uint64 {

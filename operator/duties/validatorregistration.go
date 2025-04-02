@@ -50,7 +50,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			epoch := h.network.EstimatedEpochAtSlot(slot)
-			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(frequencyEpochs))
+			shares := h.validatorProvider.SelfParticipatingValidators(epoch + frequencyEpochs)
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
