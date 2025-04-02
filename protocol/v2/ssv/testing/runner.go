@@ -30,10 +30,6 @@ var CommitteeRunnerWithShareMap = func(logger *zap.Logger, shareMap map[phase0.V
 	return baseRunnerWithShareMap(logger, spectypes.RoleCommittee, shareMap)
 }
 
-//var AttesterRunner7Operators = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-//	return baseRunner(spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), networkconfig.TestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
-//}
-
 var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectypes.RoleProposer, keySet)
 }

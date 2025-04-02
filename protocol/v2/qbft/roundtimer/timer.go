@@ -14,7 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
+//go:generate go tool -modfile=../../../../tool.mod mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
 
 type OnRoundTimeoutF func(round specqbft.Round)
 

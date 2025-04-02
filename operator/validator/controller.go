@@ -47,7 +47,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
 	networkRouterConcurrency = 2048

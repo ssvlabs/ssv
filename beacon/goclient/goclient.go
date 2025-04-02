@@ -126,9 +126,12 @@ type GoClient struct {
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
-	registrationMu       sync.Mutex
-	registrationLastSlot phase0.Slot
-	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
+	// registrationMu synchronises access to registrations
+	registrationMu sync.Mutex
+	// registrations is a set of validator-registrations (their latest versions) to be sent to
+	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
+	// participating validators
+	registrations map[phase0.BLSPubKey]*validatorRegistration
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
@@ -190,7 +193,8 @@ func New(
 		log:                                logger.Named("consensus_client"),
 		ctx:                                opt.Context,
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		registrationCache:                  make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
+		operatorDataStore:                  operatorDataStore,
+		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,

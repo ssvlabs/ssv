@@ -12,7 +12,7 @@ import (
 
 // TODO: add missing tests
 
-//go:generate mockgen -package=beacon -destination=./mock_client.go -source=./client.go
+//go:generate go tool -modfile=../../../../tool.mod mockgen -package=beacon -destination=./mock_client.go -source=./client.go
 
 // beaconDuties interface serves all duty related calls
 type beaconDuties interface {

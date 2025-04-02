@@ -109,7 +109,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		return errors.Wrap(err, "could not calculate validator registration")
 	}
 
-	signed := &api.VersionedSignedValidatorRegistration{
+	signedRegistration := &api.VersionedSignedValidatorRegistration{
 		Version: spec.BuilderVersionV1,
 		V1: &v1.SignedValidatorRegistration{
 			Message:   registration,
@@ -117,7 +117,8 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		},
 	}
 
-	if err := r.beacon.SubmitValidatorRegistration(signed); err != nil {
+	err = r.beacon.SubmitValidatorRegistration(signedRegistration)
+	if err != nil {
 		return errors.Wrap(err, "could not submit validator registration")
 	}
 
