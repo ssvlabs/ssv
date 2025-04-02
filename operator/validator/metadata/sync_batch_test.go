@@ -146,7 +146,6 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 		},
 	}
 
-	operatorID := spectypes.OperatorID(1)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			syncBatch := SyncBatch{
@@ -155,7 +154,7 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 				Epoch:        phase0.Epoch(0),
 			}
 
-			attesting, slashed, exited := syncBatch.DetectValidatorStateChanges(operatorID)
+			attesting, slashed, exited := syncBatch.DetectValidatorStateChanges()
 
 			require.Len(t, attesting, tc.expectedAttest, "unexpected attesting count")
 			require.Len(t, slashed, tc.expectedSlash, "unexpected slashed count")
