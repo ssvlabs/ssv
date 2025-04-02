@@ -8,7 +8,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-//go:generate mockgen -package=networkconfig -destination=./mock.go -source=./config.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=networkconfig -destination=./mock.go -source=./config.go
 
 type Interface interface { // TODO: rename?
 	BeaconNetwork() string
