@@ -11,7 +11,6 @@ import (
 
 	"github.com/aquasecurity/table"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec/qbft"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -45,13 +44,13 @@ var messagePriorityTests = []struct {
 			// 2. Current height/slot:
 			// 2.1. Consensus
 			// 2.1.1. Consensus/Proposal
-			mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
+			mockConsensusMessage{Height: 100, Type: specqbft.ProposalMsgType},
 			// 2.1.2. Consensus/Prepare
-			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
+			mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType},
 			// 2.1.3. Consensus/Commit
-			mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
+			mockConsensusMessage{Height: 100, Type: specqbft.CommitMsgType},
 			// 2.1.4. Consensus/<Other>
-			mockConsensusMessage{Height: 100, Type: qbft.RoundChangeMsgType},
+			mockConsensusMessage{Height: 100, Type: specqbft.RoundChangeMsgType},
 			// 2.2. Pre-consensus
 			mockNonConsensusMessage{Slot: 64, Type: spectypes.SelectionProofPartialSig},
 			// 2.3. Post-consensus
@@ -71,7 +70,7 @@ var messagePriorityTests = []struct {
 			// 4.1 Decided
 			mockConsensusMessage{Height: 99, Decided: true},
 			// 4.2. Commit
-			mockConsensusMessage{Height: 99, Type: qbft.CommitMsgType},
+			mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType},
 			// 4.3. Pre-consensus
 			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
 		},
@@ -92,13 +91,13 @@ var messagePriorityTests = []struct {
 			mockNonConsensusMessage{Slot: 64, Type: spectypes.PostConsensusPartialSig},
 			// 1.3. Consensus
 			// 1.3.1. Consensus/Proposal
-			mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
+			mockConsensusMessage{Height: 100, Type: specqbft.ProposalMsgType},
 			// 1.3.2. Consensus/Prepare
-			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
+			mockConsensusMessage{Height: 100, Type: specqbft.PrepareMsgType},
 			// 1.3.3. Consensus/Commit
-			mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
+			mockConsensusMessage{Height: 100, Type: specqbft.CommitMsgType},
 			// 1.3.4. Consensus/<Other>
-			mockConsensusMessage{Height: 100, Type: qbft.RoundChangeMsgType},
+			mockConsensusMessage{Height: 100, Type: specqbft.RoundChangeMsgType},
 
 			// 2. Higher height/slot:
 			// 2.1 Decided
@@ -114,7 +113,7 @@ var messagePriorityTests = []struct {
 			// 3.1 Decided
 			mockConsensusMessage{Height: 99, Decided: true},
 			// 3.2. Commit
-			mockConsensusMessage{Height: 99, Type: qbft.CommitMsgType},
+			mockConsensusMessage{Height: 99, Type: specqbft.CommitMsgType},
 			// 3.3. Pre-consensus
 			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
 		},
@@ -161,9 +160,9 @@ type mockMessage interface {
 
 type mockConsensusMessage struct {
 	Role    spectypes.RunnerRole
-	Type    qbft.MessageType
+	Type    specqbft.MessageType
 	Decided bool
-	Height  qbft.Height
+	Height  specqbft.Height
 }
 
 func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
@@ -172,7 +171,7 @@ func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMessa
 		signerCount = 1
 	)
 	if m.Decided {
-		typ = qbft.CommitMsgType
+		typ = specqbft.CommitMsgType
 		signerCount = int(state.Quorum) + 1
 	}
 
@@ -182,7 +181,7 @@ func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMessa
 	}
 
 	factory := ssvMessageFactory(m.Role)
-	msg := qbft.Message{
+	msg := specqbft.Message{
 		MsgType:                  typ,
 		Height:                   m.Height,
 		Round:                    2,
@@ -285,7 +284,7 @@ func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SignedSSVMes
 
 type mockTimeoutMessage struct {
 	Role   spectypes.RunnerRole
-	Height qbft.Height
+	Height specqbft.Height
 }
 
 func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
@@ -379,7 +378,7 @@ func (m messageSlice) dump(s *State) string {
 			} else {
 				kind = "pre-consensus"
 			}
-		case *qbft.Message:
+		case *specqbft.Message:
 			kind = "consensus"
 			heightOrSlot = mm.Height
 			typ = mm.MsgType
