@@ -2,26 +2,33 @@ package ssvsigner
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/fasthttp/router"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
 const (
+	// TODO: The routes are currently custom and adhere DESIGN.md.
+	//  However, web3signer and eth remote signer APIs use different ones (prefixed with /api/v1/):
+	//  - https://consensys.github.io/web3signer/web3signer-eth2.html
+	//  - https://github.com/ethereum/remote-signing-api
+	//  We need to decide if we need to match them.
 	pathValidators       = "/v1/validators"        // TODO: /api/v1/eth2/publicKeys ?
 	pathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
 	pathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
@@ -86,7 +93,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 	var req AddValidatorRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		logger.Warn("unmarshal request body", zap.Error(err))
+		logger.Warn("failed to unmarshal request body", zap.Error(err))
 		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
@@ -100,7 +107,17 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		// The password is used to encrypt a keystore and to decrypt and save it in web3signer afterwards.
 		// So, there's no need to store the password. We can just generate a random password for each keystore.
-		keystorePassword := r.generateRandomPassword()
+		keystorePassword, err := r.generateRandomPassword(16)
+		if err != nil {
+			logger.Warn("failed to generate random password", zap.Error(err))
+			r.writeJSONErr(
+				ctx,
+				logger,
+				fasthttp.StatusUnprocessableEntity,
+				fmt.Errorf("failed to generate random password: %w", err),
+			)
+			return
+		}
 
 		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(
 			share.EncryptedPrivKey,
@@ -108,12 +125,12 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			keystorePassword,
 		)
 		if err != nil {
-			logger.Warn("get keystore from encrypted share", zap.Error(err))
+			logger.Warn("failed to get keystore from encrypted share", zap.Error(err))
 			r.writeJSONErr(
 				ctx,
 				logger,
 				fasthttp.StatusUnprocessableEntity,
-				fmt.Errorf("get keystore from encrypted share index %d: %w", i, err),
+				fmt.Errorf("failed to get keystore from encrypted share index %d: %w", i, err),
 			)
 			return
 		}
@@ -183,8 +200,18 @@ func (r *Server) keystoreJSONFromEncryptedShare(
 	return string(keystoreJSON), nil
 }
 
-func (r *Server) generateRandomPassword() string {
-	return "password" // TODO
+func (r *Server) generateRandomPassword(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	password := make([]byte, length)
+	for i := range password {
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			return "", err
+		}
+		password[i] = charset[idx.Int64()]
+	}
+	return string(password), nil
 }
 
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
@@ -194,7 +221,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 
 	var req web3signer.DeleteKeystoreRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		logger.Warn("unmarshal request body", zap.Error(err))
+		logger.Warn("failed to unmarshal request body", zap.Error(err))
 		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
@@ -232,7 +259,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 
 	var req web3signer.SignRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		logger.Warn("unmarshal request body", zap.Error(err))
+		logger.Warn("failed to unmarshal request body", zap.Error(err))
 		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("unmarshal request body: %w", err))
 		return
 	}
@@ -242,7 +269,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	identifierValue := ctx.UserValue("identifier")
 	blsPubKey, err := r.extractShareKey(identifierValue)
 	if err != nil {
-		logger.Warn("extract share key", zap.Error(err))
+		logger.Warn("failed to extract share key", zap.Error(err))
 		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("extract share key: %w", err))
 		return
 	}

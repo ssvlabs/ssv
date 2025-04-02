@@ -3,16 +3,16 @@ package qbft
 import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	protocolsigning "github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
-	GetShareSigner() protocolsigning.BeaconSigner
+	GetShareSigner() ekm.BeaconSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() spectypes.DomainType
 }
@@ -32,7 +32,7 @@ type IConfig interface {
 }
 
 type Config struct {
-	BeaconSigner protocolsigning.BeaconSigner
+	BeaconSigner ekm.BeaconSigner
 	Domain       spectypes.DomainType
 	ValueCheckF  specqbft.ProposedValueCheckF
 	ProposerF    specqbft.ProposerF
@@ -42,7 +42,7 @@ type Config struct {
 }
 
 // GetShareSigner returns a BeaconSigner instance
-func (c *Config) GetShareSigner() protocolsigning.BeaconSigner {
+func (c *Config) GetShareSigner() ekm.BeaconSigner {
 	return c.BeaconSigner
 }
 

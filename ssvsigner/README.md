@@ -14,7 +14,7 @@ Consensys tutorial: https://docs.web3signer.consensys.io/how-to/configure-slashi
 
 #### Short summary
 
-- Run `postrgresql` (either Docker or install it) and create DB named `web3signer`
+- Run `postgresql` (either Docker or install it) and create DB named `web3signer`
 
 Docker example:
 

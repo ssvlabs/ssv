@@ -22,7 +22,7 @@ var (
 // OperatorData the public data of an operator
 type OperatorData struct {
 	ID           spectypes.OperatorID `json:"id"`
-	PublicKey    []byte               `json:"publicKey"` // TODO: consider changing to string
+	PublicKey    []byte               `json:"publicKey"`
 	OwnerAddress common.Address       `json:"ownerAddress"`
 }
 

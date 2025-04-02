@@ -100,7 +100,10 @@ func GenerateShareKeystore(sharePrivateKey *bls.SecretKey, sharePublicKey phase0
 	}
 
 	return map[string]any{
-		"crypto":  keystoreCrypto,
+		"crypto": keystoreCrypto,
+		// web3signer uses "pubkey" in lowercase:
+		// - https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT
+		// - https://github.com/Consensys/web3signer/blob/bdf1e72169bf7f6800979b0c765647feea172dc5/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/keymanager/imports/ImportKeystoresHandler.java#L234
 		"pubkey":  sharePublicKey.String(),
 		"version": 4,
 		"uuid":    uuid.New().String(),
