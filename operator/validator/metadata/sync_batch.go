@@ -14,14 +14,12 @@ type SyncBatch struct {
 }
 
 // DetectValidatorStateChanges compares validator metadata before and after the update to detect state changes.
-// Returns validators that became attesting, slashed, or exited for the given operator.
-func (s SyncBatch) DetectValidatorStateChanges(operatorID spectypes.OperatorID) (attesting, slashed, exited []*ssvtypes.SSVShare) {
+// Returns validators that became attesting, slashed, or exited.
+func (s SyncBatch) DetectValidatorStateChanges() (attesting, slashed, exited []*ssvtypes.SSVShare) {
 	// Build a map of previous states for quick lookups
 	beforeMap := make(map[spectypes.ValidatorPK]*ssvtypes.SSVShare, len(s.SharesBefore))
 	for _, share := range s.SharesBefore {
-		if share.BelongsToOperator(operatorID) {
-			beforeMap[share.ValidatorPubKey] = share
-		}
+		beforeMap[share.ValidatorPubKey] = share
 	}
 
 	attesting = make([]*ssvtypes.SSVShare, 0, len(s.SharesAfter))

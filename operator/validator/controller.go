@@ -957,7 +957,7 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 	}
 
 	// Identify validators that changed state (attesting, slashed, or exited) after the metadata update.
-	attestingShares, slashedShares, exitedShares := syncBatch.DetectValidatorStateChanges(c.operatorDataStore.GetOperatorID())
+	attestingShares, slashedShares, exitedShares := syncBatch.DetectValidatorStateChanges()
 
 	// Start only the validators that became attesting as a result of the metadata update.
 	// We do NOT start slashed or exited validators, as they are no longer eligible to participate.
