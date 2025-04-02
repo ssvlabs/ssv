@@ -24,7 +24,7 @@ type Server struct {
 	exporter   *handlers.Exporter
 	httpServer *http.Server
 
-	enableDutyTracing bool
+	full bool
 }
 
 // New creates a new Server instance.
@@ -34,15 +34,15 @@ func New(
 	node *handlers.Node,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
-	enabledDutyTracing bool,
+	full bool,
 ) *Server {
 	return &Server{
-		logger:            logger,
-		addr:              addr,
-		node:              node,
-		validators:        validators,
-		exporter:          exporter,
-		enableDutyTracing: enabledDutyTracing,
+		logger:     logger,
+		addr:       addr,
+		node:       node,
+		validators: validators,
+		exporter:   exporter,
+		full:       full,
 	}
 }
 
@@ -62,7 +62,7 @@ func (s *Server) Run() error {
 	router.Get("/v1/validators", api.Handler(s.validators.List))
 
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
-	if s.enableDutyTracing {
+	if s.full {
 		router.Get("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
 		router.Get("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
 		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
