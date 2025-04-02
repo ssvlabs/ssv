@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"

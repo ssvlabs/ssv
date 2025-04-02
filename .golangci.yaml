@@ -216,20 +216,13 @@ issues:
   fix: false
 formatters:
   settings:
-    gci:
-      sections:
-        - standard
-        - default
-        - blank
-        - dot
-        - localmodule
     gofmt:
       simplify: true
     gofumpt:
       extra-rules: false
     goimports:
       local-prefixes:
-        - github.com/ssvlabs/ssv
+        - github.com/ssvlabs/ssv/
   exclusions:
     generated: lax
     paths:

@@ -164,4 +164,7 @@ mockgen-install:
 
 .PHONY: format
 format:
-	gci write --skip-generated -s standard -s default -s blank -s dot -s localmodule $$(find . -type f -name '*.go')
+	# TODO - instead of filtering out mock-related files we should ignore all generated files once
+	# goimports allows for it - https://github.com/golang/go/issues/71676 - but until then it is
+	# a temporary work-around
+	goimports -l -w -local github.com/ssvlabs/ssv/ $$(find . -name '*.go' -not -path "*mock*")

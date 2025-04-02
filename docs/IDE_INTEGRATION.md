@@ -1,6 +1,6 @@
-# IDE integration
+# IDE integrations
 
-The project uses [gci](https://github.com/daixiang0/gci) to format code and imports.
+The project uses [goimports](https://pkg.go.dev/golang.org/x/tools/cmd/goimports) to format code and imports section.
 
 ## Goland
 
@@ -21,4 +21,4 @@ Editor -> Code Style -> Go -> Imports:
 
 ## VSCode
 
-### TODO
+TODO
