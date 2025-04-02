@@ -324,7 +324,7 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, s)
 		}
 
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
+		if cfg.SSVOptions.ValidatorOptions.Exporter && !cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
@@ -339,7 +339,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
+		if cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			fixedSubnets, err = networkcommons.FromString(networkcommons.AllSubnets)
 			if err != nil {
 				logger.Fatal("failed to parse all fixed subnets", zap.Error(err))
@@ -359,8 +359,10 @@ var StartNodeCmd = &cobra.Command{
 
 		// Validator duty tracing
 		var collector *dutytracer.Collector
-		if cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
-			logger.Info("exporter duty tracing enabled")
+		if cfg.SSVOptions.ValidatorOptions.ExporterFull {
+			cfg.SSVOptions.ValidatorOptions.Exporter = false // disable old decideds
+
+			logger.Info("exporter mode: full")
 			dstore := &dutytracer.DutyTraceStoreMetrics{
 				Store: dutytracestore.New(db),
 			}
@@ -500,7 +502,7 @@ var StartNodeCmd = &cobra.Command{
 					TraceStore:        collector,
 					Validators:        nodeStorage.ValidatorStore(),
 				},
-				cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing,
+				cfg.SSVOptions.ValidatorOptions.ExporterFull,
 			)
 			go func() {
 				err := apiServer.Run()
