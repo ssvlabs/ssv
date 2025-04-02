@@ -73,7 +73,7 @@ type ControllerOptions struct {
 	Beacon                     beaconprotocol.BeaconNode
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:"Enable data export functionality"`
-	ExporterFull               bool   `yaml:"ExporterFull" env:"EXPORTER_FULL" env-default:"true" env-description:"Expose all validator duties to the exporter in addition to the decideds"`
+	ExporterFull               bool   `yaml:"ExporterFull" env:"EXPORTER_FULL" env-default:"false" env-description:"Expose all validator duties to the exporter in addition to the decideds"`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"Number of slots to retain in export data"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
