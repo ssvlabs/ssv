@@ -6,8 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const requiredSuffix = " (required)"
-
 // AddPersistentStringFlag adds a string flag to the command
 func AddPersistentStringFlag(c *cobra.Command, flag string, value string, description string, isRequired bool) {
 	c.PersistentFlags().String(flag, value, formatDescription(description, isRequired))
@@ -22,6 +20,7 @@ func AddPersistentIntFlag(c *cobra.Command, flag string, value uint64, descripti
 
 // formatDescription adds required suffix to description if needed
 func formatDescription(description string, isRequired bool) string {
+	const requiredSuffix = " (required)"
 	if isRequired {
 		return fmt.Sprintf("%s%s", description, requiredSuffix)
 	}

@@ -42,7 +42,6 @@ func NewInstance(
 	if len(identifier) == 56 {
 		name = spectypes.MessageID(identifier).GetRoleType()
 	} else {
-		// base64.StdEncoding.EncodeToString(identifier)
 		name = spectypes.RoleUnknown
 	}
 
