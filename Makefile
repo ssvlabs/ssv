@@ -155,14 +155,6 @@ mock:
 generate:
 	go generate ./...
 
-.PHONY: tools
-tools:
-	$(GET_TOOL) go.uber.org/mock/mockgen
-	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
-	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
-	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	$(RUN_TOOL)
-
 .PHONY: format
 format:
 # both format commands must ignore generated files which are named *mock* or enr_fork_id_encoding.go
