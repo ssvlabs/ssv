@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -35,11 +36,11 @@ type Provider interface {
 
 	// ReportQuorum changes a validator's state to observed quorum, immediately bypassing further Doppelganger checks.
 	// Typically used when a validator successfully completes post-consensus partial sig quorum (attester/proposer).
-	ReportQuorum(ctx context.Context, validatorIndex phase0.ValidatorIndex)
+	ReportQuorum(validatorIndex phase0.ValidatorIndex)
 
 	// RemoveValidatorState removes a validator from Doppelganger tracking, clearing its protection status.
 	// Useful when a validator is no longer managed (validator removed or liquidated).
-	RemoveValidatorState(ctx context.Context, validatorIndex phase0.ValidatorIndex)
+	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
 }
 
 // ValidatorProvider represents a provider of validator information.
@@ -101,7 +102,7 @@ func (h *handler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
 }
 
 // ReportQuorum changes a validator's state to observed quorum, marking it as safe to sign in effect.
-func (h *handler) ReportQuorum(ctx context.Context, validatorIndex phase0.ValidatorIndex) {
+func (h *handler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -113,15 +114,11 @@ func (h *handler) ReportQuorum(ctx context.Context, validatorIndex phase0.Valida
 
 	if !state.safe() {
 		state.observedQuorum = true
-
-		validatorsStateCounter.Add(ctx, -1, metric.WithAttributes(unsafeAttribute(true)))
-		validatorsStateCounter.Add(ctx, 1, metric.WithAttributes(unsafeAttribute(false)))
-
 		h.logger.Info("Validator marked as safe due to observed quorum", fields.ValidatorIndex(validatorIndex))
 	}
 }
 
-func (h *handler) updateDoppelgangerState(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) {
+func (h *handler) updateDoppelgangerState(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -145,16 +142,11 @@ func (h *handler) updateDoppelgangerState(ctx context.Context, epoch phase0.Epoc
 	for idx := range h.validatorsState {
 		if _, exists := retrievedValidatorsSet[idx]; !exists {
 			removedValidators = append(removedValidators, uint64(idx))
-
-			unsafe := !h.validatorsState[idx].safe()
-			validatorsStateCounter.Add(ctx, -1, metric.WithAttributes(unsafeAttribute(unsafe)))
-
 			delete(h.validatorsState, idx)
 		}
 	}
 
 	if len(addedValidators) > 0 {
-		validatorsStateCounter.Add(ctx, int64(len(addedValidators)), metric.WithAttributes(unsafeAttribute(true)))
 		h.logger.Debug("Added validators to Doppelganger state", fields.Epoch(epoch), zap.Uint64s("validator_indices", addedValidators))
 	}
 
@@ -164,7 +156,7 @@ func (h *handler) updateDoppelgangerState(ctx context.Context, epoch phase0.Epoc
 }
 
 // RemoveValidatorState removes the validator from the Doppelganger state.
-func (h *handler) RemoveValidatorState(ctx context.Context, validatorIndex phase0.ValidatorIndex) {
+func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -173,11 +165,7 @@ func (h *handler) RemoveValidatorState(ctx context.Context, validatorIndex phase
 		return
 	}
 
-	unsafe := !h.validatorsState[validatorIndex].safe()
-	validatorsStateCounter.Add(ctx, -1, metric.WithAttributes(unsafeAttribute(unsafe)))
-
 	delete(h.validatorsState, validatorIndex)
-
 	h.logger.Debug("Removed validator from Doppelganger state", fields.ValidatorIndex(validatorIndex))
 }
 
@@ -203,7 +191,7 @@ func (h *handler) Start(ctx context.Context) error {
 
 			// Update DG state with self participating validators from validator provider at the current epoch
 			validatorIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(currentEpoch))
-			h.updateDoppelgangerState(ctx, currentEpoch, validatorIndices)
+			h.updateDoppelgangerState(currentEpoch, validatorIndices)
 
 			// Perform liveness checks during the first run or at the last slot of the epoch.
 			// This ensures that the beacon node has had enough time to observe blocks and attestations,
@@ -228,10 +216,14 @@ func (h *handler) Start(ctx context.Context) error {
 				// Resetting all Doppelganger states ensures safety, but it also means
 				// our operator will likely skip signing for at least a few epochs
 				// or until there is a post-consensus partial sig quorum.
-				h.resetDoppelgangerStates(ctx)
+				h.resetDoppelgangerStates()
 			}
 
 			h.checkLiveness(ctx, currentSlot, currentEpoch-1)
+
+			// Record the current count of safe and unsafe validators after each slot.
+			// This ensures metrics reflect any changes from quorum reports, liveness updates, or state resets.
+			h.recordValidatorStates(ctx)
 
 			// Update the previous epoch tracker to detect potential future skips.
 			previousEpoch = currentEpoch
@@ -265,10 +257,10 @@ func (h *handler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch pha
 	}
 
 	// Process liveness data
-	h.processLivenessData(ctx, epoch, livenessData)
+	h.processLivenessData(epoch, livenessData)
 }
 
-func (h *handler) processLivenessData(ctx context.Context, epoch phase0.Epoch, livenessData []*eth2apiv1.ValidatorLiveness) {
+func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2apiv1.ValidatorLiveness) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -306,31 +298,35 @@ func (h *handler) processLivenessData(ctx context.Context, epoch phase0.Epoch, l
 				fields.ValidatorIndex(response.Index),
 				zap.Uint64("remaining_epochs", uint64(state.remainingEpochs)))
 		} else {
-			validatorsStateCounter.Add(ctx, -1, metric.WithAttributes(unsafeAttribute(true)))
-			validatorsStateCounter.Add(ctx, 1, metric.WithAttributes(unsafeAttribute(false)))
-
 			h.logger.Debug("Validator is now safe to sign", fields.ValidatorIndex(response.Index))
 		}
 	}
 }
 
 // resetDoppelgangerStates resets all validator states back to the default remaining epochs.
-func (h *handler) resetDoppelgangerStates(ctx context.Context) {
+func (h *handler) resetDoppelgangerStates() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	previouslySafeCount := 0
 	for _, state := range h.validatorsState {
-		if state.safe() {
-			previouslySafeCount++
-		}
 		state.resetRemainingEpochs()
 	}
 
-	validatorsStateCounter.Add(ctx, int64(previouslySafeCount), metric.WithAttributes(unsafeAttribute(true)))
-	validatorsStateCounter.Add(ctx, -int64(previouslySafeCount), metric.WithAttributes(unsafeAttribute(false)))
-
 	h.logger.Info("All Doppelganger states reset to initial detection epochs")
+}
+
+func (h *handler) recordValidatorStates(ctx context.Context) {
+	var safe, unsafe uint64
+	for _, state := range h.validatorsState {
+		if state.safe() {
+			safe++
+		} else {
+			unsafe++
+		}
+	}
+
+	observability.RecordUint64Value(ctx, safe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(false)))
+	observability.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
 }
 
 func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {

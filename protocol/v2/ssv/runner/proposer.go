@@ -273,7 +273,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
 			fields.Round(r.GetState().RunningInstance.State.Round))
 
-		r.doppelgangerHandler.ReportQuorum(ctx, r.GetShare().ValidatorIndex)
+		r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
 
 		validatorConsensusData := &spectypes.ValidatorConsensusData{}
 		err = validatorConsensusData.Decode(r.GetState().DecidedValue)

@@ -462,7 +462,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				// Only mark as safe if this is an attester role
 				// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
 				// The doppelganger check is not performed for sync committee duties, so we rely on attester duties for safety confirmation.
-				cr.doppelgangerHandler.ReportQuorum(ctx, validator)
+				cr.doppelgangerHandler.ReportQuorum(validator)
 
 				att := sszObject.(*spec.VersionedAttestation)
 				// Insert signature

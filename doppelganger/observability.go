@@ -18,11 +18,11 @@ const (
 var (
 	meter = otel.Meter(observabilityName)
 
-	validatorsStateCounter = observability.NewMetric(
-		meter.Int64UpDownCounter(
-			metricName("validators.state.count"),
+	validatorsStateGauge = observability.NewMetric(
+		meter.Int64Gauge(
+			metricName("validators.state"),
 			metric.WithUnit("{validator}"),
-			metric.WithDescription("Tracks the total number of validators in Doppelganger state, categorized by safety"),
+			metric.WithDescription("Tracks the current number of validators in Doppelganger state, categorized by safety"),
 		),
 	)
 )

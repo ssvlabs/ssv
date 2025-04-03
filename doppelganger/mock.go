@@ -57,27 +57,27 @@ func (mr *MockProviderMockRecorder) CanSign(validatorIndex any) *gomock.Call {
 }
 
 // RemoveValidatorState mocks base method.
-func (m *MockProvider) RemoveValidatorState(ctx context.Context, validatorIndex phase0.ValidatorIndex) {
+func (m *MockProvider) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemoveValidatorState", ctx, validatorIndex)
+	m.ctrl.Call(m, "RemoveValidatorState", validatorIndex)
 }
 
 // RemoveValidatorState indicates an expected call of RemoveValidatorState.
-func (mr *MockProviderMockRecorder) RemoveValidatorState(ctx, validatorIndex any) *gomock.Call {
+func (mr *MockProviderMockRecorder) RemoveValidatorState(validatorIndex any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveValidatorState", reflect.TypeOf((*MockProvider)(nil).RemoveValidatorState), ctx, validatorIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveValidatorState", reflect.TypeOf((*MockProvider)(nil).RemoveValidatorState), validatorIndex)
 }
 
 // ReportQuorum mocks base method.
-func (m *MockProvider) ReportQuorum(ctx context.Context, validatorIndex phase0.ValidatorIndex) {
+func (m *MockProvider) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReportQuorum", ctx, validatorIndex)
+	m.ctrl.Call(m, "ReportQuorum", validatorIndex)
 }
 
 // ReportQuorum indicates an expected call of ReportQuorum.
-func (mr *MockProviderMockRecorder) ReportQuorum(ctx, validatorIndex any) *gomock.Call {
+func (mr *MockProviderMockRecorder) ReportQuorum(validatorIndex any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportQuorum", reflect.TypeOf((*MockProvider)(nil).ReportQuorum), ctx, validatorIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportQuorum", reflect.TypeOf((*MockProvider)(nil).ReportQuorum), validatorIndex)
 }
 
 // Start mocks base method.
