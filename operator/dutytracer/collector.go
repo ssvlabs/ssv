@@ -562,7 +562,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 					var data = new(spectypes.ValidatorConsensusData)
 					err := data.Decode(msg.SignedSSVMessage.FullData)
 					if err != nil {
-						// c.logger.Error("decode validator proposal data", zap.Error(err), fields.Slot(slot), fields.Validator(validatorPK[:]))
+						c.logger.Error("decode validator proposal data", zap.Error(err), fields.Slot(slot), fields.Validator(validatorPK[:]))
 						return
 					}
 
