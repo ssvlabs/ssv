@@ -137,7 +137,14 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
+		var db basedb.Database
+		if cfg.DBOptions.Type == "pebble" || cfg.DBOptions.Type == "pebbledb" {
+			logger.Info("using pebble db")
+			db, err = setupPebbleDB(logger, networkConfig.Beacon.GetNetwork())
+		} else {
+			logger.Info("using badger db")
+			db, err = setupBadgerDB(logger, networkConfig.Beacon.GetNetwork())
+		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -576,7 +583,40 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.PebbleDB, error) {
+func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+	db, err := kv.New(logger, cfg.DBOptions)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open db")
+	}
+
+	migrationOpts := migrations.Options{
+		Db:      db,
+		DbPath:  cfg.DBOptions.Path,
+		Network: eth2Network,
+	}
+	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to run migrations")
+	}
+	if applied == 0 {
+		return db, nil
+	}
+
+	// If migrations were applied, we run a full garbage collection cycle
+	// to reclaim any space that may have been freed up.
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	if err := db.FullGC(ctx); err != nil {
+		return nil, errors.Wrap(err, "failed to collect garbage")
+	}
+
+	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+
+	return db, nil
+}
+
+func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.PebbleDB, error) {
 	db, err := kv.NewPebbleDB(cfg.DBOptions.Ctx, logger, cfg.DBOptions.Path, &pebble.Options{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
