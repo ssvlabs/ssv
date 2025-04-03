@@ -5,9 +5,10 @@ import (
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"go.uber.org/zap"
 )
 
 // DecodedSSVMessage serves as a marker interface for any SSV message types.
@@ -49,8 +50,10 @@ type P2PNetwork interface {
 	ActiveSubnets() commons.Subnets
 	// FixedSubnets returns fixed subnets
 	FixedSubnets() commons.Subnets
-	// PeersByTopic returns topic->peers we are connected to
+	// PeersByTopic returns topic->peers mapping for all peers we are connected to
 	PeersByTopic() map[string][]peer.ID
+	// Peers returns all peers we are connected to
+	Peers() []peer.ID
 }
 
 // GetValidatorStats returns stats of validators, including the following:
