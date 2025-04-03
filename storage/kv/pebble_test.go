@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 func setupTestDB(t *testing.T) *PebbleDB {
@@ -232,5 +233,116 @@ func TestPebbleDB_GC(t *testing.T) {
 
 	// Test FullGC
 	err = db.FullGC(context.Background())
+	require.NoError(t, err)
+}
+
+func TestPebbleDB_CountPrefix(t *testing.T) {
+	db := setupTestDB(t)
+
+	prefix := []byte("test_prefix")
+	keys := [][]byte{
+		[]byte("key1"),
+		[]byte("key2"),
+		[]byte("key3"),
+	}
+	values := [][]byte{
+		[]byte("value1"),
+		[]byte("value2"),
+		[]byte("value3"),
+	}
+
+	// Set values
+	for i, key := range keys {
+		err := db.Set(prefix, key, values[i])
+		require.NoError(t, err)
+	}
+
+	// Count items with prefix
+	count, err := db.CountPrefix(prefix)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), count)
+
+	// Count items with different prefix
+	otherPrefix := []byte("other_prefix")
+	count, err = db.CountPrefix(otherPrefix)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), count)
+}
+
+func TestPebbleDB_DropPrefix(t *testing.T) {
+	db := setupTestDB(t)
+
+	prefix1 := []byte("prefix1")
+	prefix2 := []byte("prefix2")
+
+	// Set values with different prefixes
+	err := db.Set(prefix1, []byte("key1"), []byte("value1"))
+	require.NoError(t, err)
+	err = db.Set(prefix1, []byte("key2"), []byte("value2"))
+	require.NoError(t, err)
+	err = db.Set(prefix2, []byte("key1"), []byte("value3"))
+	require.NoError(t, err)
+
+	// Drop prefix1
+	err = db.DropPrefix(prefix1)
+	require.NoError(t, err)
+
+	// Verify prefix1 items are deleted
+	_, found, err := db.Get(prefix1, []byte("key1"))
+	require.NoError(t, err)
+	require.False(t, found)
+
+	_, found, err = db.Get(prefix1, []byte("key2"))
+	require.NoError(t, err)
+	require.False(t, found)
+
+	// Verify prefix2 items still exist
+	obj, found, err := db.Get(prefix2, []byte("key1"))
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, []byte("value3"), obj.Value)
+}
+
+func TestPebbleDB_Update(t *testing.T) {
+	db := setupTestDB(t)
+
+	prefix := []byte("test_prefix")
+	key := []byte("test_key")
+	value := []byte("test_value")
+
+	// Update using transaction
+	err := db.Update(func(txn basedb.Txn) error {
+		return txn.Set(prefix, key, value)
+	})
+	require.NoError(t, err)
+
+	// Verify value was set
+	obj, found, err := db.Get(prefix, key)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, value, obj.Value)
+
+	// Test error handling
+	expectedErr := errors.New("update error")
+	err = db.Update(func(txn basedb.Txn) error {
+		return expectedErr
+	})
+	require.Error(t, err)
+	require.Equal(t, expectedErr, err)
+}
+
+func TestPebbleDB_QuickGC(t *testing.T) {
+	db := setupTestDB(t)
+
+	// QuickGC is currently a no-op, but we should test it doesn't error
+	err := db.QuickGC(context.Background())
+	require.NoError(t, err)
+}
+
+func TestPebbleDB_FullGC(t *testing.T) {
+	db := setupTestDB(t)
+
+	// FullGC is currently a no-op, but we should test it doesn't error
+	err := db.FullGC(context.Background())
 	require.NoError(t, err)
 }

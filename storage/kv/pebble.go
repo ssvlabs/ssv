@@ -103,7 +103,7 @@ func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.
 
 		// Wrap the key/value in an object satisfying basedb.Obj.
 		obj := basedb.Obj{
-			Key:   fullKey,
+			Key:   key,
 			Value: vcopy,
 		}
 
