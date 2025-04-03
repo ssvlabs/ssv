@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/exp/maps"
 	"math/rand"
 	"slices"
 	"strconv"
@@ -12,12 +11,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -36,7 +39,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
 	"github.com/ssvlabs/ssv/utils/ttl"
-	"go.uber.org/zap"
 )
 
 // network states
@@ -629,7 +631,7 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 	const (
 		duoSubnetPriority  = 1
 		soloSubnetPriority = 3
-		deadSubnetPriority = 90
+		deadSubnetPriority = 9
 	)
 	score := float64(0)
 	for i := range a {
