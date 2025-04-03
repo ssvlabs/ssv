@@ -22,8 +22,9 @@ type Server struct {
 	node       *handlers.Node
 	validators *handlers.Validators
 	exporter   *handlers.Exporter
-
 	httpServer *http.Server
+
+	full bool
 }
 
 // New creates a new Server instance.
@@ -33,6 +34,7 @@ func New(
 	node *handlers.Node,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
+	full bool,
 ) *Server {
 	return &Server{
 		logger:     logger,
@@ -40,6 +42,7 @@ func New(
 		node:       node,
 		validators: validators,
 		exporter:   exporter,
+		full:       full,
 	}
 }
 
@@ -59,8 +62,15 @@ func (s *Server) Run() error {
 	router.Get("/v1/validators", api.Handler(s.validators.List))
 
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
-	router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
-	router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+	if s.full {
+		router.Get("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
+		router.Get("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
+		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
+		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.TraceDecideds))
+	} else {
+		router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+		router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
+	}
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 
