@@ -33,7 +33,7 @@ ssv-signer is a lightweight remote signing service inspired by Web3Signer. It wi
     - Slashing data may not be necessary
     - Note: if `ssv-signer` can't decrypt the share, return an error, in ssv-node like today, don't prevent saving it.
 
-- `DELETE /v1/validators` - remove a share from ssv-signer and web3signer
+- `DELETE /v1/validators` - remove a share from the ssv-signer and web3signer
     - Calls https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_DELETE
 
 - `POST /v1/validators/sign/:identifier` - Mimics the Web3Signer signing endpoint. Accepts a share public key and payload to sign (following the Web3Signer API specifications). Communicates with the Web3Signer instance to generate and return the signature, effectively acting as a proxy.
