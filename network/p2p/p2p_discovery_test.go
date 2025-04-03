@@ -102,7 +102,7 @@ func TestSubnetPeers_Score_DeadSubnets(t *testing.T) {
 		{
 			name:          "peer with dead subnet",
 			theirSubnets:  createSubnets(1),
-			expectedScore: 90, // deadSubnetPriority
+			expectedScore: 9, // deadSubnetPriority
 			description:   "Peer shares subnet 1 which is dead (0 peers)",
 		},
 		{
@@ -120,13 +120,13 @@ func TestSubnetPeers_Score_DeadSubnets(t *testing.T) {
 		{
 			name:          "peer with dead and solo subnets",
 			theirSubnets:  createSubnets(1, 2),
-			expectedScore: 93, // deadSubnetPriority + soloSubnetPriority
+			expectedScore: 12, // deadSubnetPriority + soloSubnetPriority
 			description:   "Peer shares subnet 1 (dead) and subnet 2 (solo)",
 		},
 		{
 			name:          "peer with all subnets",
 			theirSubnets:  createSubnets(1, 2, 3),
-			expectedScore: 93, // deadSubnetPriority + soloSubnetPriority
+			expectedScore: 12, // deadSubnetPriority + soloSubnetPriority
 			description:   "Peer shares all subnets, but only 1 (dead) and 2 (solo) contribute to score",
 		},
 		{
@@ -138,7 +138,7 @@ func TestSubnetPeers_Score_DeadSubnets(t *testing.T) {
 		{
 			name:          "peer with dead subnet and unsubscribed subnet",
 			theirSubnets:  createSubnets(1, 4),
-			expectedScore: 90, // deadSubnetPriority
+			expectedScore: 9, // deadSubnetPriority
 			description:   "Peer shares subnet 1 (dead) and subnet 4 (not subscribed)",
 		},
 	}
@@ -178,7 +178,7 @@ func TestSubnetPeers_Score_MixedSubnets(t *testing.T) {
 		{
 			name:          "peer with all dead subnets",
 			theirSubnets:  createSubnets(0, 1),
-			expectedScore: 180, // 2 * deadSubnetPriority
+			expectedScore: 18, // 2 * deadSubnetPriority
 			description:   "Peer shares both dead subnets",
 		},
 		{
@@ -202,13 +202,13 @@ func TestSubnetPeers_Score_MixedSubnets(t *testing.T) {
 		{
 			name:          "peer with mixed subnet types",
 			theirSubnets:  createSubnets(0, 2, 4, 6),
-			expectedScore: 94, // deadSubnetPriority + soloSubnetPriority + duoSubnetPriority
+			expectedScore: 13, // deadSubnetPriority + soloSubnetPriority + duoSubnetPriority
 			description:   "Peer shares one of each subnet type",
 		},
 		{
 			name:          "peer with highest priority subnets",
 			theirSubnets:  createSubnets(0, 1, 2),
-			expectedScore: 183, // 2 * deadSubnetPriority + soloSubnetPriority
+			expectedScore: 21, // 2 * deadSubnetPriority + soloSubnetPriority
 			description:   "Peer shares both dead subnets and one solo subnet",
 		},
 	}

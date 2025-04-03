@@ -630,7 +630,7 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 	const (
 		duoSubnetPriority  = 1
 		soloSubnetPriority = 3
-		deadSubnetPriority = 90
+		deadSubnetPriority = 9
 	)
 	score := float64(0)
 	for i := range a {
