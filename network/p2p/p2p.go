@@ -180,7 +180,17 @@ func (n *p2pNetwork) PeersIndex() peers.Index {
 	return n.idx
 }
 
-// PeersByTopic returns topic->peers we are connected to
+// Peers returns all peers we are connected to
+func (n *p2pNetwork) Peers() []peer.ID {
+	allPeers, err := n.topicsCtrl.Peers("")
+	if err != nil {
+		n.logger.Error("Cant list all peers", zap.Error(err))
+		return nil
+	}
+	return allPeers
+}
+
+// PeersByTopic returns topic->peers mapping for all peers we are connected to
 func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
 	tpcs := n.topicsCtrl.Topics()
 	peerz := make(map[string][]peer.ID, len(tpcs))
