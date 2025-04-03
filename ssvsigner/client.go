@@ -11,6 +11,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -49,17 +50,20 @@ func WithLogger(logger *zap.Logger) ClientOption {
 
 func (c *Client) ListValidators(ctx context.Context) ([]phase0.BLSPubKey, error) {
 	var resp web3signer.ListKeysResponse
+	start := time.Now() // TODO: add metrics, consider removing logs with request duration
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathValidators).
 		ToJSON(&resp).
 		Fetch(ctx)
+	c.logger.Debug("requested to list keys in remote signer", fields.Duration(start))
 
 	return resp, err
 }
 
 func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
+
 	encodedShares := make([]ShareKeys, 0, len(shares))
 	for _, share := range shares {
 		encodedShares = append(encodedShares, ShareKeys{
@@ -74,6 +78,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
 
 	var resp web3signer.ImportKeystoreResponse
 	var errStr string
+	start := time.Now()
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -83,6 +88,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
 		ToJSON(&resp).
 		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
 		Fetch(ctx)
+	c.logger.Debug("requested to add keys to remote signer", fields.Count(len(shares)), fields.Duration(start))
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
 		return ShareDecryptionError(errors.New(errStr))
@@ -111,6 +117,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 	}
 
 	var resp web3signer.DeleteKeystoreResponse
+	start := time.Now()
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -119,6 +126,8 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		Delete().
 		ToJSON(&resp).
 		Fetch(ctx)
+	c.logger.Debug("requested to remove keys from remote signer", fields.Count(len(pubKeys)), fields.Duration(start))
+
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -138,6 +147,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 
 func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
 	var resp web3signer.SignResponse
+	start := time.Now()
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -146,6 +156,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 		Post().
 		ToJSON(&resp).
 		Fetch(ctx)
+	c.logger.Debug("requested to sign with share key", fields.PubKey(sharePubKey[:]), fields.Duration(start))
 	if err != nil {
 		return phase0.BLSSignature{}, fmt.Errorf("request failed: %w", err)
 	}
@@ -155,12 +166,15 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 
 func (c *Client) OperatorIdentity(ctx context.Context) (string, error) {
 	var resp string
+	start := time.Now()
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathOperatorIdentity).
 		ToString(&resp).
 		Fetch(ctx)
+	c.logger.Debug("requested operator identity", fields.Duration(start))
+
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
@@ -170,6 +184,7 @@ func (c *Client) OperatorIdentity(ctx context.Context) (string, error) {
 
 func (c *Client) OperatorSign(ctx context.Context, payload []byte) ([]byte, error) {
 	var resp bytes.Buffer
+	start := time.Now()
 	err := requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
@@ -178,6 +193,8 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) ([]byte, erro
 		Post().
 		ToBytesBuffer(&resp).
 		Fetch(ctx)
+	c.logger.Debug("requested to sign with operator key", fields.Duration(start))
+
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

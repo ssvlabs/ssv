@@ -28,15 +28,13 @@ ifeq ($(COVERAGE),true)
 endif
 UNFORMATTED=$(shell gofmt -l .)
 
-#Lint
-.PHONY: lint-prepare
-lint-prepare:
-	@echo "Preparing Linter"
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
+GET_TOOL=go get -tool
+RUN_TOOL=go tool
 
+#Lint
 .PHONY: lint
 lint:
-	./bin/golangci-lint run -v ./...
+	$(RUN_TOOL) golangci-lint run -v ./...
 	@if [ ! -z "${UNFORMATTED}" ]; then \
 		echo "Some files requires formatting, please run 'go fmt ./...'"; \
 		exit 1; \
@@ -156,11 +154,6 @@ mock:
 .PHONY: generate
 generate:
 	go generate ./...
-
-.PHONY: mockgen-install
-mockgen-install:
-	go install go.uber.org/mock/mockgen@v0.4.0
-	@which mockgen || echo "Error: ensure `go env GOPATH` is added to PATH"
 
 .PHONY: format
 format:

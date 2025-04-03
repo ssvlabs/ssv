@@ -6,7 +6,7 @@ import (
 )
 
 // OperatorID returns sha256 of the given operator public key
-func OperatorID(operatorPubKey []byte) string { // TODO: consider changing to string
+func OperatorID(operatorPubKey []byte) string {
 	if operatorPubKey == nil {
 		return ""
 	}

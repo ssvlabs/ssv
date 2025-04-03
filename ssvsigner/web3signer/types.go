@@ -1,6 +1,7 @@
 package web3signer
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -97,8 +98,35 @@ const (
 )
 
 type BeaconBlockData struct {
-	Version     spec.DataVersion          `json:"version"`
+	Version     DataVersion               `json:"version"`
 	BlockHeader *phase0.BeaconBlockHeader `json:"block_header"`
+}
+
+type DataVersion spec.DataVersion
+
+// MarshalJSON implements json.Marshaler.
+func (d *DataVersion) MarshalJSON() ([]byte, error) {
+	specDV := spec.DataVersion(*d)
+
+	b, err := specDV.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes.ToUpper(b), err
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (d *DataVersion) UnmarshalJSON(input []byte) error {
+	loweredInput := bytes.ToLower(input)
+
+	var specDV spec.DataVersion
+	if err := specDV.UnmarshalJSON(loweredInput); err != nil {
+		return err
+	}
+
+	*d = DataVersion(specDV)
+	return nil
 }
 
 // AggregateAndProof is a union of *phase0.AggregateAndProof or *electra.AggregateAndProof.

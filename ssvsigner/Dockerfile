@@ -1,7 +1,7 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.22 AS preparer
+FROM golang:1.24 AS preparer
 
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
@@ -17,14 +17,15 @@ RUN apt-get update                                                        && \
 
 RUN go version
 
-WORKDIR /go/src/github.com/ssvlabs/ssv/ssvsigner
-COPY go.mod .
-COPY go.sum .
-RUN --mount=type=cache,target=/root/.cache/go-build \
-  --mount=type=cache,mode=0755,target=/go/pkg \
-  go mod download
+# Set working directory for the build
+WORKDIR /go/src/github.com/ssvlabs/ssv/
 
-ARG APP_VERSION
+# Cache dependencies
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,mode=0755,target=/go/pkg \
+    go mod download && go mod verify
+
 #
 # STEP 2: Build executable binary
 #
@@ -44,7 +45,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 ##
 # STEP 3: Prepare image to run the binary
 #
-FROM golang:1.22 AS runner
+FROM golang:1.24 AS runner
 
 RUN apt-get update     && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
@@ -62,4 +63,3 @@ EXPOSE 8080
 ENV GODEBUG="netdns=go"
 
 ENTRYPOINT ["/go/bin/ssv-signer"]
-

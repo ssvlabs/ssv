@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
+	"unicode"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -551,4 +553,37 @@ func (t *testRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKe
 		return web3signer.SignResponse{}, t.signError
 	}
 	return t.signResult, nil
+}
+
+func TestGenerateRandomPassword(t *testing.T) {
+	server := &Server{}
+
+	tests := []struct {
+		length int
+	}{
+		{8},
+		{12},
+		{16},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("PasswordLength%d", test.length), func(t *testing.T) {
+			password, err := server.generateRandomPassword(test.length)
+			require.NoError(t, err)
+
+			require.Equal(t, test.length, len(password), "Password length is incorrect")
+
+			for _, char := range password {
+				require.True(t, unicode.IsLetter(char) || unicode.IsDigit(char), "Password contains invalid character")
+			}
+		})
+	}
+
+	password1, err := server.generateRandomPassword(12)
+	require.NoError(t, err)
+
+	password2, err := server.generateRandomPassword(12)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, password1, password2, "Passwords should be different")
 }

@@ -314,7 +314,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 		}
 
 		ret = &web3signer.BeaconBlockData{
-			Version: spec.DataVersionCapella,
+			Version: web3signer.DataVersion(spec.DataVersionCapella),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -330,7 +330,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 		}
 
 		ret = &web3signer.BeaconBlockData{
-			Version: spec.DataVersionDeneb,
+			Version: web3signer.DataVersion(spec.DataVersionDeneb),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -347,7 +347,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 		}
 
 		ret = &web3signer.BeaconBlockData{
-			Version: spec.DataVersionElectra,
+			Version: web3signer.DataVersion(spec.DataVersionElectra),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -364,7 +364,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 		}
 
 		ret = &web3signer.BeaconBlockData{
-			Version: spec.DataVersionCapella,
+			Version: web3signer.DataVersion(spec.DataVersionCapella),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -381,7 +381,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 		}
 
 		ret = &web3signer.BeaconBlockData{
-			Version: spec.DataVersionDeneb,
+			Version: web3signer.DataVersion(spec.DataVersionDeneb),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,
@@ -398,7 +398,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 		}
 
 		ret = &web3signer.BeaconBlockData{
-			Version: spec.DataVersionElectra,
+			Version: web3signer.DataVersion(spec.DataVersionElectra),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
 				ProposerIndex: v.ProposerIndex,

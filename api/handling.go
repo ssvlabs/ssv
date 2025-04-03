@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -18,18 +19,17 @@ type HandlerFunc func(http.ResponseWriter, *http.Request) error
 func Handler(h HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := h(w, r); err != nil {
-			//nolint:errorlint
-			// errors.As would be incorrect here since a renderer.Renderer
-			// wrapped inside another error should error, not render.
-			switch e := err.(type) {
-			case render.Renderer:
-				if err := render.Render(w, r, e); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-				}
-			default:
-				if err := render.Render(w, r, Error(err)); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-				}
+			var renderErr error
+			var errRenderer render.Renderer
+
+			if errors.As(err, &errRenderer) {
+				renderErr = errRenderer.Render(w, r)
+			} else {
+				renderErr = render.Render(w, r, Error(err))
+			}
+
+			if renderErr != nil {
+				http.Error(w, renderErr.Error(), http.StatusInternalServerError)
 			}
 		}
 	}
