@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/cockroachdb/pebble"
-
 	"github.com/dgraph-io/badger/v4"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -148,13 +147,14 @@ func (t *pebbleTxn) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.O
 			}
 			return err
 		}
+
 		valCopy := make([]byte, len(value))
 		copy(valCopy, value)
 		if err := closer.Close(); err != nil {
 			return err
 		}
 		obj := basedb.Obj{
-			Key:   fullKey,
+			Key:   key,
 			Value: valCopy,
 		}
 		if err := iterator(obj); err != nil {
@@ -179,14 +179,22 @@ func (t *pebbleTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error 
 			continue
 		}
 		i++ // TODO: should we index including failed keys?
+
+		key := make([]byte, len(iter.Key())-len(prefix))
+		copy(key, iter.Key()[len(prefix):])
+
+		val := make([]byte, len(v))
+		copy(val, v)
+
 		err = fn(i, basedb.Obj{
-			Key:   iter.Key(),
-			Value: v,
+			Key:   key,
+			Value: val,
 		})
 		if err != nil {
 			return err
 		}
 	}
+
 	return iter.Error()
 }
 

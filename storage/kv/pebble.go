@@ -5,8 +5,9 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // TODO: reconsider prefixes?
@@ -102,7 +103,7 @@ func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.
 
 		// Wrap the key/value in an object satisfying basedb.Obj.
 		obj := basedb.Obj{
-			Key:   fullKey,
+			Key:   key,
 			Value: vcopy,
 		}
 
