@@ -2,100 +2,72 @@ package goclient
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-)
 
-var (
-	FarFutureEpoch phase0.Epoch = math.MaxUint64
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func (gc *GoClient) DataVersion(epoch phase0.Epoch) spec.DataVersion {
-	gc.ForkLock.RLock()
-	defer gc.ForkLock.RUnlock()
-	if epoch < gc.ForkEpochAltair {
-		return spec.DataVersionPhase0
-	} else if epoch < gc.ForkEpochBellatrix {
-		return spec.DataVersionAltair
-	} else if epoch < gc.ForkEpochCapella {
-		return spec.DataVersionBellatrix
-	} else if epoch < gc.ForkEpochDeneb {
-		return spec.DataVersionCapella
-	} else if epoch < gc.ForkEpochElectra {
-		return spec.DataVersionDeneb
-	}
-	return spec.DataVersionElectra
+	return gc.BeaconConfig().DataVersion(epoch)
 }
 
-func (gc *GoClient) checkForkValues(specResponse *api.Response[map[string]any]) error {
-	// Validate the response.
+func (gc *GoClient) getForkEpochs(specResponse *api.Response[map[string]any]) (*networkconfig.ForkEpochs, error) {
 	if specResponse == nil {
-		return fmt.Errorf("spec response is nil")
+		return nil, fmt.Errorf("spec response is nil")
 	}
 	if specResponse.Data == nil {
-		return fmt.Errorf("spec response data is nil")
+		return nil, fmt.Errorf("spec response data is nil")
 	}
 
-	// Lock the fork values to ensure atomic read and update.
-	gc.ForkLock.Lock()
-	defer gc.ForkLock.Unlock()
-
-	// We'll compute candidate new values first and update the fields only if all validations pass.
-	var newAltair, newBellatrix, newCapella, newDeneb, newElectra phase0.Epoch
-
-	// processFork is a helper to handle required forks.
-	// It retrieves the candidate fork epoch from the response,
-	// and compares it with the current stored value.
-	// If the candidate is greater than the current value, that's an error.
-	// Otherwise, it returns the lower value (or the candidate if the current value is zero).
-	processFork := func(forkName, key string, current phase0.Epoch, required bool) (phase0.Epoch, error) {
+	getForkEpoch := func(key string, required bool) (phase0.Epoch, error) {
 		raw, ok := specResponse.Data[key]
 		if !ok {
 			if required {
-				return 0, fmt.Errorf("%s fork epoch not known by chain", forkName)
+				return 0, fmt.Errorf("%s is not known by chain", key)
 			}
-			return FarFutureEpoch, nil
+			return networkconfig.FarFutureEpoch, nil
 		}
 		forkVal, ok := raw.(uint64)
 		if !ok {
-			return 0, fmt.Errorf("failed to decode %s fork epoch", forkName)
-		}
-		if current != FarFutureEpoch && current != phase0.Epoch(forkVal) {
-			// Reject if candidate is missing the fork epoch that we've already seen.
-			return 0, fmt.Errorf("new %s fork epoch (%d) doesn't match current value (%d)", forkName, phase0.Epoch(forkVal), current)
+			return 0, fmt.Errorf("failed to decode %s", key)
 		}
 		return phase0.Epoch(forkVal), nil
 	}
 
-	var err error
-	// Process required forks.
-	if newAltair, err = processFork("ALTAIR", "ALTAIR_FORK_EPOCH", gc.ForkEpochAltair, true); err != nil {
-		return err
+	altairEpoch, err := getForkEpoch("ALTAIR_FORK_EPOCH", true)
+	if err != nil {
+		return nil, err
 	}
-	if newBellatrix, err = processFork("BELLATRIX", "BELLATRIX_FORK_EPOCH", gc.ForkEpochBellatrix, true); err != nil {
-		return err
+	bellatrixEpoch, err := getForkEpoch("BELLATRIX_FORK_EPOCH", true)
+	if err != nil {
+		return nil, err
 	}
-	if newCapella, err = processFork("CAPELLA", "CAPELLA_FORK_EPOCH", gc.ForkEpochCapella, true); err != nil {
-		return err
+	capellaEpoch, err := getForkEpoch("CAPELLA_FORK_EPOCH", true)
+	if err != nil {
+		return nil, err
 	}
-	if newDeneb, err = processFork("DENEB", "DENEB_FORK_EPOCH", gc.ForkEpochDeneb, true); err != nil {
-		return err
+	denebEpoch, err := getForkEpoch("DENEB_FORK_EPOCH", true)
+	if err != nil {
+		return nil, err
 	}
-	alreadySeenElectra := gc.ForkEpochElectra != FarFutureEpoch
-	if newElectra, err = processFork("ELECTRA", "ELECTRA_FORK_EPOCH", gc.ForkEpochElectra, alreadySeenElectra); err != nil {
-		return err
+	// After Electra fork happens on all networks,
+	// - Electra check should become required
+	// - Fulu check might be added as non-required
+	electraEpoch, err := getForkEpoch("ELECTRA_FORK_EPOCH", false)
+	if err != nil {
+		return nil, err
 	}
 
-	// At this point, no error was encountered.
-	// Update all fork values atomically.
-	gc.ForkEpochAltair = newAltair
-	gc.ForkEpochBellatrix = newBellatrix
-	gc.ForkEpochCapella = newCapella
-	gc.ForkEpochDeneb = newDeneb
-	gc.ForkEpochElectra = newElectra
+	forkEpochs := &networkconfig.ForkEpochs{
+		Electra:   electraEpoch,
+		Deneb:     denebEpoch,
+		Capella:   capellaEpoch,
+		Bellatrix: bellatrixEpoch,
+		Altair:    altairEpoch,
+	}
 
-	return nil
+	return forkEpochs, nil
 }

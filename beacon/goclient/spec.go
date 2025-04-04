@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
+	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
@@ -25,47 +26,48 @@ const (
 
 // BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
 func (gc *GoClient) BeaconConfig() networkconfig.Beacon {
+	// It should always be non-nil for external calls because it's initialized in GoClient's constructor.
 	return *gc.beaconConfig
 }
 
 // fetchBeaconConfig must be called once on GoClient's initialization
-func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
+func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkconfig.Beacon, error) {
 	start := time.Now()
-	specResponse, err := gc.multiClient.Spec(gc.ctx, &api.SpecOpts{})
-	recordRequestDuration(gc.ctx, "Spec", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	specResponse, err := client.Spec(gc.ctx, &api.SpecOpts{})
+	recordRequestDuration(gc.ctx, "Spec", client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Spec"), zap.Error(err))
-		return nil, fmt.Errorf("failed to obtain spec response: %w", err)
+		return networkconfig.Beacon{}, fmt.Errorf("failed to obtain spec response: %w", err)
 	}
 	if specResponse == nil {
 		gc.log.Error(clNilResponseErrMsg, zap.String("api", "Spec"))
-		return nil, fmt.Errorf("spec response is nil")
+		return networkconfig.Beacon{}, fmt.Errorf("spec response is nil")
 	}
 	if specResponse.Data == nil {
 		gc.log.Error(clNilResponseDataErrMsg, zap.String("api", "Spec"))
-		return nil, fmt.Errorf("spec response data is nil")
+		return networkconfig.Beacon{}, fmt.Errorf("spec response data is nil")
 	}
 
 	// types of most values are already cast: https://github.com/attestantio/go-eth2-client/blob/v0.21.7/http/spec.go#L78
 
 	networkNameRaw, ok := specResponse.Data["CONFIG_NAME"]
 	if !ok {
-		return nil, fmt.Errorf("config name not known by chain")
+		return networkconfig.Beacon{}, fmt.Errorf("config name not known by chain")
 	}
 
 	networkName, ok := networkNameRaw.(string)
 	if !ok {
-		return nil, fmt.Errorf("failed to decode config name")
+		return networkconfig.Beacon{}, fmt.Errorf("failed to decode config name")
 	}
 
 	capellaForkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
 	if !ok {
-		return nil, fmt.Errorf("capella fork version not known by chain")
+		return networkconfig.Beacon{}, fmt.Errorf("capella fork version not known by chain")
 	}
 
 	capellaForkVersion, ok := capellaForkVersionRaw.(phase0.Version)
 	if !ok {
-		return nil, fmt.Errorf("failed to decode capella fork version")
+		return networkconfig.Beacon{}, fmt.Errorf("failed to decode capella fork version")
 	}
 
 	slotDuration := DefaultSlotDuration
@@ -149,22 +151,28 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 	}
 
 	start = time.Now()
-	genesisResponse, err := gc.multiClient.Genesis(gc.ctx, &api.GenesisOpts{})
-	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	genesisResponse, err := client.Genesis(gc.ctx, &api.GenesisOpts{})
+	recordRequestDuration(gc.ctx, "Genesis", client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Genesis"), zap.Error(err))
-		return nil, fmt.Errorf("failed to obtain genesis response: %w", err)
+		return networkconfig.Beacon{}, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
 	if genesisResponse == nil {
 		gc.log.Error(clNilResponseErrMsg, zap.String("api", "Genesis"))
-		return nil, fmt.Errorf("genesis response is nil")
+		return networkconfig.Beacon{}, fmt.Errorf("genesis response is nil")
 	}
 	if genesisResponse.Data == nil {
 		gc.log.Error(clNilResponseDataErrMsg, zap.String("api", "Genesis"))
-		return nil, fmt.Errorf("genesis response data is nil")
+		return networkconfig.Beacon{}, fmt.Errorf("genesis response data is nil")
 	}
 
-	return &networkconfig.Beacon{
+	forkEpochs, err := gc.getForkEpochs(specResponse)
+	if err != nil {
+		gc.log.Error(clResponseErrMsg, zap.String("api", "getForkEpochs"), zap.Error(err))
+		return networkconfig.Beacon{}, fmt.Errorf("get fork values: %w", err)
+	}
+
+	beaconConfig := networkconfig.Beacon{
 		NetworkName:                          networkName,
 		CapellaForkVersion:                   capellaForkVersion,
 		SlotDuration:                         slotDuration,
@@ -176,5 +184,8 @@ func (gc *GoClient) fetchBeaconConfig() (*networkconfig.Beacon, error) {
 		TargetAggregatorsPerCommittee:        targetAggregatorsPerCommittee,
 		IntervalsPerSlot:                     intervalsPerSlot,
 		Genesis:                              *genesisResponse.Data,
-	}, nil
+		ForkEpochs:                           forkEpochs,
+	}
+
+	return beaconConfig, nil
 }

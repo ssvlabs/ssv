@@ -7,17 +7,24 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 // TestDataVersion verifies that DataVersion returns the correct version based on fork epochs.
 func TestDataVersion(t *testing.T) {
 	// Create a client with preset fork epochs.
 	client := &GoClient{
-		ForkEpochAltair:    phase0.Epoch(10),
-		ForkEpochBellatrix: phase0.Epoch(20),
-		ForkEpochCapella:   phase0.Epoch(30),
-		ForkEpochDeneb:     phase0.Epoch(40),
-		ForkEpochElectra:   phase0.Epoch(50),
+		beaconConfig: &networkconfig.Beacon{
+			ForkEpochs: &networkconfig.ForkEpochs{
+				Altair:    phase0.Epoch(10),
+				Bellatrix: phase0.Epoch(20),
+				Capella:   phase0.Epoch(30),
+				Deneb:     phase0.Epoch(40),
+				Electra:   phase0.Epoch(50),
+			},
+		},
 	}
 
 	tests := []struct {
@@ -39,7 +46,7 @@ func TestDataVersion(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := client.DataVersion(tc.epoch)
+		got := client.beaconConfig.DataVersion(tc.epoch)
 		if got != tc.expected {
 			t.Errorf("DataVersion(%d): expected %v, got %v", tc.epoch, tc.expected, got)
 		}
@@ -50,9 +57,6 @@ func TestDataVersion(t *testing.T) {
 func TestCheckForkValues(t *testing.T) {
 	tests := []struct {
 		name string
-		// initial fork values
-		initialAltair, initialBellatrix, initialCapella,
-		initialDeneb, initialElectra phase0.Epoch
 		// input response and expected outcomes
 		response    *api.Response[map[string]any]
 		expectedErr string
@@ -72,12 +76,7 @@ func TestCheckForkValues(t *testing.T) {
 			expectedErr: "spec response data is nil",
 		},
 		{
-			name:             "missing ALTAIR",
-			initialAltair:    FarFutureEpoch,
-			initialBellatrix: FarFutureEpoch,
-			initialCapella:   FarFutureEpoch,
-			initialDeneb:     FarFutureEpoch,
-			initialElectra:   FarFutureEpoch,
+			name: "missing ALTAIR",
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"BELLATRIX_FORK_EPOCH": uint64(20),
@@ -85,15 +84,10 @@ func TestCheckForkValues(t *testing.T) {
 					"DENEB_FORK_EPOCH":     uint64(40),
 				},
 			},
-			expectedErr: "ALTAIR fork epoch not known by chain",
+			expectedErr: "ALTAIR_FORK_EPOCH is not known by chain",
 		},
 		{
-			name:             "invalid type for ALTAIR",
-			initialAltair:    FarFutureEpoch,
-			initialBellatrix: FarFutureEpoch,
-			initialCapella:   FarFutureEpoch,
-			initialDeneb:     FarFutureEpoch,
-			initialElectra:   FarFutureEpoch,
+			name: "invalid type for ALTAIR",
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    "not a uint",
@@ -102,15 +96,10 @@ func TestCheckForkValues(t *testing.T) {
 					"DENEB_FORK_EPOCH":     uint64(40),
 				},
 			},
-			expectedErr: "failed to decode ALTAIR fork epoch",
+			expectedErr: "failed to decode ALTAIR_FORK_EPOCH",
 		},
 		{
-			name:             "valid update with initial zeros and electra provided",
-			initialAltair:    FarFutureEpoch,
-			initialBellatrix: FarFutureEpoch,
-			initialCapella:   FarFutureEpoch,
-			initialDeneb:     FarFutureEpoch,
-			initialElectra:   FarFutureEpoch,
+			name: "valid update with initial zeros and electra provided",
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    uint64(10),
@@ -127,12 +116,7 @@ func TestCheckForkValues(t *testing.T) {
 			expectedElectra:   phase0.Epoch(50),
 		},
 		{
-			name:             "optional ELECTRA not provided, remains unchanged",
-			initialAltair:    FarFutureEpoch,
-			initialBellatrix: FarFutureEpoch,
-			initialCapella:   FarFutureEpoch,
-			initialDeneb:     FarFutureEpoch,
-			initialElectra:   FarFutureEpoch,
+			name: "optional ELECTRA not provided, set to FarFutureEpoch",
 			response: &api.Response[map[string]any]{
 				Data: map[string]any{
 					"ALTAIR_FORK_EPOCH":    uint64(10),
@@ -145,48 +129,7 @@ func TestCheckForkValues(t *testing.T) {
 			expectedBellatrix: phase0.Epoch(20),
 			expectedCapella:   phase0.Epoch(30),
 			expectedDeneb:     phase0.Epoch(40),
-			expectedElectra:   FarFutureEpoch,
-		},
-		{
-			name:             "optional ELECTRA provided and can't change",
-			initialAltair:    10,
-			initialBellatrix: 20,
-			initialCapella:   30,
-			initialDeneb:     40,
-			initialElectra:   99,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    uint64(10),
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-					"ELECTRA_FORK_EPOCH":   uint64(50),
-				},
-			},
-			expectedAltair:    phase0.Epoch(10),
-			expectedBellatrix: phase0.Epoch(20),
-			expectedCapella:   phase0.Epoch(30),
-			expectedDeneb:     phase0.Epoch(40),
-			expectedElectra:   phase0.Epoch(50),
-			expectedErr:       "new ELECTRA fork epoch (50) doesn't match current value (99)",
-		},
-		{
-			name:             "optional ELECTRA provided, candidate greater than current",
-			initialAltair:    10,
-			initialBellatrix: 20,
-			initialCapella:   30,
-			initialDeneb:     40,
-			initialElectra:   50,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    uint64(10),
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-					"ELECTRA_FORK_EPOCH":   uint64(60),
-				},
-			},
-			expectedErr: "new ELECTRA fork epoch (60) doesn't match current value (50)",
+			expectedElectra:   networkconfig.FarFutureEpoch,
 		},
 	}
 
@@ -195,15 +138,20 @@ func TestCheckForkValues(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a client with initial fork values.
 			client := &GoClient{
-				ForkEpochAltair:    tc.initialAltair,
-				ForkEpochBellatrix: tc.initialBellatrix,
-				ForkEpochCapella:   tc.initialCapella,
-				ForkEpochDeneb:     tc.initialDeneb,
-				ForkEpochElectra:   tc.initialElectra,
+				beaconConfig: &networkconfig.Beacon{
+					ForkEpochs: &networkconfig.ForkEpochs{
+						Altair:    phase0.Epoch(10),
+						Bellatrix: phase0.Epoch(20),
+						Capella:   phase0.Epoch(30),
+						Deneb:     phase0.Epoch(40),
+						Electra:   phase0.Epoch(50),
+					},
+				},
 			}
 
-			err := client.checkForkValues(tc.response)
+			forkEpochs, err := client.getForkEpochs(tc.response)
 			if tc.expectedErr != "" {
+				require.EqualError(t, err, tc.expectedErr)
 				if err == nil {
 					t.Fatalf("expected error containing %q but got nil", tc.expectedErr)
 				}
@@ -212,26 +160,13 @@ func TestCheckForkValues(t *testing.T) {
 				}
 				return
 			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			require.NoError(t, err)
 
-			// Verify that the fork epoch fields have been updated as expected.
-			if client.ForkEpochAltair != tc.expectedAltair {
-				t.Errorf("ForkEpochAltair: expected %d, got %d", tc.expectedAltair, client.ForkEpochAltair)
-			}
-			if client.ForkEpochBellatrix != tc.expectedBellatrix {
-				t.Errorf("ForkEpochBellatrix: expected %d, got %d", tc.expectedBellatrix, client.ForkEpochBellatrix)
-			}
-			if client.ForkEpochCapella != tc.expectedCapella {
-				t.Errorf("ForkEpochCapella: expected %d, got %d", tc.expectedCapella, client.ForkEpochCapella)
-			}
-			if client.ForkEpochDeneb != tc.expectedDeneb {
-				t.Errorf("ForkEpochDeneb: expected %d, got %d", tc.expectedDeneb, client.ForkEpochDeneb)
-			}
-			if client.ForkEpochElectra != tc.expectedElectra {
-				t.Errorf("ForkEpochElectra: expected %d, got %d", tc.expectedElectra, client.ForkEpochElectra)
-			}
+			require.EqualValues(t, forkEpochs.Altair, tc.expectedAltair)
+			require.EqualValues(t, forkEpochs.Bellatrix, tc.expectedBellatrix)
+			require.EqualValues(t, forkEpochs.Capella, tc.expectedCapella)
+			require.EqualValues(t, forkEpochs.Deneb, tc.expectedDeneb)
+			require.EqualValues(t, forkEpochs.Electra, tc.expectedElectra)
 		})
 	}
 }

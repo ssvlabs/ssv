@@ -137,6 +137,10 @@ func TestTimeouts(t *testing.T) {
 		fastServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout / 2)
 			switch r.URL.Path {
+			case "/eth/v1/config/spec":
+			case "/eth/v1/beacon/genesis":
+			case "/eth/v1/node/syncing":
+			case "/eth/v1/node/version":
 			case "/eth/v2/debug/beacon/states/head":
 				time.Sleep(longTimeout / 2)
 			}
@@ -153,47 +157,6 @@ func TestTimeouts(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
-}
-
-func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
-	ctx := context.Background()
-	version := phase0.Version{0, 0, 0, 0}
-	callback := func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-		if r.URL.Path == "/eth/v1/beacon/genesis" {
-			resp2 := json.RawMessage(fmt.Sprintf(`{"data": {
-				"genesis_time": "1606824023",
-				"genesis_validators_root": "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95",
-				"genesis_fork_version": "%s"
-			}}`, version))
-			return resp2, nil
-		}
-		return resp, nil
-	}
-
-	server := tests.MockServer(callback)
-	defer server.Close()
-
-	c, err := mockClient(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond)
-	require.NoError(t, err, "failed to create client")
-	client := c.(*GoClient)
-
-	output, err := client.assertSameGenesisVersion(version)
-	require.Equal(t, version, output)
-	require.NoError(t, err, "failed to assert same genesis version: %s", err)
-}
-
-func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
-	ctx := context.Background()
-	server := tests.MockServer(nil)
-	defer server.Close()
-	c, err := mockClient(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond)
-	require.NoError(t, err, "failed to create client")
-	client := c.(*GoClient)
-	forkVersion := phase0.Version{0x01, 0x02, 0x03, 0x04}
-
-	output, err := client.assertSameGenesisVersion(forkVersion)
-	require.Equal(t, phase0.Version{}, output, "expected genesis version to be %s, got %s", phase0.Version{}, output)
-	require.Error(t, err, "expected error when genesis versions are different")
 }
 
 func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {

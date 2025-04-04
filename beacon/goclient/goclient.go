@@ -18,7 +18,6 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
@@ -116,12 +115,15 @@ const (
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log          *zap.Logger
-	ctx          context.Context
-	beaconConfig *networkconfig.Beacon // using pointer to make sure it's fetched
-	clients      []Client
-	multiClient  MultiClient
-	specssv.VersionCalls
+	log *zap.Logger
+	ctx context.Context
+
+	beaconConfigMu   sync.Mutex
+	beaconConfig     *networkconfig.Beacon
+	beaconConfigInit chan struct{}
+
+	clients     []Client
+	multiClient MultiClient
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -163,14 +165,6 @@ type GoClient struct {
 
 	lastProcessedHeadEventSlotLock sync.Mutex
 	lastProcessedHeadEventSlot     phase0.Slot
-
-	genesisForkVersion phase0.Version // TODO get from config
-	ForkLock           sync.RWMutex
-	ForkEpochElectra   phase0.Epoch // TODO get from config
-	ForkEpochDeneb     phase0.Epoch // TODO get from config
-	ForkEpochCapella   phase0.Epoch // TODO get from config
-	ForkEpochBellatrix phase0.Epoch // TODO get from config
-	ForkEpochAltair    phase0.Epoch // TODO get from config
 }
 
 // New init new client and go-client instance
@@ -192,6 +186,7 @@ func New(
 	client := &GoClient{
 		log:                                logger.Named("consensus_client"),
 		ctx:                                opt.Context,
+		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
 		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
 		commonTimeout:                      commonTimeout,
@@ -200,12 +195,6 @@ func New(
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{EventTopicHead},
-		// Initialize forks with FAR_FUTURE_EPOCH.
-		ForkEpochAltair:    math.MaxUint64,
-		ForkEpochBellatrix: math.MaxUint64,
-		ForkEpochCapella:   math.MaxUint64,
-		ForkEpochDeneb:     math.MaxUint64,
-		ForkEpochElectra:   math.MaxUint64,
 	}
 
 	if opt.BeaconNodeAddr == "" {
@@ -219,6 +208,8 @@ func New(
 		}
 	}
 
+	// Despite allowing delayed start, addSingleClient attempts to connect to node before returning,
+	// so active clients should be up before the initMultiClient call
 	err := client.initMultiClient(opt.Context)
 	if err != nil {
 		logger.Error("Consensus multi client initialization failed",
@@ -231,23 +222,27 @@ func New(
 
 	client.nodeSyncingFn = client.nodeSyncing
 
-	beaconConfig, err := client.fetchBeaconConfig()
-	if err != nil {
-		return nil, fmt.Errorf("fetch spec config: %w", err)
+	ctx, cancel := context.WithTimeout(client.ctx, client.longTimeout)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("timed out awaiting config initialization: %w", ctx.Err())
+	case <-client.beaconConfigInit:
 	}
 
-	client.beaconConfig = beaconConfig
-
-	client.genesisForkVersion = beaconConfig.GenesisForkVersion()
+	if client.beaconConfig == nil {
+		return nil, fmt.Errorf("no beacon config set")
+	}
 
 	client.blockRootToSlotCache = ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
-		uint64(beaconConfig.SlotsPerEpoch) * BlockRootToSlotCacheCapacityEpochs),
+		uint64(client.beaconConfig.SlotsPerEpoch) * BlockRootToSlotCacheCapacityEpochs),
 	)
 
 	client.attestationDataCache = ttlcache.New(
 		// we only fetch attestation data during the slot of the relevant duty (and never later),
 		// hence caching it for 2 slots is sufficient
-		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * beaconConfig.SlotDuration),
+		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * client.beaconConfig.SlotDuration),
 	)
 
 	// Start automatic expired item deletion for attestationDataCache.
@@ -310,76 +305,46 @@ func (gc *GoClient) addSingleClient(ctx context.Context, addr string) error {
 func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	return &eth2clienthttp.Hooks{
 		OnActive: func(ctx context.Context, s *eth2clienthttp.Service) {
+			logger := gc.log.With(
+				fields.Name(s.Name()),
+				zap.String("address", s.Address()),
+			)
+
 			// If err is nil, nodeVersionResp is never nil.
 			nodeVersionResp, err := s.NodeVersion(ctx, &api.NodeVersionOpts{})
 			if err != nil {
-				gc.log.Error(clResponseErrMsg,
-					zap.String("address", s.Address()),
+				logger.Error(clResponseErrMsg,
 					zap.String("api", "NodeVersion"),
 					zap.Error(err),
 				)
 				return
 			}
 
-			gc.log.Info("consensus client connected",
-				fields.Name(s.Name()),
-				fields.Address(s.Address()),
+			logger.Info("consensus client connected",
 				zap.String("client", string(ParseNodeClient(nodeVersionResp.Data))),
 				zap.String("version", nodeVersionResp.Data),
 			)
 
-			genesis, err := s.Genesis(ctx, &api.GenesisOpts{})
+			beaconConfig, err := gc.fetchBeaconConfig(s)
 			if err != nil {
-				gc.log.Error(clResponseErrMsg,
+				logger.Error(clResponseErrMsg,
 					zap.String("address", s.Address()),
-					zap.String("api", "Genesis"),
+					zap.String("api", "fetchBeaconConfig"),
 					zap.Error(err),
 				)
 				return
 			}
 
-			if expected, err := gc.assertSameGenesisVersion(genesis.Data.GenesisForkVersion); err != nil {
-				gc.log.Fatal("client returned unexpected genesis fork version, make sure all clients use the same Ethereum network",
+			currentConfig, err := gc.applyBeaconConfig(s.Address(), beaconConfig)
+			if err != nil {
+				logger.Fatal("client returned unexpected beacon config, make sure all clients use the same Ethereum network",
 					zap.String("address", s.Address()),
-					zap.Any("client_genesis", genesis.Data.GenesisForkVersion),
-					zap.Any("expected_genesis", expected),
+					zap.Any("client_config", beaconConfig),
+					zap.Any("expected_config", currentConfig),
 					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
 			}
-
-			spec, err := s.Spec(ctx, &api.SpecOpts{})
-			if err != nil {
-				gc.log.Error(clResponseErrMsg,
-					zap.String("address", s.Address()),
-					zap.String("api", "Spec"),
-					zap.Error(err),
-				)
-				return
-			}
-
-			if err := gc.checkForkValues(spec); err != nil {
-				gc.log.Error("failed to check fork values",
-					zap.String("address", s.Address()),
-					zap.Error(err),
-				)
-				return
-			}
-
-			epoch := gc.beaconConfig.EstimatedCurrentEpoch()
-			dataVersion := gc.DataVersion(epoch)
-
-			gc.ForkLock.RLock()
-			gc.log.Info("retrieved fork epochs",
-				zap.String("node_addr", s.Address()),
-				zap.Uint64("current_data_version", uint64(dataVersion)),
-				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
-				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
-				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),
-				zap.Uint64("deneb", uint64(gc.ForkEpochDeneb)),
-				zap.Uint64("electra", uint64(gc.ForkEpochElectra)),
-			)
-			gc.ForkLock.RUnlock()
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",
@@ -402,18 +367,30 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	}
 }
 
-// assertSameGenesis checks if genesis is same.
-// Clients may have different values returned by Spec call,
-// so we decided that it's best to assert that GenesisForkVersion is the same.
-// To add more assertions, we check the whole apiv1.Genesis (GenesisTime and GenesisValidatorsRoot)
-// as they should be same too.
-func (gc *GoClient) assertSameGenesisVersion(genesisVersion phase0.Version) (phase0.Version, error) {
-	if gc.genesisForkVersion != genesisVersion {
-		fmt.Printf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
-		return gc.genesisForkVersion, fmt.Errorf("genesis fork version mismatch, expected %v, got %v", gc.genesisForkVersion, genesisVersion)
+func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkconfig.Beacon) (networkconfig.Beacon, error) {
+	gc.beaconConfigMu.Lock()
+	defer gc.beaconConfigMu.Unlock()
+
+	if gc.beaconConfig == nil {
+		gc.beaconConfig = &beaconConfig
+		close(gc.beaconConfigInit)
+
+		epoch := beaconConfig.EstimatedCurrentEpoch()
+		dataVersion := beaconConfig.DataVersion(epoch)
+
+		gc.log.Info("beacon config has been initialized",
+			zap.String("beacon_config", beaconConfig.String()),
+			zap.Uint64("current_data_version", uint64(dataVersion)),
+			fields.Address(nodeAddress),
+		)
+		return beaconConfig, nil
 	}
 
-	return gc.genesisForkVersion, nil
+	if !gc.beaconConfig.Apply(beaconConfig) {
+		return *gc.beaconConfig, fmt.Errorf("beacon config misalign, current %v, got %v", gc.beaconConfig, beaconConfig)
+	}
+
+	return *gc.beaconConfig, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
