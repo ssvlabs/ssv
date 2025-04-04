@@ -27,16 +27,17 @@ ssv-signer is a lightweight remote signing service inspired by Web3Signer. It wi
 #### API Endpoints
 
 - `POST /v1/validators` - Receives an encrypted validator share and a corresponding validator public key. Verifies the validity of the provided keys. Decrypts the share and stores it in the configured Web3Signer instance. Adds the decrypted shares directly into the Web3Signer instance, leveraging its built-in capabilities, including the slashing protection database.
-    - Calls https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT
+    - Calls https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT and uses the same response/request format.
     - Requires creating a keystore for the SSV share (search `keystorev4` package)
     - Note: keystore private key is the share private key, so the corresponding public key should be the share public key
     - Slashing data may not be necessary
     - Note: if `ssv-signer` can't decrypt the share, return an error, in ssv-node like today, don't prevent saving it.
 
 - `DELETE /v1/validators` - remove a share from the ssv-signer and web3signer
-    - Calls https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_DELETE
+    - Calls https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_DELETE and uses the same response/request format
 
 - `POST /v1/validators/sign/:identifier` - Mimics the Web3Signer signing endpoint. Accepts a share public key and payload to sign (following the Web3Signer API specifications). Communicates with the Web3Signer instance to generate and return the signature, effectively acting as a proxy.
+    - Calls https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Signing/operation/ETH2_SIGN and uses the same response/request format
     - Note: public key is share public key and not validator public key
 
 - `GET /v1/operator/identity` - returns RSA public key, used by the node on startup to determine its own public key and therefore operator ID

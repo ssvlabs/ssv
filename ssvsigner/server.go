@@ -274,7 +274,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	logger = logger.With(zap.Stringer("pubkey", blsPubKey))
+	logger = logger.With(fields.PubKey(blsPubKey[:]))
 
 	resp, err := r.remoteSigner.Sign(ctx, blsPubKey, req)
 	if err != nil {

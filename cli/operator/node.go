@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -157,6 +158,10 @@ var StartNodeCmd = &cobra.Command{
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
 			logger.Info("using ssv-signer for signing")
 
+			if _, err := url.ParseRequestURI(cfg.SSVSignerEndpoint); err != nil {
+				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
+			}
+
 			ssvSignerClient = ssvsigner.NewClient(cfg.SSVSignerEndpoint, ssvsigner.WithLogger(logger))
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
@@ -213,7 +218,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 
-		logger.Info("successfully loaded operator keys", zap.String("pubkey", operatorPubKeyBase64))
+		logger.Info("successfully loaded operator keys", zap.String(fields.FieldPubKey, operatorPubKeyBase64))
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
@@ -598,13 +603,13 @@ func ensureNoMissingKeys(
 }
 
 func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPrivateKey, []byte, error) {
-	// nolint: gosec
+	// #nosec G304
 	encryptedJSON, err := os.ReadFile(privKeyFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not read PEM file: %w", err)
 	}
 
-	// nolint: gosec
+	// #nosec G304
 	keyStorePassword, err := os.ReadFile(passwordFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not read password file: %w", err)
@@ -637,20 +642,17 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 		usingPrivKey = true
 	}
 
-	var errorMsg string
-	if usingSSVSigner && (usingKeystore || usingPrivKey) {
-		errorMsg = "cannot enable both remote signing (SSVSignerEndpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)"
-	} else if usingKeystore && usingPrivKey {
-		errorMsg = "cannot enable both OperatorPrivateKey and PrivateKeyFile"
-	}
-
-	if errorMsg != "" {
-		logger.Fatal(errorMsg,
-			zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint),
+	logger = logger.
+		With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint),
 			zap.String("private_key_file", cfg.KeyStore.PrivateKeyFile),
 			zap.String("password_file", cfg.KeyStore.PasswordFile),
 			zap.Int("operator_private_key_len", len(cfg.OperatorPrivateKey)), // not exposing the private key
 		)
+
+	if usingSSVSigner && (usingKeystore || usingPrivKey) {
+		logger.Fatal("cannot enable both remote signing (SSVSignerEndpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)")
+	} else if usingKeystore && usingPrivKey {
+		logger.Fatal("cannot enable both OperatorPrivateKey and PrivateKeyFile")
 	}
 
 	return usingSSVSigner, usingKeystore, usingPrivKey
