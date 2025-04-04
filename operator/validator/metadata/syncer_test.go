@@ -10,6 +10,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -40,7 +41,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
-	validatorMetadata := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
+	validatorMetadata := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, ExitEpoch: goclient.FarFutureEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
 
 	pubKey := spectypes.ValidatorPK{0x1}
 
@@ -442,6 +443,7 @@ func TestSyncer_Stream(t *testing.T) {
 			},
 			Status:          eth2apiv1.ValidatorStateActiveOngoing,
 			ActivationEpoch: 0,
+			ExitEpoch:       0,
 			Liquidated:      false,
 		}
 
@@ -475,6 +477,7 @@ func TestSyncer_Stream(t *testing.T) {
 					Index:           1,
 					Status:          eth2apiv1.ValidatorStateActiveOngoing,
 					ActivationEpoch: 0,
+					ExitEpoch:       0,
 				},
 			}
 
