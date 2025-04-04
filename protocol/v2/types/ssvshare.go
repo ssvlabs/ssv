@@ -121,8 +121,8 @@ func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
 	}
 
 	// Compute the CommitteeID since it's not yet set.
-	ids := make([]spectypes.OperatorID, len(s.Share.Committee))
-	for i, v := range s.Share.Committee {
+	ids := make([]spectypes.OperatorID, len(s.Committee))
+	for i, v := range s.Committee {
 		ids[i] = v.Signer
 	}
 	id := ComputeCommitteeID(ids)
