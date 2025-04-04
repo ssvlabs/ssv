@@ -2,6 +2,7 @@ global:
   LogLevel: debug
 
 db:
+  Engine: pebble
   Path: ./data/db
 
 eth2:
@@ -26,6 +27,7 @@ ssv:
     SignatureCollectionTimeout: 5s
     FullNode: true
     Exporter: true
+    ExporterFull: true
 
 GenerateOperatorPrivateKey: true
 
