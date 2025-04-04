@@ -1,10 +1,31 @@
 #!/bin/bash
+set -eo pipefail
 
-# Enable BuildKit
+# Multi-architecture build script for SSV node using Dockerfile.multiarch
+
 export DOCKER_BUILDKIT=1
+export DOCKER_CLI_EXPERIMENTAL=enabled
 
-# Extract the Git tag from the SOURCE_COMMIT
-APP_VERSION=$(git describe --tags "${SOURCE_COMMIT}")
+if [ -n "${SOURCE_COMMIT}" ]; then
+  APP_VERSION=$(git describe --tags "${SOURCE_COMMIT}")
+  echo "Using SOURCE_COMMIT=${SOURCE_COMMIT}"
+else
+  # Extract Git tag when running locally
+  APP_VERSION=$(git describe --tags 2>/dev/null || echo "latest")
+fi
 
-# Pass the Git tag as a build argument
-docker build --build-arg APP_VERSION="${APP_VERSION}" -t "${IMAGE_NAME}" .
+echo "Build Configuration:"
+echo "  Image: ${IMAGE_NAME}"
+echo "  Commit: ${SOURCE_COMMIT}"
+echo "  Version: ${APP_VERSION}"
+
+docker buildx rm ssv-multiplatform-builder 2>/dev/null || true
+docker buildx create --name ssv-multiplatform-builder --driver docker-container --use
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --tag "${IMAGE_NAME}" \
+  --build-arg APP_VERSION="${APP_VERSION}" \
+  --file Dockerfile.multiarch \
+  --push \
+  .
