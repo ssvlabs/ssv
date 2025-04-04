@@ -1,6 +1,7 @@
 package dirk
 
 import (
+	"context"
 	"errors"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -23,9 +24,10 @@ type Client interface {
 	ListAccounts() ([]Account, error)
 
 	// Sign signs data using the specified account
+	// ctx: The context for the request
 	// pubKey: The public key identifying the validator share
 	// data: The signing root (hash) to be signed
-	Sign(pubKey []byte, data []byte) ([]byte, error)
+	Sign(ctx context.Context, pubKey []byte, data []byte) ([]byte, error)
 
 	// Close closes the connection to Dirk
 	Close() error

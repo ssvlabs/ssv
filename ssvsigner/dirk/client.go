@@ -99,10 +99,11 @@ func (g *GRPCClient) ListAccounts() ([]Account, error) {
 }
 
 // Sign signs data using a specified public key
+// - ctx: The context for the gRPC call
 // - pubKey: The public key that identifies the validator share
 // - data: The signing root (hash) to be signed
 // Returns the signature as a byte array
-func (g *GRPCClient) Sign(pubKey []byte, data []byte) ([]byte, error) {
+func (g *GRPCClient) Sign(ctx context.Context, pubKey []byte, data []byte) ([]byte, error) {
 	req := &pb.SignRequest{
 		Id: &pb.SignRequest_PublicKey{
 			PublicKey: pubKey,
@@ -111,7 +112,6 @@ func (g *GRPCClient) Sign(pubKey []byte, data []byte) ([]byte, error) {
 	}
 
 	// Call the Dirk signer service
-	ctx := context.Background()
 	resp, err := g.signerClient.Sign(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("dirk signing failed: %w", err)

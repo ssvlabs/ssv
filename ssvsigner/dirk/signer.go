@@ -85,7 +85,7 @@ func (d *Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, signing
 	// Convert signing root to byte array
 	signRootBytes := signingRoot[:]
 
-	signature, err := d.client.Sign(pubKeyBytes, signRootBytes)
+	signature, err := d.client.Sign(ctx, pubKeyBytes, signRootBytes)
 	if err != nil {
 		return phase0.BLSSignature{}, fmt.Errorf("failed to sign data: %w", err)
 	}
