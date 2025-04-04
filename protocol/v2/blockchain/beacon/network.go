@@ -7,7 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
+//go:generate go tool -modfile=../../../../tool.mod mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
 
 // Network is a beacon chain network.
 type Network struct {

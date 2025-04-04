@@ -136,6 +136,7 @@ func New(
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeCommittees:        hashmap.New[string, validatorStatus](),
+		activeSubnets:           make([]byte, commons.SubnetsCount),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,

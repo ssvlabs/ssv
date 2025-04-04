@@ -2,6 +2,7 @@ package kv
 
 import (
 	"errors"
+
 	"github.com/cockroachdb/pebble"
 
 	"github.com/dgraph-io/badger/v4"
@@ -100,7 +101,7 @@ func (t *pebbleTxn) Commit() error {
 }
 
 func (t *pebbleTxn) Discard() {
-	t.batch.Close()
+	_ = t.batch.Close()
 }
 
 func (t *pebbleTxn) Set(prefix []byte, key []byte, value []byte) error {
@@ -123,12 +124,12 @@ func (t *pebbleTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, er
 func (t *pebbleTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	value, closer, err := t.batch.Get(append(prefix, key...))
 	if err != nil {
-		if err == pebble.ErrNotFound {
+		if errors.Is(err, pebble.ErrNotFound) {
 			return basedb.Obj{}, false, nil
 		}
 		return basedb.Obj{}, true, err
 	}
-	defer closer.Close()
+	defer func() { _ = closer.Close() }()
 	valCopy := make([]byte, len(value))
 	copy(valCopy, value)
 	return basedb.Obj{
@@ -142,7 +143,7 @@ func (t *pebbleTxn) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.O
 		fullKey := append(prefix, key...)
 		value, closer, err := t.batch.Get(fullKey)
 		if err != nil {
-			if err == pebble.ErrNotFound {
+			if errors.Is(err, pebble.ErrNotFound) {
 				continue
 			}
 			return err
@@ -169,7 +170,7 @@ func (t *pebbleTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error 
 		return err
 	}
 
-	defer iter.Close()
+	defer func() { _ = iter.Close() }()
 	i := 0
 	// SeekPrefixGE starts prefix iteration mode.
 	for iter.First(); iter.Valid(); iter.Next() {

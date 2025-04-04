@@ -8,6 +8,8 @@ global:
 db:
   # Path to a persistent directory to store the node's database.
   Path: ./data/db
+  # Type is the database type, currently only badger and pebble are supported
+  Engine: badger
 
 ssv:
   # The SSV network to join to

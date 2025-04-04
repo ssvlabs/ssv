@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -16,6 +17,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/operator/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -207,9 +209,16 @@ func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectype
 		panic(err)
 	}
 
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return slotticker.New(logger, slotticker.Config{
+			SlotDuration: 12 * time.Second,
+			GenesisTime:  time.Now(),
+		})
+	}
+
 	storageMap := qbftstorage.NewStores()
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(logger, db, role, networkconfig.HoleskyStage, nil))
+		storageMap.Add(role, qbftstorage.New(logger, db, role, networkconfig.HoleskyStage, slotTickerProvider))
 	}
 
 	return sExporter, storageMap

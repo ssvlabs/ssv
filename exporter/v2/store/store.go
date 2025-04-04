@@ -13,8 +13,7 @@ import (
 
 const (
 	validatorDutyTraceKey      = "vd"
-	commiteeDutyTraceKey       = "cd"
-	commiteeOperatorIndexKey   = "ci"
+	committeeDutyTraceKey      = "cd"
 	validatorCommitteeIndexKey = "vc"
 )
 
@@ -218,16 +217,16 @@ func (s *DutyTraceStore) makeValidatorPrefix(slot phase0.Slot, role spectypes.Be
 
 // slot only
 func (s *DutyTraceStore) makeCommitteeSlotPrefix(slot phase0.Slot) []byte {
-	prefix := make([]byte, 0, len(commiteeDutyTraceKey)+4)
-	prefix = append(prefix, []byte(commiteeDutyTraceKey)...)
+	prefix := make([]byte, 0, len(committeeDutyTraceKey)+4)
+	prefix = append(prefix, []byte(committeeDutyTraceKey)...)
 	prefix = append(prefix, slotToByteSlice(slot)...)
 	return prefix
 }
 
 // slot + role
 func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.CommitteeID) []byte {
-	prefix := make([]byte, 0, len(commiteeDutyTraceKey)+4+32)
-	prefix = append(prefix, []byte(commiteeDutyTraceKey)...)
+	prefix := make([]byte, 0, len(committeeDutyTraceKey)+4+32)
+	prefix = append(prefix, []byte(committeeDutyTraceKey)...)
 	prefix = append(prefix, slotToByteSlice(slot)...)
 	prefix = append(prefix, id[:]...)
 	return prefix

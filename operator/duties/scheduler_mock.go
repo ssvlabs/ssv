@@ -27,7 +27,6 @@ import (
 type MockDutiesExecutor struct {
 	ctrl     *gomock.Controller
 	recorder *MockDutiesExecutorMockRecorder
-	isgomock struct{}
 }
 
 // MockDutiesExecutorMockRecorder is the mock recorder for MockDutiesExecutor.
@@ -75,7 +74,6 @@ func (mr *MockDutiesExecutorMockRecorder) ExecuteDuties(ctx, logger, duties any)
 type MockDutyExecutor struct {
 	ctrl     *gomock.Controller
 	recorder *MockDutyExecutorMockRecorder
-	isgomock struct{}
 }
 
 // MockDutyExecutorMockRecorder is the mock recorder for MockDutyExecutor.
@@ -123,7 +121,6 @@ func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(ctx, logger, duty any) *gomo
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNodeMockRecorder
-	isgomock struct{}
 }
 
 // MockBeaconNodeMockRecorder is the mock recorder for MockBeaconNode.
@@ -234,7 +231,6 @@ func (mr *MockBeaconNodeMockRecorder) SyncCommitteeDuties(ctx, epoch, indices an
 type MockExecutionClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutionClientMockRecorder
-	isgomock struct{}
 }
 
 // MockExecutionClientMockRecorder is the mock recorder for MockExecutionClient.
@@ -273,7 +269,6 @@ func (mr *MockExecutionClientMockRecorder) BlockByNumber(ctx, blockNumber any) *
 type MockValidatorProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorProviderMockRecorder
-	isgomock struct{}
 }
 
 // MockValidatorProviderMockRecorder is the mock recorder for MockValidatorProvider.
@@ -340,7 +335,6 @@ func (mr *MockValidatorProviderMockRecorder) Validator(pubKey any) *gomock.Call 
 type MockValidatorController struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorControllerMockRecorder
-	isgomock struct{}
 }
 
 // MockValidatorControllerMockRecorder is the mock recorder for MockValidatorController.

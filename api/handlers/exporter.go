@@ -210,7 +210,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting all committee duties: %w", err))
 			}
-			all = append(duties, duties...)
+			all = append(all, duties...)
 		}
 		return api.Render(w, r, toCommitteeTraceResponse(all))
 	}

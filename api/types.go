@@ -22,20 +22,27 @@ func (h *Hex) UnmarshalJSON(data []byte) error {
 	if len(data) < 2 || data[0] != '"' || data[len(data)-1] != '"' {
 		return errors.New("invalid hex string")
 	}
+
 	str := string(data[1 : len(data)-1])
+
 	return h.Bind(str)
 }
 
 func (h *Hex) Bind(value string) error {
 	if value == "" {
+		*h = Hex{}
 		return nil
 	}
+
 	value = strings.TrimPrefix(value, "0x")
 	b, err := hex.DecodeString(value)
+
 	if err != nil {
 		return err
 	}
+
 	*h = b
+
 	return nil
 }
 
