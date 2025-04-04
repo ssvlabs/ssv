@@ -36,6 +36,9 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	if err != nil {
 		return err
 	}
+
+	i.metrics.RecordRoundChange(ctx, newRound, reasonTimeout)
+
 	logger.Debug("📢 broadcasting round change message",
 		fields.Round(i.State.Round),
 		fields.Root(root),
