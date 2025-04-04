@@ -9,7 +9,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
-//go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
 
 type dutyHandler interface {
 	Setup(
