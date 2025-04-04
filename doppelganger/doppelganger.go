@@ -17,7 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
 
 // initialRemainingDetectionEpochs represents the starting number of epochs
 // a validator must pass without liveness detection before being considered safe to sign.
@@ -174,15 +174,13 @@ func (h *handler) Start(ctx context.Context) error {
 	var startEpoch, previousEpoch phase0.Epoch
 	firstRun := true
 	ticker := h.slotTickerProvider()
-	slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.network.EstimatedEpochAtSlot(currentSlot)
 
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
@@ -191,10 +189,11 @@ func (h *handler) Start(ctx context.Context) error {
 			validatorIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(currentEpoch))
 			h.updateDoppelgangerState(validatorIndices)
 
+			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch
 			// Perform liveness checks during the first run or at the last slot of the epoch.
 			// This ensures that the beacon node has had enough time to observe blocks and attestations,
 			// preventing delays in marking a validator as safe.
-			if (!firstRun && uint64(currentSlot)%slotsPerEpoch != slotsPerEpoch-1) || startEpoch == currentEpoch {
+			if (!firstRun && currentSlot%slotsPerEpoch != slotsPerEpoch-1) || startEpoch == currentEpoch {
 				continue
 			}
 

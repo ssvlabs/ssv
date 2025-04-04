@@ -79,7 +79,7 @@ func TestNewController(t *testing.T) {
 	require.NoError(t, err)
 
 	controllerOptions := ControllerOptions{
-		NetworkConfig:     networkconfig.TestNetwork,
+		NetworkConfig:     networkconfig.TestingNetworkConfig,
 		Beacon:            bc,
 		FullNode:          true,
 		Network:           network,
@@ -248,7 +248,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	wg.Add(3)
 
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	identifier := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
@@ -508,20 +508,20 @@ func TestSetupValidators(t *testing.T) {
 			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeeMap))
 
-			bc.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
+			bc.EXPECT().GetBeaconNetwork().Return(spectypes.BeaconTestNetwork).AnyTimes()
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
 				network:           network,
-				networkConfig:     networkconfig.TestNetwork,
+				networkConfig:     networkconfig.TestingNetworkConfig,
 				sharesStorage:     sharesStorage,
 				operatorDataStore: operatorDataStore,
 				recipientsStorage: recipientStorage,
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorOptions: validator.Options{
-					NetworkConfig: networkconfig.TestNetwork,
+					NetworkConfig: networkconfig.TestingNetworkConfig,
 					Storage:       storageMap,
 				},
 			}
@@ -574,8 +574,7 @@ func TestGetValidatorStats(t *testing.T) {
 	bc := beacon.NewMockBeaconNode(ctrl)
 	passedEpoch := phase0.Epoch(1)
 
-	netCfg := networkconfig.TestNetwork
-	bc.EXPECT().GetBeaconNetwork().Return(netCfg.Beacon.GetBeaconNetwork()).AnyTimes()
+	bc.EXPECT().GetBeaconNetwork().Return(spectypes.BeaconTestNetwork).AnyTimes()
 
 	t.Run("Test with multiple operators", func(t *testing.T) {
 		// Setup for this subtest
@@ -789,7 +788,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	// Default to test network config if not provided.
 	if opts.networkConfig.Name == "" {
-		opts.networkConfig = networkconfig.TestNetwork
+		opts.networkConfig = networkconfig.TestingNetworkConfig
 	}
 
 	return controller{
@@ -948,7 +947,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
+	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestingNetworkConfig, "")
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }

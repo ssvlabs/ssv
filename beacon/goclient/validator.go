@@ -2,17 +2,19 @@ package goclient
 
 import (
 	"fmt"
-	"github.com/cespare/xxhash/v2"
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	"golang.org/x/exp/maps"
 	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/cespare/xxhash/v2"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 type validatorRegistration struct {
@@ -68,14 +70,18 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 	return nil
 }
 
-// registrationSubmitter periodically submits validator registrations in batches, 1 batch per slot
+// RegistrationSubmitter periodically submits validator registrations in batches, 1 batch per slot
 // making sure
 //   - every new(fresh) validator registration is submitted at the earliest slot possible once
 //     GoClient is aware of it
 //   - every validator registration GoClient is aware of is submitted at least once during 1 epoch
 //     period
-func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
-	ticker := slotTickerProvider()
+func (gc *GoClient) RegistrationSubmitter(operatorDataStore operatordatastore.OperatorDataStore) {
+	ticker := slotticker.New(gc.log, slotticker.Config{
+		SlotDuration: gc.BeaconConfig().SlotDuration,
+		GenesisTime:  gc.BeaconConfig().GenesisTime(),
+	})
+
 	for {
 		select {
 		case <-gc.ctx.Done():
@@ -97,9 +103,9 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 				}
 
 				// Distribute the registrations evenly across the epoch based on the pubkeys.
-				slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
+				slotInEpoch := (currentSlot) % gc.beaconConfig.SlotsPerEpoch
 				validatorDescriptor := xxhash.Sum64(validatorPk[:])
-				shouldSubmit := validatorDescriptor%gc.network.SlotsPerEpoch() == slotInEpoch
+				shouldSubmit := phase0.Slot(validatorDescriptor)%gc.beaconConfig.SlotsPerEpoch == slotInEpoch
 
 				if r.new || shouldSubmit {
 					r.new = false

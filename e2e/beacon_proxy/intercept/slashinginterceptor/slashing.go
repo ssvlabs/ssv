@@ -73,7 +73,7 @@ func New(
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
 	}
 
-	if len(s.validators) > int(network.SlotsPerEpoch()) {
+	if len(s.validators) > int(network.SlotsPerEpoch) {
 		panic(">32 validators not supported yet")
 	}
 

@@ -5,23 +5,22 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
 	"github.com/ssvlabs/ssv/registry/storage"
-	"go.uber.org/zap"
 )
 
 // DefaultScoringConfig returns the default scoring config
 func DefaultScoringConfig() *ScoringConfig {
 	return &ScoringConfig{
 		IPColocationWeight: -35.11,
-		OneEpochDuration:   (12 * time.Second) * 32,
 	}
 }
 
@@ -206,7 +205,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		logger.Debug("got filtered committees for score params")
 
 		// Create topic options
-		opts := params.NewSubnetTopicOpts(totalValidators, commons.SubnetsCount, topicCommittees)
+		opts := params.NewSubnetTopicOpts(cfg.NetworkConfig, totalValidators, commons.SubnetsCount, topicCommittees)
 
 		// Generate topic parameters
 		tp, err := params.TopicParams(opts)
