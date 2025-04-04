@@ -31,32 +31,28 @@ var (
 
 	requestDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("request.duration"),
+			observability.InstrumentName(observabilityNamespace, "request.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("execution client request duration in seconds"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	syncDistanceGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("sync.distance"),
+			observability.InstrumentName(observabilityNamespace, "sync.distance"),
 			metric.WithUnit("{block}"),
 			metric.WithDescription("execution client sync distance which is a delta between highest and current blocks")))
 
 	clientStatusGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("sync.status"),
+			observability.InstrumentName(observabilityNamespace, "sync.status"),
 			metric.WithDescription("execution client sync status")))
 
 	lastProcessedBlockGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("sync.last_processed_block"),
+			observability.InstrumentName(observabilityNamespace, "sync.last_processed_block"),
 			metric.WithUnit("{block_number}"),
 			metric.WithDescription("last processed block by execution client")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordRequestDuration(ctx context.Context, serverAddr string, duration time.Duration) {
 	requestDurationHistogram.Record(
