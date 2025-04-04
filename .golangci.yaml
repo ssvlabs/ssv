@@ -213,19 +213,16 @@ issues:
   max-same-issues: 0
   uniq-by-line: true
   new: false
-  fix: true
+  fix: false
 formatters:
   settings:
-    gci:
-      sections:
-        - prefix(github.com/ssvlabs/ssv)
     gofmt:
       simplify: true
     gofumpt:
       extra-rules: false
     goimports:
       local-prefixes:
-        - github.com/ssvlabs/ssv
+        - github.com/ssvlabs/ssv/
   exclusions:
     generated: lax
     paths:

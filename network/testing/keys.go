@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/network"

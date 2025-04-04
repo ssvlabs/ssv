@@ -5,10 +5,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 func TestInstances_FindInstance(t *testing.T) {

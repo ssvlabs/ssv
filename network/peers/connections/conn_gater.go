@@ -4,8 +4,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/ssvlabs/ssv/utils/ttl"
-
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -16,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 const (

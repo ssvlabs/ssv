@@ -17,9 +17,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
+
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 var share1 = &ssvtypes.SSVShare{

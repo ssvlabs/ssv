@@ -4,10 +4,11 @@ import (
 	"math"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	ssvpeers "github.com/ssvlabs/ssv/network/peers"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"go.uber.org/zap"
 )
 
 // ReportValidation reports the result for the given message

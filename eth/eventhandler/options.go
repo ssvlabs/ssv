@@ -1,8 +1,9 @@
 package eventhandler
 
 import (
-	"github.com/ssvlabs/ssv/logging"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
 )
 
 // Option defines EventHandler configuration option.

@@ -9,8 +9,9 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 // MaxPeersProvider returns the max peers for the given topic.

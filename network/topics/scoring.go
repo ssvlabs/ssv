@@ -9,12 +9,13 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
 	"github.com/ssvlabs/ssv/registry/storage"
-	"go.uber.org/zap"
 )
 
 // DefaultScoringConfig returns the default scoring config

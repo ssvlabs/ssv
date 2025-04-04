@@ -2,8 +2,9 @@ package storage
 
 import (
 	"encoding/hex"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func Test_storageShare_encoding_decoding(t *testing.T) {

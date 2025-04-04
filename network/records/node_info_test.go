@@ -6,8 +6,9 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 func TestNodeInfo_Seal_Consume(t *testing.T) {

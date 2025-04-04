@@ -10,6 +10,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
+
 	"github.com/ssvlabs/ssv/e2e/logs_catcher"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -18,8 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 )
 
 type ShareUpdateCmd struct {

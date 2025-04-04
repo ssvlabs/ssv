@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/operator/slotticker"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 type MockDataStore struct {
