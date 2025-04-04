@@ -168,7 +168,7 @@ var StartNodeCmd = &cobra.Command{
 
 			operatorPubKey, err := keys.PublicKeyFromString(operatorPubKeyString)
 			if err != nil {
-				logger.Fatal("could not extract operator private key from file", zap.Error(err))
+				logger.Fatal("could not extract operator public key from string", zap.Error(err))
 			}
 
 			operatorPubKeyBase64, err = operatorPubKey.Base64()
