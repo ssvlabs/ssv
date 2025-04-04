@@ -4,26 +4,25 @@ import (
 	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 )
 
 type OperatorPublicKey interface {
 	Encrypt(data []byte) ([]byte, error)
 	Verify(data []byte, signature []byte) error
-	Base64() ([]byte, error)
+	Base64() (string, error)
 }
 
 type OperatorPrivateKey interface {
 	OperatorSigner
 	OperatorDecrypter
-	StorageHash() (string, error)
-	EKMHash() (string, error)
+	StorageHash() string
+	EKMHash() string
 	Bytes() []byte
-	Base64() []byte
+	Base64() string
 }
 
 type OperatorSigner interface {
@@ -36,23 +35,18 @@ type OperatorDecrypter interface {
 }
 
 func PrivateKeyFromString(privKeyString string) (OperatorPrivateKey, error) {
-	operatorKeyByte, err := base64.StdEncoding.DecodeString(privKeyString)
+	privKeyBytes, err := base64.StdEncoding.DecodeString(privKeyString)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode base64: %w", err)
 	}
 
-	privKey, err := rsaencryption.PemToPrivateKey(operatorKeyByte)
-	if err != nil {
-		return nil, err
-	}
-
-	return &privateKey{privKey: privKey}, nil
+	return PrivateKeyFromBytes(privKeyBytes)
 }
 
 func PrivateKeyFromBytes(pemData []byte) (OperatorPrivateKey, error) {
-	privKey, err := rsaencryption.PemToPrivateKey(pemData)
+	privKey, err := rsaencryption.PEMToPrivateKey(pemData)
 	if err != nil {
-		return nil, fmt.Errorf("can't decode operator private key: %w", err)
+		return nil, fmt.Errorf("pem to private key: %w", err)
 	}
 	return &privateKey{privKey: privKey}, nil
 }
@@ -75,9 +69,6 @@ func (p *privateKey) Sign(data []byte) ([]byte, error) {
 		return []byte{}, err
 	}
 
-	//var sig [256]byte
-	//copy(sig[:], signature)
-
 	return signature, nil
 }
 
@@ -87,23 +78,23 @@ func (p *privateKey) Public() OperatorPublicKey {
 }
 
 func (p *privateKey) Decrypt(data []byte) ([]byte, error) {
-	return rsaencryption.DecodeKey(p.privKey, data)
+	return rsaencryption.Decrypt(p.privKey, data)
 }
 
 func (p *privateKey) Bytes() []byte {
-	return rsaencryption.PrivateKeyToByte(p.privKey)
+	return rsaencryption.PrivateKeyToPEM(p.privKey)
 }
 
-func (p *privateKey) Base64() []byte {
-	return []byte(rsaencryption.ExtractPrivateKey(p.privKey))
+func (p *privateKey) Base64() string {
+	return rsaencryption.PrivateKeyToBase64PEM(p.privKey)
 }
 
-func (p *privateKey) StorageHash() (string, error) {
-	return rsaencryption.HashRsaKey(rsaencryption.PrivateKeyToByte(p.privKey))
+func (p *privateKey) StorageHash() string {
+	return rsaencryption.HashKeyBytes(rsaencryption.PrivateKeyToPEM(p.privKey))
 }
 
-func (p *privateKey) EKMHash() (string, error) {
-	return rsaencryption.HashRsaKey(x509.MarshalPKCS1PrivateKey(p.privKey))
+func (p *privateKey) EKMHash() string {
+	return rsaencryption.HashKeyBytes(rsaencryption.PrivateKeyToBytes(p.privKey))
 }
 
 func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {
@@ -112,7 +103,7 @@ func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {
 		return nil, err
 	}
 
-	pubKey, err := rsaencryption.ConvertPemToPublicKey(pubPem)
+	pubKey, err := rsaencryption.PEMToPublicKey(pubPem)
 	if err != nil {
 		return nil, err
 	}
@@ -130,10 +121,10 @@ func (p *publicKey) Verify(data []byte, signature []byte) error {
 	return VerifyRSA(p, data, signature)
 }
 
-func (p *publicKey) Base64() ([]byte, error) {
-	b, err := rsaencryption.ExtractPublicKey(p.pubKey)
+func (p *publicKey) Base64() (string, error) {
+	b, err := rsaencryption.PublicKeyToBase64PEM(p.pubKey)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return []byte(b), err
+	return b, err
 }

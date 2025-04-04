@@ -18,14 +18,16 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/ekm"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -38,11 +40,10 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 const (
@@ -59,7 +60,7 @@ type MockControllerOptions struct {
 	sharesStorage     SharesStorage
 	beacon            beacon.BeaconNode
 	validatorOptions  validator.Options
-	signer            spectypes.BeaconSigner
+	signer            ekm.BeaconSigner
 	StorageMap        *ibftstorage.ParticipantStores
 	validatorsMap     *validators.ValidatorsMap
 	validatorStore    registrystorage.ValidatorStore
@@ -70,13 +71,16 @@ type MockControllerOptions struct {
 
 func TestNewController(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-	_, logger, _, network, _, recipientStorage, bc := setupCommonTestComponents(t)
-	db, err := getBaseStorage(logger)
-	require.NoError(t, err)
-	registryStorage, newStorageErr := storage.NewNodeStorage(logger, db)
-	require.NoError(t, newStorageErr)
+
 	operatorSigner, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
+
+	_, logger, _, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorSigner)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	registryStorage, newStorageErr := storage.NewNodeStorage(logger, db)
+	require.NoError(t, newStorageErr)
 
 	controllerOptions := ControllerOptions{
 		NetworkConfig:     networkconfig.TestNetwork,
@@ -165,7 +169,10 @@ func TestSetupValidatorsExporter(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
+			operatorPrivateKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
 
 			defer ctrl.Finish()
 			mockValidatorsMap := validators.New(context.TODO())
@@ -327,12 +334,16 @@ func TestSetupValidators(t *testing.T) {
 		operators[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
+	shareKey, err := createKey()
+	require.NoError(t, err)
+
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorIndex: 1,
 			// OperatorID:      2,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+			SharePubKey:     shareKey,
 		},
 		Status:          3, // ValidatorStateActiveOngoing
 		ActivationEpoch: passedEpoch,
@@ -343,6 +354,7 @@ func TestSetupValidators(t *testing.T) {
 			// OperatorID:      2,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+			SharePubKey:     shareKey,
 		},
 		OwnerAddress: common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 	}
@@ -938,7 +950,7 @@ func createKey() ([]byte, error) {
 	return pubKey, nil
 }
 
-func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *mocks.MockSharesStorage, *mocks.MockP2PNetwork, ekm.KeyManager, *mocks.MockRecipients, *beacon.MockBeaconNode) {
+func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivateKey) (*gomock.Controller, *zap.Logger, *mocks.MockSharesStorage, *mocks.MockP2PNetwork, ekm.KeyManager, *mocks.MockRecipients, *beacon.MockBeaconNode) {
 	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	bc := beacon.NewMockBeaconNode(ctrl)
@@ -948,7 +960,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
+	km, err := ekm.NewLocalKeyManager(logger, db, networkconfig.TestNetwork, operatorPrivKey)
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }
