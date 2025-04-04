@@ -22,6 +22,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -60,11 +66,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -162,7 +163,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
 			}
 
-			logger = logger.With(zap.String("pubkey", operatorPubKeyString))
+			logger = logger.With(zap.String(fields.FieldPubKey, operatorPubKeyString))
 			logger.Info("ssv-signer operator identity")
 
 			operatorPubKey, err := keys.PublicKeyFromString(operatorPubKeyString)
