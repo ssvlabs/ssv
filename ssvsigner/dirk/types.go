@@ -2,6 +2,7 @@ package dirk
 
 import (
 	"errors"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
@@ -9,7 +10,7 @@ var (
 	ErrKeyDeletionNotSupported = errors.New("key deletion is not supported by Dirk")
 )
 
-// Signer implements the RemoteSigner interface for Dirk
+// Signer implements the signing functionality for Dirk remote signer
 type Signer struct {
 	endpoint    string
 	credentials Credentials
@@ -22,7 +23,9 @@ type Client interface {
 	ListAccounts() ([]Account, error)
 
 	// Sign signs data using the specified account
-	Sign(pubKey []byte, data []byte, domain []byte) ([]byte, error)
+	// pubKey: The public key identifying the validator share
+	// data: The signing root (hash) to be signed
+	Sign(pubKey []byte, data []byte) ([]byte, error)
 
 	// Close closes the connection to Dirk
 	Close() error
@@ -30,19 +33,23 @@ type Client interface {
 
 // Credentials holds authentication information for Dirk
 type Credentials struct {
-	ClientCert    string
-	ClientKey     string
-	CACert        string
-	AllowInsecure bool // TODO: sounds retarded
+	// ClientCert is the path to the client certificate file
+	ClientCert string
+
+	// ClientKey is the path to the client private key file
+	ClientKey string
+
+	// CACert is the path to the CA certificate file
+	CACert string
+
+	// AllowInsecure allows insecure connections (not recommended)
+	AllowInsecure bool
 }
 
 // Account represents a validator account in Dirk
 type Account struct {
 	// PublicKey is the BLS public key of the validator
 	PublicKey phase0.BLSPubKey
-
-	// Path is the derivation path for HD wallets
-	Path string
 
 	// Name is a human-readable identifier for the account
 	Name string

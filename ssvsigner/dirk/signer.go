@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -72,17 +71,34 @@ func (d *Signer) DeleteKeystore(ctx context.Context, req web3signer.DeleteKeysto
 	}, ErrKeyDeletionNotSupported
 }
 
-func (d *Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, req web3signer.SignRequest) (web3signer.SignResponse, error) {
+// Sign signs a message using Dirk's gRPC API
+// The function takes a public key and signing root (hash to sign)
+// It returns a BLS signature or an error
+func (d *Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, signingRoot phase0.Root) (phase0.BLSSignature, error) {
 	if err := d.connect(ctx); err != nil {
-		return web3signer.SignResponse{}, err
+		return phase0.BLSSignature{}, fmt.Errorf("failed to connect to Dirk: %w", err)
 	}
 
-	var blsSignature phase0.BLSSignature
+	// Convert BLS public key to byte array
+	pubKeyBytes := sharePubKey[:]
 
-	return web3signer.SignResponse{
-		Signature: blsSignature,
-	}, nil
+	// Convert signing root to byte array
+	signRootBytes := signingRoot[:]
+
+	signature, err := d.client.Sign(pubKeyBytes, signRootBytes)
+	if err != nil {
+		return phase0.BLSSignature{}, fmt.Errorf("failed to sign data: %w", err)
+	}
+
+	// Convert the signature to the expected BLSSignature format
+	var blsSignature phase0.BLSSignature
+	if len(signature) != len(blsSignature) {
+		return phase0.BLSSignature{}, fmt.Errorf("invalid signature length: got %d, want %d", len(signature), len(blsSignature))
+	}
+	copy(blsSignature[:], signature)
+
+	return blsSignature, nil
 }
 
 // Ensure that Signer implements the RemoteSigner interface
-var _ ssvsigner.RemoteSigner = (*Signer)(nil)
+//var _ ssvsigner.RemoteSigner = (*Signer)(nil)

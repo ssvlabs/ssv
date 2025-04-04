@@ -4,14 +4,19 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	pb "github.com/wealdtech/eth2-signer-api/pb/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type GRPCClient struct {
-	conn *grpc.ClientConn
-	// TODO: add generated protobuf
+	conn         *grpc.ClientConn
+	listerClient pb.ListerClient
+	signerClient pb.SignerClient
+	accountMgr   pb.AccountManagerClient
 }
 
 func NewClient(ctx context.Context, endpoint string, c Credentials) (Client, error) {
@@ -34,10 +39,10 @@ func NewClient(ctx context.Context, endpoint string, c Credentials) (Client, err
 	}
 
 	client := &GRPCClient{
-		conn: conn,
-		// Initialize service clients
-		// listerClient:   pb.NewListerClient(conn),
-		// signerClient:   pb.NewSignerClient(conn),
+		conn:         conn,
+		listerClient: pb.NewListerClient(conn),
+		signerClient: pb.NewSignerClient(conn),
+		accountMgr:   pb.NewAccountManagerClient(conn),
 	}
 
 	return client, nil
@@ -59,17 +64,71 @@ func createTLSConfig(credentials Credentials) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-func (G GRPCClient) ListAccounts() ([]Account, error) {
-	//TODO implement me
-	panic("implement me")
+func (g *GRPCClient) ListAccounts() ([]Account, error) {
+	// Create the request for listing accounts with wildcard path
+	req := &pb.ListAccountsRequest{
+		Paths: []string{"*"}, // Wildcard to list all accounts
+	}
+
+	// Call Dirk service to list accounts
+	resp, err := g.listerClient.ListAccounts(context.Background(), req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list accounts: %w", err)
+	}
+
+	if resp.GetState() != pb.ResponseState_SUCCEEDED {
+		return nil, fmt.Errorf("failed to list accounts: state %v", resp.GetState())
+	}
+
+	// Convert the response to our Account type
+	accounts := make([]Account, 0, len(resp.GetAccounts()))
+	for _, account := range resp.GetAccounts() {
+		var pubKey phase0.BLSPubKey
+		if len(account.GetPublicKey()) != len(pubKey) {
+			return nil, fmt.Errorf("invalid public key length: got %d, want %d", len(account.GetPublicKey()), len(pubKey))
+		}
+		copy(pubKey[:], account.GetPublicKey())
+
+		accounts = append(accounts, Account{
+			PublicKey: pubKey,
+			Name:      account.GetName(),
+		})
+	}
+
+	return accounts, nil
 }
 
-func (G GRPCClient) Sign(pubKey []byte, data []byte, domain []byte) ([]byte, error) {
-	//TODO implement me
-	panic("implement me")
+// Sign signs data using a specified public key
+// - pubKey: The public key that identifies the validator share
+// - data: The signing root (hash) to be signed
+// Returns the signature as a byte array
+func (g *GRPCClient) Sign(pubKey []byte, data []byte) ([]byte, error) {
+	req := &pb.SignRequest{
+		Id: &pb.SignRequest_PublicKey{
+			PublicKey: pubKey,
+		},
+		Data: data,
+	}
+
+	// Call the Dirk signer service
+	ctx := context.Background()
+	resp, err := g.signerClient.Sign(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("dirk signing failed: %w", err)
+	}
+
+	// Check the response state
+	if resp.GetState() != pb.ResponseState_SUCCEEDED {
+		return nil, fmt.Errorf("dirk signing failed with state: %v", resp.GetState())
+	}
+
+	// Return the signature bytes
+	return resp.GetSignature(), nil
 }
 
-func (G GRPCClient) Close() error {
-	//TODO implement me
-	panic("implement me")
+func (g *GRPCClient) Close() error {
+	if g.conn != nil {
+		return g.conn.Close()
+	}
+	return nil
 }
