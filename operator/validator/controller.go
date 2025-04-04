@@ -98,7 +98,7 @@ type ControllerOptions struct {
 type Controller interface {
 	StartValidators(ctx context.Context)
 	HandleMetadataUpdates(ctx context.Context)
-	FilterIndices(afterInit bool, filter func(*types.SSVShare) bool) []phase0.ValidatorIndex
+	FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
 	StartNetworkHandlers()
 	// GetValidatorStats returns stats of validators, including the following:
