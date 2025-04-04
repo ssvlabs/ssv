@@ -5,8 +5,9 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	"golang.org/x/exp/maps"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -85,7 +86,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 
 			// Select registrations to submit.
 			gc.registrationMu.Lock()
-			allRegistrations := maps.Values(gc.registrations)
+			allRegistrations := slices.Collect(maps.Values(gc.registrations))
 			gc.registrationMu.Unlock()
 
 			registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
