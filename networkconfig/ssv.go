@@ -2,12 +2,12 @@ package networkconfig
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/sanity-io/litter"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -41,19 +41,26 @@ type SSV struct {
 }
 
 func (s SSV) String() string {
-	return litter.Sdump(s)
+	marshaled, err := json.Marshal(s)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(marshaled)
 }
 
-func (s SSV) MarshalYAML() (interface{}, error) {
-	aux := &struct {
-		Name                    string   `yaml:"Name,omitempty"`
-		DomainType              string   `yaml:"DomainType,omitempty"`
-		RegistrySyncOffset      *big.Int `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr    string   `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes               []string `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID     string   `yaml:"DiscoveryProtocolID,omitempty"`
-		TotalEthereumValidators int      `yaml:"TotalEthereumValidators,omitempty"`
-	}{
+type marshaledConfig struct {
+	Name                    string   `json:"Name,omitempty" yaml:"Name,omitempty"`
+	DomainType              string   `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
+	RegistrySyncOffset      *big.Int `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr    string   `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes               []string `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+	DiscoveryProtocolID     string   `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	TotalEthereumValidators int      `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
+}
+
+func (s *SSV) marshal() (marshaledConfig, error) {
+	aux := marshaledConfig{
 		Name:                    s.Name,
 		DomainType:              "0x" + hex.EncodeToString(s.DomainType[:]),
 		RegistrySyncOffset:      s.RegistrySyncOffset,
@@ -61,6 +68,24 @@ func (s SSV) MarshalYAML() (interface{}, error) {
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     "0x" + hex.EncodeToString(s.DiscoveryProtocolID[:]),
 		TotalEthereumValidators: s.TotalEthereumValidators,
+	}
+
+	return aux, nil
+}
+
+func (s SSV) MarshalJSON() ([]byte, error) {
+	aux, err := s.marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(aux)
+}
+
+func (s SSV) MarshalYAML() (interface{}, error) {
+	aux, err := s.marshal()
+	if err != nil {
+		return nil, err
 	}
 
 	return aux, nil

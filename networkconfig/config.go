@@ -1,10 +1,10 @@
 package networkconfig
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/sanity-io/litter"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -45,7 +45,12 @@ type NetworkConfig struct {
 }
 
 func (n NetworkConfig) String() string {
-	return litter.Sdump(n)
+	jsonBytes, err := json.Marshal(n)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(jsonBytes)
 }
 
 // SlotDuration returns slot duration

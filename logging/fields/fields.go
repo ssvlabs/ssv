@@ -15,9 +15,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/sanity-io/litter"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields/stringer"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -25,8 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/utils/format"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -396,7 +396,7 @@ func BlockRoot(r [32]byte) zap.Field {
 }
 
 func SSVConfig(val networkconfig.SSV) zap.Field {
-	return zap.String(FieldConfig, litter.Sdump(val))
+	return zap.String(FieldConfig, val.String())
 }
 
 func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {

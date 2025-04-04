@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"encoding/json"
 	"math"
 	"sync"
 	"time"
@@ -8,7 +9,6 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/sanity-io/litter"
 )
 
 var (
@@ -45,7 +45,12 @@ func (b Beacon) Apply(other Beacon) bool {
 }
 
 func (b Beacon) String() string {
-	return litter.Sdump(b)
+	marshaled, err := json.Marshal(b)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(marshaled)
 }
 
 func (b Beacon) DataVersion(epoch phase0.Epoch) spec.DataVersion {
