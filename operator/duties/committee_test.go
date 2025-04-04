@@ -867,14 +867,14 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 	ticker.Send(currentSlot.Get())
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
-	// STEP 3: wait for attester duties to be executed faster than 1/3 of the slot duration
-	startTime := time.Now()
+	// STEP 3: wait for attester duties to be executed faster than 1/3 of the slot duration when
+	// Beacon head event is observed (block arrival)
 	currentSlot.Set(phase0.Slot(2))
-	ticker.Send(currentSlot.Get())
-
 	aDuties, _ := attDuties.Get(0)
 	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, currentSlot.Get())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+	startTime := time.Now()
+	ticker.Send(currentSlot.Get())
 
 	// STEP 4: trigger head event (block arrival)
 	e := &eth2apiv1.Event{
@@ -935,13 +935,13 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	// validate the 1/3 of the slot waiting time
 	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
 
-	// STEP 3: wait for committee duty to be executed faster than 1/3 of the slot duration
-	startTime = time.Now()
+	// STEP 3: wait for attester duties to be executed faster than 1/3 of the slot duration when
+	// Beacon head event is observed (block arrival)
 	currentSlot.Set(phase0.Slot(2))
-	ticker.Send(currentSlot.Get())
-
 	committeeMap = commHandler.buildCommitteeDuties(nil, sDuties, 0, currentSlot.Get())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
+	startTime = time.Now()
+	ticker.Send(currentSlot.Get())
 
 	// STEP 4: trigger head event (block arrival)
 	e := &eth2apiv1.Event{

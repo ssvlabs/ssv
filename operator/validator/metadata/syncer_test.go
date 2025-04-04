@@ -332,8 +332,8 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
 		metadata := ValidatorMap{
-			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
-			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			share1.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			share2.ValidatorPubKey: &beacon.ValidatorMetadata{},
 		}
 
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil)
@@ -473,7 +473,7 @@ func TestSyncer_Stream(t *testing.T) {
 			}
 
 			expected := ValidatorMap{
-				share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{
+				share1.ValidatorPubKey: &beacon.ValidatorMetadata{
 					Index:           1,
 					Status:          eth2apiv1.ValidatorStateActiveOngoing,
 					ActivationEpoch: 0,
