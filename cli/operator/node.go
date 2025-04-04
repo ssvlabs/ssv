@@ -138,7 +138,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
 		var db basedb.Database
-		if cfg.DBOptions.Type == "pebble" || cfg.DBOptions.Type == "pebbledb" {
+		if cfg.DBOptions.Engine == "pebble" || cfg.DBOptions.Engine == "pebbledb" {
 			logger.Info("using pebble db")
 			db, err = setupPebbleDB(logger, networkConfig.Beacon.GetNetwork())
 		} else {
