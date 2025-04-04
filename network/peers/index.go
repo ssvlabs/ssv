@@ -7,7 +7,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
@@ -42,7 +41,7 @@ type ConnectionIndex interface {
 	AtLimit(dir libp2pnetwork.Direction) bool
 
 	// IsBad returns whether the given peer is bad
-	IsBad(logger *zap.Logger, id peer.ID) bool
+	IsBad(id peer.ID) bool
 }
 
 // ScoreIndex is an interface for managing peers scores

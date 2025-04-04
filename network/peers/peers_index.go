@@ -22,6 +22,7 @@ type NetworkKeyProvider func() libp2pcrypto.PrivKey
 
 // peersIndex implements Index interface.
 type peersIndex struct {
+	logger         *zap.Logger
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
@@ -42,6 +43,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration, gossipScoreIndex GossipScoreIndex) *peersIndex {
 
 	return &peersIndex{
+		logger:           logger,
 		network:          network,
 		scoreIdx:         newScoreIndex(),
 		SubnetsIndex:     NewSubnetsIndex(subnetsCount),
@@ -59,7 +61,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - bad gossip score
 // - pruned (that was not expired)
 // - bad score
-func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (pi *peersIndex) IsBad(id peer.ID) bool {
 	if isBad, _ := pi.HasBadGossipScore(id); isBad {
 		return true
 	}
@@ -74,7 +76,7 @@ func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 
 	for _, score := range scores {
 		if score.Value < threshold {
-			logger.Debug("bad peer (low score)")
+			pi.logger.Debug("bad peer (low score)")
 			return true
 		}
 	}

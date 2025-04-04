@@ -9,11 +9,12 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oleiade/lane/v2"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/utils/async"
-	"go.uber.org/zap"
 )
 
 // SubnetPeers contains the number of peers we are connected to for each subnet.
@@ -61,7 +62,7 @@ func (a SubnetPeers) String() string {
 	return b.String()
 }
 
-func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
+func (n *p2pNetwork) startDiscovery() error {
 	startTime := time.Now()
 
 	connector, err := n.getConnector()
@@ -71,7 +72,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 	// Spawn a goroutine to deduplicate discovered peers by peer ID.
 	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
-	go n.bootstrapDiscovery(logger, connectorProposals)
+	go n.bootstrapDiscovery(connectorProposals)
 	go func() {
 		for proposal := range connectorProposals {
 			discoveredPeer := discovery.DiscoveredPeer{

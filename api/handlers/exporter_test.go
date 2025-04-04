@@ -12,11 +12,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -75,11 +74,11 @@ func (m *mockParticipantStore) GetParticipants(spectypes.ValidatorPK, phase0.Slo
 	return nil, nil
 }
 
-func (m *mockParticipantStore) Prune(context.Context, *zap.Logger, phase0.Slot) {
+func (m *mockParticipantStore) Prune(context.Context, phase0.Slot) {
 	// no-op.
 }
 
-func (m *mockParticipantStore) PruneContinously(context.Context, *zap.Logger, slotticker.Provider, phase0.Slot) {
+func (m *mockParticipantStore) PruneContinously(context.Context, slotticker.Provider, phase0.Slot) {
 	// no-op.
 }
 
