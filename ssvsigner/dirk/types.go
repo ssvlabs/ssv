@@ -2,29 +2,30 @@ package dirk
 
 import (
 	"context"
-	"errors"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
-
-var (
-	ErrKeyDeletionNotSupported = errors.New("key deletion is not supported by Dirk")
-)
-
-// Signer implements the signing functionality for Dirk remote signer
-type Signer struct {
-	endpoint    string
-	credentials Credentials
-	client      Client
-}
 
 // Client defines the interface for communication with a Dirk server
 type Client interface {
 	// ListAccounts returns all accounts available in the Dirk server
 	ListAccounts() ([]Account, error)
 
+	// ImportAccount imports a keystore to Dirk
+	// walletName: Name of the wallet to import to (e.g. "Wallet")
+	// accountName: Name to give the account (e.g. "validator-0")
+	// keystoreJSON: Raw keystore JSON data
+	// keystorePass: Password to decrypt the keystore
+	// walletPass: Optional passphrase for the wallet if required
+	ImportAccount(ctx context.Context, walletName, accountName string,
+		keystoreJSON, keystorePass, walletPass []byte) error
+
+	// DeleteAccount deletes an account from Dirk
+	// accountPath: Full path of the account (e.g. "Wallet/validator-0")
+	DeleteAccount(ctx context.Context, accountPath string) error
+
 	// Sign signs data using the specified account
-	// ctx: The context for the request
+	// ctx: Context for the operation
 	// pubKey: The public key identifying the validator share
 	// data: The signing root (hash) to be signed
 	Sign(ctx context.Context, pubKey []byte, data []byte) ([]byte, error)
@@ -46,6 +47,14 @@ type Credentials struct {
 
 	// AllowInsecure allows insecure connections (not recommended)
 	AllowInsecure bool
+
+	// WalletName is the default wallet name to use with Dirk
+	// Usually "Wallet" or another name configured in Dirk
+	WalletName string
+
+	// ConfigDir is the directory where Dirk stores keystores
+	// Used for direct file operations when ethdo is not available
+	ConfigDir string
 }
 
 // Account represents a validator account in Dirk

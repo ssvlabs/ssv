@@ -3,10 +3,19 @@ package dirk
 import (
 	"context"
 	"fmt"
+	"os/exec"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
+
+// Signer is the implementation of web3signer.RemoteSigner for Dirk
+// TODO: update global interfaces, fix all references to web3signer.RemoteSigner
+type Signer struct {
+	endpoint    string      // Endpoint of the Dirk server (host:port)
+	credentials Credentials // Credentials for connecting to the Dirk server
+	client      Client      // Client for communicating with the Dirk server
+}
 
 // New creates a new Dirk signer
 func New(endpoint string, credentials Credentials) *Signer {
@@ -16,26 +25,28 @@ func New(endpoint string, credentials Credentials) *Signer {
 	}
 }
 
-func (d *Signer) connect(ctx context.Context) error {
-	if d.client != nil {
+// Connect establishes a connection to the Dirk server
+func (s *Signer) connect(ctx context.Context) error {
+	if s.client != nil {
 		return nil
 	}
 
-	client, err := NewClient(ctx, d.endpoint, d.credentials)
+	client, err := NewClient(ctx, s.endpoint, s.credentials)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to connect to Dirk: %w", err)
 	}
 
-	d.client = client
+	s.client = client
 	return nil
 }
 
-func (d *Signer) ListKeys(ctx context.Context) (web3signer.ListKeysResponse, error) {
-	if err := d.connect(ctx); err != nil {
+// ListKeys lists all available validator keys
+func (s *Signer) ListKeys(ctx context.Context) (web3signer.ListKeysResponse, error) {
+	if err := s.connect(ctx); err != nil {
 		return nil, err
 	}
 
-	accounts, err := d.client.ListAccounts()
+	accounts, err := s.client.ListAccounts()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list accounts: %w", err)
 	}
@@ -48,57 +59,62 @@ func (d *Signer) ListKeys(ctx context.Context) (web3signer.ListKeysResponse, err
 	return response, nil
 }
 
-func (d *Signer) ImportKeystore(ctx context.Context, req web3signer.ImportKeystoreRequest) (web3signer.ImportKeystoreResponse, error) {
-	return web3signer.ImportKeystoreResponse{
-		Data: []web3signer.KeyManagerResponseData{
-			{
-				Status:  web3signer.StatusImported,
-				Message: "not implemented",
-			},
-		},
-	}, nil
-}
-
-func (d *Signer) DeleteKeystore(ctx context.Context, req web3signer.DeleteKeystoreRequest) (web3signer.DeleteKeystoreResponse, error) {
-	return web3signer.DeleteKeystoreResponse{
-		Message: ErrKeyDeletionNotSupported.Error(),
-		Data: []web3signer.KeyManagerResponseData{
-			{
-				Status:  web3signer.StatusError,
-				Message: ErrKeyDeletionNotSupported.Error(),
-			},
-		},
-	}, ErrKeyDeletionNotSupported
-}
-
 // Sign signs a message using Dirk's gRPC API
-// The function takes a public key and signing root (hash to sign)
-// It returns a BLS signature or an error
-func (d *Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, signingRoot phase0.Root) (phase0.BLSSignature, error) {
-	if err := d.connect(ctx); err != nil {
-		return phase0.BLSSignature{}, fmt.Errorf("failed to connect to Dirk: %w", err)
+func (s *Signer) Sign(ctx context.Context, pubKey phase0.BLSPubKey, req web3signer.SignRequest) (web3signer.SignResponse, error) {
+	if err := s.connect(ctx); err != nil {
+		return web3signer.SignResponse{}, err
 	}
 
-	// Convert BLS public key to byte array
-	pubKeyBytes := sharePubKey[:]
+	pubKeyBytes := pubKey[:]
+	var signingRootBytes []byte
 
-	// Convert signing root to byte array
-	signRootBytes := signingRoot[:]
+	if req.SigningRoot != [32]byte{} {
+		signingRootBytes = req.SigningRoot[:]
+	} else {
+		return web3signer.SignResponse{}, fmt.Errorf("signing without explicit signing root is not supported")
+	}
 
-	signature, err := d.client.Sign(ctx, pubKeyBytes, signRootBytes)
+	signature, err := s.client.Sign(ctx, pubKeyBytes, signingRootBytes)
 	if err != nil {
-		return phase0.BLSSignature{}, fmt.Errorf("failed to sign data: %w", err)
+		return web3signer.SignResponse{}, fmt.Errorf("failed to sign data: %w", err)
 	}
 
-	// Convert the signature to the expected BLSSignature format
 	var blsSignature phase0.BLSSignature
 	if len(signature) != len(blsSignature) {
-		return phase0.BLSSignature{}, fmt.Errorf("invalid signature length: got %d, want %d", len(signature), len(blsSignature))
+		return web3signer.SignResponse{}, fmt.Errorf("invalid signature length: got %d, want %d", len(signature), len(blsSignature))
 	}
 	copy(blsSignature[:], signature)
 
-	return blsSignature, nil
+	return web3signer.SignResponse{
+		Signature: blsSignature,
+	}, nil
 }
 
-// Ensure that Signer implements the RemoteSigner interface
-//var _ ssvsigner.RemoteSigner = (*Signer)(nil)
+// SignDirect signs data directly without using Web3Signer format
+func (s *Signer) SignDirect(ctx context.Context, pubKeyBytes, signingRoot []byte) ([]byte, error) {
+	if err := s.connect(ctx); err != nil {
+		return nil, err
+	}
+
+	return s.client.Sign(ctx, pubKeyBytes, signingRoot)
+}
+
+// Close closes the connection to the Dirk server
+func (s *Signer) Close() error {
+	if s.client != nil {
+		return s.client.Close()
+	}
+	return nil
+}
+
+// Helper method to get the ethdo path (find in PATH if not specified)
+func (s *Signer) getEthdoPath() string {
+	// Use existing path from client if available
+	if gc, ok := s.client.(*GRPCClient); ok && gc.ethdoPath != "" {
+		return gc.ethdoPath
+	}
+
+	// Otherwise look in PATH
+	path, _ := exec.LookPath("ethdo")
+	return path
+}
