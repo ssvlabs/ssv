@@ -38,14 +38,14 @@ const (
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
-	remoteSigner    remoteSigner
+	remoteSigner    RemoteSigner
 	router          *router.Router
 }
 
 func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
-	remoteSigner remoteSigner,
+	remoteSigner RemoteSigner,
 ) *Server {
 	r := router.New()
 
