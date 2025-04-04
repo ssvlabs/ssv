@@ -85,4 +85,32 @@ func TestGenesis(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "genesis response data is nil")
 	})
+
+	t.Run("error", func(t *testing.T) {
+		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+			if r.URL.Path == genesisPath {
+				return json.RawMessage(`malformed`), nil
+			}
+			return resp, nil
+		})
+		defer mockServer.Close()
+
+		client, err := New(
+			zap.NewNop(),
+			beacon.Options{
+				Context:        ctx,
+				Network:        beacon.NewNetwork(types.MainNetwork),
+				BeaconNodeAddr: mockServer.URL,
+				CommonTimeout:  100 * time.Millisecond,
+				LongTimeout:    500 * time.Millisecond,
+			},
+			tests.MockDataStore{},
+			tests.MockSlotTickerProvider,
+		)
+		require.NoError(t, err)
+
+		_, err = client.Genesis(ctx)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to request genesis")
+	})
 }
