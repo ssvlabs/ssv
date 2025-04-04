@@ -178,7 +178,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
-	ctr.indicesChange = make(chan struct{})
+	ctr.indicesChangeCh = make(chan struct{})
 
 	require.NoError(t, signer.AddShare(secretKey))
 
@@ -218,7 +218,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 
 	indiciesUpdate := make(chan struct{})
 	go func() {
-		<-ctr.indicesChange
+		<-ctr.indicesChangeCh
 		indiciesUpdate <- struct{}{}
 	}()
 	err = ctr.ReactivateCluster(common.HexToAddress("0x1231231"), []uint64{1, 2, 3, 4}, toReactivate)

@@ -41,7 +41,7 @@ type Syncer struct {
 type shareStorage interface {
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
-	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) error
+	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata) ([]*ssvtypes.SSVShare, error)
 }
 
 type selfValidatorStore interface {
@@ -84,7 +84,7 @@ func WithSyncInterval(interval time.Duration) Option {
 	}
 }
 
-func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
+func (s *Syncer) SyncOnStartup(ctx context.Context) ([]*ssvtypes.SSVShare, error) {
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -118,15 +118,7 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (map[spectypes.ValidatorPK]*
 	return s.Sync(ctx, pubKeysToFetch)
 }
 
-type SyncBatch struct {
-	IndicesBefore []phase0.ValidatorIndex
-	IndicesAfter  []phase0.ValidatorIndex
-	Validators    ValidatorMap
-}
-
-type ValidatorMap = map[spectypes.ValidatorPK]*beacon.ValidatorMetadata
-
-func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
+func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) ([]*ssvtypes.SSVShare, error) {
 	fetchStart := time.Now()
 	metadata, err := s.Fetch(ctx, pubKeys)
 	if err != nil {
@@ -141,20 +133,21 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 
 	updateStart := time.Now()
 	// TODO: Refactor share storage to support passing context.
-	if err := s.shareStorage.UpdateValidatorsMetadata(metadata); err != nil {
-		return metadata, fmt.Errorf("update metadata: %w", err)
+	updatedValidators, err := s.shareStorage.UpdateValidatorsMetadata(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("update metadata: %w", err)
 	}
 
 	s.logger.Debug("🆕 saved validators metadata",
 		fields.Took(time.Since(updateStart)),
 		zap.Int("metadatas", len(metadata)),
-		zap.Int("validators", len(pubKeys)),
+		zap.Int("validators", len(updatedValidators)),
 	)
 
-	return metadata, nil
+	return updatedValidators, nil
 }
 
-func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (ValidatorMap, error) {
+func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -204,7 +197,7 @@ func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 				continue
 			}
 
-			if len(batch.Validators) == 0 {
+			if len(batch.SharesAfter) == 0 {
 				if slept := s.sleep(ctx, s.streamInterval); !slept {
 					return
 				}
@@ -249,36 +242,33 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 	default:
 	}
 
-	shares := s.nextBatch(ctx, subnetsBuf)
-	if len(shares) == 0 {
+	sharesBefore := s.nextBatchFromDB(ctx, subnetsBuf)
+	if len(sharesBefore) == 0 {
 		return SyncBatch{}, false, nil
 	}
 
-	pubKeys := make([]spectypes.ValidatorPK, len(shares))
-	for i, share := range shares {
+	pubKeys := make([]spectypes.ValidatorPK, len(sharesBefore))
+	for i, share := range sharesBefore {
 		pubKeys[i] = share.ValidatorPubKey
 	}
 
-	indicesBefore := s.allActiveIndices(ctx, s.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
-
-	validators, err := s.Sync(ctx, pubKeys)
+	syncEpoch := s.beaconNetwork.EstimatedCurrentEpoch()
+	sharesAfter, err := s.Sync(ctx, pubKeys)
 	if err != nil {
 		return SyncBatch{}, false, fmt.Errorf("sync: %w", err)
 	}
 
-	indicesAfter := s.allActiveIndices(ctx, s.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
-
-	update := SyncBatch{
-		IndicesBefore: indicesBefore,
-		IndicesAfter:  indicesAfter,
-		Validators:    validators,
+	syncBatch := SyncBatch{
+		SharesBefore: sharesBefore,
+		SharesAfter:  sharesAfter,
+		Epoch:        syncEpoch,
 	}
 
-	return update, len(shares) < batchSize, nil
+	return syncBatch, len(sharesBefore) < batchSize, nil
 }
 
-// nextBatch returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
-func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.SSVShare {
+// nextBatchFromDB returns non-liquidated shares from DB that are most deserving of an update, it relies on share.Metadata.lastUpdated to be updated in order to keep iterating forward.
+func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.SSVShare {
 	// TODO: use context, return if it's done
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -322,21 +312,6 @@ func (s *Syncer) nextBatch(_ context.Context, subnetsBuf *big.Int) []*ssvtypes.S
 	}
 
 	return shares
-}
-
-// TODO: Create a wrapper for share storage that contains all common methods like AllActiveIndices and use the wrapper.
-func (s *Syncer) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase0.ValidatorIndex {
-	var indices []phase0.ValidatorIndex
-
-	// TODO: use context, return if it's done
-	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-		if share.IsParticipating(epoch) {
-			indices = append(indices, share.ValidatorIndex)
-		}
-		return true
-	})
-
-	return indices
 }
 
 func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {

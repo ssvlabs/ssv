@@ -75,11 +75,12 @@ func (mr *MockshareStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 }
 
 // UpdateValidatorsMetadata mocks base method.
-func (m *MockshareStorage) UpdateValidatorsMetadata(arg0 map[types.ValidatorPK]*beacon.ValidatorMetadata) error {
+func (m *MockshareStorage) UpdateValidatorsMetadata(arg0 map[types.ValidatorPK]*beacon.ValidatorMetadata) ([]*types0.SSVShare, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateValidatorsMetadata indicates an expected call of UpdateValidatorsMetadata.
