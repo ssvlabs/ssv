@@ -10,8 +10,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsatesting"
 )
 
+var logger, _ = zap.NewDevelopment()
+
 func TestRun_InvalidWeb3SignerEndpoint(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
 	cli := CLI{
 		ListenAddr:         ":8080",
 		Web3SignerEndpoint: "invalid-url",
@@ -23,7 +24,6 @@ func TestRun_InvalidWeb3SignerEndpoint(t *testing.T) {
 }
 
 func TestRun_MissingPrivateKey(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
 	cli := CLI{
 		ListenAddr:         ":8080",
 		Web3SignerEndpoint: "http://example.com",
@@ -37,7 +37,6 @@ func TestRun_MissingPrivateKey(t *testing.T) {
 }
 
 func TestRun_InvalidPrivateKeyFormat(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
 	cli := CLI{
 		ListenAddr:         ":8080",
 		Web3SignerEndpoint: "http://example.com",
@@ -50,7 +49,6 @@ func TestRun_InvalidPrivateKeyFormat(t *testing.T) {
 }
 
 func TestRun_FailedKeystoreLoad(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
 	cli := CLI{
 		ListenAddr:         ":8080",
 		Web3SignerEndpoint: "http://example.com",
@@ -64,7 +62,6 @@ func TestRun_FailedKeystoreLoad(t *testing.T) {
 }
 
 func TestRun_FailedServerStart(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
 	cli := CLI{
 		ListenAddr:         ":999999",
 		Web3SignerEndpoint: "http://example.com",

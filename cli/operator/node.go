@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -21,6 +22,12 @@ import (
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -60,11 +67,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -84,7 +86,7 @@ type config struct {
 	ConsensusClient              beaconprotocol.Options  `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
-	SSVSignerEndpoint            string                  `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer"`
+	SSVSignerEndpoint            string                  `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
@@ -156,18 +158,22 @@ var StartNodeCmd = &cobra.Command{
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
 			logger.Info("using ssv-signer for signing")
 
+			if _, err := url.ParseRequestURI(cfg.SSVSignerEndpoint); err != nil {
+				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
+			}
+
 			ssvSignerClient = ssvsigner.NewClient(cfg.SSVSignerEndpoint, ssvsigner.WithLogger(logger))
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
 			}
 
-			logger = logger.With(zap.String("pubkey", operatorPubKeyString))
+			logger = logger.With(zap.String(fields.FieldPubKey, operatorPubKeyString))
 			logger.Info("ssv-signer operator identity")
 
 			operatorPubKey, err := keys.PublicKeyFromString(operatorPubKeyString)
 			if err != nil {
-				logger.Fatal("could not extract operator private key from file", zap.Error(err))
+				logger.Fatal("could not extract operator public key from string", zap.Error(err))
 			}
 
 			operatorPubKeyBase64, err = operatorPubKey.Base64()
@@ -212,7 +218,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 
-		logger.Info("successfully loaded operator keys", zap.String("pubkey", operatorPubKeyBase64))
+		logger.Info("successfully loaded operator keys", zap.String(fields.FieldPubKey, operatorPubKeyBase64))
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
@@ -597,13 +603,13 @@ func ensureNoMissingKeys(
 }
 
 func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPrivateKey, []byte, error) {
-	// nolint: gosec
+	// #nosec G304
 	encryptedJSON, err := os.ReadFile(privKeyFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not read PEM file: %w", err)
 	}
 
-	// nolint: gosec
+	// #nosec G304
 	keyStorePassword, err := os.ReadFile(passwordFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not read password file: %w", err)
@@ -636,20 +642,17 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 		usingPrivKey = true
 	}
 
-	var errorMsg string
-	if usingSSVSigner && (usingKeystore || usingPrivKey) {
-		errorMsg = "cannot enable both remote signing (SSVSignerEndpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)"
-	} else if usingKeystore && usingPrivKey {
-		errorMsg = "cannot enable both OperatorPrivateKey and PrivateKeyFile"
-	}
-
-	if errorMsg != "" {
-		logger.Fatal(errorMsg,
-			zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint),
+	logger = logger.
+		With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint),
 			zap.String("private_key_file", cfg.KeyStore.PrivateKeyFile),
 			zap.String("password_file", cfg.KeyStore.PasswordFile),
 			zap.Int("operator_private_key_len", len(cfg.OperatorPrivateKey)), // not exposing the private key
 		)
+
+	if usingSSVSigner && (usingKeystore || usingPrivKey) {
+		logger.Fatal("cannot enable both remote signing (SSVSignerEndpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)")
+	} else if usingKeystore && usingPrivKey {
+		logger.Fatal("cannot enable both OperatorPrivateKey and PrivateKeyFile")
 	}
 
 	return usingSSVSigner, usingKeystore, usingPrivKey
