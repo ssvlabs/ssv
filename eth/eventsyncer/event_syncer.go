@@ -37,7 +37,6 @@ type ExecutionClient interface {
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error)
 }
 
-
 type EventHandler interface {
 	HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
 }
