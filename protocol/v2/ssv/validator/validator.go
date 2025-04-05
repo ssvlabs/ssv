@@ -11,6 +11,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -18,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -35,7 +37,7 @@ type Validator struct {
 
 	Operator       *spectypes.CommitteeMember
 	Share          *ssvtypes.SSVShare
-	Signer         spectypes.BeaconSigner
+	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
 	Queues map[spectypes.RunnerRole]queueContainer

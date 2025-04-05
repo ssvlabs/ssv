@@ -8,14 +8,15 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -41,12 +42,11 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 	parsedPrivKey, err := keys.PrivateKeyFromString(skPem)
 	require.NoError(t, err)
 
-	parsedPrivKeyHash, err := parsedPrivKey.StorageHash()
-	require.NoError(t, err)
+	parsedPrivKeyHash := parsedPrivKey.StorageHash()
 
 	encodedPubKey, err := parsedPrivKey.Public().Base64()
 	require.NoError(t, err)
-	require.Equal(t, pkPem, string(encodedPubKey))
+	require.Equal(t, pkPem, encodedPubKey)
 
 	require.NoError(t, operatorStorage.SavePrivateKeyHash(parsedPrivKeyHash))
 	extractedHash, found, err := operatorStorage.GetPrivateKeyHash()

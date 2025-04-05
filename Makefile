@@ -28,8 +28,8 @@ ifeq ($(COVERAGE),true)
 endif
 UNFORMATTED=$(shell gofmt -l .)
 
-GET_TOOL=go get -modfile=tool.mod -tool
-RUN_TOOL=go tool -modfile=tool.mod
+GET_TOOL=go get -tool
+RUN_TOOL=go tool
 
 #Lint
 .PHONY: lint
@@ -154,14 +154,6 @@ mock:
 .PHONY: generate
 generate:
 	go generate ./...
-
-.PHONY: tools
-tools:
-	$(GET_TOOL) go.uber.org/mock/mockgen
-	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
-	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
-	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	$(RUN_TOOL)
 
 .PHONY: format
 format:
