@@ -32,6 +32,6 @@ func metricName(name string) string {
 }
 
 func unsafeAttribute(isUnsafe bool) attribute.KeyValue {
-	const attrName = observabilityNamespace + ".unsafe"
+	const attrName = observabilityNamespace + ".validators.unsafe"
 	return attribute.Bool(attrName, isUnsafe)
 }
