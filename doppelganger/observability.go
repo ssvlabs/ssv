@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	observabilityName      = "github.com/ssvlabs/ssv/operator/doppelganger"
+	observabilityName      = "github.com/ssvlabs/ssv/doppelganger"
 	observabilityNamespace = "ssv.doppelganger"
 )
 
