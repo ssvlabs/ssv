@@ -2238,3 +2238,11 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 func TestRemoteKeyManagerTestSuite(t *testing.T) {
 	suite.Run(t, new(RemoteKeyManagerTestSuite))
 }
+
+// TestRemoteKeyManager_SlashingProtection runs the shared slashing protection test suite
+// against the RemoteKeyManager implementation, using a real slashing protector
+// and database, but mocking the remote signer client interactions.
+func TestRemoteKeyManager_SlashingProtection(t *testing.T) {
+	// Note: setupRemoteKeyManager is defined in key_manager_slashing_test.go
+	runKeyManagerSlashingTests(t, setupRemoteKeyManager)
+}
