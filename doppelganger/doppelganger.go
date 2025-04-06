@@ -316,17 +316,19 @@ func (h *handler) resetDoppelgangerStates() {
 }
 
 func (h *handler) recordValidatorStates(ctx context.Context) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	safe, unsafe := func() (safe, unsafe uint64) {
+		h.mu.RLock()
+		defer h.mu.RUnlock()
 
-	var safe, unsafe uint64
-	for _, state := range h.validatorsState {
-		if state.safe() {
-			safe++
-		} else {
-			unsafe++
+		for _, state := range h.validatorsState {
+			if state.safe() {
+				safe++
+			} else {
+				unsafe++
+			}
 		}
-	}
+		return
+	}()
 
 	observability.RecordUint64Value(ctx, safe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(false)))
 	observability.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
