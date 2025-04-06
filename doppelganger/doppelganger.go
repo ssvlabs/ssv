@@ -316,6 +316,9 @@ func (h *handler) resetDoppelgangerStates() {
 }
 
 func (h *handler) recordValidatorStates(ctx context.Context) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
 	var safe, unsafe uint64
 	for _, state := range h.validatorsState {
 		if state.safe() {
