@@ -3,9 +3,9 @@ package migrations
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
