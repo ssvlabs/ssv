@@ -18,12 +18,15 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -41,9 +44,6 @@ import (
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 const (
@@ -177,7 +177,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 
 			network.EXPECT().ActiveSubnets().Return(subnets[:]).AnyTimes()
-			network.EXPECT().FixedSubnets().Return(make(records.Subnets, commons.SubnetsCount)).AnyTimes()
+			network.EXPECT().FixedSubnets().Return(make(commons.Subnets, commons.SubnetsCount)).AnyTimes()
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
@@ -198,7 +198,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 						}
 					}
 				}).AnyTimes()
-				sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil).AnyTimes()
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
@@ -354,8 +353,6 @@ func TestSetupValidators(t *testing.T) {
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
 	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
 	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
-	storageMu := sync.Mutex{}
-	storageData := make(map[string]*beacon.ValidatorMetadata)
 
 	opStorage, done := newOperatorStorageForTest(logger)
 	defer done()
@@ -504,14 +501,6 @@ func TestSetupValidators(t *testing.T) {
 			sharesStorage := mocks.NewMockSharesStorage(ctrl)
 			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
 				return shareWithMetaData, true
-			}).AnyTimes()
-			sharesStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(pk string, metadata *beacon.ValidatorMetadata) error {
-				storageMu.Lock()
-				defer storageMu.Unlock()
-
-				storageData[pk] = metadata
-
-				return nil
 			}).AnyTimes()
 
 			testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{

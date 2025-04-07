@@ -9,10 +9,12 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -22,9 +24,8 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
-	"go.uber.org/zap"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -154,6 +155,12 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 				Deneb:   v,
 			}
 			return km.signer.SignBeaconBlock(vBlock, domain, pk)
+		case *electra.BeaconBlock:
+			vBlock := &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionElectra,
+				Electra: v,
+			}
+			return km.signer.SignBeaconBlock(vBlock, domain, pk)
 		case *apiv1capella.BlindedBeaconBlock:
 			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
 				Version: spec.DataVersionCapella,
@@ -164,6 +171,12 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
 				Version: spec.DataVersionDeneb,
 				Deneb:   v,
+			}
+			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
+		case *apiv1electra.BlindedBeaconBlock:
+			vBlindedBlock := &api.VersionedBlindedBeaconBlock{
+				Version: spec.DataVersionElectra,
+				Electra: v,
 			}
 			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 		default:
@@ -177,11 +190,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		return km.signer.SignVoluntaryExit(data, domain, pk)
 	case spectypes.DomainAggregateAndProof:
-		data, ok := obj.(*phase0.AggregateAndProof)
-		if !ok {
-			return nil, nil, errors.New("could not cast obj to AggregateAndProof")
-		}
-		return km.signer.SignAggregateAndProof(data, domain, pk)
+		return km.signer.SignAggregateAndProof(obj, domain, pk)
 	case spectypes.DomainSelectionProof:
 		data, ok := obj.(spectypes.SSZUint64)
 		if !ok {

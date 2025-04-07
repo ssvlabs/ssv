@@ -1,4 +1,4 @@
-package topics
+package topics_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -19,20 +20,22 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 // TODO: fix this test to run post-fork
@@ -81,7 +84,7 @@ func TestTopicManager(t *testing.T) {
 		validatorStore := mocks.NewMockValidatorStore(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
-		validator := validation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier)
+		validator := validation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier, phase0.Epoch(0))
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
@@ -112,10 +115,10 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 		for _, p := range peers {
 			require.NoError(t, p.tm.Subscribe(logger, committeeTopic(cid)))
 			// simulate concurrency, by trying to subscribe multiple times
-			go func(tm Controller, cid string) {
+			go func(tm topics.Controller, cid string) {
 				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
 			}(p.tm, cid)
-			go func(tm Controller, cid string) {
+			go func(tm topics.Controller, cid string) {
 				<-time.After(100 * time.Millisecond)
 				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
 			}(p.tm, cid)
@@ -313,7 +316,7 @@ func committeeTopic(cidHex string) string {
 type P struct {
 	host host.Host
 	ps   *pubsub.PubSub
-	tm   *topicsCtrl
+	tm   topics.Controller
 
 	connsCount uint64
 
@@ -374,12 +377,12 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	require.NoError(t, err)
 
 	var p *P
-	var midHandler MsgIDHandler
+	var midHandler topics.MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
+		midHandler = topics.NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
 		go midHandler.Start()
 	}
-	cfg := &PubSubConfig{
+	cfg := &topics.PubSubConfig{
 		Host:         h,
 		TraceLog:     false,
 		MsgIDHandler: midHandler,
@@ -387,7 +390,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			p.saveMsg(topic, msg)
 			return nil
 		},
-		Scoring: &ScoringConfig{
+		Scoring: &topics.ScoringConfig{
 			IPWhitelist:        nil,
 			IPColocationWeight: 0,
 			OneEpochDuration:   time.Minute,
@@ -405,13 +408,13 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		t.Fatal(err)
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, validatorStore, nil)
+	ps, tm, err := topics.NewPubSub(ctx, logger, cfg, validatorStore, nil)
 	require.NoError(t, err)
 
 	p = &P{
 		host:     h,
 		ps:       ps,
-		tm:       tm.(*topicsCtrl),
+		tm:       tm,
 		msgs:     make(map[string][]*pubsub.Message),
 		msgsLock: &sync.Mutex{},
 	}

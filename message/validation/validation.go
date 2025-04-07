@@ -16,6 +16,9 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
+
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -23,8 +26,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/casts"
-	"go.uber.org/zap"
-	"tailscale.com/util/singleflight"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -42,6 +43,7 @@ type messageValidator struct {
 	validatorStore    storage.ValidatorStore
 	dutyStore         *dutystore.Store
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+	pectraForkEpoch   phase0.Epoch
 
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
 	// same ID apply any state modifications (during message validation - which is not
@@ -63,6 +65,7 @@ func New(
 	validatorStore storage.ValidatorStore,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
+	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
@@ -73,6 +76,7 @@ func New(
 		validatorStore:      validatorStore,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
+		pectraForkEpoch:     pectraForkEpoch,
 	}
 
 	for _, opt := range opts {

@@ -8,10 +8,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -48,6 +48,11 @@ type Runner interface {
 	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
+}
+
+type DoppelgangerProvider interface {
+	CanSign(validatorIndex phase0.ValidatorIndex) bool
+	ReportQuorum(validatorIndex phase0.ValidatorIndex)
 }
 
 var _ Runner = new(CommitteeRunner)

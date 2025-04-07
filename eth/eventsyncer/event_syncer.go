@@ -17,10 +17,14 @@ import (
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 )
 
-//go:generate mockgen -package=eventsyncer -destination=./event_syncer_mock.go -source=./event_syncer.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=eventsyncer -destination=./event_syncer_mock.go -source=./event_syncer.go
 
 // TODO: check if something from these PRs need to be ported:
 // https://github.com/ssvlabs/ssv/pull/1053
+
+const (
+	defaultStalenessThreshold = 300 * time.Second
+)
 
 var (
 	// ErrNodeNotReady is returned when node is not ready.
@@ -58,7 +62,7 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		eventHandler:    eventHandler,
 
 		logger:             zap.NewNop(),
-		stalenessThreshold: 150 * time.Second,
+		stalenessThreshold: defaultStalenessThreshold,
 	}
 
 	for _, opt := range opts {
