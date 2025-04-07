@@ -4,9 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	"google.golang.org/grpc/credentials"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pb "github.com/wealdtech/eth2-signer-api/pb/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -14,25 +15,16 @@ import (
 
 // GRPCClient implements Client interface for communication with Dirk via gRPC.
 type GRPCClient struct {
-	conn          *grpc.ClientConn
-	listerClient  pb.ListerClient
-	signerClient  pb.SignerClient
-	accountMgr    pb.AccountManagerClient
-	walletName    string
-	configOptions ConfigOptions
-}
-
-// ConfigOptions contains optional configuration for the client.
-type ConfigOptions struct {
-	// EthdoPath is the path to the ethdo binary for offline operations.
-	EthdoPath string
-
-	// ConfigDir is the directory where Dirk stores its configuration.
-	ConfigDir string
+	conn         *grpc.ClientConn
+	listerClient pb.ListerClient
+	signerClient pb.SignerClient
+	accountMgr   pb.AccountManagerClient
+	walletName   string
 }
 
 // NewGRPCClient creates a new Dirk gRPC client.
-func NewGRPCClient(ctx context.Context, endpoint string, creds Credentials, opts ...ClientOption) (*GRPCClient, error) {
+// ClientOptions are no longer used as ethdo config is externalized.
+func NewGRPCClient(ctx context.Context, endpoint string, creds Credentials) (*GRPCClient, error) {
 	var dialOpts []grpc.DialOption
 
 	if creds.AllowInsecure {
@@ -51,37 +43,76 @@ func NewGRPCClient(ctx context.Context, endpoint string, creds Credentials, opts
 	}
 
 	client := &GRPCClient{
-		conn:          conn,
-		listerClient:  pb.NewListerClient(conn),
-		signerClient:  pb.NewSignerClient(conn),
-		accountMgr:    pb.NewAccountManagerClient(conn),
-		walletName:    creds.WalletName,
-		configOptions: ConfigOptions{},
-	}
-
-	// Apply options
-	for _, opt := range opts {
-		opt(client)
+		conn:         conn,
+		listerClient: pb.NewListerClient(conn),
+		signerClient: pb.NewSignerClient(conn),
+		accountMgr:   pb.NewAccountManagerClient(conn),
+		walletName:   creds.WalletName,
 	}
 
 	return client, nil
 }
 
-// ClientOption defines a function to configure a GRPCClient.
-type ClientOption func(*GRPCClient)
-
-// WithEthdoPath sets the path to the ethdo binary.
-func WithEthdoPath(path string) ClientOption {
-	return func(c *GRPCClient) {
-		c.configOptions.EthdoPath = path
+// Sign signs data using the specified account.
+func (c *GRPCClient) Sign(ctx context.Context, pubKey []byte, data []byte) ([]byte, error) {
+	// Create a sign request with the public key as identifier
+	req := &pb.SignRequest{
+		// Use public key as identifier
+		Id: &pb.SignRequest_PublicKey{
+			PublicKey: pubKey,
+		},
+		// The data to sign (signing root)
+		Data: data,
 	}
+
+	// Call the Dirk Signer service
+	resp, err := c.signerClient.Sign(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC call to Dirk Sign failed: %w", err)
+	}
+
+	// Check the response state from Dirk
+	if resp.GetState() != pb.ResponseState_SUCCEEDED {
+		return nil, fmt.Errorf("dirk Sign returned non-success state: %v", resp.GetState())
+	}
+
+	// Return the signature bytes from the successful response
+	return resp.GetSignature(), nil
 }
 
-// WithConfigDir sets the config directory.
-func WithConfigDir(dir string) ClientOption {
-	return func(c *GRPCClient) {
-		c.configOptions.ConfigDir = dir
+// ListAccounts returns all accounts available in the Dirk server.
+func (c *GRPCClient) ListAccounts(ctx context.Context) ([]Account, error) {
+	req := &pb.ListAccountsRequest{
+		Paths: []string{"*"}, // Wildcard to list all accounts
 	}
+
+	// Call Dirk Lister service
+	resp, err := c.listerClient.ListAccounts(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC call to Dirk ListAccounts failed: %w", err)
+	}
+
+	// Check response state from Dirk
+	if resp.GetState() != pb.ResponseState_SUCCEEDED {
+		return nil, fmt.Errorf("dirk ListAccounts returned non-success state: %v", resp.GetState())
+	}
+
+	// Convert the gRPC response accounts to our internal Account type
+	accounts := make([]Account, 0, len(resp.GetAccounts()))
+	for _, account := range resp.GetAccounts() {
+		var pubKey phase0.BLSPubKey
+		if len(account.GetPublicKey()) != len(pubKey) {
+			return nil, fmt.Errorf("invalid public key length: got %d, want %d", len(account.GetPublicKey()), len(pubKey))
+		}
+		copy(pubKey[:], account.GetPublicKey())
+
+		accounts = append(accounts, Account{
+			PublicKey: pubKey,
+			Name:      account.GetName(),
+		})
+	}
+
+	return accounts, nil
 }
 
 // createTLSConfig creates a TLS configuration from credentials.
@@ -98,69 +129,6 @@ func createTLSConfig(credentials Credentials) (*tls.Config, error) {
 	}
 
 	return tlsConfig, nil
-}
-
-// ListAccounts returns all accounts available in the Dirk server.
-func (c *GRPCClient) ListAccounts(ctx context.Context) ([]Account, error) {
-	// Create the request for listing accounts with wildcard path
-	req := &pb.ListAccountsRequest{
-		Paths: []string{"*"}, // Wildcard to list all accounts
-	}
-
-	// Call Dirk service to list accounts
-	resp, err := c.listerClient.ListAccounts(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list accounts: %w", err)
-	}
-
-	if resp.GetState() != pb.ResponseState_SUCCEEDED {
-		return nil, fmt.Errorf("failed to list accounts: state %v", resp.GetState())
-	}
-
-	// Convert the response to our Account type
-	accounts := make([]Account, 0, len(resp.GetAccounts()))
-	for _, account := range resp.GetAccounts() {
-		// Convert the public key to our format
-		var pubKey phase0.BLSPubKey
-		if len(account.GetPublicKey()) != len(pubKey) {
-			return nil, fmt.Errorf("invalid public key length: got %d, want %d", len(account.GetPublicKey()), len(pubKey))
-		}
-		copy(pubKey[:], account.GetPublicKey())
-
-		accounts = append(accounts, Account{
-			PublicKey: pubKey,
-			Name:      account.GetName(),
-		})
-	}
-
-	return accounts, nil
-}
-
-// Sign signs data using the specified account.
-func (c *GRPCClient) Sign(ctx context.Context, pubKey []byte, data []byte) ([]byte, error) {
-	// Create a sign request with the public key as identifier
-	req := &pb.SignRequest{
-		// Use public key as identifier
-		Id: &pb.SignRequest_PublicKey{
-			PublicKey: pubKey,
-		},
-		// The data to sign (signing root)
-		Data: data,
-	}
-
-	// Call the Dirk signer service
-	resp, err := c.signerClient.Sign(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("dirk signing failed: %w", err)
-	}
-
-	// Check the response state
-	if resp.GetState() != pb.ResponseState_SUCCEEDED {
-		return nil, fmt.Errorf("dirk signing failed with state: %v", resp.GetState())
-	}
-
-	// Return the signature bytes
-	return resp.GetSignature(), nil
 }
 
 // Close closes the gRPC connection.

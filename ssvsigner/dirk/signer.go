@@ -4,27 +4,43 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"os/exec"
 
+	// "os/exec" // No longer needed after removing findEthdoPath
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
 // Signer implements web3signer.RemoteSigner for the Dirk signing service.
 // It handles communication with a Dirk server and adapts its API to the expected
-// web3signer interfaces for listing keys, signing, and key management operations.
+// web3signer interfaces for listing keys, signing, and key management (import only) operations.
+// It requires a path to a functional ethdo executable for import operations.
 type Signer struct {
 	endpoint    string      // Endpoint of the Dirk server (host:port)
 	credentials Credentials // Credentials for connecting to the Dirk server
-	client      Client      // Client for communicating with the Dirk server
+	client      Client      // Lazily initialized gRPC client for communication
+	ethdoPath   string      // Path to the ethdo executable, required for imports
 }
 
 // New creates a new Dirk signer.
-func New(endpoint string, credentials Credentials) *Signer {
+// It requires the Dirk server endpoint, credentials, and the path to the ethdo executable.
+func New(endpoint string, credentials Credentials, ethdoPath string) (*Signer, error) {
+	if ethdoPath == "" {
+		// Attempt to find ethdo in PATH as a fallback? Or enforce it?
+		// Let's enforce it for clarity.
+		return nil, fmt.Errorf("ethdo path must be provided for Dirk signer")
+	}
+	// check if ethdoPath is executable
+	if _, err := exec.LookPath(ethdoPath); err != nil {
+		return nil, fmt.Errorf("ethdo executable not found at path %s: %w", ethdoPath, err)
+	}
+
 	return &Signer{
 		endpoint:    endpoint,
 		credentials: credentials,
-	}
+		ethdoPath:   ethdoPath,
+	}, nil
 }
 
 // connect establishes a connection to the Dirk server if not already connected.
@@ -33,16 +49,10 @@ func (s *Signer) connect(ctx context.Context) error {
 		return nil
 	}
 
-	// Find ethdo executable path for offline operations
-	ethdoPath, _ := exec.LookPath("ethdo")
-
-	// Create client with options
 	client, err := NewGRPCClient(
 		ctx,
 		s.endpoint,
 		s.credentials,
-		WithEthdoPath(ethdoPath),
-		WithConfigDir(s.credentials.ConfigDir),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Dirk: %w", err)
@@ -106,29 +116,35 @@ func (s *Signer) ListKeys(ctx context.Context) (web3signer.ListKeysResponse, err
 }
 
 // ImportKeystore implements web3signer.RemoteSigner.ImportKeystore.
-// Since Dirk doesn't support direct keystore imports via API, this method uses
-// the KeystoreManager which employs ethdo CLI or direct file placement.
+// This method uses the KeystoreManager which relies on the ethdo CLI tool.
 func (s *Signer) ImportKeystore(ctx context.Context, req web3signer.ImportKeystoreRequest) (web3signer.ImportKeystoreResponse, error) {
 	if err := s.connect(ctx); err != nil {
 		return web3signer.ImportKeystoreResponse{}, err
 	}
 
-	manager := NewKeystoreManager(
-		s.client,
-		findEthdoPath(s.client),
-		s.credentials.ConfigDir,
-		s.credentials.WalletName,
-	)
+	// Use the ethdo path configured for the Signer.
+	// The New function already validated that s.ethdoPath is not empty.
+	ethdoPath := s.ethdoPath
 
-	// Configure additional ethdo options if TLS is being used
-	if s.credentials.CACert != "" || s.credentials.ClientCert != "" {
-		manager.WithEthdoOptions(
-			s.credentials.ConfigDir,
-			s.credentials.CACert,
-			s.credentials.ClientCert,
-			s.credentials.ClientKey,
-			s.endpoint,
-		)
+	// Create EthdoManager
+	manager, err := NewEthdoManager(ethdoPath, s.credentials.WalletName)
+	if err != nil {
+		return web3signer.ImportKeystoreResponse{}, fmt.Errorf("failed to initialize keystore manager: %w", err)
+	}
+
+	// Configure additional ethdo options if TLS is being used or other options are set
+	// Note: s.credentials.EthdoBaseDir might be relevant for ethdo's --base-dir if needed.
+	// Construct EthdoOptions based on available credentials.
+	opts := EthdoOptions{
+		BaseDir:      s.credentials.EthdoBaseDir,
+		ServerCACert: s.credentials.CACert,
+		ClientCert:   s.credentials.ClientCert,
+		ClientKey:    s.credentials.ClientKey,
+		Remote:       s.endpoint, // Use the signer's endpoint as the potential remote target for ethdo
+	}
+	// Only call WithEthdoOptions if any options are actually set.
+	if opts != (EthdoOptions{}) { // Check if the struct is non-zero
+		manager.WithEthdoOptions(opts)
 	}
 
 	// Process each keystore in the request
@@ -160,44 +176,25 @@ func (s *Signer) ImportKeystore(ctx context.Context, req web3signer.ImportKeysto
 }
 
 // DeleteKeystore implements web3signer.RemoteSigner.DeleteKeystore.
-// Since Dirk doesn't support runtime key deletion, this implementation will
-// delete the keystore files but requires a Dirk restart to take effect.
+// WARNING: Deleting individual accounts/keystores is NOT supported by ethdo or the Dirk API.
+// This function will always return an error indicating the operation is unsupported.
+// Manual deletion via filesystem is unreliable and not recommended.
 func (s *Signer) DeleteKeystore(ctx context.Context, req web3signer.DeleteKeystoreRequest) (web3signer.DeleteKeystoreResponse, error) {
-	if err := s.connect(ctx); err != nil {
-		return web3signer.DeleteKeystoreResponse{}, err
-	}
+	// Deletion is not supported. Return an error for all requested keys.
+	responseData := make([]web3signer.KeyManagerResponseData, len(req.Pubkeys))
+	errMsg := "keystore deletion is not supported by the Dirk signer implementation"
 
-	responseData := make([]web3signer.KeyManagerResponseData, 0, len(req.Pubkeys))
-
-	for _, pubkey := range req.Pubkeys {
-		err := DeleteByPublicKey(ctx, s.client, s.credentials.ConfigDir, pubkey)
-		if err != nil {
-			responseData = append(responseData, web3signer.KeyManagerResponseData{
-				Status:  web3signer.StatusError,
-				Message: fmt.Sprintf("failed to delete account: %v", err),
-			})
-			continue
+	for i, pubkey := range req.Pubkeys {
+		responseData[i] = web3signer.KeyManagerResponseData{
+			Status:  web3signer.StatusError,
+			Message: fmt.Sprintf("failed to delete account %s: %s", pubkey.String(), errMsg),
 		}
-
-		responseData = append(responseData, web3signer.KeyManagerResponseData{
-			Status:  web3signer.StatusDeleted,
-			Message: fmt.Sprintf("deleted account with public key %s (restart Dirk to use)", pubkey.String()),
-		})
 	}
 
+	// Return a general error as well
 	return web3signer.DeleteKeystoreResponse{
 		Data: responseData,
-	}, nil
-}
-
-// SignDirect signs data directly without using Web3Signer format.
-// This is a convenience method for direct signing needs.
-func (s *Signer) SignDirect(ctx context.Context, pubKeyBytes, signingRoot []byte) ([]byte, error) {
-	if err := s.connect(ctx); err != nil {
-		return nil, err
-	}
-
-	return s.client.Sign(ctx, pubKeyBytes, signingRoot)
+	}, fmt.Errorf(errMsg)
 }
 
 // Close closes the connection to the Dirk server.
@@ -208,28 +205,15 @@ func (s *Signer) Close() error {
 	return nil
 }
 
-// Helper functions
-
 // decodeKeystoreJSON decodes a base64-encoded keystore JSON string.
 func decodeKeystoreJSON(encodedKeystore string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(encodedKeystore)
 }
 
-// findEthdoPath tries to find the ethdo executable path, first checking
-// if the client already has it configured, then looking in PATH.
-func findEthdoPath(client Client) string {
-	if gc, ok := client.(*GRPCClient); ok && gc.configOptions.EthdoPath != "" {
-		return gc.configOptions.EthdoPath
-	}
-
-	path, _ := exec.LookPath("ethdo")
-	return path
-}
-
-// processKeystore handles a single keystore import.
+// processKeystore handles a single keystore import using the EthdoManager.
 func processKeystore(
 	ctx context.Context,
-	manager *KeystoreManager,
+	manager *EthdoManager, // Use EthdoManager type
 	encodedKeystore string,
 	password string,
 	walletName string,
@@ -243,7 +227,7 @@ func processKeystore(
 		}, err
 	}
 
-	// Import the keystore
+	// Import the keystore using EthdoManager
 	err = manager.ImportKeystoreJSON(
 		ctx,
 		keystoreJSON,
