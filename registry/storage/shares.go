@@ -83,8 +83,7 @@ type Share struct {
 	Committee             []*storageOperator `ssz-max:"13"`
 	Quorum, PartialQuorum uint64
 	DomainType            [4]byte `ssz-size:"4"`
-	FeeRecipientAddress   [addressLength]byte
-	Graffiti              []byte `ssz-max:"32"`
+	Graffiti              []byte  `ssz-max:"32"`
 
 	Status          uint64
 	ActivationEpoch uint64
@@ -273,19 +272,18 @@ func FromSSVShare(share *types.SSVShare) *Share {
 	}
 	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
 	return &Share{
-		ValidatorIndex:      uint64(share.ValidatorIndex),
-		ValidatorPubKey:     share.ValidatorPubKey[:],
-		SharePubKey:         share.SharePubKey,
-		Committee:           committee,
-		Quorum:              quorum,
-		PartialQuorum:       partialQuorum,
-		DomainType:          share.DomainType,
-		FeeRecipientAddress: share.FeeRecipientAddress,
-		Graffiti:            share.Graffiti,
-		OwnerAddress:        share.OwnerAddress,
-		Liquidated:          share.Liquidated,
-		Status:              uint64(share.Status), // nolint: gosec
-		ActivationEpoch:     uint64(share.ActivationEpoch),
+		ValidatorIndex:  uint64(share.ValidatorIndex),
+		ValidatorPubKey: share.ValidatorPubKey[:],
+		SharePubKey:     share.SharePubKey,
+		Committee:       committee,
+		Quorum:          quorum,
+		PartialQuorum:   partialQuorum,
+		DomainType:      share.DomainType,
+		Graffiti:        share.Graffiti,
+		OwnerAddress:    share.OwnerAddress,
+		Liquidated:      share.Liquidated,
+		Status:          uint64(share.Status), // nolint: gosec
+		ActivationEpoch: uint64(share.ActivationEpoch),
 	}
 }
 
@@ -307,13 +305,12 @@ func ToSSVShare(stShare *Share) (*types.SSVShare, error) {
 
 	domainShare := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorIndex:      phase0.ValidatorIndex(stShare.ValidatorIndex),
-			ValidatorPubKey:     validatorPubKey,
-			SharePubKey:         stShare.SharePubKey,
-			Committee:           committee,
-			DomainType:          stShare.DomainType,
-			FeeRecipientAddress: stShare.FeeRecipientAddress,
-			Graffiti:            stShare.Graffiti,
+			ValidatorIndex:  phase0.ValidatorIndex(stShare.ValidatorIndex),
+			ValidatorPubKey: validatorPubKey,
+			SharePubKey:     stShare.SharePubKey,
+			Committee:       committee,
+			DomainType:      stShare.DomainType,
+			Graffiti:        stShare.Graffiti,
 		},
 		Status:          eth2apiv1.ValidatorState(stShare.Status), // nolint: gosec
 		ActivationEpoch: phase0.Epoch(stShare.ActivationEpoch),

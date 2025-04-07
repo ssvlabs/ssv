@@ -520,19 +520,18 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) (*
 	quorum, partialQuorum := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(splitKeys)))
 
 	return &Share{
-		ValidatorIndex:      3,
-		ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
-		SharePubKey:         sk2.GetPublicKey().Serialize(),
-		Committee:           ibftCommittee,
-		Quorum:              quorum,
-		PartialQuorum:       partialQuorum,
-		DomainType:          networkconfig.TestNetwork.DomainType,
-		FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-		Graffiti:            bytes.Repeat([]byte{0x01}, 32),
-		Status:              2,
-		ActivationEpoch:     4,
-		OwnerAddress:        common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-		Liquidated:          true,
+		ValidatorIndex:  3,
+		ValidatorPubKey: sk1.GetPublicKey().Serialize(),
+		SharePubKey:     sk2.GetPublicKey().Serialize(),
+		Committee:       ibftCommittee,
+		Quorum:          quorum,
+		PartialQuorum:   partialQuorum,
+		DomainType:      networkconfig.TestNetwork.DomainType,
+		Graffiti:        bytes.Repeat([]byte{0x01}, 32),
+		Status:          2,
+		ActivationEpoch: 4,
+		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+		Liquidated:      true,
 	}, &sk1
 }
 
@@ -556,13 +555,12 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShar
 
 	return &ssvtypes.SSVShare{
 		Share: spectypes.Share{
-			ValidatorIndex:      3,
-			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
-			SharePubKey:         sk2.GetPublicKey().Serialize(),
-			Committee:           ibftCommittee,
-			DomainType:          networkconfig.TestNetwork.DomainType,
-			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
+			ValidatorIndex:  3,
+			ValidatorPubKey: spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
+			SharePubKey:     sk2.GetPublicKey().Serialize(),
+			Committee:       ibftCommittee,
+			DomainType:      networkconfig.TestNetwork.DomainType,
+			Graffiti:        bytes.Repeat([]byte{0x01}, 32),
 		},
 		Status:          2,
 		ActivationEpoch: 4,
@@ -592,13 +590,12 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 
 	return &ssvtypes.SSVShare{
 		Share: spectypes.Share{
-			ValidatorPubKey:     pk,
-			ValidatorIndex:      index,
-			SharePubKey:         committee[0].SharePubKey,
-			Committee:           committee,
-			DomainType:          networkconfig.TestNetwork.DomainType,
-			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
+			ValidatorPubKey: pk,
+			ValidatorIndex:  index,
+			SharePubKey:     committee[0].SharePubKey,
+			Committee:       committee,
+			DomainType:      networkconfig.TestNetwork.DomainType,
+			Graffiti:        bytes.Repeat([]byte{0x01}, 32),
 		},
 		Status:          eth2apiv1.ValidatorStateActiveOngoing,
 		ActivationEpoch: 4,
