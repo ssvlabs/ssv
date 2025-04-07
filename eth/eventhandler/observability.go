@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ssvlabs/ssv/observability"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/ssvlabs/ssv/observability"
 )
 
 const (
