@@ -184,9 +184,8 @@ type controller struct {
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
 
-	recentlyStartedValidators uint64
-	indicesChange             chan struct{}
-	validatorExitCh           chan duties.ExitDescriptor
+	indicesChangeCh chan struct{}
+	validatorExitCh chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -269,7 +268,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		),
 		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
 
-		indicesChange:           make(chan struct{}),
+		indicesChangeCh:         make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
@@ -288,7 +287,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
-	return c.indicesChange
+	return c.indicesChangeCh
 }
 
 func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
@@ -539,27 +538,46 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-func (c *controller) startValidatorsForMetadata(_ context.Context, validators metadata.ValidatorMap) (count int) {
-	// TODO: use context
+// startEligibleValidators starts validators that transitioned to eligible to start due to a metadata update.
+func (c *controller) startEligibleValidators(ctx context.Context, pubKeys []spectypes.ValidatorPK) (count int) {
+	// Build a map for quick lookup to ensure only explicitly listed validators start.
+	validatorsSet := make(map[spectypes.ValidatorPK]struct{}, len(pubKeys))
+	for _, v := range pubKeys {
+		validatorsSet[v] = struct{}{}
+	}
 
+	// Filtering shares again ensures:
+	// 1. Validators still exist (not removed or liquidated).
+	// 2. They belong to this operator (ownership check).
+
+	// Note: A validator might be removed from storage after being fetched but before starting.
+	// In this case, it could still be added to validatorsMap despite no longer existing in sharesStorage,
+	// leading to unnecessary tracking.
+	operatorID := c.operatorDataStore.GetOperatorID()
 	shares := c.sharesStorage.List(
 		nil,
+		registrystorage.ByOperatorID(operatorID),
 		registrystorage.ByNotLiquidated(),
-		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
 		func(share *ssvtypes.SSVShare) bool {
-			return validators[share.ValidatorPubKey] != nil
+			_, exists := validatorsSet[share.ValidatorPubKey]
+			return exists
 		},
 	)
 
 	startedValidators := 0
 
 	for _, share := range shares {
+		select {
+		case <-ctx.Done():
+			c.logger.Warn("context cancelled, stopping validator start loop")
+			return startedValidators
+		default:
+		}
+
 		// Start validator (if not already started).
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
-			v.Share.ValidatorIndex = share.ValidatorIndex
-			v.Share.Status = share.Status
-			v.Share.ActivationEpoch = share.ActivationEpoch
+			v.Share.SetBeaconMetadata(share.BeaconMetadata())
 			started, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
@@ -915,11 +933,8 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
 	}
-	if started {
-		c.recentlyStartedValidators++
-	}
 
-	return true, nil // TODO: what should be returned if c.validatorStart(v) returns false?
+	return started, nil
 }
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {
@@ -933,37 +948,52 @@ func (c *controller) HandleMetadataUpdates(ctx context.Context) {
 	}
 }
 
+// handleMetadataUpdate processes metadata changes for validators.
 func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadata.SyncBatch) error {
-	startedValidators := 0
-	if c.operatorDataStore.GetOperatorID() != 0 {
-		startedValidators = c.startValidatorsForMetadata(ctx, syncBatch.Validators)
+	// Skip processing for full nodes (exporters) and operators that are still syncing
+	// (i.e., haven't received their OperatorAdded event yet).
+	if !c.operatorDataStore.OperatorIDReady() {
+		return nil
 	}
 
-	if startedValidators > 0 || hasNewValidators(syncBatch.IndicesBefore, syncBatch.IndicesAfter) {
-		c.logger.Debug("new validators found after metadata sync",
-			zap.Int("started_validators", startedValidators),
+	// Identify validators that changed state (eligible to start, slashed, or exited) after the metadata update.
+	eligibleToStart, slashedShares, exitedShares := syncBatch.DetectValidatorStateChanges()
+
+	// Start only the validators that became eligible to start as a result of the metadata update.
+	// We do NOT start slashed or exited validators, as they are no longer eligible to participate.
+	if len(eligibleToStart) > 0 || len(slashedShares) > 0 || len(exitedShares) > 0 {
+		c.logger.Debug("validators state changed after metadata sync",
+			zap.Int("eligible_to_start_count", len(eligibleToStart)),
+			zap.Int("slashed_count", len(slashedShares)),
+			zap.Int("exited_count", len(exitedShares)),
 		)
-		// Refresh duties if there are any new active validators.
-		if !c.reportIndicesChange(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec()) {
-			c.logger.Warn("timed out while notifying DutyScheduler of new validators")
+	}
+
+	if len(eligibleToStart) > 0 {
+		startedValidators := c.startEligibleValidators(ctx, eligibleToStart)
+		if startedValidators > 0 {
+			c.logger.Debug("started new eligible validators", zap.Int("started_validators", startedValidators))
+
+			// Refresh duties only if there are started validators.
+			if !c.reportIndicesChange(ctx) {
+				c.logger.Error("failed to notify indices change")
+			}
+		} else {
+			c.logger.Warn("no eligible validators started despite metadata changes")
 		}
 	}
-
-	c.logger.Debug("started validators after metadata sync",
-		fields.Count(startedValidators),
-	)
 
 	return nil
 }
 
-func (c *controller) reportIndicesChange(ctx context.Context, timeout time.Duration) bool {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+func (c *controller) reportIndicesChange(ctx context.Context) bool {
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.Beacon.SlotDurationSec())
 	defer cancel()
 
 	select {
 	case <-timeoutCtx.Done():
 		return false
-	case c.indicesChange <- struct{}{}:
+	case c.indicesChangeCh <- struct{}{}:
 		return true
 	}
 }
@@ -988,7 +1018,7 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 					validatorsPerStatus[statusActive]++
 				} else if share.Slashed() {
 					validatorsPerStatus[statusSlashed]++
-				} else if share.Exiting() {
+				} else if share.Exited() {
 					validatorsPerStatus[statusExiting]++
 				} else if !share.Activated() {
 					validatorsPerStatus[statusNotActivated]++
@@ -1014,19 +1044,6 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 		}
 	}
 
-}
-
-func hasNewValidators(before []phase0.ValidatorIndex, after []phase0.ValidatorIndex) bool {
-	m := make(map[phase0.ValidatorIndex]struct{})
-	for _, v := range before {
-		m[v] = struct{}{}
-	}
-	for _, v := range after {
-		if _, ok := m[v]; !ok {
-			return true
-		}
-	}
-	return false
 }
 
 func SetupCommitteeRunners(
