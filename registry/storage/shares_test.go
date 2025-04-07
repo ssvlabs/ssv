@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -21,6 +22,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -29,9 +33,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 )
 
 func init() {
@@ -360,13 +361,13 @@ func TestShareStorage_MultipleCommittees(t *testing.T) {
 			for _, share := range s {
 				shares[share.ValidatorIndex] = share
 			}
-			requireValidatorStoreIntegrity(t, storage.ValidatorStore, maps.Values(shares))
+			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
 		}
 		deleteAndVerify := func(share *ssvtypes.SSVShare) {
 			require.NoError(t, storage.Shares.Delete(nil, share.ValidatorPubKey[:]))
 			reopen(t)
 			delete(shares, share.ValidatorIndex)
-			requireValidatorStoreIntegrity(t, storage.ValidatorStore, maps.Values(shares))
+			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
 		}
 
 		share1 := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
