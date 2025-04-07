@@ -5,6 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/network/records"
 )
 

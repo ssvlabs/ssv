@@ -3,12 +3,12 @@ package topics
 import (
 	"encoding/hex"
 
-	"github.com/ssvlabs/ssv/logging"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
 )
 
 // psTracer helps to trace pubsub events

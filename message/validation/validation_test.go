@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"testing"
@@ -21,6 +22,11 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	eth2types "github.com/wealdtech/go-eth2-types/v2"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -35,11 +41,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
-	"github.com/stretchr/testify/require"
-	eth2types "github.com/wealdtech/go-eth2-types/v2"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap/zaptest"
-	"golang.org/x/exp/maps"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -60,7 +61,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	dutyStore := dutystore.New()
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
 
-	committee := maps.Keys(ks.Shares)
+	committee := slices.Collect(maps.Keys(ks.Shares))
 	slices.Sort(committee)
 
 	committeeID := shares.active.CommitteeID()

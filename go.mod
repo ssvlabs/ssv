@@ -42,7 +42,6 @@ require (
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
-	github.com/wealdtech/go-eth2-types/v2 v2.8.1
 	github.com/wealdtech/go-eth2-util v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.opentelemetry.io/otel/sdk v1.32.0
@@ -58,6 +57,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.72.0
 )
+
+require github.com/wealdtech/go-eth2-types/v2 v2.8.1 // indirect
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect

@@ -6,10 +6,11 @@ import (
 	"fmt"
 
 	"github.com/sanity-io/litter"
+	"go.uber.org/zap"
+
 	opstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 // This migration changes share format used for storing share in DB from gob to ssz.
