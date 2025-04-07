@@ -22,6 +22,9 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"

@@ -22,7 +22,6 @@ import (
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"

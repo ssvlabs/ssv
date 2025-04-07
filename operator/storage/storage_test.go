@@ -8,6 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -17,8 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var (

@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -17,8 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
-	"go.uber.org/zap"
 )
 
 // errPeerWasFiltered is thrown when a peer is filtered during handshake

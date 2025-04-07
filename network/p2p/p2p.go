@@ -11,15 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/utils/ttl"
-
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/utils/ttl"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
@@ -39,6 +38,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 // network states
