@@ -199,7 +199,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	})
 
 	if len(eligibleIndices) == 0 {
-		h.logger.Debug("no active validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
+		h.logger.Debug("no eligible validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
 		return nil
 	}
 
