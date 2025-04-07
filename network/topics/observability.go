@@ -18,13 +18,13 @@ var (
 
 	inboundMessageCounter = observability.NewMetric(
 		meter.Int64Counter(
-			observability.InstrumentName(observabilityNamespace, "inbound"),
+			observability.InstrumentName(observabilityNamespace, "in"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of inbound messages")))
 
 	outboundMessageCounter = observability.NewMetric(
 		meter.Int64Counter(
-			observability.InstrumentName(observabilityNamespace, "outbound"),
+			observability.InstrumentName(observabilityNamespace, "out"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of outbound(broadcasted) messages")))
 )
