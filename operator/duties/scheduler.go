@@ -412,13 +412,13 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 
-		go func() {
+		go func(ctx context.Context) {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
 			recordDutyExecuted(ctx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
-		}()
+		}(ctx)
 	}
 
 	span.SetStatus(codes.Ok, "")
