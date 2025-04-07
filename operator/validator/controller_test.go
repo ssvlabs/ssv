@@ -1106,7 +1106,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			},
 			expectIndicesChange: false,
 			mockSharesStorageExpect: func(mockSharesStorage *mocks.MockSharesStorage) {
-				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]*types.SSVShare{}).AnyTimes()
+				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return([]*types.SSVShare{}).AnyTimes()
 			},
 		},
 	}
@@ -1124,7 +1124,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 					share.SetBeaconMetadata(metadata)
 					shares = append(shares, share)
 				}
-				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shares).AnyTimes()
+				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shares).AnyTimes()
 			}
 
 			syncBatch := metadata.SyncBatch{
