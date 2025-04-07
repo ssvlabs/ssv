@@ -3,9 +3,9 @@ package qbft
 import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)

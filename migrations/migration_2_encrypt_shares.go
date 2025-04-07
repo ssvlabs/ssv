@@ -8,8 +8,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 var migration_2_encrypt_shares = Migration{

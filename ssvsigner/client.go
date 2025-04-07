@@ -11,9 +11,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 

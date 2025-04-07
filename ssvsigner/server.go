@@ -14,10 +14,10 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/fasthttp/router"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
