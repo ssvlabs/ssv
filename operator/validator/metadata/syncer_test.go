@@ -19,6 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -70,7 +71,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 
 			validatorStore := NewMockselfValidatorStore(ctrl)
 
-			data := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata)
+			data := make(registrystorage.ValidatorMetadataMap)
 			data[tc.testPublicKey] = tc.metadata
 
 			beaconNode := beacon.NewMockBeaconNode(ctrl)
@@ -135,16 +136,12 @@ func TestSyncer_Sync(t *testing.T) {
 			beaconNode:   defaultMockBeaconNode,
 		}
 
-		expectedUpdatedShares := []*ssvtypes.SSVShare{
-			{
-				Share: spectypes.Share{
-					ValidatorPubKey: spectypes.ValidatorPK{0x1},
-				},
+		expectedUpdatedShares := registrystorage.ValidatorMetadataMap{
+			spectypes.ValidatorPK{0x1}: {
+				Index: 1,
 			},
-			{
-				Share: spectypes.Share{
-					ValidatorPubKey: spectypes.ValidatorPK{0x2},
-				},
+			spectypes.ValidatorPK{0x2}: {
+				Index: 2,
 			},
 		}
 
@@ -328,15 +325,18 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		// Set expectations
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
 		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{share1}).AnyTimes()
-
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return([]*ssvtypes.SSVShare{share1}, nil)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(registrystorage.ValidatorMetadataMap{
+			share1.ValidatorPubKey: share1.BeaconMetadata(),
+		}, nil)
 
 		// Call method
 		result, err := syncer.SyncOnStartup(context.Background())
 
 		// Assert
 		require.NoError(t, err)
-		require.Equal(t, []*ssvtypes.SSVShare{share1}, result)
+		require.Equal(t, registrystorage.ValidatorMetadataMap{
+			share1.ValidatorPubKey: share1.BeaconMetadata(),
+		}, result)
 	})
 
 	// Subtest: SyncBatch returns error
@@ -448,7 +448,9 @@ func TestSyncer_Stream(t *testing.T) {
 		}).AnyTimes()
 
 		// Mock shareStorage.UpdateValidatorsMetadata
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return([]*ssvtypes.SSVShare{share1}, nil).AnyTimes()
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(registrystorage.ValidatorMetadataMap{
+			share1.ValidatorPubKey: share1.BeaconMetadata(),
+		}, nil).AnyTimes()
 
 		// Mock validatorStore.SelfValidators
 		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{share1}).AnyTimes()
@@ -464,11 +466,13 @@ func TestSyncer_Stream(t *testing.T) {
 				return
 			}
 
-			expected := []*ssvtypes.SSVShare{share1}
+			expected := registrystorage.ValidatorMetadataMap{
+				share1.ValidatorPubKey: share1.BeaconMetadata(),
+			}
 
 			// Verify the update
-			require.Equal(t, expected, batch.SharesBefore)
-			require.Equal(t, expected, batch.SharesAfter)
+			require.Equal(t, expected, batch.Before)
+			require.Equal(t, expected, batch.After)
 			// Signal that the update was received
 			close(updateSent)
 		}()

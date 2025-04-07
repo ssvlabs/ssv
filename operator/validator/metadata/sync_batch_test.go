@@ -4,161 +4,172 @@ import (
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestDetectValidatorStateChanges(t *testing.T) {
 	testCases := []struct {
-		name           string
-		sharesBefore   []*ssvtypes.SSVShare
-		sharesAfter    []*ssvtypes.SSVShare
-		expectedAttest int
-		expectedSlash  int
-		expectedExit   int
+		name                    string
+		metadataBefore          registrystorage.ValidatorMetadataMap
+		metadataAfter           registrystorage.ValidatorMetadataMap
+		expectedEligibleToStart int
+		expectedSlashedCount    int
+		expectedExitedCount     int
 	}{
 		{
-			name: "Validator becomes attesting",
-			sharesBefore: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x01}},
+			name: "Validator becomes eligible to start",
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			sharesAfter: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x01}},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			expectedAttest: 1,
-			expectedSlash:  0,
-			expectedExit:   0,
+			expectedEligibleToStart: 1,
+			expectedSlashedCount:    0,
+			expectedExitedCount:     0,
 		},
 		{
 			name: "Validator gets slashed",
-			sharesBefore: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x02}},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x02}: {
+					Index:  2,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			sharesAfter: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x02}},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x02}: {
+					Index:  2,
 					Status: eth2apiv1.ValidatorStateActiveSlashed,
 				},
 			},
-			expectedAttest: 0,
-			expectedSlash:  1,
-			expectedExit:   0,
+			expectedEligibleToStart: 0,
+			expectedSlashedCount:    1,
+			expectedExitedCount:     0,
 		},
 		{
 			name: "Validator exits",
-			sharesBefore: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x03}},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x03}: {
+					Index:  3,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			sharesAfter: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x03}},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x03}: {
+					Index:  3,
 					Status: eth2apiv1.ValidatorStateExitedUnslashed,
 				},
 			},
-			expectedAttest: 0,
-			expectedSlash:  0,
-			expectedExit:   1,
+			expectedEligibleToStart: 0,
+			expectedSlashedCount:    0,
+			expectedExitedCount:     1,
 		},
 		{
 			name: "No state change",
-			sharesBefore: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x04}},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x04}: {
+					Index:  4,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			sharesAfter: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x04}},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x04}: {
+					Index:  4,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			expectedAttest: 0,
-			expectedSlash:  0,
-			expectedExit:   0,
+			expectedEligibleToStart: 0,
+			expectedSlashedCount:    0,
+			expectedExitedCount:     0,
 		},
 		{
-			name: "multiple validators: all become attesting",
-			sharesBefore: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x01}},
-					Status: eth2apiv1.ValidatorStateUnknown,
-				},
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x02}},
-					Status: eth2apiv1.ValidatorStateUnknown,
+			name: "Validator transitions from pending to active",
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x05}: {
+					Index:  5,
+					Status: eth2apiv1.ValidatorStatePendingQueued,
 				},
 			},
-			sharesAfter: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x01}},
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-				},
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x02}},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x05}: {
+					Index:  5,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			expectedAttest: 2,
-			expectedSlash:  0,
-			expectedExit:   0,
+			expectedEligibleToStart: 0,
+			expectedSlashedCount:    0,
+			expectedExitedCount:     0,
+		},
+
+		{
+			name: "multiple validators: all become eligible to start",
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Status: eth2apiv1.ValidatorStateUnknown,
+				},
+				spectypes.ValidatorPK{0x02}: {
+					Status: eth2apiv1.ValidatorStateUnknown,
+				},
+			},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+				spectypes.ValidatorPK{0x02}: {
+					Index:  2,
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
+				},
+			},
+			expectedEligibleToStart: 2,
+			expectedSlashedCount:    0,
+			expectedExitedCount:     0,
 		},
 		{
-			name: "multiple validators: one become attesting",
-			sharesBefore: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x01}},
+			name: "multiple validators: one become eligible to start",
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x02}},
+				spectypes.ValidatorPK{0x02}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			sharesAfter: []*ssvtypes.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x01}},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
-				{
-					Share:  spectypes.Share{Committee: []*spectypes.ShareMember{{Signer: 1}}, ValidatorPubKey: spectypes.ValidatorPK{0x02}},
+				spectypes.ValidatorPK{0x02}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			expectedAttest: 1,
-			expectedSlash:  0,
-			expectedExit:   0,
+			expectedEligibleToStart: 1,
+			expectedSlashedCount:    0,
+			expectedExitedCount:     0,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			syncBatch := SyncBatch{
-				SharesBefore: tc.sharesBefore,
-				SharesAfter:  tc.sharesAfter,
-				Epoch:        phase0.Epoch(0),
+				Before: tc.metadataBefore,
+				After:  tc.metadataAfter,
 			}
 
-			attesting, slashed, exited := syncBatch.DetectValidatorStateChanges()
+			eligibleToStart, slashed, exited := syncBatch.DetectValidatorStateChanges()
 
-			require.Len(t, attesting, tc.expectedAttest, "unexpected attesting count")
-			require.Len(t, slashed, tc.expectedSlash, "unexpected slashed count")
-			require.Len(t, exited, tc.expectedExit, "unexpected exited count")
+			require.Len(t, eligibleToStart, tc.expectedEligibleToStart, "unexpected eligible to start count")
+			require.Len(t, slashed, tc.expectedSlashedCount, "unexpected slashed count")
+			require.Len(t, exited, tc.expectedExitedCount, "unexpected exited count")
 		})
 	}
 }

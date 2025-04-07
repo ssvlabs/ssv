@@ -1,49 +1,45 @@
 package metadata
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
+// SyncBatch represents the validator metadata before and after a sync.
 type SyncBatch struct {
-	SharesBefore []*ssvtypes.SSVShare
-	SharesAfter  []*ssvtypes.SSVShare
-	Epoch        phase0.Epoch
+	Before registrystorage.ValidatorMetadataMap
+	After  registrystorage.ValidatorMetadataMap
 }
 
-// DetectValidatorStateChanges compares validator metadata before and after the update to detect state changes.
-// Returns validators that became attesting, slashed, or exited.
-func (s SyncBatch) DetectValidatorStateChanges() (attesting, slashed, exited []*ssvtypes.SSVShare) {
-	// Build a map of previous states for quick lookups
-	beforeMap := make(map[spectypes.ValidatorPK]*ssvtypes.SSVShare, len(s.SharesBefore))
-	for _, share := range s.SharesBefore {
-		beforeMap[share.ValidatorPubKey] = share
-	}
+// DetectValidatorStateChanges identifies validators whose states changed between syncs.
+// Specifically returns validators that:
+// - became eligible to start (transitioned from Unknown to Active without being slashed/exited)
+// - became slashed (transitioned to a slashed state)
+// - became exited (transitioned to an exited state)
+func (s SyncBatch) DetectValidatorStateChanges() (eligibleToStart, slashed, exited []spectypes.ValidatorPK) {
+	eligibleToStart = make([]spectypes.ValidatorPK, 0, len(s.After))
+	slashed = make([]spectypes.ValidatorPK, 0, len(s.After))
+	exited = make([]spectypes.ValidatorPK, 0, len(s.After))
 
-	attesting = make([]*ssvtypes.SSVShare, 0, len(s.SharesAfter))
-	slashed = make([]*ssvtypes.SSVShare, 0, len(s.SharesAfter))
-	exited = make([]*ssvtypes.SSVShare, 0, len(s.SharesAfter))
-
-	for _, shareAfter := range s.SharesAfter {
-		shareBefore, exists := beforeMap[shareAfter.ValidatorPubKey]
+	for pk, after := range s.After {
+		before, exists := s.Before[pk]
 		if !exists {
 			continue
 		}
 
-		if !shareBefore.IsAttesting(s.Epoch) && shareAfter.IsAttesting(s.Epoch) {
-			attesting = append(attesting, shareAfter)
+		if after.BecameEligible(before) {
+			eligibleToStart = append(eligibleToStart, pk)
 		}
 
-		if !shareBefore.Slashed() && shareAfter.Slashed() {
-			slashed = append(slashed, shareAfter)
+		if !before.Slashed() && after.Slashed() {
+			slashed = append(slashed, pk)
 		}
-
-		if !shareBefore.Exiting() && shareAfter.Exiting() {
-			exited = append(exited, shareAfter)
+		
+		if !before.Exited() && after.Exited() {
+			exited = append(exited, pk)
 		}
 	}
 
-	return attesting, slashed, exited
+	return eligibleToStart, slashed, exited
 }

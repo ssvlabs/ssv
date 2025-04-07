@@ -990,22 +990,21 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 func TestHandleMetadataUpdates(t *testing.T) {
 	testCases := []struct {
 		name                    string
-		sharesBefore            []*types.SSVShare
-		sharesAfter             []*types.SSVShare
+		metadataBefore          registrystorage.ValidatorMetadataMap
+		metadataAfter           registrystorage.ValidatorMetadataMap
 		expectIndicesChange     bool
 		mockSharesStorageExpect func(mockSharesStorage *mocks.MockSharesStorage)
 	}{
 		{
 			name: "report indices change (Unknown → ActiveOngoing)",
-			sharesBefore: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t)},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			sharesAfter: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
@@ -1013,32 +1012,32 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "report indices change (PendingQueued → ActiveOngoing)",
-			sharesBefore: []*types.SSVShare{
-				{
-					Share:           spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:           1,
 					Status:          eth2apiv1.ValidatorStatePendingQueued,
 					ActivationEpoch: goclient.FarFutureEpoch,
 				},
 			},
-			sharesAfter: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			expectIndicesChange: true,
+			expectIndicesChange: false,
 		},
 		{
 			name: "no report indices change (ActiveOngoing → ActiveOngoing)",
-			sharesBefore: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			sharesAfter: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
@@ -1046,15 +1045,15 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "no report indices change (ActiveOngoing → ActiveExiting)",
-			sharesBefore: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			sharesAfter: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveExiting,
 				},
 			},
@@ -1062,15 +1061,15 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "no report indices change (ActiveExiting → ExitedUnslashed)",
-			sharesBefore: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveExiting,
 				},
 			},
-			sharesAfter: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateExitedUnslashed,
 				},
 			},
@@ -1078,57 +1077,30 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "no report indices change (ActiveOngoing → ActiveSlashed)",
-			sharesBefore: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			sharesAfter: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveSlashed,
 				},
 			},
 			expectIndicesChange: false,
 		},
 		{
-			name: "no report indices change for non-committee validator (PendingQueued → ActiveOngoing)",
-			sharesBefore: []*types.SSVShare{
-				{
-					Share: spectypes.Share{
-						Committee: []*spectypes.ShareMember{
-							{Signer: 10}, {Signer: 11}, {Signer: 12}, {Signer: 13},
-						},
-						ValidatorIndex: 1,
-					},
-					Status: eth2apiv1.ValidatorStatePendingQueued,
-				},
-			},
-			sharesAfter: []*types.SSVShare{
-				{
-					Share: spectypes.Share{
-						Committee: []*spectypes.ShareMember{
-							{Signer: 10}, {Signer: 11}, {Signer: 12}, {Signer: 13},
-						},
-						ValidatorIndex: 1,
-					},
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-				},
-			},
-			expectIndicesChange: false,
-		},
-		{
 			name: "no report indices change - validator not found before starting (Unknown → ActiveOngoing)",
-			sharesBefore: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t)},
+			metadataBefore: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			sharesAfter: []*types.SSVShare{
-				{
-					Share:  spectypes.Share{Committee: buildOperators(t), ValidatorIndex: 1},
+			metadataAfter: registrystorage.ValidatorMetadataMap{
+				spectypes.ValidatorPK{0x01}: {
+					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
@@ -1146,12 +1118,18 @@ func TestHandleMetadataUpdates(t *testing.T) {
 			if tc.mockSharesStorageExpect != nil {
 				tc.mockSharesStorageExpect(mockSharesStorage)
 			} else {
-				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(tc.sharesAfter).AnyTimes()
+				var shares []*types.SSVShare
+				for _, metadata := range tc.metadataAfter {
+					share := &types.SSVShare{}
+					share.SetBeaconMetadata(metadata)
+					shares = append(shares, share)
+				}
+				mockSharesStorage.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shares).AnyTimes()
 			}
 
 			syncBatch := metadata.SyncBatch{
-				SharesBefore: tc.sharesBefore,
-				SharesAfter:  tc.sharesAfter,
+				Before: tc.metadataBefore,
+				After:  tc.metadataAfter,
 			}
 
 			var done <-chan struct{}

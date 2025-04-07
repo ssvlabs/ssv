@@ -538,31 +538,26 @@ func (c *controller) StartNetworkHandlers() {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-// startAttestingValidators starts validators that transitioned to attesting due to a metadata update.
-func (c *controller) startAttestingValidators(_ context.Context, validators []*ssvtypes.SSVShare) (count int) {
-	// TODO: use context
-
-	// Build a map for quick lookup
-	validatorsSet := make(map[spectypes.ValidatorPK]struct{}, len(validators))
-	for _, v := range validators {
-		validatorsSet[v.ValidatorPubKey] = struct{}{}
+// startEligibleValidators starts validators that transitioned to eligible to start due to a metadata update.
+func (c *controller) startEligibleValidators(ctx context.Context, pubKeys []spectypes.ValidatorPK) (count int) {
+	// Build a map for quick lookup to ensure only explicitly listed validators start.
+	validatorsSet := make(map[spectypes.ValidatorPK]struct{}, len(pubKeys))
+	for _, v := range pubKeys {
+		validatorsSet[v] = struct{}{}
 	}
 
 	// Filtering shares again ensures:
 	// 1. Validators still exist (not removed or liquidated).
 	// 2. They belong to this operator (ownership check).
-	// 3. They are active and eligible to attest in this epoch.
 
 	// Note: A validator might be removed from storage after being fetched but before starting.
 	// In this case, it could still be added to validatorsMap despite no longer existing in sharesStorage,
 	// leading to unnecessary tracking.
 	operatorID := c.operatorDataStore.GetOperatorID()
-	currentEpoch := c.networkConfig.Beacon.EstimatedCurrentEpoch()
 	shares := c.sharesStorage.List(
 		nil,
 		registrystorage.ByOperatorID(operatorID),
 		registrystorage.ByNotLiquidated(),
-		registrystorage.ByAttesting(currentEpoch),
 		func(share *ssvtypes.SSVShare) bool {
 			_, exists := validatorsSet[share.ValidatorPubKey]
 			return exists
@@ -572,12 +567,17 @@ func (c *controller) startAttestingValidators(_ context.Context, validators []*s
 	startedValidators := 0
 
 	for _, share := range shares {
+		select {
+		case <-ctx.Done():
+			c.logger.Warn("context cancelled, stopping validator start loop")
+			return startedValidators
+		default:
+		}
+
 		// Start validator (if not already started).
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
-			v.Share.ValidatorIndex = share.ValidatorIndex
-			v.Share.Status = share.Status
-			v.Share.ActivationEpoch = share.ActivationEpoch
+			v.Share.SetBeaconMetadata(share.BeaconMetadata())
 			started, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
@@ -956,30 +956,30 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 		return nil
 	}
 
-	// Identify validators that changed state (attesting, slashed, or exited) after the metadata update.
-	attestingShares, slashedShares, exitedShares := syncBatch.DetectValidatorStateChanges()
+	// Identify validators that changed state (eligible to start, slashed, or exited) after the metadata update.
+	eligibleToStart, slashedShares, exitedShares := syncBatch.DetectValidatorStateChanges()
 
-	// Start only the validators that became attesting as a result of the metadata update.
+	// Start only the validators that became eligible to start as a result of the metadata update.
 	// We do NOT start slashed or exited validators, as they are no longer eligible to participate.
-	if len(attestingShares) > 0 || len(slashedShares) > 0 || len(exitedShares) > 0 {
+	if len(eligibleToStart) > 0 || len(slashedShares) > 0 || len(exitedShares) > 0 {
 		c.logger.Debug("validators state changed after metadata sync",
-			zap.Int("attesting_count", len(attestingShares)),
+			zap.Int("eligible_to_start_count", len(eligibleToStart)),
 			zap.Int("slashed_count", len(slashedShares)),
 			zap.Int("exited_count", len(exitedShares)),
 		)
 	}
 
-	if len(attestingShares) > 0 {
-		startedValidators := c.startAttestingValidators(ctx, attestingShares)
+	if len(eligibleToStart) > 0 {
+		startedValidators := c.startEligibleValidators(ctx, eligibleToStart)
 		if startedValidators > 0 {
-			c.logger.Debug("started new attesting validators", zap.Int("started_validators", startedValidators))
+			c.logger.Debug("started new eligible validators", zap.Int("started_validators", startedValidators))
 
 			// Refresh duties only if there are started validators.
 			if !c.reportIndicesChange(ctx) {
 				c.logger.Error("failed to notify indices change")
 			}
 		} else {
-			c.logger.Warn("no new attesting validators started")
+			c.logger.Warn("no eligible validators started despite metadata changes")
 		}
 	}
 
@@ -1018,7 +1018,7 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 					validatorsPerStatus[statusActive]++
 				} else if share.Slashed() {
 					validatorsPerStatus[statusSlashed]++
-				} else if share.Exiting() {
+				} else if share.Exited() {
 					validatorsPerStatus[statusExiting]++
 				} else if !share.Activated() {
 					validatorsPerStatus[statusNotActivated]++

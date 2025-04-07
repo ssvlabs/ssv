@@ -122,13 +122,14 @@ func TestSharesStorage(t *testing.T) {
 	require.EqualValues(t, 2, len(validators))
 
 	t.Run("UpdateValidatorMetadata_shareExists", func(t *testing.T) {
-		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-			validatorShare.ValidatorPubKey: {
-				Index:           3,
-				Status:          eth2apiv1.ValidatorStateActiveExiting,
-				ActivationEpoch: 4,
-			},
-		})
+		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(
+			map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+				validatorShare.ValidatorPubKey: {
+					Index:           3,
+					Status:          eth2apiv1.ValidatorStateActiveExiting,
+					ActivationEpoch: 4,
+				},
+			})
 		require.NoError(t, err)
 		require.NotNil(t, updatedShares)
 		require.Len(t, updatedShares, 1)
@@ -138,17 +139,18 @@ func TestSharesStorage(t *testing.T) {
 		require.NotNil(t, validatorShareAfter)
 
 		require.Equal(t, eth2apiv1.ValidatorStateActiveExiting, validatorShareAfter.Status)
-		require.Equal(t, validatorShareAfter.Status, updatedShares[0].Status)
+		require.Equal(t, validatorShareAfter.Status, updatedShares[validatorShare.ValidatorPubKey].Status)
 	})
 
 	t.Run("UpdateValidatorMetadata_shareExists_sameMetadata", func(t *testing.T) {
-		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-			validatorShare.ValidatorPubKey: {
-				Index:           3,
-				Status:          eth2apiv1.ValidatorStateActiveExiting,
-				ActivationEpoch: 4,
-			},
-		})
+		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(
+			map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+				validatorShare.ValidatorPubKey: {
+					Index:           3,
+					Status:          eth2apiv1.ValidatorStateActiveExiting,
+					ActivationEpoch: 4,
+				},
+			})
 		require.NoError(t, err)
 		require.Nil(t, updatedShares)
 	})
@@ -194,13 +196,14 @@ func TestSharesStorage(t *testing.T) {
 	require.Nil(t, share)
 
 	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
-		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-			validatorShare.ValidatorPubKey: {
-				Index:           3,
-				Status:          2,
-				ActivationEpoch: 4,
-			},
-		})
+		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(
+			map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+				validatorShare.ValidatorPubKey: {
+					Index:           3,
+					Status:          2,
+					ActivationEpoch: 4,
+				},
+			})
 		require.NoError(t, err)
 		require.Nil(t, updatedShares)
 	})
@@ -322,9 +325,10 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 		}
 
 		// Update the share with new metadata
-		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-			testShare.ValidatorPubKey: updatedMetadata,
-		})
+		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(
+			map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+				testShare.ValidatorPubKey: updatedMetadata,
+			})
 		require.NoError(t, err)
 		require.NotNil(t, updatedShares)
 		reopen(t)
@@ -427,13 +431,14 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 					case "add":
 						require.NoError(t, storage.Shares.Save(nil, share1, share2, share3, share4))
 					case "update":
-						_, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-							share2.ValidatorPubKey: {
-								Status:          updatedShare2.Status,
-								Index:           updatedShare2.ValidatorIndex,
-								ActivationEpoch: updatedShare2.ActivationEpoch,
-							},
-						})
+						_, err := storage.Shares.UpdateValidatorsMetadata(
+							map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+								share2.ValidatorPubKey: {
+									Status:          updatedShare2.Status,
+									Index:           updatedShare2.ValidatorIndex,
+									ActivationEpoch: updatedShare2.ActivationEpoch,
+								},
+							})
 						require.NoError(t, err)
 					case "remove1":
 						require.NoError(t, storage.Shares.Delete(nil, share1.ValidatorPubKey[:]))
