@@ -17,7 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate sszgen -path ./shares.go --objs Share
+//go:generate go tool -modfile=../../tool.mod sszgen -path ./shares.go --objs Share
 
 // sharesPrefix specifies the prefix used for storing Share(s) in DB.
 // Note, previously gob-encoded Share(s) were stored with `shares/` prefix, this has been

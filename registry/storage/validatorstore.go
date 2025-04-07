@@ -8,11 +8,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"golang.org/x/exp/maps"
+
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
 
 type BaseValidatorStore interface {
 	Validator(pubKey []byte) (*types.SSVShare, bool)
