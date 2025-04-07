@@ -23,7 +23,6 @@ import (
 type MockBeaconNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNetworkMockRecorder
-	isgomock struct{}
 }
 
 // MockBeaconNetworkMockRecorder is the mock recorder for MockBeaconNetwork.

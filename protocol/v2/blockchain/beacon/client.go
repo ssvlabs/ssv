@@ -7,13 +7,12 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 )
 
 // TODO: add missing tests
 
-//go:generate mockgen -package=beacon -destination=./mock_client.go -source=./client.go
+//go:generate go tool -modfile=../../../../tool.mod mockgen -package=beacon -destination=./mock_client.go -source=./client.go
 
 // beaconDuties interface serves all duty related calls
 type beaconDuties interface {

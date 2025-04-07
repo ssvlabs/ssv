@@ -10,13 +10,14 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"golang.org/x/exp/maps"
+
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"golang.org/x/exp/maps"
 )
 
-//go:generate sszgen -path ./shares.go --objs Share
+//go:generate go tool -modfile=../../tool.mod sszgen -path ./shares.go --objs Share
 
 // sharesPrefix specifies the prefix used for storing Share(s) in DB.
 // Note, previously gob-encoded Share(s) were stored with `shares/` prefix, this has been

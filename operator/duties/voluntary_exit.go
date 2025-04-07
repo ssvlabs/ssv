@@ -6,9 +6,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"go.uber.org/zap"
 )
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
