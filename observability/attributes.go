@@ -13,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolTypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
