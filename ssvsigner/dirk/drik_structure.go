@@ -5,27 +5,25 @@ import (
 	"path/filepath"
 )
 
-// Structure represents the directory structure for a Dirk installation
+// Structure represents the directory structure for a Dirk installation.
 type Structure struct {
-	// BaseDir is the main directory for Dirk
+	// BaseDir is the main directory for Dirk.
 	BaseDir string
 
-	// WalletsDir is where wallet configurations are stored
+	// WalletsDir is where wallet configurations are stored.
 	WalletsDir string
 
-	// KeystoresDir is where keystores are stored
+	// KeystoresDir is where keystores are stored.
 	KeystoresDir string
 }
 
-// NewDirkStructure creates a new directory structure with initialized paths
-// TODO: refactor + rename
-func NewDirkStructure(baseDir string) *Structure {
+// NewStructure creates a new directory structure object with initialized paths.
+func NewStructure(baseDir string) *Structure {
 	if baseDir == "" {
 		homeDir, _ := os.UserHomeDir()
-		baseDir = filepath.Join(homeDir, "dirk")
+		baseDir = filepath.Join(homeDir, ".dirk")
 	}
 
-	// TODO: update to use the correct path
 	return &Structure{
 		BaseDir:      baseDir,
 		WalletsDir:   filepath.Join(baseDir, "wallets"),
@@ -33,7 +31,7 @@ func NewDirkStructure(baseDir string) *Structure {
 	}
 }
 
-// EnsureDirectories creates all required directories
+// EnsureDirectories creates all required directories.
 func (d *Structure) EnsureDirectories() error {
 	dirs := []string{
 		d.BaseDir,
@@ -50,7 +48,7 @@ func (d *Structure) EnsureDirectories() error {
 	return nil
 }
 
-// KeystorePath returns the path to a specific keystore file
+// KeystorePath returns the path to a specific keystore file.
 func (d *Structure) KeystorePath(walletName, accountName string) string {
 	accountPath := accountName
 	if walletName != "" {
@@ -59,7 +57,7 @@ func (d *Structure) KeystorePath(walletName, accountName string) string {
 	return filepath.Join(d.KeystoresDir, accountPath+".json")
 }
 
-// GetWalletNames returns a list of all wallet directories in the wallets directory
+// GetWalletNames returns a list of all wallet directories in the wallets directory.
 func (d *Structure) GetWalletNames() ([]string, error) {
 	var wallets []string
 
@@ -82,7 +80,7 @@ func (d *Structure) GetWalletNames() ([]string, error) {
 	return wallets, nil
 }
 
-// GetAccountNames returns a list of all accounts for a specific wallet
+// GetAccountNames returns a list of all accounts for a specific wallet.
 func (d *Structure) GetAccountNames(walletName string) ([]string, error) {
 	accounts := []string{}
 	keystoresDir := filepath.Join(d.WalletsDir, walletName, "keystores")
