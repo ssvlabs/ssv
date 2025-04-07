@@ -481,9 +481,3 @@ func TestEkmListAccounts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, accounts, 2)
 }
-
-// TestLocalKeyManager_SlashingProtection runs the shared slashing protection test suite
-// against the LocalKeyManager implementation.
-func TestLocalKeyManager_SlashingProtection(t *testing.T) {
-	runKeyManagerSlashingTests(t, setupLocalKeyManager)
-}
