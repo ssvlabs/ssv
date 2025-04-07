@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"go.uber.org/zap"
 )
 
 // HandleMessage handles a spectypes.SSVMessage.

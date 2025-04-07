@@ -3,10 +3,10 @@ package connections
 import (
 	"context"
 
+	"github.com/libp2p/go-libp2p/core/network"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv/observability"
 )
 

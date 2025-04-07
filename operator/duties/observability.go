@@ -3,10 +3,10 @@ package duties
 import (
 	"context"
 
+	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/observability"
 )
 
