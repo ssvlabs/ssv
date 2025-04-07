@@ -3,13 +3,13 @@ package metadata
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 // SyncBatch represents the validator metadata before and after a sync.
 type SyncBatch struct {
-	Before registrystorage.ValidatorMetadataMap
-	After  registrystorage.ValidatorMetadataMap
+	Before beacon.ValidatorMetadataMap
+	After  beacon.ValidatorMetadataMap
 }
 
 // DetectValidatorStateChanges identifies validators whose states changed between syncs.
@@ -35,7 +35,7 @@ func (s SyncBatch) DetectValidatorStateChanges() (eligibleToStart, slashed, exit
 		if !before.Slashed() && after.Slashed() {
 			slashed = append(slashed, pk)
 		}
-		
+
 		if !before.Exited() && after.Exited() {
 			exited = append(exited, pk)
 		}

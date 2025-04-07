@@ -990,19 +990,19 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 func TestHandleMetadataUpdates(t *testing.T) {
 	testCases := []struct {
 		name                    string
-		metadataBefore          registrystorage.ValidatorMetadataMap
-		metadataAfter           registrystorage.ValidatorMetadataMap
+		metadataBefore          beacon.ValidatorMetadataMap
+		metadataAfter           beacon.ValidatorMetadataMap
 		expectIndicesChange     bool
 		mockSharesStorageExpect func(mockSharesStorage *mocks.MockSharesStorage)
 	}{
 		{
 			name: "report indices change (Unknown → ActiveOngoing)",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
@@ -1012,14 +1012,14 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "report indices change (PendingQueued → ActiveOngoing)",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:           1,
 					Status:          eth2apiv1.ValidatorStatePendingQueued,
 					ActivationEpoch: goclient.FarFutureEpoch,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
@@ -1029,13 +1029,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "no report indices change (ActiveOngoing → ActiveOngoing)",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
@@ -1045,13 +1045,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "no report indices change (ActiveOngoing → ActiveExiting)",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveExiting,
@@ -1061,13 +1061,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "no report indices change (ActiveExiting → ExitedUnslashed)",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveExiting,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateExitedUnslashed,
@@ -1077,13 +1077,13 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "no report indices change (ActiveOngoing → ActiveSlashed)",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveSlashed,
@@ -1093,12 +1093,12 @@ func TestHandleMetadataUpdates(t *testing.T) {
 		},
 		{
 			name: "no report indices change - validator not found before starting (Unknown → ActiveOngoing)",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,

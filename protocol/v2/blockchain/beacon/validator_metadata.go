@@ -3,7 +3,10 @@ package beacon
 import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
+
+type ValidatorMetadataMap map[spectypes.ValidatorPK]*ValidatorMetadata
 
 // ValidatorMetadata represents validator metadata from Ethereum beacon node
 type ValidatorMetadata struct {

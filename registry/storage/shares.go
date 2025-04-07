@@ -52,7 +52,7 @@ type Shares interface {
 	Drop() error
 
 	// UpdateValidatorsMetadata updates the metadata of the given validators
-	UpdateValidatorsMetadata(ValidatorMetadataMap) (ValidatorMetadataMap, error)
+	UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error)
 }
 
 type sharesStorage struct {
@@ -356,15 +356,13 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	return s.db.Using(rw).Delete(s.storagePrefix, SharesDBKey(pubKey))
 }
 
-type ValidatorMetadataMap map[spectypes.ValidatorPK]*beacon.ValidatorMetadata
-
 // UpdateValidatorsMetadata updates shares with provided validator metadata.
 // It returns only metadata entries that actually changed the stored shares.
 // The returned map is nil if no changes occurred.
-func (s *sharesStorage) UpdateValidatorsMetadata(data ValidatorMetadataMap) (ValidatorMetadataMap, error) {
+func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	var (
 		changedShares   []*types.SSVShare
-		changedMetadata ValidatorMetadataMap
+		changedMetadata beacon.ValidatorMetadataMap
 	)
 
 	s.storageMtx.Lock()
@@ -392,7 +390,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data ValidatorMetadataMap) (Val
 				changedShares = append(changedShares, share)
 
 				if changedMetadata == nil {
-					changedMetadata = make(ValidatorMetadataMap)
+					changedMetadata = make(beacon.ValidatorMetadataMap)
 				}
 
 				changedMetadata[pk] = metadata

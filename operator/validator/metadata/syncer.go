@@ -43,7 +43,7 @@ type Syncer struct {
 type shareStorage interface {
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*ssvtypes.SSVShare
 	Range(txn basedb.Reader, fn func(*ssvtypes.SSVShare) bool)
-	UpdateValidatorsMetadata(registrystorage.ValidatorMetadataMap) (registrystorage.ValidatorMetadataMap, error)
+	UpdateValidatorsMetadata(beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error)
 }
 
 type selfValidatorStore interface {
@@ -86,7 +86,7 @@ func WithSyncInterval(interval time.Duration) Option {
 	}
 }
 
-func (s *Syncer) SyncOnStartup(ctx context.Context) (registrystorage.ValidatorMetadataMap, error) {
+func (s *Syncer) SyncOnStartup(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -122,7 +122,7 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (registrystorage.ValidatorMe
 
 // Sync retrieves metadata for the provided public keys and updates storage accordingly.
 // Returns updated metadata for keys that had changes. Returns nil if no keys were provided or no updates occurred.
-func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (registrystorage.ValidatorMetadataMap, error) {
+func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	fetchStart := time.Now()
 	metadata, err := s.Fetch(ctx, pubKeys)
 	if err != nil {
@@ -151,7 +151,7 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (reg
 	return updatedValidators, nil
 }
 
-func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (registrystorage.ValidatorMetadataMap, error) {
+func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -167,7 +167,7 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (regi
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
 	}
 
-	results := make(registrystorage.ValidatorMetadataMap, len(validatorsIndexMap))
+	results := make(beacon.ValidatorMetadataMap, len(validatorsIndexMap))
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
 			Balance:         v.Balance,
@@ -266,7 +266,7 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 
 // nextBatchFromDB returns metadata for non-liquidated shares from DB that are most deserving of an update.
 // It prioritizes shares whose metadata was never fetched or became stale based on BeaconMetadataLastUpdated.
-func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) registrystorage.ValidatorMetadataMap {
+func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.ValidatorMetadataMap {
 	// TODO: use context, return if it's done
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -300,7 +300,7 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) registr
 		shares = shares[:batchSize]
 	}
 
-	metadataMap := make(registrystorage.ValidatorMetadataMap, len(shares))
+	metadataMap := make(beacon.ValidatorMetadataMap, len(shares))
 	for _, share := range shares {
 		metadataMap[share.ValidatorPubKey] = share.BeaconMetadata()
 	}

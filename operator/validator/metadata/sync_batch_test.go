@@ -7,26 +7,26 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestDetectValidatorStateChanges(t *testing.T) {
 	testCases := []struct {
 		name                    string
-		metadataBefore          registrystorage.ValidatorMetadataMap
-		metadataAfter           registrystorage.ValidatorMetadataMap
+		metadataBefore          beacon.ValidatorMetadataMap
+		metadataAfter           beacon.ValidatorMetadataMap
 		expectedEligibleToStart int
 		expectedSlashedCount    int
 		expectedExitedCount     int
 	}{
 		{
 			name: "Validator becomes eligible to start",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
@@ -38,13 +38,13 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 		},
 		{
 			name: "Validator gets slashed",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x02}: {
 					Index:  2,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x02}: {
 					Index:  2,
 					Status: eth2apiv1.ValidatorStateActiveSlashed,
@@ -56,13 +56,13 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 		},
 		{
 			name: "Validator exits",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x03}: {
 					Index:  3,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x03}: {
 					Index:  3,
 					Status: eth2apiv1.ValidatorStateExitedUnslashed,
@@ -74,13 +74,13 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 		},
 		{
 			name: "No state change",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x04}: {
 					Index:  4,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x04}: {
 					Index:  4,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
@@ -92,13 +92,13 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 		},
 		{
 			name: "Validator transitions from pending to active",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x05}: {
 					Index:  5,
 					Status: eth2apiv1.ValidatorStatePendingQueued,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x05}: {
 					Index:  5,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
@@ -111,7 +111,7 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 
 		{
 			name: "multiple validators: all become eligible to start",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
@@ -119,7 +119,7 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,
@@ -135,7 +135,7 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 		},
 		{
 			name: "multiple validators: one become eligible to start",
-			metadataBefore: registrystorage.ValidatorMetadataMap{
+			metadataBefore: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
@@ -143,7 +143,7 @@ func TestDetectValidatorStateChanges(t *testing.T) {
 					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 			},
-			metadataAfter: registrystorage.ValidatorMetadataMap{
+			metadataAfter: beacon.ValidatorMetadataMap{
 				spectypes.ValidatorPK{0x01}: {
 					Index:  1,
 					Status: eth2apiv1.ValidatorStateActiveOngoing,

@@ -19,7 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -71,7 +70,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 
 			validatorStore := NewMockselfValidatorStore(ctrl)
 
-			data := make(registrystorage.ValidatorMetadataMap)
+			data := make(beacon.ValidatorMetadataMap)
 			data[tc.testPublicKey] = tc.metadata
 
 			beaconNode := beacon.NewMockBeaconNode(ctrl)
@@ -136,7 +135,7 @@ func TestSyncer_Sync(t *testing.T) {
 			beaconNode:   defaultMockBeaconNode,
 		}
 
-		expectedUpdatedShares := registrystorage.ValidatorMetadataMap{
+		expectedUpdatedShares := beacon.ValidatorMetadataMap{
 			spectypes.ValidatorPK{0x1}: {
 				Index: 1,
 			},
@@ -325,7 +324,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		// Set expectations
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
 		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{share1}).AnyTimes()
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(registrystorage.ValidatorMetadataMap{
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(beacon.ValidatorMetadataMap{
 			share1.ValidatorPubKey: share1.BeaconMetadata(),
 		}, nil)
 
@@ -334,7 +333,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		// Assert
 		require.NoError(t, err)
-		require.Equal(t, registrystorage.ValidatorMetadataMap{
+		require.Equal(t, beacon.ValidatorMetadataMap{
 			share1.ValidatorPubKey: share1.BeaconMetadata(),
 		}, result)
 	})
@@ -448,7 +447,7 @@ func TestSyncer_Stream(t *testing.T) {
 		}).AnyTimes()
 
 		// Mock shareStorage.UpdateValidatorsMetadata
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(registrystorage.ValidatorMetadataMap{
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(beacon.ValidatorMetadataMap{
 			share1.ValidatorPubKey: share1.BeaconMetadata(),
 		}, nil).AnyTimes()
 
@@ -466,7 +465,7 @@ func TestSyncer_Stream(t *testing.T) {
 				return
 			}
 
-			expected := registrystorage.ValidatorMetadataMap{
+			expected := beacon.ValidatorMetadataMap{
 				share1.ValidatorPubKey: share1.BeaconMetadata(),
 			}
 

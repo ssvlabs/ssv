@@ -12,6 +12,7 @@ package metadata
 import (
 	reflect "reflect"
 
+	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	types "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
@@ -22,6 +23,7 @@ import (
 type MockshareStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockshareStorageMockRecorder
+	isgomock struct{}
 }
 
 // MockshareStorageMockRecorder is the mock recorder for MockshareStorage.
@@ -73,10 +75,10 @@ func (mr *MockshareStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 }
 
 // UpdateValidatorsMetadata mocks base method.
-func (m *MockshareStorage) UpdateValidatorsMetadata(arg0 storage.ValidatorMetadataMap) (storage.ValidatorMetadataMap, error) {
+func (m *MockshareStorage) UpdateValidatorsMetadata(arg0 beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", arg0)
-	ret0, _ := ret[0].(storage.ValidatorMetadataMap)
+	ret0, _ := ret[0].(beacon.ValidatorMetadataMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -91,6 +93,7 @@ func (mr *MockshareStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gomo
 type MockselfValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockselfValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockselfValidatorStoreMockRecorder is the mock recorder for MockselfValidatorStore.
