@@ -79,42 +79,27 @@ func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, d
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "start_consume_queue"),
-		trace.WithAttributes(
-			observability.RunnerRoleAttribute(duty.RunnerRole()),
-			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
-			observability.BeaconSlotAttribute(duty.Slot)),
-	)
-	defer span.End()
-
 	// Setting the cancel function separately due the queue could be created in HandleMessage
 	q, found := c.Queues[duty.Slot]
 	if !found {
-		err := fmt.Errorf("no queue found for slot %d", duty.Slot)
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return fmt.Errorf("no queue found for slot %d", duty.Slot)
 	}
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
-		err := fmt.Errorf("no runner found for slot %d", duty.Slot)
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return fmt.Errorf("no runner found for slot %d", duty.Slot)
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
 
 	go func() {
 		defer cancelF()
 		if err := c.ConsumeQueue(queueCtx, q, logger, c.ProcessMessage, r); err != nil {
 			logger.Error("❗failed consuming committee queue", zap.Error(err))
-			span.RecordError(err)
 		}
 	}()
 
-	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
