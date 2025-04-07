@@ -137,13 +137,17 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
+
 		var db basedb.Database
-		if cfg.DBOptions.Engine == "pebble" || cfg.DBOptions.Engine == "pebbledb" {
+		switch cfg.DBOptions.Engine {
+		case "pebble":
 			logger.Info("using pebble db")
 			db, err = setupPebbleDB(logger, networkConfig.Beacon.GetNetwork())
-		} else {
+		case "badger":
 			logger.Info("using badger db")
 			db, err = setupBadgerDB(logger, networkConfig.Beacon.GetNetwork())
+		default:
+			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
 		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
