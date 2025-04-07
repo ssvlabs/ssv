@@ -35,15 +35,17 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger                *zap.Logger
-	netCfg                networkconfig.NetworkConfig
+	logger          *zap.Logger
+	netCfg          networkconfig.NetworkConfig
+	pectraForkEpoch phase0.Epoch
+
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
 
-	validatorStore    storage.ValidatorStore
-	dutyStore         *dutystore.Store
+	validatorStore storage.ValidatorStore
+	dutyStore      *dutystore.Store
+
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
-	pectraForkEpoch   phase0.Epoch
 
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
 	// same ID apply any state modifications (during message validation - which is not
