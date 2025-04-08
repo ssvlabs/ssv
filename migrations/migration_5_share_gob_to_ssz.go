@@ -146,12 +146,6 @@ func matchGOBvsSSZ(shareGOB *storageShareGOB, shareSSZ *storage.Share) bool {
 			return false
 		}
 	}
-	if shareGOB.Quorum != shareSSZ.Quorum {
-		return false
-	}
-	if shareGOB.PartialQuorum != shareSSZ.PartialQuorum {
-		return false
-	}
 	if shareGOB.DomainType != shareSSZ.DomainType {
 		return false
 	}
