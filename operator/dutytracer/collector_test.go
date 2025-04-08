@@ -18,6 +18,9 @@ import (
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 )
 
+// These tests are deliberately written in a progressive manner to ensure that only the expected values are
+// changing at any given iteration.
+
 func TestValidatorDuty(t *testing.T) {
 	logger := zap.NewNop()
 	ctrl := gomock.NewController(t)
@@ -313,6 +316,45 @@ func TestValidatorDuty(t *testing.T) {
 		assert.Equal(t, uint64(1), roundChange.Signer)
 		require.NotNil(t, roundChange.ReceivedTime)
 	}
+
+	{ // TC - 9 Proposal with proposal data
+		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
+		data, err := new(specqbft.Message).Encode()
+		require.NoError(t, err)
+
+		proposalMsg.Data = data
+
+		pData, err := new(spectypes.ValidatorConsensusData).Encode()
+		require.NoError(t, err)
+
+		proposalMsg.SignedSSVMessage.FullData = pData
+
+		err = collector.Collect(context.Background(), proposalMsg, dummyVerify)
+		require.NoError(t, err)
+
+		duty, err := collector.GetValidatorDuty(bnRole, slot, validatorPK)
+		require.NoError(t, err)
+		require.NotNil(t, duty)
+
+		assert.Equal(t, slot, duty.Slot)
+		assert.Equal(t, bnRole, duty.Role)
+		assert.Equal(t, vIndex, duty.Validator)
+
+		require.NotNil(t, duty.ConsensusTrace)
+		assert.Len(t, duty.Rounds, 2)
+
+		round := duty.Rounds[0]
+		require.NotNil(t, round)
+		require.NotNil(t, round.RoundChanges)
+		require.Len(t, round.RoundChanges, 1)
+
+		roundChange := round.RoundChanges[0]
+		require.NotNil(t, roundChange)
+		assert.Equal(t, uint64(1), roundChange.Round)
+		assert.Equal(t, wantBeaconRoot, roundChange.BeaconRoot)
+		assert.Equal(t, uint64(1), roundChange.Signer)
+		require.NotNil(t, roundChange.ReceivedTime)
+	}
 }
 
 func TestCommitteeDuty(t *testing.T) {
@@ -541,6 +583,35 @@ func TestCommitteeDuty(t *testing.T) {
 		roundChangeMsg2.Body.(*specqbft.Message).Round = 2
 
 		tracer.Collect(context.Background(), roundChangeMsg2, dummyVerify)
+
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		require.NoError(t, err)
+		require.NotNil(t, duty)
+		assert.Equal(t, slot, duty.Slot)
+		assert.Equal(t, duty.CommitteeID, committeeID)
+		require.Len(t, duty.Rounds, 2)
+		round1 := duty.Rounds[1]
+		require.NotNil(t, round1)
+		// assert.Equal(t, uint64(3), round1.Proposer)
+		require.Len(t, round1.RoundChanges, 1)
+
+		roundChange := round1.RoundChanges[0]
+		require.NotNil(t, roundChange)
+		assert.Equal(t, uint64(2), roundChange.Round)
+		assert.Equal(t, wantBeaconRoot, roundChange.BeaconRoot)
+		assert.Equal(t, uint64(1), roundChange.Signer)
+		require.NotNil(t, roundChange.ReceivedTime)
+
+		require.Nil(t, round1.ProposalTrace)
+		require.Empty(t, round1.Prepares)
+		require.Empty(t, round1.Commits)
+	}
+
+	{ // TC 8 - Proposal with proposal data
+		proposalMsg := buildConsensusMsg(identifier, specqbft.ProposalMsgType, slot, nil)
+		proposalMsg.SignedSSVMessage.FullData = []byte{1, 2, 3, 4}
+
+		tracer.Collect(context.Background(), proposalMsg, dummyVerify)
 
 		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
 		require.NoError(t, err)

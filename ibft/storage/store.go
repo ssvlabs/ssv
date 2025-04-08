@@ -195,6 +195,12 @@ func (i *participantStorage) CleanAllInstances() error {
 }
 
 func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
+	start := time.Now()
+	defer func() {
+		dur := time.Since(start)
+		recordSaveDuration(i.ID(), dur)
+	}()
+
 	existingParticipants, err := i.getParticipants(pk, slot)
 	if err != nil {
 		return false, fmt.Errorf("get participants %w", err)

@@ -145,15 +145,14 @@ func toUIRoundChangeTrace(m []*model.RoundChangeTrace) (out []roundChange) {
 }
 
 // committee
-
 type committeeTraceResponse struct {
 	Data []committeeTrace `json:"data"`
 }
 
 type committeeTrace struct {
-	Slot      phase0.Slot `json:"slot"`
-	Consensus []round     `json:"consensus"`
-	Decideds  []decided   `json:"decideds"`
+	Slot      uint64    `json:"slot"`
+	Consensus []round   `json:"consensus"`
+	Decideds  []decided `json:"decideds"`
 
 	SyncCommittee []committeeMessage `json:"sync_committee"`
 	Attester      []committeeMessage `json:"attester"`
@@ -163,15 +162,15 @@ type committeeTrace struct {
 }
 
 type committeeMessage struct {
-	Signer       spectypes.OperatorID    `json:"signer"`
-	ValidatorIdx []phase0.ValidatorIndex `json:"validatorIdx"`
-	ReceivedTime time.Time               `json:"time"`
+	Signer       uint64    `json:"signer"`
+	ValidatorIdx []uint64  `json:"validatorIdx"`
+	ReceivedTime time.Time `json:"time"`
 }
 
 func toCommitteeTrace(t *model.CommitteeDutyTrace) committeeTrace {
 	return committeeTrace{
 		// consensus trace
-		Slot:          t.Slot,
+		Slot:          uint64(t.Slot),
 		Consensus:     toRounds(t.Rounds),
 		Decideds:      toDecideds(t.Decideds),
 		SyncCommittee: toCommitteePost(t.SyncCommittee),
@@ -198,7 +197,7 @@ func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
 	for _, mt := range m {
 		out = append(out, committeeMessage{
 			Signer:       mt.Signer,
-			ValidatorIdx: mt.ValidatorIdx,
+			ValidatorIdx: toUint64Slice(mt.ValidatorIdx),
 			ReceivedTime: toTime(mt.ReceivedTime),
 		})
 	}
@@ -207,6 +206,15 @@ func toCommitteePost(m []*model.SignerData) (out []committeeMessage) {
 }
 
 // helpers
+
+func toUint64Slice(s []phase0.ValidatorIndex) []uint64 {
+	out := make([]uint64, len(s))
+	for i, v := range s {
+		out[i] = uint64(v)
+	}
+
+	return out
+}
 
 //nolint:gosec
 func toTime(t uint64) time.Time {
