@@ -20,20 +20,20 @@ type committeeIterator func(validator *validator.Committee) bool
 type ValidatorsMap struct {
 	ctx context.Context
 
-	vLock      sync.RWMutex
-	validators map[spectypes.ValidatorPK]*validator.Validator
+	validatorsMx sync.RWMutex
+	validators   map[spectypes.ValidatorPK]*validator.Validator
 
-	cLock      sync.RWMutex
-	committees map[spectypes.CommitteeID]*validator.Committee
+	committeesMx sync.RWMutex
+	committees   map[spectypes.CommitteeID]*validator.Committee
 }
 
 func New(ctx context.Context, opts ...Option) *ValidatorsMap {
 	vm := &ValidatorsMap{
-		ctx:        ctx,
-		vLock:      sync.RWMutex{},
-		cLock:      sync.RWMutex{},
-		validators: make(map[spectypes.ValidatorPK]*validator.Validator),
-		committees: make(map[spectypes.CommitteeID]*validator.Committee),
+		ctx:          ctx,
+		validatorsMx: sync.RWMutex{},
+		committeesMx: sync.RWMutex{},
+		validators:   make(map[spectypes.ValidatorPK]*validator.Validator),
+		committees:   make(map[spectypes.CommitteeID]*validator.Committee),
 	}
 
 	for _, opt := range opts {
@@ -56,8 +56,8 @@ func WithInitialState(vstate map[spectypes.ValidatorPK]*validator.Validator, mst
 
 // ForEachValidator loops over validators applying iterator func
 func (vm *ValidatorsMap) ForEachValidator(iterator validatorIterator) bool {
-	vm.vLock.RLock()
-	defer vm.vLock.RUnlock()
+	vm.validatorsMx.RLock()
+	defer vm.validatorsMx.RUnlock()
 
 	for _, val := range vm.validators {
 		if !iterator(val) {
@@ -69,8 +69,8 @@ func (vm *ValidatorsMap) ForEachValidator(iterator validatorIterator) bool {
 
 // GetValidator returns a validator
 func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
-	vm.vLock.RLock()
-	defer vm.vLock.RUnlock()
+	vm.validatorsMx.RLock()
+	defer vm.validatorsMx.RUnlock()
 
 	v, ok := vm.validators[pubKey]
 
@@ -79,8 +79,8 @@ func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*validator.
 
 // PutValidator creates a new validator instance
 func (vm *ValidatorsMap) PutValidator(pubKey spectypes.ValidatorPK, v *validator.Validator) {
-	vm.vLock.Lock()
-	defer vm.vLock.Unlock()
+	vm.validatorsMx.Lock()
+	defer vm.validatorsMx.Unlock()
 
 	vm.validators[pubKey] = v
 }
@@ -88,8 +88,8 @@ func (vm *ValidatorsMap) PutValidator(pubKey spectypes.ValidatorPK, v *validator
 // RemoveValidator removes a validator instance from the map
 func (vm *ValidatorsMap) RemoveValidator(pubKey spectypes.ValidatorPK) *validator.Validator {
 	if v, found := vm.GetValidator(pubKey); found {
-		vm.vLock.Lock()
-		defer vm.vLock.Unlock()
+		vm.validatorsMx.Lock()
+		defer vm.validatorsMx.Unlock()
 
 		delete(vm.validators, pubKey)
 		return v
@@ -99,8 +99,8 @@ func (vm *ValidatorsMap) RemoveValidator(pubKey spectypes.ValidatorPK) *validato
 
 // SizeValidators returns the number of validators in the map
 func (vm *ValidatorsMap) SizeValidators() int {
-	vm.vLock.RLock()
-	defer vm.vLock.RUnlock()
+	vm.validatorsMx.RLock()
+	defer vm.validatorsMx.RUnlock()
 
 	return len(vm.validators)
 }
@@ -109,8 +109,8 @@ func (vm *ValidatorsMap) SizeValidators() int {
 
 // ForEachCommittee loops over committees applying iterator func
 func (vm *ValidatorsMap) ForEachCommittee(iterator committeeIterator) bool {
-	vm.cLock.RLock()
-	defer vm.cLock.RUnlock()
+	vm.committeesMx.RLock()
+	defer vm.committeesMx.RUnlock()
 
 	for _, val := range vm.committees {
 		if !iterator(val) {
@@ -122,8 +122,8 @@ func (vm *ValidatorsMap) ForEachCommittee(iterator committeeIterator) bool {
 
 // GetAllCommittees returns all committees.
 func (vm *ValidatorsMap) GetAllCommittees() []*validator.Committee {
-	vm.cLock.RLock()
-	defer vm.cLock.RUnlock()
+	vm.committeesMx.RLock()
+	defer vm.committeesMx.RUnlock()
 
 	var committees []*validator.Committee
 	for _, val := range vm.committees {
@@ -135,8 +135,8 @@ func (vm *ValidatorsMap) GetAllCommittees() []*validator.Committee {
 
 // GetCommittee returns a committee
 func (vm *ValidatorsMap) GetCommittee(pubKey spectypes.CommitteeID) (*validator.Committee, bool) {
-	vm.cLock.RLock()
-	defer vm.cLock.RUnlock()
+	vm.committeesMx.RLock()
+	defer vm.committeesMx.RUnlock()
 
 	v, ok := vm.committees[pubKey]
 
@@ -145,8 +145,8 @@ func (vm *ValidatorsMap) GetCommittee(pubKey spectypes.CommitteeID) (*validator.
 
 // PutCommittee creates a new committee instance
 func (vm *ValidatorsMap) PutCommittee(pubKey spectypes.CommitteeID, v *validator.Committee) {
-	vm.cLock.Lock()
-	defer vm.cLock.Unlock()
+	vm.committeesMx.Lock()
+	defer vm.committeesMx.Unlock()
 
 	vm.committees[pubKey] = v
 }
@@ -154,8 +154,8 @@ func (vm *ValidatorsMap) PutCommittee(pubKey spectypes.CommitteeID, v *validator
 // RemoveCommittee removes a committee instance from the map
 func (vm *ValidatorsMap) RemoveCommittee(pubKey spectypes.CommitteeID) *validator.Committee {
 	if v, found := vm.GetCommittee(pubKey); found {
-		vm.cLock.Lock()
-		defer vm.cLock.Unlock()
+		vm.committeesMx.Lock()
+		defer vm.committeesMx.Unlock()
 
 		delete(vm.committees, pubKey)
 		return v
@@ -165,8 +165,8 @@ func (vm *ValidatorsMap) RemoveCommittee(pubKey spectypes.CommitteeID) *validato
 
 // SizeCommittees returns the number of committees in the map
 func (vm *ValidatorsMap) SizeCommittees() int {
-	vm.cLock.RLock()
-	defer vm.cLock.RUnlock()
+	vm.committeesMx.RLock()
+	defer vm.committeesMx.RUnlock()
 
 	return len(vm.committees)
 }
