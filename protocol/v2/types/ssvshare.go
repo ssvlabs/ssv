@@ -113,7 +113,7 @@ func (s *SSVShare) IsSyncCommitteeEligible(epoch phase0.Epoch, periodFromEpoch f
 	if s.Status.IsExited() || s.Status == eth2apiv1.ValidatorStateWithdrawalPossible || s.Status == eth2apiv1.ValidatorStateActiveSlashed {
 		// if validator exited within Current Period OR Current Period - 1, then it is eligible
 		// because Sync committees are assigned EPOCHS_PER_SYNC_COMMITTEE_PERIOD in advance
-		if periodFromEpoch(epoch)-periodFromEpoch(s.ExitEpoch) <= 1 {
+		if epoch >= s.ExitEpoch && periodFromEpoch(epoch)-periodFromEpoch(s.ExitEpoch) <= 1 {
 			return true
 		}
 	}
