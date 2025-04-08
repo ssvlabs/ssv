@@ -105,7 +105,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
 	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
-	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(vDuty.Type))
+	logger = v.withDutyID(logger, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.
 	if baseRunner.QBFTController != nil {
@@ -154,8 +154,9 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			return errors.Wrap(err, "invalid qbft Message")
 		}
 
-		logger = v.loggerForDuty(logger, messageID.GetRoleType(), phase0.Slot(qbftMsg.Height))
-		logger = logger.With(fields.Height(qbftMsg.Height))
+		logger = v.withDutyID(logger, messageID.GetRoleType()).
+			With(fields.Slot(phase0.Slot(qbftMsg.Height))).
+			With(fields.Height(qbftMsg.Height))
 
 		return dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
@@ -163,7 +164,9 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		logger = v.loggerForDuty(logger, messageID.GetRoleType(), signedMsg.Slot)
+
+		logger = v.withDutyID(logger, messageID.GetRoleType()).
+			With(fields.Slot(signedMsg.Slot))
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
 			return errors.New("PartialSignatureMessage has more than 1 signer")
@@ -197,17 +200,11 @@ func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.RunnerRole, slot phase0.Slot) *zap.Logger {
-	logger = logger.With(fields.Slot(slot))
+// withDutyID returns a logger with the duty ID for the given role.
+func (v *Validator) withDutyID(logger *zap.Logger, role spectypes.RunnerRole) *zap.Logger {
 	if dutyID, ok := v.dutyIDs.Get(role); ok {
 		return logger.With(fields.DutyID(dutyID))
 	}
-	return logger
-}
 
-func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.RunnerRole, string], role spectypes.RunnerRole) *zap.Logger {
-	if dutyID, ok := dutyIDs.Get(role); ok {
-		return logger.With(fields.DutyID(dutyID))
-	}
 	return logger
 }
