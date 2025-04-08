@@ -10,8 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/pkg/errors"
-
 	"github.com/ssvlabs/ssv/network/commons"
 )
 
@@ -19,8 +17,9 @@ import (
 func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.IP, udpPort, tcpPort uint16) (*enode.LocalNode, error) {
 	db, err := enode.OpenDB(storagePath)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not open node's peer database")
+		return nil, fmt.Errorf("could not open node's peer database: %w", err)
 	}
+
 	localNode := enode.NewLocalNode(db, privKey)
 
 	localNode.Set(enr.IP(ipAddr))
@@ -71,11 +70,11 @@ func addAddresses(localNode *enode.LocalNode, hostAddr, hostDNS string) error {
 func ToPeer(node *enode.Node) (*peer.AddrInfo, error) {
 	m, err := ToMultiAddr(node)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create multiaddr")
+		return nil, fmt.Errorf("could not create multiaddr: %w", err)
 	}
 	pi, err := peer.AddrInfoFromP2pAddr(m)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create peer info")
+		return nil, fmt.Errorf("could not create peer info: %w", err)
 	}
 	return pi, nil
 }
@@ -96,12 +95,12 @@ func ToMultiAddr(node *enode.Node) (ma.Multiaddr, error) {
 		return nil, err
 	}
 	if id.String() == "" {
-		return nil, errors.New("empty peer id")
+		return nil, fmt.Errorf("empty peer id")
 	}
 	ipAddr := node.IP().String()
 	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil && ip.To16() == nil {
-		return nil, errors.Errorf("invalid ip address: %s", ipAddr)
+		return nil, fmt.Errorf("invalid ip address: %s", ipAddr)
 	}
 	port := node.TCP()
 	var s string
@@ -127,15 +126,15 @@ func ParseENR(schemes enr.SchemeMap, tcpRequired bool, enrs ...string) ([]*enode
 		}
 		node, err := enode.Parse(schemes, e)
 		if err != nil {
-			return nodes, errors.Wrap(err, "could not parse ENR")
+			return nodes, fmt.Errorf("could not parse ENR: %w", err)
 		}
 		if tcpRequired {
 			hasTCP, err := hasTCPEntry(node)
 			if err != nil {
-				return nil, errors.Wrap(err, "could not check tcp port")
+				return nil, fmt.Errorf("could not check tcp port: %w", err)
 			}
 			if !hasTCP {
-				return nil, errors.Wrap(err, "could not find tcp port")
+				return nil, fmt.Errorf("could not find tcp port: %s", e)
 			}
 		}
 		nodes = append(nodes, node)
@@ -147,9 +146,9 @@ func ParseENR(schemes enr.SchemeMap, tcpRequired bool, enrs ...string) ([]*enode
 func hasTCPEntry(node *enode.Node) (bool, error) {
 	if err := node.Record().Load(enr.WithEntry(tcp, new(enr.TCP))); err != nil {
 		if !enr.IsNotFound(err) {
-			return false, errors.Wrap(err, "could not find tcp port in ENR")
+			return false, fmt.Errorf("could not find tcp port in ENR: %w", err)
 		}
-		return false, errors.Wrap(err, "could not load tcp port from ENR")
+		return false, fmt.Errorf("could not load tcp port from ENR: %w", err)
 	}
 	return true, nil
 }
