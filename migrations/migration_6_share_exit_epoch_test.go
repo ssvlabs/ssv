@@ -168,8 +168,6 @@ func generateValidatorPublicKey() []byte {
 
 func sharesEqual(old *migration_6_OldStorageShare, new *storage.Share) bool {
 	if old.ValidatorIndex != new.ValidatorIndex ||
-		old.Quorum != new.Quorum ||
-		old.PartialQuorum != new.PartialQuorum ||
 		old.Status != new.Status ||
 		old.ActivationEpoch != new.ActivationEpoch ||
 		old.Liquidated != new.Liquidated ||
