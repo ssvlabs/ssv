@@ -102,7 +102,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	}
 
 	logger.Debug("🧩 got partial signature quorum",
-		zap.Any("signer", signedMsg.Messages[0].Signer), // TODO: always 1?
+		zap.Any("signer", signedMsg.Messages[0].Signer),
 	)
 
 	r.measurements.PauseDutyFlow()
