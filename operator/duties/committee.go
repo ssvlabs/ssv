@@ -86,8 +86,7 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
 	selfValidators := h.validatorProvider.SelfValidators()
 
-	validatorCommittees := make(map[phase0.ValidatorIndex]committeeDuty, len(selfValidators))
-	participatingValidatorCommittees := map[phase0.ValidatorIndex]committeeDuty{}
+	validatorCommittees := map[phase0.ValidatorIndex]committeeDuty{}
 
 	for _, validatorShare := range selfValidators {
 		committeeDuty := committeeDuty{
@@ -96,38 +95,24 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 		}
 
 		validatorCommittees[validatorShare.ValidatorIndex] = committeeDuty
-
-		if validatorShare.IsParticipating(epoch) {
-			participatingValidatorCommittees[validatorShare.ValidatorIndex] = committeeDuty
-		}
 	}
 
 	resultCommitteeMap := make(committeeDutiesMap)
 
 	for _, duty := range attDuties {
-		committee, ok := participatingValidatorCommittees[duty.ValidatorIndex]
+		committee, ok := validatorCommittees[duty.ValidatorIndex]
 		if !ok {
 			h.logger.Error("failed to find committee for validator", zap.Uint64("validator_index", uint64(duty.ValidatorIndex)))
 			continue
 		}
 
 		if h.shouldExecuteAtt(duty) {
-			specDuty := h.toSpecAttDuty(duty, spectypes.BNRoleAttester)
-
-			cd, exists := resultCommitteeMap[committee.id]
-			if !exists {
-				cd = &committeeDuty{
-					id:          committee.id,
-					operatorIDs: committee.operatorIDs,
-					duty: &spectypes.CommitteeDuty{
-						Slot:            specDuty.Slot,
-						ValidatorDuties: []*spectypes.ValidatorDuty{},
-					},
-				}
+			share, found := h.validatorProvider.Validator(duty.PubKey[:])
+			if !found || !share.IsParticipating(epoch) {
+				continue
 			}
 
-			cd.duty.ValidatorDuties = append(cd.duty.ValidatorDuties, specDuty)
-			resultCommitteeMap[committee.id] = cd
+			addToCommitteeMap(resultCommitteeMap, committee, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
 		}
 	}
 
@@ -139,26 +124,38 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 		}
 
 		if h.shouldExecuteSync(duty, slot) {
-			specDuty := h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee)
-
-			cd, exists := resultCommitteeMap[committee.id]
-			if !exists {
-				cd = &committeeDuty{
-					id:          committee.id,
-					operatorIDs: committee.operatorIDs,
-					duty: &spectypes.CommitteeDuty{
-						Slot:            specDuty.Slot,
-						ValidatorDuties: []*spectypes.ValidatorDuty{},
-					},
-				}
+			share, found := h.validatorProvider.Validator(duty.PubKey[:])
+			if !found || !share.IsSyncCommitteeEligible(epoch, h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch) {
+				continue
 			}
 
-			cd.duty.ValidatorDuties = append(cd.duty.ValidatorDuties, specDuty)
-			resultCommitteeMap[committee.id] = cd
+			addToCommitteeMap(resultCommitteeMap, committee, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
 		}
 	}
 
 	return resultCommitteeMap
+}
+
+func addToCommitteeMap(
+	committeeDutyMap committeeDutiesMap,
+	committee committeeDuty,
+	specDuty *spectypes.ValidatorDuty,
+) {
+	cd, exists := committeeDutyMap[committee.id]
+	if !exists {
+		cd = &committeeDuty{
+			id:          committee.id,
+			operatorIDs: committee.operatorIDs,
+			duty: &spectypes.CommitteeDuty{
+				Slot:            specDuty.Slot,
+				ValidatorDuties: []*spectypes.ValidatorDuty{},
+			},
+		}
+	}
+
+	cd.duty.ValidatorDuties = append(cd.duty.ValidatorDuties, specDuty)
+
+	committeeDutyMap[committee.id] = cd
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {

@@ -87,6 +87,7 @@ func setupCommitteeDutiesMock(
 							Share: spectypes.Share{
 								ValidatorIndex: duty.ValidatorIndex,
 							},
+							Status: eth2apiv1.ValidatorStateActiveOngoing,
 						}
 						if epoch < minEpoch {
 							minEpoch = epoch
@@ -107,6 +108,7 @@ func setupCommitteeDutiesMock(
 								Share: spectypes.Share{
 									ValidatorIndex: duty.ValidatorIndex,
 								},
+								Status: eth2apiv1.ValidatorStateActiveOngoing,
 							}
 							firstEpoch := s.network.Beacon.FirstEpochOfSyncPeriod(period)
 							if firstEpoch < minEpoch {
