@@ -84,17 +84,14 @@ type Share struct {
 	ValidatorPubKey     []byte             `ssz-size:"48"`
 	SharePubKey         []byte             `ssz-max:"48"` // empty for not own shares
 	Committee           []*storageOperator `ssz-max:"13"`
-	Quorum              uint64
-	PartialQuorum       uint64
-	DomainType          [4]byte `ssz-size:"4"`
+	DomainType          [4]byte            `ssz-size:"4"`
 	FeeRecipientAddress [addressLength]byte
 	Graffiti            []byte `ssz-max:"32"`
-
-	Status          uint64
-	ActivationEpoch uint64
-	ExitEpoch       uint64
-	OwnerAddress    [addressLength]byte
-	Liquidated      bool
+	Status              uint64
+	ActivationEpoch     uint64
+	ExitEpoch           uint64
+	OwnerAddress        [addressLength]byte
+	Liquidated          bool
 }
 
 type storageOperator struct {
@@ -275,14 +272,12 @@ func FromSSVShare(share *types.SSVShare) *Share {
 			PubKey:     c.SharePubKey,
 		}
 	}
-	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(uint64(len(committee)))
+
 	return &Share{
 		ValidatorIndex:      uint64(share.ValidatorIndex),
 		ValidatorPubKey:     share.ValidatorPubKey[:],
 		SharePubKey:         share.SharePubKey,
 		Committee:           committee,
-		Quorum:              quorum,
-		PartialQuorum:       partialQuorum,
 		DomainType:          share.DomainType,
 		FeeRecipientAddress: share.FeeRecipientAddress,
 		Graffiti:            share.Graffiti,

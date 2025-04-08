@@ -541,15 +541,11 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) *S
 		return ibftCommittee[i].OperatorID < ibftCommittee[j].OperatorID
 	})
 
-	quorum, partialQuorum := ssvtypes.ComputeQuorumAndPartialQuorum(uint64(len(splitKeys)))
-
 	return &Share{
 		ValidatorIndex:      3,
 		ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
 		SharePubKey:         sk2.GetPublicKey().Serialize(),
 		Committee:           ibftCommittee,
-		Quorum:              quorum,
-		PartialQuorum:       partialQuorum,
 		DomainType:          networkconfig.TestNetwork.DomainType,
 		FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 		Graffiti:            bytes.Repeat([]byte{0x01}, 32),
