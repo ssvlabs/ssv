@@ -145,21 +145,20 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
+
 		if err := qbftMsg.Validate(); err != nil {
 			return errors.Wrap(err, "invalid qbft Message")
 		}
+
 		logger = v.loggerForDuty(logger, messageID.GetRoleType(), phase0.Slot(qbftMsg.Height))
 		logger = logger.With(fields.Height(qbftMsg.Height))
+
 		return dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
@@ -177,20 +176,13 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg)
 		}
+
 		return dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg)
 	case message.SSVEventMsgType:
 		return v.handleEventMessage(ctx, logger, msg, dutyRunner)
 	default:
 		return errors.New("unknown msg")
 	}
-}
-
-func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.RunnerRole, slot phase0.Slot) *zap.Logger {
-	logger = logger.With(fields.Slot(slot))
-	if dutyID, ok := v.dutyIDs.Get(role); ok {
-		return logger.With(fields.DutyID(dutyID))
-	}
-	return logger
 }
 
 func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
@@ -203,6 +195,14 @@ func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 	}
 
 	return nil
+}
+
+func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.RunnerRole, slot phase0.Slot) *zap.Logger {
+	logger = logger.With(fields.Slot(slot))
+	if dutyID, ok := v.dutyIDs.Get(role); ok {
+		return logger.With(fields.DutyID(dutyID))
+	}
+	return logger
 }
 
 func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.RunnerRole, string], role spectypes.RunnerRole) *zap.Logger {
