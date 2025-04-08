@@ -373,6 +373,12 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			expectedResult: "",
 			expectError:    false,
 		},
+		{
+			name:        "invalid host address format",
+			hostAddress: "not-an-ip-address",
+			hostDNS:     "",
+			expectError: true,
+		},
 	}
 
 	for i, tc := range testCases {
@@ -392,9 +398,15 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			service, err := NewService(ctx, zap.NewNop(), *opts)
 			if tc.expectError {
 				require.Error(t, err)
+
+				// for invalid address test case, check for the specific error message
+				if tc.name == "invalid host address format" {
+					require.ErrorContains(t, err, "invalid host address given")
+				}
 				return
 			}
 			require.NoError(t, err)
+
 			t.Cleanup(func() {
 				if service != nil {
 					service.Close()
