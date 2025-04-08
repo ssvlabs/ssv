@@ -19,10 +19,10 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod sszgen -path ./shares.go --objs Share
 
-// sharesPrefix specifies the prefix used for storing Share(s) in DB.
-// Note, previously gob-encoded Share(s) were stored with `shares/` prefix, this has been
-// changed in migration_5_change_share_format_from_gob_to_ssz.
-var sharesPrefix = []byte("shares_ssz_v2/")
+// sharesPrefix specifies the prefix used for storing Share(s) in the DB.
+// During database migrations, records often need to be moved to a different prefix,
+// which is why the version evolves over time.
+var sharesPrefix = []byte("shares_v2/")
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
