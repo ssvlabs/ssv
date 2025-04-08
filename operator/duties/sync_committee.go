@@ -88,7 +88,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			h.processExecution(ctx, period, slot)
-			h.processFetching(ctx, period, true)
+			h.processFetching(ctx, epoch, period, true)
 			cancel()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
@@ -138,15 +138,15 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-	h.processFetching(ctx, period, false)
+	h.processFetching(ctx, epoch, period, false)
 }
 
-func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, waitForInitial bool) {
+func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if h.fetchCurrentPeriod {
-		if err := h.fetchAndProcessDuties(ctx, period, waitForInitial); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch, period, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 			return
 		}
@@ -154,7 +154,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 	}
 
 	if h.fetchNextPeriod {
-		if err := h.fetchAndProcessDuties(ctx, period+1, waitForInitial); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch, period+1, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
 		}
@@ -182,28 +182,24 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 // Period can be current or future.
 // If the period passed is the current period – the sync committee target epoch should be the current epoch.
 // If the period passed is a future period – the sync committee target epoch should be the first epoch of that future period.
-func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
+// The epoch passed is always the current epoch.
+func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) error {
 	start := time.Now()
 
-	currentEpoch := h.network.Beacon.EstimatedCurrentEpoch()
-	firstEpochOfPeriod := h.network.Beacon.FirstEpochOfSyncPeriod(period)
-
-	targetEpoch := currentEpoch
-	isFuturePeriod := firstEpochOfPeriod > currentEpoch
-	if isFuturePeriod {
-		targetEpoch = firstEpochOfPeriod
+	if period > h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
+		epoch = h.network.Beacon.FirstEpochOfSyncPeriod(period)
 	}
 
 	eligibleIndices := h.validatorController.FilterIndices(waitForInitial, func(s *types.SSVShare) bool {
-		return s.IsSyncCommitteeEligible(targetEpoch, h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch)
+		return s.IsSyncCommitteeEligible(epoch, h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch)
 	})
 
 	if len(eligibleIndices) == 0 {
-		h.logger.Debug("no eligible validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
+		h.logger.Debug("no eligible validators for period", fields.Epoch(epoch), zap.Uint64("period", period))
 		return nil
 	}
 
-	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, targetEpoch, eligibleIndices)
+	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
