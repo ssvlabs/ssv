@@ -47,7 +47,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.NextSlot()
+			slot := h.ticker.Slot()
 			next = h.ticker.NextTick()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(frequencyEpochs))

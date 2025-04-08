@@ -55,7 +55,7 @@ func (mr *MockSlotTickerMockRecorder) Next() *gomock.Call {
 }
 
 // Slot mocks base method.
-func (m *MockSlotTicker) NextSlot() phase0.Slot {
+func (m *MockSlotTicker) Slot() phase0.Slot {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Slot")
 	ret0, _ := ret[0].(phase0.Slot)
@@ -65,5 +65,5 @@ func (m *MockSlotTicker) NextSlot() phase0.Slot {
 // Slot indicates an expected call of Slot.
 func (mr *MockSlotTickerMockRecorder) Slot() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Slot", reflect.TypeOf((*MockSlotTicker)(nil).NextSlot))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Slot", reflect.TypeOf((*MockSlotTicker)(nil).Slot))
 }

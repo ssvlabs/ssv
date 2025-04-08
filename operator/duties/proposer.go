@@ -61,7 +61,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.NextSlot()
+			slot := h.ticker.Slot()
 			next = h.ticker.NextTick()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)

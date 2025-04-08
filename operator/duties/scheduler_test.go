@@ -23,7 +23,7 @@ import (
 
 type MockSlotTicker interface {
 	NextTick() <-chan time.Time
-	NextSlot() phase0.Slot
+	Slot() phase0.Slot
 	Subscribe() chan phase0.Slot
 }
 
@@ -58,7 +58,7 @@ func (m *mockSlotTicker) NextTick() <-chan time.Time {
 	return m.timeChan
 }
 
-func (m *mockSlotTicker) NextSlot() phase0.Slot {
+func (m *mockSlotTicker) Slot() phase0.Slot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.slot

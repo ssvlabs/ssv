@@ -22,9 +22,8 @@ type SlotTicker interface {
 	// and returns a channel that will signal once the time corresponding to that "freshest" slot
 	// comes.
 	NextTick() <-chan time.Time
-	// NextSlot returns the next slot number SlotTicker will tick on (corresponding to the tick
-	// that happens upon NextTick signal).
-	NextSlot() phase0.Slot
+	// Slot returns the slot number that corresponds to NextTick.
+	Slot() phase0.Slot
 }
 
 type Config struct {
@@ -106,8 +105,8 @@ func (s *slotTicker) NextTick() <-chan time.Time {
 	return s.timer.C()
 }
 
-// NextSlot implements SlotTicker.NextSlot.
+// Slot implements SlotTicker.Slot.
 // Note, this method is not thread-safe.
-func (s *slotTicker) NextSlot() phase0.Slot {
+func (s *slotTicker) Slot() phase0.Slot {
 	return s.nextSlot
 }

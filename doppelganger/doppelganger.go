@@ -183,7 +183,7 @@ func (h *handler) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.NextTick():
-			currentSlot := ticker.NextSlot()
+			currentSlot := ticker.Slot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
 
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)

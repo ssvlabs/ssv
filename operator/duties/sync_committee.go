@@ -78,7 +78,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			slot := h.ticker.NextSlot()
+			slot := h.ticker.Slot()
 			next = h.ticker.NextTick()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)

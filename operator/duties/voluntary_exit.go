@@ -53,7 +53,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-next:
-			currentSlot := h.ticker.NextSlot()
+			currentSlot := h.ticker.Slot()
 			next = h.ticker.NextTick()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
