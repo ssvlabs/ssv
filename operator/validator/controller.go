@@ -892,7 +892,7 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 			fields.Validator(share.ValidatorPubKey[:]), fields.FeeRecipient(data.FeeRecipient[:]))
 		feeRecipient = data.FeeRecipient
 	}
-	share.SetFeeRecipient(feeRecipient)
+	share.FeeRecipientAddress = feeRecipient
 
 	return nil
 }
