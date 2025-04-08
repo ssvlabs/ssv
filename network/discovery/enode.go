@@ -41,7 +41,7 @@ func addAddresses(localNode *enode.LocalNode, hostAddr, hostDNS string) error {
 	if len(hostDNS) > 0 {
 		ips, err := net.LookupIP(hostDNS)
 		if err != nil {
-			return errors.Wrapf(err, "could not resolve host DNS: %s", hostDNS)
+			return fmt.Errorf("could not resolve host DNS: %s, %v", hostDNS, err)
 		}
 
 		if len(ips) > 0 {
