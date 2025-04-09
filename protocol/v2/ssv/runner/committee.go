@@ -226,7 +226,7 @@ func (cr *CommitteeRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, msg *spectypes.SignedSSVMessage) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
+		observability.InstrumentName(observabilityNamespace, "runner.process_committee_consensus"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.SSVMessage.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.SSVMessage.GetType()),
