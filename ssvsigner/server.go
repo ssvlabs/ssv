@@ -152,6 +152,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		if data.Status != web3signer.StatusImported {
 			logger.Warn("unexpected keystore status",
 				zap.String("status", string(data.Status)),
+				zap.String("message", data.Message),
 				zap.Stringer("share_pubkey", req.ShareKeys[i].PubKey),
 			)
 		} else {
@@ -241,6 +242,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 		if data.Status != web3signer.StatusDeleted {
 			logger.Warn("unexpected keystore status",
 				zap.String("status", string(data.Status)),
+				zap.String("message", data.Message),
 				zap.Stringer("share_pubkey", req.Pubkeys[i]),
 			)
 		} else {
