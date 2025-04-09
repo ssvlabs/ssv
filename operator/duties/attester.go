@@ -183,15 +183,20 @@ func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epo
 		return
 	}
 
+	role := spectypes.BNRoleAggregator
 	span.AddEvent("duties fetched", trace.WithAttributes(observability.DutyCountAttribute(len(duties))))
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
-			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
+			toExecute = append(toExecute, h.toSpecDuty(d, role))
 		}
 	}
 
-	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
+	span.AddEvent("executing duties",
+		trace.WithAttributes(
+			observability.DutyCountAttribute(len(toExecute)),
+			observability.BeaconRoleAttribute(role),
+		))
 
 	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 
