@@ -5,15 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
@@ -28,9 +27,10 @@ type Controller interface {
 	Subscribe(logger *zap.Logger, name string) error
 	// Unsubscribe unsubscribes from the given topic
 	Unsubscribe(logger *zap.Logger, topicName string, hard bool) error
-	// Peers returns the peers subscribed to the given topic
+	// Peers returns a list of peers we are connected to in the given topic, if topicName
+	// param is an empty string it returns a list of all peers we are connected to.
 	Peers(topicName string) ([]peer.ID, error)
-	// Topics lists all the available topics
+	// Topics lists all topics this node is subscribed to
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
@@ -143,7 +143,7 @@ func (ctrl *topicsCtrl) Close() error {
 	return nil
 }
 
-// Peers returns the peers subscribed to the given topic
+// Peers returns a list of peers we are connected to in the given topic.
 func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	if name == "" {
 		return ctrl.ps.ListPeers(""), nil
@@ -156,7 +156,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	return topic.ListPeers(), nil
 }
 
-// Topics lists all the available topics
+// Topics lists all topics this node is subscribed to
 func (ctrl *topicsCtrl) Topics() []string {
 	topics := ctrl.ps.GetTopics()
 	for i, tp := range topics {
@@ -198,7 +198,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 		err := topic.Publish(ctx, data)
 		if err == nil {
-			metricPubsubOutbound.WithLabelValues(name).Inc()
+			outboundMessageCounter.Add(ctrl.ctx, 1)
 		}
 	}()
 
@@ -275,15 +275,8 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(m.MsgType), 10),
-			).Inc()
-		case *genesisqueue.GenesisSSVMessage:
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(m.MsgType), 10),
-			).Inc()
+			inboundMessageCounter.Add(ctrl.ctx, 1,
+				metric.WithAttributes(messageTypeAttribute(uint64(m.MsgType))))
 		default:
 			logger.Warn("unknown message type", zap.Any("message", m))
 		}

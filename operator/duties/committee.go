@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -58,16 +59,8 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 
-			if !h.network.PastAlanForkAtEpoch(epoch) {
-				h.logger.Debug("🛠 ticker event",
-					zap.String("period_epoch_slot_pos", buildStr),
-					zap.String("status", "alan not forked yet"),
-				)
-				continue
-			}
-
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
-			h.processExecution(period, epoch, slot)
+			h.processExecution(ctx, period, epoch, slot)
 
 		case <-h.reorg:
 			// do nothing
@@ -78,7 +71,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
 	attDuties := h.attDuties.CommitteeSlotDuties(epoch, slot)
 	syncDuties := h.syncDuties.CommitteePeriodDuties(period)
 	if attDuties == nil && syncDuties == nil {
@@ -86,7 +79,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 	}
 
 	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
-	h.dutiesExecutor.ExecuteCommitteeDuties(h.logger, committeeMap)
+	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, h.logger, committeeMap)
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
@@ -176,6 +169,11 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 
 func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+
+	if participates := h.canParticipate(duty.PubKey[:], currentSlot); !participates {
+		return false
+	}
+
 	// execute task if slot already began and not pass 1 epoch
 	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
 	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
@@ -190,6 +188,11 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
 
 func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+
+	if participates := h.canParticipate(duty.PubKey[:], currentSlot); !participates {
+		return false
+	}
+
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == slot {
 		return true
@@ -199,4 +202,25 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 		return true
 	}
 	return false
+}
+
+func (h *CommitteeHandler) canParticipate(pubKey []byte, currentSlot phase0.Slot) bool {
+	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+
+	v, exists := h.validatorProvider.Validator(pubKey)
+	if !exists {
+		h.logger.Warn("validator not found", fields.Validator(pubKey))
+		return false
+	}
+
+	if v.MinParticipationEpoch() > currentEpoch {
+		h.logger.Debug("validator not yet participating",
+			fields.Validator(pubKey),
+			zap.Uint64("min_participation_epoch", uint64(v.MinParticipationEpoch())),
+			zap.Uint64("current_epoch", uint64(currentEpoch)),
+		)
+		return false
+	}
+
+	return true
 }

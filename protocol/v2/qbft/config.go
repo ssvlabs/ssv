@@ -5,7 +5,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
@@ -25,8 +24,6 @@ type IConfig interface {
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() specqbft.Network
-	// GetStorage returns a storage instance
-	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
 	// GetRoundCutOff returns the round cut off
@@ -38,7 +35,6 @@ type Config struct {
 	Domain       spectypes.DomainType
 	ValueCheckF  specqbft.ProposedValueCheckF
 	ProposerF    specqbft.ProposerF
-	Storage      qbftstorage.QBFTStore
 	Network      specqbft.Network
 	Timer        roundtimer.Timer
 	CutOffRound  specqbft.Round
@@ -67,11 +63,6 @@ func (c *Config) GetProposerF() specqbft.ProposerF {
 // GetNetwork returns a p2p Network instance
 func (c *Config) GetNetwork() specqbft.Network {
 	return c.Network
-}
-
-// GetStorage returns a storage instance
-func (c *Config) GetStorage() qbftstorage.QBFTStore {
-	return c.Storage
 }
 
 // GetTimer returns round timer

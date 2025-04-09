@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-
 	"github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -56,15 +56,15 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	if err != nil {
 		return nil, err
 	}
+
+	requestsSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(s.Protocol())))
+
 	defer func() {
 		if err := s.Close(); err != nil {
 			logger.Debug("could not close stream", zap.Error(err))
 		}
 	}()
 	stream := NewStream(s)
-	metricsStreamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
-	metricsStreamRequestsActive.WithLabelValues(string(protocol)).Inc()
-	defer metricsStreamRequestsActive.WithLabelValues(string(protocol)).Dec()
 
 	if err := stream.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
 		return nil, errors.Wrap(err, "could not write to stream")
@@ -76,7 +76,8 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read stream msg")
 	}
-	metricsStreamRequestsSuccess.WithLabelValues(string(protocol)).Inc()
+
+	responsesReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
 	return res, nil
 }
 
@@ -85,14 +86,14 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byte, StreamResponder, func(), error) {
 	s := NewStream(stream)
 
-	protocolID := stream.Protocol()
-	metricsStreamRequests.WithLabelValues(string(protocolID)).Inc()
-	// logger := logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
+	requestsReceivedCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
+
 	done := func() {
 		if err := s.Close(); err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
 			logger.Debug("failed to close stream (handler)", zap.String("s_id", stream.ID()), zap.Error(err))
 		}
 	}
+
 	data, err := s.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
@@ -102,10 +103,10 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 		cp := make([]byte, len(res))
 		copy(cp, res)
 		if err := s.WriteWithTimeout(cp, n.readWriteTimeout); err != nil {
-			// logger.Debug("could not write to stream", zap.Error(err))
 			return errors.Wrap(err, "could not write to stream")
 		}
-		metricsStreamResponses.WithLabelValues(string(protocolID)).Inc()
+
+		responsesSentCounter.Add(n.ctx, 1, metric.WithAttributes(protocolIDAttribute(stream.Protocol())))
 		return nil
 	}, done, nil
 }

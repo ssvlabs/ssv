@@ -28,14 +28,12 @@ ifeq ($(COVERAGE),true)
 endif
 UNFORMATTED=$(shell gofmt -l .)
 
-.PHONY: lint-prepare
-lint-prepare:
-	@echo "Preparing Linter"
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
+GET_TOOL=go get -modfile=tool.mod -tool
+RUN_TOOL=go tool -modfile=tool.mod
 
 .PHONY: lint
 lint:
-	./bin/golangci-lint run -v ./...
+	$(RUN_TOOL) golangci-lint run -v ./...
 	@if [ ! -z "${UNFORMATTED}" ]; then \
 		echo "Some files requires formatting, please run 'go fmt ./...'"; \
 		exit 1; \
@@ -61,22 +59,10 @@ spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
 
-
 .PHONY: all-spec-test-raceless
 all-spec-test-raceless:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/...
-
-
-.PHONY: pre-fork-spec-test-raceless
-pre-fork-spec-test-raceless:
-	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/genesis/...
-
-.PHONY: post-fork-spec-test-raceless
-post-fork-spec-test-raceless:
-	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 90m ${COV_CMD} -p 1 -v ./protocol/v2/...
 
 .PHONY: spec-test-raceless
 spec-test-raceless:
@@ -168,25 +154,25 @@ start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node ${BOOTNODE_COMMAND}
 
-MONITOR_NODES=prometheus grafana
-.PHONY: docker-monitor
-docker-monitor:
-	@echo $(MONITOR_NODES)
-	@docker-compose up --build $(MONITOR_NODES)
-
 .PHONY: mock
 mock:
+	make generate
+
+.PHONY: generate
+generate:
 	go generate ./...
 
-.PHONY: mockgen-install
-mockgen-install:
-	go install go.uber.org/mock/mockgen@v0.4.0
-	@which mockgen || echo "Error: ensure `go env GOPATH` is added to PATH"
+.PHONY: tools
+tools:
+	$(GET_TOOL) go.uber.org/mock/mockgen
+	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
+	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
+	$(GET_TOOL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	$(RUN_TOOL)
 
 .PHONY: format
 format:
-# both format commands must ignore generated files which are named *mock* or enr_fork_id_encoding.go
-# the argument to gopls format can be a list of files
-	find . -name "*.go" ! -path '*mock*' ! -name 'enr_fork_id_encoding.go' -type f -print0 | xargs -0 -P 1 sh -c 'gopls -v format -w $0'
-# the argument to gopls imports must be a single file so this entire command takes a few mintues to run
-	find . -name "*.go" ! -path '*mock*' ! -name 'enr_fork_id_encoding.go' -type f -print0 | xargs -0 -P 10 -I{} sh -c 'gopls -v imports -w "{}"'
+	# TODO - instead of filtering out mock-related files we should ignore all generated files once
+	# goimports allows for it - https://github.com/golang/go/issues/71676 - but until then it is
+	# a temporary work-around
+	goimports -l -w -local github.com/ssvlabs/ssv/ $$(find . -name '*.go' -not -path "*mock*")

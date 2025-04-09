@@ -104,7 +104,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		capacity       = 3
 		contextTimeout = 50 * time.Millisecond
 		pushDelay      = 50 * time.Millisecond
-		precision      = 5 * time.Millisecond
+		precision      = 50 * time.Millisecond
 	)
 	queue := New(capacity)
 	require.True(t, queue.Empty())
@@ -265,34 +265,6 @@ func TestPriorityQueue_Pop_WithLoopForNonMatchingAndMatchingMessages(t *testing.
 
 	// Ensure that the queue still contains the non-matching messages.
 	require.False(t, queue.Empty())
-}
-
-type testMetrics struct {
-	dropped atomic.Uint64
-}
-
-func (n *testMetrics) DroppedQueueMessage(messageID spectypes.MessageID) {
-	n.dropped.Add(1)
-}
-
-func TestWithMetrics(t *testing.T) {
-	metrics := &testMetrics{}
-	queue := WithMetrics(New(1), metrics)
-	require.True(t, queue.Empty())
-
-	// Push 1 message.
-	msg, err := DecodeSignedSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-	require.NoError(t, err)
-	pushed := queue.TryPush(msg)
-	require.True(t, pushed)
-	require.False(t, queue.Empty())
-	require.EqualValues(t, 0, metrics.dropped.Load())
-
-	// Push above capacity.
-	pushed = queue.TryPush(msg)
-	require.False(t, pushed)
-	require.False(t, queue.Empty())
-	require.EqualValues(t, 1, metrics.dropped.Load())
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {

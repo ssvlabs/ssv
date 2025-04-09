@@ -65,11 +65,6 @@ func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
 	}
 }
 
-// reset will remove all instances from the container, perserving the underlying slice's capacity.
-func (i *InstanceContainer) reset() {
-	*i = (*i)[:0]
-}
-
 // String returns a human-readable representation of the instances. Useful for debugging.
 func (i *InstanceContainer) String() string {
 	heights := make([]string, len(*i))

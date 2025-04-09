@@ -5,10 +5,11 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const iteratorTimeout = 5 * time.Millisecond

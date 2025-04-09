@@ -17,7 +17,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(logger *zap.Logger, msg *queue.SSVMessage) error
+type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -28,7 +28,7 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.SSVMessage) {
+func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
@@ -150,9 +150,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
+		if err := handler(ctx, logger, msg); err != nil {
 			v.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.SSVMessage.MsgType),
+				fields.MessageType(msg.MsgType),
 				zap.Error(err))
 		}
 	}
@@ -163,7 +163,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.SSVMessage.MsgType {
+	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := msg.Body.(*specqbft.Message)
 
@@ -201,7 +201,7 @@ func (v *Validator) GetLastRound(identifier spectypes.MessageID) specqbft.Round 
 	if r == nil {
 		return specqbft.Round(1)
 	}
-	if r != nil && r.HasRunningDuty() {
+	if r.HasRunningDuty() {
 		inst := r.GetBaseRunner().State.RunningInstance
 		if inst != nil {
 			return inst.State.Round

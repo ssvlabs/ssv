@@ -1,6 +1,7 @@
 package spectest
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
@@ -8,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
@@ -59,7 +59,7 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 				continue
 			}
 
-			msg1 := &types.PartialSignatureMessages{}
+			msg1 := &spectypes.PartialSignatureMessages{}
 			require.NoError(t, msg1.Decode(msg.Data))
 			msg2 := test.OutputMessages[index]
 			require.Len(t, msg1.Messages, len(msg2.Messages))
@@ -173,6 +173,6 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 }
 
 func (test *StartNewRunnerDutySpecTest) runPreTesting(logger *zap.Logger) error {
-	err := test.Runner.StartNewDuty(logger, test.Duty, test.Threshold)
+	err := test.Runner.StartNewDuty(context.TODO(), logger, test.Duty, test.Threshold)
 	return err
 }

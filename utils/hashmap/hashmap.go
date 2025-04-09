@@ -15,6 +15,11 @@ func New[Key comparable, Value any]() *Map[Key, Value] {
 	return &Map[Key, Value]{}
 }
 
+func (m *Map[Key, Value]) Has(key Key) bool {
+	_, ok := m.m.Load(key)
+	return ok
+}
+
 func (m *Map[Key, Value]) Get(key Key) (Value, bool) {
 	v, ok := m.m.Load(key)
 	if !ok {
@@ -29,11 +34,18 @@ func (m *Map[Key, Value]) GetOrSet(key Key, value Value) (Value, bool) {
 	return actual.(Value), loaded
 }
 
+func (m *Map[Key, Value]) CompareAndSwap(key Key, old, new Value) (swapped bool) {
+	return m.m.CompareAndSwap(key, old, new)
+}
+
 func (m *Map[Key, Value]) Set(key Key, value Value) {
 	m.m.Store(key, value)
 }
 
 // SlowLen returns the number of elements in the map by iterating over all items.
+// This method call doesn't block other operations (for example Set), hence the
+// resulting length value returned might or might not reflect the outcome of
+// concurrent operations happening with this Map.
 //
 // This implementation is quite expensive. If it becomes a bottleneck,
 // we should consider maintaining an internal atomic counter and
