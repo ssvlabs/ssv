@@ -40,9 +40,7 @@ var migration_7_populate_validator_index_mapping = Migration{
 				return fmt.Errorf("decode ssz share: %w", err)
 			}
 
-			if shareSSZ.ValidatorIndex > 0 {
-				// TODO(Moshe): should we check for validator index > 0?
-			} else {
+			if shareSSZ.ValidatorIndex == 0 {
 				shares0++
 			}
 
@@ -54,7 +52,7 @@ var migration_7_populate_validator_index_mapping = Migration{
 		}
 
 		logger.Info("tracer-migration: shares with 0 index", zap.Int("count", shares0))
-		logger.Info("tracer-migration: mappings", zap.Int("count", len(mappings)))
+		logger.Info("tracer-migration: validator index mappings", zap.Int("count", len(mappings)))
 
 		err = opt.Db.SetMany(storage.PubkeyToIndexMappingDBKey(opstorage.OperatorStoragePrefix), len(mappings), func(i int) (basedb.Obj, error) {
 			m := mappings[i]
