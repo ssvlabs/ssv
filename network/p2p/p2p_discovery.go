@@ -122,7 +122,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					peerScore *= peerRelevance * peerRelevance
 				}
 
-				// Push the peer.
 				peersByPriority.Push(discoveredPeer, peerScore)
 				minScore = min(minScore, peerScore)
 				maxScore = max(maxScore, peerScore)

@@ -639,8 +639,8 @@ func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 	const (
 		duoSubnetPriority  = 1
-		soloSubnetPriority = 3
-		deadSubnetPriority = 9
+		soloSubnetPriority = 4
+		deadSubnetPriority = 16
 	)
 	score := float64(0)
 	for i := range a {
