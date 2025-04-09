@@ -62,6 +62,8 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 		return spectypes.BNRoleValidatorRegistration, nil
 	case "VOLUNTARY_EXIT":
 		return spectypes.BNRoleVoluntaryExit, nil
+	case "PRECONF_COMMITMENT":
+		return spectypes.BNRolePreconfCommitment, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}
@@ -81,6 +83,8 @@ func RunnerRoleToString(r spectypes.RunnerRole) string {
 		return "VALIDATOR_REGISTRATION"
 	case spectypes.RoleVoluntaryExit:
 		return "VOLUNTARY_EXIT"
+	case spectypes.RolePreconfCommitment:
+		return "PRECONF_COMMITMENT"
 	default:
 		return fmt.Sprintf("unknown(%d)", r)
 	}
@@ -100,6 +104,8 @@ func PartialMsgTypeToString(mt spectypes.PartialSigMsgType) string {
 		return "ValidatorRegistrationPartialSig"
 	case spectypes.VoluntaryExitPartialSig:
 		return "VoluntaryExitPartialSig"
+	case spectypes.PreconfCommitmentPartialSig:
+		return "PreconfCommitmentPartialSig"
 	default:
 		return fmt.Sprintf("unknown(%d)", mt)
 	}
