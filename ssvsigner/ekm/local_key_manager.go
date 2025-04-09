@@ -251,16 +251,16 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 
 	sharePrivKeyHex, err := km.operatorDecrypter.Decrypt(encryptedPrivKey)
 	if err != nil {
-		return ShareDecryptionError(fmt.Errorf("decrypt: %w", err))
+		return ShareDecryptionError{Err: fmt.Errorf("decrypt: %w", err)}
 	}
 
 	sharePrivKey := &bls.SecretKey{}
 	if err := sharePrivKey.SetHexString(string(sharePrivKeyHex)); err != nil {
-		return ShareDecryptionError(fmt.Errorf("decode hex: %w", err))
+		return ShareDecryptionError{Err: fmt.Errorf("decode hex: %w", err)}
 	}
 
 	if !bytes.Equal(sharePrivKey.GetPublicKey().Serialize(), pubKey[:]) {
-		return ShareDecryptionError(errors.New("share private key does not match public key"))
+		return ShareDecryptionError{Err: errors.New("share private key does not match public key")}
 	}
 
 	acc, err := km.wallet.AccountByPublicKey(sharePrivKey.GetPublicKey().SerializeToHexStr())
