@@ -5,16 +5,16 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"reflect"
-	"testing"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 )
 
 func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Web3Signer) {
+	t.Helper()
+
 	server := httptest.NewServer(handler)
 
 	t.Cleanup(func() {
@@ -27,6 +27,8 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 }
 
 func TestNew(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		baseURL string
@@ -43,6 +45,8 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			client := New(tt.baseURL)
 			require.NotNil(t, client)
 
@@ -57,6 +61,8 @@ func TestNew(t *testing.T) {
 }
 
 func TestListKeys(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		statusCode  int
@@ -86,12 +92,15 @@ func TestListKeys(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, pathPublicKeys, r.URL.Path)
 				require.Equal(t, http.MethodGet, r.Method)
+				require.Equal(t, pathPublicKeys, r.URL.Path)
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
+
 				require.NoError(t, json.NewEncoder(w).Encode(tt.resp))
 			})
 
@@ -108,6 +117,8 @@ func TestListKeys(t *testing.T) {
 }
 
 func TestImportKeystore(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		req         ImportKeystoreRequest
@@ -151,20 +162,20 @@ func TestImportKeystore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, pathKeystores, r.URL.Path)
 				require.Equal(t, http.MethodPost, r.Method)
+				require.Equal(t, pathKeystores, r.URL.Path)
 
 				var req ImportKeystoreRequest
 
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-
-				if !reflect.DeepEqual(req, tt.req) {
-					t.Errorf("Expected req %v but got %v", tt.req, req)
-				}
+				require.Equal(t, tt.req, req)
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
+
 				require.NoError(t, json.NewEncoder(w).Encode(tt.response))
 			})
 
@@ -172,18 +183,18 @@ func TestImportKeystore(t *testing.T) {
 
 			if tt.containsErr != "" {
 				require.ErrorContains(t, err, tt.containsErr)
+				require.Empty(t, data)
 			} else {
 				require.NoError(t, err)
-
-				if !reflect.DeepEqual(data, tt.response) {
-					t.Errorf("Expected resp %v but got %v", tt.response, data)
-				}
+				require.Equal(t, tt.response, data)
 			}
 		})
 	}
 }
 
 func TestDeleteKeystore(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                 string
 		req                  DeleteKeystoreRequest
@@ -226,20 +237,20 @@ func TestDeleteKeystore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, pathKeystores, r.URL.Path)
 				require.Equal(t, http.MethodDelete, r.Method)
+				require.Equal(t, pathKeystores, r.URL.Path)
 
 				var req DeleteKeystoreRequest
 
 				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-
-				if !reflect.DeepEqual(req, tt.req) {
-					t.Errorf("Expected req %v but got %v", tt.req, req.Pubkeys)
-				}
+				require.Equal(t, tt.req, req)
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
+
 				require.NoError(t, json.NewEncoder(w).Encode(tt.response))
 			})
 
@@ -247,18 +258,19 @@ func TestDeleteKeystore(t *testing.T) {
 
 			if tt.containsErr != "" {
 				require.ErrorContains(t, err, tt.containsErr)
+				require.Empty(t, resp)
 			} else {
 				require.NoError(t, err)
-
-				if !reflect.DeepEqual(resp, tt.response) {
-					t.Errorf("Expected resp %v but got %v", tt.response, resp)
-				}
+				require.Equal(t, tt.response, resp)
 			}
 		})
 	}
 }
 
 func TestSign(t *testing.T) {
+	t.Parallel()
+
+	testPubKey := mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
 	testPayload := SignRequest{
 		Type: TypeAggregationSlot,
 		ForkInfo: ForkInfo{
@@ -275,48 +287,101 @@ func TestSign(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		sharePubKey    phase0.BLSPubKey
-		payload        SignRequest
-		statusCode     int
-		response       SignResponse
-		expectedResult []byte
-		expectError    bool
+		name            string
+		pubKey          phase0.BLSPubKey
+		payload         SignRequest
+		setupServer     func(w http.ResponseWriter, r *http.Request)
+		wantSignature   []byte
+		wantErrContains string
 	}{
 		{
-			name:           "Successful sign",
-			sharePubKey:    phase0.BLSPubKey{0x01, 0x02, 0x03},
-			payload:        testPayload,
-			statusCode:     http.StatusOK,
-			response:       SignResponse{Signature: phase0.BLSSignature(bytes.Repeat([]byte{1}, phase0.SignatureLength))},
-			expectedResult: bytes.Repeat([]byte{1}, phase0.SignatureLength),
-			expectError:    false,
+			name:    "successful signing",
+			pubKey:  testPubKey,
+			payload: testPayload,
+			setupServer: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodPost, r.Method)
+
+				var req SignRequest
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+				require.Equal(t, testPayload, req)
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				response := SignResponse{Signature: phase0.BLSSignature(bytes.Repeat([]byte{1}, phase0.SignatureLength))}
+
+				require.NoError(t, json.NewEncoder(w).Encode(response))
+			},
+			wantSignature: bytes.Repeat([]byte{1}, phase0.SignatureLength),
+		},
+		{
+			name:    "server error",
+			pubKey:  testPubKey,
+			payload: testPayload,
+			setupServer: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+
+				require.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+					"error": "internal server error",
+				}))
+			},
+			wantErrContains: "error status 500",
+		},
+		{
+			name:    "bad request error",
+			pubKey:  testPubKey,
+			payload: testPayload,
+			setupServer: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+
+				require.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+					"error": "invalid request",
+				}))
+			},
+			wantErrContains: "error status 400",
+		},
+		{
+			name:    "network error",
+			pubKey:  testPubKey,
+			payload: testPayload,
+			setupServer: func(w http.ResponseWriter, r *http.Request) {
+				// close connection without response to simulate network error
+				hj, ok := w.(http.Hijacker)
+				require.True(t, ok)
+
+				conn, _, err := hj.Hijack()
+				require.NoError(t, err)
+
+				conn.Close()
+			},
+			wantErrContains: "error status 500",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, pathSign+tt.sharePubKey.String(), r.URL.Path)
-				require.Equal(t, http.MethodPost, r.Method)
+				expectedPath := pathSign + tt.pubKey.String()
 
-				var req SignRequest
+				require.Equal(t, expectedPath, r.URL.Path)
 
-				require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-				require.Equal(t, tt.payload, req)
-
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(tt.statusCode)
-				require.NoError(t, json.NewEncoder(w).Encode(tt.response))
+				tt.setupServer(w, r)
 			})
 
-			resp, err := web3Signer.Sign(context.Background(), tt.sharePubKey, tt.payload)
+			resp, err := web3Signer.Sign(context.Background(), tt.pubKey, tt.payload)
 
-			if tt.expectError {
+			if tt.wantErrContains != "" {
 				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErrContains)
+
+				var httpErr HTTPResponseError
+				require.ErrorAs(t, err, &httpErr)
 			} else {
 				require.NoError(t, err)
-				require.EqualValues(t, tt.expectedResult, resp.Signature)
+				require.EqualValues(t, tt.wantSignature, resp.Signature)
 			}
 		})
 	}
