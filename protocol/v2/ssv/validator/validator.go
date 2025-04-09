@@ -153,6 +153,11 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
 	defer span.End()
 
+	slot, err := msg.Slot()
+	if err == nil {
+		span.SetAttributes(observability.BeaconSlotAttribute(slot))
+	}
+
 	if msgType != message.SSVEventMsgType {
 		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
