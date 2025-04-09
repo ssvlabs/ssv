@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -28,20 +29,50 @@ const (
 // participantStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type participantStorage struct {
-	prefix         []byte
-	oldPrefix      string // kept back for cleanup
-	db             basedb.Database
-	participantsMu sync.Mutex
+	prefix    []byte
+	oldPrefix string // kept back for cleanup
+	db        basedb.Database
+
+	// Participants cache for the current slot. Flushed to DB once every slot.
+	cachedParticipants map[spectypes.ValidatorPK][]spectypes.OperatorID
+	cachedSlot         phase0.Slot
+	cacheMu            sync.RWMutex
 }
 
 // New create new participant store
-func New(db basedb.Database, prefix spectypes.BeaconRole) qbftstorage.ParticipantStore {
+func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole, netCfg networkconfig.NetworkConfig, slotTickerProvider slotticker.Provider) qbftstorage.ParticipantStore {
 	role := byte(prefix & 0xff)
-	return &participantStorage{
-		prefix:    []byte{role},
-		oldPrefix: prefix.String(),
-		db:        db,
+	st := &participantStorage{
+		prefix:             []byte{role},
+		oldPrefix:          prefix.String(),
+		db:                 db,
+		cachedSlot:         netCfg.Beacon.EstimatedCurrentSlot(),
+		cachedParticipants: make(map[spectypes.ValidatorPK][]spectypes.OperatorID),
 	}
+
+	// Persist in-memory participants to DB once every slot.
+	slotTicker := slotTickerProvider()
+	go func() {
+		for range slotTicker.Next() {
+			slot := slotTicker.Slot()
+			// Flush previous slot participants.
+			st.cacheMu.Lock()
+			start := time.Now()
+			for pk, participants := range st.cachedParticipants {
+				if err := st.saveParticipants(pk, st.cachedSlot, participants); err != nil {
+					logger.Error("failed to save participants", fields.Validator(pk[:]), zap.Error(err))
+				}
+			}
+			logger.Debug("saved slot participants", fields.Slot(st.cachedSlot), fields.Took(time.Since(start)))
+
+			// Reset cache for new slot.
+			st.cachedParticipants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
+			st.cachedSlot = slot
+			st.cacheMu.Unlock()
+		}
+	}()
+
+	return st
 }
 
 // Prune waits for the initial tick and then removes all slots below the tickSlot - retain
@@ -169,13 +200,7 @@ func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot pha
 		recordSaveDuration(i.ID(), dur)
 	}()
 
-	i.participantsMu.Lock()
-	defer i.participantsMu.Unlock()
-
-	txn := i.db.Begin()
-	defer txn.Discard()
-
-	existingParticipants, err := i.getParticipants(txn, pk, slot)
+	existingParticipants, err := i.getParticipants(pk, slot)
 	if err != nil {
 		return false, fmt.Errorf("get participants %w", err)
 	}
@@ -185,13 +210,17 @@ func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot pha
 		return false, nil
 	}
 
-	if err := i.saveParticipants(txn, pk, slot, mergedParticipants); err != nil {
-		return false, fmt.Errorf("save participants: %w", err)
+	// Write to cache or DB.
+	i.cacheMu.Lock()
+	if i.cachedSlot != slot {
+		i.cacheMu.Unlock()
+		if err := i.saveParticipants(pk, slot, mergedParticipants); err != nil {
+			return false, fmt.Errorf("save participants: %w", err)
+		}
+		return true, nil
 	}
-
-	if err := txn.Commit(); err != nil {
-		return false, fmt.Errorf("commit transaction: %w", err)
-	}
+	i.cachedParticipants[pk] = mergedParticipants
+	i.cacheMu.Unlock()
 
 	return true, nil
 }
@@ -243,11 +272,23 @@ func (i *participantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, fr
 }
 
 func (i *participantStorage) GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	return i.getParticipants(nil, pk, slot)
+	return i.getParticipants(pk, slot)
 }
 
-func (i *participantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	val, found, err := i.get(txn, pk[:], slotToByteSlice(slot))
+func (i *participantStorage) getParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	// Check cache first.
+	i.cacheMu.RLock()
+	if i.cachedSlot == slot {
+		participants, ok := i.cachedParticipants[pk]
+		if ok {
+			i.cacheMu.RUnlock()
+			return participants, nil
+		}
+	}
+	i.cacheMu.RUnlock()
+
+	// Check DB.
+	val, found, err := i.get(pk[:], slotToByteSlice(slot))
 	if err != nil {
 		return nil, err
 	}
@@ -256,15 +297,23 @@ func (i *participantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes
 	}
 
 	operators := decodeOperators(val)
+
+	// Update cache.
+	i.cacheMu.Lock()
+	if i.cachedSlot == slot {
+		i.cachedParticipants[pk] = operators
+	}
+	i.cacheMu.Unlock()
+
 	return operators, nil
 }
 
-func (i *participantStorage) saveParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
+func (i *participantStorage) saveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
 	bytes, err := encodeOperators(operators)
 	if err != nil {
 		return fmt.Errorf("encode operators: %w", err)
 	}
-	if err := i.save(txn, bytes, pk[:], slotToByteSlice(slot)); err != nil {
+	if err := i.save(bytes, pk[:], slotToByteSlice(slot)); err != nil {
 		return fmt.Errorf("save to DB: %w", err)
 	}
 
@@ -277,14 +326,14 @@ func mergeParticipants(existingParticipants, newParticipants []spectypes.Operato
 	return slices.Compact(allParticipants)
 }
 
-func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, pk, slot []byte) error {
+func (i *participantStorage) save(value []byte, pk, slot []byte) error {
 	prefix := i.makePrefix(slot)
-	return i.db.Using(txn).Set(prefix, pk, value)
+	return i.db.Set(prefix, pk, value)
 }
 
-func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte, bool, error) {
+func (i *participantStorage) get(pk, slot []byte) ([]byte, bool, error) {
 	prefix := i.makePrefix(slot)
-	obj, found, err := i.db.Using(txn).Get(prefix, pk)
+	obj, found, err := i.db.Get(prefix, pk)
 	if err != nil {
 		return nil, false, err
 	}
