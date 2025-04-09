@@ -433,7 +433,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
 		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
-		
+
 		const eventMsg = "🔧 executing committee duty"
 		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties))
 		span.AddEvent(eventMsg, trace.WithAttributes(
