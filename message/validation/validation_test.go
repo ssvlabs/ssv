@@ -445,6 +445,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
+
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrUnexpectedConsensusMessage
 		expectedErr.got = spectypes.RoleValidatorRegistration
@@ -452,9 +453,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		badIdentifier = spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleVoluntaryExit)
 		signedSSVMessage = generateSignedMessage(ks, badIdentifier, slot)
-
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr.got = spectypes.RoleVoluntaryExit
+		require.ErrorIs(t, err, expectedErr)
+
+		badIdentifier = spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RolePreconfCommitment)
+		signedSSVMessage = generateSignedMessage(ks, badIdentifier, slot)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		expectedErr.got = spectypes.RolePreconfCommitment
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -814,6 +820,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				spectypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, spectypes.ContributionProofs},
 				spectypes.RoleValidatorRegistration:     {spectypes.ValidatorRegistrationPartialSig},
 				spectypes.RoleVoluntaryExit:             {spectypes.VoluntaryExitPartialSig},
+				spectypes.RolePreconfCommitment:         {spectypes.PreconfCommitmentPartialSig},
 			}
 
 			for role, msgTypes := range tests {
@@ -888,12 +895,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// Get error when sending an unexpected message type for the required duty (sending randao for attestor duty)
 		t.Run("mismatch", func(t *testing.T) {
 			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
-				spectypes.RoleCommittee:                 {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleAggregator:                {spectypes.RandaoPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleProposer:                  {spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.RoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleCommittee:                 {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.PreconfCommitmentPartialSig},
+				spectypes.RoleAggregator:                {spectypes.RandaoPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.PreconfCommitmentPartialSig},
+				spectypes.RoleProposer:                  {spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig, spectypes.PreconfCommitmentPartialSig},
+				spectypes.RoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ValidatorRegistrationPartialSig, spectypes.PreconfCommitmentPartialSig},
 				spectypes.RoleValidatorRegistration:     {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
 				spectypes.RoleVoluntaryExit:             {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
+				spectypes.RolePreconfCommitment:         {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
 			}
 
 			for role, msgTypes := range tests {

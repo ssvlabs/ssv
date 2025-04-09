@@ -1104,6 +1104,7 @@ func SetupRunners(
 		spectypes.RoleSyncCommitteeContribution,
 		spectypes.RoleValidatorRegistration,
 		spectypes.RoleVoluntaryExit,
+		spectypes.RolePreconfCommitment,
 	}
 
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
@@ -1151,6 +1152,8 @@ func SetupRunners(
 			runners[role], err = runner.NewValidatorRegistrationRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+		case spectypes.RolePreconfCommitment:
+			runners[role], err = runner.NewPreconfCommitmentRunner(domainType, &options.SSVShare.Share, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.Operator.GetQuorum())
 		}
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create duty runner")

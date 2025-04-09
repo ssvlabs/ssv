@@ -28,6 +28,22 @@ func signBeaconObject(
 	return signAsValidator(runner, duty.ValidatorIndex, obj, domainType, domain)
 }
 
+// TODO - signPreconfCommitment and signBeaconObject can be 1 single function (refactor it)
+func signPreconfCommitment(
+	runner Runner,
+	validatorIndex spec.ValidatorIndex,
+	root ssz.HashRoot,
+	slot spec.Slot,
+	domainType spec.DomainType,
+) (*spectypes.PartialSignatureMessage, error) {
+	epoch := runner.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(slot)
+	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
+	}
+	return signAsValidator(runner, validatorIndex, root, domainType, domain)
+}
+
 func signAsValidator(
 	runner Runner,
 	validatorIndex spec.ValidatorIndex,

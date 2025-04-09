@@ -11,6 +11,7 @@ require (
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/ethereum/go-ethereum v1.14.8
+	github.com/fasthttp/router v1.5.4
 	github.com/ferranbt/fastssz v0.1.4
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/render v1.0.2
@@ -42,6 +43,8 @@ require (
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
+	github.com/valyala/fasthttp v1.58.0
+	github.com/wealdtech/go-eth2-types/v2 v2.8.1
 	github.com/wealdtech/go-eth2-util v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.opentelemetry.io/otel/sdk v1.32.0
@@ -58,7 +61,11 @@ require (
 	tailscale.com v1.72.0
 )
 
-require github.com/wealdtech/go-eth2-types/v2 v2.8.1
+require (
+	github.com/andybalholm/brotli v1.1.1 // indirect
+	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+)
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
@@ -135,7 +142,7 @@ require (
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/jbenet/goprocess v0.1.4 // indirect
 	github.com/joho/godotenv v1.4.0 // indirect
-	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/koron/go-ssdp v0.0.4 // indirect
 	github.com/kr/pretty v0.3.1 // indirect

@@ -10,3 +10,8 @@ func (r ValidatorDutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runn
 	role := msgID.GetRoleType()
 	return r[role]
 }
+
+// GetPreconfCommitmentRunner returns PreconfCommitmentRunner for the corresponding validator
+func (r ValidatorDutyRunners) GetPreconfCommitmentRunner() *PreconfCommitmentRunner {
+	return r[spectypes.RolePreconfCommitment].(*PreconfCommitmentRunner)
+}

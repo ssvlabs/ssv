@@ -22,10 +22,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/api/handlers"
-	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	global_config "github.com/ssvlabs/ssv/cli/config"
+	cbapi "github.com/ssvlabs/ssv/commit-boost-api"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
@@ -313,6 +312,7 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.BNRoleSyncCommitteeContribution,
 			spectypes.BNRoleValidatorRegistration,
 			spectypes.BNRoleVoluntaryExit,
+			spectypes.BNRolePreconfCommitment,
 		}
 
 		storageMap := ibftstorage.NewStores()
@@ -461,33 +461,47 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 
-		if cfg.SSVAPIPort > 0 {
-			apiServer := apiserver.New(
-				logger,
-				fmt.Sprintf(":%d", cfg.SSVAPIPort),
-				&handlers.Node{
-					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
-					ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
-					PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
-					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
-					NodeProber:      nodeProber,
-				},
-				&handlers.Validators{
-					Shares: nodeStorage.Shares(),
-				},
-				&handlers.Exporter{
-					NetworkConfig:     networkConfig,
-					ParticipantStores: storageMap,
-				},
-			)
-			go func() {
-				err := apiServer.Run()
-				if err != nil {
-					logger.Fatal("failed to start API server", zap.Error(err))
-				}
-			}()
+		// TODO - using cfg.SSVAPIPort for commit-boost API testing for now, probably need to define
+		// separate configuration setting for it specifically
+		if cfg.SSVAPIPort <= 0 {
+			panic("SSVAPIPort isn't set in config")
 		}
+		//if cfg.SSVAPIPort > 0 {
+		//	apiServer := apiserver.New(
+		//		logger,
+		//		fmt.Sprintf(":%d", cfg.SSVAPIPort),
+		//		&handlers.Node{
+		//			// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
+		//			ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
+		//			PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+		//			Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+		//			TopicIndex:      p2pNetwork.(handlers.TopicIndex),
+		//			NodeProber:      nodeProber,
+		//		},
+		//		&handlers.Validators{
+		//			Shares: nodeStorage.Shares(),
+		//		},
+		//		&handlers.Exporter{
+		//			NetworkConfig:     networkConfig,
+		//			ParticipantStores: storageMap,
+		//		},
+		//	)
+		//	go func() {
+		//		err := apiServer.Run()
+		//		if err != nil {
+		//			logger.Fatal("failed to start API server", zap.Error(err))
+		//		}
+		//	}()
+		//}
+		addr := fmt.Sprintf(":%d", cfg.SSVAPIPort)
+		commitBoostAPI := cbapi.New(logger, validatorCtrl)
+		go func() {
+			err := commitBoostAPI.Run(addr)
+			if err != nil {
+				logger.Fatal("failed to start commit-boost API", zap.Error(err))
+			}
+		}()
+
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}

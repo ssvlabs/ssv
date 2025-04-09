@@ -175,6 +175,11 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	}
 }
 
+// GetPreconfCommitmentRunner returns PreconfCommitmentRunner for this validator
+func (v *Validator) GetPreconfCommitmentRunner() *runner.PreconfCommitmentRunner {
+	return v.DutyRunners.GetPreconfCommitmentRunner()
+}
+
 func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.RunnerRole, slot phase0.Slot) *zap.Logger {
 	logger = logger.With(fields.Slot(slot))
 	if dutyID, ok := v.dutyIDs.Get(role); ok {
