@@ -155,6 +155,9 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 						continue
 					}
 					for _, pr := range participantsByPK {
+						if len(pr.Signers) == 0 {
+							continue
+						}
 						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
 					}
 				}
@@ -167,6 +170,9 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					continue
 				}
 				for _, pr := range participantsByPK {
+					if len(pr.Signers) == 0 {
+						continue
+					}
 					response.Data = append(response.Data, transformToParticipantResponse(role, pr))
 				}
 			}

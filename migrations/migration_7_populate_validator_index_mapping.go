@@ -13,8 +13,8 @@ import (
 
 // This migration populates the mapping between validator pubkey -> index
 // It reads all the shares to collect relevant data
-var migration_6_populate_validator_index_mapping = Migration{
-	Name: "migration_6_populate_validator_index_mapping",
+var migration_7_populate_validator_index_mapping = Migration{
+	Name: "migration_7_populate_validator_index_mapping",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) (err error) {
 		var validatorsMapped int
 
@@ -40,9 +40,7 @@ var migration_6_populate_validator_index_mapping = Migration{
 				return fmt.Errorf("decode ssz share: %w", err)
 			}
 
-			if shareSSZ.ValidatorIndex > 0 {
-				// TODO(Moshe): should we check for validator index > 0?
-			} else {
+			if shareSSZ.ValidatorIndex == 0 {
 				shares0++
 			}
 
@@ -54,7 +52,7 @@ var migration_6_populate_validator_index_mapping = Migration{
 		}
 
 		logger.Info("tracer-migration: shares with 0 index", zap.Int("count", shares0))
-		logger.Info("tracer-migration: mappings", zap.Int("count", len(mappings)))
+		logger.Info("tracer-migration: validator index mappings", zap.Int("count", len(mappings)))
 
 		err = opt.Db.SetMany(storage.PubkeyToIndexMappingDBKey(opstorage.OperatorStoragePrefix), len(mappings), func(i int) (basedb.Obj, error) {
 			m := mappings[i]

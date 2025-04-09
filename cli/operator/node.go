@@ -137,7 +137,18 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
+
+		var db basedb.Database
+		switch cfg.DBOptions.Engine {
+		case "pebble":
+			logger.Info("using pebble db")
+			db, err = setupPebbleDB(logger, networkConfig.Beacon.GetNetwork())
+		case "badger":
+			logger.Info("using badger db")
+			db, err = setupBadgerDB(logger, networkConfig.Beacon.GetNetwork())
+		default:
+			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
+		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -325,7 +336,7 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, s)
 		}
 
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
+		if cfg.SSVOptions.ValidatorOptions.Exporter && !cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
@@ -340,7 +351,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
+		if cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			fixedSubnets, err = networkcommons.FromString(networkcommons.AllSubnets)
 			if err != nil {
 				logger.Fatal("failed to parse all fixed subnets", zap.Error(err))
@@ -360,8 +371,10 @@ var StartNodeCmd = &cobra.Command{
 
 		// Validator duty tracing
 		var collector *dutytracer.Collector
-		if cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing {
-			logger.Info("exporter duty tracing enabled")
+		if cfg.SSVOptions.ValidatorOptions.ExporterFull {
+			cfg.SSVOptions.ValidatorOptions.Exporter = false // disable old decideds
+
+			logger.Info("exporter mode: full")
 			dstore := &dutytracer.DutyTraceStoreMetrics{
 				Store: dutytracestore.New(db),
 			}
@@ -501,7 +514,7 @@ var StartNodeCmd = &cobra.Command{
 					TraceStore:        collector,
 					Validators:        nodeStorage.ValidatorStore(),
 				},
-				cfg.SSVOptions.ValidatorOptions.ExporterDutyTracing,
+				cfg.SSVOptions.ValidatorOptions.ExporterFull,
 			)
 			go func() {
 				err := apiServer.Run()
@@ -574,7 +587,40 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.PebbleDB, error) {
+func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+	db, err := kv.New(logger, cfg.DBOptions)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open db")
+	}
+
+	migrationOpts := migrations.Options{
+		Db:      db,
+		DbPath:  cfg.DBOptions.Path,
+		Network: eth2Network,
+	}
+	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to run migrations")
+	}
+	if applied == 0 {
+		return db, nil
+	}
+
+	// If migrations were applied, we run a full garbage collection cycle
+	// to reclaim any space that may have been freed up.
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	if err := db.FullGC(ctx); err != nil {
+		return nil, errors.Wrap(err, "failed to collect garbage")
+	}
+
+	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+
+	return db, nil
+}
+
+func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.PebbleDB, error) {
 	db, err := kv.NewPebbleDB(cfg.DBOptions.Ctx, logger, cfg.DBOptions.Path, &pebble.Options{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")

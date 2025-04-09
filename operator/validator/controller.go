@@ -50,7 +50,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
 	networkRouterConcurrency = 2048
@@ -73,8 +73,8 @@ type ControllerOptions struct {
 	Beacon                     beaconprotocol.BeaconNode
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:"Enable data export functionality"`
+	ExporterFull               bool   `yaml:"ExporterFull" env:"EXPORTER_FULL" env-default:"false" env-description:"Expose all validator duties to the exporter in addition to the decideds"`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"Number of slots to retain in export data"`
-	ExporterDutyTracing        bool   `yaml:"ExporterDutyTracing" env:"EXPORTER_DUTY_TRACING" env-default:"true" env-description:"Expose all validator duties to the exporter"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -220,7 +220,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GasLimit:            options.GasLimit,
 		MessageValidator:    options.MessageValidator,
 		Graffiti:            options.Graffiti,
-		ExporterDutyTracing: options.ExporterDutyTracing,
+		ExporterFull:        options.ExporterFull,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -336,7 +336,7 @@ func (c *controller) handleRouterMessages() {
 					v.HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(ctx, c.logger, m)
-				} else if c.validatorOptions.Exporter || c.validatorOptions.ExporterDutyTracing {
+				} else if c.validatorOptions.Exporter || c.validatorOptions.ExporterFull {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
@@ -365,7 +365,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	ssvMsg := msg.(*queue.SSVMessage)
 	observer := c.getCommitteeObserver(ssvMsg.GetID())
 
-	if c.validatorOptions.ExporterDutyTracing {
+	if c.validatorOptions.ExporterFull {
 		return c.traceCollector.Collect(c.ctx, ssvMsg, observer.VerifySig)
 	}
 
@@ -457,7 +457,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		}
 	}
 
-	if c.validatorOptions.Exporter || c.validatorOptions.ExporterDutyTracing {
+	if c.validatorOptions.Exporter || c.validatorOptions.ExporterFull {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
 	} else {
@@ -563,6 +563,7 @@ func (c *controller) startValidatorsForMetadata(_ context.Context, validators me
 			v.Share.ValidatorIndex = share.ValidatorIndex
 			v.Share.Status = share.Status
 			v.Share.ActivationEpoch = share.ActivationEpoch
+			v.Share.ExitEpoch = share.ExitEpoch
 			started, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
