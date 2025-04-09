@@ -426,17 +426,20 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
-	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "scheduler.execute_committee_duties"),
-		trace.WithAttributes(observability.DutyCountAttribute(len(duties))),
-	)
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_committee_duties"))
 	defer span.End()
 
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
 		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
+		
+		const eventMsg = "🔧 executing committee duty"
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties))
+		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.CommitteeIDAttribute(committee.id),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+		))
 
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
