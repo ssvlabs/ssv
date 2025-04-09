@@ -62,15 +62,15 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *zap.Logger) (*validator.Validator, *validator.Committee, error) {
 	var share *spectypes.Share
 	ketSetMap := make(map[phase0.ValidatorIndex]*spectestingutils.TestKeySet)
-	if len(test.Runner.GetBaseRunner().Share) == 0 {
+	if len(test.Runner.GetShares()) == 0 {
 		panic("No share in base runner for tests")
 	}
-	for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+	for _, validatorShare := range test.Runner.GetShares() {
 		share = validatorShare
 		break
 	}
 
-	for valIdx, validatorShare := range test.Runner.GetBaseRunner().Share {
+	for valIdx, validatorShare := range test.Runner.GetShares() {
 		ketSetMap[valIdx] = spectestingutils.KeySetForShare(validatorShare)
 	}
 
@@ -119,7 +119,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 				lastErr = err
 			}
 			if test.DecidedSlashable && IsQBFTProposalMessage(msg) {
-				for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+				for _, validatorShare := range test.Runner.GetShares() {
 					test.Runner.GetSigner().(*spectestingutils.TestingKeyManager).AddSlashableSlot(validatorShare.SharePubKey, spectestingutils.TestingDutySlot)
 				}
 			}
@@ -127,7 +127,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(ctx context.Context, logger *za
 
 	default:
 		v = ssvprotocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
-		v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
+		v.DutyRunners[test.Runner.GetRole()] = test.Runner
 		v.Network = test.Runner.GetNetwork()
 
 		if !test.DontStartDuty {
@@ -293,7 +293,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBaseRunner().BeaconNetwork,
+		runnerSample.GetBeaconNode().GetBeaconNetwork(),
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

@@ -1,8 +1,6 @@
 package validator
 
 import (
-	"sync/atomic"
-
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -10,13 +8,15 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey[:]))
 
-	if !atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
+	justStarted := v.started.CompareAndSwap(false, true)
+	if !justStarted {
 		return false, nil
 	}
 
@@ -28,7 +28,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 		logger := logger.With(fields.Role(role))
 		var share *spectypes.Share
 
-		for _, s := range dutyRunner.GetBaseRunner().Share {
+		for _, s := range dutyRunner.GetShares() {
 			if s.ValidatorPubKey == v.Share.ValidatorPubKey {
 				share = s
 				break
@@ -56,13 +56,15 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 
 // Stop stops a Validator.
 func (v *Validator) Stop() {
-	if atomic.CompareAndSwapUint32(&v.state, uint32(Started), uint32(NotStarted)) {
-		v.cancel()
-
-		v.mtx.Lock() // write-lock for v.Queues
-		defer v.mtx.Unlock()
-
-		// clear the msg q
-		v.Queues = make(map[spectypes.RunnerRole]queueContainer)
+	justStopped := v.started.CompareAndSwap(true, false)
+	if !justStopped {
+		return
 	}
+
+	v.cancel()
+
+	v.mtx.Lock() // write-lock for v.Queues
+	defer v.mtx.Unlock()
+
+	v.Queues = make(map[spectypes.RunnerRole]queue.Queue) // clear the msg q
 }

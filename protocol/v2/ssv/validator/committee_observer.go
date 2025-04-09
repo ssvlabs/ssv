@@ -203,6 +203,8 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 		return []spectypes.BeaconRole{spectypes.BNRoleValidatorRegistration}
 	case spectypes.RoleVoluntaryExit:
 		return []spectypes.BeaconRole{spectypes.BNRoleVoluntaryExit}
+	case spectypes.RolePreconfCommitment:
+		return []spectypes.BeaconRole{spectypes.BNRolePreconfCommitment}
 	}
 
 	return nil
