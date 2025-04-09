@@ -630,7 +630,8 @@ func TestRequestErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL)
+	logger, _ := zap.NewDevelopment()
+	client := NewClient(server.URL, WithLogger(logger))
 
 	err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
