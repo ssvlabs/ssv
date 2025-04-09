@@ -616,6 +616,59 @@ func TestExporterTraceDecideds(t *testing.T) {
 				assert.Equal(t, uint64(150), resp.Data[0].Slot)
 				assert.Equal(t, []uint64{1, 2, 3}, resp.Data[0].Message.Signers)
 			},
+		}, {
+			name: "valid request - empty signers array - proposer role",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				entry := qbftstorage.ParticipantsRangeEntry{
+					Signers: []uint64{},
+				}
+				store.AddValidatorDecided(spectypes.BNRoleProposer, phase0.Slot(150), pk, entry.Signers)
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 0) // Empty signers array should be filtered out
+			},
+		},
+		{
+			name: "valid request - empty signers array - attester role",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"ATTESTER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				entry := qbftstorage.ParticipantsRangeEntry{
+					Signers: []uint64{},
+				}
+				store.AddCommitteeDecided(phase0.Slot(150), pk, entry.Signers)
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 0) // Empty signers array should be filtered out
+			},
 		},
 		{
 			name: "invalid request - no pubkeys",
