@@ -31,6 +31,7 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		logger: zap.NewNop(),
 	}
 
 	for _, opt := range opts {
@@ -48,21 +49,30 @@ func WithLogger(logger *zap.Logger) ClientOption {
 	}
 }
 
-func (c *Client) ListValidators(ctx context.Context) ([]phase0.BLSPubKey, error) {
-	var resp web3signer.ListKeysResponse
-	start := time.Now() // TODO: add metrics, consider removing logs with request duration
-	err := requests.
+func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKey, err error) {
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opListValidators, err, duration)
+		c.logger.Debug("requested to list keys in remote signer", zap.Duration("duration", duration), zap.Error(err))
+	}()
+	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathValidators).
-		ToJSON(&resp).
+		ToJSON(&listResp).
 		Fetch(ctx)
-	c.logger.Debug("requested to list keys in remote signer", fields.Duration(start))
 
-	return resp, err
+	return listResp, err
 }
 
-func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
+func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err error) {
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opAddValidator, err, duration)
+		c.logger.Debug("requested to add keys to remote signer", fields.Count(len(shares)), zap.Duration("duration", duration), zap.Error(err))
+	}()
 
 	encodedShares := make([]ShareKeys, 0, len(shares))
 	for _, share := range shares {
@@ -78,8 +88,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
 
 	var resp web3signer.ImportKeystoreResponse
 	var errStr string
-	start := time.Now()
-	err := requests.
+	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathValidators).
@@ -88,7 +97,6 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
 		ToJSON(&resp).
 		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errStr))).
 		Fetch(ctx)
-	c.logger.Debug("requested to add keys to remote signer", fields.Count(len(shares)), fields.Duration(start))
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
 		return ShareDecryptionError(errors.New(errStr))
@@ -111,14 +119,19 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) error {
 	return nil
 }
 
-func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) error {
+func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) (err error) {
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opRemoveValidator, err, duration)
+		c.logger.Debug("requested to remove keys from remote signer", fields.Count(len(pubKeys)), zap.Duration("duration", duration), zap.Error(err))
+	}()
 	req := web3signer.DeleteKeystoreRequest{
 		Pubkeys: pubKeys,
 	}
 
 	var resp web3signer.DeleteKeystoreResponse
-	start := time.Now()
-	err := requests.
+	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathValidators).
@@ -126,7 +139,6 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		Delete().
 		ToJSON(&resp).
 		Fetch(ctx)
-	c.logger.Debug("requested to remove keys from remote signer", fields.Count(len(pubKeys)), fields.Duration(start))
 
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
@@ -145,10 +157,15 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 	return nil
 }
 
-func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
+func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (signature phase0.BLSSignature, err error) {
 	var resp web3signer.SignResponse
 	start := time.Now()
-	err := requests.
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opSignValidator, err, duration)
+		c.logger.Debug("requested to sign with share key", fields.PubKey(sharePubKey[:]), zap.Duration("duration", duration), zap.Error(err))
+	}()
+	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathValidatorsSign + sharePubKey.String()).
@@ -156,7 +173,6 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 		Post().
 		ToJSON(&resp).
 		Fetch(ctx)
-	c.logger.Debug("requested to sign with share key", fields.PubKey(sharePubKey[:]), fields.Duration(start))
 	if err != nil {
 		return phase0.BLSSignature{}, fmt.Errorf("request failed: %w", err)
 	}
@@ -164,16 +180,20 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 	return resp.Signature, nil
 }
 
-func (c *Client) OperatorIdentity(ctx context.Context) (string, error) {
+func (c *Client) OperatorIdentity(ctx context.Context) (pubKeyBase64 string, err error) {
 	var resp string
 	start := time.Now()
-	err := requests.
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opOperatorIdentity, err, duration)
+		c.logger.Debug("requested operator identity", zap.Duration("duration", duration), zap.Error(err))
+	}()
+	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathOperatorIdentity).
 		ToString(&resp).
 		Fetch(ctx)
-	c.logger.Debug("requested operator identity", fields.Duration(start))
 
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
@@ -182,24 +202,28 @@ func (c *Client) OperatorIdentity(ctx context.Context) (string, error) {
 	return resp, nil
 }
 
-func (c *Client) OperatorSign(ctx context.Context, payload []byte) ([]byte, error) {
-	var resp bytes.Buffer
+func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []byte, err error) {
+	var respBuf bytes.Buffer
 	start := time.Now()
-	err := requests.
+	defer func() {
+		duration := time.Since(start)
+		recordClientRequest(ctx, opSignOperator, err, duration)
+		c.logger.Debug("requested to sign with operator key", zap.Duration("duration", duration), zap.Error(err))
+	}()
+	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
 		Path(pathOperatorSign).
 		BodyBytes(payload).
 		Post().
-		ToBytesBuffer(&resp).
+		ToBytesBuffer(&respBuf).
 		Fetch(ctx)
-	c.logger.Debug("requested to sign with operator key", fields.Duration(start))
 
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	return resp.Bytes(), nil
+	return respBuf.Bytes(), nil
 }
 
 func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) ([]phase0.BLSPubKey, error) {
