@@ -50,6 +50,42 @@ func (s *SSVSignerClientSuite) TearDownTest() {
 	s.serverHits = 0
 }
 
+// resetMux resets the mux handler between test cases.
+func (s *SSVSignerClientSuite) resetMux() {
+	s.mux = http.NewServeMux()
+	s.serverHits = 0
+}
+
+// assertErrorResult asserts that the error matches expectations.
+func (s *SSVSignerClientSuite) assertErrorResult(err error, expectError bool, t *testing.T) {
+	if expectError {
+		require.Error(t, err, "Expected an error")
+	} else {
+		require.NoError(t, err, "Unexpected error")
+	}
+	assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
+}
+
+// writeJSONResponse writes a JSON response with the given status code and data.
+func writeJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.WriteHeader(statusCode)
+
+	if statusCode == http.StatusOK && data != nil {
+		respBytes, err := json.Marshal(data)
+		if err == nil {
+			w.Write(respBytes)
+			return
+		}
+	}
+
+	// For non-OK status codes or marshal errors
+	if statusCode == http.StatusUnprocessableEntity {
+		w.Write([]byte("Decryption error"))
+	} else if statusCode != http.StatusOK {
+		w.Write([]byte("Server error"))
+	}
+}
+
 func (s *SSVSignerClientSuite) TestAddValidators() {
 	t := s.T()
 
@@ -118,11 +154,10 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s.mux = http.NewServeMux()
+			s.resetMux()
 			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
-
-				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+				require.Equal(t, http.MethodPost, r.Method)
+				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err, "Failed to read request body")
@@ -132,45 +167,25 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				err = json.Unmarshal(body, &req)
 				require.NoError(t, err, "Failed to unmarshal request body")
 
-				assert.Len(t, req.ShareKeys, len(tc.shares))
+				require.Len(t, req.ShareKeys, len(tc.shares))
 
 				for i, share := range tc.shares {
 					assert.Equal(t, share.EncryptedPrivKey, req.ShareKeys[i].EncryptedPrivKey)
 					assert.EqualValues(t, share.PubKey[:], req.ShareKeys[i].PubKey)
 				}
 
-				w.WriteHeader(tc.expectedStatusCode)
-
-				switch tc.expectedStatusCode {
-				case http.StatusUnprocessableEntity:
-					w.Write([]byte("Decryption error"))
-				case http.StatusOK:
-					respBytes, err := json.Marshal(tc.expectedResponse)
-					require.NoError(t, err, "Failed to marshal response")
-					w.Write(respBytes)
-				default:
-					w.Write([]byte("Server error"))
-				}
+				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
 			err := s.client.AddValidators(context.Background(), tc.shares...)
 
-			if tc.expectError {
-				assert.Error(t, err, "Expected an error")
+			s.assertErrorResult(err, tc.expectError, t)
 
-				if tc.isDecryptionError {
-					var decryptErr ShareDecryptionError
-
-					assert.ErrorAs(t, err, &decryptErr, "Expected a ShareDecryptionError")
-				}
-			} else {
-				assert.NoError(t, err, "Unexpected error")
+			if tc.isDecryptionError {
+				var decryptErr ShareDecryptionError
+				assert.ErrorAs(t, err, &decryptErr, "Expected a ShareDecryptionError")
 			}
-
-			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
-
-		s.serverHits = 0
 	}
 }
 
@@ -222,11 +237,10 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s.mux = http.NewServeMux()
+			s.resetMux()
 			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodDelete, r.Method)
-
-				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+				require.Equal(t, http.MethodDelete, r.Method)
+				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err, "Failed to read request body")
@@ -236,35 +250,19 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				err = json.Unmarshal(body, &req)
 				require.NoError(t, err, "Failed to unmarshal request body")
 
-				assert.Len(t, req.Pubkeys, len(tc.pubKeys))
+				require.Len(t, req.Pubkeys, len(tc.pubKeys))
 
 				for i, pubKey := range tc.pubKeys {
 					assert.Equal(t, pubKey, req.Pubkeys[i])
 				}
 
-				w.WriteHeader(tc.expectedStatusCode)
-
-				if tc.expectedStatusCode == http.StatusOK {
-					respBytes, err := json.Marshal(tc.expectedResponse)
-					require.NoError(t, err, "Failed to marshal response")
-					w.Write(respBytes)
-				} else {
-					w.Write([]byte("Server error"))
-				}
+				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
 			err := s.client.RemoveValidators(context.Background(), tc.pubKeys...)
 
-			if tc.expectError {
-				assert.Error(t, err, "Expected an error")
-			} else {
-				assert.NoError(t, err, "Unexpected error")
-			}
-
-			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
+			s.assertErrorResult(err, tc.expectError, t)
 		})
-
-		s.serverHits = 0
 	}
 }
 
@@ -274,7 +272,8 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 	testCases := []struct {
 		name               string
 		expectedStatusCode int
-		expectedResponse   []phase0.BLSPubKey
+		expectedResponse   interface{}
+		expectedResult     []phase0.BLSPubKey
 		expectError        bool
 	}{
 		{
@@ -284,52 +283,46 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 				{1, 2, 3},
 				{4, 5, 6},
 			},
+			expectedResult: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
+			},
 			expectError: false,
 		},
 		{
 			name:               "EmptyList", // TODO: fix
 			expectedStatusCode: http.StatusOK,
 			expectedResponse:   web3signer.ListKeysResponse{},
+			expectedResult:     web3signer.ListKeysResponse{},
 			expectError:        false,
 		},
 		{
 			name:               "ServerError",
 			expectedStatusCode: http.StatusInternalServerError,
 			expectedResponse:   nil,
+			expectedResult:     nil,
 			expectError:        true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s.mux = http.NewServeMux()
+			s.resetMux()
 			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodGet, r.Method)
-
-				w.WriteHeader(tc.expectedStatusCode)
-
-				if tc.expectedStatusCode == http.StatusOK {
-					respBytes, err := json.Marshal(tc.expectedResponse)
-					require.NoError(t, err, "Failed to marshal response")
-					w.Write(respBytes)
-				} else {
-					w.Write([]byte("Server error"))
-				}
+				require.Equal(t, http.MethodGet, r.Method)
+				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
 			result, err := s.client.ListValidators(context.Background())
 
 			if tc.expectError {
-				assert.Error(t, err, "Expected an error")
+				require.Error(t, err, "Expected an error")
 			} else {
-				assert.NoError(t, err, "Unexpected error")
-				assert.Equal(t, tc.expectedResponse, result)
+				require.NoError(t, err, "Unexpected error")
+				assert.Equal(t, tc.expectedResult, result)
 			}
-
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
-
-		s.serverHits = 0
 	}
 }
 
@@ -400,18 +393,16 @@ func (s *SSVSignerClientSuite) TestSign() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s.mux = http.NewServeMux()
+			s.resetMux()
 			s.mux.HandleFunc(pathValidatorsSign+tc.pubKey.String(), func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
-				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-
-				var req web3signer.SignRequest
+				require.Equal(t, http.MethodPost, r.Method)
+				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err, "Failed to read request body")
-
 				defer r.Body.Close()
 
+				var req web3signer.SignRequest
 				err = json.Unmarshal(body, &req)
 				require.NoError(t, err, "Failed to unmarshal request body")
 
@@ -422,16 +413,13 @@ func (s *SSVSignerClientSuite) TestSign() {
 			result, err := s.client.Sign(context.Background(), tc.pubKey, tc.payload)
 
 			if tc.expectError {
-				assert.Error(t, err, "Expected an error")
+				require.Error(t, err, "Expected an error")
 			} else {
-				assert.NoError(t, err, "Unexpected error")
+				require.NoError(t, err, "Unexpected error")
 				assert.Equal(t, tc.expectedResult, result)
 			}
-
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
-
-		s.serverHits = 0
 	}
 }
 
@@ -461,12 +449,11 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s.mux = http.NewServeMux()
+			s.resetMux()
 			s.mux.HandleFunc(pathOperatorIdentity, func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodGet, r.Method)
+				require.Equal(t, http.MethodGet, r.Method)
 
 				w.WriteHeader(tc.expectedStatusCode)
-
 				if tc.expectedStatusCode == http.StatusOK {
 					w.Write([]byte(tc.expectedResult))
 				} else {
@@ -477,16 +464,13 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 			result, err := s.client.OperatorIdentity(context.Background())
 
 			if tc.expectError {
-				assert.Error(t, err, "Expected an error")
+				require.Error(t, err, "Expected an error")
 			} else {
-				assert.NoError(t, err, "Unexpected error")
+				require.NoError(t, err, "Unexpected error")
 				assert.Equal(t, tc.expectedResult, result)
 			}
-
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
-
-		s.serverHits = 0
 	}
 }
 
@@ -520,9 +504,9 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			s.mux = http.NewServeMux()
+			s.resetMux()
 			s.mux.HandleFunc(pathOperatorSign, func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
+				require.Equal(t, http.MethodPost, r.Method)
 
 				body, err := io.ReadAll(r.Body)
 				require.NoError(t, err, "Failed to read request body")
@@ -531,7 +515,6 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 				assert.Equal(t, tc.payload, body)
 
 				w.WriteHeader(tc.expectedStatusCode)
-
 				if tc.expectedStatusCode == http.StatusOK {
 					w.Write(tc.expectedResult)
 				} else {
@@ -542,16 +525,154 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 			result, err := s.client.OperatorSign(context.Background(), tc.payload)
 
 			if tc.expectError {
-				assert.Error(t, err, "Expected an error")
+				require.Error(t, err, "Expected an error")
 			} else {
-				assert.NoError(t, err, "Unexpected error")
+				require.NoError(t, err, "Unexpected error")
 				assert.Equal(t, tc.expectedResult, result)
 			}
-
 			assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
 		})
+	}
+}
 
-		s.serverHits = 0
+// TestMissingKeys tests the MissingKeys method which identifies keys present in local storage
+// but missing from the remote SSV signer service. It verifies proper key difference calculation
+// and error handling for various key combinations and server response scenarios.
+func (s *SSVSignerClientSuite) TestMissingKeys() {
+	t := s.T()
+
+	testCases := []struct {
+		name         string
+		localKeys    []phase0.BLSPubKey
+		remoteKeys   []phase0.BLSPubKey
+		expectedKeys []phase0.BLSPubKey
+		listError    bool
+		expectError  bool
+	}{
+		{
+			name: "NoMissingKeys",
+			localKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
+			},
+			remoteKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
+				{7, 8, 9},
+			},
+			expectedKeys: nil,
+			listError:    false,
+			expectError:  false,
+		},
+		{
+			name: "SomeMissingKeys",
+			localKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
+				{10, 11, 12},
+			},
+			remoteKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{7, 8, 9},
+			},
+			expectedKeys: []phase0.BLSPubKey{
+				{4, 5, 6},
+				{10, 11, 12},
+			},
+			listError:   false,
+			expectError: false,
+		},
+		{
+			name: "AllMissingKeys",
+			localKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
+			},
+			remoteKeys: []phase0.BLSPubKey{
+				{7, 8, 9},
+				{10, 11, 12},
+			},
+			expectedKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
+			},
+			listError:   false,
+			expectError: false,
+		},
+		{
+			name:         "EmptyLocalKeys",
+			localKeys:    []phase0.BLSPubKey{},
+			remoteKeys:   []phase0.BLSPubKey{{1, 2, 3}},
+			expectedKeys: nil,
+			listError:    false,
+			expectError:  false,
+		},
+		{
+			name: "EmptyRemoteKeys",
+			localKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
+			},
+			remoteKeys: []phase0.BLSPubKey{},
+			expectedKeys: []phase0.BLSPubKey{
+				{1, 2, 3},
+				{4, 5, 6},
+			},
+			listError:   false,
+			expectError: false,
+		},
+		{
+			name:         "ListValidatorsError",
+			localKeys:    []phase0.BLSPubKey{{1, 2, 3}},
+			remoteKeys:   nil,
+			expectedKeys: nil,
+			listError:    true,
+			expectError:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			s.resetMux()
+
+			s.mux.HandleFunc(pathValidators, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodGet, r.Method)
+
+				if tc.listError {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte("Server error"))
+					return
+				}
+
+				w.WriteHeader(http.StatusOK)
+				respBytes, err := json.Marshal(tc.remoteKeys)
+				require.NoError(t, err, "Failed to marshal response")
+				w.Write(respBytes)
+			})
+
+			result, err := s.client.MissingKeys(context.Background(), tc.localKeys)
+
+			if tc.expectError {
+				require.Error(t, err, "Expected an error")
+			} else {
+				require.NoError(t, err, "Unexpected error")
+
+				// create sets to compare results regardless of order
+				expectedSet := make(map[phase0.BLSPubKey]struct{}, len(tc.expectedKeys))
+				for _, key := range tc.expectedKeys {
+					expectedSet[key] = struct{}{}
+				}
+
+				resultSet := make(map[phase0.BLSPubKey]struct{}, len(result))
+				for _, key := range result {
+					resultSet[key] = struct{}{}
+				}
+
+				assert.Equal(t, expectedSet, resultSet)
+			}
+
+			assert.Equal(t, 1, s.serverHits)
+		})
 	}
 }
 
