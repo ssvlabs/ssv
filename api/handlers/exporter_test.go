@@ -755,7 +755,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				var resp committeeTraceResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
-				assert.Equal(t, uint64(100), uint64(resp.Data[0].Slot))
+				assert.Equal(t, uint64(100), resp.Data[0].Slot)
 				assert.Len(t, resp.Data[0].Decideds, 1)
 				assert.Len(t, resp.Data[0].Consensus, 1)
 				assert.Len(t, resp.Data[0].SyncCommittee, 1)
@@ -780,7 +780,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 				var resp committeeTraceResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
-				assert.Equal(t, uint64(100), uint64(resp.Data[0].Slot))
+				assert.Equal(t, uint64(100), resp.Data[0].Slot)
 				assert.Len(t, resp.Data[0].Decideds, 1)
 				assert.Len(t, resp.Data[0].Consensus, 1)
 				assert.Len(t, resp.Data[0].SyncCommittee, 1)
