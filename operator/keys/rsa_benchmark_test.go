@@ -17,10 +17,10 @@ const (
 
 var (
 	// msg we'll use for benchmarking.
-	msg = []byte("Some message example to be hashed for benchmarking, let's make it at " +
-		"least 100 bytes long so we can benchmark against somewhat real-world message size. " +
-		"Although it still might be way too small. Lajfklflfaslfjsalfalsfjsla fjlajlfaslkfjaslkf" +
-		"lasjflkasljfLFSJLfjsalfjaslfLKFsalfjalsfjalsfjaslfjaslfjlasflfslafasklfjsalfj;eqwfgh442")
+	msg = []byte(`Some message example to be hashed for benchmarking, let's make it at 
+		least 100 bytes long so we can benchmark against somewhat real-world message size. 
+		Although it still might be way too small. Lajfklflfaslfjsalfalsfjsla fjlajlfaslkfjaslkf
+		lasjflkasljfLFSJLfjsalfjaslfLKFsalfjalsfjalsfjaslfjaslfjlasflfslafasklfjsalfj;eqwfgh442`)
 	// msgHash is a typical sha256 hash, we use it for benchmarking because it's the most
 	// common type of data we work with.
 	msgHash = func() []byte {
@@ -105,8 +105,7 @@ func init() {
 func BenchmarkSignRSA(b *testing.B) {
 	privKey, _ := genKeypair(b)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := SignRSA(privKey, msgHash)
 		if err != nil {
 			b.Fatal(err)
@@ -117,8 +116,7 @@ func BenchmarkSignRSA(b *testing.B) {
 func BenchmarkEncryptRSA(b *testing.B) {
 	_, pubKey := genKeypair(b)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := EncryptRSA(pubKey, msgHash)
 		if err != nil {
 			b.Fatal(err)
@@ -133,8 +131,7 @@ func BenchmarkVerifyRSA(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := VerifyRSA(pubKey, msg, sig)
 		if err != nil {
 			b.Fatal(err)
@@ -149,8 +146,7 @@ func BenchmarkVerifyBLS(b *testing.B) {
 	msg := []byte("This is some test data for verification.")
 	sig := secKey.SignByte(msg)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if !sig.VerifyByte(pubKey, msg) {
 			b.Fatal("Verification failed")
 		}
@@ -158,8 +154,7 @@ func BenchmarkVerifyBLS(b *testing.B) {
 }
 
 func BenchmarkVerifyPKCS1v15(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, hashed[:], signature)
 		if err != nil {
 			b.Fatal(err)
@@ -168,8 +163,7 @@ func BenchmarkVerifyPKCS1v15(b *testing.B) {
 }
 
 func BenchmarkVerifyPKCS1v15FastHash(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := rsa.VerifyPKCS1v15(pubKeyFast, crypto.MD5, hashedFast[:], signatureFast)
 		if err != nil {
 			b.Fatal(err)
@@ -182,8 +176,7 @@ func BenchmarkVerifyPSS(b *testing.B) {
 		SaltLength: rsa.PSSSaltLengthAuto,
 		Hash:       crypto.SHA256,
 	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		err := rsa.VerifyPSS(pubKeyPSS, crypto.SHA256, hashedPSS[:], pssSignature, pssOptions)
 		if err != nil {
 			b.Fatal(err)
@@ -196,15 +189,13 @@ func BenchmarkSignBLS(b *testing.B) {
 	secKey.SetByCSPRNG()
 	msg := []byte("This is some test data for verification.")
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = secKey.SignByte(msg)
 	}
 }
 
 func BenchmarkSignPKCS1v15(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := rsa.SignPKCS1v15(rand.Reader, privKey, crypto.SHA256, hashed[:])
 		if err != nil {
 			b.Fatal(err)
@@ -213,8 +204,7 @@ func BenchmarkSignPKCS1v15(b *testing.B) {
 }
 
 func BenchmarkSignPKCS1v15FastHash(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := rsa.SignPKCS1v15(rand.Reader, privKeyFast, crypto.MD5, hashedFast[:])
 		if err != nil {
 			b.Fatal(err)
@@ -223,8 +213,7 @@ func BenchmarkSignPKCS1v15FastHash(b *testing.B) {
 }
 
 func BenchmarkSignPSS(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		pssOptions := &rsa.PSSOptions{
 			SaltLength: rsa.PSSSaltLengthAuto,
 			Hash:       crypto.SHA256,
