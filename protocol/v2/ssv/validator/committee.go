@@ -239,9 +239,10 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
 	defer span.End()
 
-	if msg.SignedSSVMessage != nil {
-		slot, err := msg.Slot()
-		if err == nil {
+	slot, err := msg.Slot()
+	if err == nil {
+		span.SetAttributes(observability.BeaconSlotAttribute(slot))
+		if msg.SignedSSVMessage != nil {
 			span.SetAttributes(observability.DutyIDAttribute(
 				fields.FormatCommitteeDutyID(msg.SignedSSVMessage.OperatorIDs, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot),
 			))
