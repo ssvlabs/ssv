@@ -2,8 +2,10 @@ package p2pv1
 
 import (
 	"fmt"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 	"math"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -37,6 +39,13 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 	}()
 
+	// TODO
+	discoveredTopicsFirstTime := hashmap.New[int, time.Duration]()
+	var discoveredTopicsFirstTimeOnce sync.Once
+
+	// TODO
+	proposedPeers := hashmap.New[peer.ID, struct{}]()
+
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
 	// To find the best set of peers to connect we'll:
 	// - iterate over all available candidate-peers (peers discovered so far) and choose the best one
@@ -51,6 +60,34 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		if time.Since(startTime) < minDiscoveryTime {
 			return
 		}
+
+		// TODO
+		myPeers := make(map[peer.ID]struct{})
+		for _, peers := range n.PeersByTopic() {
+			for _, p := range peers {
+				myPeers[p] = struct{}{}
+			}
+		}
+		var connected, unconnected []string
+		total := proposedPeers.SlowLen()
+		proposedPeers.Range(func(p peer.ID, _ struct{}) bool {
+			_, ok := myPeers[p]
+			if ok {
+				connected = append(connected, p.String())
+			} else {
+				unconnected = append(unconnected, p.String())
+			}
+			return true
+		})
+		if len(unconnected) > 20 {
+			unconnected = unconnected[:20]
+		}
+		n.logger.Debug(
+			"Discovered peers: CONNECTED vs TOTAL",
+			zap.Int("connected", len(connected)),
+			zap.Int("total", total),
+			zap.Strings("unconnected", unconnected),
+		)
 
 		// Avoid connecting to more peers if we're already at the limit.
 		inbound, outbound := n.connectionStats()
@@ -86,6 +123,34 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		n.logger.Debug("selecting discovered peers",
 			zap.Int("pool_size", n.discoveredPeersPool.SlowLen()),
 			zap.String("own_subnet_peers", currentSubnetPeers.String()))
+
+		// TODO
+		n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
+			for subnet, v := range n.PeersIndex().GetPeerSubnets(peerID) {
+				if v > 0 {
+					_, ok := discoveredTopicsFirstTime.Get(subnet)
+					if !ok {
+						discoveredTopicsFirstTime.Set(subnet, time.Since(startTime))
+					}
+				}
+			}
+			return true
+		})
+		subscribedTopicsCnt := len(n.topicsCtrl.Topics())
+		if discoveredTopicsFirstTime.SlowLen() >= subscribedTopicsCnt {
+			discoveredTopicsFirstTimeOnce.Do(func() {
+				var result string
+				discoveredTopicsFirstTime.Range(func(i int, duration time.Duration) bool {
+					result += fmt.Sprintf("%d: %s \n", i, duration)
+					return true
+				})
+				n.logger.Debug(
+					"ALL SUBSCRIBED TOPICS have been discovered",
+					zap.Int("topics_cnt", subscribedTopicsCnt),
+					zap.String("discovered_topics_times_since_node_start", result),
+				)
+			})
+		}
 
 		// Limit new connections to the remaining outbound slots.
 		maxPeersToConnect := max(vacantOutboundSlots, 1)
@@ -157,6 +222,9 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 		// Forward the selected peers for connection, incrementing the retry counter.
 		for _, p := range peersToConnect {
+			// TODO
+			proposedPeers.Set(p.ID, struct{}{})
+
 			n.discoveredPeersPool.Set(p.ID, discovery.DiscoveredPeer{
 				AddrInfo: p.AddrInfo,
 				Tries:    p.Tries + 1,
