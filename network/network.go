@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
