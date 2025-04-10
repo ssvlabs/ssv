@@ -3,8 +3,9 @@ package p2pv1
 import (
 	"testing"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 // createSubnets creates a commons.Subnets with the specified subnets active

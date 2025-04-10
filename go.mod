@@ -5,6 +5,7 @@ go 1.24
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
+	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -41,7 +42,6 @@ require (
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
-	github.com/wealdtech/go-eth2-types/v2 v2.8.1
 	github.com/wealdtech/go-eth2-util v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.opentelemetry.io/otel/sdk v1.32.0
@@ -58,6 +58,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.72.0
 )
+
+require github.com/wealdtech/go-eth2-types/v2 v2.8.1
 
 require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect

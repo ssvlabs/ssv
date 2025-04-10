@@ -7,10 +7,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 
 	"github.com/ssvlabs/ssv/api"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 type Exporter struct {

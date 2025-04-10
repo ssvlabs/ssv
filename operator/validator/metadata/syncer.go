@@ -8,6 +8,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -15,7 +17,6 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 //go:generate go tool -modfile=../../../tool.mod mockgen -package=metadata -destination=./mocks.go -source=./syncer.go
@@ -134,11 +135,8 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
 
-	s.logger.Debug("🆕 fetched validators metadata",
-		fields.Took(time.Since(fetchStart)),
-		zap.Int("metadatas", len(metadata)),
-		zap.Int("validators", len(pubKeys)),
-	)
+	logger := s.logger.With(zap.Int("metadatas", len(metadata)), zap.Int("validators", len(pubKeys)))
+	logger.Debug("🆕 fetched validators metadata", fields.Took(time.Since(fetchStart)))
 
 	updateStart := time.Now()
 	// TODO: Refactor share storage to support passing context.
@@ -146,11 +144,7 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 		return metadata, fmt.Errorf("update metadata: %w", err)
 	}
 
-	s.logger.Debug("🆕 saved validators metadata",
-		fields.Took(time.Since(updateStart)),
-		zap.Int("metadatas", len(metadata)),
-		zap.Int("validators", len(pubKeys)),
-	)
+	logger.Debug("🆕 saved validators metadata", fields.Took(time.Since(updateStart)))
 
 	return metadata, nil
 }
@@ -174,10 +168,10 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (Vali
 	results := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, len(validatorsIndexMap))
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
-			Balance:         v.Balance,
 			Status:          v.Status,
 			Index:           v.Index,
 			ActivationEpoch: v.Validator.ActivationEpoch,
+			ExitEpoch:       v.Validator.ExitEpoch,
 		}
 		results[spectypes.ValidatorPK(v.Validator.PublicKey)] = meta
 	}

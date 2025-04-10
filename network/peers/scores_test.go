@@ -6,9 +6,10 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	nettesting "github.com/ssvlabs/ssv/network/testing"
-	"github.com/stretchr/testify/require"
 )
 
 func TestScoresIndex(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"testing"
@@ -21,6 +22,12 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	eth2types "github.com/wealdtech/go-eth2-types/v2"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap/zaptest"
+
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -34,11 +41,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
-	"github.com/stretchr/testify/require"
-	eth2types "github.com/wealdtech/go-eth2-types/v2"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap/zaptest"
-	"golang.org/x/exp/maps"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -59,7 +61,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	dutyStore := dutystore.New()
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
 
-	committee := maps.Keys(ks.Shares)
+	committee := slices.Collect(maps.Keys(ks.Shares))
 	slices.Sort(committee)
 
 	committeeID := shares.active.CommitteeID()
@@ -1809,12 +1811,14 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, inactiveShare))
 
 	slot := netCfg.EstimatedCurrentSlot()
-	epoch := netCfg.EstimatedEpochAtSlot(slot)
+	activationEpoch := netCfg.EstimatedEpochAtSlot(slot)
+	exitEpoch := goclient.FarFutureEpoch
 
 	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
 		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
-		ActivationEpoch: epoch,
+		ActivationEpoch: activationEpoch,
+		ExitEpoch:       exitEpoch,
 		Liquidated:      false,
 	}
 
@@ -1827,7 +1831,8 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	nonUpdatedMetadataNextEpochShare := &ssvtypes.SSVShare{
 		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
-		ActivationEpoch: epoch + 1,
+		ActivationEpoch: activationEpoch + 1,
+		ExitEpoch:       exitEpoch,
 		Liquidated:      false,
 	}
 
