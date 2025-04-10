@@ -4,8 +4,9 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv/utils/casts"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go

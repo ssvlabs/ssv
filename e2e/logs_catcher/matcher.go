@@ -2,10 +2,9 @@ package logs_catcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
-
-	"errors"
 
 	"go.uber.org/zap"
 

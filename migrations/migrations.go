@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 var (
@@ -25,12 +26,13 @@ var (
 		migration_3_drop_registry_data,
 		migration_4_configlock_add_alan_fork_to_network_name,
 		migration_5_change_share_format_from_gob_to_ssz,
+		migration_6_share_exit_epoch,
 	}
 )
 
 // Run executes the default migrations.
 func Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
-	return defaultMigrations.Run(ctx, logger, opt)
+	return defaultMigrations.Run(ctx, logger.Named("Migrations"), opt)
 }
 
 // CompletedFunc is a function that marks a migration as completed.

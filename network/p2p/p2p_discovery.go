@@ -9,11 +9,12 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oleiade/lane/v2"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/utils/async"
-	"go.uber.org/zap"
 )
 
 // SubnetPeers contains the number of peers we are connected to for each subnet.

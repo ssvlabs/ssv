@@ -2,9 +2,6 @@ package goclient
 
 import (
 	"fmt"
-	"github.com/cespare/xxhash/v2"
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/operator/slotticker"
 	"maps"
 	"net/http"
 	"slices"
@@ -13,7 +10,11 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/cespare/xxhash/v2"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 type validatorRegistration struct {
