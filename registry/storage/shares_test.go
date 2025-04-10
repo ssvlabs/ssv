@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -14,8 +15,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"math/rand"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -434,7 +433,7 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 									Status:          updatedShare2.Status,
 									Index:           updatedShare2.ValidatorIndex,
 									ActivationEpoch: updatedShare2.ActivationEpoch,
-								ExitEpoch:       updatedShare2.ExitEpoch,},
+									ExitEpoch:       updatedShare2.ExitEpoch},
 							})
 						require.NoError(t, err)
 					case "remove1":

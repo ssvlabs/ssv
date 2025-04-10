@@ -86,6 +86,7 @@ func (s *SSVShare) SetBeaconMetadata(metadata *beacon.ValidatorMetadata) {
 	s.ValidatorIndex = metadata.Index
 	s.Status = metadata.Status
 	s.ActivationEpoch = metadata.ActivationEpoch
+	s.ExitEpoch = metadata.ExitEpoch
 	s.BeaconMetadataLastUpdated = time.Now()
 }
 
@@ -97,7 +98,8 @@ func (s *SSVShare) MetadataEquals(other *beacon.ValidatorMetadata) bool {
 
 	return s.ValidatorIndex == other.Index &&
 		s.Status == other.Status &&
-		s.ActivationEpoch == other.ActivationEpoch
+		s.ActivationEpoch == other.ActivationEpoch &&
+		s.ExitEpoch == other.ExitEpoch
 }
 
 // HasBeaconMetadata checks whether SSVShare has been enriched with respective Beacon metadata.
