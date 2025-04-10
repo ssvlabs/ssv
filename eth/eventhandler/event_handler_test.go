@@ -25,7 +25,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
@@ -745,7 +744,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NotNil(t, valShare)
 			valShare.ValidatorIndex = 1
 			valShare.ActivationEpoch = 0
-			valShare.ExitEpoch = goclient.FarFutureEpoch
+			valShare.ExitEpoch = networkconfig.FarFutureEpoch
 			valShare.Status = eth2apiv1.ValidatorStateActiveOngoing
 			err := eh.nodeStorage.Shares().Save(nil, valShare)
 			require.NoError(t, err)

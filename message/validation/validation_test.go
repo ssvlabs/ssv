@@ -27,7 +27,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -1812,7 +1811,7 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 
 	slot := netCfg.EstimatedCurrentSlot()
 	activationEpoch := netCfg.EstimatedEpochAtSlot(slot)
-	exitEpoch := goclient.FarFutureEpoch
+	exitEpoch := networkconfig.FarFutureEpoch
 
 	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
 		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),

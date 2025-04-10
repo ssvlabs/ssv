@@ -22,7 +22,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -96,7 +95,7 @@ func TestNewController(t *testing.T) {
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
-	passedEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
+	passedEpoch, exitEpoch := phase0.Epoch(1), networkconfig.FarFutureEpoch
 	operators := buildOperators(t)
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(0, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
@@ -307,7 +306,7 @@ func TestSetupValidators(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	// Init global variables
-	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
+	activationEpoch, exitEpoch := phase0.Epoch(1), networkconfig.FarFutureEpoch
 	operatorIds := []uint64{1, 2, 3, 4}
 	var validatorPublicKey phase0.BLSPubKey
 
@@ -577,7 +576,7 @@ func TestGetValidatorStats(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	sharesStorage := mocks.NewMockSharesStorage(ctrl)
 	bc := beacon.NewMockBeaconNode(ctrl)
-	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
+	activationEpoch, exitEpoch := phase0.Epoch(1), networkconfig.FarFutureEpoch
 
 	bc.EXPECT().GetBeaconNetwork().Return(spectypes.BeaconTestNetwork).AnyTimes()
 
