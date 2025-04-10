@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
-	pMsg *pubsub.Message,
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committeeInfo CommitteeInfo,
+	receivedFrom peer.ID,
 	receivedAt time.Time,
 ) (
 	*spectypes.PartialSignatureMessages,
@@ -43,7 +43,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	key := peerIDWithMessageID{
-		peerID:    pMsg.ReceivedFrom,
+		peerID:    receivedFrom,
 		messageID: ssvMessage.GetID(),
 	}
 	state := mv.validatorState(key, committeeInfo.committee)

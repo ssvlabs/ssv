@@ -139,10 +139,15 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 		return nil, err
 	}
 
-	return mv.handleSignedSSVMessage(pMsg, signedSSVMessage, receivedAt)
+	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
 }
 
-func (mv *messageValidator) handleSignedSSVMessage(pMsg *pubsub.Message, signedSSVMessage *spectypes.SignedSSVMessage, receivedAt time.Time) (*queue.SSVMessage, error) {
+func (mv *messageValidator) handleSignedSSVMessage(
+	signedSSVMessage *spectypes.SignedSSVMessage,
+	topic string,
+	receivedFrom peer.ID,
+	receivedAt time.Time,
+) (*queue.SSVMessage, error) {
 	decodedMessage := &queue.SSVMessage{
 		SignedSSVMessage: signedSSVMessage,
 	}
@@ -163,12 +168,12 @@ func (mv *messageValidator) handleSignedSSVMessage(pMsg *pubsub.Message, signedS
 		return decodedMessage, err
 	}
 
-	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, pMsg.GetTopic()); err != nil {
+	if err := mv.committeeChecks(signedSSVMessage, committeeInfo, topic); err != nil {
 		return decodedMessage, err
 	}
 
 	key := peerIDWithMessageID{
-		peerID:    pMsg.ReceivedFrom,
+		peerID:    receivedFrom,
 		messageID: signedSSVMessage.SSVMessage.GetID(),
 	}
 
@@ -178,14 +183,14 @@ func (mv *messageValidator) handleSignedSSVMessage(pMsg *pubsub.Message, signedS
 
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(pMsg, signedSSVMessage, committeeInfo, receivedAt)
+		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
 		decodedMessage.Body = consensusMessage
 		if err != nil {
 			return decodedMessage, err
 		}
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(pMsg, signedSSVMessage, committeeInfo, receivedAt)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeInfo, receivedFrom, receivedAt)
 		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err
