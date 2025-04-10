@@ -107,7 +107,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "voluntary_exit.process_execution"),
+		observability.InstrumentName(observabilityNamespace, "voluntary_exit.execute"),
 		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
 	defer span.End()
 

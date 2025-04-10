@@ -76,7 +76,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 
 func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "committee_handler.process_execution"),
+		observability.InstrumentName(observabilityNamespace, "committee.execute"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconEpochAttribute(epoch),

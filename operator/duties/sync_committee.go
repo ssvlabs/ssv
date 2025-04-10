@@ -166,7 +166,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 
 func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "sync_committee.process_execution"),
+		observability.InstrumentName(observabilityNamespace, "sync_committee.execute"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconPeriodAttribute(period),
