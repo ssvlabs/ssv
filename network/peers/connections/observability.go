@@ -2,7 +2,6 @@ package connections
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"go.opentelemetry.io/otel"
@@ -21,26 +20,22 @@ var (
 
 	connectedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("connected"),
+			observability.InstrumentName(observabilityNamespace, "connected"),
 			metric.WithUnit("{connection}"),
 			metric.WithDescription("total number of connected peers")))
 
 	disconnectedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("disconnected"),
+			observability.InstrumentName(observabilityNamespace, "disconnected"),
 			metric.WithUnit("{connection}"),
 			metric.WithDescription("total number of disconnected peers")))
 
 	filteredCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("filtered"),
+			observability.InstrumentName(observabilityNamespace, "filtered"),
 			metric.WithUnit("{connection}"),
 			metric.WithDescription("total number of filtered connections")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordConnected(ctx context.Context, direction network.Direction) {
 	connectedCounter.Add(ctx, 1,

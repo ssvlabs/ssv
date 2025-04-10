@@ -1,8 +1,6 @@
 package instance
 
 import (
-	"fmt"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -24,19 +22,16 @@ const (
 )
 
 var (
-	meter = otel.Meter(observabilityName)
+	meter  = otel.Meter(observabilityName)
+	tracer = otel.Tracer(observabilityName)
 
 	validatorStageDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("stage.duration"),
+			observability.InstrumentName(observabilityNamespace, "stage.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("validator stage(proposal, prepare, commit) duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func stageAttribute(stage stage) attribute.KeyValue {
 	return attribute.String("ssv.validator.stage", string(stage))

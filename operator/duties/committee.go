@@ -7,9 +7,12 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -72,14 +75,27 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "committee_handler.process_execution"),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(slot),
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconPeriodAttribute(period),
+		))
+	defer span.End()
+
 	attDuties := h.attDuties.CommitteeSlotDuties(epoch, slot)
 	syncDuties := h.syncDuties.CommitteePeriodDuties(period)
 	if attDuties == nil && syncDuties == nil {
+		span.AddEvent("attestation and sync duties are empty")
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
 	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
 	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, h.logger, committeeMap)
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
