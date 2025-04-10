@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -73,15 +72,7 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot], alanForkEpoch phase0.Epoch) (
-	*Scheduler,
-	*zap.Logger,
-	*mockSlotTickerService,
-	time.Duration,
-	context.CancelFunc,
-	*pool.ContextPool,
-	func(),
-) {
+func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot]) (*Scheduler, *zap.Logger, *mockSlotTickerService, time.Duration, context.CancelFunc, *pool.ContextPool, func()) {
 	ctrl := gomock.NewController(t)
 	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
 	timeout := 200 * time.Millisecond
@@ -96,8 +87,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
-		Beacon:        mocknetwork.NewMockBeaconNetwork(ctrl),
-		AlanForkEpoch: alanForkEpoch,
+		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
 	}
 
 	opts := &SchedulerOptions{
@@ -120,7 +110,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	s.indicesChg = make(chan struct{})
 	s.handlers = handlers
 
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 
 	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().MinGenesisTime().Return(int64(0)).AnyTimes()
 	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotDurationSec().Return(150 * time.Millisecond).AnyTimes()
@@ -190,31 +180,6 @@ func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Valida
 	).AnyTimes()
 }
 
-func setExecuteGenesisDutyFunc(s *Scheduler, executeDutiesCall chan []*genesisspectypes.Duty, executeDutiesCallSize int) {
-	executeDutiesBuffer := make(chan *genesisspectypes.Duty, executeDutiesCallSize)
-
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteGenesisDuty(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
-		func(logger *zap.Logger, duty *genesisspectypes.Duty) error {
-			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
-			executeDutiesBuffer <- duty
-
-			// Check if all expected duties have been received
-			if len(executeDutiesBuffer) == executeDutiesCallSize {
-				// Build the array of duties
-				var duties []*genesisspectypes.Duty
-				for i := 0; i < executeDutiesCallSize; i++ {
-					d := <-executeDutiesBuffer
-					duties = append(duties, d)
-				}
-
-				// Send the array of duties to executeDutiesCall
-				executeDutiesCall <- duties
-			}
-			return nil
-		},
-	).AnyTimes()
-}
-
 func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *committeeDuty, executeDutiesCallSize)
 
@@ -260,17 +225,6 @@ func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan s
 	}
 }
 
-func waitForGenesisDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration) {
-	select {
-	case <-fetchDutiesCall:
-		logger.Debug("duties fetched")
-	case <-executeDutiesCall:
-		require.FailNow(t, "unexpected execute duty call")
-	case <-time.After(timeout):
-		require.FailNow(t, "timed out waiting for duties to be fetched")
-	}
-}
-
 func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
 	select {
 	case <-fetchDutiesCall:
@@ -282,42 +236,7 @@ func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan stru
 	}
 }
 
-func waitForNoActionGenesis(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration) {
-	select {
-	case <-fetchDutiesCall:
-		require.FailNow(t, "unexpected duties call")
-	case <-executeDutiesCall:
-		require.FailNow(t, "unexpected execute duty call")
-	case <-time.After(timeout):
-		// No action as expected.
-	}
-}
-
 func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration, expectedDuties []*spectypes.ValidatorDuty) {
-	select {
-	case <-fetchDutiesCall:
-		require.FailNow(t, "unexpected duties call")
-	case duties := <-executeDutiesCall:
-		logger.Debug("duties executed", zap.Any("duties", duties))
-		logger.Debug("expected duties", zap.Any("duties", expectedDuties))
-		require.Len(t, duties, len(expectedDuties))
-		for _, e := range expectedDuties {
-			found := false
-			for _, d := range duties {
-				if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
-					found = true
-					break
-				}
-			}
-			require.True(t, found)
-		}
-
-	case <-time.After(timeout):
-		require.FailNow(t, "timed out waiting for duty to be executed")
-	}
-}
-
-func waitForGenesisDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*genesisspectypes.Duty, timeout time.Duration, expectedDuties []*genesisspectypes.Duty) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -444,7 +363,7 @@ func TestScheduler_Run(t *testing.T) {
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 
 	// setup mock duty handler expectations
@@ -493,7 +412,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
-	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 	err := s.Start(ctx, logger)
 	require.NoError(t, err)

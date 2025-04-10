@@ -9,13 +9,12 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -30,8 +29,6 @@ type VoluntaryExitRunner struct {
 	valCheck       specqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
-
-	metrics metrics.ConsensusMetrics
 }
 
 func NewVoluntaryExitRunner(
@@ -60,8 +57,6 @@ func NewVoluntaryExitRunner(
 		network:        network,
 		signer:         signer,
 		operatorSigner: operatorSigner,
-
-		metrics: metrics.NewConsensusMetrics(spectypes.RoleVoluntaryExit),
 	}, nil
 }
 

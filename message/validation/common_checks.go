@@ -38,7 +38,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	var ttl phase0.Slot
 	switch role {
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
-		ttl = 1 + lateSlotAllowance
+		ttl = 1 + LateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
 		ttl = MaxStoredSlots(mv.netCfg)
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
@@ -117,10 +117,22 @@ func (mv *messageValidator) validateBeaconDuty(
 	role spectypes.RunnerRole,
 	slot phase0.Slot,
 	indices []phase0.ValidatorIndex,
+	randaoMsg bool,
 ) error {
+	epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+
 	// Rule: For a proposal duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleProposer {
-		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		// Tolerate missing duties for RANDAO signatures during the first slot of an epoch,
+		// while duties are still being fetched from the Beacon node.
+		//
+		// Note: we allow current slot to be lower because of the ErrEarlyMessage rule.
+		if randaoMsg && mv.netCfg.Beacon.IsFirstSlotOfEpoch(slot) && mv.netCfg.Beacon.EstimatedCurrentSlot() <= slot {
+			if !mv.dutyStore.Proposer.IsEpochSet(epoch) {
+				return nil
+			}
+		}
+
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
 		if mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, validatorIndex) == nil {
@@ -130,7 +142,7 @@ func (mv *messageValidator) validateBeaconDuty(
 
 	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
 	if role == spectypes.RoleSyncCommitteeContribution {
-		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
+		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 		// Non-committee roles always have one validator index.
 		validatorIndex := indices[0]
 		if mv.dutyStore.SyncCommittee.Duty(period, validatorIndex) == nil {

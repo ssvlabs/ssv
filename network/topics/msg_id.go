@@ -3,16 +3,16 @@ package topics
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"sync"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
@@ -128,22 +128,16 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	// TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
 
-	// pre-fork hashing scheme
-
-	if !handler.networkConfig.PastAlanFork() {
-		decodedMsg, _, _, err := genesisspectypes.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			// todo: should err here or just log and let the decode function err?
-		} else {
-			return commons.MsgID()(decodedMsg)
-		}
-	}
-
 	// In Alan message structure the message body can be identical for all 4 operators
 	// whereas before it included a BLS signature which made it unique
 	// so we hash full message (including signer) to make it unique
 
-	return commons.MsgID()(msg)
+	if len(msg) == 0 {
+		return ""
+	}
+	b := make([]byte, 12)
+	binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
+	return string(b)
 }
 
 // GetPeers returns the peers that are related to the given msg

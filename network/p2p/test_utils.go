@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -14,9 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
-	"github.com/ssvlabs/ssv/network/commons"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/testing"
@@ -44,11 +43,11 @@ type LocalNet struct {
 
 // WithBootnode adds a bootnode to the network
 func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := commons.GenNetworkKey()
+	bnSk, err := p2pcommons.GenNetworkKey()
 	if err != nil {
 		return err
 	}
-	isk, err := commons.ECDSAPrivToInterface(bnSk)
+	isk, err := p2pcommons.ECDSAPrivToInterface(bnSk)
 	if err != nil {
 		return err
 	}
@@ -180,12 +179,12 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
-	cfg.Metrics = nil
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
 		nodeStorage.ValidatorStore(),
 		dutyStore,
 		signatureVerifier,
+		phase0.Epoch(0),
 	)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
@@ -211,6 +210,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			nodeStorage.ValidatorStore(),
 			dutyStore,
 			signatureVerifier,
+			phase0.Epoch(0),
 			validation.WithSelfAccept(selfPeerID, true),
 		)
 	}
@@ -224,8 +224,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 
 	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: nodeIndex + 1})
 
-	mr := metricsreporter.New()
-	p, err := New(logger, cfg, mr)
+	p, err := New(logger, cfg)
 	if err != nil {
 		return nil, err
 	}

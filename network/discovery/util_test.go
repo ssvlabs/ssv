@@ -6,9 +6,11 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -19,11 +21,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 var (
@@ -58,28 +63,26 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	}
 
 	// Discovery options
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	allSubs, _ := commons.FromString(commons.AllSubnets)
 	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
 	connectionIndex := NewMockConnection()
 
 	return &Options{
-		DiscV5Opts:    discV5Opts,
-		ConnIndex:     connectionIndex,
-		SubnetsIdx:    subnetsIndex,
-		NetworkConfig: networkConfig,
+		DiscV5Opts:          discV5Opts,
+		ConnIndex:           connectionIndex,
+		SubnetsIdx:          subnetsIndex,
+		NetworkConfig:       networkConfig,
+		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
+		TrimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 }
 
 // Testing discovery with a given NetworkConfig
 func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, netConfig)
-	service, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
-	require.NotNil(t, service)
-
-	dvs, ok := service.(*DiscV5Service)
-	require.True(t, ok)
-
+	require.NotNil(t, dvs)
 	return dvs
 }
 
@@ -94,14 +97,11 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 	return networkconfig.NetworkConfig{
 		Name:                 n.Name,
 		Beacon:               n.Beacon,
-		GenesisDomainType:    n.GenesisDomainType,
-		AlanDomainType:       n.AlanDomainType,
+		DomainType:           n.DomainType,
 		GenesisEpoch:         n.GenesisEpoch,
 		RegistrySyncOffset:   n.RegistrySyncOffset,
 		RegistryContractAddr: n.RegistryContractAddr,
 		Bootnodes:            n.Bootnodes,
-		// Fork epoch
-		AlanForkEpoch: forkEpoch,
 	}
 }
 
@@ -128,9 +128,9 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 	require.NoError(t, err)
 
 	// Set entries
-	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType())
+	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType)
 	require.NoError(t, err)
-	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.NextDomainType())
+	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.DomainType)
 	require.NoError(t, err)
 	err = records.SetSubnetsEntry(localNode, mockSubnets(1))
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 
 // Testing node
 func NewTestingNode(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, mockSubnets(1))
+	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, mockSubnets(1))
 }
 
 func NewTestingNodes(t *testing.T, count int) []*enode.Node {
@@ -152,15 +152,15 @@ func NewTestingNodes(t *testing.T, count int) []*enode.Node {
 }
 
 func NodeWithoutDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, false, spectypes.DomainType{}, true, testNetConfig.NextDomainType(), true, mockSubnets(1))
+	return CustomNode(t, false, spectypes.DomainType{}, true, testNetConfig.DomainType, true, mockSubnets(1))
 }
 
 func NodeWithoutNextDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), false, spectypes.DomainType{}, true, mockSubnets(1))
+	return CustomNode(t, true, testNetConfig.DomainType, false, spectypes.DomainType{}, true, mockSubnets(1))
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), false, nil)
+	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, false, nil)
 }
 
 func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
@@ -168,11 +168,11 @@ func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDo
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, zeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, zeroSubnets)
 }
 
 func NodeWithCustomSubnets(t *testing.T, subnets []byte) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType(), true, testNetConfig.NextDomainType(), true, subnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, subnets)
 }
 
 func CustomNode(t *testing.T,
@@ -193,6 +193,7 @@ func CustomNode(t *testing.T,
 	record := enr.Record{}
 
 	// Set entries
+	record.Set(enr.WithEntry("ssv", true)) // marks node as SSV-related (we filter out SSV-unrelated ones)
 	record.Set(enr.IP(net.IPv4(127, 0, 0, 1)))
 	record.Set(enr.UDP(12000))
 	record.Set(enr.TCP(13000))
@@ -306,13 +307,13 @@ func (mc *MockConnection) Connectedness(id peer.ID) network.Connectedness {
 	return network.NotConnected
 }
 
-func (mc *MockConnection) CanConnect(id peer.ID) bool {
+func (mc *MockConnection) CanConnect(id peer.ID) error {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	if can, ok := mc.canConnect[id]; ok {
-		return can
+	if can, ok := mc.canConnect[id]; ok && can {
+		return nil
 	}
-	return false
+	return fmt.Errorf("cannot connect")
 }
 
 func (mc *MockConnection) AtLimit(dir network.Direction) bool {

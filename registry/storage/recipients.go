@@ -86,7 +86,7 @@ func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte)
 	}
 }
 
-// GetRecipientsPrefix returns the prefix
+// GetRecipientsPrefix returns DB prefix
 func (s *recipientsStorage) GetRecipientsPrefix() []byte {
 	return recipientsPrefix
 }

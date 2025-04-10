@@ -15,10 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
-	genesismessage "github.com/ssvlabs/ssv/protocol/genesis/message"
-	"github.com/ssvlabs/ssv/protocol/genesis/ssv/genesisqueue"
-	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/network/discovery"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
@@ -65,7 +62,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.interfaceLogger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
+			n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
@@ -76,7 +73,7 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	n.fixedSubnets, _ = records.Subnets{}.FromString(records.AllSubnets)
+	n.fixedSubnets, _ = commons.FromString(commons.AllSubnets)
 	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
 		if err != nil {
@@ -91,14 +88,29 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	if numSubnets > commons.Subnets() {
-		numSubnets = commons.Subnets()
+	if numSubnets > commons.SubnetsCount {
+		numSubnets = commons.SubnetsCount
 	}
 
-	// Subscribe to random subnets.
-	// #nosec G404
-	randomSubnets := rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
-	randomSubnets = randomSubnets[:numSubnets]
+	var randomSubnets []int
+	for {
+		// pick random subnets
+		randomSubnets = rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.SubnetsCount) // #nosec G404
+		randomSubnets = randomSubnets[:numSubnets]
+		// check if any of subnets we've generated in this random set is already being used by us
+		randSubnetAlreadyInUse := false
+		for _, subnet := range randomSubnets {
+			if n.activeSubnets[subnet] == 1 {
+				randSubnetAlreadyInUse = true
+				break
+			}
+		}
+		if !randSubnetAlreadyInUse {
+			// found a set of random subnets that we aren't yet using
+			break
+		}
+	}
+
 	for _, subnet := range randomSubnets {
 		// #nosec G115
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(uint64(subnet))) // Perm slice is [0, n)
@@ -108,7 +120,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	}
 
 	// Update the subnets slice.
-	subnets := make([]byte, commons.Subnets())
+	subnets := make([]byte, commons.SubnetsCount)
 	copy(subnets, n.fixedSubnets)
 	for _, subnet := range randomSubnets {
 		subnets[subnet] = byte(1)
@@ -116,6 +128,21 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	n.fixedSubnets = subnets
 
 	return nil
+}
+
+// SubscribedSubnets returns the subnets the node is subscribed to, consisting of the fixed subnets and the active committees/validators.
+func (n *p2pNetwork) SubscribedSubnets() []byte {
+	// Compute the new subnets according to the active committees/validators.
+	updatedSubnets := make([]byte, commons.SubnetsCount)
+	copy(updatedSubnets, n.fixedSubnets)
+
+	n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
+		subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
+		updatedSubnets[subnet] = byte(1)
+		return true
+	})
+
+	return updatedSubnets
 }
 
 // Subscribe subscribes to validator subnet
@@ -133,43 +160,24 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if err != nil {
 		return fmt.Errorf("could not subscribe to committee: %w", err)
 	}
-	if !n.cfg.Network.PastAlanFork() {
-		return n.subscribeValidator(pk)
-	}
+
 	return nil
 }
 
 // subscribeCommittee handles the subscription logic for committee subnets
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
-	n.interfaceLogger.Debug("subscribing to committee", fields.CommitteeID(cid))
+	n.logger.Debug("subscribing to committee", fields.CommitteeID(cid))
 	status, found := n.activeCommittees.GetOrSet(string(cid[:]), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
 	}
 
 	for _, topic := range commons.CommitteeTopicID(cid) {
-		if err := n.topicsCtrl.Subscribe(n.interfaceLogger, topic); err != nil {
+		if err := n.topicsCtrl.Subscribe(n.logger, topic); err != nil {
 			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
 		}
 	}
 	n.activeCommittees.Set(string(cid[:]), validatorStatusSubscribed)
-	return nil
-}
-
-// subscribeValidator handles the subscription logic for validator subnets
-func (n *p2pNetwork) subscribeValidator(pk spectypes.ValidatorPK) error {
-	pkHex := hex.EncodeToString(pk[:])
-	n.interfaceLogger.Debug("subscribing to validator", zap.String("validator", pkHex))
-	status, found := n.activeValidators.GetOrSet(pkHex, validatorStatusSubscribing)
-	if found && status != validatorStatusInactive {
-		return nil
-	}
-	for _, topic := range commons.ValidatorTopicID(pk[:]) {
-		if err := n.topicsCtrl.Subscribe(n.interfaceLogger, topic); err != nil {
-			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
-		}
-	}
-	n.activeValidators.Set(pkHex, validatorStatusSubscribed)
 	return nil
 }
 
@@ -190,14 +198,6 @@ func (n *p2pNetwork) unsubscribeSubnet(logger *zap.Logger, subnet uint64) error 
 func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
-	}
-
-	if !n.cfg.Network.PastAlanFork() {
-		pkHex := hex.EncodeToString(pk[:])
-		if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
-			return nil
-		}
-		n.activeValidators.Delete(pkHex)
 	}
 
 	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
@@ -231,10 +231,6 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		switch m := msg.ValidatorData.(type) {
 		case *queue.SSVMessage:
 			decodedMsg = m
-			metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(m.MsgType)).Inc()
-		case *genesisqueue.GenesisSSVMessage:
-			decodedMsg = m
-			metricsRouterIncoming.WithLabelValues(genesismessage.MsgTypeToString(m.MsgType)).Inc()
 		case nil:
 			return errors.New("message was not decoded")
 		default:
@@ -247,12 +243,14 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 	}
 }
 
-// subscribeToSubnets subscribes to all the node's subnets
-func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
-	if len(n.fixedSubnets) == 0 {
+// subscribeToFixedSubnets subscribes to all the node's subnets
+func (n *p2pNetwork) subscribeToFixedSubnets(logger *zap.Logger) error {
+	if !discovery.HasActiveSubnets(n.fixedSubnets) {
 		return nil
 	}
+
 	logger.Debug("subscribing to fixed subnets", fields.Subnets(n.fixedSubnets))
+
 	for i, val := range n.fixedSubnets {
 		if val > 0 {
 			subnet := fmt.Sprintf("%d", i)
@@ -263,5 +261,6 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 			}
 		}
 	}
+
 	return nil
 }

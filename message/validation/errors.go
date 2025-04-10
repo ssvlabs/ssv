@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -117,7 +118,7 @@ var (
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
@@ -126,7 +127,7 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 
 	var valErr Error
 	if !errors.As(err, &valErr) {
-		mv.metrics.MessageIgnored(err.Error(), loggerFields.Role, loggerFields.Consensus.Round)
+		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
 		logger.Debug("ignoring invalid message", zap.Error(err))
 		return pubsub.ValidationIgnore
 	}
@@ -135,7 +136,7 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 		if !valErr.Silent() {
 			logger.Debug("ignoring invalid message", zap.Error(valErr))
 		}
-		mv.metrics.MessageIgnored(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
+		recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
 		return pubsub.ValidationIgnore
 	}
 
@@ -143,13 +144,11 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 		logger.Debug("rejecting invalid message", zap.Error(valErr))
 	}
 
-	mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
+	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
-	loggerFields := mv.buildLoggerFields(decodedMessage)
-	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
-
+func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
+	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
 	return pubsub.ValidationAccept
 }

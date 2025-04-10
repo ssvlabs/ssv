@@ -14,8 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (
@@ -23,12 +21,34 @@ const (
 	MaxAllowedShareSize  = MaxPossibleShareSize * 8 // Leaving some room for protocol updates and calculation mistakes.
 )
 
-// SSVShare is a combination of spectypes.Share and its Metadata.
+// SSVShare is a spectypes.Share with extra data that fully describes SSV validator share.
 type SSVShare struct {
 	spectypes.Share
-	Metadata
 
+	// Status is validator (this share belongs to) state.
+	Status eth2apiv1.ValidatorState
+	// ActivationEpoch is validator (this share belongs to) epoch it activates at.
+	ActivationEpoch phase0.Epoch
+	// ExitEpoch is the epoch at which the validator (that this share belongs to) exited.
+	ExitEpoch phase0.Epoch
+	// OwnerAddress is validator (this share belongs to) owner address.
+	OwnerAddress common.Address
+	// Liquidated is validator (this share belongs to) liquidation status (true or false).
+	Liquidated bool
+
+	// BeaconMetadataLastUpdated is used to keep track of share last update time. Note, we don't
+	// store this field in DB - it just serves as a helper-indicator for when we might want
+	// to update SSVShare metadata we fetch from Beacon node so it doesn't get super stale.
+	BeaconMetadataLastUpdated time.Time
+
+	// committeeID is a cached value for committee ID so we don't recompute it every time.
 	committeeID atomic.Pointer[spectypes.CommitteeID]
+
+	// minParticipationEpoch is the epoch at which the validator can start participating.
+	// This is set on registration and on every reactivation.
+	//
+	// TODO: this is not persistent yet, so we should assume zero values are already participating for now.
+	minParticipationEpoch phase0.Epoch
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
@@ -42,18 +62,51 @@ func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
 	})
 }
 
-// HasBeaconMetadata checks whether the BeaconMetadata field is not nil.
+// HasBeaconMetadata checks whether SSVShare has been enriched with respective Beacon metadata.
 func (s *SSVShare) HasBeaconMetadata() bool {
-	return s != nil && s.BeaconMetadata != nil
+	return s != nil && s.Status != eth2apiv1.ValidatorStateUnknown
 }
 
 func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
 	return s.HasBeaconMetadata() &&
-		(s.BeaconMetadata.IsAttesting() || (s.BeaconMetadata.Status == eth2apiv1.ValidatorStatePendingQueued && s.BeaconMetadata.ActivationEpoch <= epoch))
+		(s.Status.IsAttesting() || (s.Status == eth2apiv1.ValidatorStatePendingQueued && s.ActivationEpoch <= epoch))
+}
+
+// Pending returns true if the validator is pending
+func (s *SSVShare) Pending() bool {
+	return s.Status.IsPending()
+}
+
+// Activated returns true if the validator is not unknown. It might be pending activation or active
+func (s *SSVShare) Activated() bool {
+	return s.Status.HasActivated() || s.Status.IsActive() || s.Status.IsAttesting()
+}
+
+// IsActive returns true if the validator is currently active. Cant be other state
+func (s *SSVShare) IsActive() bool {
+	return s.Status == eth2apiv1.ValidatorStateActiveOngoing
+}
+
+// Exiting returns true if the validator is exiting or exited
+func (s *SSVShare) Exiting() bool {
+	return s.Status.IsExited() || s.Status.HasExited()
+}
+
+// Slashed returns true if the validator is exiting or exited due to slashing
+func (s *SSVShare) Slashed() bool {
+	return s.Status == eth2apiv1.ValidatorStateExitedSlashed || s.Status == eth2apiv1.ValidatorStateActiveSlashed
 }
 
 func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
 	return !s.Liquidated && s.IsAttesting(epoch)
+}
+
+func (s *SSVShare) SetMinParticipationEpoch(epoch phase0.Epoch) {
+	s.minParticipationEpoch = epoch
+}
+
+func (s *SSVShare) MinParticipationEpoch() phase0.Epoch {
+	return s.minParticipationEpoch
 }
 
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
@@ -68,8 +121,8 @@ func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
 	}
 
 	// Compute the CommitteeID since it's not yet set.
-	ids := make([]spectypes.OperatorID, len(s.Share.Committee))
-	for i, v := range s.Share.Committee {
+	ids := make([]spectypes.OperatorID, len(s.Committee))
+	for i, v := range s.Committee {
 		ids[i] = v.Signer
 	}
 	id := ComputeCommitteeID(ids)
@@ -92,7 +145,7 @@ func (s *SSVShare) HasQuorum(cnt uint64) bool {
 }
 
 func (s *SSVShare) Quorum() uint64 {
-	q, _ := ComputeQuorumAndPartialQuorum(uint64(len((s.Committee))))
+	q, _ := ComputeQuorumAndPartialQuorum(uint64(len(s.Committee)))
 	return q
 }
 
@@ -128,24 +181,6 @@ func ComputeF(committeeSize uint64) uint64 {
 func ValidCommitteeSize(committeeSize uint64) bool {
 	f := ComputeF(committeeSize)
 	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4
-}
-
-// Metadata represents metadata of SSVShare.
-type Metadata struct {
-	BeaconMetadata *beaconprotocol.ValidatorMetadata
-	OwnerAddress   common.Address
-	Liquidated     bool
-
-	// lastUpdated is an internal field that can be used to track the last time the metadata was updated.
-	lastUpdated time.Time
-}
-
-func (m *Metadata) MetadataLastUpdated() time.Time {
-	return m.lastUpdated
-}
-
-func (m *Metadata) SetMetadataLastUpdated(t time.Time) {
-	m.lastUpdated = t
 }
 
 // Return a 32 bytes ID for the committee of operators

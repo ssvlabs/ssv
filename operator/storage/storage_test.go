@@ -1,12 +1,16 @@
 package storage
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/keys"
@@ -14,9 +18,6 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var (
@@ -65,10 +66,15 @@ func TestDropRegistryData(t *testing.T) {
 	storage, err := NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
+	sharepubkey := func(id int) []byte {
+		v := make([]byte, 48)
+		rand.Read(v)
+		return v
+	}
 	// Save operators, shares and recipients.
 	var (
 		operatorIDs     = []uint64{1, 2, 3}
-		sharePubKeys    = [][]byte{{1}, {2}, {3}}
+		sharePubKeys    = [][]byte{sharepubkey(1), sharepubkey(2), sharepubkey(3)}
 		recipientOwners = []common.Address{{1}, {2}, {3}}
 	)
 	for _, id := range operatorIDs {

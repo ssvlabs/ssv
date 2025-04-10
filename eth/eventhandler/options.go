@@ -1,8 +1,9 @@
 package eventhandler
 
 import (
-	"github.com/ssvlabs/ssv/logging"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
 )
 
 // Option defines EventHandler configuration option.
@@ -12,13 +13,6 @@ type Option func(*EventHandler)
 func WithLogger(logger *zap.Logger) Option {
 	return func(eh *EventHandler) {
 		eh.logger = logger.Named(logging.NameEventHandler)
-	}
-}
-
-// WithMetrics enables reporting metrics.
-func WithMetrics(metrics metrics) Option {
-	return func(eh *EventHandler) {
-		eh.metrics = metrics
 	}
 }
 

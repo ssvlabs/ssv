@@ -17,14 +17,15 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
-	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -40,17 +41,22 @@ type peerIDWithMessageID struct {
 
 type messageValidator struct {
 	logger            *zap.Logger
-	metrics           metricsreporter.MetricsReporter
 	netCfg            networkconfig.NetworkConfig
+	pectraForkEpoch   phase0.Epoch
 	state             *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
 	validatorStore    storage.ValidatorStore
 	dutyStore         *dutystore.Store
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
-	// validationLocks is a map of lock per SSV message ID to
-	// prevent concurrent access to the same state.
-	validationLocks map[peerIDWithMessageID]*sync.Mutex
-	validationMutex sync.Mutex
+	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
+	// same ID apply any state modifications (during message validation - which is not
+	// stateless) in isolated synchronised manner with respect to each other.
+	validationLockCache *ttlcache.Cache[peerIDWithMessageID, *sync.Mutex]
+	// validationLocksInflight helps us prevent generating 2 different validation locks
+	// for messages that must lock on the same lock (messages with same ID) when undergoing
+	// validation (that validation is not stateless - it often requires messageValidator to
+	// update some state).
+	validationLocksInflight singleflight.Group[peerIDWithMessageID, *sync.Mutex]
 
 	selfPID    peer.ID
 	selfAccept bool
@@ -63,27 +69,31 @@ func New(
 	validatorStore storage.ValidatorStore,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
+	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
 	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec() // #nosec G115 -- amount of slots cannot exceed int64
 
 	mv := &messageValidator{
-		logger:  zap.NewNop(),
-		metrics: metricsreporter.NewNop(),
-		netCfg:  netCfg,
+		logger: zap.NewNop(),
+		netCfg: netCfg,
 		state: ttlcache.New(
 			ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
 		),
-		validationLocks:   make(map[peerIDWithMessageID]*sync.Mutex),
-		validatorStore:    validatorStore,
-		dutyStore:         dutyStore,
-		signatureVerifier: signatureVerifier,
+		validationLockCache: ttlcache.New[peerIDWithMessageID, *sync.Mutex](),
+		validatorStore:      validatorStore,
+		dutyStore:           dutyStore,
+		signatureVerifier:   signatureVerifier,
+		pectraForkEpoch:     pectraForkEpoch,
 	}
 
 	for _, opt := range opts {
 		opt(mv)
 	}
 
+	// Start automatic expired item deletion for validationLockCache.
+	go mv.validationLockCache.Start()
+	// Start automatic expired item deletion for state.
 	go mv.state.Start()
 
 	return mv
@@ -97,22 +107,26 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 
 // Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) Validate(ctx context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
 		return mv.validateSelf(pmsg)
 	}
 
-	reportDone := mv.reportPubSubMetrics(pmsg)
-	defer reportDone()
+	validationStart := time.Now()
+	defer func() {
+		messageValidationDurationHistogram.Record(ctx, time.Since(validationStart).Seconds())
+	}()
+
+	recordMessage(ctx)
 
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
-		return mv.handleValidationError(peerID, decodedMessage, err)
+		return mv.handleValidationError(ctx, peerID, decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage
 
-	return mv.handleValidationSuccess(decodedMessage)
+	return mv.handleValidationSuccess(ctx, decodedMessage)
 }
 
 func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.SSVMessage, error) {
@@ -158,8 +172,7 @@ func (mv *messageValidator) handleSignedSSVMessage(pMsg *pubsub.Message, signedS
 		messageID: signedSSVMessage.SSVMessage.GetID(),
 	}
 
-	validationMu := mv.obtainValidationLock(key)
-
+	validationMu := mv.getValidationLock(key)
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
@@ -203,19 +216,30 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	return nil
 }
 
-func (mv *messageValidator) obtainValidationLock(key peerIDWithMessageID) *sync.Mutex {
-	// Lock this SSV message ID to prevent concurrent access to the same state.
-	mv.validationMutex.Lock()
-	// TODO: make sure that we check that message ID exists in advance
-	mutex, ok := mv.validationLocks[key]
-	if !ok {
-		mutex = &sync.Mutex{}
-		mv.validationLocks[key] = mutex
-		// TODO: Clean the map when mutex won't be needed anymore. Now it's a mutex leak...
-	}
-	mv.validationMutex.Unlock()
+func (mv *messageValidator) getValidationLock(key peerIDWithMessageID) *sync.Mutex {
+	lock, _, _ := mv.validationLocksInflight.Do(key, func() (*sync.Mutex, error) {
+		cachedLock := mv.validationLockCache.Get(key)
+		if cachedLock != nil {
+			return cachedLock.Value(), nil
+		}
 
-	return mutex
+		lock := &sync.Mutex{}
+
+		epochDuration := casts.DurationFromUint64(mv.netCfg.Beacon.SlotsPerEpoch()) * mv.netCfg.Beacon.SlotDurationSec()
+		// validationLockTTL specifies how much time a particular validation lock is meant to
+		// live. It must be large enough for validation lock to never expire while we still are
+		// expecting to process messages targeting that same validation lock. For a message
+		// that will get rejected due to being stale (even after acquiring some validation lock)
+		// it doesn't matter which exact lock will get acquired (because no state updates will
+		// be allowed to take place).
+		// 2 epoch duration is a safe TTL to use - message validation will reject processing
+		// for any message older than that.
+		validationLockTTL := 2 * epochDuration
+		mv.validationLockCache.Set(key, lock, validationLockTTL)
+
+		return lock, nil
+	})
+	return lock
 }
 
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {
@@ -238,7 +262,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
 	}
 
-	validator, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
+	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
 	if !exists {
 		e := ErrUnknownValidator
 		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
@@ -246,28 +270,28 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is liquidated
-	if validator.Liquidated {
+	if share.Liquidated {
 		return CommitteeInfo{}, ErrValidatorLiquidated
 	}
 
-	if validator.BeaconMetadata == nil {
+	if !share.HasBeaconMetadata() {
 		return CommitteeInfo{}, ErrNoShareMetadata
 	}
 
 	// Rule: If validator is not active
-	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
-		e.got = validator.BeaconMetadata.Status.String()
+		e.got = share.Status.String()
 		return CommitteeInfo{}, e
 	}
 
 	var operators []spectypes.OperatorID
-	for _, c := range validator.Committee {
+	for _, c := range share.Committee {
 		operators = append(operators, c.Signer)
 	}
 
-	indices := []phase0.ValidatorIndex{validator.BeaconMetadata.Index}
-	return newCommitteeInfo(validator.CommitteeID(), operators, indices), nil
+	indices := []phase0.ValidatorIndex{share.ValidatorIndex}
+	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
 }
 
 func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []spectypes.OperatorID) *ValidatorState {
@@ -283,24 +307,8 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 	return cs
 }
 
-func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {
-	mv.metrics.ActiveMsgValidation(pmsg.GetTopic())
-	mv.metrics.MessagesReceivedFromPeer(pmsg.ReceivedFrom)
-	mv.metrics.MessagesReceivedTotal()
-	mv.metrics.MessageSize(len(pmsg.GetData()))
-
-	start := time.Now()
-
-	return func() {
-		sinceStart := time.Since(start)
-
-		mv.metrics.MessageValidationDuration(sinceStart)
-		mv.metrics.ActiveMsgValidationDone(pmsg.GetTopic())
-	}
-}
-
 // MaxStoredSlots stores max amount of slots message validation stores.
 // It's exported to allow usage outside of message validation
 func MaxStoredSlots(netCfg networkconfig.NetworkConfig) phase0.Slot {
-	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance
+	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + LateSlotAllowance
 }

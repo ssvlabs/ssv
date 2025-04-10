@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -11,8 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
-	"github.com/ssvlabs/ssv/operator/validators"
-	genesistypes "github.com/ssvlabs/ssv/protocol/genesis/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -25,7 +25,7 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
-	c.metrics.ValidatorRemoved(pubKey[:])
+	validatorsRemovedCounter.Add(c.ctx, 1)
 	c.onShareStop(pubKey)
 
 	logger.Info("removed validator")
@@ -61,9 +61,8 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	if startedValidators > 0 {
 		// Notify DutyScheduler about the changes in validator indices without blocking.
 		go func() {
-			select {
-			case c.indicesChange <- struct{}{}:
-			case <-time.After(12 * time.Second):
+			ctx := context.Background() // TODO: pass context
+			if !c.reportIndicesChange(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec()) {
 				logger.Error("failed to notify indices change")
 			}
 		}()
@@ -80,15 +79,9 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
-	c.validatorsMap.ForEachValidator(func(v *validators.ValidatorContainer) bool {
-		if v.Share().OwnerAddress == owner {
-			v.UpdateShare(
-				func(s *types.SSVShare) {
-					s.FeeRecipientAddress = recipient
-				}, func(s *genesistypes.SSVShare) {
-					s.FeeRecipientAddress = recipient
-				},
-			)
+	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
+		if v.Share.OwnerAddress == owner {
+			v.Share.FeeRecipientAddress = recipient
 
 			logger.Debug("updated recipient address")
 		}
