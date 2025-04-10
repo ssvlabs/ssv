@@ -341,7 +341,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			zap.String("block_hash", blockSummary.Hash.String()),
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),
-			zap.NamedError("summarize_err", summarizeErr))
+			zap.NamedError("summarize_err", summarizeErr),
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
 	}
 
 	r.GetState().Finished = true

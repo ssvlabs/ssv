@@ -519,7 +519,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(cr.measurements.ConsensusTime()))
+			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()))
 
 		// Record successful submissions
 		for validator := range attestationsToSubmit {
@@ -556,7 +556,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(cr.measurements.ConsensusTime()))
+			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()))
 
 		// Record successful submissions
 		for validator := range syncCommitteeMessagesToSubmit {
