@@ -174,6 +174,7 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (beac
 			Status:          v.Status,
 			Index:           v.Index,
 			ActivationEpoch: v.Validator.ActivationEpoch,
+			ExitEpoch:       v.Validator.ExitEpoch,
 		}
 		results[spectypes.ValidatorPK(v.Validator.PublicKey)] = meta
 	}

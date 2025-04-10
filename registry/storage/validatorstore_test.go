@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -33,6 +34,7 @@ var share1 = &ssvtypes.SSVShare{
 		Graffiti:            []byte("example"),
 	},
 	ActivationEpoch: 100,
+	ExitEpoch:       goclient.FarFutureEpoch,
 	Status:          eth2apiv1.ValidatorStatePendingQueued,
 	OwnerAddress:    common.HexToAddress("0x12345"),
 	Liquidated:      false,
@@ -48,6 +50,7 @@ var share2 = &ssvtypes.SSVShare{
 		Graffiti:            []byte("test"),
 	},
 	ActivationEpoch: 200,
+	ExitEpoch:       goclient.FarFutureEpoch,
 	Status:          eth2apiv1.ValidatorStatePendingQueued,
 	OwnerAddress:    common.HexToAddress("0x67890"),
 	Liquidated:      false,
@@ -63,6 +66,7 @@ var updatedShare2 = &ssvtypes.SSVShare{
 		Graffiti:            []byte("test"),
 	},
 	ActivationEpoch: 200,
+	ExitEpoch:       goclient.FarFutureEpoch,
 	Status:          eth2apiv1.ValidatorStatePendingQueued,
 	OwnerAddress:    common.HexToAddress("0x67890"),
 	Liquidated:      true,
@@ -783,6 +787,7 @@ func TestValidatorStore_HandlingDifferentStatuses(t *testing.T) {
 			Graffiti:            []byte("status_test"),
 		},
 		ActivationEpoch: 300,
+		ExitEpoch:       goclient.FarFutureEpoch,
 		Status:          eth2apiv1.ValidatorStateActiveOngoing,
 		OwnerAddress:    common.HexToAddress("0xabcde"),
 		Liquidated:      false,
@@ -837,6 +842,7 @@ func TestValidatorStore_AddRemoveBulkShares(t *testing.T) {
 				Graffiti:            []byte("bulk_add"),
 			},
 			ActivationEpoch: phase0.Epoch(i),
+			ExitEpoch:       goclient.FarFutureEpoch,
 			Status:          eth2apiv1.ValidatorStatePendingQueued,
 			OwnerAddress:    common.HexToAddress(fmt.Sprintf("0x%x", i)),
 			Liquidated:      false,
@@ -924,6 +930,7 @@ func TestValidatorStore_InvalidCommitteeHandling(t *testing.T) {
 			Graffiti:            []byte("invalid_committee"),
 		},
 		ActivationEpoch: 500,
+		ExitEpoch:       goclient.FarFutureEpoch,
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
 		OwnerAddress:    common.HexToAddress("0xdeadbeef"),
 		Liquidated:      false,
@@ -1064,6 +1071,7 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 			Graffiti:            []byte("duplicate_test"),
 		},
 		ActivationEpoch: 100,
+		ExitEpoch:       goclient.FarFutureEpoch,
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
 		OwnerAddress:    common.HexToAddress("0x12345"),
 		Liquidated:      false,
