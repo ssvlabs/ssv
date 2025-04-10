@@ -17,13 +17,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
+	"go.uber.org/zap"
 )
 
 const (
@@ -246,10 +245,10 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	metricsBeaconNodeStatus.Set(float64(statusSyncing))
 	if syncState.IsSyncing {
-		return fmt.Errorf("syncing")
+		return fmt.Errorf("node is syncing")
 	}
 	if syncState.IsOptimistic {
-		return fmt.Errorf("optimistic")
+		return fmt.Errorf("node is optimistic")
 	}
 
 	metricsBeaconNodeStatus.Set(float64(statusOK))

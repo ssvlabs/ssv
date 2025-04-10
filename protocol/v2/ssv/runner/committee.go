@@ -14,14 +14,13 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 )
 
 var (
@@ -678,7 +677,6 @@ func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) 
 	)
 
 	cr.started = time.Now()
-	cr.metrics.StartConsensus()
 
 	vote := &spectypes.BeaconVote{
 		BlockRoot: attData.BeaconBlockRoot,
@@ -686,6 +684,7 @@ func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) 
 		Target:    attData.Target,
 	}
 
+	cr.metrics.StartConsensus()
 	if err := cr.BaseRunner.decide(logger, cr, duty.DutySlot(), vote); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

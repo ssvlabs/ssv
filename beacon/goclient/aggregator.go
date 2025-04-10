@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -17,15 +16,6 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	// to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
 	gc.waitToSlotTwoThirds(slot)
-
-	// differ from spec because we need to subscribe to subnet
-	isAggregator, err := isAggregator(committeeLength, slotSig)
-	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("failed to check if validator is an aggregator: %w", err)
-	}
-	if !isAggregator {
-		return nil, DataVersionNil, fmt.Errorf("validator is not an aggregator")
-	}
 
 	attData, _, err := gc.GetAttestationData(slot, committeeIndex)
 	if err != nil {
@@ -71,27 +61,6 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
 func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
 	return gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
-}
-
-// IsAggregator returns true if the signature is from the input validator. The committee
-// count is provided as an argument rather than imported implementation from spec. Having
-// committee count as an argument allows cheaper computation at run time.
-//
-// Spec pseudocode definition:
-//
-//	def is_aggregator(state: BeaconState, slot: Slot, index: CommitteeIndex, slot_signature: BLSSignature) -> bool:
-//	 committee = get_beacon_committee(state, slot, index)
-//	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
-//	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
-func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
-	modulo := committeeCount / TargetAggregatorsPerCommittee
-	if modulo == 0 {
-		// Modulo must be at least 1.
-		modulo = 1
-	}
-
-	b := Hash(slotSig)
-	return binary.LittleEndian.Uint64(b[:8])%modulo == 0, nil
 }
 
 // waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)
