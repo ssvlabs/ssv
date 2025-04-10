@@ -16,7 +16,7 @@ const (
 
 // forkingDV5Listener wraps a pre-fork and a post-fork listener.
 // Before the fork, it performs operations on both services.
-// Aftet the fork, it performs operations only on the post-fork service.
+// After the fork, it performs operations only on the post-fork service.
 type forkingDV5Listener struct {
 	logger           *zap.Logger
 	preForkListener  Listener
