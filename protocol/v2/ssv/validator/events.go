@@ -19,7 +19,7 @@ func (v *Validator) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 	}
 	switch eventMsg.Type {
 	case types.Timeout:
-		if err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(ctx, logger, *eventMsg); err != nil {
+		if err := dutyRunner.OnTimeoutQBFT(ctx, logger, *eventMsg); err != nil {
 			return fmt.Errorf("timeout event: %w", err)
 		}
 		return nil
@@ -53,7 +53,7 @@ func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 			return nil
 		}
 
-		if err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(ctx, logger, *eventMsg); err != nil {
+		if err := dutyRunner.OnTimeoutQBFT(ctx, logger, *eventMsg); err != nil {
 			return fmt.Errorf("timeout event: %w", err)
 		}
 		return nil
