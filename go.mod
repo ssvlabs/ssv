@@ -61,6 +61,12 @@ require (
 require github.com/wealdtech/go-eth2-types/v2 v2.8.1
 
 require (
+	github.com/prysmaticlabs/fastssz v0.0.0-20220628121656-93dfe28febab // indirect
+	github.com/prysmaticlabs/gohashtree v0.0.4-beta // indirect
+	github.com/thomaso-mirodin/intmath v0.0.0-20160323211736-5dc6d854e46e // indirect
+)
+
+require (
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
