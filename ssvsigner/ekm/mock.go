@@ -58,7 +58,7 @@ type MockConsensusClient struct {
 }
 
 func (m *MockConsensusClient) ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) {
-	args := m.Called(ctx)
+	args := m.Called(ctx, epoch)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
