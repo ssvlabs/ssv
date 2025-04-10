@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/cockroachdb/pebble"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
 
@@ -34,7 +34,7 @@ func BenchmarkTracer(b *testing.B) {
 
 	_ = f.Close()
 
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := kv.NewPebbleDB(context.Background(), zap.NewNop(), b.TempDir(), &pebble.Options{})
 	if err != nil {
 		b.Fatal(err)
 	}

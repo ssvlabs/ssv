@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -32,14 +33,13 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger                *zap.Logger
-	netCfg                networkconfig.NetworkConfig
-	consensusStateIndex   map[consensusID]*consensusState
-	consensusStateIndexMu sync.Mutex
-	validatorStore        storage.ValidatorStore
-	dutyStore             *dutystore.Store
-	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
-	pectraForkEpoch       phase0.Epoch
+	logger            *zap.Logger
+	netCfg            networkconfig.NetworkConfig
+	state             *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
+	validatorStore    storage.ValidatorStore
+	dutyStore         *dutystore.Store
+	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+	pectraForkEpoch   phase0.Epoch
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -51,6 +51,7 @@ type messageValidator struct {
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
+// It starts a goroutine that cleans up the state.
 func New(
 	netCfg networkconfig.NetworkConfig,
 	validatorStore storage.ValidatorStore,
@@ -59,20 +60,26 @@ func New(
 	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
+	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec() // #nosec G115 -- amount of slots cannot exceed int64
+
 	mv := &messageValidator{
-		logger:              zap.NewNop(),
-		netCfg:              netCfg,
-		consensusStateIndex: make(map[consensusID]*consensusState),
-		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
-		validatorStore:      validatorStore,
-		dutyStore:           dutyStore,
-		signatureVerifier:   signatureVerifier,
-		pectraForkEpoch:     pectraForkEpoch,
+		logger: zap.NewNop(),
+		netCfg: netCfg,
+		state: ttlcache.New(
+			ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
+		),
+		validationLocks:   make(map[spectypes.MessageID]*sync.Mutex),
+		validatorStore:    validatorStore,
+		dutyStore:         dutyStore,
+		signatureVerifier: signatureVerifier,
+		pectraForkEpoch:   pectraForkEpoch,
 	}
 
 	for _, opt := range opts {
 		opt(mv)
 	}
+
+	go mv.state.Start()
 
 	return mv
 }
@@ -173,7 +180,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 }
 
 func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSSVMessage, committeeInfo CommitteeInfo, topic string) error {
-	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.operatorIDs); err != nil {
+	if err := mv.belongsToCommittee(signedSSVMessage.OperatorIDs, committeeInfo.committee); err != nil {
 		return err
 	}
 
@@ -205,12 +212,6 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 	return mutex
 }
 
-type CommitteeInfo struct {
-	operatorIDs []spectypes.OperatorID
-	indices     []phase0.ValidatorIndex
-	committeeID spectypes.CommitteeID
-}
-
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
@@ -228,11 +229,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return CommitteeInfo{
-			operatorIDs: committee.Operators,
-			indices:     committee.Indices,
-			committeeID: committeeID,
-		}, nil
+		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
 	}
 
 	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
@@ -263,29 +260,25 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		operators = append(operators, c.Signer)
 	}
 
-	return CommitteeInfo{
-		operatorIDs: operators,
-		indices:     []phase0.ValidatorIndex{share.ValidatorIndex},
-		committeeID: share.CommitteeID(),
-	}, nil
+	indices := []phase0.ValidatorIndex{share.ValidatorIndex}
+	return newCommitteeInfo(share.CommitteeID(), operators, indices), nil
 }
 
-func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
-	mv.consensusStateIndexMu.Lock()
-	defer mv.consensusStateIndexMu.Unlock()
-
-	id := consensusID{
-		DutyExecutorID: string(messageID.GetDutyExecutorID()),
-		Role:           messageID.GetRoleType(),
+func (mv *messageValidator) validatorState(messageID spectypes.MessageID, committee []spectypes.OperatorID) *ValidatorState {
+	if v := mv.state.Get(messageID); v != nil {
+		return v.Value()
 	}
 
-	if _, ok := mv.consensusStateIndex[id]; !ok {
-		cs := &consensusState{
-			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
-		}
-		mv.consensusStateIndex[id] = cs
+	cs := &ValidatorState{
+		operators:       make([]*OperatorState, len(committee)),
+		storedSlotCount: MaxStoredSlots(mv.netCfg),
 	}
+	mv.state.Set(messageID, cs, ttlcache.DefaultTTL)
+	return cs
+}
 
-	return mv.consensusStateIndex[id]
+// MaxStoredSlots stores max amount of slots message validation stores.
+// It's exported to allow usage outside of message validation
+func MaxStoredSlots(netCfg networkconfig.NetworkConfig) phase0.Slot {
+	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + LateSlotAllowance
 }
