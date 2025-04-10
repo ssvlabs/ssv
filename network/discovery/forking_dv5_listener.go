@@ -8,8 +8,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
