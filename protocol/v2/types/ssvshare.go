@@ -29,6 +29,8 @@ type SSVShare struct {
 	Status eth2apiv1.ValidatorState
 	// ActivationEpoch is validator (this share belongs to) epoch it activates at.
 	ActivationEpoch phase0.Epoch
+	// ExitEpoch is the epoch at which the validator (that this share belongs to) exited.
+	ExitEpoch phase0.Epoch
 	// OwnerAddress is validator (this share belongs to) owner address.
 	OwnerAddress common.Address
 	// Liquidated is validator (this share belongs to) liquidation status (true or false).
@@ -85,7 +87,7 @@ func (s *SSVShare) IsActive() bool {
 	return s.Status == eth2apiv1.ValidatorStateActiveOngoing
 }
 
-// Exiting returns true if the validator is existing or exited
+// Exiting returns true if the validator is exiting or exited
 func (s *SSVShare) Exiting() bool {
 	return s.Status.IsExited() || s.Status.HasExited()
 }
@@ -119,8 +121,8 @@ func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
 	}
 
 	// Compute the CommitteeID since it's not yet set.
-	ids := make([]spectypes.OperatorID, len(s.Share.Committee))
-	for i, v := range s.Share.Committee {
+	ids := make([]spectypes.OperatorID, len(s.Committee))
+	for i, v := range s.Committee {
 		ids[i] = v.Signer
 	}
 	id := ComputeCommitteeID(ids)

@@ -7,10 +7,9 @@ import (
 	"runtime/debug"
 	"time"
 
-	"gopkg.in/natefinch/lumberjack.v2"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func parseConfigLevel(levelName string) (zapcore.Level, error) {
@@ -74,9 +73,10 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 
 	var usedcore zapcore.Core
 
-	if logFormat == "console" {
+	switch logFormat {
+	case "console":
 		usedcore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
-	} else if logFormat == "json" {
+	case "json":
 		usedcore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
 	}
 

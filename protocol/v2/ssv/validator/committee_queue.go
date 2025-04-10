@@ -8,12 +8,13 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"go.uber.org/zap"
 )
 
 // HandleMessage handles a spectypes.SSVMessage.
@@ -124,7 +125,7 @@ func (c *Committee) ConsumeQueue(
 		} else if runningInstance != nil && !runningInstance.State.Decided {
 			filter = func(ssvMessage *queue.SSVMessage) bool {
 				// don't read post consensus until decided
-				return ssvMessage.SSVMessage.MsgType != spectypes.SSVPartialSignatureMsgType
+				return ssvMessage.MsgType != spectypes.SSVPartialSignatureMsgType
 			}
 		}
 
@@ -149,7 +150,7 @@ func (c *Committee) ConsumeQueue(
 		// Handle the message.
 		if err := handler(ctx, logger, msg); err != nil {
 			c.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.SSVMessage.MsgType),
+				fields.MessageType(msg.MsgType),
 				zap.Error(err))
 			if errors.Is(err, runner.ErrNoValidDuties) {
 				// Stop the queue consumer if the runner no longer has any valid duties.
@@ -164,7 +165,7 @@ func (c *Committee) ConsumeQueue(
 
 func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.SSVMessage.MsgType {
+	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{

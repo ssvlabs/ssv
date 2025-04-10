@@ -7,10 +7,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -198,7 +198,7 @@ func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
-	if len(msg.SSVMessage.GetData()) == 0 {
+	if len(msg.GetData()) == 0 {
 		return errors.New("msg data is invalid")
 	}
 

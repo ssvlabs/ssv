@@ -27,7 +27,7 @@ func New[Key comparable, Value any](lifespan, cleanupInterval time.Duration) *Ma
 			m.idxLastUpdatedAt.Range(func(key Key, t time.Time) bool {
 				if time.Since(t) > lifespan {
 					m.idxLastUpdatedAt.Delete(key)
-					m.Map.Delete(key)
+					m.Delete(key)
 				}
 				return true
 			})

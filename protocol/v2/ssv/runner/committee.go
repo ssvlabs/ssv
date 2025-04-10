@@ -17,12 +17,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 var (
@@ -518,7 +519,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.measurements.consensusStart)))
+			fields.TotalConsensusTime(cr.measurements.ConsensusTime()))
 
 		// Record successful submissions
 		for validator := range attestationsToSubmit {
@@ -555,7 +556,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.measurements.consensusStart)))
+			fields.TotalConsensusTime(cr.measurements.ConsensusTime()))
 
 		// Record successful submissions
 		for validator := range syncCommitteeMessagesToSubmit {

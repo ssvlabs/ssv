@@ -12,8 +12,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 type (
