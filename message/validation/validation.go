@@ -211,6 +211,7 @@ func (mv *messageValidator) getValidationLock(messageID spectypes.MessageID) *sy
 
 		lock := &sync.Mutex{}
 
+		// #nosec G115: SlotsPerEpoch is never above math.MaxInt64
 		epochDuration := time.Duration(mv.netCfg.SlotsPerEpoch()) * mv.netCfg.SlotDuration()
 		// validationLockTTL specifies how much time a particular validation lock is meant to
 		// live. It must be large enough for validation lock to never expire while we still are
