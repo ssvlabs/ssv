@@ -84,7 +84,7 @@ func TestTopicManager(t *testing.T) {
 		validatorStore := mocks.NewMockValidatorStore(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
-		validator := validation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier, phase0.Epoch(0))
+		validator := validation.New(networkconfig.TestingNetworkConfig, validatorStore, dutyStore, signatureVerifier, phase0.Epoch(0))
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
@@ -379,7 +379,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	var p *P
 	var midHandler topics.MsgIDHandler
 	if msgID {
-		midHandler = topics.NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
+		midHandler = topics.NewMsgIDHandler(ctx, networkconfig.TestingNetworkConfig, 2*time.Minute)
 		go midHandler.Start()
 	}
 	cfg := &topics.PubSubConfig{
@@ -393,7 +393,6 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		Scoring: &topics.ScoringConfig{
 			IPWhitelist:        nil,
 			IPColocationWeight: 0,
-			OneEpochDuration:   time.Minute,
 		},
 		MsgValidator:           msgValidator,
 		ScoreInspector:         scoreInspector,
@@ -452,7 +451,7 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SignedSSVMes
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleCommittee)
+	id := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), pk, spectypes.RoleCommittee)
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err

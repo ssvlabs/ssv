@@ -22,7 +22,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/ekm"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -81,7 +80,7 @@ func TestNewController(t *testing.T) {
 	require.NoError(t, err)
 
 	controllerOptions := ControllerOptions{
-		NetworkConfig:     networkconfig.TestNetwork,
+		NetworkConfig:     networkconfig.TestingNetworkConfig,
 		Beacon:            bc,
 		FullNode:          true,
 		Network:           network,
@@ -96,7 +95,7 @@ func TestNewController(t *testing.T) {
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
-	passedEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
+	passedEpoch, exitEpoch := phase0.Epoch(1), networkconfig.FarFutureEpoch
 	operators := buildOperators(t)
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(0, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
@@ -252,7 +251,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	wg.Add(3)
 
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	identifier := spectypes.NewMsgID(networkconfig.TestingNetworkConfig.DomainType(), []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
@@ -307,7 +306,7 @@ func TestSetupValidators(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	// Init global variables
-	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
+	activationEpoch, exitEpoch := phase0.Epoch(1), networkconfig.FarFutureEpoch
 	operatorIds := []uint64{1, 2, 3, 4}
 	var validatorPublicKey phase0.BLSPubKey
 
@@ -513,20 +512,20 @@ func TestSetupValidators(t *testing.T) {
 			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeeMap))
 
-			bc.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
+			bc.EXPECT().GetBeaconNetwork().Return(spectypes.BeaconTestNetwork).AnyTimes()
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
 				network:           network,
-				networkConfig:     networkconfig.TestNetwork,
+				networkConfig:     networkconfig.TestingNetworkConfig,
 				sharesStorage:     sharesStorage,
 				operatorDataStore: operatorDataStore,
 				recipientsStorage: recipientStorage,
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorOptions: validator.Options{
-					NetworkConfig: networkconfig.TestNetwork,
+					NetworkConfig: networkconfig.TestingNetworkConfig,
 					Storage:       storageMap,
 				},
 			}
@@ -577,10 +576,9 @@ func TestGetValidatorStats(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	sharesStorage := mocks.NewMockSharesStorage(ctrl)
 	bc := beacon.NewMockBeaconNode(ctrl)
-	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
+	activationEpoch, exitEpoch := phase0.Epoch(1), networkconfig.FarFutureEpoch
 
-	netCfg := networkconfig.TestNetwork
-	bc.EXPECT().GetBeaconNetwork().Return(netCfg.Beacon.GetBeaconNetwork()).AnyTimes()
+	bc.EXPECT().GetBeaconNetwork().Return(spectypes.BeaconTestNetwork).AnyTimes()
 
 	t.Run("Test with multiple operators", func(t *testing.T) {
 		// Setup for this subtest
@@ -790,7 +788,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	// Default to test network config if not provided.
 	if opts.networkConfig.Name == "" {
-		opts.networkConfig = networkconfig.TestNetwork
+		opts.networkConfig = networkconfig.TestingNetworkConfig
 	}
 
 	return controller{
@@ -949,7 +947,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
+	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestingNetworkConfig, "")
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }

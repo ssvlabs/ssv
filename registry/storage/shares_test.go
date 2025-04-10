@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -14,8 +15,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"math/rand"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -25,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -316,7 +314,7 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 			Status:          v1.ValidatorStateActiveOngoing,
 			Index:           3,
 			ActivationEpoch: 5,
-			ExitEpoch:       goclient.FarFutureEpoch,
+			ExitEpoch:       networkconfig.FarFutureEpoch,
 		}
 
 		// Update the share with new metadata
@@ -546,7 +544,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) *S
 		ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
 		SharePubKey:         sk2.GetPublicKey().Serialize(),
 		Committee:           ibftCommittee,
-		DomainType:          networkconfig.TestNetwork.DomainType,
+		DomainType:          networkconfig.TestingNetworkConfig.DomainType(),
 		FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 		Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		Status:              2,
@@ -581,7 +579,7 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey, state v1.Validator
 			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
-			DomainType:          networkconfig.TestNetwork.DomainType,
+			DomainType:          networkconfig.TestingNetworkConfig.DomainType(),
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
@@ -619,13 +617,13 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 			ValidatorIndex:      index,
 			SharePubKey:         committee[0].SharePubKey,
 			Committee:           committee,
-			DomainType:          networkconfig.TestNetwork.DomainType,
+			DomainType:          networkconfig.TestingNetworkConfig.DomainType(),
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
 		Status:          v1.ValidatorStateActiveOngoing,
 		ActivationEpoch: 4,
-		ExitEpoch:       goclient.FarFutureEpoch,
+		ExitEpoch:       networkconfig.FarFutureEpoch,
 		OwnerAddress:    common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 		Liquidated:      false,
 	}

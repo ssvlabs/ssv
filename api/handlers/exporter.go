@@ -10,12 +10,10 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 type Exporter struct {
-	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores
 }
 

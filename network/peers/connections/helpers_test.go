@@ -98,7 +98,7 @@ func getTestingData(t *testing.T) TestData {
 		net:        net,
 		streams:    sc,
 		filters:    func() []HandshakeFilter { return []HandshakeFilter{} },
-		domainType: networkconfig.TestNetwork.DomainType,
+		domainType: networkconfig.TestingNetworkConfig.DomainType(),
 	}
 
 	mockConn := mock.Conn{
