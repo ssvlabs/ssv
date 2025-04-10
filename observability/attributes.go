@@ -89,6 +89,10 @@ func DutyCountAttribute(count int) attribute.KeyValue {
 	return attribute.Int("ssv.validator.duty.count", count)
 }
 
+func ValidatorCountAttribute(count int) attribute.KeyValue {
+	return attribute.Int("ssv.validator.count", count)
+}
+
 func BeaconBlockHashAttribute(hash phase0.Hash32) attribute.KeyValue {
 	return attribute.String("ssv.beacon.block.hash", hash.String())
 }

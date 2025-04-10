@@ -594,7 +594,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	// Submit multiple attestations
 	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
 	for _, att := range attestationsToSubmit {
-		attestations = append(attestations, att)
+		if att != nil && att.ValidatorIndex != nil {
+			span.AddEvent("adding attestation to submit to beacon", trace.WithAttributes(
+				observability.ValidatorIndexAttribute(*att.ValidatorIndex),
+			))
+
+			attestations = append(attestations, att)
+		}
 	}
 
 	cr.measurements.EndDutyFlow()
@@ -625,7 +631,12 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			return err
 		}
 		const eventMsg = "✅ successfully submitted attestations"
-		span.AddEvent(eventMsg)
+		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.BeaconBlockRootAttribute(attData.BeaconBlockRoot),
+			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
+			observability.ValidatorCountAttribute(attestationsCount),
+		))
+
 		logger.Info(eventMsg,
 			fields.Epoch(cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
@@ -668,6 +679,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			observability.BeaconSlotAttribute(cr.BaseRunner.State.StartingDuty.DutySlot()),
 			observability.DutyRoundAttribute(cr.BaseRunner.State.RunningInstance.State.Round),
 			observability.BeaconBlockRootAttribute(syncCommitteeMessages[0].BeaconBlockRoot),
+			observability.ValidatorCountAttribute(len(syncCommitteeMessages)),
 			attribute.Float64("ssv.validator.duty.submission_time", time.Since(submissionStart).Seconds()),
 			attribute.Float64("ssv.validator.duty.consensus_time_total", time.Since(cr.measurements.consensusStart).Seconds()),
 		))
