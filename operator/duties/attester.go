@@ -273,26 +273,32 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	// calculate subscriptions
 	subscriptions := calculateSubscriptionInfo(duties, slot)
-	if len(subscriptions) > 0 {
-		if deadline, ok := ctx.Deadline(); ok {
-			go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
-				// Create a new subscription context with a deadline from parent context.
-				subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
-				defer cancel()
+	if len(subscriptions) == 0 {
+		span.AddEvent("no subscriptions available")
+		span.SetStatus(codes.Ok, "")
+		return nil
+	}
 
-				span.AddEvent("submitting beacon committee subscriptions", trace.WithAttributes(
-					attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
-				))
-				if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
-					h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
-					span.RecordError(err)
-				}
-			}(h, subscriptions)
-		} else {
-			const eventMsg = "failed to get context deadline"
-			span.AddEvent(eventMsg)
-			h.logger.Warn(eventMsg)
-		}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		const eventMsg = "failed to get context deadline"
+		span.AddEvent(eventMsg)
+		h.logger.Warn(eventMsg)
+		span.SetStatus(codes.Ok, "")
+		return nil
+	}
+
+	// Create a new subscription context with a deadline from parent context.
+	subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+
+	span.AddEvent("submitting beacon committee subscriptions", trace.WithAttributes(
+		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
+	))
+	if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
+		h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	span.SetStatus(codes.Ok, "")
