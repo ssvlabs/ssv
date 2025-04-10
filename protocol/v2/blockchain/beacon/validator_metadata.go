@@ -10,6 +10,7 @@ type ValidatorMetadata struct {
 	Status          eth2apiv1.ValidatorState `json:"status"`
 	Index           phase0.ValidatorIndex    `json:"index"`
 	ActivationEpoch phase0.Epoch             `json:"activation_epoch"`
+	ExitEpoch       phase0.Epoch             `json:"exit_epoch"`
 }
 
 // Equals returns true if the given metadata is equal to current
@@ -17,7 +18,8 @@ func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
 	return other != nil &&
 		m.Status == other.Status &&
 		m.Index == other.Index &&
-		m.ActivationEpoch == other.ActivationEpoch
+		m.ActivationEpoch == other.ActivationEpoch &&
+		m.ExitEpoch == other.ExitEpoch
 }
 
 // Pending returns true if the validator is pending
