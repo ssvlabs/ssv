@@ -47,7 +47,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
 	networkRouterConcurrency = 2048
@@ -560,6 +560,7 @@ func (c *controller) startValidatorsForMetadata(_ context.Context, validators me
 			v.Share.ValidatorIndex = share.ValidatorIndex
 			v.Share.Status = share.Status
 			v.Share.ActivationEpoch = share.ActivationEpoch
+			v.Share.ExitEpoch = share.ExitEpoch
 			started, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
