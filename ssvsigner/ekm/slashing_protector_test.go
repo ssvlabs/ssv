@@ -6,17 +6,24 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/holiman/uint256"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/go-bitfield"
+	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 func TestSlashing(t *testing.T) {
@@ -113,39 +120,21 @@ func TestSlashing(t *testing.T) {
 				},
 			},
 			ExecutionPayload: &capella.ExecutionPayload{
-				ParentHash: phase0.Hash32{
-					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-				},
-				FeeRecipient: bellatrix.ExecutionAddress{},
-				StateRoot: [32]byte{
-					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-				},
-				ReceiptsRoot: [32]byte{
-					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-				},
-				LogsBloom: [256]byte{},
-				PrevRandao: [32]byte{
-					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-				},
-				BlockNumber: 0,
-				GasLimit:    0,
-				GasUsed:     0,
-				Timestamp:   0,
-				ExtraData:   nil,
-				BaseFeePerGas: [32]byte{
-					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-				},
-				BlockHash: phase0.Hash32{
-					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-				},
-				Transactions: []bellatrix.Transaction{},
-				Withdrawals:  []*capella.Withdrawal{},
+				ParentHash:    [32]byte{0x01},
+				FeeRecipient:  [20]byte{0x01},
+				StateRoot:     [32]byte{0x01},
+				ReceiptsRoot:  [32]byte{0x01},
+				LogsBloom:     [256]byte{0x01},
+				PrevRandao:    [32]byte{0x01},
+				BlockNumber:   1,
+				GasLimit:      1,
+				GasUsed:       1,
+				Timestamp:     1,
+				ExtraData:     []byte{0x01},
+				BaseFeePerGas: uint256.NewInt(1).Bytes32(),
+				BlockHash:     [32]byte{0x01},
+				Transactions:  []bellatrix.Transaction{},
+				Withdrawals:   []*capella.Withdrawal{},
 			},
 		},
 	}
@@ -723,4 +712,640 @@ func buildAttestationData(slot phase0.Slot, highestSource, highestTarget phase0.
 			Root:  [32]byte{},
 		},
 	}
+}
+
+// TestComprehensiveSlashingBlockProposal tests various block proposal slashing scenarios in sequence
+func TestComprehensiveSlashingBlockProposal(t *testing.T) {
+	// Use testKeyManager instead of manual setup
+	operatorPrivateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
+	km, network := testKeyManager(t, nil, operatorPrivateKey)
+
+	// Initialize test share key
+	require.NoError(t, bls.Init(bls.BLS12_381))
+	sharePrivKey := &bls.SecretKey{}
+	sharePrivKey.SetByCSPRNG()
+	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+	// Add the share to the key manager
+	encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(sharePrivKey.SerializeToHexStr()))
+	require.NoError(t, err)
+	require.NoError(t, km.AddShare(context.Background(), encryptedPrivKey, sharePubKey))
+
+	// --- First Block Proposal ---
+	slotToSign := network.Beacon.EstimatedCurrentSlot() + 5 // Sign a block slightly in the future
+
+	// Check directly with IsBeaconBlockSlashable
+	err = km.IsBeaconBlockSlashable(sharePubKey, slotToSign)
+	require.NoError(t, err, "First block should not be slashable")
+
+	// Create a block
+	block1 := &capella.BeaconBlock{
+		Slot:          slotToSign,
+		ProposerIndex: 0,
+		ParentRoot:    phase0.Root{0x01},
+		Body: &capella.BeaconBlockBody{
+			ETH1Data: &phase0.ETH1Data{
+				DepositRoot:  phase0.Root{},
+				DepositCount: 0,
+				BlockHash:    []byte{0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01},
+			},
+			SyncAggregate: &altair.SyncAggregate{
+				SyncCommitteeBits: bitfield.Bitvector512{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+				},
+				SyncCommitteeSignature: phase0.BLSSignature{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+				},
+			},
+			// Add ExecutionPayload with all required fields
+			ExecutionPayload: &capella.ExecutionPayload{
+				ParentHash:    [32]byte{0x01},
+				FeeRecipient:  [20]byte{0x01},
+				StateRoot:     [32]byte{0x01},
+				ReceiptsRoot:  [32]byte{0x01},
+				LogsBloom:     [256]byte{0x01},
+				PrevRandao:    [32]byte{0x01},
+				BlockNumber:   1,
+				GasLimit:      1,
+				GasUsed:       1,
+				Timestamp:     1,
+				ExtraData:     []byte{0x01},
+				BaseFeePerGas: uint256.NewInt(1).Bytes32(),
+				BlockHash:     [32]byte{0x01},
+				Transactions:  []bellatrix.Transaction{},
+				Withdrawals:   []*capella.Withdrawal{},
+			},
+		},
+	}
+
+	// Sign the block - should succeed
+	_, _, err = km.SignBeaconObject(
+		context.Background(),
+		block1,
+		phase0.Domain{},
+		sharePubKey,
+		slotToSign,
+		spectypes.DomainProposer,
+	)
+	require.NoError(t, err, "Signing first block failed")
+
+	// --- Second Block Proposal (Same Slot) ---
+	// Create a different block at same slot
+	block2 := &capella.BeaconBlock{
+		Slot:          slotToSign,
+		ProposerIndex: 0,
+		ParentRoot:    phase0.Root{0x02}, // Different parent root
+		Body: &capella.BeaconBlockBody{
+			ETH1Data: &phase0.ETH1Data{
+				DepositRoot:  phase0.Root{},
+				DepositCount: 0,
+				BlockHash:    []byte{0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02},
+			},
+			SyncAggregate: &altair.SyncAggregate{
+				SyncCommitteeBits: bitfield.Bitvector512{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+				},
+				SyncCommitteeSignature: phase0.BLSSignature{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+				},
+			},
+			// Add ExecutionPayload with all required fields
+			ExecutionPayload: &capella.ExecutionPayload{
+				ParentHash:    [32]byte{0x02},
+				FeeRecipient:  [20]byte{0x02},
+				StateRoot:     [32]byte{0x02},
+				ReceiptsRoot:  [32]byte{0x02},
+				LogsBloom:     [256]byte{0x02},
+				PrevRandao:    [32]byte{0x02},
+				BlockNumber:   2,
+				GasLimit:      2,
+				GasUsed:       2,
+				Timestamp:     2,
+				ExtraData:     []byte{0x02},
+				BaseFeePerGas: uint256.NewInt(2).Bytes32(),
+				BlockHash:     [32]byte{0x02},
+				Transactions:  []bellatrix.Transaction{},
+				Withdrawals:   []*capella.Withdrawal{},
+			},
+		},
+	}
+
+	// Attempt to sign second block - should fail
+	_, _, err = km.SignBeaconObject(
+		context.Background(),
+		block2,
+		phase0.Domain{},
+		sharePubKey,
+		slotToSign,
+		spectypes.DomainProposer,
+	)
+	require.Error(t, err, "Signing second block at same slot should fail")
+	require.Contains(t, err.Error(), "slashable proposal", "Error message should indicate slashable proposal")
+
+	// --- Third Block Proposal (Lower Slot) ---
+	// Create a block at a lower slot
+	block3 := &capella.BeaconBlock{
+		Slot:          slotToSign - 1, // Lower slot
+		ProposerIndex: 0,
+		ParentRoot:    phase0.Root{0x03},
+		Body: &capella.BeaconBlockBody{
+			ETH1Data: &phase0.ETH1Data{
+				DepositRoot:  phase0.Root{},
+				DepositCount: 0,
+				BlockHash:    []byte{0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03},
+			},
+			SyncAggregate: &altair.SyncAggregate{
+				SyncCommitteeBits: bitfield.Bitvector512{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+				},
+				SyncCommitteeSignature: phase0.BLSSignature{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+				},
+			},
+			// Add ExecutionPayload with all required fields
+			ExecutionPayload: &capella.ExecutionPayload{
+				ParentHash:    [32]byte{0x03},
+				FeeRecipient:  [20]byte{0x03},
+				StateRoot:     [32]byte{0x03},
+				ReceiptsRoot:  [32]byte{0x03},
+				LogsBloom:     [256]byte{0x03},
+				PrevRandao:    [32]byte{0x03},
+				BlockNumber:   3,
+				GasLimit:      3,
+				GasUsed:       3,
+				Timestamp:     3,
+				ExtraData:     []byte{0x03},
+				BaseFeePerGas: uint256.NewInt(3).Bytes32(),
+				BlockHash:     [32]byte{0x03},
+				Transactions:  []bellatrix.Transaction{},
+				Withdrawals:   []*capella.Withdrawal{},
+			},
+		},
+	}
+
+	// Attempt to sign - should fail
+	_, _, err = km.SignBeaconObject(
+		context.Background(),
+		block3,
+		phase0.Domain{},
+		sharePubKey,
+		slotToSign-1,
+		spectypes.DomainProposer,
+	)
+	require.Error(t, err, "Signing block at lower slot should fail")
+	require.Contains(t, err.Error(), "slashable proposal", "Error message should indicate slashable proposal")
+
+	// --- Fourth Block Proposal (Higher Slot) ---
+	slotToSignHigher := slotToSign + 1
+	block4 := &capella.BeaconBlock{
+		Slot:          slotToSignHigher,
+		ProposerIndex: 0,
+		ParentRoot:    phase0.Root{0x04},
+		Body: &capella.BeaconBlockBody{
+			ETH1Data: &phase0.ETH1Data{
+				DepositRoot:  phase0.Root{},
+				DepositCount: 0,
+				BlockHash:    []byte{0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04},
+			},
+			SyncAggregate: &altair.SyncAggregate{
+				SyncCommitteeBits: bitfield.Bitvector512{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+				},
+				SyncCommitteeSignature: phase0.BLSSignature{
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+				},
+			},
+			// Add ExecutionPayload with all required fields
+			ExecutionPayload: &capella.ExecutionPayload{
+				ParentHash:    [32]byte{0x04},
+				FeeRecipient:  [20]byte{0x04},
+				StateRoot:     [32]byte{0x04},
+				ReceiptsRoot:  [32]byte{0x04},
+				LogsBloom:     [256]byte{0x04},
+				PrevRandao:    [32]byte{0x04},
+				BlockNumber:   4,
+				GasLimit:      4,
+				GasUsed:       4,
+				Timestamp:     4,
+				ExtraData:     []byte{0x04},
+				BaseFeePerGas: uint256.NewInt(4).Bytes32(),
+				BlockHash:     [32]byte{0x04},
+				Transactions:  []bellatrix.Transaction{},
+				Withdrawals:   []*capella.Withdrawal{},
+			},
+		},
+	}
+
+	// Attempt to sign - should succeed
+	_, _, err = km.SignBeaconObject(
+		context.Background(),
+		block4,
+		phase0.Domain{},
+		sharePubKey,
+		slotToSignHigher,
+		spectypes.DomainProposer,
+	)
+	require.NoError(t, err, "Signing block at higher slot failed")
+}
+
+// The following tests are added/adapted from key_manager_slashing_test.go
+func TestSlashableBlockDoubleProposal(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	defer db.Close()
+
+	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+	signerStore := NewSignerStorage(db, mockBeacon, logger)
+	protection := slashingprotection.NewNormalProtection(signerStore)
+	protector := NewSlashingProtector(logger, signerStore, protection)
+
+	// Initialize test share key
+	require.NoError(t, bls.Init(bls.BLS12_381))
+	sharePrivKey := &bls.SecretKey{}
+	sharePrivKey.SetByCSPRNG()
+	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+	// Setup for slashing protection
+	err = protector.BumpSlashingProtection(sharePubKey)
+	require.NoError(t, err, "Failed to bump slashing protection")
+
+	// --- First Block Proposal ---
+	slotToSign := mockBeacon.EstimatedCurrentSlot() + 5 // Sign a block slightly in the future
+
+	// Check if first block at this slot is slashable - should not be
+	err = protector.IsBeaconBlockSlashable(sharePubKey, slotToSign)
+	require.NoError(t, err, "First block should not be slashable")
+
+	// Update slashing protection as if we've signed this block
+	err = protector.UpdateHighestProposal(sharePubKey, slotToSign)
+	require.NoError(t, err, "Failed to update highest proposal")
+
+	// --- Second Block Proposal (Same Slot) ---
+	// Attempt to sign the second block at the same slot - should fail
+	err = protector.IsBeaconBlockSlashable(sharePubKey, slotToSign)
+	require.Error(t, err, "Signing second block at same slot should fail")
+	require.Contains(t, err.Error(), "slashable proposal", "Error message should indicate slashable proposal")
+
+	// --- Third Block Proposal (Lower Slot) ---
+	// Attempt to sign a block at a lower slot - should fail
+	err = protector.IsBeaconBlockSlashable(sharePubKey, slotToSign-1)
+	require.Error(t, err, "Signing block at lower slot should fail")
+	require.Contains(t, err.Error(), "slashable proposal", "Error message should indicate slashable proposal")
+
+	// --- Fourth Block Proposal (Higher Slot) ---
+	slotToSignHigher := slotToSign + 1
+
+	// Attempt to sign a block at a higher slot - should succeed
+	err = protector.IsBeaconBlockSlashable(sharePubKey, slotToSignHigher)
+	require.NoError(t, err, "Signing block at higher slot failed")
+
+	// Update slashing protection
+	err = protector.UpdateHighestProposal(sharePubKey, slotToSignHigher)
+	require.NoError(t, err, "Failed to update highest proposal")
+}
+
+func TestSlashableAttestationDoubleVote(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	defer db.Close()
+
+	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+	signerStore := NewSignerStorage(db, mockBeacon, logger)
+	protection := slashingprotection.NewNormalProtection(signerStore)
+	protector := NewSlashingProtector(logger, signerStore, protection)
+
+	// Initialize test share key
+	require.NoError(t, bls.Init(bls.BLS12_381))
+	sharePrivKey := &bls.SecretKey{}
+	sharePrivKey.SetByCSPRNG()
+	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+	// Setup for slashing protection
+	err = protector.BumpSlashingProtection(sharePubKey)
+	require.NoError(t, err, "Failed to bump slashing protection")
+
+	// --- First Attestation ---
+	epochToSign := mockBeacon.EstimatedCurrentEpoch() + 2
+	slotToSign := mockBeacon.FirstSlotAtEpoch(epochToSign)
+	attData1 := &phase0.AttestationData{
+		Slot:            slotToSign,
+		Index:           0,
+		BeaconBlockRoot: phase0.Root{0xAA}, // Different root
+		Source:          &phase0.Checkpoint{Epoch: epochToSign - 1, Root: phase0.Root{0xBB}},
+		Target:          &phase0.Checkpoint{Epoch: epochToSign, Root: phase0.Root{0xCC}}, // Same target epoch
+	}
+
+	// Check if first attestation is slashable - should not be
+	err = protector.IsAttestationSlashable(sharePubKey, attData1)
+	require.NoError(t, err, "First attestation should not be slashable")
+
+	// Update slashing protection as if we've signed this attestation
+	err = protector.UpdateHighestAttestation(sharePubKey, attData1)
+	require.NoError(t, err, "Failed to update highest attestation")
+
+	// --- Second Attestation (Same Target Epoch, Different Data) ---
+	attData2 := &phase0.AttestationData{
+		Slot:            slotToSign,
+		Index:           0,
+		BeaconBlockRoot: phase0.Root{0xDD}, // Different root
+		Source:          &phase0.Checkpoint{Epoch: epochToSign - 1, Root: phase0.Root{0xEE}},
+		Target:          &phase0.Checkpoint{Epoch: epochToSign, Root: phase0.Root{0xFF}}, // Same target epoch, different root
+	}
+
+	// Attempt to sign the second attestation - should fail (Double Vote)
+	err = protector.IsAttestationSlashable(sharePubKey, attData2)
+	require.Error(t, err, "Signing second attestation with same target epoch should fail")
+	require.Contains(t, err.Error(), "slashable attestation", "Error message should indicate slashable attestation")
+
+	// --- Third Attestation (Higher Target Epoch) ---
+	epochToSignHigher := epochToSign + 1
+	slotToSignHigher := mockBeacon.FirstSlotAtEpoch(epochToSignHigher)
+	attData3 := &phase0.AttestationData{
+		Slot:            slotToSignHigher,
+		Index:           0,
+		BeaconBlockRoot: phase0.Root{0x11},
+		Source:          &phase0.Checkpoint{Epoch: epochToSign, Root: phase0.Root{0x22}},       // Source is previous target
+		Target:          &phase0.Checkpoint{Epoch: epochToSignHigher, Root: phase0.Root{0x33}}, // Higher target epoch
+	}
+
+	// Attempt to sign the third attestation - should succeed
+	err = protector.IsAttestationSlashable(sharePubKey, attData3)
+	require.NoError(t, err, "Signing third attestation with higher target epoch failed")
+
+	// Update slashing protection
+	err = protector.UpdateHighestAttestation(sharePubKey, attData3)
+	require.NoError(t, err, "Failed to update highest attestation")
+}
+
+func TestSlashableAttestationSurroundingVote(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	defer db.Close()
+
+	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+	signerStore := NewSignerStorage(db, mockBeacon, logger)
+	protection := slashingprotection.NewNormalProtection(signerStore)
+	protector := NewSlashingProtector(logger, signerStore, protection)
+
+	// Initialize test share key
+	require.NoError(t, bls.Init(bls.BLS12_381))
+	sharePrivKey := &bls.SecretKey{}
+	sharePrivKey.SetByCSPRNG()
+	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+	// Setup for slashing protection
+	err = protector.BumpSlashingProtection(sharePubKey)
+	require.NoError(t, err, "Failed to bump slashing protection")
+
+	// --- First Attestation (Inner) ---
+	innerSourceEpoch := mockBeacon.EstimatedCurrentEpoch() + 2
+	innerTargetEpoch := innerSourceEpoch + 1
+	innerSlot := mockBeacon.FirstSlotAtEpoch(innerTargetEpoch) // Slot within the target epoch
+	attDataInner := &phase0.AttestationData{
+		Slot:            innerSlot,
+		Index:           0,
+		BeaconBlockRoot: phase0.Root{0xAA},
+		Source:          &phase0.Checkpoint{Epoch: innerSourceEpoch, Root: phase0.Root{0xBB}},
+		Target:          &phase0.Checkpoint{Epoch: innerTargetEpoch, Root: phase0.Root{0xCC}},
+	}
+
+	// Check if inner attestation is slashable - should not be
+	err = protector.IsAttestationSlashable(sharePubKey, attDataInner)
+	require.NoError(t, err, "Inner attestation should not be slashable")
+
+	// Update slashing protection as if we've signed this attestation
+	err = protector.UpdateHighestAttestation(sharePubKey, attDataInner)
+	require.NoError(t, err, "Failed to update highest attestation for inner")
+
+	// --- Second Attestation (Surrounding) ---
+	outerSourceEpoch := innerSourceEpoch - 1 // Lower source
+	outerTargetEpoch := innerTargetEpoch + 1 // Higher target
+	outerSlot := mockBeacon.FirstSlotAtEpoch(outerTargetEpoch)
+	attDataOuter := &phase0.AttestationData{
+		Slot:            outerSlot,
+		Index:           0,
+		BeaconBlockRoot: phase0.Root{0xDD},
+		Source:          &phase0.Checkpoint{Epoch: outerSourceEpoch, Root: phase0.Root{0xEE}},
+		Target:          &phase0.Checkpoint{Epoch: outerTargetEpoch, Root: phase0.Root{0xFF}},
+	}
+
+	// Attempt to sign the outer attestation - should fail (Surrounding Vote)
+	err = protector.IsAttestationSlashable(sharePubKey, attDataOuter)
+	require.Error(t, err, "Signing outer (surrounding) attestation should fail")
+	require.Contains(t, err.Error(), "slashable attestation", "Error message should indicate slashable attestation")
+
+	// --- Third Attestation (Non-Surrounding, Higher) ---
+	higherSourceEpoch := innerSourceEpoch // Same source as inner
+	higherTargetEpoch := outerTargetEpoch // Same target as outer (but source is higher than outer's source)
+	higherSlot := mockBeacon.FirstSlotAtEpoch(higherTargetEpoch)
+	attDataHigher := &phase0.AttestationData{
+		Slot:            higherSlot,
+		Index:           0,
+		BeaconBlockRoot: phase0.Root{0x11},
+		Source:          &phase0.Checkpoint{Epoch: higherSourceEpoch, Root: phase0.Root{0x22}},
+		Target:          &phase0.Checkpoint{Epoch: higherTargetEpoch, Root: phase0.Root{0x33}},
+	}
+
+	// Attempt to sign the third attestation - should succeed
+	err = protector.IsAttestationSlashable(sharePubKey, attDataHigher)
+	require.NoError(t, err, "Signing higher (non-surrounding) attestation failed")
+
+	// Update slashing protection
+	err = protector.UpdateHighestAttestation(sharePubKey, attDataHigher)
+	require.NoError(t, err, "Failed to update highest attestation for higher")
+}
+
+func TestSlashingDBIntegrity(t *testing.T) {
+	// Create a unique database file path for the test
+	dbPath := t.TempDir() + "/slashing_db.db"
+
+	// --- Phase 1: Initial Setup, Sign, and Close ---
+	logger := logging.TestLogger(t)
+	db, err := kv.New(logger, basedb.Options{Path: dbPath})
+	require.NoError(t, err)
+
+	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+	signerStore := NewSignerStorage(db, mockBeacon, logger)
+	protection := slashingprotection.NewNormalProtection(signerStore)
+	protector := NewSlashingProtector(logger, signerStore, protection)
+
+	// Initialize test share key
+	require.NoError(t, bls.Init(bls.BLS12_381))
+	sharePrivKey := &bls.SecretKey{}
+	sharePrivKey.SetByCSPRNG()
+	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+	// Setup for slashing protection
+	err = protector.BumpSlashingProtection(sharePubKey)
+	require.NoError(t, err, "DB Integrity: Failed to bump slashing protection (Phase 1)")
+
+	// Sign a block
+	slotToSign := mockBeacon.EstimatedCurrentSlot() + 5
+	err = protector.IsBeaconBlockSlashable(sharePubKey, slotToSign)
+	require.NoError(t, err, "DB Integrity: First block should not be slashable (Phase 1)")
+
+	// Update as if we signed
+	err = protector.UpdateHighestProposal(sharePubKey, slotToSign)
+	require.NoError(t, err, "DB Integrity: Failed to update highest proposal (Phase 1)")
+
+	// Close the first database
+	err = db.Close()
+	require.NoError(t, err, "Failed to close database")
+	t.Log("Phase 1 completed. Database closed.")
+
+	// --- Phase 2: Reopen DB and Attempt Slashable Signing ---
+	// Make sure it's a fresh instance with the same DB path
+	t.Log("Starting Phase 2 with the same database path")
+	db2, err := kv.New(logger, basedb.Options{Path: dbPath})
+	require.NoError(t, err)
+	defer db2.Close()
+
+	signerStore2 := NewSignerStorage(db2, mockBeacon, logger)
+	protection2 := slashingprotection.NewNormalProtection(signerStore2)
+	protector2 := NewSlashingProtector(logger, signerStore2, protection2)
+
+	// Attempt to sign the *same* block again - should fail due to persisted data
+	t.Log("Attempting to sign the same block again - should fail")
+	err = protector2.IsBeaconBlockSlashable(sharePubKey, slotToSign)
+	require.Error(t, err, "DB Integrity: Signing same block after reopen should fail")
+	require.Contains(t, err.Error(), "slashable proposal", "DB Integrity: Error message should indicate slashable proposal")
+
+	// Attempt to sign a block at a *higher* slot - should succeed
+	slotToSignHigher := slotToSign + 1
+	err = protector2.IsBeaconBlockSlashable(sharePubKey, slotToSignHigher)
+	require.NoError(t, err, "DB Integrity: Signing block at higher slot after reopen failed")
+}
+
+func TestSlashingConcurrency(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	defer db.Close()
+
+	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+	signerStore := NewSignerStorage(db, mockBeacon, logger)
+	protection := slashingprotection.NewNormalProtection(signerStore)
+	protector := NewSlashingProtector(logger, signerStore, protection)
+
+	// Initialize test share key
+	require.NoError(t, bls.Init(bls.BLS12_381))
+	sharePrivKey := &bls.SecretKey{}
+	sharePrivKey.SetByCSPRNG()
+	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+	// Setup for slashing protection
+	err = protector.BumpSlashingProtection(sharePubKey)
+	require.NoError(t, err, "Concurrency: Failed to bump slashing protection")
+
+	// Sign a valid block first to establish a baseline
+	slotToSign := mockBeacon.EstimatedCurrentSlot() + 5
+	err = protector.IsBeaconBlockSlashable(sharePubKey, slotToSign)
+	require.NoError(t, err, "Concurrency: First block should not be slashable")
+
+	// Update as if we signed
+	err = protector.UpdateHighestProposal(sharePubKey, slotToSign)
+	require.NoError(t, err, "Concurrency: Failed to update highest proposal")
+
+	// Prepare a second validator to test concurrency on add/remove
+	sharePrivKey2 := &bls.SecretKey{}
+	sharePrivKey2.SetByCSPRNG()
+	sharePubKey2 := phase0.BLSPubKey(sharePrivKey2.GetPublicKey().Serialize())
+
+	numGoroutines := 50 // Number of concurrent operations
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(routineID int) {
+			defer wg.Done()
+
+			// Mix of operations
+			switch routineID % 4 {
+			case 0: // Attempt to sign the already signed (slashable) block
+				err := protector.IsBeaconBlockSlashable(sharePubKey, slotToSign)
+				// We expect an error here because it's slashable
+				require.Error(t, err, "Goroutine %d: Expected error signing slashable block", routineID)
+				require.Contains(t, err.Error(), "slashable proposal", "Goroutine %d: Error message mismatch", routineID)
+
+			case 1: // Attempt to sign a valid future block
+				futureSlot := slotToSign + phase0.Slot(routineID) + 1 // Ensure unique future slots
+				err := protector.IsBeaconBlockSlashable(sharePubKey, futureSlot)
+				if err == nil {
+					// Update if it was signable
+					_ = protector.UpdateHighestProposal(sharePubKey, futureSlot)
+				} else {
+					// If it fails, it should be due to slashing
+					require.Contains(t, err.Error(), "slashable proposal", "Goroutine %d: Error signing future block", routineID)
+				}
+
+			case 2: // Add validation for second key
+				err := protector.BumpSlashingProtection(sharePubKey2)
+				// This is an idempotent operation so should not error
+				if err != nil {
+					t.Logf("Goroutine %d: BumpSlashingProtection returned error: %v", routineID, err)
+				}
+
+			case 3: // Check a new attestation
+				epoch := mockBeacon.EstimatedCurrentEpoch() + phase0.Epoch(routineID%10) + 1
+				slot := mockBeacon.FirstSlotAtEpoch(epoch)
+				attData := &phase0.AttestationData{
+					Slot:            slot,
+					Index:           0,
+					BeaconBlockRoot: phase0.Root{byte(routineID % 256)},
+					Source:          &phase0.Checkpoint{Epoch: epoch - 1, Root: phase0.Root{byte(routineID % 256)}},
+					Target:          &phase0.Checkpoint{Epoch: epoch, Root: phase0.Root{byte(routineID % 256)}},
+				}
+
+				err := protector.IsAttestationSlashable(sharePubKey, attData)
+				if err == nil {
+					// Update if it was signable
+					_ = protector.UpdateHighestAttestation(sharePubKey, attData)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Final check: Ensure the original slashable block cannot be signed
+	err = protector.IsBeaconBlockSlashable(sharePubKey, slotToSign)
+	require.Error(t, err, "Concurrency: Final check failed - slashable block was signable")
+	require.Contains(t, err.Error(), "slashable proposal", "Concurrency: Final check error message mismatch")
 }
