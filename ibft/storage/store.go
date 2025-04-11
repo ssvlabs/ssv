@@ -63,7 +63,7 @@ func (i *participantStorage) PruneContinously(ctx context.Context, logger *zap.L
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.NextTick():
+		case <-ticker.Next():
 			threshold := ticker.Slot() - retain - 1
 			count, err := i.removeSlotAt(threshold)
 			if err != nil {

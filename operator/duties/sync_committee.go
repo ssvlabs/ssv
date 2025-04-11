@@ -71,7 +71,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 		h.fetchNextPeriod = true
 	}
 
-	next := h.ticker.NextTick()
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
@@ -79,7 +79,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 		case <-next:
 			slot := h.ticker.Slot()
-			next = h.ticker.NextTick()
+			next = h.ticker.Next()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)

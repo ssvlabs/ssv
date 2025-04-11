@@ -22,7 +22,7 @@ import (
 )
 
 type MockSlotTicker interface {
-	NextTick() <-chan time.Time
+	Next() <-chan time.Time
 	Slot() phase0.Slot
 	Subscribe() chan phase0.Slot
 }
@@ -54,7 +54,7 @@ func (m *mockSlotTicker) start() {
 	}()
 }
 
-func (m *mockSlotTicker) NextTick() <-chan time.Time {
+func (m *mockSlotTicker) Next() <-chan time.Time {
 	return m.timeChan
 }
 

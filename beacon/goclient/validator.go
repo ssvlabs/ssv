@@ -81,7 +81,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 		select {
 		case <-gc.ctx.Done():
 			return
-		case <-ticker.NextTick():
+		case <-ticker.Next():
 			currentSlot := ticker.Slot()
 
 			// Select registrations to submit.

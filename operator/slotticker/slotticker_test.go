@@ -25,7 +25,7 @@ func TestSlotTicker(t *testing.T) {
 	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
 
 	for i := 0; i < numTicks; i++ {
-		<-ticker.NextTick()
+		<-ticker.Next()
 		slot := ticker.Slot()
 
 		require.Equal(t, expectedSlot, slot)
@@ -43,11 +43,11 @@ func TestSlotTicker2(t *testing.T) {
 	//timeSinceGenesis := time.Since(genesisTime)
 	//expectedSlot := phase0.Slot(timeSinceGenesis/slotDuration) + 1
 	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
-	<-ticker.NextTick()
+	<-ticker.Next()
 	firstSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(1), firstSlot)
 
-	ch := ticker.NextTick()
+	ch := ticker.Next()
 	select {
 	case <-ch:
 		require.FailNowf(t, "unexpected tick", "expected to wait for dummyChan")
@@ -66,7 +66,7 @@ func TestTickerInitialization(t *testing.T) {
 	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
 
 	start := time.Now()
-	<-ticker.NextTick()
+	<-ticker.Next()
 	slot := ticker.Slot()
 
 	// Allow a small buffer (e.g., 10ms) due to code execution overhead
@@ -85,7 +85,7 @@ func TestSlotNumberConsistency(t *testing.T) {
 	var lastSlot phase0.Slot
 
 	for i := 0; i < 10; i++ {
-		<-ticker.NextTick()
+		<-ticker.Next()
 		slot := ticker.Slot()
 
 		require.Equal(t, lastSlot+1, slot)
@@ -100,7 +100,7 @@ func TestGenesisInFuture(t *testing.T) {
 	ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
 	start := time.Now()
 
-	<-ticker.NextTick()
+	<-ticker.Next()
 
 	// The first tick should occur after the genesis time
 	expectedFirstTickDuration := genesisTime.Sub(start)
@@ -121,7 +121,7 @@ func TestBoundedDrift(t *testing.T) {
 
 	start := time.Now()
 	for i := 0; i < ticks; i++ {
-		<-ticker.NextTick()
+		<-ticker.Next()
 	}
 	expectedDuration := time.Duration(ticks) * slotDuration
 	elapsed := time.Since(start)
@@ -151,7 +151,7 @@ func TestMultipleSlotTickers(t *testing.T) {
 			defer wg.Done()
 			ticker := New(zap.NewNop(), Config{slotDuration, genesisTime})
 			for j := 0; j < ticksPerTimer; j++ {
-				<-ticker.NextTick()
+				<-ticker.Next()
 			}
 		}()
 	}
@@ -180,7 +180,7 @@ func TestSlotSkipping(t *testing.T) {
 	var lastSlot phase0.Slot
 	for i := 1; i <= numTicks; i++ { // Starting loop from 1 for ease of skipInterval check
 		select {
-		case <-ticker.NextTick():
+		case <-ticker.Next():
 			slot := ticker.Slot()
 
 			// Ensure we never receive slots out of order or repeatedly
@@ -193,7 +193,7 @@ func TestSlotSkipping(t *testing.T) {
 				time.Sleep(slotDuration)
 
 				// Ensure the next slot we receive is exactly 2 slots ahead of the previous slot
-				<-ticker.NextTick()
+				<-ticker.Next()
 				slotAfterDelay := ticker.Slot()
 				require.Equal(t, lastSlot+2, slotAfterDelay, "Expected to skip a slot after introducing a delay")
 
@@ -264,9 +264,9 @@ func TestDoubleTickWarning(t *testing.T) {
 	mockTimerChan <- time.Now()
 
 	// Call Next() twice to process the ticks
-	<-ticker.NextTick()
+	<-ticker.Next()
 	firstSlot := ticker.Slot()
-	<-ticker.NextTick()
+	<-ticker.Next()
 	secondSlot := ticker.Slot()
 
 	require.NotEqual(t, firstSlot, secondSlot)
@@ -300,20 +300,20 @@ func TestDoubleTickRealTimer(t *testing.T) {
 	}, (&mockTimeProvider{timer: mockTimer}).NewTimer)
 
 	// Wait for the first slot.
-	<-ticker.NextTick()
+	<-ticker.Next()
 	require.WithinDuration(t, firstSlotTime.Add(1*slotTime), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
 	firstSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(1), firstSlot)
 
 	// Wait for the 2nd slot, but wake up early.
 	mockTimer.fakeNextReset(slotTime / 2)
-	<-ticker.NextTick()
+	<-ticker.Next()
 	require.WithinDuration(t, firstSlotTime.Add(1*slotTime+slotTime/2), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/2th of a slot")
 	secondSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(2), secondSlot)
 
 	// Expect the SlotTicker to realize it woke up early, and wait for the 3rd slot instead.
-	<-ticker.NextTick()
+	<-ticker.Next()
 	require.WithinDuration(t, firstSlotTime.Add(3*slotTime), time.Now(), 50*time.Millisecond, "Expected the first tick to occur after 1/10th of a slot")
 	thirdSlot := ticker.Slot()
 	require.Equal(t, phase0.Slot(3), thirdSlot)

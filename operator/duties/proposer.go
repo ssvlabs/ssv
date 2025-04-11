@@ -54,7 +54,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 	defer h.logger.Info("duty handler exited")
 
-	next := h.ticker.NextTick()
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
@@ -62,7 +62,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 		case <-next:
 			slot := h.ticker.Slot()
-			next = h.ticker.NextTick()
+			next = h.ticker.Next()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))

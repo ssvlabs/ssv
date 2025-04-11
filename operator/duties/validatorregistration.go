@@ -40,7 +40,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
 	registrationSlots := h.network.SlotsPerEpoch() * frequencyEpochs
 
-	next := h.ticker.NextTick()
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
@@ -48,7 +48,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 		case <-next:
 			slot := h.ticker.Slot()
-			next = h.ticker.NextTick()
+			next = h.ticker.Next()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(frequencyEpochs))
 

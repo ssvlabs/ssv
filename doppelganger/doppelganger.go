@@ -182,7 +182,7 @@ func (h *handler) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-ticker.NextTick():
+		case <-ticker.Next():
 			currentSlot := ticker.Slot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
 
