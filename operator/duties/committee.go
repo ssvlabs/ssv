@@ -108,7 +108,7 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 
 		if h.shouldExecuteAtt(duty) {
 			share, found := h.validatorProvider.Validator(duty.PubKey[:])
-			if !found || !share.IsParticipating(epoch) {
+			if !found || !share.IsParticipating(h.network, epoch) {
 				continue
 			}
 
@@ -125,7 +125,7 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 
 		if h.shouldExecuteSync(duty, slot) {
 			share, found := h.validatorProvider.Validator(duty.PubKey[:])
-			if !found || !share.IsSyncCommitteeEligible(epoch, h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch) {
+			if !found || !share.IsSyncCommitteeEligible(h.network, epoch) {
 				continue
 			}
 

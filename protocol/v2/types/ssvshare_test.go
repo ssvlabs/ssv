@@ -9,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func TestSSVShare_BelongsToOperator(t *testing.T) {
@@ -211,7 +213,8 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 	for _, tc := range tt {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsParticipating(tc.Epoch)
+
+			result := tc.Share.IsParticipating(networkconfig.Mainnet, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}
@@ -232,22 +235,12 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 		Expected bool
 	}{
 		{
-			Name: "Attesting Share Not Liquidated",
+			Name: "Attesting Share",
 			Share: &SSVShare{
-				Status:     eth2apiv1.ValidatorStateActiveOngoing,
-				Liquidated: false,
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
 			},
 			Epoch:    currentEpoch,
 			Expected: true,
-		},
-		{
-			Name: "Attesting Share Liquidated",
-			Share: &SSVShare{
-				Status:     eth2apiv1.ValidatorStateActiveOngoing,
-				Liquidated: true,
-			},
-			Epoch:    currentEpoch,
-			Expected: false,
 		},
 		{
 			Name: "Exited Share Within Same Period",
@@ -257,16 +250,6 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 			},
 			Epoch:    currentEpoch,
 			Expected: true,
-		},
-		{
-			Name: "Exited Share Within Same Period Liquidated",
-			Share: &SSVShare{
-				Status:     eth2apiv1.ValidatorStateExitedUnslashed,
-				ExitEpoch:  epochSamePeriod,
-				Liquidated: true,
-			},
-			Epoch:    currentEpoch,
-			Expected: false,
 		},
 		{
 			Name: "Exited Share Previous Period",
@@ -307,8 +290,7 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 		{
 			Name: "Non-Participating Non-Exited Share",
 			Share: &SSVShare{
-				Status:     eth2apiv1.ValidatorStatePendingInitialized,
-				Liquidated: false,
+				Status: eth2apiv1.ValidatorStatePendingInitialized,
 			},
 			Epoch:    currentEpoch,
 			Expected: false,
@@ -316,9 +298,8 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 		{
 			Name: "Exited Share Within Future Period",
 			Share: &SSVShare{
-				Status:     eth2apiv1.ValidatorStateExitedUnslashed,
-				Liquidated: false,
-				ExitEpoch:  currentEpoch * 2,
+				Status:    eth2apiv1.ValidatorStateExitedUnslashed,
+				ExitEpoch: currentEpoch * 2,
 			},
 			Epoch:    currentEpoch,
 			Expected: false,
@@ -328,9 +309,7 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 	for _, tc := range tt {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsSyncCommitteeEligible(tc.Epoch, func(epoch phase0.Epoch) uint64 {
-				return uint64(epoch) / 256
-			})
+			result := tc.Share.IsSyncCommitteeEligible(networkconfig.TestNetwork, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}

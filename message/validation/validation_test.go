@@ -50,7 +50,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := storage.NewNodeStorage(logger, db)
+	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	require.NoError(t, err)
 
 	netCfg := networkconfig.TestNetwork

@@ -14,6 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -97,15 +99,11 @@ func (s *SSVShare) Slashed() bool {
 	return s.Status == eth2apiv1.ValidatorStateExitedSlashed || s.Status == eth2apiv1.ValidatorStateActiveSlashed
 }
 
-func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
-	return !s.Liquidated && s.IsAttesting(epoch)
+func (s *SSVShare) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
+	return !s.Liquidated && s.IsSyncCommitteeEligible(cfg, epoch)
 }
 
-func (s *SSVShare) IsSyncCommitteeEligible(epoch phase0.Epoch, periodFromEpoch func(epoch phase0.Epoch) uint64) bool {
-	if s.Liquidated {
-		return false
-	}
-
+func (s *SSVShare) IsSyncCommitteeEligible(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
 	if s.IsAttesting(epoch) {
 		return true
 	}
@@ -113,7 +111,7 @@ func (s *SSVShare) IsSyncCommitteeEligible(epoch phase0.Epoch, periodFromEpoch f
 	if s.Status.IsExited() || s.Status == eth2apiv1.ValidatorStateWithdrawalPossible || s.Status == eth2apiv1.ValidatorStateActiveSlashed {
 		// if validator exited within Current Period OR Current Period - 1, then it is eligible
 		// because Sync committees are assigned EPOCHS_PER_SYNC_COMMITTEE_PERIOD in advance
-		if epoch >= s.ExitEpoch && periodFromEpoch(epoch)-periodFromEpoch(s.ExitEpoch) <= 1 {
+		if epoch >= s.ExitEpoch && cfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)-cfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(s.ExitEpoch) <= 1 {
 			return true
 		}
 	}
