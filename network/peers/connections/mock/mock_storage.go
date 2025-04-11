@@ -1,7 +1,6 @@
 package mock
 
 import (
-	"bytes"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -56,9 +55,9 @@ func (m NodeStorage) DropRegistryData() error {
 	panic("implement me")
 }
 
-func (m NodeStorage) GetOperatorDataByPubKey(txn basedb.Reader, operatorPublicKeyPEM []byte) (*registrystorage.OperatorData, bool, error) {
+func (m NodeStorage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
 	for _, current := range m.RegisteredOperatorPublicKeyPEMs {
-		if bytes.Equal([]byte(current), operatorPublicKeyPEM) {
+		if current == operatorPubKey {
 			return &registrystorage.OperatorData{}, true, nil
 		}
 	}

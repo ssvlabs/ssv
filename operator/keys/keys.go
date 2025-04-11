@@ -14,7 +14,7 @@ import (
 type OperatorPublicKey interface {
 	Encrypt(data []byte) ([]byte, error)
 	Verify(data []byte, signature []byte) error
-	Base64() ([]byte, error)
+	Base64() (string, error)
 }
 
 type OperatorPrivateKey interface {
@@ -23,7 +23,7 @@ type OperatorPrivateKey interface {
 	StorageHash() (string, error)
 	EKMHash() (string, error)
 	Bytes() []byte
-	Base64() []byte
+	Base64() string
 }
 
 type OperatorSigner interface {
@@ -94,8 +94,8 @@ func (p *privateKey) Bytes() []byte {
 	return rsaencryption.PrivateKeyToByte(p.privKey)
 }
 
-func (p *privateKey) Base64() []byte {
-	return []byte(rsaencryption.ExtractPrivateKey(p.privKey))
+func (p *privateKey) Base64() string {
+	return rsaencryption.ExtractPrivateKey(p.privKey)
 }
 
 func (p *privateKey) StorageHash() (string, error) {
@@ -130,10 +130,10 @@ func (p *publicKey) Verify(data []byte, signature []byte) error {
 	return VerifyRSA(p, data, signature)
 }
 
-func (p *publicKey) Base64() ([]byte, error) {
+func (p *publicKey) Base64() (string, error) {
 	b, err := rsaencryption.ExtractPublicKey(p.pubKey)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return []byte(b), err
+	return (b), err
 }

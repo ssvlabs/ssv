@@ -640,20 +640,20 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 		logger.Fatal("operator private key is not matching the one encrypted the storage")
 	}
 
-	encodedPubKey, err := configPrivKey.Public().Base64()
+	base64PubKey, err := configPrivKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("could not encode public key", zap.Error(err))
 	}
 
-	logger.Info("successfully loaded operator keys", zap.String("pubkey", string(encodedPubKey)))
+	logger.Info("successfully loaded operator keys", zap.String("pubkey", base64PubKey))
 
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, base64PubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: encodedPubKey,
+			PublicKey: base64PubKey,
 		}
 	}
 	if operatorData == nil {
