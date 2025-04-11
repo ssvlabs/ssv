@@ -31,6 +31,7 @@ import (
 type MockController struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllerMockRecorder
+	isgomock struct{}
 }
 
 // MockControllerMockRecorder is the mock recorder for MockController.
@@ -270,6 +271,7 @@ func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 type MockRecipients struct {
 	ctrl     *gomock.Controller
 	recorder *MockRecipientsMockRecorder
+	isgomock struct{}
 }
 
 // MockRecipientsMockRecorder is the mock recorder for MockRecipients.
@@ -309,6 +311,7 @@ func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner any) *gomock.Cal
 type MockSharesStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockSharesStorageMockRecorder
+	isgomock struct{}
 }
 
 // MockSharesStorageMockRecorder is the mock recorder for MockSharesStorage.
@@ -378,6 +381,7 @@ func (mr *MockSharesStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 type MockP2PNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockP2PNetworkMockRecorder
+	isgomock struct{}
 }
 
 // MockP2PNetworkMockRecorder is the mock recorder for MockP2PNetwork.
@@ -440,17 +444,17 @@ func (mr *MockP2PNetworkMockRecorder) FixedSubnets() *gomock.Call {
 }
 
 // SubscribeRandoms mocks base method.
-func (m *MockP2PNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+func (m *MockP2PNetwork) SubscribeRandoms(numSubnets int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeRandoms", logger, numSubnets)
+	ret := m.ctrl.Call(m, "SubscribeRandoms", numSubnets)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubscribeRandoms indicates an expected call of SubscribeRandoms.
-func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(logger, numSubnets any) *gomock.Call {
+func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(numSubnets any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeRandoms", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeRandoms), logger, numSubnets)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeRandoms", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeRandoms), numSubnets)
 }
 
 // UseMessageRouter mocks base method.
