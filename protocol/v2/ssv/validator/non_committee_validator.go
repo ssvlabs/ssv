@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -28,16 +29,17 @@ import (
 )
 
 type CommitteeObserver struct {
-	msgID             spectypes.MessageID
-	logger            *zap.Logger
-	Storage           *storage.ParticipantStores
-	beaconNetwork     beacon.BeaconNetwork
-	networkConfig     networkconfig.NetworkConfig
-	ValidatorStore    registrystorage.ValidatorStore
-	newDecidedHandler qbftcontroller.NewDecidedHandler
-	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache       *DomainCache
+	msgID               spectypes.MessageID
+	logger              *zap.Logger
+	Storage             *storage.ParticipantStores
+	beaconNetwork       beacon.BeaconNetwork
+	networkConfig       networkconfig.NetworkConfig
+	ValidatorStore      registrystorage.ValidatorStore
+	newDecidedHandler   qbftcontroller.NewDecidedHandler
+	attesterRoots       *ttlcache.Cache[phase0.Root, struct{}]
+	beaconVoteHashRoots *ttlcache.Cache[BeaconVoteHashKey, struct{}] // cache to identify duplicate computations of attester roots
+	syncCommRoots       *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache         *DomainCache
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
@@ -74,6 +76,13 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 	}
 
 	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
+	co.beaconVoteHashRoots = ttlcache.New(ttlcache.WithTTL[BeaconVoteHashKey, struct{}](time.Minute * 6))
+
+	go func() {
+		for range time.Tick(time.Minute * 1) {
+			co.beaconVoteHashRoots.DeleteExpired()
+		}
+	}()
 
 	return co
 }
@@ -328,6 +337,21 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
+	beaconVoteRoot, err := beaconVote.HashTreeRoot()
+	if err != nil {
+		return err
+	}
+
+	key := BeaconVoteHashKey{
+		root:   beaconVoteRoot,
+		height: qbftMsg.Height,
+	}
+
+	// if the roots for this beacon vote hash and height have already been computed, skip
+	if ncv.beaconVoteHashRoots.Has(key) {
+		return nil
+	}
+
 	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
 	if err := ncv.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
@@ -338,7 +362,15 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		return err
 	}
 
+	// cache the roots for this beacon vote hash and height
+	ncv.beaconVoteHashRoots.Set(key, struct{}{}, ttlcache.DefaultTTL)
+
 	return nil
+}
+
+type BeaconVoteHashKey struct {
+	root   [32]byte // beaconVote.HashTreeRoot()
+	height specqbft.Height
 }
 
 func (ncv *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
