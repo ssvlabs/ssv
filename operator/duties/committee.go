@@ -108,11 +108,10 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 
 		if h.shouldExecuteAtt(duty) {
 			share, found := h.validatorProvider.Validator(duty.PubKey[:])
-			if !found || !share.IsParticipating(h.network, epoch) {
-				continue
-			}
 
-			addToCommitteeMap(resultCommitteeMap, committee, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
+			if found && share.IsAttesting(epoch) && !share.Liquidated {
+				addToCommitteeMap(resultCommitteeMap, committee, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
+			}
 		}
 	}
 
@@ -125,11 +124,10 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 
 		if h.shouldExecuteSync(duty, slot) {
 			share, found := h.validatorProvider.Validator(duty.PubKey[:])
-			if !found || !share.IsSyncCommitteeEligible(h.network, epoch) {
-				continue
-			}
 
-			addToCommitteeMap(resultCommitteeMap, committee, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
+			if found && share.IsParticipating(h.network, epoch) {
+				addToCommitteeMap(resultCommitteeMap, committee, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
+			}
 		}
 	}
 
