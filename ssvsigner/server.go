@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -69,34 +68,15 @@ func NewServer(
 }
 
 func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
-	return func(ctx *fasthttp.RequestCtx) {
-		start := time.Now()
-		defer func() {
-			route := string(ctx.Path())
-			matchedRoute := ctx.UserValue(router.MatchedRoutePathParam)
-			if matchedRouteStr, ok := matchedRoute.(string); ok {
-				route = matchedRouteStr
-			}
-			recordHTTPRequest(
-				ctx, // Use fasthttp context directly
-				route,
-				string(ctx.Method()),
-				ctx.Response.StatusCode(),
-				time.Since(start),
-			)
-		}()
-		r.router.Handler(ctx)
-	}
+	return r.router.Handler
 }
 
 func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleListValidators"))
+
 	logger.Debug("received request")
 
-	start := time.Now()
 	resp, err := r.remoteSigner.ListKeys(ctx)
-	recordRemoteSignerOperation(ctx, opRemoteSignerListKeys, err, time.Since(start))
-
 	if err != nil {
 		r.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -108,6 +88,7 @@ func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
 
 func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleAddValidator"))
+
 	logger.Debug("received request")
 
 	var req AddValidatorRequest
@@ -120,6 +101,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	logger = logger.With(zap.Int("req_count", len(req.ShareKeys)))
 
 	var importKeystoreReq web3signer.ImportKeystoreRequest
+
 	for i, share := range req.ShareKeys {
 		logger := logger.With(zap.Stringer("share_pubkey", share.PubKey))
 
@@ -157,9 +139,7 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 		importKeystoreReq.Passwords = append(importKeystoreReq.Passwords, keystorePassword)
 	}
 
-	start := time.Now()
 	resp, err := r.remoteSigner.ImportKeystore(ctx, importKeystoreReq)
-	recordRemoteSignerOperation(ctx, opRemoteSignerImportKeystore, err, time.Since(start))
 	if err != nil {
 		r.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -237,6 +217,7 @@ func (r *Server) generateRandomPassword(length int) (string, error) {
 
 func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleRemoveValidator"))
+
 	logger.Debug("received request")
 
 	var req web3signer.DeleteKeystoreRequest
@@ -248,9 +229,7 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 
 	logger = logger.With(zap.Int("req_count", len(req.Pubkeys)))
 
-	start := time.Now()
 	resp, err := r.remoteSigner.DeleteKeystore(ctx, req)
-	recordRemoteSignerOperation(ctx, opRemoteSignerDeleteKeystore, err, time.Since(start))
 	if err != nil {
 		r.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
@@ -277,7 +256,17 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 
 func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleSignValidator"))
+
 	logger.Debug("received request")
+
+	var req web3signer.SignRequest
+	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
+		logger.Warn("failed to unmarshal request body", zap.Error(err))
+		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("unmarshal request body: %w", err))
+		return
+	}
+
+	logger = logger.With(zap.String("type", string(req.Type)))
 
 	identifierValue := ctx.UserValue("identifier")
 	blsPubKey, err := r.extractShareKey(identifierValue)
@@ -289,18 +278,7 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 
 	logger = logger.With(fields.PubKey(blsPubKey[:]))
 
-	var req web3signer.SignRequest
-	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
-		logger.Warn("failed to unmarshal request body", zap.Error(err))
-		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("unmarshal request body: %w", err))
-		return
-	}
-
-	logger = logger.With(zap.String("type", string(req.Type)))
-
-	start := time.Now()
 	resp, err := r.remoteSigner.Sign(ctx, blsPubKey, req)
-	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
 	if err != nil {
 		logger = logger.With(zap.String("req", string(ctx.PostBody())))
 		r.handleWeb3SignerErr(ctx, logger, resp, err)
@@ -331,6 +309,7 @@ func (r *Server) extractShareKey(identifierValue any) (phase0.BLSPubKey, error) 
 
 func (r *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
 	logger := r.logger.With(zap.String("method", "handleOperatorIdentity"))
+
 	logger.Debug("received request")
 
 	pubKeyB64, err := r.operatorPrivKey.Public().Base64()
