@@ -11,20 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// dummyRenderer simulates a renderer that succeeds.
-type dummyRenderer struct {
-	msg string
-}
-
-func (d *dummyRenderer) Render(w http.ResponseWriter, r *http.Request) error {
-	_, err := w.Write([]byte(d.msg))
-	return err
-}
-
-func (d *dummyRenderer) Error() string {
-	return d.msg
-}
-
 // dummyString implements fmt.Stringer.
 type dummyString string
 
@@ -35,7 +21,7 @@ func (d dummyString) String() string {
 // failingRenderer simulates a renderer whose Render always fails.
 type failingRenderer struct{}
 
-func (f *failingRenderer) Render(w http.ResponseWriter, r *http.Request) error {
+func (f *failingRenderer) Render(http.ResponseWriter, *http.Request) error {
 	return errors.New("render failure")
 }
 
@@ -140,7 +126,7 @@ func TestHandler_RendererError(t *testing.T) {
 	t.Parallel()
 
 	h := Handler(func(w http.ResponseWriter, r *http.Request) error {
-		return &dummyRenderer{msg: "renderer error"}
+		return BadRequestError(errors.New("my error"))
 	})
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)
@@ -148,7 +134,7 @@ func TestHandler_RendererError(t *testing.T) {
 	req.Header.Set("Accept", "text/plain")
 	h(rr, req)
 
-	assert.Equal(t, "renderer error", strings.TrimSpace(rr.Body.String()))
+	assert.Equal(t, `{"status":"Bad Request","error":"my error"}`, strings.TrimSpace(rr.Body.String()))
 }
 
 // TestHandler_RendererError_Failure verifies that when the renderer returns an error,
