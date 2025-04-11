@@ -10,14 +10,17 @@ tool (
 )
 
 require (
+	github.com/alecthomas/kong v1.10.0
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
 	github.com/brianvoe/gofakeit/v7 v7.2.1
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4
+	github.com/carlmjohnson/requests v0.24.3
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/ethereum/go-ethereum v1.14.8
+	github.com/fasthttp/router v1.5.4
 	github.com/ferranbt/fastssz v0.1.4
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/render v1.0.2
@@ -27,6 +30,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/herumi/bls-eth-go-binary v1.29.1
+	github.com/holiman/uint256 v1.3.2
 	github.com/ilyakaznacheev/cleanenv v1.4.2
 	github.com/jellydator/ttlcache/v3 v3.3.0
 	github.com/libp2p/go-libp2p v0.36.5
@@ -46,11 +50,12 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/ssvlabs/eth2-key-manager v1.5.2
 	github.com/ssvlabs/ssv-spec v1.1.3
-	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250409212656-7f364de40477
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.10.0
+	github.com/valyala/fasthttp v1.58.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
 	github.com/wealdtech/go-eth2-util v1.8.1
+	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.59.0
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.57.0
@@ -107,7 +112,6 @@ require (
 	github.com/breml/errchkjson v0.4.1 // indirect
 	github.com/butuzov/ireturn v0.3.1 // indirect
 	github.com/butuzov/mirror v1.3.0 // indirect
-	github.com/carlmjohnson/requests v0.24.3 // indirect
 	github.com/catenacyber/perfsprint v0.9.1 // indirect
 	github.com/ccojocar/zxcvbn-go v1.0.2 // indirect
 	github.com/charithe/durationcheck v0.0.10 // indirect
@@ -147,7 +151,6 @@ require (
 	github.com/ethereum/c-kzg-4844 v1.0.0 // indirect
 	github.com/ethereum/go-verkle v0.2.2 // indirect
 	github.com/ettle/strcase v0.2.0 // indirect
-	github.com/fasthttp/router v1.5.4 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -211,7 +214,6 @@ require (
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/holiman/billy v0.0.0-20240216141850-2abb0c79d3c4 // indirect
 	github.com/holiman/bloomfilter/v2 v2.0.3 // indirect
-	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/huandu/go-clone v1.6.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -383,9 +385,7 @@ require (
 	github.com/uudashr/gocognit v1.2.0 // indirect
 	github.com/uudashr/iface v1.3.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.58.0 // indirect
 	github.com/wealdtech/go-bytesutil v1.2.1 // indirect
-	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/wlynxg/anet v0.0.4 // indirect
 	github.com/xen0n/gosmopolitan v1.3.0 // indirect
