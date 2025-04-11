@@ -13,7 +13,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
-type validatorCommitteeDutyMap map[phase0.ValidatorIndex]*committeeDuty
 type committeeDutiesMap map[spectypes.CommitteeID]*committeeDuty
 
 type CommitteeHandler struct {
@@ -85,59 +84,76 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
-	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
-	validatorCommitteeMap := make(validatorCommitteeDutyMap)
-	committeeMap := make(committeeDutiesMap)
-	for _, v := range vs {
-		validatorCommitteeMap[v.ValidatorIndex] = &committeeDuty{
-			id:          v.CommitteeID(),
-			operatorIDs: v.OperatorIDs(),
+	selfValidators := h.validatorProvider.SelfValidators()
+
+	validatorCommittees := map[phase0.ValidatorIndex]committeeDuty{}
+
+	for _, validatorShare := range selfValidators {
+		committeeDuty := committeeDuty{
+			id:          validatorShare.CommitteeID(),
+			operatorIDs: validatorShare.OperatorIDs(),
+		}
+
+		validatorCommittees[validatorShare.ValidatorIndex] = committeeDuty
+	}
+
+	resultCommitteeMap := make(committeeDutiesMap)
+
+	for _, duty := range attDuties {
+		committee, ok := validatorCommittees[duty.ValidatorIndex]
+		if !ok {
+			h.logger.Error("failed to find committee for validator", zap.Uint64("validator_index", uint64(duty.ValidatorIndex)))
+			continue
+		}
+
+		if h.shouldExecuteAtt(duty) {
+			share, found := h.validatorProvider.Validator(duty.PubKey[:])
+
+			if found && share.IsAttesting(epoch) && !share.Liquidated {
+				addToCommitteeMap(resultCommitteeMap, committee, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
+			}
 		}
 	}
 
-	for _, d := range attDuties {
-		if h.shouldExecuteAtt(d) {
-			specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
-			h.appendBeaconDuty(validatorCommitteeMap, committeeMap, specDuty)
+	for _, duty := range syncDuties {
+		committee, ok := validatorCommittees[duty.ValidatorIndex]
+		if !ok {
+			h.logger.Error("failed to find committee for validator", zap.Uint64("validator_index", uint64(duty.ValidatorIndex)))
+			continue
+		}
+
+		if h.shouldExecuteSync(duty, slot) {
+			share, found := h.validatorProvider.Validator(duty.PubKey[:])
+
+			if found && share.IsParticipating(h.network, epoch) {
+				addToCommitteeMap(resultCommitteeMap, committee, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
+			}
 		}
 	}
 
-	for _, d := range syncDuties {
-		if h.shouldExecuteSync(d, slot) {
-			specDuty := h.toSpecSyncDuty(d, slot, spectypes.BNRoleSyncCommittee)
-			h.appendBeaconDuty(validatorCommitteeMap, committeeMap, specDuty)
-		}
-	}
-
-	return committeeMap
+	return resultCommitteeMap
 }
 
-func (h *CommitteeHandler) appendBeaconDuty(vc validatorCommitteeDutyMap, c committeeDutiesMap, beaconDuty *spectypes.ValidatorDuty) {
-	if beaconDuty == nil {
-		h.logger.Error("received nil beaconDuty")
-		return
-	}
-
-	committee, ok := vc[beaconDuty.ValidatorIndex]
-	if !ok {
-		h.logger.Error("failed to find committee for validator", zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
-		return
-	}
-
-	cd, ok := c[committee.id]
-	if !ok {
+func addToCommitteeMap(
+	committeeDutyMap committeeDutiesMap,
+	committee committeeDuty,
+	specDuty *spectypes.ValidatorDuty,
+) {
+	cd, exists := committeeDutyMap[committee.id]
+	if !exists {
 		cd = &committeeDuty{
 			id:          committee.id,
 			operatorIDs: committee.operatorIDs,
 			duty: &spectypes.CommitteeDuty{
-				Slot:            beaconDuty.Slot,
-				ValidatorDuties: make([]*spectypes.ValidatorDuty, 0),
+				Slot:            specDuty.Slot,
+				ValidatorDuties: []*spectypes.ValidatorDuty{},
 			},
 		}
-		c[committee.id] = cd
 	}
 
-	cd.duty.ValidatorDuties = append(c[committee.id].duty.ValidatorDuties, beaconDuty)
+	cd.duty.ValidatorDuties = append(cd.duty.ValidatorDuties, specDuty)
+
+	committeeDutyMap[committee.id] = cd
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
@@ -183,6 +199,7 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
 		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
+
 	return false
 }
 
@@ -201,6 +218,7 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
+
 	return false
 }
 
