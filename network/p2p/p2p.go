@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math/rand"
 	"slices"
 	"strconv"
@@ -18,7 +19,6 @@ import (
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -404,7 +404,7 @@ func (n *p2pNetwork) PeerProtection(immunityQuota int, protectEveryOutbound bool
 		}
 	}
 
-	myPeers := maps.Keys(myPeersSet)
+	myPeers := slices.Collect(maps.Keys(myPeersSet))
 	slices.SortFunc(myPeers, func(a, b peer.ID) int {
 		// sort in desc order (peers with the highest scores come first)
 		if n.peerScore(a) < n.peerScore(b) {

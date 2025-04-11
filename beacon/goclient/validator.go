@@ -2,7 +2,9 @@ package goclient
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -10,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cespare/xxhash/v2"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -86,7 +87,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 
 			// Select registrations to submit.
 			gc.registrationMu.Lock()
-			allRegistrations := maps.Values(gc.registrations)
+			allRegistrations := slices.Collect(maps.Values(gc.registrations))
 			gc.registrationMu.Unlock()
 
 			registrations := make([]*api.VersionedSignedValidatorRegistration, 0)

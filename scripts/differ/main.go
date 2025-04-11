@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -13,7 +15,6 @@ import (
 	"github.com/aquasecurity/table"
 	"github.com/cespare/xxhash/v2"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 )
 
@@ -102,7 +103,7 @@ func run() (changes int, err error) {
 
 		// For each element in the left package, find the corresponding element
 		// in the right package and compare.
-		sortedNames := maps.Keys(lefts)
+		sortedNames := slices.Collect(maps.Keys(lefts))
 		sort.Strings(sortedNames)
 		for _, name := range sortedNames {
 			left := lefts[name]
