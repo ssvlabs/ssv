@@ -280,7 +280,10 @@ func (f *EventFeed[T]) FanOut(ctx context.Context, in <-chan T) {
 	}
 }
 
-// SlotTicker handles the "head" events from the beacon node.
+// SlotTicker advances "head" slot every slot-tick once we are 1/3 of slot-time past slot start
+// and only if necessary. Normally Beacon node events would trigger "head" slot updates, but in
+// case event is delayed or didn't arrive for some reason we still need to advance "head" slot
+// for duties to keep executing normally - so SlotTicker is a secondary mechanism for that.
 func (s *Scheduler) SlotTicker(ctx context.Context) {
 	for {
 		select {
@@ -289,10 +292,9 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
+			delayThirdOfSlot := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot)
+			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delayThirdOfSlot)
 			waitDuration := time.Until(finalTime)
-
 			if waitDuration > 0 {
 				time.Sleep(waitDuration)
 			}
