@@ -2,11 +2,12 @@ package p2pv1
 
 import (
 	"fmt"
-	"github.com/ssvlabs/ssv/utils/hashmap"
 	"math"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/ssvlabs/ssv/utils/hashmap"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oleiade/lane/v2"
@@ -153,7 +154,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		}
 
 		// Limit new connections to the remaining outbound slots.
-		maxPeersToConnect := max(vacantOutboundSlots, 1)
+		maxPeersToConnect := max(vacantOutboundSlots/2, 1)
 
 		// Repeatedly select the next best peer to connect to,
 		// adding its subnets to pendingSubnetPeers so that the next selection
