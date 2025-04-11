@@ -102,10 +102,12 @@ type Scheduler struct {
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
-	waitCond   *sync.Cond
 	pool       *pool.ContextPool
 
-	headSlot                  phase0.Slot
+	// waitCond coordinates access to headSlot for different go-routines
+	waitCond *sync.Cond
+	headSlot phase0.Slot
+
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
@@ -296,11 +298,12 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 			}
 
 			s.waitCond.L.Lock()
-			// we only want to increase s.headSlot (and never decrease it)
+			// we only want to increase s.headSlot (and never decrease it) and notify the go-routines
+			// waiting for it to happen
 			if slot > s.headSlot {
 				s.headSlot = slot
+				s.waitCond.Broadcast()
 			}
-			s.waitCond.Broadcast()
 			s.waitCond.L.Unlock()
 		}
 	}
@@ -381,11 +384,12 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 			time.Sleep(s.blockPropagateDelay)
 
 			s.waitCond.L.Lock()
-			// we only want to increase s.headSlot (and never decrease it)
+			// we only want to increase s.headSlot (and never decrease it) and notify the go-routines
+			// waiting for it to happen
 			if event.Slot > s.headSlot {
 				s.headSlot = event.Slot
+				s.waitCond.Broadcast()
 			}
-			s.waitCond.Broadcast()
 			s.waitCond.L.Unlock()
 		}
 	}
