@@ -224,17 +224,19 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
 	case spectypes.DomainApplicationBuilder:
-		var data *api.VersionedValidatorRegistration
 		switch v := obj.(type) {
 		case *eth2apiv1.ValidatorRegistration:
-			data = &api.VersionedValidatorRegistration{
+			data := &api.VersionedValidatorRegistration{
 				Version: spec.BuilderVersionV1,
 				V1:      v,
 			}
+			return km.signer.SignRegistration(data, domain, pk)
+		case *spectypes.PreconfCommitmentDuty:
+			// TODO - do we need similar implementation adjustment(s) for remote signer as well ?
+			return km.signer.SignPreconfCommitment(v[:], domain, pk)
 		default:
 			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
-		return km.signer.SignRegistration(data, domain, pk)
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}

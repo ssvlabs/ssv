@@ -18,13 +18,13 @@ import (
 
 func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
 	return func(round specqbft.Round) {
-		v.mtx.RLock() // read-lock for v.Queues, v.state
-		defer v.mtx.RUnlock()
-
 		// only run if the validator is started
-		if v.state != uint32(Started) {
+		if v.started.Load() {
 			return
 		}
+
+		v.mtx.RLock() // read-lock for v.Queues
+		defer v.mtx.RUnlock()
 
 		dr := v.DutyRunners[identifier.GetRoleType()]
 		if dr == nil {
@@ -48,7 +48,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 
-		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
+		if pushed := v.Queues[identifier.GetRoleType()].TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
 				fields.Role(identifier.GetRoleType()))
 		}
