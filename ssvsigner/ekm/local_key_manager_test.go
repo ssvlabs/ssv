@@ -477,7 +477,7 @@ func TestEkmListAccounts(t *testing.T) {
 	require.NoError(t, err)
 
 	km, _ := testKeyManager(t, nil, operatorPrivateKey)
-	accounts, err := km.(*LocalKeyManager).slashingProtector.ListAccounts()
+	accounts, err := km.(*LocalKeyManager).ListAccounts()
 	require.NoError(t, err)
 	require.Len(t, accounts, 2)
 }
