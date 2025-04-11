@@ -18,45 +18,91 @@ const (
 	testPubKeyBase64 = "base64EncodedPublicKey"
 )
 
-func TestDecryptKeystoreWithInvalidData(t *testing.T) {
-	encryptedJSONData := []byte(`{"version":4,"pubKey":"` + testPubKeyBase64 + `","crypto":{"kdf":"scrypt","checksum":{"function":"sha256","params":{"dklen":32,"salt":"base64EncodedSalt"},"message":"base64EncodedMessage"},"cipher":{"function":"aes-128-ctr","params":{"iv":"base64EncodedIV"},"message":"base64EncodedEncryptedMessage"},"kdfparams":{"n":262144,"r":8,"p":1,"salt":"base64EncodedSalt"}}}`)
-	_, err := DecryptKeystore(encryptedJSONData, testPassword)
-	require.Error(t, err)
+func TestMain(m *testing.M) {
+	require.NoError(&testing.T{}, bls.Init(bls.BLS12_381))
+	os.Exit(m.Run())
 }
 
-func TestDecryptKeystoreWithEmptyPassword(t *testing.T) {
-	password := ""
-	encryptedJSONData := []byte(`{"valid":"data"}`)
-	_, err := DecryptKeystore(encryptedJSONData, password)
-	require.Error(t, err)
+func TestDecryptKeystore(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with invalid data", func(t *testing.T) {
+		t.Parallel()
+
+		encryptedJSONData := []byte(`{"version":4,"pubKey":"` + testPubKeyBase64 + `","crypto":{"kdf":"scrypt","checksum":{"function":"sha256","params":{"dklen":32,"salt":"base64EncodedSalt"},"message":"base64EncodedMessage"},"cipher":{"function":"aes-128-ctr","params":{"iv":"base64EncodedIV"},"message":"base64EncodedEncryptedMessage"},"kdfparams":{"n":262144,"r":8,"p":1,"salt":"base64EncodedSalt"}}}`)
+		_, err := DecryptKeystore(encryptedJSONData, testPassword)
+		require.Error(t, err)
+	})
+
+	t.Run("with empty password", func(t *testing.T) {
+		t.Parallel()
+
+		password := ""
+		encryptedJSONData := []byte(`{"valid":"data"}`)
+		_, err := DecryptKeystore(encryptedJSONData, password)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "password required")
+	})
+
+	t.Run("with malformed data", func(t *testing.T) {
+		t.Parallel()
+
+		malformedData := []byte(`{"checksum":{"function":"SHA256","message":"hb27fe860c96f269f7838525ba8dce0886e0b7753caccc14162195bcdacbf49e","params":{}},"cipher":{"function":"xor","message":"e18afad793ec8dc3263169c07add77515d9f301464a05508d7ecb42ced24ed3a","params":{}},"kdf":{"function":"scrypt","message":"","params":{"dklen":32,"n":262144,"p":8,"r":1,"salt":"ab0c7876052600dd703518d6fc3fe8984592145b591fc8fb5c6d43190334ba19"}}}`)
+		_, err := DecryptKeystore(malformedData, "testpassword")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "decrypt private key")
+	})
 }
 
-func TestEncryptKeystoreWithValidData(t *testing.T) {
-	privkey := []byte("privateKey")
+func TestEncryptKeystore(t *testing.T) {
+	t.Parallel()
 
-	data, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
-	require.NoError(t, err)
+	t.Run("with valid data", func(t *testing.T) {
+		t.Parallel()
 
-	var jsonData map[string]interface{}
-	err = json.Unmarshal(data, &jsonData)
-	require.NoError(t, err)
-	require.Equal(t, testPubKeyBase64, jsonData["pubKey"])
+		privkey := []byte("privateKey")
 
-	decrtypted, err := DecryptKeystore(data, testPassword)
-	require.NoError(t, err)
-	require.Equal(t, privkey, decrtypted)
-}
+		data, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
+		require.NoError(t, err)
 
-func TestEncryptKeystoreWithEmptyPassword(t *testing.T) {
-	password := ""
-	privkey := []byte("privateKey")
+		var jsonData map[string]interface{}
+		err = json.Unmarshal(data, &jsonData)
+		require.NoError(t, err)
+		require.Equal(t, testPubKeyBase64, jsonData["pubKey"])
 
-	_, err := EncryptKeystore(privkey, testPubKeyBase64, password)
-	require.Error(t, err)
+		decrtypted, err := DecryptKeystore(data, testPassword)
+		require.NoError(t, err)
+		require.Equal(t, privkey, decrtypted)
+	})
+
+	t.Run("with empty password", func(t *testing.T) {
+		t.Parallel()
+
+		password := ""
+		privkey := []byte("privateKey")
+
+		_, err := EncryptKeystore(privkey, testPubKeyBase64, password)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "password required")
+	})
+
+	t.Run("with nil private key", func(t *testing.T) {
+		t.Parallel()
+
+		var privkey []byte = nil
+
+		_, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "encrypt private key")
+	})
 }
 
 func TestLoadOperatorKeystore(t *testing.T) {
+	t.Parallel()
+
 	t.Run("fails when encryptedPrivateKeyFile does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		nonExistentFile := filepath.Join(os.TempDir(), "nonexistent.pem")
 		passwordFile := filepath.Join(os.TempDir(), "some-password.txt")
 
@@ -66,6 +112,8 @@ func TestLoadOperatorKeystore(t *testing.T) {
 	})
 
 	t.Run("fails when passwordFile does not exist", func(t *testing.T) {
+		t.Parallel()
+
 		tmpEncryptedFile := createTempFile(t, "valid-encrypted-", ".json", []byte(`encrypted-content`))
 		defer os.Remove(tmpEncryptedFile)
 
@@ -77,6 +125,8 @@ func TestLoadOperatorKeystore(t *testing.T) {
 	})
 
 	t.Run("fails if password file is empty", func(t *testing.T) {
+		t.Parallel()
+
 		tmpEncryptedFile := createTempFile(t, "valid-encrypted-", ".json", []byte(`encrypted-content`))
 		defer os.Remove(tmpEncryptedFile)
 
@@ -89,6 +139,8 @@ func TestLoadOperatorKeystore(t *testing.T) {
 	})
 
 	t.Run("fails if DecryptKeystore returns an error", func(t *testing.T) {
+		t.Parallel()
+
 		tmpEncryptedFile := createTempFile(t, "invalid-encrypted-", ".json", []byte(`bad-encrypted-data`))
 		defer os.Remove(tmpEncryptedFile)
 
@@ -102,6 +154,8 @@ func TestLoadOperatorKeystore(t *testing.T) {
 	})
 
 	t.Run("fails if PrivateKeyFromBytes returns an error", func(t *testing.T) {
+		t.Parallel()
+
 		privkey := []byte("privateKey")
 
 		keystore, err := EncryptKeystore(privkey, testPubKeyBase64, testPassword)
@@ -120,6 +174,8 @@ func TestLoadOperatorKeystore(t *testing.T) {
 	})
 
 	t.Run("succeeds with valid files and data", func(t *testing.T) {
+		t.Parallel()
+
 		privKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
@@ -139,9 +195,11 @@ func TestLoadOperatorKeystore(t *testing.T) {
 }
 
 func TestGenerateShareKeystore(t *testing.T) {
-	require.NoError(t, bls.Init(bls.BLS12_381))
+	t.Parallel()
 
 	t.Run("succeeds with valid BLS key and passphrase", func(t *testing.T) {
+		t.Parallel()
+
 		sharePrivateKey := new(bls.SecretKey)
 		sharePrivateKey.SetByCSPRNG()
 
