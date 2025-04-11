@@ -78,10 +78,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				zap.Any("validator_registrations", vrs))
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
 	}
 }
