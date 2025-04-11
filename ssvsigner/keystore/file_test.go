@@ -44,11 +44,11 @@ func TestDecryptKeystore(t *testing.T) {
 		require.Contains(t, err.Error(), "password required")
 	})
 
-	t.Run("with malformed data", func(t *testing.T) {
+	t.Run("with invalid checksum", func(t *testing.T) {
 		t.Parallel()
 
-		malformedData := []byte(`{"checksum":{"function":"SHA256","message":"hb27fe860c96f269f7838525ba8dce0886e0b7753caccc14162195bcdacbf49e","params":{}},"cipher":{"function":"xor","message":"e18afad793ec8dc3263169c07add77515d9f301464a05508d7ecb42ced24ed3a","params":{}},"kdf":{"function":"scrypt","message":"","params":{"dklen":32,"n":262144,"p":8,"r":1,"salt":"ab0c7876052600dd703518d6fc3fe8984592145b591fc8fb5c6d43190334ba19"}}}`)
-		_, err := DecryptKeystore(malformedData, "testpassword")
+		invalidChecksumData := []byte(`{"checksum":{"function":"SHA256","message":"db27fe860c96f269f7838525ba8dce0886e0b7753caccc14162195bcdacbf49e","params":{}},"cipher":{"function":"xor","message":"e18afad793ec8dc3263169c07add77515d9f301464a05508d7ecb42ced24ed3a","params":{}},"kdf":{"function":"scrypt","message":"","params":{"dklen":32,"n":262144,"p":8,"r":1,"salt":"ab0c7876052600dd703518d6fc3fe8984592145b591fc8fb5c6d43190334ba19"}}}`)
+		_, err := DecryptKeystore(invalidChecksumData, testPassword)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "decrypt private key")
 	})
