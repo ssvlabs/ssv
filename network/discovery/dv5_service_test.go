@@ -7,9 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/ssvlabs/ssv/utils/ttl"
-
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
