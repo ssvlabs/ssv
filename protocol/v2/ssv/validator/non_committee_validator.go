@@ -38,6 +38,10 @@ type CommitteeObserver struct {
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache       *DomainCache
+
+	// cache to identify duplicate computations of attester/sync committee roots
+	beaconVoteRoots cache
+
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
@@ -55,6 +59,12 @@ type CommitteeObserverOptions struct {
 	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	DomainCache       *DomainCache
+	BeaconVoteRoots   cache
+}
+
+type cache interface {
+	Set(phase0.Root, specqbft.Height)
+	Has(phase0.Root, specqbft.Height) bool
 }
 
 func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
@@ -71,6 +81,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		attesterRoots:     opts.AttesterRoots,
 		syncCommRoots:     opts.SyncCommRoots,
 		domainCache:       opts.DomainCache,
+		beaconVoteRoots:   opts.BeaconVoteRoots,
 	}
 
 	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
@@ -328,6 +339,14 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 		ncv.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
+	// if the roots for this beacon vote hash and height have already been computed, skip
+	if ncv.beaconVoteRoots.Has(beaconVote.BlockRoot, qbftMsg.Height) {
+		ncv.logger.Debug("found cached beacon vote roots", zap.Uint64("slot", uint64(qbftMsg.Height)), zap.String("root", hex.EncodeToString(beaconVote.BlockRoot[:])))
+		return nil
+	}
+
+	ncv.logger.Info("beacon vote roots not found in cache", zap.Uint64("slot", uint64(qbftMsg.Height)), zap.String("root", hex.EncodeToString(beaconVote.BlockRoot[:])))
+
 	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
 	if err := ncv.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
@@ -337,6 +356,10 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	if err := ncv.saveSyncCommRoots(epoch, beaconVote); err != nil {
 		return err
 	}
+
+	// cache the roots for this beacon vote hash and height
+	ncv.beaconVoteRoots.Set(beaconVote.BlockRoot, qbftMsg.Height)
+	ncv.logger.Info("saved beacon vote roots", zap.Uint64("slot", uint64(qbftMsg.Height)), zap.String("root", hex.EncodeToString(beaconVote.BlockRoot[:])))
 
 	return nil
 }

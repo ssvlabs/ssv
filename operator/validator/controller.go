@@ -183,6 +183,7 @@ type controller struct {
 	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
+	beaconVoteRoots          *ttlcache.Cache[BeaconVoteHashKey, struct{}]
 
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
@@ -268,7 +269,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
 		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
-
+		beaconVoteRoots: ttlcache.New(
+			ttlcache.WithTTL[BeaconVoteHashKey, struct{}](cacheTTL),
+		),
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
@@ -283,6 +286,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
 	go ctrl.domainCache.Start()
+	go ctrl.beaconVoteRoots.Start()
 
 	return &ctrl
 }
@@ -380,6 +384,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			AttesterRoots:     c.attesterRoots,
 			SyncCommRoots:     c.syncCommRoots,
 			DomainCache:       c.domainCache,
+			BeaconVoteRoots:   &beaconVoteCacheWrapper{Cache: c.beaconVoteRoots},
 		}
 		ncv = &committeeObserver{
 			CommitteeObserver: validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions),
@@ -1148,4 +1153,23 @@ func SetupRunners(
 		}
 	}
 	return runners, nil
+}
+
+type BeaconVoteHashKey struct {
+	root   phase0.Root
+	height specqbft.Height
+}
+
+// beaconVoteCacheWrapper is a wrapper around ttlcache.Cache[BeaconVoteHashKey, struct{}]
+// it is needed to avoid passing composite key (BeaconVoteHashKey) down to the non-committee validator
+type beaconVoteCacheWrapper struct {
+	*ttlcache.Cache[BeaconVoteHashKey, struct{}]
+}
+
+func (c *beaconVoteCacheWrapper) Set(key phase0.Root, key2 specqbft.Height) {
+	c.Cache.Set(BeaconVoteHashKey{root: key, height: key2}, struct{}{}, time.Minute*6)
+}
+
+func (c *beaconVoteCacheWrapper) Has(key phase0.Root, key2 specqbft.Height) bool {
+	return c.Cache.Has(BeaconVoteHashKey{root: key, height: key2})
 }
