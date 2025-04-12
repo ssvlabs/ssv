@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 type ValidatorDutyTrace struct {
@@ -46,12 +47,12 @@ func (a *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorP
 
 func (a *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	// lookup in cache
-	validatorSlots, found := a.validatorTraces.Load(pubkey)
+	validatorSlots, found := a.validatorTraces.Get(pubkey)
 	if !found {
 		return a.getValidatorDutiesFromDisk(role, slot, pubkey)
 	}
 
-	traces, found := validatorSlots.Load(slot)
+	traces, found := validatorSlots.Get(slot)
 	if found {
 		traces.Lock()
 		defer traces.Unlock()
@@ -89,7 +90,7 @@ func (a *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot p
 }
 
 func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.CommitteeDutyTrace, err error) {
-	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *TypedSyncMap[phase0.Slot, *committeeDutyTrace]) bool {
+	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		committeeSlots.Range(func(slot phase0.Slot, dt *committeeDutyTrace) bool {
 			if wantSlot == slot {
 				func() {
@@ -114,12 +115,12 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.Co
 }
 
 func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
-	committeeSlots, found := c.committeeTraces.Load(committeeID)
+	committeeSlots, found := c.committeeTraces.Get(committeeID)
 	if !found {
 		return c.getCommitteeDutyFromDisk(slot, committeeID)
 	}
 
-	trace, found := committeeSlots.Load(slot)
+	trace, found := committeeSlots.Get(slot)
 	if !found {
 		trace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
 		if err != nil {
@@ -209,12 +210,12 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 }
 
 func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
-	slotToCommittee, found := c.validatorIndexToCommitteeLinks.Load(index)
+	slotToCommittee, found := c.validatorIndexToCommitteeLinks.Get(index)
 	if !found {
 		return c.getCommitteeIDFromDisk(slot, index)
 	}
 
-	committeeID, found := slotToCommittee.Load(slot)
+	committeeID, found := slotToCommittee.Get(slot)
 	if !found {
 		return c.getCommitteeIDFromDisk(slot, index)
 	}

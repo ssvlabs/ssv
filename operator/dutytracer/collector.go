@@ -22,19 +22,20 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 type Collector struct {
 	logger *zap.Logger
 
 	// committeeID:slot:committeeDutyTrace
-	committeeTraces *TypedSyncMap[spectypes.CommitteeID, *TypedSyncMap[phase0.Slot, *committeeDutyTrace]]
+	committeeTraces *hashmap.Map[spectypes.CommitteeID, *hashmap.Map[phase0.Slot, *committeeDutyTrace]]
 
 	// validatorPubKey:slot:validatorDutyTrace
-	validatorTraces *TypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]]
+	validatorTraces *hashmap.Map[spectypes.ValidatorPK, *hashmap.Map[phase0.Slot, *validatorDutyTrace]]
 
 	// validatorIndex:slot:committeeID
-	validatorIndexToCommitteeLinks *TypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]]
+	validatorIndexToCommitteeLinks *hashmap.Map[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, spectypes.CommitteeID]]
 
 	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
 	syncCommitteeRootsSf    singleflight.Group
@@ -69,9 +70,9 @@ func New(ctx context.Context,
 		client:                         client,
 		beacon:                         beaconNetwork,
 		validators:                     validators,
-		committeeTraces:                NewTypedSyncMap[spectypes.CommitteeID, *TypedSyncMap[phase0.Slot, *committeeDutyTrace]](),
-		validatorTraces:                NewTypedSyncMap[spectypes.ValidatorPK, *TypedSyncMap[phase0.Slot, *validatorDutyTrace]](),
-		validatorIndexToCommitteeLinks: NewTypedSyncMap[phase0.ValidatorIndex, *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]](),
+		committeeTraces:                hashmap.New[spectypes.CommitteeID, *hashmap.Map[phase0.Slot, *committeeDutyTrace]](),
+		validatorTraces:                hashmap.New[spectypes.ValidatorPK, *hashmap.Map[phase0.Slot, *validatorDutyTrace]](),
+		validatorIndexToCommitteeLinks: hashmap.New[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, spectypes.CommitteeID]](),
 		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttl)),
 	}
 
@@ -130,12 +131,12 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 		return nil, nil, fmt.Errorf("validator trace late arrival")
 	}
 
-	validatorSlots, found := c.validatorTraces.Load(vPubKey)
+	validatorSlots, found := c.validatorTraces.Get(vPubKey)
 	if !found {
-		validatorSlots, _ = c.validatorTraces.LoadOrStore(vPubKey, NewTypedSyncMap[phase0.Slot, *validatorDutyTrace]())
+		validatorSlots, _ = c.validatorTraces.GetOrSet(vPubKey, hashmap.New[phase0.Slot, *validatorDutyTrace]())
 	}
 
-	traces, found := validatorSlots.Load(slot)
+	traces, found := validatorSlots.Get(slot)
 
 	if !found {
 		roleDutyTrace := &model.ValidatorDutyTrace{
@@ -145,7 +146,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 		newTrace := &validatorDutyTrace{
 			Roles: []*model.ValidatorDutyTrace{roleDutyTrace},
 		}
-		traces, _ = validatorSlots.LoadOrStore(slot, newTrace)
+		traces, _ = validatorSlots.GetOrSet(slot, newTrace)
 		return traces, roleDutyTrace, nil
 	}
 
@@ -174,12 +175,12 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 		return nil, fmt.Errorf("committee trace late arrival")
 	}
 
-	committeeSlots, found := c.committeeTraces.Load(committeeID)
+	committeeSlots, found := c.committeeTraces.Get(committeeID)
 	if !found {
-		committeeSlots, _ = c.committeeTraces.LoadOrStore(committeeID, NewTypedSyncMap[phase0.Slot, *committeeDutyTrace]())
+		committeeSlots, _ = c.committeeTraces.GetOrSet(committeeID, hashmap.New[phase0.Slot, *committeeDutyTrace]())
 	}
 
-	committeeTrace, found := committeeSlots.Load(slot)
+	committeeTrace, found := committeeSlots.Get(slot)
 
 	if !found {
 		trace := &committeeDutyTrace{
@@ -189,7 +190,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 			},
 		}
 
-		committeeTrace, _ = committeeSlots.LoadOrStore(slot, trace)
+		committeeTrace, _ = committeeSlots.GetOrSet(slot, trace)
 	}
 
 	return committeeTrace, nil
@@ -416,14 +417,15 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 
 func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
 	for _, msg := range msg.Messages {
-		slotToCommittee, found := c.validatorIndexToCommitteeLinks.Load(msg.ValidatorIndex)
+		slotToCommittee, found := c.validatorIndexToCommitteeLinks.Get(msg.ValidatorIndex)
 		if !found {
-			slotToCommittee, _ = c.validatorIndexToCommitteeLinks.LoadOrStore(msg.ValidatorIndex, NewTypedSyncMap[phase0.Slot, spectypes.CommitteeID]())
+			slotToCommittee, _ = c.validatorIndexToCommitteeLinks.GetOrSet(msg.ValidatorIndex, hashmap.New[phase0.Slot, spectypes.CommitteeID]())
 		}
 
-		slotToCommittee.Store(slot, committeeID)
+		slotToCommittee.Set(slot, committeeID)
 	}
 }
+
 func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Root, error) {
 	var beaconVote = new(spectypes.BeaconVote)
 	if err := beaconVote.Decode(in); err != nil {

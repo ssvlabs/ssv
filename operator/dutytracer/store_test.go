@@ -16,6 +16,7 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 func TestValidatorCommitteeMapping(t *testing.T) {
@@ -108,7 +109,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	tracer.evictValidatorCommitteeLinks(thresholdSlot)
 
 	// check that slot 3 and 4 are evicted from cache
-	indexToSlotMap, found := tracer.validatorIndexToCommitteeLinks.Load(1)
+	indexToSlotMap, found := tracer.validatorIndexToCommitteeLinks.Get(1)
 	require.True(t, found)
 
 	assert.False(t, indexToSlotMap.Has(slot3))
@@ -305,7 +306,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	// assert that only slot 7 is in memory
 	var inMem = make(map[phase0.Slot]struct{})
-	tracer.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *TypedSyncMap[phase0.Slot, *committeeDutyTrace]) bool {
+	tracer.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		slotToTraceMap.Range(func(slot phase0.Slot, dutyTrace *committeeDutyTrace) bool {
 			inMem[slot] = struct{}{}
 			return true
@@ -436,7 +437,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	tracer.evictValidatorTraces(slot6)
 
 	var inMem = make(map[phase0.Slot]struct{})
-	tracer.validatorTraces.Range(func(key spectypes.ValidatorPK, slotToTraceMap *TypedSyncMap[phase0.Slot, *validatorDutyTrace]) bool {
+	tracer.validatorTraces.Range(func(key spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		slotToTraceMap.Range(func(slot phase0.Slot, dutyTrace *validatorDutyTrace) bool {
 			inMem[slot] = struct{}{}
 			return true

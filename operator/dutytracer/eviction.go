@@ -7,6 +7,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 // TTL in slots for each role
@@ -19,9 +20,9 @@ const (
 )
 
 func (c *Collector) evictValidatorCommitteeLinks(threshold phase0.Slot) (totalSaved int) {
-	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *TypedSyncMap[phase0.Slot, spectypes.CommitteeID]) bool {
+	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
 		for slot := threshold; ; slot-- {
-			committeeID, found := slotToCommittee.Load(slot)
+			committeeID, found := slotToCommittee.Get(slot)
 			if !found {
 				break
 			}
@@ -43,9 +44,9 @@ func (c *Collector) evictValidatorCommitteeLinks(threshold phase0.Slot) (totalSa
 }
 
 func (c *Collector) evictCommitteeTraces(threshold phase0.Slot) (totalSaved int) {
-	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *TypedSyncMap[phase0.Slot, *committeeDutyTrace]) bool {
+	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		for slot := threshold; ; slot-- {
-			trace, found := slotToTraceMap.Load(slot)
+			trace, found := slotToTraceMap.Get(slot)
 			if !found {
 				break
 			}
@@ -75,9 +76,9 @@ func (c *Collector) evictCommitteeTraces(threshold phase0.Slot) (totalSaved int)
 }
 
 func (c *Collector) evictValidatorTraces(threshold phase0.Slot) (totalSaved int) {
-	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *TypedSyncMap[phase0.Slot, *validatorDutyTrace]) bool {
+	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		for slot := threshold; ; slot-- {
-			trace, found := slotToTraceMap.Load(slot)
+			trace, found := slotToTraceMap.Get(slot)
 			if !found {
 				break
 			}
