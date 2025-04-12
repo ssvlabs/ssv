@@ -1166,10 +1166,10 @@ type beaconVoteCacheWrapper struct {
 	*ttlcache.Cache[BeaconVoteHashKey, struct{}]
 }
 
-func (c *beaconVoteCacheWrapper) Set(key phase0.Root, key2 specqbft.Height) {
-	c.Cache.Set(BeaconVoteHashKey{root: key, height: key2}, struct{}{}, time.Minute*6)
+func (c *beaconVoteCacheWrapper) Set(root phase0.Root, height specqbft.Height) {
+	c.Cache.Set(BeaconVoteHashKey{root: root, height: height}, struct{}{}, ttlcache.DefaultTTL)
 }
 
-func (c *beaconVoteCacheWrapper) Has(key phase0.Root, key2 specqbft.Height) bool {
-	return c.Cache.Has(BeaconVoteHashKey{root: key, height: key2})
+func (c *beaconVoteCacheWrapper) Has(root phase0.Root, height specqbft.Height) bool {
+	return c.Cache.Has(BeaconVoteHashKey{root: root, height: height})
 }
