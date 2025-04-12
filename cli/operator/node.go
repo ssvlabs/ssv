@@ -196,8 +196,8 @@ var StartNodeCmd = &cobra.Command{
 
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
-				SlotDuration: networkConfig.SlotDurationSec(),
-				GenesisTime:  networkConfig.GetGenesisTime(),
+				SlotDuration: networkConfig.SlotDuration,
+				GenesisTime:  networkConfig.GenesisTime,
 			})
 		}
 
@@ -324,7 +324,7 @@ var StartNodeCmd = &cobra.Command{
 
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
-			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
+			threshold := cfg.SSVOptions.Network.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
 		}
 

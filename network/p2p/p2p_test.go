@@ -141,7 +141,7 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 		panic("committee role shouldn't be used here")
 	}
 	netCfg := networkconfig.TestNetwork
-	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
+	height := specqbft.Height(netCfg.EstimatedCurrentSlot())
 
 	fullData := spectestingutils.TestingQBFTFullData
 
@@ -167,7 +167,7 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 
 func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round) *spectypes.SignedSSVMessage {
 	netCfg := networkconfig.TestNetwork
-	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
+	height := specqbft.Height(netCfg.EstimatedCurrentSlot())
 
 	share := &ssvtypes.SSVShare{
 		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),

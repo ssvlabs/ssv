@@ -249,7 +249,7 @@ func (eh *EventHandler) handleShareCreation(
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
-		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
+		share.SetMinParticipationEpoch(eh.networkConfig.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	// Save share to DB.
@@ -443,7 +443,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
-		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
+		share.SetMinParticipationEpoch(eh.networkConfig.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	if len(enabledPubKeys) > 0 {

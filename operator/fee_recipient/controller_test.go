@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -80,11 +80,11 @@ func TestSubmitProposal(t *testing.T) {
 		go frCtrl.Start(logger)
 
 		slots := []phase0.Slot{
-			1,                                        // first time
-			2,                                        // should not call submit
-			20,                                       // should not call submit
-			phase0.Slot(network.SlotsPerEpoch()) / 2, // halfway through epoch
-			63,                                       // should not call submit
+			1,                         // first time
+			2,                         // should not call submit
+			20,                        // should not call submit
+			network.SlotsPerEpoch / 2, // halfway through epoch
+			63,                        // should not call submit
 		}
 
 		for _, s := range slots {

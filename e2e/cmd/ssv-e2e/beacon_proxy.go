@@ -124,7 +124,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	networkCfg := networkconfig.HoleskyE2E
 
 	const startEpochDelay = 1 // TODO: change to 2 after debugging is done
-	startEpoch := networkCfg.Beacon.EstimatedCurrentEpoch() + startEpochDelay
+	startEpoch := networkCfg.EstimatedCurrentEpoch() + startEpochDelay
 
 	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, true, maps.Values(validatorsData))
 	go interceptor.WatchSubmissions()

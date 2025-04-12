@@ -2,7 +2,9 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -11,8 +13,12 @@ import (
 var HoleskyStage = NetworkConfig{
 	Name: "holesky-stage",
 	BeaconConfig: BeaconConfig{
-		Beacon:       beacon.NewNetwork(spectypes.HoleskyNetwork),
-		GenesisEpoch: 1,
+		Beacon:        beacon.NewNetwork(spectypes.HoleskyNetwork),
+		GenesisEpoch:  1,
+		SlotDuration:  spectypes.HoleskyNetwork.SlotDurationSec(),
+		SlotsPerEpoch: phase0.Slot(spectypes.HoleskyNetwork.SlotsPerEpoch()),
+		ForkVersion:   spectypes.HoleskyNetwork.ForkVersion(),
+		GenesisTime:   time.Unix(int64(spectypes.HoleskyNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},

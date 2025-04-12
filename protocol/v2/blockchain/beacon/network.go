@@ -20,11 +20,11 @@ type BeaconNetwork interface {
 	MinGenesisTime() int64
 	SlotDurationSec() time.Duration
 	SlotsPerEpoch() uint64
-	EstimatedCurrentSlot() phase0.Slot
+	EstimatedCurrentSlot() phase0.Slot // TODO: use networkconfig's method instead
 	EstimatedSlotAtTime(time int64) phase0.Slot
 	EstimatedTimeAtSlot(slot phase0.Slot) int64
 	EstimatedCurrentEpoch() phase0.Epoch
-	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
+	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch // TODO: use networkconfig's method instead
 	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
 	EpochStartTime(epoch phase0.Epoch) time.Time
 

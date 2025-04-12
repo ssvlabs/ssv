@@ -10,7 +10,7 @@ import (
 )
 
 // frequencyEpochs defines how frequently we want to submit validator-registrations.
-const frequencyEpochs = uint64(10)
+const frequencyEpochs = phase0.Epoch(10)
 
 type ValidatorRegistrationHandler struct {
 	baseHandler
@@ -38,7 +38,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	defer h.logger.Info("duty handler exited")
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
-	registrationSlots := h.network.SlotsPerEpoch() * frequencyEpochs
+	registrationSlots := h.network.SlotsPerEpoch * phase0.Slot(frequencyEpochs)
 
 	next := h.ticker.Next()
 	for {
@@ -49,12 +49,12 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(frequencyEpochs))
+			epoch := h.network.EstimatedEpochAtSlot(slot)
+			shares := h.validatorProvider.SelfParticipatingValidators(epoch + frequencyEpochs)
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
+				if phase0.Slot(share.ValidatorIndex)%registrationSlots != slot%registrationSlots {
 					continue
 				}
 

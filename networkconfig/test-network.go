@@ -2,7 +2,9 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -11,8 +13,12 @@ import (
 var TestNetwork = NetworkConfig{
 	Name: "testnet",
 	BeaconConfig: BeaconConfig{
-		Beacon:       beacon.NewNetwork(spectypes.BeaconTestNetwork),
-		GenesisEpoch: 152834,
+		Beacon:        beacon.NewNetwork(spectypes.BeaconTestNetwork),
+		GenesisEpoch:  152834,
+		SlotDuration:  spectypes.BeaconTestNetwork.SlotDurationSec(),
+		SlotsPerEpoch: phase0.Slot(spectypes.BeaconTestNetwork.SlotsPerEpoch()),
+		ForkVersion:   spectypes.BeaconTestNetwork.ForkVersion(),
+		GenesisTime:   time.Unix(int64(spectypes.BeaconTestNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},

@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -166,7 +167,7 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	require.NoError(t, err)
 	require.NotNil(t, block)
 
-	slot := scheduler.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+	slot := scheduler.network.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0))
 	require.EqualValues(t, blockNumber, slot)
 }
 

@@ -231,7 +231,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 ) error {
 	stateBySlot := state.GetOrCreate(signer)
 	messageSlot := partialSignatureMessages.Slot
-	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
+	messageEpoch := mv.netCfg.EstimatedEpochAtSlot(messageSlot)
 
 	signerState := stateBySlot.Get(messageSlot)
 	if signerState == nil || signerState.Slot != messageSlot {

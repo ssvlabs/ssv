@@ -74,7 +74,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger) {
 		<-ticker.Next()
 		slot := ticker.Slot()
 		// submit if first time or if first slot in epoch
-		if firstTimeSubmitted && uint64(slot)%rc.network.SlotsPerEpoch() != (rc.network.SlotsPerEpoch()/2) {
+		if firstTimeSubmitted && slot%rc.network.SlotsPerEpoch != (rc.network.SlotsPerEpoch/2) {
 			continue
 		}
 		firstTimeSubmitted = true

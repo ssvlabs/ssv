@@ -25,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -212,7 +211,7 @@ func (mv *messageValidator) getValidationLock(messageID spectypes.MessageID) *sy
 
 		lock := &sync.Mutex{}
 
-		epochDuration := casts.DurationFromUint64(mv.netCfg.Beacon.SlotsPerEpoch()) * mv.netCfg.Beacon.SlotDurationSec()
+		epochDuration := time.Duration(mv.netCfg.SlotsPerEpoch) * mv.netCfg.SlotDuration // #nosec G115 - slots per epoch never exceeds math.MaxInt64
 		// validationLockTTL specifies how much time a particular validation lock is meant to
 		// live. It must be large enough for validation lock to never expire while we still are
 		// expecting to process messages targeting that same validation lock. For a message
@@ -276,7 +275,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is not active
-	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = share.Status.String()
 		return CommitteeInfo{}, e
@@ -306,7 +305,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
+			storedSlotCount: mv.netCfg.SlotsPerEpoch * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}

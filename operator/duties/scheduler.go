@@ -287,8 +287,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
+			delay := s.network.SlotDuration / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
+			finalTime := s.network.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 
 			if waitDuration > 0 {
@@ -308,12 +308,12 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.HeadEvent) {
 	return func(event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
-		if event.Slot != s.network.Beacon.EstimatedCurrentSlot() {
+		if event.Slot != s.network.EstimatedCurrentSlot() {
 			return
 		}
 
 		// check for reorg
-		epoch := s.network.Beacon.EstimatedEpochAtSlot(event.Slot)
+		epoch := s.network.EstimatedEpochAtSlot(event.Slot)
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, event.Slot, event.Slot%32+1)
 		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
@@ -366,8 +366,8 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(event.Slot).Add(delay)
+		delay := s.network.SlotDuration / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
+		slotStartTimeWithDelay := s.network.GetSlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
@@ -388,7 +388,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
-		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.network.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
@@ -408,10 +408,10 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
-		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+		dutyEpoch := s.network.EstimatedEpochAtSlot(duty.Slot)
 		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
 
-		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.network.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
@@ -429,27 +429,27 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Va
 	return logger.
 		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.network.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot))).
+		With(fields.Epoch(s.network.EstimatedEpochAtSlot(duty.Slot))).
 		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
+		With(fields.StartTimeUnixMilli(s.network.GetSlotStartTime(duty.Slot)))
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
 func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
-	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+	dutyEpoch := s.network.EstimatedEpochAtSlot(duty.Slot)
 	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
 	return logger.
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.Role(duty.RunnerRole())).
-		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.network.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
-		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
+		With(fields.StartTimeUnixMilli(s.network.GetSlotStartTime(duty.Slot)))
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)

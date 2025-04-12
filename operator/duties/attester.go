@@ -74,28 +74,28 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			currentEpoch := h.network.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			h.processExecution(ctx, currentEpoch, slot)
 			h.processFetching(ctx, currentEpoch, slot)
 
-			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
+			slotsPerEpoch := h.network.SlotsPerEpoch
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next epoch in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch/2-1 {
+			if slot%slotsPerEpoch == slotsPerEpoch/2-1 {
 				h.fetchNextEpoch = true
 			}
 
 			// last slot of epoch
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+			if slot%slotsPerEpoch == slotsPerEpoch-1 {
 				h.duties.ResetEpoch(currentEpoch - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
+			currentEpoch := h.network.EstimatedEpochAtSlot(reorgEvent.Slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
@@ -119,8 +119,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case <-h.indicesChange:
-			slot := h.network.Beacon.EstimatedCurrentSlot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			slot := h.network.EstimatedCurrentSlot()
+			currentEpoch := h.network.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
@@ -135,16 +135,16 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *AttesterHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.network.SlotDuration/2)
 	defer cancel()
 
-	slot := h.network.Beacon.EstimatedCurrentSlot()
-	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	slot := h.network.EstimatedCurrentSlot()
+	epoch := h.network.EstimatedEpochAtSlot(slot)
 	h.processFetching(ctx, epoch, slot)
 }
 
 func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
-	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, cancel := context.WithDeadline(ctx, h.network.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	if h.fetchCurrentEpoch {
@@ -248,8 +248,8 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 }
 
 func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := h.network.EstimatedCurrentSlot()
+	currentEpoch := h.network.EstimatedEpochAtSlot(currentSlot)
 
 	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
 	if !exists {
@@ -267,7 +267,7 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
+	var attestationPropagationSlotRange = h.network.SlotsPerEpoch
 	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
 		return true
 	}
@@ -304,5 +304,5 @@ func toBeaconCommitteeSubscription(duty *eth2apiv1.AttesterDuty, role spectypes.
 }
 
 func (h *AttesterHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
-	return uint64(slot)%h.network.Beacon.SlotsPerEpoch() > h.network.Beacon.SlotsPerEpoch()/2-2
+	return slot%h.network.SlotsPerEpoch > h.network.SlotsPerEpoch/2-2
 }

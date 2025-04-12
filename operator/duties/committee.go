@@ -55,8 +55,8 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			epoch := h.network.EstimatedEpochAtSlot(slot)
+			period := h.network.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
@@ -168,14 +168,14 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 }
 
 func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	currentSlot := h.network.EstimatedCurrentSlot()
 
 	if participates := h.canParticipate(duty.PubKey[:], currentSlot); !participates {
 		return false
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
+	var attestationPropagationSlotRange = h.network.SlotsPerEpoch
 	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
 		return true
 	}
@@ -187,7 +187,7 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
 }
 
 func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	currentSlot := h.network.EstimatedCurrentSlot()
 
 	if participates := h.canParticipate(duty.PubKey[:], currentSlot); !participates {
 		return false
@@ -205,7 +205,7 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 }
 
 func (h *CommitteeHandler) canParticipate(pubKey []byte, currentSlot phase0.Slot) bool {
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+	currentEpoch := h.network.EstimatedEpochAtSlot(currentSlot)
 
 	v, exists := h.validatorProvider.Validator(pubKey)
 	if !exists {
