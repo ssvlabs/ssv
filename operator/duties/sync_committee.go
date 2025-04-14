@@ -204,7 +204,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
 
-	selfShares := h.validatorProvider.SelfValidators()
+	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)
 	selfIndices := make(map[phase0.ValidatorIndex]struct{}, len(selfShares))
 	for _, share := range selfShares {
 		selfIndices[share.ValidatorIndex] = struct{}{}

@@ -64,7 +64,7 @@ func setupSyncCommitteeDutiesMock(
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().Return(activeShares).MinTimes(1)
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).MinTimes(1)
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validator(gomock.Any()).DoAndReturn(
 		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
 			var ssvShare *ssvtypes.SSVShare
