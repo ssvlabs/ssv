@@ -184,20 +184,20 @@ func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epo
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) error {
 	start := time.Now()
 
-	var selfAttestingShares []*types.SSVShare
+	var eligibleShares []*types.SSVShare
 	for _, share := range h.validatorProvider.SelfValidators() {
 		if !share.Liquidated && share.IsAttesting(epoch) {
-			selfAttestingShares = append(selfAttestingShares, share)
+			eligibleShares = append(eligibleShares, share)
 		}
 	}
 
-	selfAttestingIndices := indicesFromShares(selfAttestingShares)
-	if len(selfAttestingIndices) == 0 {
+	eligibleIndices := indicesFromShares(eligibleShares)
+	if len(eligibleIndices) == 0 {
 		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
-	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, selfAttestingIndices)
+	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}

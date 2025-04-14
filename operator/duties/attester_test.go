@@ -50,7 +50,7 @@ func setupAttesterDutiesMock(
 					},
 					ActivationEpoch: epoch,
 					Liquidated:      false,
-					//this particular status is needed so that ActivationEpoch can be taken into consideration when checking the IsAttesting() condition.
+					// this particular status is needed so that ActivationEpoch can be taken into consideration when checking the IsAttesting() condition.
 					Status: eth2apiv1.ValidatorStatePendingQueued,
 				}
 				attestingShares = append(attestingShares, attestingShare)
