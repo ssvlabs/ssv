@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type committeeDutiesMap map[spectypes.CommitteeID]*committeeDuty
@@ -104,12 +105,8 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 			continue
 		}
 
-		if h.shouldExecuteAtt(duty) {
-			share, found := h.validatorProvider.Validator(duty.PubKey[:])
-
-			if found && share.IsAttesting(epoch) && !share.Liquidated {
-				addToCommitteeMap(resultCommitteeMap, committee, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
-			}
+		if h.shouldExecuteAtt(duty, epoch) {
+			addToCommitteeMap(resultCommitteeMap, committee, h.toSpecAttDuty(duty, spectypes.BNRoleAttester))
 		}
 	}
 
@@ -120,12 +117,8 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 			continue
 		}
 
-		if h.shouldExecuteSync(duty, slot) {
-			share, found := h.validatorProvider.Validator(duty.PubKey[:])
-
-			if found && share.IsParticipating(h.network, epoch) {
-				addToCommitteeMap(resultCommitteeMap, committee, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
-			}
+		if h.shouldExecuteSync(duty, slot, epoch) {
+			addToCommitteeMap(resultCommitteeMap, committee, h.toSpecSyncDuty(duty, slot, spectypes.BNRoleSyncCommittee))
 		}
 	}
 
@@ -181,10 +174,15 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 	}
 }
 
-func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
+func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch phase0.Epoch) bool {
+	share, found := h.validatorProvider.Validator(duty.PubKey[:])
+	if !found || !share.IsAttesting(epoch) || share.Liquidated {
+		return false
+	}
+
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
 
-	if participates := h.canParticipate(duty.PubKey[:], currentSlot); !participates {
+	if participates := h.canParticipate(share, currentSlot); !participates {
 		return false
 	}
 
@@ -201,10 +199,15 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty) bool {
 	return false
 }
 
-func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
+func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, epoch phase0.Epoch) bool {
+	share, found := h.validatorProvider.Validator(duty.PubKey[:])
+	if !found || !share.IsParticipating(h.network, epoch) {
+		return false
+	}
+
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
 
-	if participates := h.canParticipate(duty.PubKey[:], currentSlot); !participates {
+	if participates := h.canParticipate(share, currentSlot); !participates {
 		return false
 	}
 
@@ -220,19 +223,13 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 	return false
 }
 
-func (h *CommitteeHandler) canParticipate(pubKey []byte, currentSlot phase0.Slot) bool {
+func (h *CommitteeHandler) canParticipate(share *types.SSVShare, currentSlot phase0.Slot) bool {
 	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
 
-	v, exists := h.validatorProvider.Validator(pubKey)
-	if !exists {
-		h.logger.Warn("validator not found", fields.Validator(pubKey))
-		return false
-	}
-
-	if v.MinParticipationEpoch() > currentEpoch {
+	if share.MinParticipationEpoch() > currentEpoch {
 		h.logger.Debug("validator not yet participating",
-			fields.Validator(pubKey),
-			zap.Uint64("min_participation_epoch", uint64(v.MinParticipationEpoch())),
+			fields.Validator(share.SharePubKey),
+			zap.Uint64("min_participation_epoch", uint64(share.MinParticipationEpoch())),
 			zap.Uint64("current_epoch", uint64(currentEpoch)),
 		)
 		return false
