@@ -39,11 +39,18 @@ type CommitteeObserver struct {
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache       *DomainCache
 
-	// cache to identify duplicate computations of attester/sync committee roots
+	// cache to identify and skip duplicate computations of attester/sync committee roots
 	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
 
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
+}
+
+// BeaconVoteCacheKey is a composite key for identifying a unique call
+// to computing attester and sync committee roots.
+type BeaconVoteCacheKey struct {
+	root   phase0.Root
+	height specqbft.Height
 }
 
 type CommitteeObserverOptions struct {
@@ -338,11 +345,8 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 
 	// if the roots for this beacon vote hash and height have already been computed, skip
 	if ncv.beaconVoteRoots.Has(bnCacheKey) {
-		ncv.logger.Debug("found cached beacon vote roots", zap.Uint64("slot", uint64(qbftMsg.Height)), zap.String("root", hex.EncodeToString(beaconVote.BlockRoot[:])))
 		return nil
 	}
-
-	ncv.logger.Info("beacon vote roots not found in cache", zap.Uint64("slot", uint64(qbftMsg.Height)), zap.String("root", hex.EncodeToString(beaconVote.BlockRoot[:])))
 
 	epoch := ncv.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
@@ -356,16 +360,8 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 
 	// cache the roots for this beacon vote hash and height
 	ncv.beaconVoteRoots.Set(bnCacheKey, struct{}{}, ttlcache.DefaultTTL)
-	ncv.logger.Info("saved beacon vote roots", zap.Uint64("slot", uint64(qbftMsg.Height)), zap.String("root", hex.EncodeToString(beaconVote.BlockRoot[:])))
 
 	return nil
-}
-
-// BeaconVoteCacheKey is a composite key for identifying a unique call
-// to computing attester and sync committee roots.
-type BeaconVoteCacheKey struct {
-	root   phase0.Root
-	height specqbft.Height
 }
 
 func (ncv *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {

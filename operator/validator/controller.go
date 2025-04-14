@@ -180,10 +180,12 @@ type controller struct {
 	// nonCommittees is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
-	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache              *validator.DomainCache
-	beaconVoteRoots          *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
+
+	attesterRoots   *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots   *ttlcache.Cache[phase0.Root, struct{}]
+	beaconVoteRoots *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
+
+	domainCache *validator.DomainCache
 
 	recentlyStartedValidators uint64
 	indicesChange             chan struct{}
