@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"testing"
@@ -64,7 +65,7 @@ func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
 	return wallet, signerStorage, done
 }
 
-// TestWalletAndAccountManagement tests wallet and account operations
+// TestWalletAndAccountManagement tests wallet and account operations.
 func TestWalletAndAccountManagement(t *testing.T) {
 	t.Run("OpeningAccounts", func(t *testing.T) {
 		wallet, _, done := testWallet(t)
@@ -97,23 +98,150 @@ func TestWalletAndAccountManagement(t *testing.T) {
 		}
 	})
 
-	t.Run("OpenWallet_NonExistentWallet", func(t *testing.T) {
-		signerStorage, done := newStorageForTest(t)
-		defer done()
+	t.Run("OpenWallet", func(t *testing.T) {
+		t.Run("SuccessfulOpen", func(t *testing.T) {
+			wallet, signerStorage, done := testWallet(t)
+			defer done()
 
-		w, err := signerStorage.OpenWallet()
-		require.Error(t, err)
-		require.EqualError(t, err, "could not find wallet")
-		require.Nil(t, w)
+			// Verify original wallet
+			require.NotNil(t, wallet)
+
+			// Open wallet and verify
+			fetched, err := signerStorage.OpenWallet()
+			require.NoError(t, err)
+			require.NotNil(t, fetched)
+			require.Equal(t, wallet.ID(), fetched.ID())
+			require.Equal(t, wallet.Type(), fetched.Type())
+		})
+
+		t.Run("NonExistentWallet", func(t *testing.T) {
+			signerStorage, done := newStorageForTest(t)
+			defer done()
+
+			w, err := signerStorage.OpenWallet()
+			require.Error(t, err)
+			require.EqualError(t, err, "could not find wallet")
+			require.Nil(t, w)
+		})
+
+		t.Run("EmptyWalletValue", func(t *testing.T) {
+			signerStorage, done := newStorageForTest(t)
+			defer done()
+
+			// Use unexported field to set up test condition - store empty value
+			s := signerStorage.(*storage)
+			err := s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), []byte{})
+			require.NoError(t, err)
+
+			// Attempt to open wallet
+			wallet, err := signerStorage.OpenWallet()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "failed to open wallet")
+			require.Nil(t, wallet)
+		})
+
+		t.Run("InvalidWalletJSON", func(t *testing.T) {
+			signerStorage, done := newStorageForTest(t)
+			defer done()
+
+			// Use unexported field to set up test condition - store invalid JSON
+			s := signerStorage.(*storage)
+			err := s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), []byte("{invalid-json}"))
+			require.NoError(t, err)
+
+			// Attempt to open wallet
+			wallet, err := signerStorage.OpenWallet()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "unmarshal HD Wallet object")
+			require.Nil(t, wallet)
+		})
 	})
 
-	t.Run("OpenAccount_NonExistentAccount", func(t *testing.T) {
-		wallet, _, done := testWallet(t)
+	t.Run("OpenAccount", func(t *testing.T) {
+		t.Run("ExistingAccount", func(t *testing.T) {
+			_, signerStorage, done := testWallet(t)
+			defer done()
+
+			accounts, err := signerStorage.ListAccounts()
+			require.NoError(t, err)
+			require.NotEmpty(t, accounts)
+
+			account, err := signerStorage.OpenAccount(accounts[0].ID())
+			require.NoError(t, err)
+			require.NotNil(t, account)
+			require.Equal(t, accounts[0].ID(), account.ID())
+		})
+
+		t.Run("NonExistentAccount", func(t *testing.T) {
+			wallet, _, done := testWallet(t)
+			defer done()
+
+			account, err := wallet.AccountByID(uuid.New())
+			require.EqualError(t, err, "account not found")
+			require.Nil(t, account)
+		})
+	})
+
+	t.Run("AccountSerialization", func(t *testing.T) {
+		t.Run("ValidAccountRoundtrip", func(t *testing.T) {
+			_, signerStorage, done := testWallet(t)
+			defer done()
+
+			// Get an existing account
+			accounts, err := signerStorage.ListAccounts()
+			require.NoError(t, err)
+			require.NotEmpty(t, accounts)
+
+			originalAccount := accounts[0]
+			accountID := originalAccount.ID()
+
+			// save the account again (+ encode)
+			err = signerStorage.SaveAccount(originalAccount)
+			require.NoError(t, err)
+
+			// open the account (+ decode)
+			retrievedAccount, err := signerStorage.OpenAccount(accountID)
+			require.NoError(t, err)
+			require.NotNil(t, retrievedAccount)
+
+			require.Equal(t, originalAccount.ID(), retrievedAccount.ID())
+			require.Equal(t, originalAccount.Name(), retrievedAccount.Name())
+			require.Equal(t,
+				originalAccount.ValidatorPublicKey(),
+				retrievedAccount.ValidatorPublicKey())
+		})
+	})
+
+	t.Run("InvalidAccountJSON", func(t *testing.T) {
+		_, signerStorage, done := testWallet(t)
 		defer done()
 
-		account, err := wallet.AccountByID(uuid.New())
-		require.EqualError(t, err, "account not found")
-		require.Nil(t, account)
+		s := signerStorage.(*storage)
+		result, err := s.decodeAccount([]byte("{invalid-json}"))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unmarshal HD account object")
+		require.Nil(t, result)
+	})
+
+	t.Run("ValidAccountJSON", func(t *testing.T) {
+		_, signerStorage, done := testWallet(t)
+		defer done()
+
+		// Get an existing account and marshal it
+		accounts, err := signerStorage.ListAccounts()
+		require.NoError(t, err)
+		require.NotEmpty(t, accounts)
+
+		// This is a bit of a hack for testing, but we're assuming the storage format is JSON
+		data, err := json.Marshal(accounts[0])
+		require.NoError(t, err)
+
+		// Now decode it
+		s := signerStorage.(*storage)
+		result, err := s.decodeAccount(data)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, accounts[0].ID(), result.ID())
 	})
 
 	t.Run("WalletStorage", func(t *testing.T) {
@@ -172,7 +300,6 @@ func TestWalletAndAccountManagement(t *testing.T) {
 				require.NotNil(t, fetched)
 				require.NoError(t, test.error)
 
-				// assert
 				require.Equal(t, wallet.ID(), fetched.ID())
 				require.Equal(t, wallet.Type(), fetched.Type())
 			})
@@ -203,7 +330,7 @@ func TestWalletAndAccountManagement(t *testing.T) {
 	})
 }
 
-// TestStorageUtilityFunctions tests utility methods in Storage interface
+// TestStorageUtilityFunctions tests utility methods in Storage interface.
 func TestStorageUtilityFunctions(t *testing.T) {
 	t.Parallel()
 
@@ -243,9 +370,63 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "the key must be a valid hexadecimal string")
 	})
+
+	t.Run("DataEncryption", func(t *testing.T) {
+		t.Parallel()
+
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+
+		// create a test account
+		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
+		require.NoError(t, signerStorage.SaveWallet(wallet))
+
+		// generate a private key
+		sk := bls.SecretKey{}
+		sk.SetByCSPRNG()
+		index := 1
+
+		// create an account
+		account, err := wallet.CreateValidatorAccountFromPrivateKey(sk.Serialize(), &index)
+		require.NoError(t, err)
+		require.NotNil(t, account)
+		accountID := account.ID()
+
+		// test with encryption key
+		err = signerStorage.SetEncryptionKey("0123456789abcdef0123456789abcdef")
+		require.NoError(t, err)
+
+		// save the account (this will encrypt it)
+		err = signerStorage.SaveAccount(account)
+		require.NoError(t, err)
+
+		// retrieve the account (this will decrypt it)
+		retrievedAccount, err := signerStorage.OpenAccount(accountID)
+		require.NoError(t, err)
+		require.NotNil(t, retrievedAccount)
+		require.Equal(t, accountID, retrievedAccount.ID())
+
+		// now test without encryption key
+		err = signerStorage.SetEncryptionKey("")
+		require.NoError(t, err)
+
+		// save the account again (this won't encrypt it)
+		err = signerStorage.SaveAccount(account)
+		require.NoError(t, err)
+
+		// retrieve the account (no decryption needed)
+		retrievedAccount, err = signerStorage.OpenAccount(accountID)
+		require.NoError(t, err)
+		require.NotNil(t, retrievedAccount)
+		require.Equal(t, accountID, retrievedAccount.ID())
+	})
 }
 
-// TestSlashingProtection tests slashing protection data storage and retrieval
+// TestSlashingProtection tests slashing protection data storage and retrieval.
 func TestSlashingProtection(t *testing.T) {
 	t.Run("AttestationData", func(t *testing.T) {
 		_, signerStorage, done := testWallet(t)
@@ -300,17 +481,14 @@ func TestSlashingProtection(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				// Save attestation
 				err := signerStorage.SaveHighestAttestation(tc.account.ValidatorPublicKey(), tc.att)
 				require.NoError(t, err)
 
-				// Retrieve attestation
 				att, found, err := signerStorage.RetrieveHighestAttestation(tc.account.ValidatorPublicKey())
 				require.NoError(t, err)
 				require.True(t, found)
 				require.NotNil(t, att)
 
-				// Verify hash root matches
 				aRoot, err := att.HashTreeRoot()
 				require.NoError(t, err)
 				bRoot, err := tc.att.HashTreeRoot()
@@ -339,6 +517,40 @@ func TestSlashingProtection(t *testing.T) {
 			err := signerStorage.SaveHighestAttestation(pubKey, nil)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "attestation data could not be nil")
+		})
+
+		t.Run("InvalidAttestationSSZ", func(t *testing.T) {
+			_, signerStorage, done := testWallet(t)
+			defer done()
+
+			s := signerStorage.(*storage)
+			pubKey := []byte("test_pubkey")
+
+			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte("invalid-ssz-data"))
+			require.NoError(t, err)
+
+			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
+			require.Error(t, err)
+			require.True(t, found)
+			require.Contains(t, err.Error(), "could not unmarshal attestation data")
+			require.Nil(t, att)
+		})
+
+		t.Run("EmptyAttestationValue", func(t *testing.T) {
+			_, signerStorage, done := testWallet(t)
+			defer done()
+
+			s := signerStorage.(*storage)
+			pubKey := []byte("test_pubkey")
+
+			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte{})
+			require.NoError(t, err)
+
+			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
+			require.Error(t, err)
+			require.True(t, found)
+			require.Contains(t, err.Error(), "highest attestation value is empty")
+			require.Nil(t, att)
 		})
 
 		t.Run("remove_attestation", func(t *testing.T) {
@@ -437,6 +649,23 @@ func TestSlashingProtection(t *testing.T) {
 			err := signerStorage.SaveHighestProposal(pubKey, 0)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "invalid proposal slot, slot could not be 0")
+		})
+
+		t.Run("EmptyProposalValue", func(t *testing.T) {
+			_, signerStorage, done := testWallet(t)
+			defer done()
+
+			s := signerStorage.(*storage)
+			pubKey := []byte("test_pubkey")
+
+			err := s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, []byte{})
+			require.NoError(t, err)
+
+			slot, found, err := signerStorage.RetrieveHighestProposal(pubKey)
+			require.Error(t, err)
+			require.True(t, found)
+			require.Contains(t, err.Error(), "highest proposal value is empty")
+			require.Equal(t, phase0.Slot(0), slot)
 		})
 
 		t.Run("remove_proposal", func(t *testing.T) {
