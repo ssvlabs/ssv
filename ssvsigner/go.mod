@@ -21,7 +21,7 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.2
-	github.com/ssvlabs/ssv v1.2.1-0.20250409212656-7f364de40477
+	github.com/ssvlabs/ssv v1.2.1-0.20250414235141-2069a269b8b3
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/stretchr/testify v1.10.0
 	github.com/valyala/fasthttp v1.58.0
@@ -106,7 +106,6 @@ require (
 	github.com/wealdtech/go-eth2-util v1.8.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel/exporters/prometheus v0.54.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.32.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.32.0 // indirect
