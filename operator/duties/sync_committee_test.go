@@ -591,11 +591,11 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 }
 
 func eligibleShares() []*ssvtypes.SSVShare {
-	var eligibleShares []*ssvtypes.SSVShare
+	var result []*ssvtypes.SSVShare
 
 	participationShares := []*ssvtypes.SSVShare{
 		{
-			//share that is participating
+			// share that is participating
 			Share: spectypes.Share{
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
@@ -606,7 +606,7 @@ func eligibleShares() []*ssvtypes.SSVShare {
 			Liquidated: false,
 		},
 		{
-			//share that is participating
+			// share that is participating
 			Share: spectypes.Share{
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
@@ -617,7 +617,7 @@ func eligibleShares() []*ssvtypes.SSVShare {
 			Liquidated: false,
 		},
 		{
-			//share that is participating
+			// share that is participating
 			Share: spectypes.Share{
 				Committee: []*spectypes.ShareMember{
 					{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4},
@@ -669,8 +669,8 @@ func eligibleShares() []*ssvtypes.SSVShare {
 		},
 	}
 
-	eligibleShares = append(eligibleShares, participationShares...)
-	eligibleShares = append(eligibleShares, exitingShares...)
+	result = append(result, participationShares...)
+	result = append(result, exitingShares...)
 
-	return eligibleShares
+	return result
 }
