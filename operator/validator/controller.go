@@ -384,7 +384,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			AttesterRoots:     c.attesterRoots,
 			SyncCommRoots:     c.syncCommRoots,
 			DomainCache:       c.domainCache,
-			BeaconVoteRoots:   validator.NewBeaconVoteCacheWrapper(c.beaconVoteRoots),
+			BeaconVoteRoots:   c.beaconVoteRoots,
 		}
 		ncv = &committeeObserver{
 			CommitteeObserver: validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions),
