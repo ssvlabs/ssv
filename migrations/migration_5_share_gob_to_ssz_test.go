@@ -34,7 +34,6 @@ func TestMigration5_shareGOB_Decode(t *testing.T) {
 			},
 			Metadata: Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         32344747760,
 					Status:          3,
 					Index:           1680836,
 					ActivationEpoch: 47275,
@@ -69,7 +68,6 @@ func TestMigration5_shareGOB_Decode(t *testing.T) {
 			},
 			Metadata: Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         32267015779,
 					Status:          3,
 					Index:           1668022,
 					ActivationEpoch: 45673,

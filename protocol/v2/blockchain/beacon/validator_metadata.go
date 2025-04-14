@@ -5,9 +5,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-// ValidatorMetadata represents validator metdata from Ethereum beacon node
+// ValidatorMetadata represents validator metadata from Ethereum beacon node
 type ValidatorMetadata struct {
-	Balance         phase0.Gwei              `json:"balance"`
 	Status          eth2apiv1.ValidatorState `json:"status"`
 	Index           phase0.ValidatorIndex    `json:"index"`
 	ActivationEpoch phase0.Epoch             `json:"activation_epoch"`
@@ -19,7 +18,6 @@ func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
 	return other != nil &&
 		m.Status == other.Status &&
 		m.Index == other.Index &&
-		m.Balance == other.Balance &&
 		m.ActivationEpoch == other.ActivationEpoch &&
 		m.ExitEpoch == other.ExitEpoch
 }
