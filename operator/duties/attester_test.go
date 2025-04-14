@@ -39,7 +39,8 @@ func setupAttesterDutiesMock(
 		dutiesMap.Range(func(epoch phase0.Epoch, duties []*eth2apiv1.AttesterDuty) bool {
 			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
-			for _, d := range duties {
+			epochDuties, _ := dutiesMap.Get(epoch)
+			for _, d := range epochDuties {
 				uniqueIndices[d.ValidatorIndex] = true
 			}
 
@@ -48,7 +49,7 @@ func setupAttesterDutiesMock(
 					Share: spectypes.Share{
 						ValidatorIndex: index,
 					},
-					ActivationEpoch: 0,
+					ActivationEpoch: epoch,
 					Liquidated:      false,
 					Status:          eth2apiv1.ValidatorStateActiveOngoing,
 				}
@@ -824,7 +825,6 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	currentSlot.Set(phase0.Slot(51))
 	for slot := currentSlot.Get(); slot < 64; slot++ {
 		mockTicker.Send(slot)
-		//here it fails
 		waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 		currentSlot.Set(slot + 1)
 	}
