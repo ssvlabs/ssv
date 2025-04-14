@@ -135,5 +135,5 @@ func (p *publicKey) Base64() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return b, err
+	return b, nil
 }
