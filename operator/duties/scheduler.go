@@ -62,8 +62,8 @@ type ExecutionClient interface {
 
 // ValidatorProvider represents the component that controls validators via the scheduler
 type ValidatorProvider interface {
+	Validators() []*types.SSVShare
 	SelfValidators() []*types.SSVShare
-	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	Validator(pubKey []byte) (*types.SSVShare, bool)
 }

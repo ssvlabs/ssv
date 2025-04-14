@@ -198,11 +198,12 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 	}
 	shares := c.OperatorValidators(c.operatorID())
 	var participating []*types.SSVShare
-	for _, validator := range shares {
-		if validator.IsParticipating(c.networkConfig, epoch) {
-			participating = append(participating, validator)
+	for _, share := range shares {
+		if share.IsParticipating(c.networkConfig, epoch) {
+			participating = append(participating, share)
 		}
 	}
+
 	return participating
 }
 

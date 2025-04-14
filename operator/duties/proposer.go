@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ProposerHandler struct {
@@ -150,19 +151,41 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 
-	allIndices := indicesFromShares(h.validatorProvider.ParticipatingValidators(epoch))
-	if len(allIndices) == 0 {
+	isAttestingFilter := func(epoch phase0.Epoch, share *types.SSVShare) bool {
+		if !share.Liquidated && share.IsAttesting(epoch) {
+			return true
+		}
+		return false
+	}
+
+	var attestingShares []*types.SSVShare
+	for _, share := range h.validatorProvider.Validators() {
+		if isAttestingFilter(epoch, share) {
+			attestingShares = append(attestingShares, share)
+		}
+	}
+
+	attestingIndices := indicesFromShares(attestingShares)
+	if len(attestingIndices) == 0 {
 		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
-	selfIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
+	var selfAttestingShares []*types.SSVShare
+	for _, share := range h.validatorProvider.SelfValidators() {
+		if isAttestingFilter(epoch, share) {
+			selfAttestingShares = append(selfAttestingShares, share)
+		}
+	}
+
+	selfAttestingIndices := indicesFromShares(selfAttestingShares)
+
 	selfIndicesSet := map[phase0.ValidatorIndex]struct{}{}
-	for _, idx := range selfIndices {
+	for _, idx := range selfAttestingIndices {
 		selfIndicesSet[idx] = struct{}{}
 	}
 
-	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allIndices)
+	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, attestingIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}

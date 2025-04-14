@@ -27,6 +27,7 @@ import (
 type MockDutiesExecutor struct {
 	ctrl     *gomock.Controller
 	recorder *MockDutiesExecutorMockRecorder
+	isgomock struct{}
 }
 
 // MockDutiesExecutorMockRecorder is the mock recorder for MockDutiesExecutor.
@@ -74,6 +75,7 @@ func (mr *MockDutiesExecutorMockRecorder) ExecuteDuties(ctx, logger, duties any)
 type MockDutyExecutor struct {
 	ctrl     *gomock.Controller
 	recorder *MockDutyExecutorMockRecorder
+	isgomock struct{}
 }
 
 // MockDutyExecutorMockRecorder is the mock recorder for MockDutyExecutor.
@@ -121,6 +123,7 @@ func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(ctx, logger, duty any) *gomo
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNodeMockRecorder
+	isgomock struct{}
 }
 
 // MockBeaconNodeMockRecorder is the mock recorder for MockBeaconNode.
@@ -231,6 +234,7 @@ func (mr *MockBeaconNodeMockRecorder) SyncCommitteeDuties(ctx, epoch, indices an
 type MockExecutionClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutionClientMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutionClientMockRecorder is the mock recorder for MockExecutionClient.
@@ -269,6 +273,7 @@ func (mr *MockExecutionClientMockRecorder) BlockByNumber(ctx, blockNumber any) *
 type MockValidatorProvider struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorProviderMockRecorder
+	isgomock struct{}
 }
 
 // MockValidatorProviderMockRecorder is the mock recorder for MockValidatorProvider.
@@ -286,20 +291,6 @@ func NewMockValidatorProvider(ctrl *gomock.Controller) *MockValidatorProvider {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
 	return m.recorder
-}
-
-// ParticipatingValidators mocks base method.
-func (m *MockValidatorProvider) ParticipatingValidators(epoch phase0.Epoch) []*types1.SSVShare {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types1.SSVShare)
-	return ret0
-}
-
-// ParticipatingValidators indicates an expected call of ParticipatingValidators.
-func (mr *MockValidatorProviderMockRecorder) ParticipatingValidators(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).ParticipatingValidators), epoch)
 }
 
 // SelfParticipatingValidators mocks base method.
@@ -345,10 +336,25 @@ func (mr *MockValidatorProviderMockRecorder) Validator(pubKey any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockValidatorProvider)(nil).Validator), pubKey)
 }
 
+// Validators mocks base method.
+func (m *MockValidatorProvider) Validators() []*types1.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validators")
+	ret0, _ := ret[0].([]*types1.SSVShare)
+	return ret0
+}
+
+// Validators indicates an expected call of Validators.
+func (mr *MockValidatorProviderMockRecorder) Validators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validators", reflect.TypeOf((*MockValidatorProvider)(nil).Validators))
+}
+
 // MockValidatorController is a mock of ValidatorController interface.
 type MockValidatorController struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorControllerMockRecorder
+	isgomock struct{}
 }
 
 // MockValidatorControllerMockRecorder is the mock recorder for MockValidatorController.

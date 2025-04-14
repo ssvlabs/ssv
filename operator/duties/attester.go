@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type AttesterHandler struct {
@@ -182,14 +183,21 @@ func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epo
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) error {
 	start := time.Now()
-	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
 
-	if len(indices) == 0 {
+	var selfAttestingShares []*types.SSVShare
+	for _, share := range h.validatorProvider.SelfValidators() {
+		if !share.Liquidated && share.IsAttesting(epoch) {
+			selfAttestingShares = append(selfAttestingShares, share)
+		}
+	}
+
+	selfAttestingIndices := indicesFromShares(selfAttestingShares)
+	if len(selfAttestingIndices) == 0 {
 		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
-	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, indices)
+	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, selfAttestingIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
