@@ -84,9 +84,8 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				result := make(map[phase0.ValidatorIndex]*eth2apiv1.Validator)
 				for i, pk := range pubKeys {
 					result[phase0.ValidatorIndex(i)] = &eth2apiv1.Validator{
-						Index:   tc.metadata.Index,
-						Balance: tc.metadata.Balance,
-						Status:  tc.metadata.Status,
+						Index:  tc.metadata.Index,
+						Status: tc.metadata.Status,
 						Validator: &phase0.Validator{
 							ActivationEpoch: tc.metadata.ActivationEpoch,
 							PublicKey:       pk,

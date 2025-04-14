@@ -2,6 +2,8 @@ package slashinginterceptor
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -9,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	beaconproxy "github.com/ssvlabs/ssv/e2e/beacon_proxy"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -150,14 +151,14 @@ func (s *SlashingInterceptor) checkStartEpochProposalSubmission() {
 			s.logger.Debug("validator did not submit proposal in start epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", gatewayNames(maps.Keys(state.firstSubmittedBlock))),
+				zap.Any("submitters", gatewayNames(slices.Collect(maps.Keys(state.firstSubmittedBlock)))),
 			)
 		} else {
 			submittedCount++
 			s.logger.Debug("validator submitted proposal in start epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", gatewayNames(maps.Keys(state.firstSubmittedBlock))),
+				zap.Any("submitters", gatewayNames(slices.Collect(maps.Keys(state.firstSubmittedBlock)))),
 			)
 		}
 	}
@@ -181,14 +182,14 @@ func (s *SlashingInterceptor) checkStartEpochAttestationSubmission() {
 			s.logger.Debug("validator did not submit in start epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", gatewayNames(maps.Keys(state.firstSubmittedAttestation))),
+				zap.Any("submitters", gatewayNames(slices.Collect(maps.Keys(state.firstSubmittedAttestation)))),
 			)
 		} else {
 			submittedCount++
 			s.logger.Debug("validator submitted in start epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", gatewayNames(maps.Keys(state.firstSubmittedAttestation))),
+				zap.Any("submitters", gatewayNames(slices.Collect(maps.Keys(state.firstSubmittedAttestation)))),
 			)
 		}
 	}
@@ -210,7 +211,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 				s.logger.Error("found slashable validator",
 					zap.Any("validator_index", state.validator.Index),
 					zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-					zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
+					zap.Any("submitters", gatewayNames(slices.Collect(maps.Keys(state.secondSubmittedAttestation)))),
 					zap.Any("first_attestation", state.firstSubmittedAttestation),
 					zap.Any("second_attestation", state.secondSubmittedAttestation),
 					zap.Any("test", state.attesterTest.Name),
@@ -220,7 +221,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 			s.logger.Debug("validator did not submit in end epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
+				zap.Any("submitters", gatewayNames(slices.Collect(maps.Keys(state.secondSubmittedAttestation)))),
 				zap.Any("test", state.attesterTest.Name),
 			)
 		} else {
@@ -228,7 +229,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 			s.logger.Debug("validator submitted in end epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
+				zap.Any("submitters", gatewayNames(slices.Collect(maps.Keys(state.secondSubmittedAttestation)))),
 				zap.Any("test", state.attesterTest.Name),
 			)
 		}
