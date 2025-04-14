@@ -39,8 +39,7 @@ func setupAttesterDutiesMock(
 		dutiesMap.Range(func(epoch phase0.Epoch, duties []*eth2apiv1.AttesterDuty) bool {
 			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
-			epochDuties, _ := dutiesMap.Get(epoch)
-			for _, d := range epochDuties {
+			for _, d := range duties {
 				uniqueIndices[d.ValidatorIndex] = true
 			}
 
@@ -51,7 +50,8 @@ func setupAttesterDutiesMock(
 					},
 					ActivationEpoch: epoch,
 					Liquidated:      false,
-					Status:          eth2apiv1.ValidatorStateActiveOngoing,
+					//this particular status is needed so that ActivationEpoch can be taken into consideration when checking the IsAttesting() condition.
+					Status: eth2apiv1.ValidatorStatePendingQueued,
 				}
 				attestingShares = append(attestingShares, attestingShare)
 			}
