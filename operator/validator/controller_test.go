@@ -16,6 +16,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/jellydator/ttlcache/v3"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -982,4 +983,58 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 	return s, func() {
 		db.Close()
 	}
+}
+
+func TestBeaconVoteCacheWrapper(t *testing.T) {
+	// Create a new cache with a short TTL for testing
+	cache := ttlcache.New(
+		ttlcache.WithTTL[BeaconVoteHashKey, struct{}](100 * time.Millisecond),
+	)
+	wrapper := &beaconVoteCacheWrapper{Cache: cache}
+
+	// Start the cache cleanup goroutine
+	go cache.Start()
+	defer cache.Stop()
+
+	// Test data
+	root := phase0.Root{1, 2, 3}
+	height := specqbft.Height(1)
+
+	// Test Set and Has
+	t.Run("SetAndHas", func(t *testing.T) {
+		// Initially should not have the key
+		require.False(t, wrapper.Has(root, height))
+
+		// Set the key
+		wrapper.Set(root, height)
+
+		// Should have the key now
+		require.True(t, wrapper.Has(root, height))
+
+		// Wait for TTL to expire
+		time.Sleep(150 * time.Millisecond)
+
+		// Should not have the key after TTL expires
+		require.False(t, wrapper.Has(root, height))
+	})
+
+	// Test multiple keys
+	t.Run("MultipleKeys", func(t *testing.T) {
+		root1 := phase0.Root{1, 2, 3}
+		root2 := phase0.Root{4, 5, 6}
+		height1 := specqbft.Height(1)
+		height2 := specqbft.Height(2)
+
+		// Set both keys
+		wrapper.Set(root1, height1)
+		wrapper.Set(root2, height2)
+
+		// Both keys should exist
+		require.True(t, wrapper.Has(root1, height1))
+		require.True(t, wrapper.Has(root2, height2))
+
+		// Different combinations should not exist
+		require.False(t, wrapper.Has(root1, height2))
+		require.False(t, wrapper.Has(root2, height1))
+	})
 }
