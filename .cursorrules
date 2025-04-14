@@ -17,3 +17,7 @@
 - Prefer the logger with most context (method logger > struct logger > global logger)
 - Prefer DEBUG level, unless it's an error the node operator should be aware of and can potentially fix
 - Prefer `fields.FieldName` over `zap.String("fieldName", value)` for common fields such as Validator and Slot
+
+// Conventions
+
+- Argument order for funcs and methods: (ctx, logger, deps..., args...)
