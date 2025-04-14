@@ -64,6 +64,7 @@ func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
 	return wallet, signerStorage, done
 }
 
+// TestOpeningAccounts tests creating and retrieving validator accounts.
 func TestOpeningAccounts(t *testing.T) {
 	wallet, _, done := testWallet(t)
 	defer done()
@@ -73,6 +74,7 @@ func TestOpeningAccounts(t *testing.T) {
 	for i := range 10 {
 		testName := fmt.Sprintf("adding and fetching account: %d", i)
 		t.Run(testName, func(t *testing.T) {
+
 			// create
 			a, err := wallet.CreateValidatorAccount(seed, nil)
 			require.NoError(t, err)
@@ -95,7 +97,48 @@ func TestOpeningAccounts(t *testing.T) {
 	}
 }
 
-func TestDeleteAccount(t *testing.T) {
+// TestStorage_SetEncryptionKey tests that SetEncryptionKey properly validates hex strings.
+func TestStorage_SetEncryptionKey(t *testing.T) {
+	t.Parallel()
+
+	logger := logging.TestLogger(t)
+
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	defer db.Close()
+
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+
+	err = signerStorage.SetEncryptionKey("aabbccddee")
+	require.NoError(t, err)
+
+	err = signerStorage.SetEncryptionKey("invalid-hex-key")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "the key must be a valid hexadecimal string")
+}
+
+// TestStorage_StorageName tests the Name method.
+func TestStorage_StorageName(t *testing.T) {
+	t.Parallel()
+
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	name := signerStorage.Name()
+	require.Equal(t, "SSV Storage", name)
+}
+
+// TestStorage_DropRegistryData tests dropping registry data.
+func TestStorage_DropRegistryData(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	err := signerStorage.DropRegistryData()
+	require.NoError(t, err)
+}
+
+// TestStorage_DeleteAccount tests that account deletion works correctly.
+func TestStorage_DeleteAccount(t *testing.T) {
 	_, signerStorage, done := testWallet(t)
 	defer done()
 
@@ -109,7 +152,8 @@ func TestDeleteAccount(t *testing.T) {
 	require.Nil(t, acc)
 }
 
-func TestNonExistingWallet(t *testing.T) {
+// TestStorage_OpenWallet_NonExistentWallet tests that OpenWallet properly handles missing wallets.
+func TestStorage_OpenWallet_NonExistentWallet(t *testing.T) {
 	signerStorage, done := newStorageForTest(t)
 	defer done()
 
@@ -119,7 +163,8 @@ func TestNonExistingWallet(t *testing.T) {
 	require.Nil(t, w)
 }
 
-func TestNonExistingAccount(t *testing.T) {
+// TestStorage_OpenAccount_NonExistentAccount tests that OpenAccount properly handles missing accounts.
+func TestStorage_OpenAccount_NonExistentAccount(t *testing.T) {
 	wallet, _, done := testWallet(t)
 	defer done()
 
@@ -128,7 +173,8 @@ func TestNonExistingAccount(t *testing.T) {
 	require.Nil(t, account)
 }
 
-func TestWalletStorage(t *testing.T) {
+// TestStorage_WalletStorage tests saving and retrieving wallet data with different encryptors.
+func TestStorage_WalletStorage(t *testing.T) {
 	tests := []struct {
 		name       string
 		walletName string
@@ -149,7 +195,6 @@ func TestWalletStorage(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			wallet, signerStorage, done := testWallet(t)
 			defer done()
@@ -190,6 +235,203 @@ func TestWalletStorage(t *testing.T) {
 			require.Equal(t, wallet.Type(), fetched.Type())
 		})
 	}
+}
+
+// TestStorage_ListAccounts tests listing accounts.
+func TestStorage_ListAccounts(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	accounts, err := signerStorage.ListAccounts()
+	require.NoError(t, err)
+	require.Len(t, accounts, 1)
+}
+
+// TestStorage_SaveLoadHighestProposal tests saving and loading proposal data.
+func TestStorage_SaveLoadHighestProposal(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	tests := []struct {
+		name     string
+		proposal phase0.Slot
+		account  core.ValidatorAccount
+	}{
+		{
+			name:     "simple save",
+			proposal: testSlot(),
+			account: &mockAccount{
+				id:            uuid.New(),
+				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+			},
+		},
+		{
+			name:     "slot_100",
+			proposal: phase0.Slot(100),
+			account: &mockAccount{
+				id:            uuid.New(),
+				validationKey: _bigInt("6467048590701165350380985526996487573957450279098876378395441669247373404219"),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// save
+			err := signerStorage.SaveHighestProposal(tc.account.ValidatorPublicKey(), tc.proposal)
+			require.NoError(t, err)
+
+			// fetch
+			proposal, found, err := signerStorage.RetrieveHighestProposal(tc.account.ValidatorPublicKey())
+			require.NoError(t, err)
+			require.True(t, found)
+			require.Equal(t, tc.proposal, proposal)
+		})
+	}
+}
+
+// TestStorage_SaveLoadHighestAttestation tests saving and loading attestation data.
+func TestStorage_SaveLoadHighestAttestation(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	testCases := []struct {
+		name    string
+		att     *phase0.AttestationData
+		account core.ValidatorAccount
+	}{
+		{
+			name: "standard_attestation",
+			att: &phase0.AttestationData{
+				Slot:            30,
+				Index:           1,
+				BeaconBlockRoot: [32]byte{},
+				Source: &phase0.Checkpoint{
+					Epoch: 1,
+					Root:  [32]byte{},
+				},
+				Target: &phase0.Checkpoint{
+					Epoch: 4,
+					Root:  [32]byte{},
+				},
+			},
+			account: &mockAccount{
+				id:            uuid.New(),
+				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+			},
+		},
+		{
+			name: "differing_target_epoch",
+			att: &phase0.AttestationData{
+				Slot:            30,
+				Index:           1,
+				BeaconBlockRoot: [32]byte{},
+				Source: &phase0.Checkpoint{
+					Epoch: 1,
+					Root:  [32]byte{},
+				},
+				Target: &phase0.Checkpoint{
+					Epoch: 3,
+					Root:  [32]byte{},
+				},
+			},
+			account: &mockAccount{
+				id:            uuid.New(),
+				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// save
+			err := signerStorage.SaveHighestAttestation(tc.account.ValidatorPublicKey(), tc.att)
+			require.NoError(t, err)
+
+			// fetch
+			att, found, err := signerStorage.RetrieveHighestAttestation(tc.account.ValidatorPublicKey())
+			require.NoError(t, err)
+			require.True(t, found)
+			require.NotNil(t, att)
+
+			// test equal
+			aRoot, err := att.HashTreeRoot()
+			require.NoError(t, err)
+			bRoot, err := tc.att.HashTreeRoot()
+			require.NoError(t, err)
+			require.Equal(t, aRoot, bRoot)
+		})
+	}
+}
+
+// TestStorage_SaveRemoveHighestAttestation tests that attestation data can be removed.
+func TestStorage_SaveRemoveHighestAttestation(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	account := &mockAccount{
+		id:            uuid.New(),
+		validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+	}
+
+	att := &phase0.AttestationData{
+		Slot:            30,
+		Index:           1,
+		BeaconBlockRoot: [32]byte{},
+		Source: &phase0.Checkpoint{
+			Epoch: 1,
+			Root:  [32]byte{},
+		},
+		Target: &phase0.Checkpoint{
+			Epoch: 4,
+			Root:  [32]byte{},
+		},
+	}
+
+	err := signerStorage.SaveHighestAttestation(account.ValidatorPublicKey(), att)
+	require.NoError(t, err)
+
+	retrieved, found, err := signerStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, retrieved)
+
+	err = signerStorage.RemoveHighestAttestation(account.ValidatorPublicKey())
+	require.NoError(t, err)
+
+	retrieved, found, err = signerStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Nil(t, retrieved)
+}
+
+// TestStorage_SaveRemoveHighestProposal tests that proposal data can be removed.
+func TestStorage_SaveRemoveHighestProposal(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	account := &mockAccount{
+		id:            uuid.New(),
+		validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+	}
+
+	proposal := phase0.Slot(42)
+
+	err := signerStorage.SaveHighestProposal(account.ValidatorPublicKey(), proposal)
+	require.NoError(t, err)
+
+	retrieved, found, err := signerStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, proposal, retrieved)
+
+	err = signerStorage.RemoveHighestProposal(account.ValidatorPublicKey())
+	require.NoError(t, err)
+
+	retrieved, found, err = signerStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Equal(t, phase0.Slot(0), retrieved)
 }
 
 /*
