@@ -988,9 +988,9 @@ func newOperatorStorageForTest(logger *zap.Logger) (registrystorage.Operators, f
 func TestBeaconVoteCacheWrapper(t *testing.T) {
 	// Create a new cache with a short TTL for testing
 	cache := ttlcache.New(
-		ttlcache.WithTTL[BeaconVoteHashKey, struct{}](100 * time.Millisecond),
+		ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](100 * time.Millisecond),
 	)
-	wrapper := &beaconVoteCacheWrapper{Cache: cache}
+	wrapper := &validator.BeaconVoteCache{Cache: cache}
 
 	// Start the cache cleanup goroutine
 	go cache.Start()

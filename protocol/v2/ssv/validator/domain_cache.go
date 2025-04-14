@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -47,4 +48,27 @@ func (dc *DomainCache) Get(epoch phase0.Epoch, domainType phase0.DomainType) (ph
 
 	dc.cache.Set(key, domain, ttlcache.DefaultTTL)
 	return domain, nil
+}
+
+type BeaconVoteCacheKey struct {
+	root   phase0.Root
+	height specqbft.Height
+}
+
+// BeaconVoteCache is a wrapper around ttlcache.Cache[BeaconVoteCacheKey, struct{}]
+// it is needed to avoid passing composite key (BeaconVoteCacheKey) down to the non-committee validator
+type BeaconVoteCache struct {
+	*ttlcache.Cache[BeaconVoteCacheKey, struct{}]
+}
+
+func NewBeaconVoteCacheWrapper(cache *ttlcache.Cache[BeaconVoteCacheKey, struct{}]) *BeaconVoteCache {
+	return &BeaconVoteCache{Cache: cache}
+}
+
+func (c *BeaconVoteCache) Set(root phase0.Root, height specqbft.Height) {
+	c.Cache.Set(BeaconVoteCacheKey{root: root, height: height}, struct{}{}, ttlcache.DefaultTTL)
+}
+
+func (c *BeaconVoteCache) Has(root phase0.Root, height specqbft.Height) bool {
+	return c.Cache.Has(BeaconVoteCacheKey{root: root, height: height})
 }

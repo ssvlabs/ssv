@@ -40,7 +40,7 @@ type CommitteeObserver struct {
 	domainCache       *DomainCache
 
 	// cache to identify duplicate computations of attester/sync committee roots
-	beaconVoteRoots cache
+	beaconVoteRoots *BeaconVoteCache
 
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
@@ -59,12 +59,7 @@ type CommitteeObserverOptions struct {
 	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	DomainCache       *DomainCache
-	BeaconVoteRoots   cache
-}
-
-type cache interface {
-	Set(phase0.Root, specqbft.Height)
-	Has(phase0.Root, specqbft.Height) bool
+	BeaconVoteRoots   *BeaconVoteCache
 }
 
 func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
