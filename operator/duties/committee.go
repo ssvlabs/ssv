@@ -87,13 +87,11 @@ func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterD
 	selfValidators := h.validatorProvider.SelfValidators()
 
 	validatorCommittees := map[phase0.ValidatorIndex]committeeDuty{}
-
 	for _, validatorShare := range selfValidators {
 		committeeDuty := committeeDuty{
 			id:          validatorShare.CommitteeID(),
 			operatorIDs: validatorShare.OperatorIDs(),
 		}
-
 		validatorCommittees[validatorShare.ValidatorIndex] = committeeDuty
 	}
 
