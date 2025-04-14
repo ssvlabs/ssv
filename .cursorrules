@@ -18,6 +18,10 @@
 - Prefer DEBUG level, unless it's an error the node operator should be aware of and can potentially fix
 - Prefer `fields.FieldName` over `zap.String("fieldName", value)` for common fields such as Validator and Slot
 
+// Testing
+
+- Use github.com/stretchr/testify
+
 // Conventions
 
 - Argument order for funcs and methods: (ctx, logger, deps..., args...)
