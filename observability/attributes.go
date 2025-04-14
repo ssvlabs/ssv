@@ -31,6 +31,10 @@ func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
 	}
 }
 
+func RoundChangeReasonAttribute(reason string) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.round.change_reason", reason)
+}
+
 func NetworkDirectionAttribute(direction network.Direction) attribute.KeyValue {
 	return attribute.String("ssv.p2p.connection.direction", strings.ToLower(direction.String()))
 }

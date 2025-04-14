@@ -249,7 +249,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		successfullySubmittedAggregates++
 		logger.Debug("✅ successful submitted aggregate",
 			fields.SubmissionTime(time.Since(start)),
-		)
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
 	}
 
 	r.GetState().Finished = true
