@@ -3,9 +3,10 @@ package ekm
 import (
 	"context"
 	"encoding/hex"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"testing"
 	"time"
+
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/altair"
