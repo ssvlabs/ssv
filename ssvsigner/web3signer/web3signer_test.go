@@ -22,7 +22,7 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 		server.Close()
 	})
 
-	web3Signer := New(server.URL)
+	web3Signer := New(server.URL, nil)
 
 	return server, web3Signer
 }
@@ -48,7 +48,7 @@ func TestNew(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := New(tt.baseURL)
+			client := New(tt.baseURL, nil)
 			require.NotNil(t, client)
 
 			expectedBaseURL := tt.baseURL

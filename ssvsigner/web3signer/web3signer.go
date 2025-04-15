@@ -2,6 +2,7 @@ package web3signer
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net/http"
 	"strings"
@@ -16,14 +17,23 @@ type Web3Signer struct {
 	httpClient *http.Client
 }
 
-func New(baseURL string) *Web3Signer {
+// New creates a new Web3Signer client with the given base URL and optional TLS configuration.
+func New(baseURL string, tlsConfig *tls.Config) *Web3Signer {
 	baseURL = strings.TrimRight(baseURL, "/")
 
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	if tlsConfig != nil {
+		client.Transport = &http.Transport{
+			TLSClientConfig: tlsConfig,
+		}
+	}
+
 	return &Web3Signer{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		baseURL:    baseURL,
+		httpClient: client,
 	}
 }
 
