@@ -1,12 +1,13 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/maps"
 )
 
 func TestDiffer(t *testing.T) {
@@ -111,7 +112,7 @@ func TestDiffer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, elems)
 	require.Equal(t, 1, len(elems))
-	require.Equal(t, []string{"ProposerRunner.ProcessPostConsensus"}, maps.Keys(elems))
+	require.Equal(t, []string{"ProposerRunner.ProcessPostConsensus"}, slices.Collect(maps.Keys(elems)))
 
 	elem := elems["ProposerRunner.ProcessPostConsensus"]
 	require.Equal(t, "ProposerRunner.ProcessPostConsensus", elem.Name)
