@@ -2,6 +2,7 @@ package keystore
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +20,10 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	require.NoError(&testing.T{}, bls.Init(bls.BLS12_381))
+	if err := bls.Init(bls.BLS12_381); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize BLS: %v\n", err)
+		os.Exit(1)
+	}
 	os.Exit(m.Run())
 }
 
