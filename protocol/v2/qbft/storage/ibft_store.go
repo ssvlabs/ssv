@@ -36,6 +36,7 @@ type ParticipantsRangeEntry struct {
 	Identifier convert.MessageID
 }
 
+// TODO: Take all of these from https://github.com/ssvlabs/ssv/pull/2110 once it's merged.
 type Quorum struct {
 	Signers   []spectypes.OperatorID
 	Committee []spectypes.OperatorID
