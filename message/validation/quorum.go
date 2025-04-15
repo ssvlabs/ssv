@@ -7,9 +7,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-// TODO: Take all of these from https://github.com/ssvlabs/ssv/pull/1867 once it's merged.
-// This file is temporary to avoid the need to be based on another PR, hence there are no tests.
-
 const maxCommitteeSize = 13
 
 type Quorum struct {
