@@ -2,77 +2,76 @@ package networkconfig
 
 import (
 	"encoding/json"
-	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
-var SupportedConfigs = map[string]NetworkConfig{
-	Mainnet.Name:      Mainnet,
-	Holesky.Name:      Holesky,
-	HoleskyStage.Name: HoleskyStage,
-	LocalTestnet.Name: LocalTestnet,
-	HoleskyE2E.Name:   HoleskyE2E,
-	Hoodi.Name:        Hoodi,
-	HoodiStage.Name:   HoodiStage,
-	Sepolia.Name:      Sepolia,
+//go:generate go tool -modfile=../../tool.mod mockgen -package=networkconfig -destination=./mock.go -source=./config.go
+
+type Interface interface { // TODO: rename?
+	BeaconNetwork() string
+	DomainType() spectypes.DomainType
+	GenesisForkVersion() phase0.Version
+	GenesisTime() time.Time
+	SlotDuration() time.Duration
+	SlotsPerEpoch() phase0.Slot
+	SyncCommitteeSize() uint64
+
+	EstimatedCurrentSlot() phase0.Slot
+	EstimatedCurrentEpoch() phase0.Epoch
+	EstimatedSlotAtTime(time time.Time) phase0.Slot
+	EstimatedTimeAtSlot(slot phase0.Slot) time.Time
+	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
+	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
+	EpochStartTime(epoch phase0.Epoch) time.Time
+	GetSlotStartTime(slot phase0.Slot) time.Time
+	GetSlotEndTime(slot phase0.Slot) time.Time
+	IsFirstSlotOfEpoch(slot phase0.Slot) bool
+	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
+	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
+	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
+	LastSlotOfSyncPeriod(period uint64) phase0.Slot
+	IntervalDuration() time.Duration
+	SlotsPerPeriod() phase0.Slot
 }
 
-const forkName = "alan"
-
-func GetNetworkConfigByName(name string) (NetworkConfig, error) {
-	if network, ok := SupportedConfigs[name]; ok {
-		return network, nil
-	}
-
-	return NetworkConfig{}, fmt.Errorf("network not supported: %v", name)
-}
+var _ Interface = NetworkConfig{}
 
 type NetworkConfig struct {
-	Name                 string
-	Beacon               beacon.BeaconNetwork
-	DomainType           spectypes.DomainType
-	GenesisEpoch         phase0.Epoch
-	RegistrySyncOffset   *big.Int
-	RegistryContractAddr string // TODO: ethcommon.Address
-	Bootnodes            []string
-	DiscoveryProtocolID  [6]byte
+	SSV
+	Beacon
 }
 
 func (n NetworkConfig) String() string {
-	b, err := json.MarshalIndent(n, "", "\t")
+	jsonBytes, err := json.Marshal(n)
 	if err != nil {
-		return "<malformed>"
+		panic(err)
 	}
 
-	return string(b)
+	return string(jsonBytes)
 }
 
-func (n NetworkConfig) NetworkName() string {
-	return fmt.Sprintf("%s:%s", n.Name, forkName)
-}
-
-// ForkVersion returns the fork version of the network.
-func (n NetworkConfig) ForkVersion() [4]byte {
-	return n.Beacon.ForkVersion()
-}
-
-// SlotDurationSec returns slot duration
-func (n NetworkConfig) SlotDurationSec() time.Duration {
-	return n.Beacon.SlotDurationSec()
+// SlotDuration returns slot duration
+func (n NetworkConfig) SlotDuration() time.Duration {
+	return n.Beacon.SlotDuration
 }
 
 // SlotsPerEpoch returns number of slots per one epoch
-func (n NetworkConfig) SlotsPerEpoch() uint64 {
-	return n.Beacon.SlotsPerEpoch()
+func (n NetworkConfig) SlotsPerEpoch() phase0.Slot {
+	return n.Beacon.SlotsPerEpoch
 }
 
-// GetGenesisTime returns the genesis time in unix time.
-func (n NetworkConfig) GetGenesisTime() time.Time {
-	return time.Unix(n.Beacon.MinGenesisTime(), 0)
+// DomainType returns current domain type based on the current fork.
+func (n NetworkConfig) DomainType() spectypes.DomainType {
+	return n.SSV.DomainType
+}
+
+func (n NetworkConfig) BeaconNetwork() string {
+	return n.NetworkName
+}
+
+func (n NetworkConfig) SyncCommitteeSize() uint64 {
+	return n.Beacon.SyncCommitteeSize
 }

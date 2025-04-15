@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
@@ -32,7 +33,7 @@ type Committee struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	BeaconNetwork spectypes.BeaconNetwork
+	beaconConfig networkconfig.Beacon
 
 	// mtx syncs access to Queues, Runners, Shares.
 	mtx     sync.RWMutex
@@ -51,7 +52,7 @@ func NewCommittee(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	logger *zap.Logger,
-	beaconNetwork spectypes.BeaconNetwork,
+	beaconConfig networkconfig.Beacon,
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
@@ -62,7 +63,7 @@ func NewCommittee(
 	}
 	return &Committee{
 		logger:          logger,
-		BeaconNetwork:   beaconNetwork,
+		beaconConfig:    beaconConfig,
 		ctx:             ctx,
 		cancel:          cancel,
 		Queues:          make(map[phase0.Slot]queueContainer),
@@ -268,7 +269,7 @@ func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot ph
 	for slot := range c.Runners {
 		if slot <= minValidSlot {
 			opIds := types.OperatorIDsFromOperators(c.CommitteeMember.Committee)
-			epoch := c.BeaconNetwork.EstimatedEpochAtSlot(slot)
+			epoch := c.beaconConfig.EstimatedEpochAtSlot(slot)
 			committeeDutyID := fields.FormatCommitteeDutyID(opIds, epoch, slot)
 			logger = logger.With(fields.DutyID(committeeDutyID))
 			logger.Debug("pruning expired committee runner", zap.Uint64("slot", uint64(slot)))

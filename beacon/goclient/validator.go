@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
@@ -70,14 +71,18 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 	return nil
 }
 
-// registrationSubmitter periodically submits validator registrations in batches, 1 batch per slot
+// RegistrationSubmitter periodically submits validator registrations in batches, 1 batch per slot
 // making sure
 //   - every new(fresh) validator registration is submitted at the earliest slot possible once
 //     GoClient is aware of it
 //   - every validator registration GoClient is aware of is submitted at least once during 1 epoch
 //     period
-func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
-	ticker := slotTickerProvider()
+func (gc *GoClient) RegistrationSubmitter(operatorDataStore operatordatastore.OperatorDataStore) {
+	ticker := slotticker.New(gc.log, slotticker.Config{
+		SlotDuration: gc.BeaconConfig().SlotDuration,
+		GenesisTime:  gc.BeaconConfig().GenesisTime(),
+	})
+
 	for {
 		select {
 		case <-gc.ctx.Done():
@@ -99,9 +104,9 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 				}
 
 				// Distribute the registrations evenly across the epoch based on the pubkeys.
-				slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
+				slotInEpoch := (currentSlot) % gc.beaconConfig.SlotsPerEpoch
 				validatorDescriptor := xxhash.Sum64(validatorPk[:])
-				shouldSubmit := validatorDescriptor%gc.network.SlotsPerEpoch() == slotInEpoch
+				shouldSubmit := phase0.Slot(validatorDescriptor)%gc.beaconConfig.SlotsPerEpoch == slotInEpoch
 
 				if r.new || shouldSubmit {
 					r.new = false
