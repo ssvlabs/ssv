@@ -2,12 +2,12 @@ package kv
 
 import (
 	"context"
-
 	"errors"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // TODO: reconsider prefixes?

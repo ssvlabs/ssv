@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/cockroachdb/pebble"
-
 	"github.com/dgraph-io/badger/v4"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
