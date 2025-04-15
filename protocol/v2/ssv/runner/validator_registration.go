@@ -19,6 +19,9 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"strings"
+	"time"
+	"math"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -75,6 +78,12 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
+		logger.Error("pre-consensus msg processing failed", zap.Error(err))
+		
+		if strings.Contains(err.Error(), "invalid partial sig slot") {
+			r.scheduleRetry(ctx, logger)
+		}
+		
 		return errors.Wrap(err, "failed processing validator registration message")
 	}
 
@@ -277,4 +286,61 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+func (r *ValidatorRegistrationRunner) scheduleRetry(ctx context.Context, logger *zap.Logger) {
+	if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
+		logger.Error("no running duty to schedule retry")
+		return
+	}
+
+	// get current slot
+	currentDuty := r.BaseRunner.State.StartingDuty
+	currentSlot := currentDuty.DutySlot()
+	
+	// calculate next slot (current slot + 1)
+	nextSlot := currentSlot + 1
+	
+	logger.Info("scheduling validator registration retry",
+		zap.Uint64("current slot", uint64(currentSlot)),
+		zap.Uint64("retry slot", uint64(nextSlot)),
+		fields.ValidatorPubKey(r.GetShare().ValidatorPubKey[:]))
+	
+	// create new validator registration duty
+	newDuty := &spectypes.ValidatorDuty{
+		Type:               spectypes.ValidatorRegistration,
+		ValidatorIndex:     r.GetShare().ValidatorIndex,
+		ValidatorPublicKey: r.GetShare().ValidatorPubKey,
+		Slot:               nextSlot,
+	}
+	
+	// adjust wait time based on remaining time until next slot
+	remainingTime := r.BaseRunner.BeaconNetwork.TimeUntilNextSlot()
+	waitTime := math.Min(100*time.Millisecond, remainingTime/10)
+	time.Sleep(waitTime)
+	
+	// get required quorum value (inherit from current duty)
+	quorum := r.BaseRunner.State.Quorum
+	
+	// reset current runner state
+	r.BaseRunner.Reset()
+	
+	// start new duty
+	err := r.StartNewDuty(ctx, logger, newDuty, quorum)
+	if err != nil {
+		logger.Error("validator registration retry failed",
+			zap.Error(err),
+			zap.Uint64("slot", uint64(nextSlot)),
+			fields.ValidatorPubKey(r.GetShare().ValidatorPubKey[:]))
+		return
+	}
+	
+	// try to execute new duty immediately
+	err = r.executeDuty(ctx, logger, newDuty)
+	if err != nil {
+		logger.Error("validator registration retry execution failed",
+			zap.Error(err),
+			zap.Uint64("slot", uint64(nextSlot)),
+			fields.ValidatorPubKey(r.GetShare().ValidatorPubKey[:]))
+	}
 }

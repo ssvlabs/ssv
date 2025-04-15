@@ -338,6 +338,17 @@ func (b *BaseRunner) hasRunningDuty() bool {
 	return !b.State.Finished
 }
 
+// Reset clears the current runner state to prepare for a retry
+func (b *BaseRunner) Reset() {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	
+	if b.State != nil {
+		b.State.Finished = true
+		b.State = nil
+	}
+}
+
 func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
 	if b.QBFTController.Height >= specqbft.Height(duty.DutySlot()) && b.QBFTController.Height != 0 {
 		return errors.Errorf("duty for slot %d already passed. Current height is %d", duty.DutySlot(),
