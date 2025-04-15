@@ -2,6 +2,13 @@ module github.com/ssvlabs/ssv
 
 go 1.24
 
+//tool (
+//	github.com/ethereum/go-ethereum/cmd/abigen
+//	github.com/ferranbt/fastssz/sszgen
+//	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+//	go.uber.org/mock/mockgen
+//)
+
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
