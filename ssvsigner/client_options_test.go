@@ -61,19 +61,20 @@ func TestNewClient_WithAllOptions(t *testing.T) {
 
 	const baseURL = "https://test.example.com"
 	logger := zap.NewExample()
-	certData := []byte("test-certificate")
-	keyData := []byte("test-key")
-	caCertData := []byte("test-ca-certificate")
+	certData := []byte("")
+	keyData := []byte("")
+	caCertData := []byte("")
 
-	client := NewClient(
+	client, err := NewClient(
 		baseURL,
 		WithLogger(logger),
 		WithClientCert(certData),
 		WithClientKey(keyData),
 		WithCACert(caCertData),
 	)
-
+	require.NoError(t, err)
 	require.NotNil(t, client)
+
 	assert.Equal(t, logger, client.logger)
 	assert.Equal(t, certData, client.clientCert)
 	assert.Equal(t, keyData, client.clientKey)
@@ -87,8 +88,9 @@ func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
 	const inputURL = "https://test.example.com/"
 	const expectedURL = "https://test.example.com"
 
-	client := NewClient(inputURL)
+	client, err := NewClient(inputURL)
 
+	require.NoError(t, err)
 	require.NotNil(t, client)
 	assert.Equal(t, expectedURL, client.baseURL)
 }

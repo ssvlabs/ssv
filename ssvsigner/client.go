@@ -3,6 +3,8 @@ package ssvsigner
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -27,7 +29,7 @@ type Client struct {
 	caCert     []byte
 }
 
-func NewClient(baseURL string, opts ...ClientOption) *Client {
+func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	c := &Client{
@@ -42,7 +44,30 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		opt(c)
 	}
 
-	return c
+	// set up client connection
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+
+	if len(c.clientCert) > 0 {
+		cert, err := tls.X509KeyPair(c.clientCert, c.clientKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client certificate: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	if len(c.caCert) > 0 {
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(c.caCert)
+		tlsConfig.RootCAs = caCertPool
+	}
+
+	c.httpClient.Transport = &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+
+	return c, nil
 }
 
 func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKey, err error) {
