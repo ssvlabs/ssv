@@ -284,4 +284,5 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 tool (
 	github.com/ethereum/go-ethereum/cmd/abigen
 	github.com/ferranbt/fastssz/sszgen
+	go.uber.org/mock/mockgen
 )
