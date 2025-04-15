@@ -21,6 +21,7 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.2
+	github.com/ssvlabs/ssv v1.2.1-0.20250415004132-5971cb104ec5
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0
@@ -93,7 +94,6 @@ require (
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/ssvlabs/ssv v1.2.1-0.20250415004132-5971cb104ec5 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/supranational/blst v0.3.14 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
