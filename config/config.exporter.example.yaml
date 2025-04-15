@@ -27,7 +27,6 @@ ssv:
     SignatureCollectionTimeout: 5s
     FullNode: true
     Exporter: true
-    ExporterFull: true
 
 GenerateOperatorPrivateKey: true
 
