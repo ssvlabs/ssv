@@ -281,4 +281,7 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-tool github.com/ethereum/go-ethereum/cmd/abigen
+tool (
+	github.com/ethereum/go-ethereum/cmd/abigen
+	github.com/ferranbt/fastssz/sszgen
+)
