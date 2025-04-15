@@ -2,13 +2,6 @@ module github.com/ssvlabs/ssv
 
 go 1.24
 
-//tool (
-//	github.com/ethereum/go-ethereum/cmd/abigen
-//	github.com/ferranbt/fastssz/sszgen
-//	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-//	go.uber.org/mock/mockgen
-//)
-
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
@@ -280,9 +273,3 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-tool (
-	github.com/ethereum/go-ethereum/cmd/abigen
-	github.com/ferranbt/fastssz/sszgen
-	go.uber.org/mock/mockgen
-)

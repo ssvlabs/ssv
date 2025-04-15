@@ -1,9 +1,14 @@
 // ssvsigner intentionally has its own go.mod because it's designed to be moved to a separate repository in the future.
 // To make local development easier, it's recommended to add the ssvsigner directory to the go.work file:
+//
 // use (
 // 	.
 // 	./ssvsigner
 // )
+//
+// NOTE: Using go.work conflicts with `-modfile`, so `GOWORK=off` should be passed to `make tools` and `make lint`:
+// - GOWORK=off make tools
+// - GOWORK=off make lint
 module github.com/ssvlabs/ssv/ssvsigner
 
 go 1.24
