@@ -21,9 +21,8 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.2
-	github.com/ssvlabs/ssv v1.2.1-0.20250414235647-4ba293d291fd
 	github.com/ssvlabs/ssv-spec v1.1.3
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.opentelemetry.io/otel v1.32.0
@@ -87,7 +86,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.20.5 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
-	github.com/prometheus/common v0.62.0 // indirect
+	github.com/prometheus/common v0.60.1 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/prysmaticlabs/prysm/v4 v4.0.8 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
