@@ -10,17 +10,6 @@ RUN apt-get update && \
       zip unzip bzip2 g++ && \
     rm -rf /var/lib/apt/lists/*
 
-# install jemalloc
-WORKDIR /tmp/jemalloc-temp
-RUN curl -s -L "https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2" -o jemalloc.tar.bz2 \
-  && tar xjf ./jemalloc.tar.bz2
-RUN cd jemalloc-5.3.0 \
-  && ./configure --with-jemalloc-prefix='je_' --with-malloc-conf='background_thread:true,metadata_thp:auto' \
-  && make && make install
-
-# Set working directory for the build
-RUN go version
-
 # Set working directory for the build
 WORKDIR /go/src/github.com/ssvlabs/ssv/
 
@@ -49,7 +38,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
     CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH \
     go install \
-      -tags="blst_enabled,jemalloc,allocator" \
+      -tags="blst_enabled" \
       -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags '-static -lm'" \
       ./cmd/ssvnode
 
