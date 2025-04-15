@@ -3,10 +3,10 @@ package ekm
 import (
 	"context"
 	"fmt"
-	"github.com/attestantio/go-eth2-client/spec"
 	"sync"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
