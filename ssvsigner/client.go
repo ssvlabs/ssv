@@ -21,6 +21,10 @@ type Client struct {
 	logger     *zap.Logger
 	baseURL    string
 	httpClient *http.Client
+
+	clientCert []byte
+	clientKey  []byte
+	caCert     []byte
 }
 
 func NewClient(baseURL string, opts ...ClientOption) *Client {
@@ -39,14 +43,6 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 	}
 
 	return c
-}
-
-type ClientOption func(*Client)
-
-func WithLogger(logger *zap.Logger) ClientOption {
-	return func(client *Client) {
-		client.logger = logger
-	}
 }
 
 func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKey, err error) {
