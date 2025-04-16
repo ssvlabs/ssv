@@ -1,14 +1,16 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log"
 	"net/url"
+	"os"
 
 	"github.com/alecthomas/kong"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner"
@@ -23,6 +25,13 @@ type CLI struct {
 	PrivateKey         string `env:"PRIVATE_KEY" xor:"keys" required:""`
 	PrivateKeyFile     string `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files"`
 	PasswordFile       string `env:"PASSWORD_FILE" and:"files"`
+
+	// TLS configuration
+	ServerCertFile string `env:"TLS_CERT_FILE" help:"Path to the TLS certificate file for server"`
+	ServerKeyFile  string `env:"TLS_KEY_FILE" help:"Path to the TLS key file for server"`
+	ClientCertFile string `env:"TLS_CLIENT_CERT_FILE" help:"Path to the client certificate file for outgoing connections"`
+	ClientKeyFile  string `env:"TLS_CLIENT_KEY_FILE" help:"Path to the client key file for outgoing connections"`
+	CACertFile     string `env:"TLS_CA_CERT_FILE" help:"Path to the CA certificate file for verifying connections"`
 }
 
 func main() {
@@ -48,15 +57,55 @@ func run(logger *zap.Logger, cli CLI) error {
 	logger.Debug("Starting ssv-signer",
 		zap.String("listen_addr", cli.ListenAddr),
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
-		zap.String("private_key_file", cli.PrivateKeyFile),
-		zap.String("password_file", cli.PasswordFile),
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
+		zap.Bool("server_tls_enabled", cli.ServerCertFile != "" && cli.ServerKeyFile != ""),
+		zap.Bool("client_tls_enabled", cli.ClientCertFile != "" && cli.ClientKeyFile != ""),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
 		return fmt.Errorf("init BLS: %w", err)
 	}
 
+	if err := validateConfig(cli); err != nil {
+		return err
+	}
+
+	operatorPrivateKey, err := loadOperatorPrivateKey(cli)
+	if err != nil {
+		return err
+	}
+
+	// TLS configurations
+	clientTLSConfig, err := createClientTLSConfig(logger, cli)
+	if err != nil {
+		return fmt.Errorf("failed to create client TLS configuration: %w", err)
+	}
+
+	serverTLSConfig, err := createServerTLSConfig(logger, cli)
+	if err != nil {
+		return fmt.Errorf("failed to create server TLS configuration: %w", err)
+	}
+
+	// web3signer client
+	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint, web3signer.WithTLSConfig(clientTLSConfig))
+
+	var serverOptions []ssvsigner.ServerOption
+	if serverTLSConfig != nil {
+		serverOptions = append(serverOptions, ssvsigner.WithTLSConfig(serverTLSConfig))
+	}
+
+	srv := ssvsigner.NewServer(logger, operatorPrivateKey, web3SignerClient, serverOptions...)
+
+	logger.Info("Starting ssv-signer server",
+		zap.String("addr", cli.ListenAddr),
+		zap.Bool("tls_enabled", serverTLSConfig != nil),
+	)
+
+	return srv.ListenAndServe(cli.ListenAddr)
+}
+
+// validateConfig validates the CLI configuration.
+func validateConfig(cli CLI) error {
 	// PrivateKeyFile and PasswordFile use the same 'and' group,
 	// so setting them as 'required' wouldn't allow to start with PrivateKey.
 	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
@@ -67,29 +116,128 @@ func run(logger *zap.Logger, cli CLI) error {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
-	var operatorPrivateKey keys.OperatorPrivateKey
+	return nil
+}
+
+// loadOperatorPrivateKey loads the operator private key from CLI parameters.
+func loadOperatorPrivateKey(cli CLI) (keys.OperatorPrivateKey, error) {
 	if cli.PrivateKey != "" {
 		pk, err := keys.PrivateKeyFromString(cli.PrivateKey)
 		if err != nil {
-			return fmt.Errorf("failed to parse private key: %w", err)
+			return nil, fmt.Errorf("failed to parse private key: %w", err)
 		}
-		operatorPrivateKey = pk
-	} else {
-		pk, err := keystore.LoadOperatorKeystore(cli.PrivateKeyFile, cli.PasswordFile)
+		return pk, nil
+	}
+
+	pk, err := keystore.LoadOperatorKeystore(cli.PrivateKeyFile, cli.PasswordFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load operator key from file: %w", err)
+	}
+	return pk, nil
+}
+
+// loadCertFile loads a certificate file if the path is provided.
+func loadCertFile(path string) ([]byte, error) {
+	if path == "" {
+		return nil, nil
+	}
+
+	// #nosec G304
+	cert, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("could not read certificate file %s: %w", path, err)
+	}
+
+	return cert, nil
+}
+
+// createClientTLSConfig creates TLS configuration for client connections.
+func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
+	if cli.ClientCertFile == "" || cli.ClientKeyFile == "" {
+		return nil, nil
+	}
+
+	clientCert, err := loadCertFile(cli.ClientCertFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read client certificate: %w", err)
+	}
+
+	clientKey, err := loadCertFile(cli.ClientKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read client key: %w", err)
+	}
+
+	cert, err := tls.X509KeyPair(clientCert, clientKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load client certificate: %w", err)
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{cert},
+	}
+
+	// add CA certificate if available
+	if cli.CACertFile != "" {
+		caCert, err := loadCertFile(cli.CACertFile)
 		if err != nil {
-			return fmt.Errorf("failed to load operator key from file: %w", err)
+			return nil, fmt.Errorf("failed to read CA certificate: %w", err)
 		}
-		operatorPrivateKey = pk
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to append CA certificate to pool")
+		}
+
+		tlsConfig.RootCAs = caCertPool
 	}
 
-	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint)
+	logger.Info("Client TLS configured successfully")
+	return tlsConfig, nil
+}
 
-	logger.Info("Starting ssv-signer server", zap.String("addr", cli.ListenAddr))
-
-	srv := ssvsigner.NewServer(logger, operatorPrivateKey, web3SignerClient)
-	if err := fasthttp.ListenAndServe(cli.ListenAddr, srv.Handler()); err != nil {
-		return fmt.Errorf("listen on %v: %w", cli.ListenAddr, err)
+// createServerTLSConfig creates TLS configuration for the server.
+func createServerTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
+	if cli.ServerCertFile == "" || cli.ServerKeyFile == "" {
+		return nil, nil
 	}
 
-	return nil
+	serverCert, err := loadCertFile(cli.ServerCertFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read server certificate: %w", err)
+	}
+
+	serverKey, err := loadCertFile(cli.ServerKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read server key: %w", err)
+	}
+
+	cert, err := tls.X509KeyPair(serverCert, serverKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load server certificate: %w", err)
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{cert},
+	}
+
+	// add CA certificate if available for client verification
+	if cli.CACertFile != "" {
+		caCert, err := loadCertFile(cli.CACertFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to append CA certificate to pool")
+		}
+
+		tlsConfig.ClientCAs = caCertPool
+		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+
+	logger.Info("Server TLS configured successfully")
+	return tlsConfig, nil
 }
