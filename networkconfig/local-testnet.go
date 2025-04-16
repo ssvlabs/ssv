@@ -9,7 +9,7 @@ import (
 var LocalTestnet = NetworkConfig{
 	Name: "local-testnet",
 	BeaconConfig: BeaconConfig{
-		Beacon:       beacon.NewLocalTestNetwork(spectypes.PraterNetwork),
+		Beacon: beacon.NewLocalTestNetwork(spectypes.PraterNetwork),
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x2},

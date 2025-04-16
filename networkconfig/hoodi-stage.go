@@ -11,7 +11,7 @@ import (
 var HoodiStage = NetworkConfig{
 	Name: "hoodi-stage",
 	BeaconConfig: BeaconConfig{
-		Beacon:       beacon.NewNetwork(spectypes.HoodiNetwork),
+		Beacon: beacon.NewNetwork(spectypes.HoodiNetwork),
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x14},

@@ -11,8 +11,7 @@ import (
 var TestNetwork = NetworkConfig{
 	Name: "testnet",
 	BeaconConfig: BeaconConfig{
-		Beacon:       beacon.NewNetwork(spectypes.BeaconTestNetwork),
-		GenesisEpoch: 152834,
+		Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},

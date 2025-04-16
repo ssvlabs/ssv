@@ -97,7 +97,7 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 	return networkconfig.NetworkConfig{
 		Name: n.Name,
 		BeaconConfig: networkconfig.BeaconConfig{
-			Beacon:       n.Beacon,
+			Beacon: n.Beacon,
 		},
 		SSVConfig: networkconfig.SSVConfig{
 			DomainType:           n.DomainType,

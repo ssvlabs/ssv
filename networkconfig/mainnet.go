@@ -11,7 +11,7 @@ import (
 var Mainnet = NetworkConfig{
 	Name: "mainnet",
 	BeaconConfig: BeaconConfig{
-		Beacon:       beacon.NewNetwork(spectypes.MainNetwork),
+		Beacon: beacon.NewNetwork(spectypes.MainNetwork),
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.AlanMainnet,

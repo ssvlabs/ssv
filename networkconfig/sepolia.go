@@ -11,8 +11,7 @@ import (
 var Sepolia = NetworkConfig{
 	Name: "sepolia",
 	BeaconConfig: BeaconConfig{
-		Beacon:       beacon.NewNetwork(spectypes.SepoliaNetwork),
-		GenesisEpoch: 1,
+		Beacon: beacon.NewNetwork(spectypes.SepoliaNetwork),
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x69},

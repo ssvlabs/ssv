@@ -11,7 +11,7 @@ import (
 var HoleskyE2E = NetworkConfig{
 	Name: "holesky-e2e",
 	BeaconConfig: BeaconConfig{
-		Beacon:       beacon.NewNetwork(spectypes.HoleskyNetwork),
+		Beacon: beacon.NewNetwork(spectypes.HoleskyNetwork),
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0xee, 0x1},
