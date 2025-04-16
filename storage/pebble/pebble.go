@@ -261,7 +261,23 @@ func (pdb *PebbleDB) QuickGC(ctx context.Context) error {
 	return nil
 }
 
-func (pdb *PebbleDB) FullGC(ctx context.Context) error {
-	// ditto
-	return nil
+func (pdb *PebbleDB) FullGC(context.Context) error {
+	iter, err := pdb.db.NewIter(nil)
+	if err != nil {
+		return err
+	}
+
+	var first, last []byte
+
+	if iter.First() {
+		first = append(first, iter.Key()...)
+	}
+	if iter.Last() {
+		last = append(last, iter.Key()...)
+	}
+	if err := iter.Close(); err != nil {
+		return err
+	}
+
+	return pdb.db.Compact(first, last, true)
 }

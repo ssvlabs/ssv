@@ -227,13 +227,21 @@ func TestPebbleDB_SetMany(t *testing.T) {
 
 func TestPebbleDB_GC(t *testing.T) {
 	db := setupTestDB(t)
+	ctx := context.Background()
 
 	// Test QuickGC
-	err := db.QuickGC(context.Background())
+	err := db.QuickGC(ctx)
 	require.NoError(t, err)
 
 	// Test FullGC
-	err = db.FullGC(context.Background())
+	err = db.Update(func(txn basedb.Txn) error {
+		_ = txn.Set([]byte("test-prefix"), []byte("test-key"), []byte("test-value"))
+		_ = txn.Set([]byte("test-prefix"), []byte("test-key2"), []byte("test-value2"))
+		return nil
+	})
+	require.NoError(t, err)
+
+	err = db.FullGC(ctx)
 	require.NoError(t, err)
 }
 
