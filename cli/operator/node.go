@@ -77,37 +77,26 @@ type KeyStore struct {
 	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Path to password file for private key decryption"`
 }
 
-type TLSConfig struct {
-	// SSV Signer TLS configuration
-	SSVSignerClientCertFile string `yaml:"SSVSignerClientCertFile" env:"SSV_SIGNER_CLIENT_CERT_FILE" env-description:"Path to the client certificate file for SSV signer TLS connection"`
-	SSVSignerClientKeyFile  string `yaml:"SSVSignerClientKeyFile" env:"SSV_SIGNER_CLIENT_KEY_FILE" env-description:"Path to the client key file for SSV signer TLS connection"`
-	SSVSignerCACertFile     string `yaml:"SSVSignerCACertFile" env:"SSV_SIGNER_CA_CERT_FILE" env-description:"Path to the CA certificate file for SSV signer TLS connection"`
-	// Web3Signer TLS configuration (same certs used by SSV signer to connect to Web3Signer)
-	Web3SignerServerCertFile string `yaml:"Web3SignerServerCertFile" env:"WEB3_SIGNER_SERVER_CERT_FILE" env-description:"Path to the server certificate file for Web3Signer TLS"`
-	Web3SignerServerKeyFile  string `yaml:"Web3SignerServerKeyFile" env:"WEB3_SIGNER_SERVER_KEY_FILE" env-description:"Path to the server key file for Web3Signer TLS"`
-	Web3SignerCACertFile     string `yaml:"Web3SignerCACertFile" env:"WEB3_SIGNER_CA_CERT_FILE" env-description:"Path to the CA certificate file for Web3Signer TLS"`
-}
-
 type config struct {
 	global_config.GlobalConfig   `yaml:"global"`
-	DBOptions                    basedb.Options          `yaml:"db"`
-	SSVOptions                   operator.Options        `yaml:"ssv"`
-	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient              beaconprotocol.Options  `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
-	KeyStore                     KeyStore                `yaml:"KeyStore"`
-	SSVSignerEndpoint            string                  `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
-	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
-	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
-	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
-	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
-	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
-	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
-	WithPing                     bool                    `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
-	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
-	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
-	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
-	TLS                          TLSConfig               `yaml:"TLS"`
+	DBOptions                    basedb.Options            `yaml:"db"`
+	SSVOptions                   operator.Options          `yaml:"ssv"`
+	ExecutionClient              executionclient.Options   `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient              beaconprotocol.Options    `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig             p2pv1.Config              `yaml:"p2p"`
+	KeyStore                     KeyStore                  `yaml:"KeyStore"`
+	SSVSignerEndpoint            string                    `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
+	SSVSignerTLS                 ssvsigner.ClientTLSConfig `yaml:"SSVSignerTLS" env-prefix:"SSV_SIGNER_TLS_"`
+	Graffiti                     string                    `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
+	OperatorPrivateKey           string                    `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
+	MetricsAPIPort               int                       `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
+	EnableProfile                bool                      `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
+	NetworkPrivateKey            string                    `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
+	WsAPIPort                    int                       `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
+	WithPing                     bool                      `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
+	SSVAPIPort                   int                       `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
+	LocalEventsPath              string                    `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
+	EnableDoppelgangerProtection bool                      `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
 }
 
 var cfg config
@@ -173,8 +162,20 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 
-			// Create the SSV signer client
-			ssvSignerClient = ssvsigner.NewClient(cfg.SSVSignerEndpoint, ssvsigner.WithLogger(logger))
+			clientOpts := []ssvsigner.ClientOption{ssvsigner.WithLogger(logger)}
+			if cfg.SSVSignerTLS.HasTLSConfig() {
+				tlsOpts, err := ssvsigner.LoadTLSOptions(cfg.SSVSignerTLS)
+				if err != nil {
+					logger.Fatal("failed to load TLS configuration", zap.Error(err))
+				}
+
+				clientOpts = append(clientOpts, tlsOpts...)
+			}
+
+			ssvSignerClient, err = ssvsigner.NewClient(cfg.SSVSignerEndpoint, clientOpts...)
+			if err != nil {
+				logger.Fatal("failed to create SSV signer client", zap.Error(err))
+			}
 
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {

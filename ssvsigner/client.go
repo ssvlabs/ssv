@@ -19,18 +19,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-// ClientTLSConfigOptions contains options for configuring TLS.
-type ClientTLSConfigOptions struct {
-	// CACert is the certificate authority certificate.
-	CACert []byte
-	// ClientCert is the client certificate.
-	ClientCert []byte
-	// ClientKey is the client private key.
-	ClientKey []byte
-	// InsecureSkipVerify skips certificate verification (not recommended for production).
-	InsecureSkipVerify bool
-}
-
 type Client struct {
 	logger     *zap.Logger
 	baseURL    string
@@ -97,12 +85,7 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 
 	// set up client connection with TLS if certificates are provided
 	if len(c.clientCert) > 0 || len(c.clientKey) > 0 || len(c.caCert) > 0 || c.insecureSkipVerify {
-		tlsConfig, err := createClientTLSConfig(ClientTLSConfigOptions{
-			ClientCert:         c.clientCert,
-			ClientKey:          c.clientKey,
-			CACert:             c.caCert,
-			InsecureSkipVerify: c.insecureSkipVerify,
-		})
+		tlsConfig, err := createTLSConfig(c.clientCert, c.clientKey, c.caCert, c.insecureSkipVerify)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create TLS config: %w", err)
 		}
@@ -313,24 +296,24 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	return missing, nil
 }
 
-// createClientTLSConfig creates a TLS configuration for clients.
-func createClientTLSConfig(opts ClientTLSConfigOptions) (*tls.Config, error) {
+// createTLSConfig creates a TLS configuration for clients from raw certificate data
+func createTLSConfig(clientCert, clientKey, caCert []byte, insecureSkipVerify bool) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS13,
-		InsecureSkipVerify: opts.InsecureSkipVerify,
+		InsecureSkipVerify: insecureSkipVerify,
 	}
 
-	if len(opts.ClientCert) > 0 && len(opts.ClientKey) > 0 {
-		cert, err := tls.X509KeyPair(opts.ClientCert, opts.ClientKey)
+	if len(clientCert) > 0 && len(clientKey) > 0 {
+		cert, err := tls.X509KeyPair(clientCert, clientKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load client certificate: %w", err)
 		}
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
-	if len(opts.CACert) > 0 {
+	if len(caCert) > 0 {
 		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(opts.CACert) {
+		if !caCertPool.AppendCertsFromPEM(caCert) {
 			return nil, fmt.Errorf("failed to append CA certificate to pool")
 		}
 		tlsConfig.RootCAs = caCertPool

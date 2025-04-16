@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -1123,6 +1124,241 @@ func TestClientTLSOptions(t *testing.T) {
 				}
 
 				require.Equal(t, tc.expectSkipVerify, transport.TLSClientConfig.InsecureSkipVerify)
+			}
+		})
+	}
+}
+
+func TestLoadTLSOptions(t *testing.T) {
+	t.Parallel()
+
+	// Create temporary files for testing
+	clientCertFile, err := os.CreateTemp("", "client-cert-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(clientCertFile.Name())
+
+	clientKeyFile, err := os.CreateTemp("", "client-key-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(clientKeyFile.Name())
+
+	caCertFile, err := os.CreateTemp("", "ca-cert-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(caCertFile.Name())
+
+	// Generate test certificates
+	caCert, _, clientCert, clientKey := testingutils.GenerateCertificates(t, "localhost")
+
+	// Write test data to temp files
+	err = os.WriteFile(clientCertFile.Name(), clientCert, 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(clientKeyFile.Name(), clientKey, 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(caCertFile.Name(), caCert, 0644)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name          string
+		config        ClientTLSConfig
+		expectError   bool
+		expectedOpts  int
+		errorContains string
+	}{
+		{
+			name: "All certificate files",
+			config: ClientTLSConfig{
+				ClientCertFile:   clientCertFile.Name(),
+				ClientKeyFile:    clientKeyFile.Name(),
+				ClientCACertFile: caCertFile.Name(),
+			},
+			expectError:  false,
+			expectedOpts: 3,
+		},
+		{
+			name: "Client cert and key only",
+			config: ClientTLSConfig{
+				ClientCertFile: clientCertFile.Name(),
+				ClientKeyFile:  clientKeyFile.Name(),
+			},
+			expectError:  false,
+			expectedOpts: 2,
+		},
+		{
+			name: "CA cert only",
+			config: ClientTLSConfig{
+				ClientCACertFile: caCertFile.Name(),
+			},
+			expectError:  false,
+			expectedOpts: 1,
+		},
+		{
+			name: "ServerInsecureSkipVerify only",
+			config: ClientTLSConfig{
+				ClientInsecureSkipVerify: true,
+			},
+			expectError:  false,
+			expectedOpts: 1,
+		},
+		{
+			name: "All options",
+			config: ClientTLSConfig{
+				ClientCertFile:           clientCertFile.Name(),
+				ClientKeyFile:            clientKeyFile.Name(),
+				ClientCACertFile:         caCertFile.Name(),
+				ClientInsecureSkipVerify: true,
+			},
+			expectError:  false,
+			expectedOpts: 4,
+		},
+		{
+			name: "Non-existent client cert file",
+			config: ClientTLSConfig{
+				ClientCertFile: "/non/existent/file",
+			},
+			expectError:   true,
+			errorContains: "client certificate file does not exist",
+		},
+		{
+			name: "Non-existent client key file",
+			config: ClientTLSConfig{
+				ClientKeyFile: "/non/existent/file",
+			},
+			expectError:   true,
+			errorContains: "client key file does not exist",
+		},
+		{
+			name: "Non-existent CA cert file",
+			config: ClientTLSConfig{
+				ClientCACertFile: "/non/existent/file",
+			},
+			expectError:   true,
+			errorContains: "CA certificate file does not exist",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts, err := LoadTLSOptions(tc.config)
+
+			if tc.expectError {
+				require.Error(t, err)
+				if tc.errorContains != "" {
+					require.Contains(t, err.Error(), tc.errorContains)
+				}
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, opts)
+				require.Len(t, opts, tc.expectedOpts)
+			}
+		})
+	}
+}
+
+func TestTLSConfigCLIIntegration(t *testing.T) {
+	t.Parallel()
+
+	// Create temporary files for testing
+	clientCertFile, err := os.CreateTemp("", "client-cert-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(clientCertFile.Name())
+
+	clientKeyFile, err := os.CreateTemp("", "client-key-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(clientKeyFile.Name())
+
+	caCertFile, err := os.CreateTemp("", "ca-cert-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(caCertFile.Name())
+
+	// Generate test certificates
+	caCert, _, clientCert, clientKey := testingutils.GenerateCertificates(t, "localhost")
+
+	// Write test data to temp files
+	err = os.WriteFile(clientCertFile.Name(), clientCert, 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(clientKeyFile.Name(), clientKey, 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(caCertFile.Name(), caCert, 0644)
+	require.NoError(t, err)
+
+	// Test cases that simulate CLI configuration
+	testCases := []struct {
+		name          string
+		tlsConfig     ClientTLSConfig
+		expectOptions int
+		expectError   bool
+	}{
+		{
+			name: "Full TLS configuration",
+			tlsConfig: ClientTLSConfig{
+				ClientCertFile:           clientCertFile.Name(),
+				ClientKeyFile:            clientKeyFile.Name(),
+				ClientCACertFile:         caCertFile.Name(),
+				ClientInsecureSkipVerify: false,
+			},
+			expectOptions: 3,
+			expectError:   false,
+		},
+		{
+			name: "CA cert only",
+			tlsConfig: ClientTLSConfig{
+				ClientCACertFile: caCertFile.Name(),
+			},
+			expectOptions: 1,
+			expectError:   false,
+		},
+		{
+			name: "ServerInsecureSkipVerify only",
+			tlsConfig: ClientTLSConfig{
+				ClientInsecureSkipVerify: true,
+			},
+			expectOptions: 1,
+			expectError:   false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 1. Load options from ClientTLSConfig
+			options, err := LoadTLSOptions(tc.tlsConfig)
+
+			if tc.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, options, tc.expectOptions)
+
+			// 2. Create client with options
+			logger, _ := zap.NewDevelopment()
+			allOptions := append([]ClientOption{WithLogger(logger)}, options...)
+
+			// Use localhost as a dummy endpoint
+			client, err := NewClient("https://localhost:8000", allOptions...)
+			require.NoError(t, err)
+			require.NotNil(t, client)
+
+			// 3. Verify TLS configuration was applied
+			transport, ok := client.httpClient.Transport.(*http.Transport)
+			require.True(t, ok)
+			require.NotNil(t, transport)
+			require.NotNil(t, transport.TLSClientConfig)
+
+			// Verify specific TLS settings
+			if tc.tlsConfig.ClientInsecureSkipVerify {
+				require.True(t, transport.TLSClientConfig.InsecureSkipVerify)
+			}
+
+			if tc.tlsConfig.ClientCACertFile != "" {
+				require.NotNil(t, transport.TLSClientConfig.RootCAs)
+			}
+
+			if tc.tlsConfig.ClientCertFile != "" && tc.tlsConfig.ClientKeyFile != "" {
+				require.NotEmpty(t, transport.TLSClientConfig.Certificates)
 			}
 		})
 	}

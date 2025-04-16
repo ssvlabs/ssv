@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -21,18 +20,14 @@ import (
 
 type CLI struct {
 	ListenAddr         string `env:"LISTEN_ADDR" default:":8080" required:""` // TODO: finalize port
-	Web3SignerEndpoint string `env:"WEB3SIGNER_ENDPOINT" required:""`
+	Web3SignerEndpoint string `env:"WEB3SIGNER_ENDPOINT" required:"" name:"web3signer-endpoint"`
 	PrivateKey         string `env:"PRIVATE_KEY" xor:"keys" required:""`
 	PrivateKeyFile     string `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files"`
 	PasswordFile       string `env:"PASSWORD_FILE" and:"files"`
 
 	// TLS configuration
-	ServerCertFile     string `env:"TLS_CERT_FILE" help:"Path to the TLS certificate file for server"`
-	ServerKeyFile      string `env:"TLS_KEY_FILE" help:"Path to the TLS key file for server"`
-	ClientCertFile     string `env:"TLS_CLIENT_CERT_FILE" help:"Path to the client certificate file for outgoing connections"`
-	ClientKeyFile      string `env:"TLS_CLIENT_KEY_FILE" help:"Path to the client key file for outgoing connections"`
-	CACertFile         string `env:"TLS_CA_CERT_FILE" help:"Path to the CA certificate file for verifying connections"`
-	InsecureSkipVerify bool   `env:"TLS_INSECURE_SKIP_VERIFY" help:"Skip verification of TLS certificates (not recommended for production)"`
+	Client ssvsigner.ClientTLSConfig `embed:""`
+	Server ssvsigner.ServerTLSConfig `embed:""`
 }
 
 func main() {
@@ -59,8 +54,8 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.String("listen_addr", cli.ListenAddr),
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
-		zap.Bool("server_tls_enabled", cli.ServerCertFile != "" && cli.ServerKeyFile != ""),
-		zap.Bool("client_tls_enabled", cli.ClientCertFile != "" && cli.ClientKeyFile != ""),
+		zap.Bool("server_tls_enabled", cli.Server.ServerCertFile != "" && cli.Server.ServerKeyFile != ""),
+		zap.Bool("client_tls_enabled", cli.Client.ClientCertFile != "" && cli.Client.ClientKeyFile != ""),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
@@ -109,11 +104,27 @@ func validateConfig(cli CLI) error {
 	// PrivateKeyFile and PasswordFile use the same 'and' group,
 	// so setting them as 'required' wouldn't allow to start with PrivateKey.
 	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
-		return errors.New("neither private key nor keystore provided")
+		return fmt.Errorf("neither private key nor keystore provided")
 	}
 
 	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
+	}
+
+	// Validate client TLS configuration
+	if cli.Client.ClientCertFile != "" && cli.Client.ClientKeyFile == "" {
+		return fmt.Errorf("client certificate provided without key")
+	}
+	if cli.Client.ClientKeyFile != "" && cli.Client.ClientCertFile == "" {
+		return fmt.Errorf("client key provided without certificate")
+	}
+
+	// Validate server TLS configuration
+	if cli.Server.ServerCertFile != "" && cli.Server.ServerKeyFile == "" {
+		return fmt.Errorf("server certificate provided without key")
+	}
+	if cli.Server.ServerKeyFile != "" && cli.Server.ServerCertFile == "" {
+		return fmt.Errorf("server key provided without certificate")
 	}
 
 	return nil
@@ -153,23 +164,23 @@ func loadCertFile(path string) ([]byte, error) {
 
 // createClientTLSConfig creates TLS configuration for client connections.
 func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
-	if cli.InsecureSkipVerify {
-		logger.Warn("client TLS configured with InsecureSkipVerify=true (not recommended for production)")
+	if cli.Client.ClientInsecureSkipVerify {
+		logger.Warn("client TLS configured with ServerInsecureSkipVerify=true (not recommended for production)")
 		return &tls.Config{
 			InsecureSkipVerify: true,
 		}, nil
 	}
 
-	if cli.ClientCertFile == "" || cli.ClientKeyFile == "" {
+	if cli.Client.ClientCertFile == "" || cli.Client.ClientKeyFile == "" {
 		return nil, nil
 	}
 
-	clientCert, err := loadCertFile(cli.ClientCertFile)
+	clientCert, err := loadCertFile(cli.Client.ClientCertFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read client certificate: %w", err)
 	}
 
-	clientKey, err := loadCertFile(cli.ClientKeyFile)
+	clientKey, err := loadCertFile(cli.Client.ClientKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read client key: %w", err)
 	}
@@ -184,8 +195,8 @@ func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 	}
 
 	// add CA certificate if available
-	if cli.CACertFile != "" {
-		caCert, err := loadCertFile(cli.CACertFile)
+	if cli.Server.ServerCACertFile != "" {
+		caCert, err := loadCertFile(cli.Server.ServerCACertFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read CA certificate: %w", err)
 		}
@@ -204,16 +215,16 @@ func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 
 // createServerTLSConfig creates TLS configuration for the server.
 func createServerTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
-	if cli.ServerCertFile == "" || cli.ServerKeyFile == "" {
+	if cli.Server.ServerCertFile == "" || cli.Server.ServerKeyFile == "" {
 		return nil, nil
 	}
 
-	serverCert, err := loadCertFile(cli.ServerCertFile)
+	serverCert, err := loadCertFile(cli.Server.ServerCertFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read server certificate: %w", err)
 	}
 
-	serverKey, err := loadCertFile(cli.ServerKeyFile)
+	serverKey, err := loadCertFile(cli.Server.ServerKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read server key: %w", err)
 	}
@@ -225,16 +236,16 @@ func createServerTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 
 	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: cli.InsecureSkipVerify,
+		InsecureSkipVerify: cli.Client.ClientInsecureSkipVerify,
 	}
 
-	if cli.InsecureSkipVerify {
-		logger.Warn("server TLS configured with InsecureSkipVerify=true (not recommended for production)")
+	if cli.Client.ClientInsecureSkipVerify {
+		logger.Warn("server TLS configured with ServerInsecureSkipVerify=true (not recommended for production)")
 	}
 
 	// add CA certificate if available for client verification
-	if cli.CACertFile != "" {
-		caCert, err := loadCertFile(cli.CACertFile)
+	if cli.Server.ServerCACertFile != "" {
+		caCert, err := loadCertFile(cli.Server.ServerCACertFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read CA certificate: %w", err)
 		}

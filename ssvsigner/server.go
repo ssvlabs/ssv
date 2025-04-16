@@ -39,18 +39,16 @@ const (
 	pathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
 )
 
-// ServerTLSConfigOptions contains options for configuring TLS for the server.
-type ServerTLSConfigOptions struct {
-	// CACert is the certificate authority certificate.
-	CACert []byte
-	// ServerCert is the server certificate.
-	ServerCert []byte
-	// ServerKey is the server private key.
-	ServerKey []byte
-	// MinVersion is the minimum TLS version.
-	MinVersion uint16
-	// InsecureSkipVerify skips certificate verification (not recommended for production).
-	InsecureSkipVerify bool
+// ServerTLSConfig contains TLS configuration for the server.
+type ServerTLSConfig struct {
+	// ServerCACertFile is the certificate authority certificate.
+	ServerCACertFile string `yaml:"ServerCACertFile" env:"SERVER_CA_CERT_FILE" env-description:"Path to CA certificate file for client authentication on server"`
+	// ServerCertFile is the server certificate.
+	ServerCertFile string `yaml:"ServerCertFile" env:"SERVER_CERT_FILE" env-description:"Path to certificate file for server TLS connections"`
+	// ServerKeyFile is the server private key.
+	ServerKeyFile string `yaml:"ServerKeyFile" env:"SERVER_KEY_FILE" env-description:"Path to key file for server TLS connections"`
+	// ServerInsecureSkipVerify skips certificate verification (not recommended for production).
+	ServerInsecureSkipVerify bool `yaml:"ServerInsecureSkipVerify" env:"SERVER_INSECURE_SKIP_VERIFY" env-description:"Skip TLS certificate verification for server (not recommended for production)"`
 }
 
 type Server struct {
@@ -72,13 +70,12 @@ func WithTLSConfig(config *tls.Config) ServerOption {
 }
 
 // WithTLSCertificates sets the TLS configuration for the server using certificate files.
-func WithTLSCertificates(serverCert, serverKey, caCert []byte, minVersion uint16) ServerOption {
+func WithTLSCertificates(serverCert, serverKey, caCert string) ServerOption {
 	return func(server *Server) {
-		opts := ServerTLSConfigOptions{
-			ServerCert: serverCert,
-			ServerKey:  serverKey,
-			CACert:     caCert,
-			MinVersion: minVersion,
+		opts := ServerTLSConfig{
+			ServerCertFile:   serverCert,
+			ServerKeyFile:    serverKey,
+			ServerCACertFile: caCert,
 		}
 
 		tlsConfig, err := createServerTLSConfig(opts)
@@ -519,18 +516,14 @@ func (r *Server) writeJSONErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, stat
 }
 
 // createServerTLSConfig creates a TLS configuration for servers.
-func createServerTLSConfig(opts ServerTLSConfigOptions) (*tls.Config, error) {
+func createServerTLSConfig(opts ServerTLSConfig) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS13,
-		InsecureSkipVerify: opts.InsecureSkipVerify,
+		InsecureSkipVerify: opts.ServerInsecureSkipVerify,
 	}
 
-	if opts.MinVersion != 0 {
-		tlsConfig.MinVersion = opts.MinVersion
-	}
-
-	if len(opts.ServerCert) > 0 && len(opts.ServerKey) > 0 {
-		cert, err := tls.X509KeyPair(opts.ServerCert, opts.ServerKey)
+	if len(opts.ServerCertFile) > 0 && len(opts.ServerKeyFile) > 0 {
+		cert, err := tls.X509KeyPair([]byte(opts.ServerCertFile), []byte(opts.ServerKeyFile))
 		if err != nil {
 			return nil, fmt.Errorf("failed to load server certificate: %w", err)
 		}
@@ -539,9 +532,9 @@ func createServerTLSConfig(opts ServerTLSConfigOptions) (*tls.Config, error) {
 		return nil, fmt.Errorf("server certificate and key are required")
 	}
 
-	if len(opts.CACert) > 0 {
+	if len(opts.ServerCACertFile) > 0 {
 		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(opts.CACert) {
+		if !caCertPool.AppendCertsFromPEM([]byte(opts.ServerCACertFile)) {
 			return nil, fmt.Errorf("failed to append CA certificate to pool")
 		}
 		tlsConfig.ClientCAs = caCertPool
