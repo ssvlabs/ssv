@@ -11,7 +11,6 @@ var LocalTestnet = NetworkConfig{
 	Name: "local-testnet",
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.PraterNetwork),
-		GenesisEpoch:  1,
 		SlotDuration:  spectypes.PraterNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.PraterNetwork.SlotsPerEpoch()),
 		ForkVersion:   spectypes.PraterNetwork.ForkVersion(),

@@ -12,7 +12,6 @@ var TestNetwork = NetworkConfig{
 	Name: "testnet",
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.BeaconTestNetwork),
-		GenesisEpoch:  152834,
 		SlotDuration:  spectypes.BeaconTestNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.BeaconTestNetwork.SlotsPerEpoch()),
 		ForkVersion:   spectypes.BeaconTestNetwork.ForkVersion(),

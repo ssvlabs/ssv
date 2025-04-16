@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -76,7 +75,6 @@ func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 	server, err := New(zap.NewNop(), beacon.Options{
 		BeaconNodeAddr: serverURL,
 		Context:        context.Background(),
-		BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 	},
 		tests.MockDataStore{},
 		tests.MockSlotTickerProvider)

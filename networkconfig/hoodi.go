@@ -12,7 +12,6 @@ var Hoodi = NetworkConfig{
 	Name: "hoodi",
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.HoodiNetwork),
-		GenesisEpoch:  1,
 		SlotDuration:  spectypes.HoodiNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.HoodiNetwork.SlotsPerEpoch()),
 		ForkVersion:   spectypes.HoodiNetwork.ForkVersion(),

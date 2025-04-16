@@ -33,7 +33,6 @@ type Beacon interface {
 
 type BeaconConfig struct {
 	BeaconName    string
-	GenesisEpoch  phase0.Epoch
 	SlotDuration  time.Duration
 	SlotsPerEpoch phase0.Slot
 	ForkVersion   phase0.Version

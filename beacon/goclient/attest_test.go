@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -194,7 +193,6 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 			zap.NewNop(),
 			beacon.Options{
 				Context:        ctx,
-				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 				BeaconNodeAddr: server.URL,
 				CommonTimeout:  1 * time.Second,
 				LongTimeout:    1 * time.Second,
@@ -452,7 +450,6 @@ func createClient(
 	client, err := New(zap.NewNop(),
 		beacon.Options{
 			Context:                     ctx,
-			BeaconConfig:                networkconfig.Mainnet.BeaconConfig,
 			BeaconNodeAddr:              beaconServerURL,
 			CommonTimeout:               defaultHardTimeout,
 			LongTimeout:                 time.Second,
