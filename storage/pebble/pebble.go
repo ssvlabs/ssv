@@ -21,10 +21,6 @@ type PebbleDB struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
-	//wg     sync.WaitGroup
-	//
-	//// gcMutex is used to ensure that only one GC cycle is running at a time.
-	//gcMutex sync.Mutex
 }
 
 func NewPebbleDB(pCtx context.Context, logger *zap.Logger, path string, opts *pebble.Options) (*PebbleDB, error) {
@@ -48,7 +44,6 @@ func (pdb *PebbleDB) Close() error {
 }
 
 func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
-
 	b, closer, err := pdb.db.Get(append(prefix, key...))
 	if errors.Is(err, pebble.ErrNotFound) {
 		return basedb.Obj{}, false, nil
@@ -56,13 +51,18 @@ func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	if err != nil {
 		return basedb.Obj{}, false, err
 	}
+
+	defer func() {
+		if err := closer.Close(); err != nil {
+			pdb.logger.Error("close pebble", zap.Error(err))
+		}
+	}()
+
 	// PebbleDB returned slice is valid until closer.Close() is called
 	// hence we copy
-	//
-	defer func() { _ = closer.Close() }()
-
 	out := make([]byte, len(b))
 	copy(out, b)
+
 	return basedb.Obj{Key: key, Value: out}, true, nil
 }
 
@@ -193,11 +193,18 @@ func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
 	if err != nil {
 		return 0, nil
 	}
-	defer func() { _ = iter.Close() }()
+
+	defer func() {
+		if err := iter.Close(); err != nil {
+			pdb.logger.Error("close iterator on count prefix", zap.Error(err))
+		}
+	}()
+
 	count := int64(0)
 	for iter.First(); iter.Valid(); iter.Next() {
 		count++
 	}
+
 	return count, nil
 }
 
@@ -208,7 +215,12 @@ func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
 		return err
 	}
 
-	defer func() { _ = iter.Close() }()
+	defer func() {
+		if err := iter.Close(); err != nil {
+			pdb.logger.Error("close iterator on drop prefix", zap.Error(err))
+		}
+	}()
+
 	for iter.First(); iter.Valid(); iter.Next() {
 		if err := batch.Delete(iter.Key(), nil); err != nil {
 			return err
@@ -217,6 +229,7 @@ func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
 	if err := iter.Error(); err != nil {
 		return err
 	}
+
 	return batch.Commit(pebble.Sync)
 }
 
@@ -238,21 +251,12 @@ func (pdb *PebbleDB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, e
 	return batch.Commit(pebble.Sync)
 }
 
-// TODO: implement gc?
-
-// QuickGC runs a short garbage collection cycle to reclaim some unused disk space.
 func (pdb *PebbleDB) QuickGC(ctx context.Context) error {
+	// pebble db does not require periodic gc
 	return nil
 }
 
-// FullGC runs a long garbage collection cycle to reclaim (ideally) all unused disk space.
 func (pdb *PebbleDB) FullGC(ctx context.Context) error {
-	//pdb.logger.Info("Starting FullGC")
-	//start := time.Now()
-	//if err := pdb.db.Compact(nil, nil); err != nil {
-	//	return err
-	//}
-	//pdb.logger.Info("FullGC completed", zap.Duration("duration", time.Since(start)))
-	//return nil
+	// ditto
 	return nil
 }
