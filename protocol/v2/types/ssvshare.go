@@ -108,7 +108,7 @@ func (s *SSVShare) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase0
 
 // IsParticipatingAndAttesting returns true if the validator can participate in *all* SSV duties at the given epoch.
 // Requirements: not liquidated and attesting.
-func (s *SSVShare) IsParticipatingAndAttesting(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
+func (s *SSVShare) IsParticipatingAndAttesting(epoch phase0.Epoch) bool {
 	return !s.Liquidated && s.IsAttesting(epoch)
 }
 

@@ -54,7 +54,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				if !share.IsParticipatingAndAttesting(h.network, epoch+phase0.Epoch(frequencyEpochs)) {
+				if !share.IsParticipatingAndAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
 					// Only attesting validators are eligible for registration duties.
 					continue
 				}

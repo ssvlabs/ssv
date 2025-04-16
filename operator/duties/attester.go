@@ -186,7 +186,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	var eligibleShares []*types.SSVShare
 	for _, share := range h.validatorProvider.SelfValidators() {
-		if !share.Liquidated && share.IsAttesting(epoch) {
+		if share.IsParticipatingAndAttesting(epoch) {
 			eligibleShares = append(eligibleShares, share)
 		}
 	}

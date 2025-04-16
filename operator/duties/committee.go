@@ -176,7 +176,7 @@ func (h *CommitteeHandler) toSpecSyncDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 
 func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch phase0.Epoch) bool {
 	share, found := h.validatorProvider.Validator(duty.PubKey[:])
-	if !found || !share.IsAttesting(epoch) || share.Liquidated {
+	if !found || !share.IsParticipatingAndAttesting(epoch) {
 		return false
 	}
 

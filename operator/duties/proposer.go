@@ -152,10 +152,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	start := time.Now()
 
 	eligibilityFilter := func(epoch phase0.Epoch, share *types.SSVShare) bool {
-		if !share.Liquidated && share.IsAttesting(epoch) {
-			return true
-		}
-		return false
+		return share.IsParticipatingAndAttesting(epoch)
 	}
 
 	var allEligibleShares []*types.SSVShare
