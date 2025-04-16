@@ -38,9 +38,10 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 
-	clientCert []byte
-	clientKey  []byte
-	caCert     []byte
+	clientCert         []byte
+	clientKey          []byte
+	caCert             []byte
+	insecureSkipVerify bool
 }
 
 // ClientOption defines a function that configures a Client.
@@ -77,11 +78,7 @@ func WithCACert(cert []byte) ClientOption {
 // WithClientInsecureSkipVerify configures the client to skip TLS certificate verification (not recommended for production)
 func WithClientInsecureSkipVerify() ClientOption {
 	return func(client *Client) {
-		client.httpClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}
+		client.insecureSkipVerify = true
 	}
 }
 
@@ -101,11 +98,12 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 	}
 
 	// set up client connection with TLS if certificates are provided
-	if len(c.clientCert) > 0 || len(c.clientKey) > 0 || len(c.caCert) > 0 {
+	if len(c.clientCert) > 0 || len(c.clientKey) > 0 || len(c.caCert) > 0 || c.insecureSkipVerify {
 		tlsConfig, err := createClientTLSConfig(ClientTLSConfigOptions{
-			ClientCert: c.clientCert,
-			ClientKey:  c.clientKey,
-			CACert:     c.caCert,
+			ClientCert:         c.clientCert,
+			ClientKey:          c.clientKey,
+			CACert:             c.caCert,
+			InsecureSkipVerify: c.insecureSkipVerify,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to create TLS config: %w", err)

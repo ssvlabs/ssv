@@ -3,6 +3,7 @@ package ssvsigner
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/testingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -910,4 +912,218 @@ func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	assert.Equal(t, expectedURL, client.baseURL)
+}
+
+func TestClientTLS(t *testing.T) {
+	t.Parallel()
+
+	caCert, _, serverCert, serverKey := testingutils.GenerateCertificates(t, "localhost")
+
+	testCases := []struct {
+		name           string
+		serverTLS      bool
+		clientCert     []byte
+		clientKey      []byte
+		caCert         []byte
+		skipVerify     bool
+		expectError    bool
+		errorContains  string
+		serverRequires bool
+	}{
+		{
+			name:        "No TLS",
+			serverTLS:   false,
+			expectError: false,
+		},
+		{
+			name:           "Server TLS with CA cert",
+			serverTLS:      true,
+			caCert:         caCert,
+			expectError:    false,
+			serverRequires: false,
+		},
+		{
+			name:           "Server TLS with skipVerify",
+			serverTLS:      true,
+			skipVerify:     true,
+			expectError:    false,
+			serverRequires: false,
+		},
+		{
+			name:           "Server TLS with no CA or skipVerify",
+			serverTLS:      true,
+			expectError:    true,
+			errorContains:  "certificate is not trusted",
+			serverRequires: false,
+		},
+		{
+			name:           "Server TLS requiring client cert, client provides",
+			serverTLS:      true,
+			clientCert:     serverCert, // server cert is used as client cert
+			clientKey:      serverKey,
+			caCert:         caCert,
+			expectError:    false,
+			serverRequires: true,
+		},
+		{
+			name:           "Server TLS requiring client cert, client doesn't provide",
+			serverTLS:      true,
+			caCert:         caCert,
+			expectError:    true,
+			errorContains:  "certificate",
+			serverRequires: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var serverTLSConfig *tls.Config
+			if tc.serverTLS {
+				// setup server TLS config
+				if tc.serverRequires {
+					serverTLSConfig = testingutils.CreateServerTLSConfig(t, serverCert, serverKey, caCert, true)
+				} else {
+					serverTLSConfig = testingutils.CreateServerTLSConfig(t, serverCert, serverKey, nil, false)
+				}
+			}
+
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == pathValidators {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte("[]"))
+				}
+			})
+
+			server := httptest.NewUnstartedServer(handler)
+			if tc.serverTLS {
+				server.TLS = serverTLSConfig
+				server.StartTLS()
+			} else {
+				server.Start()
+			}
+			defer server.Close()
+
+			var clientOpts []ClientOption
+			if tc.clientCert != nil && tc.clientKey != nil {
+				clientOpts = append(clientOpts, WithClientCert(tc.clientCert))
+				clientOpts = append(clientOpts, WithClientKey(tc.clientKey))
+			}
+			if tc.caCert != nil {
+				clientOpts = append(clientOpts, WithCACert(tc.caCert))
+			}
+			if tc.skipVerify {
+				clientOpts = append(clientOpts, WithClientInsecureSkipVerify())
+			}
+
+			client, err := NewClient(server.URL, clientOpts...)
+			require.NoError(t, err)
+
+			// test ListValidators which makes an HTTP request
+			_, err = client.ListValidators(context.Background())
+
+			if tc.expectError {
+				require.Error(t, err)
+				if tc.errorContains != "" {
+					require.Contains(t, err.Error(), tc.errorContains)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestClientTLSOptions(t *testing.T) {
+	t.Parallel()
+
+	caCert, _, clientCert, clientKey := testingutils.GenerateCertificates(t, "localhost")
+
+	testCases := []struct {
+		name              string
+		clientCert        []byte
+		clientKey         []byte
+		caCert            []byte
+		skipVerify        bool
+		expectTLSConfig   bool
+		expectCertificate bool
+		expectRootCAs     bool
+		expectSkipVerify  bool
+	}{
+		{
+			name:            "No TLS options",
+			expectTLSConfig: false,
+		},
+		{
+			name:              "With client certificate",
+			clientCert:        clientCert,
+			clientKey:         clientKey,
+			expectTLSConfig:   true,
+			expectCertificate: true,
+		},
+		{
+			name:            "With CA certificate",
+			caCert:          caCert,
+			expectTLSConfig: true,
+			expectRootCAs:   true,
+		},
+		{
+			name:             "With skip verify",
+			skipVerify:       true,
+			expectTLSConfig:  true,
+			expectSkipVerify: true,
+		},
+		{
+			name:              "With all options",
+			clientCert:        clientCert,
+			clientKey:         clientKey,
+			caCert:            caCert,
+			skipVerify:        true,
+			expectTLSConfig:   true,
+			expectCertificate: true,
+			expectRootCAs:     true,
+			expectSkipVerify:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var clientOpts []ClientOption
+
+			if tc.clientCert != nil && tc.clientKey != nil {
+				clientOpts = append(clientOpts, WithClientCert(tc.clientCert))
+				clientOpts = append(clientOpts, WithClientKey(tc.clientKey))
+			}
+			if tc.caCert != nil {
+				clientOpts = append(clientOpts, WithCACert(tc.caCert))
+			}
+			if tc.skipVerify {
+				clientOpts = append(clientOpts, WithClientInsecureSkipVerify())
+			}
+
+			client, err := NewClient("https://example.com", clientOpts...)
+			require.NoError(t, err)
+
+			transport, ok := client.httpClient.Transport.(*http.Transport)
+			if tc.expectTLSConfig {
+				require.True(t, ok)
+				require.NotNil(t, transport)
+				require.NotNil(t, transport.TLSClientConfig)
+
+				if tc.expectCertificate {
+					if tc.name == "With all options" {
+						require.Greater(t, len(transport.TLSClientConfig.Certificates), 0)
+					} else {
+						require.Len(t, transport.TLSClientConfig.Certificates, 1)
+					}
+				}
+
+				if tc.expectRootCAs {
+					require.NotNil(t, transport.TLSClientConfig.RootCAs)
+				}
+
+				require.Equal(t, tc.expectSkipVerify, transport.TLSClientConfig.InsecureSkipVerify)
+			}
+		})
+	}
 }

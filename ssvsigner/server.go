@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"strings"
 	"time"
 
@@ -158,11 +159,18 @@ func (r *Server) ListenAndServe(addr string) error {
 
 	if r.tlsConfig != nil {
 		r.logger.Info("starting ssv-signer server with TLS", zap.String("addr", addr))
-		server := &fasthttp.Server{
-			Handler:   handler,
-			TLSConfig: r.tlsConfig,
+
+		// TCP listener
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return err
 		}
-		return server.ListenAndServe(addr)
+
+		// wrap the listener with TLS
+		tlsListener := tls.NewListener(ln, r.tlsConfig)
+
+		// serve with the TLS listener
+		return fasthttp.Serve(tlsListener, handler)
 	}
 
 	r.logger.Info("starting ssv-signer server without TLS", zap.String("addr", addr))

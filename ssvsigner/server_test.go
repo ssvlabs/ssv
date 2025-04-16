@@ -2,11 +2,16 @@ package ssvsigner
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -18,6 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/testingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -586,4 +592,212 @@ func TestGenerateRandomPassword(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEqual(t, password1, password2, "Passwords should be different")
+}
+
+func TestTLSServer(t *testing.T) {
+	t.Parallel()
+
+	caCert, _, serverCert, serverKey := testingutils.GenerateCertificates(t, "localhost")
+
+	testCases := []struct {
+		name            string
+		tlsConfig       *tls.Config
+		tlsOption       ServerOption
+		expectTLSConfig bool
+	}{
+		{
+			name:            "No TLS",
+			tlsConfig:       nil,
+			expectTLSConfig: false,
+		},
+		{
+			name: "With TLS Config",
+			tlsConfig: &tls.Config{
+				MinVersion: tls.VersionTLS13,
+			},
+			tlsOption:       WithTLSConfig(&tls.Config{MinVersion: tls.VersionTLS13}),
+			expectTLSConfig: true,
+		},
+		{
+			name: "With TLS Certificates",
+			tlsOption: WithTLSCertificates(
+				serverCert,
+				serverKey,
+				caCert,
+				tls.VersionTLS13,
+			),
+			expectTLSConfig: true,
+		},
+		{
+			name:            "With InsecureSkipVerify",
+			tlsOption:       WithServerInsecureSkipVerify(),
+			expectTLSConfig: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger, err := zap.NewDevelopment()
+			require.NoError(t, err)
+
+			pubKey := &testOperatorPublicKey{
+				pubKeyBase64: "test_pubkey_base64",
+			}
+
+			operatorPrivKey := &testOperatorPrivateKey{
+				base64Value:   "test_operator_key_base64",
+				bytesValue:    []byte("test_bytes"),
+				storageHash:   "test_storage_hash",
+				ekmHash:       "test_ekm_hash",
+				decryptResult: []byte("decrypted_data"),
+				publicKey:     pubKey,
+				signResult:    []byte("signature_bytes"),
+			}
+
+			remoteSigner := &testRemoteSigner{
+				listKeysResult: []phase0.BLSPubKey{{1, 2, 3}},
+			}
+
+			var opts []ServerOption
+			if tc.tlsOption != nil {
+				opts = append(opts, tc.tlsOption)
+			}
+
+			server := NewServer(logger, operatorPrivKey, remoteSigner, opts...)
+
+			if tc.expectTLSConfig {
+				require.NotNil(t, server.tlsConfig)
+				if tc.tlsConfig != nil {
+					// check specific TLS config values
+					require.Equal(t, tc.tlsConfig.MinVersion, server.tlsConfig.MinVersion)
+				}
+			} else {
+				require.Nil(t, server.tlsConfig)
+			}
+		})
+	}
+}
+
+func TestServerTLSListenAndServe(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network-dependent test in short mode")
+	}
+
+	caCert, _, serverCert, serverKey := testingutils.GenerateCertificates(t, "localhost")
+
+	testCases := []struct {
+		name          string
+		serverOptions []ServerOption
+		useTLS        bool
+		expectSuccess bool
+	}{
+		{
+			name:          "TLS Server",
+			serverOptions: []ServerOption{WithTLSCertificates(serverCert, serverKey, nil, tls.VersionTLS12)},
+			useTLS:        true,
+			expectSuccess: true,
+		},
+		{
+			name:          "Non-TLS Server",
+			serverOptions: []ServerOption{},
+			useTLS:        false,
+			expectSuccess: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger, err := zap.NewDevelopment()
+			require.NoError(t, err)
+
+			// create test objects
+			pubKey := &testOperatorPublicKey{pubKeyBase64: "test_pubkey_base64"}
+			operatorPrivKey := &testOperatorPrivateKey{publicKey: pubKey}
+			remoteSigner := &testRemoteSigner{
+				listKeysResult: []phase0.BLSPubKey{{1, 2, 3}},
+			}
+
+			// create server with appropriate options
+			server := NewServer(logger, operatorPrivKey, remoteSigner, tc.serverOptions...)
+
+			// find an available port for testing
+			listener, err := net.Listen("tcp", "localhost:0")
+			require.NoError(t, err)
+			serverAddress := listener.Addr().String()
+			listener.Close()
+
+			errCh := make(chan error, 1)
+			stopCh := make(chan struct{})
+			go func() {
+				err := server.ListenAndServe(serverAddress)
+				if err != nil {
+					select {
+					case <-stopCh: // server was intentionally stopped
+						// expected error during shutdown, ignore
+					default:
+						errCh <- err
+					}
+				}
+				close(errCh)
+			}()
+
+			// allow time for server to start
+			time.Sleep(100 * time.Millisecond)
+
+			// test connection to server using appropriate protocol
+			protocol := "http"
+			if tc.useTLS {
+				protocol = "https"
+			}
+
+			clientSuccess := false
+			var resp *http.Response
+			var requestErr error
+
+			// create appropriate client based on protocol
+			if tc.useTLS {
+				tlsConfig := &tls.Config{
+					InsecureSkipVerify: true,
+				}
+
+				if caCert != nil {
+					caCertPool := x509.NewCertPool()
+					caCertPool.AppendCertsFromPEM(caCert)
+					tlsConfig.RootCAs = caCertPool
+				}
+
+				client := &http.Client{
+					Transport: &http.Transport{
+						TLSClientConfig: tlsConfig,
+					},
+				}
+				resp, requestErr = client.Get(fmt.Sprintf("%s://%s%s", protocol, serverAddress, pathValidators))
+			} else {
+				// use standard client for non-TLS connections
+				resp, requestErr = http.Get(fmt.Sprintf("%s://%s%s", protocol, serverAddress, pathValidators))
+			}
+
+			if requestErr == nil {
+				defer resp.Body.Close()
+				clientSuccess = resp.StatusCode == http.StatusOK
+			} else {
+				t.Logf("client request error: %v", requestErr)
+			}
+
+			close(stopCh)
+
+			if tc.expectSuccess {
+				require.True(t, clientSuccess, "client request should succeed")
+			}
+
+			select {
+			case err := <-errCh:
+				if err != nil && tc.expectSuccess {
+					t.Errorf("unexpected server error: %v", err)
+				}
+			case <-time.After(time.Second): // timeout - server is still running
+				// this is expected as fasthttp.Server doesn't have a clean shutdown mechanism in this test
+			}
+		})
+	}
 }

@@ -232,6 +232,3 @@ openssl s_client -connect localhost:8443 -CAfile ca.crt -cert client.crt -key cl
 ```bash
 openssl x509 -in server.crt -text -noout
 ```
-
-For automated testing, SSV includes test utilities in the `ssvsigner/testutils` package that generate test certificates
-and TLS configurations.
