@@ -17,24 +17,35 @@ type Web3Signer struct {
 	httpClient *http.Client
 }
 
-// New creates a new Web3Signer client with the given base URL and optional TLS configuration.
-func New(baseURL string, tlsConfig *tls.Config) *Web3Signer {
-	baseURL = strings.TrimRight(baseURL, "/")
+type Option func(*Web3Signer)
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	if tlsConfig != nil {
-		client.Transport = &http.Transport{
-			TLSClientConfig: tlsConfig,
+// WithTLSConfig sets the TLS configuration for the Web3Signer.
+func WithTLSConfig(config *tls.Config) Option {
+	return func(s *Web3Signer) {
+		if config != nil {
+			s.httpClient.Transport = &http.Transport{
+				TLSClientConfig: config,
+			}
 		}
 	}
+}
 
-	return &Web3Signer{
-		baseURL:    baseURL,
-		httpClient: client,
+// New creates a new Web3Signer client with the given base URL and optional TLS configuration.
+func New(baseURL string, opts ...Option) *Web3Signer {
+	baseURL = strings.TrimRight(baseURL, "/")
+
+	signer := &Web3Signer{
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
+
+	for _, opt := range opts {
+		opt(signer)
+	}
+
+	return signer
 }
 
 // ListKeys lists keys in Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Public-Key/operation/ETH2_LIST

@@ -3,6 +3,7 @@ package web3signer
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -22,7 +23,7 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 		server.Close()
 	})
 
-	web3Signer := New(server.URL, nil)
+	web3Signer := New(server.URL)
 
 	return server, web3Signer
 }
@@ -33,6 +34,7 @@ func TestNew(t *testing.T) {
 	tests := []struct {
 		name    string
 		baseURL string
+		opts    []Option
 	}{
 		{
 			name:    "Valid URL",
@@ -42,13 +44,18 @@ func TestNew(t *testing.T) {
 			name:    "Valid URL with trailing slash",
 			baseURL: "http://localhost:9000/",
 		},
+		{
+			name:    "Valid URL with TLS config",
+			baseURL: "http://localhost:9000",
+			opts:    []Option{WithTLSConfig(&tls.Config{InsecureSkipVerify: true})},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := New(tt.baseURL, nil)
+			client := New(tt.baseURL, tt.opts...)
 			require.NotNil(t, client)
 
 			expectedBaseURL := tt.baseURL
