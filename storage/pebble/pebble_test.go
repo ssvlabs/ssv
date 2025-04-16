@@ -16,13 +16,10 @@ import (
 func setupTestDB(t *testing.T) *PebbleDB {
 	t.Helper()
 
-	// Use t.TempDir() which automatically handles cleanup
-	tmpDir := t.TempDir()
-
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	db, err := NewPebbleDB(context.Background(), logger, tmpDir, &pebble.Options{})
+	db, err := NewPebbleDB(context.Background(), logger, t.TempDir(), &pebble.Options{})
 	require.NoError(t, err)
 
 	return db
@@ -95,6 +92,10 @@ func TestPebbleDB_GetMany(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Len(t, retrieved, len(keys))
+	for i, obj := range retrieved {
+		assert.Equal(t, keys[i], obj.Key)
+		assert.Equal(t, values[i], obj.Value)
+	}
 }
 
 func TestPebbleDB_GetAll(t *testing.T) {
@@ -331,18 +332,72 @@ func TestPebbleDB_Update(t *testing.T) {
 	require.Equal(t, expectedErr, err)
 }
 
-func TestPebbleDB_QuickGC(t *testing.T) {
+func TestPebbleDB_Using(t *testing.T) {
 	db := setupTestDB(t)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
 
-	// QuickGC is currently a no-op, but we should test it doesn't error
-	err := db.QuickGC(context.Background())
+	prefix := []byte("test-prefix")
+	key := []byte("test-key")
+	value := []byte("test-value")
+
+	// Test Using with nil ReadWriter returns the database itself
+	rw := db.Using(nil)
+	require.NotNil(t, rw)
+	require.Equal(t, db, rw)
+
+	// Test Using with a transaction
+	txn := db.Begin()
+	defer txn.Discard()
+
+	// Set a value in the transaction
+	err := txn.Set(prefix, key, value)
 	require.NoError(t, err)
+
+	// Use the transaction
+	rw = db.Using(txn)
+	require.NotNil(t, rw)
+	require.Equal(t, txn, rw)
+
+	// Verify we can read the value through the returned ReadWriter
+	obj, found, err := rw.Get(prefix, key)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, value, obj.Value)
 }
 
-func TestPebbleDB_FullGC(t *testing.T) {
+func TestPebbleDB_UsingReader(t *testing.T) {
 	db := setupTestDB(t)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
 
-	// FullGC is currently a no-op, but we should test it doesn't error
-	err := db.FullGC(context.Background())
+	prefix := []byte("test-prefix")
+	key := []byte("test-key")
+	value := []byte("test-value")
+
+	// First set a value in the database
+	err := db.Set(prefix, key, value)
 	require.NoError(t, err)
+
+	// Test UsingReader with nil Reader returns the database itself
+	r := db.UsingReader(nil)
+	require.NotNil(t, r)
+	require.Equal(t, db, r)
+
+	// Test UsingReader with a read transaction
+	readTxn := db.BeginRead()
+	defer readTxn.Discard()
+
+	// Use the read transaction
+	r = db.UsingReader(readTxn)
+	require.NotNil(t, r)
+	require.Equal(t, readTxn, r)
+
+	// Verify we can read the value through the returned Reader
+	obj, found, err := r.Get(prefix, key)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, value, obj.Value)
 }
