@@ -12,7 +12,6 @@ var Holesky = NetworkConfig{
 	Name:                 "holesky",
 	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x2},
-	GenesisEpoch:         1,
 	RegistrySyncOffset:   new(big.Int).SetInt64(181612),
 	RegistryContractAddr: "0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA",
 	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
