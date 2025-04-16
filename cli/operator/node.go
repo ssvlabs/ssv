@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/cockroachdb/pebble"
+	cpebble "github.com/cockroachdb/pebble"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -64,8 +64,9 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	badger "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
+	pebble "github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
@@ -564,8 +565,8 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
-	db, err := kv.New(logger, cfg.DBOptions)
+func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*badger.BadgerDB, error) {
+	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
@@ -597,8 +598,8 @@ func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.
 	return db, nil
 }
 
-func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.PebbleDB, error) {
-	db, err := kv.NewPebbleDB(cfg.DBOptions.Ctx, logger, cfg.DBOptions.Path, &pebble.Options{})
+func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*pebble.PebbleDB, error) {
+	db, err := pebble.NewPebbleDB(cfg.DBOptions.Ctx, logger, cfg.DBOptions.Path, &cpebble.Options{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
