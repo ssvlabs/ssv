@@ -7,7 +7,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
-// Options for controller struct creation
+// Options defines beacon client options
 type Options struct {
 	Context                     context.Context
 	Network                     beacon.Network
