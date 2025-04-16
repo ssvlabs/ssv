@@ -215,8 +215,6 @@ func TestController_ReactivateCluster(t *testing.T) {
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 	recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).AnyTimes().Return(recipientData, true, nil)
 
-	bc.EXPECT().GetBeaconNetwork().AnyTimes().Return(testingBC.GetBeaconNetwork())
-
 	indiciesUpdate := make(chan struct{})
 	go func() {
 		<-ctr.indicesChange

@@ -76,7 +76,7 @@ type SchedulerOptions struct {
 	Ctx                 context.Context
 	BeaconNode          BeaconNode
 	ExecutionClient     ExecutionClient
-	Network             networkconfig.NetworkConfig
+	BeaconConfig        networkconfig.Beacon
 	ValidatorProvider   ValidatorProvider
 	ValidatorController ValidatorController
 	DutyExecutor        DutyExecutor
@@ -90,7 +90,7 @@ type SchedulerOptions struct {
 type Scheduler struct {
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
+	beaconConfig        networkconfig.Beacon
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
@@ -120,7 +120,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 	s := &Scheduler{
 		beaconNode:          opts.BeaconNode,
 		executionClient:     opts.ExecutionClient,
-		network:             opts.Network,
+		beaconConfig:        opts.BeaconConfig,
 		slotTickerProvider:  opts.SlotTickerProvider,
 		dutyExecutor:        opts.DutyExecutor,
 		validatorProvider:   opts.ValidatorProvider,
@@ -179,7 +179,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			logger,
 			s.beaconNode,
 			s.executionClient,
-			s.network,
+			s.beaconConfig,
 			s.validatorProvider,
 			s.validatorController,
 			s,
@@ -287,8 +287,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.network.SlotDuration / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-			finalTime := s.network.GetSlotStartTime(slot).Add(delay)
+			delay := s.beaconConfig.GetSlotDuration() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
+			finalTime := s.beaconConfig.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 
 			if waitDuration > 0 {
@@ -308,12 +308,12 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.HeadEvent) {
 	return func(event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
-		if event.Slot != s.network.EstimatedCurrentSlot() {
+		if event.Slot != s.beaconConfig.EstimatedCurrentSlot() {
 			return
 		}
 
 		// check for reorg
-		epoch := s.network.EstimatedEpochAtSlot(event.Slot)
+		epoch := s.beaconConfig.EstimatedEpochAtSlot(event.Slot)
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, event.Slot, event.Slot%32+1)
 		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
@@ -366,8 +366,8 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.network.SlotDuration / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-		slotStartTimeWithDelay := s.network.GetSlotStartTime(event.Slot).Add(delay)
+		delay := s.beaconConfig.GetSlotDuration() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
+		slotStartTimeWithDelay := s.beaconConfig.GetSlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
@@ -388,7 +388,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
-		slotDelay := time.Since(s.network.GetSlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.beaconConfig.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
@@ -408,10 +408,10 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(logger, committee)
-		dutyEpoch := s.network.EstimatedEpochAtSlot(duty.Slot)
+		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
 		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
 
-		slotDelay := time.Since(s.network.GetSlotStartTime(duty.Slot))
+		slotDelay := time.Since(s.beaconConfig.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
@@ -429,27 +429,27 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Va
 	return logger.
 		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(fields.CurrentSlot(s.network.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
-		With(fields.Epoch(s.network.EstimatedEpochAtSlot(duty.Slot))).
+		With(fields.Epoch(s.beaconConfig.EstimatedEpochAtSlot(duty.Slot))).
 		With(fields.PubKey(duty.PubKey[:])).
-		With(fields.StartTimeUnixMilli(s.network.GetSlotStartTime(duty.Slot)))
+		With(fields.StartTimeUnixMilli(s.beaconConfig.GetSlotStartTime(duty.Slot)))
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
 func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
-	dutyEpoch := s.network.EstimatedEpochAtSlot(duty.Slot)
+	dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
 	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
 	return logger.
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.Role(duty.RunnerRole())).
-		With(fields.CurrentSlot(s.network.EstimatedCurrentSlot())).
+		With(fields.CurrentSlot(s.beaconConfig.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
-		With(fields.StartTimeUnixMilli(s.network.GetSlotStartTime(duty.Slot)))
+		With(fields.StartTimeUnixMilli(s.beaconConfig.GetSlotStartTime(duty.Slot)))
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)

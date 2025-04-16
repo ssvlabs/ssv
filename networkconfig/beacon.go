@@ -5,12 +5,33 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
+//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./beacon_mock.go -source=./beacon.go
+
+type Beacon interface {
+	GetSlotStartTime(slot phase0.Slot) time.Time
+	GetSlotEndTime(slot phase0.Slot) time.Time
+	EstimatedCurrentSlot() phase0.Slot
+	EstimatedSlotAtTime(time time.Time) phase0.Slot
+	EstimatedCurrentEpoch() phase0.Epoch
+	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
+	IsFirstSlotOfEpoch(slot phase0.Slot) bool
+	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
+	EpochsPerSyncCommitteePeriod() phase0.Epoch
+	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
+	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
+	LastSlotOfSyncPeriod(period uint64) phase0.Slot
+	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
+	EpochStartTime(epoch phase0.Epoch) time.Time
+	EstimatedTimeAtSlot(slot phase0.Slot) time.Time
+	GetSlotDuration() time.Duration
+	GetSlotsPerEpoch() phase0.Slot
+	GetBeaconName() string
+}
+
 type BeaconConfig struct {
-	Beacon        beacon.BeaconNetwork
+	BeaconName    string
 	GenesisEpoch  phase0.Epoch
 	SlotDuration  time.Duration
 	SlotsPerEpoch phase0.Slot
@@ -108,4 +129,16 @@ func (b BeaconConfig) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
 	}
 	d := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
 	return b.GenesisTime.Add(d)
+}
+
+func (b BeaconConfig) GetSlotDuration() time.Duration {
+	return b.SlotDuration
+}
+
+func (b BeaconConfig) GetSlotsPerEpoch() phase0.Slot {
+	return b.SlotsPerEpoch
+}
+
+func (b BeaconConfig) GetBeaconName() string {
+	return b.BeaconName
 }

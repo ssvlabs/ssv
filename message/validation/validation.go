@@ -35,7 +35,7 @@ type MessageValidator interface {
 
 type messageValidator struct {
 	logger          *zap.Logger
-	netCfg          networkconfig.NetworkConfig
+	netCfg          networkconfig.Network
 	pectraForkEpoch phase0.Epoch
 
 	consensusStateIndex   map[consensusID]*consensusState
@@ -62,7 +62,7 @@ type messageValidator struct {
 
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
-	netCfg networkconfig.NetworkConfig,
+	netCfg networkconfig.Network,
 	validatorStore storage.ValidatorStore,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
@@ -211,7 +211,7 @@ func (mv *messageValidator) getValidationLock(messageID spectypes.MessageID) *sy
 
 		lock := &sync.Mutex{}
 
-		epochDuration := time.Duration(mv.netCfg.SlotsPerEpoch) * mv.netCfg.SlotDuration // #nosec G115 - slots per epoch never exceeds math.MaxInt64
+		epochDuration := time.Duration(mv.netCfg.GetSlotsPerEpoch()) * mv.netCfg.GetSlotDuration() // #nosec G115 - slots per epoch never exceeds math.MaxInt64
 		// validationLockTTL specifies how much time a particular validation lock is meant to
 		// live. It must be large enough for validation lock to never expire while we still are
 		// expecting to process messages targeting that same validation lock. For a message
@@ -305,7 +305,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: mv.netCfg.SlotsPerEpoch * 2, // store last two epochs to calculate duty count
+			storedSlotCount: mv.netCfg.GetSlotsPerEpoch() * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}

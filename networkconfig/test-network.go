@@ -6,14 +6,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var TestNetwork = NetworkConfig{
 	Name: "testnet",
 	BeaconConfig: BeaconConfig{
-		Beacon:        beacon.NewNetwork(spectypes.BeaconTestNetwork),
+		BeaconName:    string(spectypes.BeaconTestNetwork),
 		GenesisEpoch:  152834,
 		SlotDuration:  spectypes.BeaconTestNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.BeaconTestNetwork.SlotsPerEpoch()),

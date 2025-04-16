@@ -20,7 +20,6 @@ import (
 	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	types "github.com/ssvlabs/ssv-spec/types"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -28,6 +27,7 @@ import (
 type MockbeaconDuties struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconDutiesMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconDutiesMockRecorder is the mock recorder for MockbeaconDuties.
@@ -110,6 +110,7 @@ func (mr *MockbeaconDutiesMockRecorder) SyncCommitteeDuties(ctx, epoch, indices 
 type MockbeaconSubscriber struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconSubscriberMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconSubscriberMockRecorder is the mock recorder for MockbeaconSubscriber.
@@ -161,6 +162,7 @@ func (mr *MockbeaconSubscriberMockRecorder) SubmitSyncCommitteeSubscriptions(ctx
 type MockbeaconValidator struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconValidatorMockRecorder
+	isgomock struct{}
 }
 
 // MockbeaconValidatorMockRecorder is the mock recorder for MockbeaconValidator.
@@ -199,6 +201,7 @@ func (mr *MockbeaconValidatorMockRecorder) GetValidatorData(validatorPubKeys any
 type Mockproposer struct {
 	ctrl     *gomock.Controller
 	recorder *MockproposerMockRecorder
+	isgomock struct{}
 }
 
 // MockproposerMockRecorder is the mock recorder for Mockproposer.
@@ -236,6 +239,7 @@ func (mr *MockproposerMockRecorder) SubmitProposalPreparation(feeRecipients any)
 type Mocksigner struct {
 	ctrl     *gomock.Controller
 	recorder *MocksignerMockRecorder
+	isgomock struct{}
 }
 
 // MocksignerMockRecorder is the mock recorder for Mocksigner.
@@ -274,6 +278,7 @@ func (mr *MocksignerMockRecorder) ComputeSigningRoot(object, domain any) *gomock
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNodeMockRecorder
+	isgomock struct{}
 }
 
 // MockBeaconNodeMockRecorder is the mock recorder for MockBeaconNode.
@@ -382,20 +387,6 @@ func (m *MockBeaconNode) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byt
 func (mr *MockBeaconNodeMockRecorder) GetBeaconBlock(slot, graffiti, randao any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).GetBeaconBlock), slot, graffiti, randao)
-}
-
-// GetBeaconNetwork mocks base method.
-func (m *MockBeaconNode) GetBeaconNetwork() types.BeaconNetwork {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBeaconNetwork")
-	ret0, _ := ret[0].(types.BeaconNetwork)
-	return ret0
-}
-
-// GetBeaconNetwork indicates an expected call of GetBeaconNetwork.
-func (mr *MockBeaconNodeMockRecorder) GetBeaconNetwork() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconNetwork", reflect.TypeOf((*MockBeaconNode)(nil).GetBeaconNetwork))
 }
 
 // GetSyncCommitteeContribution mocks base method.

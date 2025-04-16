@@ -115,7 +115,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	}
 
 	h.dutyQueue = pendingDuties
-	h.duties.RemoveSlot(slot - h.network.SlotsPerEpoch)
+	h.duties.RemoveSlot(slot - h.beaconConfig.GetSlotsPerEpoch())
 
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
 		h.dutiesExecutor.ExecuteDuties(ctx, h.logger, dutiesForExecution)
@@ -138,7 +138,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, err
 	}
 
-	blockSlot = h.network.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0)) // #nosec G115
+	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 	for k, v := range h.blockSlots {

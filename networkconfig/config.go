@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./config_mock.go -source=./config.go
+
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
 	Holesky.Name:      Holesky,
@@ -24,6 +26,12 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	}
 
 	return NetworkConfig{}, fmt.Errorf("network not supported: %v", name)
+}
+
+type Network interface {
+	NetworkName() string
+	Beacon
+	SSV
 }
 
 type NetworkConfig struct {

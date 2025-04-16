@@ -134,7 +134,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
+		db, err := setupDB(logger, networkConfig.BeaconConfig)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -202,7 +202,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
-		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
+		cfg.ConsensusClient.BeaconConfig = networkConfig.BeaconConfig
 
 		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
@@ -282,7 +282,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
-		cfg.SSVOptions.Network = networkConfig
+		cfg.SSVOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
@@ -324,7 +324,7 @@ var StartNodeCmd = &cobra.Command{
 
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
-			threshold := cfg.SSVOptions.Network.EstimatedCurrentSlot()
+			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
 		}
 
@@ -348,7 +348,7 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
-			networkConfig.Beacon,
+			networkConfig.BeaconConfig,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -552,7 +552,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+func setupDB(logger *zap.Logger, beaconConfig networkconfig.Beacon) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -566,9 +566,9 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	}
 
 	migrationOpts := migrations.Options{
-		Db:      db,
-		DbPath:  cfg.DBOptions.Path,
-		Network: eth2Network,
+		Db:           db,
+		DbPath:       cfg.DBOptions.Path,
+		BeaconConfig: beaconConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
@@ -699,7 +699,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		fields.Network(networkConfig.Name),
 		fields.Domain(networkConfig.DomainType),
 		zap.String("nodeType", nodeType),
-		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
+		zap.Any("beaconNetwork", networkConfig.GetBeaconName()),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
 	)

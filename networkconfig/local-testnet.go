@@ -5,14 +5,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var LocalTestnet = NetworkConfig{
 	Name: "local-testnet",
 	BeaconConfig: BeaconConfig{
-		Beacon:        beacon.NewLocalTestNetwork(spectypes.PraterNetwork),
+		BeaconName:    string(spectypes.PraterNetwork),
 		GenesisEpoch:  1,
 		SlotDuration:  spectypes.PraterNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.PraterNetwork.SlotsPerEpoch()),

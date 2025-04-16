@@ -6,14 +6,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var Hoodi = NetworkConfig{
 	Name: "hoodi",
 	BeaconConfig: BeaconConfig{
-		Beacon:        beacon.NewNetwork(spectypes.HoodiNetwork),
+		BeaconName:    string(spectypes.HoodiNetwork),
 		GenesisEpoch:  1,
 		SlotDuration:  spectypes.HoodiNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.HoodiNetwork.SlotsPerEpoch()),

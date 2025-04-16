@@ -11,11 +11,11 @@ import (
 	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -157,11 +157,14 @@ func TestTimeouts(t *testing.T) {
 }
 
 func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
-	networks := []types.BeaconNetwork{types.MainNetwork, types.HoleskyNetwork, types.PraterNetwork, types.BeaconTestNetwork}
+	networkConfigs := []networkconfig.NetworkConfig{
+		networkconfig.Mainnet,
+		networkconfig.Holesky,
+		networkconfig.LocalTestnet,
+		networkconfig.TestNetwork,
+	}
 
-	for _, network := range networks {
-		forkVersion := phase0.Version(beacon.NewNetwork(network).ForkVersion())
-
+	for _, netCfg := range networkConfigs {
 		ctx := context.Background()
 		callback := func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == "/eth/v1/beacon/genesis" {
@@ -169,7 +172,7 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 				"genesis_time": "1606824023",
 				"genesis_validators_root": "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95",
 				"genesis_fork_version": "%s"
-			}}`, forkVersion))
+			}}`, netCfg.ForkVersion))
 				return resp2, nil
 			}
 			return resp, nil
@@ -177,47 +180,46 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 
 		server := tests.MockServer(callback)
 		defer server.Close()
-		t.Run(fmt.Sprintf("When genesis versions are the same (%s)", string(network)), func(t *testing.T) {
-			c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
+		t.Run(fmt.Sprintf("When genesis versions are the same (%s)", netCfg.BeaconName), func(t *testing.T) {
+			c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, netCfg.BeaconConfig)
 			require.NoError(t, err, "failed to create client")
 			client := c.(*GoClient)
 
-			output, err := client.assertSameGenesisVersion(forkVersion)
-			require.Equal(t, forkVersion, output)
+			output, err := client.assertSameGenesisVersion(netCfg.ForkVersion)
+			require.Equal(t, netCfg.ForkVersion, output)
 			require.NoError(t, err, "failed to assert same genesis version: %s", err)
 		})
 	}
 }
 
 func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
-	network := types.MainNetwork
-	networkVersion := phase0.Version(beacon.NewNetwork(network).ForkVersion())
+	networkConfig := networkconfig.Mainnet
 
 	t.Run("When genesis versions are different", func(t *testing.T) {
 		ctx := context.Background()
 		server := tests.MockServer(nil)
 		defer server.Close()
-		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
+		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, networkConfig.BeaconConfig)
 		require.NoError(t, err, "failed to create client")
 		client := c.(*GoClient)
 		forkVersion := phase0.Version{0x01, 0x02, 0x03, 0x04}
 
 		output, err := client.assertSameGenesisVersion(forkVersion)
-		require.Equal(t, networkVersion, output, "expected genesis version to be %s, got %s", networkVersion, output)
+		require.Equal(t, networkConfig.ForkVersion, output, "expected genesis version to be %s, got %s", networkConfig.ForkVersion, output)
 		require.Error(t, err, "expected error when genesis versions are different")
 	})
 }
 
 func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
-	return mockClientWithNetwork(ctx, serverURL, commonTimeout, longTimeout, types.MainNetwork)
+	return mockClientWithNetwork(ctx, serverURL, commonTimeout, longTimeout, networkconfig.Mainnet.BeaconConfig)
 }
 
-func mockClientWithNetwork(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration, network types.BeaconNetwork) (beacon.BeaconNode, error) {
+func mockClientWithNetwork(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration, beaconConfig networkconfig.BeaconConfig) (beacon.BeaconNode, error) {
 	return New(
 		zap.NewNop(),
 		beacon.Options{
 			Context:        ctx,
-			Network:        beacon.NewNetwork(network),
+			BeaconConfig:   beaconConfig,
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,

@@ -42,12 +42,13 @@ func TestSubmitProposal(t *testing.T) {
 
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
-	network := networkconfig.TestNetwork
+
+	beaconConfig := networkconfig.TestNetwork.BeaconConfig
 	populateStorage(t, logger, shareStorage, operatorData)
 
 	frCtrl := NewController(&ControllerOptions{
 		Ctx:               context.TODO(),
-		Network:           network,
+		BeaconConfig:      beaconConfig,
 		ShareStorage:      shareStorage,
 		RecipientStorage:  recipientStorage,
 		OperatorDataStore: operatorDataStore,
@@ -80,11 +81,11 @@ func TestSubmitProposal(t *testing.T) {
 		go frCtrl.Start(logger)
 
 		slots := []phase0.Slot{
-			1,                         // first time
-			2,                         // should not call submit
-			20,                        // should not call submit
-			network.SlotsPerEpoch / 2, // halfway through epoch
-			63,                        // should not call submit
+			1,                              // first time
+			2,                              // should not call submit
+			20,                             // should not call submit
+			beaconConfig.SlotsPerEpoch / 2, // halfway through epoch
+			63,                             // should not call submit
 		}
 
 		for _, s := range slots {

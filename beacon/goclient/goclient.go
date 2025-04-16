@@ -24,9 +24,9 @@ import (
 	"tailscale.com/util/singleflight"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 const (
@@ -123,11 +123,11 @@ const (
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log         *zap.Logger
-	ctx         context.Context
-	network     beaconprotocol.Network
-	clients     []Client
-	multiClient MultiClient
+	log          *zap.Logger
+	ctx          context.Context
+	beaconConfig networkconfig.BeaconConfig
+	clients      []Client
+	multiClient  MultiClient
 	specssv.VersionCalls
 
 	syncDistanceTolerance phase0.Slot
@@ -189,7 +189,9 @@ func New(
 	operatorDataStore operatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
+	logger.Info("consensus client: connecting",
+		fields.Address(opt.BeaconNodeAddr),
+		fields.Network(opt.BeaconConfig.GetBeaconName()))
 
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
@@ -203,17 +205,17 @@ func New(
 	client := &GoClient{
 		log:                   logger.Named("consensus_client"),
 		ctx:                   opt.Context,
-		network:               opt.Network,
+		beaconConfig:          opt.BeaconConfig,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		operatorDataStore:     operatorDataStore,
 		registrations:         map[phase0.BLSPubKey]*validatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
-			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.Network.SlotDurationSec()),
+			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.BeaconConfig.SlotDuration),
 		),
 		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
-			opt.Network.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
+			uint64(opt.BeaconConfig.SlotsPerEpoch) * BlockRootToSlotCacheCapacityEpochs),
 		),
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
@@ -221,7 +223,7 @@ func New(
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{EventTopicHead},
-		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
+		genesisForkVersion:                 opt.BeaconConfig.ForkVersion,
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
 		ForkEpochBellatrix: math.MaxUint64,
@@ -372,7 +374,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			gc.ForkLock.RLock()
 			gc.log.Info("retrieved fork epochs",
 				zap.String("node_addr", s.Address()),
-				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.network.EstimatedCurrentEpoch()))),
+				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.beaconConfig.EstimatedCurrentEpoch()))),
 				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
 				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
 				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),
@@ -465,17 +467,4 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())
 
 	return nil
-}
-
-// GetBeaconNetwork returns the beacon network the node is on
-func (gc *GoClient) GetBeaconNetwork() spectypes.BeaconNetwork {
-	return gc.network.BeaconNetwork
-}
-
-// SlotStartTime returns the start time in terms of its unix epoch
-// value.
-func (gc *GoClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * casts.DurationFromUint64(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
-	startTime := time.Unix(gc.network.MinGenesisTime(), 0).Add(duration)
-	return startTime
 }

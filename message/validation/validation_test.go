@@ -628,8 +628,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
 		currentSlot := &utils.SlotValue{}
-		mockNetworkConfig := networkconfig.NetworkConfig{}
-		mockNetworkConfig.Beacon = utils.SetupMockBeaconNetwork(t, currentSlot)
+		mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
 
 		const epoch = 1
 		currentSlot.SetSlot(netCfg.FirstSlotAtEpoch(epoch))
@@ -645,7 +644,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		dutyExecutorID := shares.active.ValidatorPubKey[:]
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType, dutyExecutorID, spectypes.RoleProposer),
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.GetDomainType(), dutyExecutorID, spectypes.RoleProposer),
 			Data:    encodedMessages,
 		}
 
@@ -662,8 +661,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
 		currentSlot := &utils.SlotValue{}
-		mockNetworkConfig := networkconfig.NetworkConfig{}
-		mockNetworkConfig.Beacon = utils.SetupMockBeaconNetwork(t, currentSlot)
+		mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
 
 		const epoch = 1
 		currentSlot.SetSlot(mockNetworkConfig.FirstSlotAtEpoch(epoch))
@@ -680,7 +678,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		dutyExecutorID := shares.active.ValidatorPubKey[:]
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(mockNetworkConfig.DomainType, dutyExecutorID, spectypes.RoleProposer),
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.GetDomainType(), dutyExecutorID, spectypes.RoleProposer),
 			Data:    encodedMessages,
 		}
 

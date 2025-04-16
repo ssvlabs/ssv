@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -366,7 +365,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
-	base.DomainType = networkconfig.TestNetwork.DomainType
+	base.NetworkConfig = networkconfig.TestNetwork
 
 	logger := logging.TestLogger(t)
 
@@ -382,9 +381,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		}
 	}
 
-	if (ret.GetBaseRunner().DomainType == spectypes.DomainType{}) {
-		ret.GetBaseRunner().DomainType = networkconfig.TestNetwork.DomainType
-	}
+	ret.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
 
 	return ret
 }
@@ -555,7 +552,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		ctx,
 		cancel,
 		logger,
-		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		networkconfig.TestNetwork,
 		&specCommittee.CommitteeMember,
 		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []spectypes.ShareValidatorPK, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)

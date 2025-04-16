@@ -43,6 +43,7 @@ const (
 )
 
 type ethKeyManagerSigner struct {
+	netCfg            networkconfig.Network
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
@@ -68,8 +69,13 @@ type KeyManager interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, encryptionKey string) (KeyManager, error) {
-	signerStore := NewSignerStorage(db, network.Beacon, logger)
+func NewETHKeyManagerSigner(
+	logger *zap.Logger,
+	db basedb.Database,
+	netCfg networkconfig.Network,
+	encryptionKey string,
+) (KeyManager, error) {
+	signerStore := NewSignerStorage(db, netCfg, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
 		if err != nil {
@@ -96,14 +102,15 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 	}
 
 	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
-	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.Beacon.GetBeaconNetwork()))
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(netCfg.GetBeaconName()))
 
 	return &ethKeyManagerSigner{
+		netCfg:            netCfg,
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		storage:           signerStore,
-		domain:            network.DomainType,
+		domain:            netCfg.GetDomainType(),
 		slashingProtector: slashingProtector,
 	}, nil
 }
@@ -310,7 +317,7 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 
 // BumpSlashingProtection updates the slashing protection data for a given public key.
 func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
-	currentSlot := km.storage.BeaconNetwork().EstimatedCurrentSlot()
+	currentSlot := km.netCfg.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
 	if err := km.updateHighestAttestation(pubKey, currentSlot); err != nil {
@@ -333,7 +340,7 @@ func (km *ethKeyManagerSigner) updateHighestAttestation(pubKey []byte, slot phas
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	currentEpoch := km.storage.BeaconNetwork().EstimatedEpochAtSlot(slot)
+	currentEpoch := km.netCfg.EstimatedEpochAtSlot(slot)
 	minimalSP := km.computeMinimalAttestationSP(currentEpoch)
 
 	// Check if the retrieved highest attestation data is valid and not outdated.
