@@ -244,7 +244,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		span.SetAttributes(observability.BeaconSlotAttribute(slot))
 		if msg.SignedSSVMessage != nil {
 			span.SetAttributes(observability.DutyIDAttribute(
-				fields.FormatCommitteeDutyID(msg.SignedSSVMessage.OperatorIDs, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot),
+				fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot),
 			))
 		}
 	}
