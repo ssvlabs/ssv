@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	cpebble "github.com/cockroachdb/pebble"
+	cockroachdb "github.com/cockroachdb/pebble"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -600,14 +600,16 @@ func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*bad
 }
 
 func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*pebble.PebbleDB, error) {
-	db, err := pebble.NewPebbleDB(cfg.DBOptions.Ctx, logger, cfg.DBOptions.Path, &cpebble.Options{})
+	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
+
+	db, err := pebble.NewPebbleDB(cfg.DBOptions.Ctx, logger, dbPath, &cockroachdb.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
 	migrationOpts := migrations.Options{
 		Db:      db,
-		DbPath:  cfg.DBOptions.Path,
+		DbPath:  dbPath,
 		Network: eth2Network,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
