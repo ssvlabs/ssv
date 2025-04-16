@@ -700,7 +700,6 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		fields.Domain(networkConfig.DomainType),
 		zap.String("nodeType", nodeType),
 		zap.Any("beaconNetwork", networkConfig.GetBeaconName()),
-		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
 	)
 

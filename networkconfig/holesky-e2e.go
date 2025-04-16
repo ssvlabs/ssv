@@ -12,7 +12,6 @@ var HoleskyE2E = NetworkConfig{
 	Name: "holesky-e2e",
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.HoleskyNetwork),
-		GenesisEpoch:  1,
 		SlotDuration:  spectypes.HoleskyNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.HoleskyNetwork.SlotsPerEpoch()),
 		ForkVersion:   spectypes.HoleskyNetwork.ForkVersion(),

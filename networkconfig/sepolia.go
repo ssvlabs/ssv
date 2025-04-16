@@ -12,7 +12,6 @@ var Sepolia = NetworkConfig{
 	Name: "sepolia",
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.SepoliaNetwork),
-		GenesisEpoch:  1,
 		SlotDuration:  spectypes.SepoliaNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.SepoliaNetwork.SlotsPerEpoch()),
 		ForkVersion:   spectypes.SepoliaNetwork.ForkVersion(),

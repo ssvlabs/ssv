@@ -12,7 +12,6 @@ var Mainnet = NetworkConfig{
 	Name: "mainnet",
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.MainNetwork),
-		GenesisEpoch:  218450,
 		SlotDuration:  spectypes.MainNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.MainNetwork.SlotsPerEpoch()),
 		ForkVersion:   spectypes.MainNetwork.ForkVersion(),
