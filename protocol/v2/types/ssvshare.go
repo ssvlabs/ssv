@@ -99,8 +99,17 @@ func (s *SSVShare) Slashed() bool {
 	return s.Status == eth2apiv1.ValidatorStateExitedSlashed || s.Status == eth2apiv1.ValidatorStateActiveSlashed
 }
 
+// IsParticipating returns true if the validator can participate in *any* SSV duty at the given epoch.
+// Note: the validator may be eligible only for sync committee, but not to attest and propose. See IsParticipatingAndAttesting.
+// Requirements: not liquidated and attesting or exited in the current or previous sync committee period.
 func (s *SSVShare) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
 	return !s.Liquidated && s.IsSyncCommitteeEligible(cfg, epoch)
+}
+
+// IsParticipatingAndAttesting returns true if the validator can participate in *all* SSV duties at the given epoch.
+// Requirements: not liquidated and attesting.
+func (s *SSVShare) IsParticipatingAndAttesting(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
+	return !s.Liquidated && s.IsAttesting(epoch)
 }
 
 func (s *SSVShare) IsSyncCommitteeEligible(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
