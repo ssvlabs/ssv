@@ -12,7 +12,6 @@ var Hoodi = NetworkConfig{
 	Name: "hoodi",
 	BeaconConfig: BeaconConfig{
 		Beacon:       beacon.NewNetwork(spectypes.HoodiNetwork),
-		GenesisEpoch: 1,
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x3},

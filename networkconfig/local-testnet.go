@@ -10,7 +10,6 @@ var LocalTestnet = NetworkConfig{
 	Name: "local-testnet",
 	BeaconConfig: BeaconConfig{
 		Beacon:       beacon.NewLocalTestNetwork(spectypes.PraterNetwork),
-		GenesisEpoch: 1,
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x2},

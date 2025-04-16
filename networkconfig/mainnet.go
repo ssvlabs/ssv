@@ -12,7 +12,6 @@ var Mainnet = NetworkConfig{
 	Name: "mainnet",
 	BeaconConfig: BeaconConfig{
 		Beacon:       beacon.NewNetwork(spectypes.MainNetwork),
-		GenesisEpoch: 218450,
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.AlanMainnet,

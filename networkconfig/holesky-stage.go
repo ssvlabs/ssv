@@ -12,7 +12,6 @@ var HoleskyStage = NetworkConfig{
 	Name: "holesky-stage",
 	BeaconConfig: BeaconConfig{
 		Beacon:       beacon.NewNetwork(spectypes.HoleskyNetwork),
-		GenesisEpoch: 1,
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},
