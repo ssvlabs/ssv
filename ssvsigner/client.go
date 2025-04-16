@@ -27,8 +27,6 @@ type ClientTLSConfigOptions struct {
 	ClientCert []byte
 	// ClientKey is the client private key.
 	ClientKey []byte
-	// MinVersion is the minimum TLS version.
-	MinVersion uint16
 	// InsecureSkipVerify skips certificate verification (not recommended for production).
 	InsecureSkipVerify bool
 }
@@ -320,10 +318,6 @@ func createClientTLSConfig(opts ClientTLSConfigOptions) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS13,
 		InsecureSkipVerify: opts.InsecureSkipVerify,
-	}
-
-	if opts.MinVersion != 0 {
-		tlsConfig.MinVersion = opts.MinVersion
 	}
 
 	if len(opts.ClientCert) > 0 && len(opts.ClientKey) > 0 {

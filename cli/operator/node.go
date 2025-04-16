@@ -77,6 +77,17 @@ type KeyStore struct {
 	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Path to password file for private key decryption"`
 }
 
+type TLSConfig struct {
+	// SSV Signer TLS configuration
+	SSVSignerClientCertFile string `yaml:"SSVSignerClientCertFile" env:"SSV_SIGNER_CLIENT_CERT_FILE" env-description:"Path to the client certificate file for SSV signer TLS connection"`
+	SSVSignerClientKeyFile  string `yaml:"SSVSignerClientKeyFile" env:"SSV_SIGNER_CLIENT_KEY_FILE" env-description:"Path to the client key file for SSV signer TLS connection"`
+	SSVSignerCACertFile     string `yaml:"SSVSignerCACertFile" env:"SSV_SIGNER_CA_CERT_FILE" env-description:"Path to the CA certificate file for SSV signer TLS connection"`
+	// Web3Signer TLS configuration (same certs used by SSV signer to connect to Web3Signer)
+	Web3SignerServerCertFile string `yaml:"Web3SignerServerCertFile" env:"WEB3_SIGNER_SERVER_CERT_FILE" env-description:"Path to the server certificate file for Web3Signer TLS"`
+	Web3SignerServerKeyFile  string `yaml:"Web3SignerServerKeyFile" env:"WEB3_SIGNER_SERVER_KEY_FILE" env-description:"Path to the server key file for Web3Signer TLS"`
+	Web3SignerCACertFile     string `yaml:"Web3SignerCACertFile" env:"WEB3_SIGNER_CA_CERT_FILE" env-description:"Path to the CA certificate file for Web3Signer TLS"`
+}
+
 type config struct {
 	global_config.GlobalConfig   `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
@@ -96,6 +107,7 @@ type config struct {
 	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
 	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
 	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
+	TLS                          TLSConfig               `yaml:"TLS"`
 }
 
 var cfg config
@@ -161,7 +173,9 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 
+			// Create the SSV signer client
 			ssvSignerClient = ssvsigner.NewClient(cfg.SSVSignerEndpoint, ssvsigner.WithLogger(logger))
+
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))

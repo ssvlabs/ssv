@@ -87,7 +87,6 @@ func run(logger *zap.Logger, cli CLI) error {
 		return fmt.Errorf("failed to create server TLS configuration: %w", err)
 	}
 
-	// web3signer client
 	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint, web3signer.WithTLSConfig(clientTLSConfig))
 
 	var serverOptions []ssvsigner.ServerOption
@@ -157,7 +156,6 @@ func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 	if cli.InsecureSkipVerify {
 		logger.Warn("client TLS configured with InsecureSkipVerify=true (not recommended for production)")
 		return &tls.Config{
-			MinVersion:         tls.VersionTLS13,
 			InsecureSkipVerify: true,
 		}, nil
 	}
@@ -182,7 +180,6 @@ func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 	}
 
 	tlsConfig := &tls.Config{
-		MinVersion:   tls.VersionTLS13,
 		Certificates: []tls.Certificate{cert},
 	}
 
@@ -227,7 +224,6 @@ func createServerTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 	}
 
 	tlsConfig := &tls.Config{
-		MinVersion:         tls.VersionTLS13,
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: cli.InsecureSkipVerify,
 	}
@@ -252,6 +248,6 @@ func createServerTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	}
 
-	logger.Info("Server TLS configured successfully")
+	logger.Info("server TLS configured successfully")
 	return tlsConfig, nil
 }
