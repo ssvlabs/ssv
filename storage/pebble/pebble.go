@@ -52,11 +52,9 @@ func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 		return basedb.Obj{}, false, err
 	}
 
-	defer func() {
-		if err := closer.Close(); err != nil {
-			pdb.logger.Error("close pebble", zap.Error(err))
-		}
-	}()
+	if err := closer.Close(); err != nil {
+		pdb.logger.Error("close pebble", zap.Error(err))
+	}
 
 	// PebbleDB returned slice is valid until closer.Close() is called
 	// hence we copy
@@ -143,7 +141,13 @@ func (pdb *PebbleDB) GetAll(prefix []byte, iterator func(int, basedb.Obj) error)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = iter.Close() }()
+
+	defer func() {
+		if err := iter.Close(); err != nil {
+			pdb.logger.Error("close iterator on get all", zap.Error(err))
+		}
+	}()
+
 	i := 0
 	// SeekPrefixGE starts prefix iteration mode.
 	for iter.First(); iter.Valid(); iter.Next() {
@@ -161,6 +165,7 @@ func (pdb *PebbleDB) GetAll(prefix []byte, iterator func(int, basedb.Obj) error)
 		}
 		i++
 	}
+
 	return iter.Error()
 }
 
