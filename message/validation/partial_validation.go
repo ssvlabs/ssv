@@ -95,6 +95,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	// - SelectionProofPartialSig or PostConsensusPartialSig for Sync committee contribution
 	// - ValidatorRegistrationPartialSig for Validator Registration
 	// - VoluntaryExitPartialSig for Voluntary Exit
+	// - PreconfCommitmentPartialSig for Preconfirmation(s) Commitment
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return ErrPartialSignatureTypeRoleMismatch
 	}
@@ -167,6 +168,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Sync committee contribution
 		// - 1 ValidatorRegistrationPartialSig for Validator Registration
 		// - 1 VoluntaryExitPartialSig for Voluntary Exit
+		// - 1 PreconfCommitmentPartialSig for Preconfirmation(s) Commitment
 		limits := maxMessageCounts()
 		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
 			return err
@@ -249,7 +251,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.SelectionProofPartialSig,
 		spectypes.ContributionProofs,
 		spectypes.ValidatorRegistrationPartialSig,
-		spectypes.VoluntaryExitPartialSig:
+		spectypes.VoluntaryExitPartialSig,
+		spectypes.PreconfCommitmentPartialSig:
 		return true
 	default:
 		return false
@@ -270,6 +273,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.ValidatorRegistrationPartialSig
 	case spectypes.RoleVoluntaryExit:
 		return msgType == spectypes.VoluntaryExitPartialSig
+	case spectypes.RolePreconfCommitment:
+		return msgType == spectypes.PreconfCommitmentPartialSig
 	default:
 		return false
 	}
