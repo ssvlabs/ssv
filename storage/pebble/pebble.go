@@ -210,7 +210,7 @@ func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
 		count++
 	}
 
-	return count, nil
+	return count, iter.Error()
 }
 
 func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
