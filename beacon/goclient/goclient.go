@@ -20,7 +20,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
@@ -112,10 +111,6 @@ type MultiClient interface {
 	eth2client.ValidatorLivenessProvider
 }
 
-type operatorDataStore interface {
-	AwaitOperatorID() spectypes.OperatorID
-}
-
 type EventTopic string
 
 const (
@@ -137,8 +132,6 @@ type GoClient struct {
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
-
-	operatorDataStore operatorDataStore
 
 	// registrationMu synchronises access to registrations
 	registrationMu sync.Mutex
@@ -190,8 +183,6 @@ type GoClient struct {
 func New(
 	logger *zap.Logger,
 	opt beaconprotocol.Options,
-	operatorDataStore operatorDataStore,
-	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
 
@@ -209,7 +200,6 @@ func New(
 		ctx:                                opt.Context,
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		operatorDataStore:                  operatorDataStore,
 		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
@@ -273,6 +263,13 @@ func New(
 		// hence caching it for 2 slots is sufficient
 		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * client.beaconConfig.SlotDuration),
 	)
+
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return slotticker.New(logger, slotticker.Config{
+			SlotDuration: client.beaconConfig.SlotDuration,
+			GenesisTime:  client.beaconConfig.GenesisTime,
+		})
+	}
 
 	go client.registrationSubmitter(slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.

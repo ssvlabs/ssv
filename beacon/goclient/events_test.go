@@ -75,9 +75,7 @@ func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 	server, err := New(zap.NewNop(), beacon.Options{
 		BeaconNodeAddr: serverURL,
 		Context:        context.Background(),
-	},
-		tests.MockDataStore{},
-		tests.MockSlotTickerProvider)
+	})
 
 	require.NoError(t, err)
 	return server
