@@ -30,7 +30,6 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 
 type Network interface {
 	NetworkName() string
-	String() string
 	Beacon
 	SSV
 }
