@@ -568,7 +568,7 @@ func setupGlobal() (*zap.Logger, error) {
 func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*badger.BadgerDB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open db")
+		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
 	migrationOpts := migrations.Options{
@@ -578,7 +578,7 @@ func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*bad
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to run migrations")
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 	if applied == 0 {
 		return db, nil
@@ -587,10 +587,11 @@ func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*bad
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
-		return nil, errors.Wrap(err, "failed to collect garbage")
+		logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
@@ -601,7 +602,7 @@ func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*bad
 func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*pebble.PebbleDB, error) {
 	db, err := pebble.NewPebbleDB(cfg.DBOptions.Ctx, logger, cfg.DBOptions.Path, &cpebble.Options{})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open db")
+		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
 	migrationOpts := migrations.Options{
@@ -611,7 +612,7 @@ func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*peb
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to run migrations")
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 	if applied == 0 {
 		return db, nil
@@ -620,10 +621,11 @@ func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*peb
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
-		return nil, errors.Wrap(err, "failed to collect garbage")
+		logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
