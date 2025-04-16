@@ -52,14 +52,14 @@ func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 		return basedb.Obj{}, false, err
 	}
 
-	if err := closer.Close(); err != nil {
-		pdb.logger.Error("close pebble", zap.Error(err))
-	}
-
 	// PebbleDB returned slice is valid until closer.Close() is called
 	// hence we copy
 	out := make([]byte, len(b))
 	copy(out, b)
+
+	if err := closer.Close(); err != nil {
+		pdb.logger.Error("close pebble", zap.Error(err))
+	}
 
 	return basedb.Obj{Key: key, Value: out}, true, nil
 }
