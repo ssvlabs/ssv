@@ -27,6 +27,7 @@ type Beacon interface {
 	EstimatedTimeAtSlot(slot phase0.Slot) time.Time
 	GetSlotDuration() time.Duration
 	GetSlotsPerEpoch() phase0.Slot
+	GetGenesisTime() time.Time
 	GetBeaconName() string
 }
 
@@ -137,6 +138,10 @@ func (b BeaconConfig) GetSlotDuration() time.Duration {
 
 func (b BeaconConfig) GetSlotsPerEpoch() phase0.Slot {
 	return b.SlotsPerEpoch
+}
+
+func (b BeaconConfig) GetGenesisTime() time.Time {
+	return b.GenesisTime
 }
 
 func (b BeaconConfig) GetBeaconName() string {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./config_mock.go -source=./config.go
+//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./network_mock.go -source=./network.go
 
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,

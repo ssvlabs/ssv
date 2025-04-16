@@ -209,6 +209,20 @@ func (mr *MockBeaconMockRecorder) GetEpochFirstSlot(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochFirstSlot", reflect.TypeOf((*MockBeacon)(nil).GetEpochFirstSlot), epoch)
 }
 
+// GetGenesisTime mocks base method.
+func (m *MockBeacon) GetGenesisTime() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGenesisTime")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// GetGenesisTime indicates an expected call of GetGenesisTime.
+func (mr *MockBeaconMockRecorder) GetGenesisTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenesisTime", reflect.TypeOf((*MockBeacon)(nil).GetGenesisTime))
+}
+
 // GetSlotDuration mocks base method.
 func (m *MockBeacon) GetSlotDuration() time.Duration {
 	m.ctrl.T.Helper()

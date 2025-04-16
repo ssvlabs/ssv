@@ -69,7 +69,10 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 	).AnyTimes()
 	mockNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {
-			return mockNetwork.GetSlotStartTime(slot)
+			timeSinceGenesisStart := time.Duration(slot) & beaconNetwork.SlotDurationSec() // #nosec G115
+			minGenesisTime := mockNetwork.GetGenesisTime()                                 // #nosec G115
+			start := minGenesisTime.Add(timeSinceGenesisStart)
+			return start
 		},
 	).AnyTimes()
 
@@ -82,6 +85,12 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 	mockNetwork.EXPECT().GetSlotsPerEpoch().DoAndReturn(
 		func() phase0.Slot {
 			return 32
+		},
+	).AnyTimes()
+
+	mockNetwork.EXPECT().GetGenesisTime().DoAndReturn(
+		func() time.Time {
+			return time.Unix(int64(beaconNetwork.MinGenesisTime()), 0)
 		},
 	).AnyTimes()
 
