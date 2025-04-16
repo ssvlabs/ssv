@@ -19,6 +19,18 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
+// ClientTLSConfigOptions contains options for configuring TLS.
+type ClientTLSConfigOptions struct {
+	// CACert is the certificate authority certificate.
+	CACert []byte
+	// ClientCert is the client certificate.
+	ClientCert []byte
+	// ClientKey is the client private key.
+	ClientKey []byte
+	// MinVersion is the minimum TLS version.
+	MinVersion uint16
+}
+
 type Client struct {
 	logger     *zap.Logger
 	baseURL    string
@@ -27,6 +39,37 @@ type Client struct {
 	clientCert []byte
 	clientKey  []byte
 	caCert     []byte
+}
+
+// ClientOption defines a function that configures a Client.
+type ClientOption func(*Client)
+
+// WithLogger sets a custom logger for the client.
+func WithLogger(logger *zap.Logger) ClientOption {
+	return func(client *Client) {
+		client.logger = logger
+	}
+}
+
+// WithClientCert sets the bytes of the client TLS certificate.
+func WithClientCert(cert []byte) ClientOption {
+	return func(client *Client) {
+		client.clientCert = cert
+	}
+}
+
+// WithClientKey sets the bytes of the client TLS key.
+func WithClientKey(key []byte) ClientOption {
+	return func(client *Client) {
+		client.clientKey = key
+	}
+}
+
+// WithCACert sets the bytes of the certificate authority TLS certificate.
+func WithCACert(cert []byte) ClientOption {
+	return func(client *Client) {
+		client.caCert = cert
+	}
 }
 
 func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
@@ -44,27 +87,20 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 		opt(c)
 	}
 
-	// set up client connection
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS13,
-	}
-
-	if len(c.clientCert) > 0 {
-		cert, err := tls.X509KeyPair(c.clientCert, c.clientKey)
+	// set up client connection with TLS if certificates are provided
+	if len(c.clientCert) > 0 || len(c.clientKey) > 0 || len(c.caCert) > 0 {
+		tlsConfig, err := createClientTLSConfig(ClientTLSConfigOptions{
+			ClientCert: c.clientCert,
+			ClientKey:  c.clientKey,
+			CACert:     c.caCert,
+		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to load client certificate: %w", err)
+			return nil, fmt.Errorf("failed to create TLS config: %w", err)
 		}
-		tlsConfig.Certificates = []tls.Certificate{cert}
-	}
 
-	if len(c.caCert) > 0 {
-		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM(c.caCert)
-		tlsConfig.RootCAs = caCertPool
-	}
-
-	c.httpClient.Transport = &http.Transport{
-		TLSClientConfig: tlsConfig,
+		c.httpClient.Transport = &http.Transport{
+			TLSClientConfig: tlsConfig,
+		}
 	}
 
 	return c, nil
@@ -266,4 +302,33 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	}
 
 	return missing, nil
+}
+
+// createClientTLSConfig creates a TLS configuration for clients.
+func createClientTLSConfig(opts ClientTLSConfigOptions) (*tls.Config, error) {
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+
+	if opts.MinVersion != 0 {
+		tlsConfig.MinVersion = opts.MinVersion
+	}
+
+	if len(opts.ClientCert) > 0 && len(opts.ClientKey) > 0 {
+		cert, err := tls.X509KeyPair(opts.ClientCert, opts.ClientKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client certificate: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	if len(opts.CACert) > 0 {
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(opts.CACert) {
+			return nil, fmt.Errorf("failed to append CA certificate to pool")
+		}
+		tlsConfig.RootCAs = caCertPool
+	}
+
+	return tlsConfig, nil
 }

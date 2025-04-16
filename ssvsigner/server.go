@@ -3,6 +3,8 @@ package ssvsigner
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -36,17 +38,61 @@ const (
 	pathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
 )
 
+// ServerTLSConfigOptions contains options for configuring TLS for the server.
+type ServerTLSConfigOptions struct {
+	// CACert is the certificate authority certificate.
+	CACert []byte
+	// ServerCert is the server certificate.
+	ServerCert []byte
+	// ServerKey is the server private key.
+	ServerKey []byte
+	// MinVersion is the minimum TLS version.
+	MinVersion uint16
+}
+
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
 	remoteSigner    remoteSigner
 	router          *router.Router
+	tlsConfig       *tls.Config
+}
+
+// ServerOption defines a function that configures a Server.
+type ServerOption func(*Server)
+
+// WithTLSConfig sets the TLS configuration for the server.
+func WithTLSConfig(config *tls.Config) ServerOption {
+	return func(server *Server) {
+		server.tlsConfig = config
+	}
+}
+
+// WithTLSCertificates sets the TLS configuration for the server using certificate files.
+func WithTLSCertificates(serverCert, serverKey, caCert []byte, minVersion uint16) ServerOption {
+	return func(server *Server) {
+		opts := ServerTLSConfigOptions{
+			ServerCert: serverCert,
+			ServerKey:  serverKey,
+			CACert:     caCert,
+			MinVersion: minVersion,
+		}
+
+		tlsConfig, err := createServerTLSConfig(opts)
+		if err != nil {
+			server.logger.Error("failed to create TLS config", zap.Error(err))
+			return
+		}
+
+		server.tlsConfig = tlsConfig
+	}
 }
 
 func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
 	remoteSigner remoteSigner,
+	opts ...ServerOption,
 ) *Server {
 	r := router.New()
 
@@ -55,6 +101,10 @@ func NewServer(
 		operatorPrivKey: operatorPrivKey,
 		remoteSigner:    remoteSigner,
 		router:          r,
+	}
+
+	for _, opt := range opts {
+		opt(server)
 	}
 
 	r.GET(pathValidators, server.handleListValidators)
@@ -87,6 +137,24 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 		}()
 		r.router.Handler(ctx)
 	}
+}
+
+// ListenAndServe starts the server on the specified address.
+// If TLS is configured, it will use HTTPS.
+func (r *Server) ListenAndServe(addr string) error {
+	handler := r.Handler()
+
+	if r.tlsConfig != nil {
+		r.logger.Info("starting ssv-signer server with TLS", zap.String("addr", addr))
+		server := &fasthttp.Server{
+			Handler:   handler,
+			TLSConfig: r.tlsConfig,
+		}
+		return server.ListenAndServe(addr)
+	}
+
+	r.logger.Info("starting ssv-signer server without TLS", zap.String("addr", addr))
+	return fasthttp.ListenAndServe(addr, handler)
 }
 
 func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
@@ -428,4 +496,36 @@ func (r *Server) writeJSONErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, stat
 	ctx.SetStatusCode(statusCode)
 	errResp := web3signer.ErrorMessage{Message: err.Error()}
 	r.writeJSON(ctx, logger, errResp)
+}
+
+// createServerTLSConfig creates a TLS configuration for servers.
+func createServerTLSConfig(opts ServerTLSConfigOptions) (*tls.Config, error) {
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+
+	if opts.MinVersion != 0 {
+		tlsConfig.MinVersion = opts.MinVersion
+	}
+
+	if len(opts.ServerCert) > 0 && len(opts.ServerKey) > 0 {
+		cert, err := tls.X509KeyPair(opts.ServerCert, opts.ServerKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load server certificate: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	} else {
+		return nil, fmt.Errorf("server certificate and key are required")
+	}
+
+	if len(opts.CACert) > 0 {
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(opts.CACert) {
+			return nil, fmt.Errorf("failed to append CA certificate to pool")
+		}
+		tlsConfig.ClientCAs = caCertPool
+		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+
+	return tlsConfig, nil
 }

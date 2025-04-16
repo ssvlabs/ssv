@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -723,6 +722,8 @@ func TestSSVSignerClientSuite(t *testing.T) {
 }
 
 func TestCustomHTTPClient(t *testing.T) {
+	t.Parallel()
+
 	customClient := &http.Client{
 		Transport: &http.Transport{
 			MaxIdleConns: 100,
@@ -740,6 +741,8 @@ func TestCustomHTTPClient(t *testing.T) {
 }
 
 func TestRequestErrors(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hijacker, ok := w.(http.Hijacker)
 		if !ok {
@@ -779,6 +782,8 @@ func TestRequestErrors(t *testing.T) {
 }
 
 func TestResponseHandlingErrors(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -801,56 +806,108 @@ func TestResponseHandlingErrors(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
+	t.Parallel()
+
 	logger, zapErr := zap.NewDevelopment()
 	require.NoError(t, zapErr)
 
+	exampleLogger := zap.NewExample()
+	certData := []byte("")
+	keyData := []byte("")
+	caCertData := []byte("")
+
 	testCases := []struct {
-		name    string
-		baseURL string
-		opts    []ClientOption
+		name            string
+		baseURL         string
+		opts            []ClientOption
+		expectedBaseURL string
+		checkLogger     bool
+		expectedLogger  *zap.Logger
+		checkTLS        bool
 	}{
 		{
-			name:    "WithoutOptions",
-			baseURL: "http://localhost:9000",
-			opts:    nil,
+			name:            "NormalURL",
+			baseURL:         "http://example.com",
+			opts:            nil,
+			expectedBaseURL: "http://example.com",
 		},
 		{
-			name:    "WithLogger",
-			baseURL: "http://localhost:9000",
-			opts:    []ClientOption{WithLogger(logger)},
+			name:            "URLWithTrailingSlash",
+			baseURL:         "http://example.com/",
+			expectedBaseURL: "http://example.com",
 		},
 		{
-			name:    "WithTrailingSlash",
-			baseURL: "http://localhost:9000/",
-			opts:    []ClientOption{WithLogger(logger)},
+			name:            "Empty",
+			baseURL:         "",
+			expectedBaseURL: "",
+		},
+		{
+			name:            "WithLogger",
+			baseURL:         "http://localhost:9000",
+			opts:            []ClientOption{WithLogger(logger)},
+			expectedBaseURL: "http://localhost:9000",
+			checkLogger:     true,
+			expectedLogger:  logger,
+		},
+		{
+			name:            "WithAllOptions",
+			baseURL:         "https://test.example.com",
+			opts:            []ClientOption{WithLogger(exampleLogger), WithClientCert(certData), WithClientKey(keyData), WithCACert(caCertData)},
+			expectedBaseURL: "https://test.example.com",
+			checkLogger:     true,
+			expectedLogger:  exampleLogger,
+			checkTLS:        true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			client, err := NewClient(tc.baseURL, tc.opts...)
 			require.NoError(t, err)
+			require.NotNil(t, client)
 
-			expectedBaseURL := strings.TrimRight(tc.baseURL, "/")
-			assert.Equal(t, expectedBaseURL, client.baseURL)
+			assert.Equal(t, tc.expectedBaseURL, client.baseURL)
 
-			if len(tc.opts) > 0 {
-				assert.Equal(t, logger, client.logger)
+			if tc.checkLogger && tc.expectedLogger != nil {
+				assert.Equal(t, tc.expectedLogger, client.logger)
 			} else {
-				assert.NotNil(t, client.logger) // noop logger
+				assert.NotNil(t, client.logger) // default noop logger
 			}
 
 			assert.NotNil(t, client.httpClient)
 			assert.Equal(t, 30*time.Second, client.httpClient.Timeout)
+
+			if tc.checkTLS {
+				assert.Equal(t, certData, client.clientCert)
+				assert.Equal(t, keyData, client.clientKey)
+				assert.Equal(t, caCertData, client.caCert)
+			}
 		})
 	}
 }
 
 func Test_ShareDecryptionError(t *testing.T) {
+	t.Parallel()
+
 	var customErr error = ShareDecryptionError(errors.New("test error"))
 
 	var shareDecryptionError ShareDecryptionError
 	if !errors.As(customErr, &shareDecryptionError) {
 		t.Errorf("shareDecryptionError was expected to be a ShareDecryptionError")
 	}
+}
+
+func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
+	t.Parallel()
+
+	const inputURL = "https://test.example.com/"
+	const expectedURL = "https://test.example.com"
+
+	client, err := NewClient(inputURL)
+
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	assert.Equal(t, expectedURL, client.baseURL)
 }
