@@ -90,7 +90,7 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 
 	mockNetwork.EXPECT().GetGenesisTime().DoAndReturn(
 		func() time.Time {
-			return time.Unix(int64(beaconNetwork.MinGenesisTime()), 0)
+			return time.Unix(int64(beaconNetwork.MinGenesisTime()), 0) // #nosec G115 -- genesis time is never above int64
 		},
 	).AnyTimes()
 
