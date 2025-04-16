@@ -12,7 +12,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ProposerHandler struct {
@@ -151,45 +150,33 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 
-	eligibilityFilter := func(epoch phase0.Epoch, share *types.SSVShare) bool {
-		return share.IsParticipatingAndAttesting(epoch)
-	}
-
-	var allEligibleShares []*types.SSVShare
+	var allEligibleIndices []phase0.ValidatorIndex
 	for _, share := range h.validatorProvider.Validators() {
-		if eligibilityFilter(epoch, share) {
-			allEligibleShares = append(allEligibleShares, share)
+		if share.IsParticipatingAndAttesting(epoch) {
+			allEligibleIndices = append(allEligibleIndices, share.ValidatorIndex)
 		}
 	}
-
-	eligibleIndices := indicesFromShares(allEligibleShares)
-	if len(eligibleIndices) == 0 {
+	if len(allEligibleIndices) == 0 {
 		h.logger.Debug("no eligible validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
-	var selfEligibleShares []*types.SSVShare
+	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
 	for _, share := range h.validatorProvider.SelfValidators() {
-		if eligibilityFilter(epoch, share) {
-			selfEligibleShares = append(selfEligibleShares, share)
+		if share.IsParticipatingAndAttesting(epoch) {
+			selfEligibleIndices[share.ValidatorIndex] = struct{}{}
 		}
 	}
 
-	selfIndicesSet := map[phase0.ValidatorIndex]struct{}{}
-	for _, idx := range indicesFromShares(selfEligibleShares) {
-		selfIndicesSet[idx] = struct{}{}
-	}
-
-	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, eligibleIndices)
+	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allEligibleIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0, len(duties))
-
 	for _, d := range duties {
-		_, inCommitteeDuty := selfIndicesSet[d.ValidatorIndex]
+		_, inCommitteeDuty := selfEligibleIndices[d.ValidatorIndex]
 		storeDuties = append(storeDuties, dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
 			Slot:           d.Slot,
 			ValidatorIndex: d.ValidatorIndex,
@@ -198,7 +185,6 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		})
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
-
 	h.duties.Set(epoch, storeDuties)
 
 	h.logger.Debug("📚 got duties",
