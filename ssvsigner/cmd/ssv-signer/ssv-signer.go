@@ -27,11 +27,12 @@ type CLI struct {
 	PasswordFile       string `env:"PASSWORD_FILE" and:"files"`
 
 	// TLS configuration
-	ServerCertFile string `env:"TLS_CERT_FILE" help:"Path to the TLS certificate file for server"`
-	ServerKeyFile  string `env:"TLS_KEY_FILE" help:"Path to the TLS key file for server"`
-	ClientCertFile string `env:"TLS_CLIENT_CERT_FILE" help:"Path to the client certificate file for outgoing connections"`
-	ClientKeyFile  string `env:"TLS_CLIENT_KEY_FILE" help:"Path to the client key file for outgoing connections"`
-	CACertFile     string `env:"TLS_CA_CERT_FILE" help:"Path to the CA certificate file for verifying connections"`
+	ServerCertFile     string `env:"TLS_CERT_FILE" help:"Path to the TLS certificate file for server"`
+	ServerKeyFile      string `env:"TLS_KEY_FILE" help:"Path to the TLS key file for server"`
+	ClientCertFile     string `env:"TLS_CLIENT_CERT_FILE" help:"Path to the client certificate file for outgoing connections"`
+	ClientKeyFile      string `env:"TLS_CLIENT_KEY_FILE" help:"Path to the client key file for outgoing connections"`
+	CACertFile         string `env:"TLS_CA_CERT_FILE" help:"Path to the CA certificate file for verifying connections"`
+	InsecureSkipVerify bool   `env:"TLS_INSECURE_SKIP_VERIFY" help:"Skip verification of TLS certificates (not recommended for production)"`
 }
 
 func main() {
@@ -153,6 +154,14 @@ func loadCertFile(path string) ([]byte, error) {
 
 // createClientTLSConfig creates TLS configuration for client connections.
 func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
+	if cli.InsecureSkipVerify {
+		logger.Warn("client TLS configured with InsecureSkipVerify=true (not recommended for production)")
+		return &tls.Config{
+			MinVersion:         tls.VersionTLS13,
+			InsecureSkipVerify: true,
+		}, nil
+	}
+
 	if cli.ClientCertFile == "" || cli.ClientKeyFile == "" {
 		return nil, nil
 	}
@@ -192,7 +201,7 @@ func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 		tlsConfig.RootCAs = caCertPool
 	}
 
-	logger.Info("Client TLS configured successfully")
+	logger.Info("client TLS configured successfully")
 	return tlsConfig, nil
 }
 
@@ -218,8 +227,13 @@ func createServerTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 	}
 
 	tlsConfig := &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{cert},
+		MinVersion:         tls.VersionTLS13,
+		Certificates:       []tls.Certificate{cert},
+		InsecureSkipVerify: cli.InsecureSkipVerify,
+	}
+
+	if cli.InsecureSkipVerify {
+		logger.Warn("server TLS configured with InsecureSkipVerify=true (not recommended for production)")
 	}
 
 	// add CA certificate if available for client verification

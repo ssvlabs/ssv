@@ -48,6 +48,8 @@ type ServerTLSConfigOptions struct {
 	ServerKey []byte
 	// MinVersion is the minimum TLS version.
 	MinVersion uint16
+	// InsecureSkipVerify skips certificate verification (not recommended for production).
+	InsecureSkipVerify bool
 }
 
 type Server struct {
@@ -85,6 +87,16 @@ func WithTLSCertificates(serverCert, serverKey, caCert []byte, minVersion uint16
 		}
 
 		server.tlsConfig = tlsConfig
+	}
+}
+
+// WithServerInsecureSkipVerify sets the TLS configuration to skip certificate verification (not recommended for production).
+func WithServerInsecureSkipVerify() ServerOption {
+	return func(server *Server) {
+		if server.tlsConfig == nil {
+			server.tlsConfig = &tls.Config{}
+		}
+		server.tlsConfig.InsecureSkipVerify = true
 	}
 }
 
@@ -501,7 +513,8 @@ func (r *Server) writeJSONErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, stat
 // createServerTLSConfig creates a TLS configuration for servers.
 func createServerTLSConfig(opts ServerTLSConfigOptions) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS13,
+		MinVersion:         tls.VersionTLS13,
+		InsecureSkipVerify: opts.InsecureSkipVerify,
 	}
 
 	if opts.MinVersion != 0 {
