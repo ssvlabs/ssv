@@ -590,7 +590,7 @@ func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*bad
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
-		logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+		logger.Debug("post-migrations garbage collection errored", fields.Duration(start))
 		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
@@ -626,7 +626,7 @@ func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*peb
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
-		logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+		logger.Debug("post-migrations garbage collection errored", fields.Duration(start))
 		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
