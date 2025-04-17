@@ -46,13 +46,13 @@ func TestLoadCertificatesFromFiles(t *testing.T) {
 			keyFile:     clientKeyFile,
 			caCertFile:  caCertFile,
 			expectError: false,
-			validateCerts: func(t *testing.T, cert, key, caCert []byte) {
+			validateCerts: func(t *testing.T, cert, key, loadedCaCert []byte) {
 				assert.NotNil(t, cert)
 				assert.NotNil(t, key)
 				assert.NotNil(t, caCert)
 				assert.Equal(t, clientCert, cert)
 				assert.Equal(t, clientKey, key)
-				assert.Equal(t, caCert, caCert)
+				assert.Equal(t, caCert, loadedCaCert)
 			},
 		},
 		{
@@ -75,11 +75,11 @@ func TestLoadCertificatesFromFiles(t *testing.T) {
 			keyFile:     "",
 			caCertFile:  caCertFile,
 			expectError: false,
-			validateCerts: func(t *testing.T, cert, key, caCert []byte) {
+			validateCerts: func(t *testing.T, cert, key, loadedCaCert []byte) {
 				assert.Nil(t, cert)
 				assert.Nil(t, key)
-				assert.NotNil(t, caCert)
-				assert.Equal(t, caCert, caCert)
+				assert.NotNil(t, loadedCaCert)
+				assert.Equal(t, caCert, loadedCaCert)
 			},
 		},
 		{
