@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type SyncCommitteeHandler struct {
@@ -87,7 +88,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			h.processExecution(ctx, period, slot)
-			h.processFetching(ctx, period, true)
+			h.processFetching(ctx, epoch, period, true)
 			cancel()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
@@ -137,15 +138,15 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-	h.processFetching(ctx, period, false)
+	h.processFetching(ctx, epoch, period, false)
 }
 
-func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, waitForInitial bool) {
+func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if h.fetchCurrentPeriod {
-		if err := h.fetchAndProcessDuties(ctx, period, waitForInitial); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch, period, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 			return
 		}
@@ -153,7 +154,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 	}
 
 	if h.fetchNextPeriod {
-		if err := h.fetchAndProcessDuties(ctx, period+1, waitForInitial); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch, period+1, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
 		}
@@ -178,39 +179,44 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 }
 
-func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
+// Period can be current or future.
+// If the period passed is the current period – the sync committee target epoch should be the current epoch.
+// If the period passed is a future period – the sync committee target epoch should be the first epoch of that future period.
+// The epoch passed is always the current epoch.
+func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) error {
 	start := time.Now()
-	firstEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period)
-	currentEpoch := h.network.Beacon.EstimatedCurrentEpoch()
-	if firstEpoch < currentEpoch {
-		firstEpoch = currentEpoch
-	}
-	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch, waitForInitial)
-	if len(allActiveIndices) == 0 {
-		h.logger.Debug("no active validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
+	if period > h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
+		epoch = h.network.Beacon.FirstEpochOfSyncPeriod(period)
+	}
+
+	eligibleIndices := h.validatorController.FilterIndices(waitForInitial, func(s *types.SSVShare) bool {
+		return s.IsParticipating(h.network, epoch)
+	})
+
+	if len(eligibleIndices) == 0 {
+		h.logger.Debug("no eligible validators for period", fields.Epoch(epoch), zap.Uint64("period", period))
 		return nil
 	}
 
-	inCommitteeIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(firstEpoch))
-	inCommitteeIndicesSet := map[phase0.ValidatorIndex]struct{}{}
-	for _, idx := range inCommitteeIndices {
-		inCommitteeIndicesSet[idx] = struct{}{}
-	}
-
-	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, firstEpoch, allActiveIndices)
+	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
 
+	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)
+	selfIndices := make(map[phase0.ValidatorIndex]struct{}, len(selfShares))
+	for _, share := range selfShares {
+		selfIndices[share.ValidatorIndex] = struct{}{}
+	}
+
 	storeDuties := make([]dutystore.StoreSyncCommitteeDuty, 0, len(duties))
-	for _, d := range duties {
-		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
+	for _, duty := range duties {
+		_, inCommittee := selfIndices[duty.ValidatorIndex]
 		storeDuties = append(storeDuties, dutystore.StoreSyncCommitteeDuty{
-			ValidatorIndex: d.ValidatorIndex,
-			Duty:           d,
-			InCommittee:    inCommitteeDuty,
+			ValidatorIndex: duty.ValidatorIndex,
+			Duty:           duty,
+			InCommittee:    inCommittee,
 		})
 	}
 	h.duties.Set(period, storeDuties)
@@ -218,6 +224,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	h.prepareDutiesResultLog(period, duties, start)
 
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
+	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
 	if len(subscriptions) > 0 {
 		if deadline, ok := ctx.Deadline(); ok {

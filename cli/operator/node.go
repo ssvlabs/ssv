@@ -134,7 +134,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
+		db, err := setupDB(logger, networkConfig)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -173,7 +173,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 		cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 
-		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
+		nodeStorage, operatorData := setupOperatorStorage(cfg.SSVOptions.Network, logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
@@ -348,7 +348,7 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
-			networkConfig.Beacon,
+			networkConfig,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -551,7 +551,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -565,9 +565,9 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	}
 
 	migrationOpts := migrations.Options{
-		Db:      db,
-		DbPath:  cfg.DBOptions.Path,
-		Network: eth2Network,
+		Db:            db,
+		DbPath:        cfg.DBOptions.Path,
+		NetworkConfig: networkConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
@@ -602,8 +602,8 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	return db, nil
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey keys.OperatorPrivateKey, configPrivKeyText string) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+func setupOperatorStorage(networkConfig networkconfig.NetworkConfig, logger *zap.Logger, db basedb.Database, configPrivKey keys.OperatorPrivateKey, configPrivKeyText string) (operatorstorage.Storage, *registrystorage.OperatorData) {
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

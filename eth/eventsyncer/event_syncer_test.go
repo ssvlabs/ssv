@@ -208,7 +208,7 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

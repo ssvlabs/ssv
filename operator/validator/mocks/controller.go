@@ -31,6 +31,7 @@ import (
 type MockController struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllerMockRecorder
+	isgomock struct{}
 }
 
 // MockControllerMockRecorder is the mock recorder for MockController.
@@ -48,20 +49,6 @@ func NewMockController(ctrl *gomock.Controller) *MockController {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockController) EXPECT() *MockControllerMockRecorder {
 	return m.recorder
-}
-
-// AllActiveIndices mocks base method.
-func (m *MockController) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllActiveIndices", epoch, afterInit)
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockControllerMockRecorder) AllActiveIndices(epoch, afterInit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch, afterInit)
 }
 
 // ExecuteCommitteeDuty mocks base method.
@@ -100,6 +87,20 @@ func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint
 func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex, ownValidator any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex, ownValidator)
+}
+
+// FilterIndices mocks base method.
+func (m *MockController) FilterIndices(afterInit bool, filter func(*types0.SSVShare) bool) []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilterIndices", afterInit, filter)
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// FilterIndices indicates an expected call of FilterIndices.
+func (mr *MockControllerMockRecorder) FilterIndices(afterInit, filter any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterIndices", reflect.TypeOf((*MockController)(nil).FilterIndices), afterInit, filter)
 }
 
 // GetValidator mocks base method.
@@ -270,6 +271,7 @@ func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 type MockRecipients struct {
 	ctrl     *gomock.Controller
 	recorder *MockRecipientsMockRecorder
+	isgomock struct{}
 }
 
 // MockRecipientsMockRecorder is the mock recorder for MockRecipients.
@@ -309,6 +311,7 @@ func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner any) *gomock.Cal
 type MockSharesStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockSharesStorageMockRecorder
+	isgomock struct{}
 }
 
 // MockSharesStorageMockRecorder is the mock recorder for MockSharesStorage.
@@ -378,6 +381,7 @@ func (mr *MockSharesStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 type MockP2PNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockP2PNetworkMockRecorder
+	isgomock struct{}
 }
 
 // MockP2PNetworkMockRecorder is the mock recorder for MockP2PNetwork.
