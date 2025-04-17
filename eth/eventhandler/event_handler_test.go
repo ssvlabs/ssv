@@ -71,9 +71,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	currentSlot := &utils.SlotValue{}
 	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
-	mockNetworkConfig := &networkconfig.NetworkConfig{
-		Beacon: mockBeaconNetwork,
-	}
+	mockNetworkConfig := &networkconfig.NetworkConfig{}
+	mockNetworkConfig.Beacon = mockBeaconNetwork
 
 	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
 	if err != nil {
@@ -1360,9 +1359,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	operatorDataStore := operatordatastore.New(operatorData)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, &utils.SlotValue{}),
-		}
+		network = &networkconfig.NetworkConfig{}
+		network.Beacon = utils.SetupMockBeaconNetwork(t, &utils.SlotValue{})
 	}
 
 	keyManager, err := ekm.NewLocalKeyManager(logger, db, *network, operator.privateKey)

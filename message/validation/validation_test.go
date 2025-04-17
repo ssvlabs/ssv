@@ -628,9 +628,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
 		currentSlot := &utils.SlotValue{}
-		mockNetworkConfig := networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, currentSlot),
-		}
+		mockNetworkConfig := networkconfig.NetworkConfig{}
+		mockNetworkConfig.Beacon = utils.SetupMockBeaconNetwork(t, currentSlot)
 
 		const epoch = 1
 		currentSlot.SetSlot(netCfg.Beacon.FirstSlotAtEpoch(epoch))
@@ -663,9 +662,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
 		currentSlot := &utils.SlotValue{}
-		mockNetworkConfig := networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, currentSlot),
-		}
+		mockNetworkConfig := networkconfig.NetworkConfig{}
+		mockNetworkConfig.Beacon = utils.SetupMockBeaconNetwork(t, currentSlot)
 
 		const epoch = 1
 		currentSlot.SetSlot(mockNetworkConfig.Beacon.FirstSlotAtEpoch(epoch))
