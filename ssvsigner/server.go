@@ -38,18 +38,6 @@ const (
 	pathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
 )
 
-// ServerTLSConfig contains TLS configuration for the server.
-type ServerTLSConfig struct {
-	// ServerCACertFile is the certificate authority certificate.
-	ServerCACertFile string `yaml:"ServerCACertFile" env:"SERVER_CA_CERT_FILE" env-description:"Path to CA certificate file for client authentication on server"`
-	// ServerCertFile is the server certificate.
-	ServerCertFile string `yaml:"ServerCertFile" env:"SERVER_CERT_FILE" env-description:"Path to certificate file for server TLS connections"`
-	// ServerKeyFile is the server private key.
-	ServerKeyFile string `yaml:"ServerKeyFile" env:"SERVER_KEY_FILE" env-description:"Path to key file for server TLS connections"`
-	// ServerInsecureSkipVerify skips certificate verification (not recommended for production).
-	ServerInsecureSkipVerify bool `yaml:"ServerInsecureSkipVerify" env:"SERVER_INSECURE_SKIP_VERIFY" env-description:"Skip TLS certificate verification for server (not recommended for production)"`
-}
-
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
@@ -69,13 +57,14 @@ func WithTLSConfig(config *tls.Config) ServerOption {
 }
 
 // WithTLSCertificates sets the TLS configuration for the server using raw certificate data.
+// InsecureSkipVerify is set to false by default.
 func WithTLSCertificates(serverCert, serverKey, caCert []byte) ServerOption {
 	return func(server *Server) {
 		tlsConfig, err := CreateTLSConfig(ServerTLSConfigType,
 			serverCert,
 			serverKey,
 			caCert,
-			false, // InsecureSkipVerify is set to false by default
+			false,
 		)
 
 		if err != nil {
