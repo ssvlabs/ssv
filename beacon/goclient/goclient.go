@@ -185,7 +185,7 @@ type GoClient struct {
 // New init new client and go-client instance
 func New(
 	logger *zap.Logger,
-	opt beaconprotocol.Options,
+	opt Options,
 	operatorDataStore operatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
