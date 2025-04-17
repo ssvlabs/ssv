@@ -225,9 +225,6 @@ func New(
 		}
 	}
 
-	// Despite allowing delayed start, addSingleClient attempts to connect to node before returning,
-	// so active clients should be up before the initMultiClient
-
 	err := client.initMultiClient(opt.Context)
 	if err != nil {
 		logger.Error("Consensus multi client initialization failed",
