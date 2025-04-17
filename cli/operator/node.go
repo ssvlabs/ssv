@@ -204,7 +204,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.Context = cmd.Context()
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
+		consensusClient := setupConsensusClient(logger, slotTickerProvider)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -721,12 +721,8 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	return n
 }
 
-func setupConsensusClient(
-	logger *zap.Logger,
-	operatorDataStore operatordatastore.OperatorDataStore,
-	slotTickerProvider slotticker.Provider,
-) *goclient.GoClient {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, slotTickerProvider)
+func setupConsensusClient(logger *zap.Logger, slotTickerProvider slotticker.Provider) *goclient.GoClient {
+	cl, err := goclient.New(logger, cfg.ConsensusClient, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))

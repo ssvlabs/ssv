@@ -111,10 +111,6 @@ type MultiClient interface {
 	eth2client.ValidatorLivenessProvider
 }
 
-type operatorDataStore interface {
-	AwaitOperatorID() spectypes.OperatorID
-}
-
 type EventTopic string
 
 const (
@@ -132,8 +128,6 @@ type GoClient struct {
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
-
-	operatorDataStore operatorDataStore
 
 	// registrationMu synchronises access to registrations
 	registrationMu sync.Mutex
@@ -186,7 +180,6 @@ type GoClient struct {
 func New(
 	logger *zap.Logger,
 	opt beaconprotocol.Options,
-	operatorDataStore operatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
@@ -205,7 +198,6 @@ func New(
 		ctx:                   opt.Context,
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
-		operatorDataStore:     operatorDataStore,
 		registrations:         map[phase0.BLSPubKey]*validatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
