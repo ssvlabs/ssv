@@ -10,7 +10,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
@@ -55,7 +54,7 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 	dvs := testingDiscovery(t)
 
 	// Register subnets 1, 3, and 5
-	updated, err := dvs.RegisterSubnets(testLogger, 1, 3, 5)
+	updated, err := dvs.RegisterSubnets(1, 3, 5)
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
@@ -65,7 +64,7 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 	require.Equal(t, byte(0), dvs.subnets[2])
 
 	// Register the same subnets. Should not update the state
-	updated, err = dvs.RegisterSubnets(testLogger, 1, 3, 5)
+	updated, err = dvs.RegisterSubnets(1, 3, 5)
 	assert.NoError(t, err)
 	assert.False(t, updated)
 
@@ -75,7 +74,7 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 	require.Equal(t, byte(0), dvs.subnets[2])
 
 	// Register different subnets
-	updated, err = dvs.RegisterSubnets(testLogger, 2, 4)
+	updated, err = dvs.RegisterSubnets(2, 4)
 	assert.NoError(t, err)
 	assert.True(t, updated)
 	require.Equal(t, byte(1), dvs.subnets[1])
@@ -94,7 +93,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	dvs := testingDiscovery(t)
 
 	// Register subnets first
-	_, err := dvs.RegisterSubnets(testLogger, 1, 2, 3)
+	_, err := dvs.RegisterSubnets(1, 2, 3)
 	require.NoError(t, err)
 
 	require.Equal(t, byte(1), dvs.subnets[1])
@@ -102,7 +101,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	require.Equal(t, byte(1), dvs.subnets[3])
 
 	// Deregister from 2 and 3
-	updated, err := dvs.DeregisterSubnets(testLogger, 2, 3)
+	updated, err := dvs.DeregisterSubnets(2, 3)
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
@@ -111,7 +110,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	require.Equal(t, byte(0), dvs.subnets[3])
 
 	// Deregistering non-existent subnets should not update
-	updated, err = dvs.DeregisterSubnets(testLogger, 4, 5)
+	updated, err = dvs.DeregisterSubnets(4, 5)
 	assert.NoError(t, err)
 	assert.False(t, updated)
 
@@ -141,7 +140,6 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
-	logger := zap.NewNop()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -161,14 +159,13 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	// Change network config
 	dvs.networkConfig = networkconfig.HoleskyStage
 	// Test PublishENR method
-	dvs.PublishENR(logger)
+	dvs.PublishENR()
 
 	// Check LocalNode has been updated
 	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.HoleskyStage)
 }
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {
-	logger := zap.NewNop()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -192,7 +189,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 
 	// Run bootstrap
 	go func() {
-		err := dvs.Bootstrap(logger, handler)
+		err := dvs.Bootstrap(handler)
 		assert.NoError(t, err)
 	}()
 
@@ -241,47 +238,47 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	}()
 
 	// Valid peer
-	err := dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NewTestingNode(t)))
+	err := dvs.checkPeer(context.TODO(), ToPeerEvent(NewTestingNode(t)))
 	require.NoError(t, err)
 
 	// No domain
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithoutDomain(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutDomain(t)))
 	require.ErrorContains(t, err, "could not read domain type: not found")
 
 	// No next domain. No error since it's not enforced
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithoutNextDomain(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutNextDomain(t)))
 	require.NoError(t, err)
 
 	// Matching main domain
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
 	require.NoError(t, err)
 
 	// Matching next domain
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
 	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
 
 	// Mismatching domains
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, spectypes.DomainType{})))
 	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
 
 	// No subnets
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithoutSubnets(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithoutSubnets(t)))
 	require.ErrorContains(t, err, "could not read subnets: not found")
 
 	// Zero subnets
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithZeroSubnets(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithZeroSubnets(t)))
 	require.ErrorContains(t, err, "zero subnets")
 
 	// Valid peer but reached limit
 	dvs.conns.(*MockConnection).SetAtLimit(true)
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NewTestingNode(t)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NewTestingNode(t)))
 	require.ErrorContains(t, err, "reached limit")
 	dvs.conns.(*MockConnection).SetAtLimit(false)
 
 	// Valid peer but no common subnet
 	subnets := make([]byte, len(commons.ZeroSubnets))
 	subnets[10] = 1
-	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
 }
 

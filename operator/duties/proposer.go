@@ -144,7 +144,7 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
 		}
 	}
-	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
 }
 
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
