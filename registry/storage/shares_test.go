@@ -163,7 +163,7 @@ func TestSharesStorage(t *testing.T) {
 
 		shares, _, _ := NewSharesStorage(db, []byte("test"))
 
-		shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+		err = shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			share.ValidatorPubKey: {
 				Index:           share.ValidatorIndex,
 				Status:          share.Status,
@@ -175,7 +175,7 @@ func TestSharesStorage(t *testing.T) {
 		assert.Equal(t, 0, db.saveCount)
 
 		// change status to pending queued and test that it's saved
-		shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+		err = shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			share.ValidatorPubKey: {
 				Index:           share.ValidatorIndex,
 				Status:          v1.ValidatorStatePendingQueued,
