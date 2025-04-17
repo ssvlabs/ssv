@@ -11,8 +11,8 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -380,6 +380,9 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			if !exists {
 				continue
 			}
+			if metadata.Equals(extractMetadata(share)) {
+				continue
+			}
 			share.ValidatorIndex = metadata.Index
 			share.Status = metadata.Status
 			share.ActivationEpoch = metadata.ActivationEpoch
@@ -393,7 +396,20 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 		return err
 	}
 
-	return s.saveToDB(nil, shares...)
+	if len(shares) > 0 {
+		return s.saveToDB(nil, shares...)
+	}
+
+	return nil
+}
+
+func extractMetadata(share *types.SSVShare) *beaconprotocol.ValidatorMetadata {
+	return &beaconprotocol.ValidatorMetadata{
+		Index:           share.ValidatorIndex,
+		Status:          share.Status,
+		ActivationEpoch: share.ActivationEpoch,
+		ExitEpoch:       share.ExitEpoch,
+	}
 }
 
 // Drop deletes all shares.
