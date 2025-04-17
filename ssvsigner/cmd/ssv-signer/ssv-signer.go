@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -25,8 +26,8 @@ type CLI struct {
 	PasswordFile       string `env:"PASSWORD_FILE" and:"files"`
 
 	// TLS configuration
-	Client ssvsigner.ClientTLSConfig `embed:""`
-	Server ssvsigner.ServerTLSConfig `embed:""`
+	Client ssvsignertls.ClientConfig `embed:""`
+	Server ssvsignertls.ServerConfig `embed:""`
 }
 
 func main() {
@@ -85,7 +86,7 @@ func run(logger *zap.Logger, cli CLI) error {
 
 	var serverOptions []ssvsigner.ServerOption
 	if serverTLSConfig != nil {
-		serverOptions = append(serverOptions, ssvsigner.WithTLSConfig(serverTLSConfig))
+		serverOptions = append(serverOptions, ssvsigner.WithServerTLSConfig(serverTLSConfig))
 	}
 
 	srv := ssvsigner.NewServer(logger, operatorPrivateKey, web3SignerClient, serverOptions...)
@@ -164,7 +165,7 @@ func loadCertFile(path string) ([]byte, error) {
 // createClientTLSConfig creates TLS configuration for client connections.
 func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 	// If no TLS configuration is provided, return nil
-	if !cli.Client.HasTLSConfig() {
+	if !cli.Client.HasConfig() {
 		return nil, nil
 	}
 
@@ -174,7 +175,7 @@ func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 	}
 
 	// Use the centralized TLS configuration function
-	tlsConfig, err := ssvsigner.CreateClientTLSConfig(cli.Client)
+	tlsConfig, err := ssvsignertls.CreateClientConfig(cli.Client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create client TLS configuration: %w", err)
 	}
@@ -200,7 +201,7 @@ func createServerTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
 	}
 
 	// Use the centralized TLS configuration function
-	tlsConfig, err := ssvsigner.CreateServerTLSConfig(cli.Server)
+	tlsConfig, err := ssvsignertls.CreateServerConfig(cli.Server)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create server TLS configuration: %w", err)
 	}

@@ -615,12 +615,12 @@ func TestTLSServer(t *testing.T) {
 			tlsConfig: &tls.Config{
 				MinVersion: tls.VersionTLS13,
 			},
-			tlsOption:       WithTLSConfig(&tls.Config{MinVersion: tls.VersionTLS13}),
+			tlsOption:       WithServerTLSConfig(&tls.Config{MinVersion: tls.VersionTLS13}),
 			expectTLSConfig: true,
 		},
 		{
 			name: "With TLS Certificates",
-			tlsOption: WithTLSCertificates(
+			tlsOption: WithServerTLSCertificates(
 				serverCert,
 				serverKey,
 				caCert,
@@ -692,7 +692,7 @@ func TestServerTLSListenAndServe(t *testing.T) {
 	}{
 		{
 			name:          "TLS Server",
-			serverOptions: []ServerOption{WithTLSCertificates(serverCert, serverKey, nil)},
+			serverOptions: []ServerOption{WithServerTLSCertificates(serverCert, serverKey, nil)},
 			useTLS:        true,
 			expectSuccess: true,
 		},

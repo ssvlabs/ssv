@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -43,24 +44,25 @@ type Server struct {
 	operatorPrivKey keys.OperatorPrivateKey
 	remoteSigner    remoteSigner
 	router          *router.Router
-	tlsConfig       *tls.Config
+
+	tlsConfig *tls.Config
 }
 
 // ServerOption defines a function that configures a Server.
 type ServerOption func(*Server)
 
-// WithTLSConfig sets the TLS configuration for the server.
-func WithTLSConfig(config *tls.Config) ServerOption {
+// WithServerTLSConfig sets the TLS configuration for the server.
+func WithServerTLSConfig(config *tls.Config) ServerOption {
 	return func(server *Server) {
 		server.tlsConfig = config
 	}
 }
 
-// WithTLSCertificates sets the TLS configuration for the server using raw certificate data.
+// WithServerTLSCertificates sets the TLS configuration for the server.
 // InsecureSkipVerify is set to false by default.
-func WithTLSCertificates(serverCert, serverKey, caCert []byte) ServerOption {
+func WithServerTLSCertificates(serverCert, serverKey, caCert []byte) ServerOption {
 	return func(server *Server) {
-		tlsConfig, err := CreateTLSConfig(ServerTLSConfigType,
+		tlsConfig, err := ssvsignertls.CreateConfig(ssvsignertls.ServerConfigType,
 			serverCert,
 			serverKey,
 			caCert,
@@ -68,7 +70,7 @@ func WithTLSCertificates(serverCert, serverKey, caCert []byte) ServerOption {
 		)
 
 		if err != nil {
-			server.logger.Error("failed to create TLS config from raw data", zap.Error(err))
+			server.logger.Error("failed to create server TLS config", zap.Error(err))
 			return
 		}
 

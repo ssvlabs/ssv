@@ -3,6 +3,7 @@ package ssvsigner
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -22,10 +24,7 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 
-	clientCert         []byte
-	clientKey          []byte
-	caCert             []byte
-	insecureSkipVerify bool
+	tlsConfig *tls.Config
 }
 
 // ClientOption defines a function that configures a Client.
@@ -38,31 +37,33 @@ func WithLogger(logger *zap.Logger) ClientOption {
 	}
 }
 
-// WithClientCert sets the bytes of the client TLS certificate.
-func WithClientCert(cert []byte) ClientOption {
+// WithClientTLSConfig sets the TLS configuration for the client.
+func WithClientTLSConfig(tlsConfig *tls.Config) ClientOption {
 	return func(client *Client) {
-		client.clientCert = cert
+		client.tlsConfig = tlsConfig
 	}
 }
 
-// WithClientKey sets the bytes of the client TLS key.
-func WithClientKey(key []byte) ClientOption {
+// WithClientTLSCertificates sets the TLS configuration for the client.
+// InsecureSkipVerify is set to false by default.
+func WithClientTLSCertificates(cert, key, caCert []byte) ClientOption {
 	return func(client *Client) {
-		client.clientKey = key
+		tlsConfig, err := ssvsignertls.CreateConfig(ssvsignertls.ClientConfigType, cert, key, caCert, false)
+		if err != nil {
+			client.logger.Error("failed to create client TLS config", zap.Error(err))
+		}
+
+		client.tlsConfig = tlsConfig
 	}
 }
 
-// WithCACert sets the bytes of the certificate authority TLS certificate.
-func WithCACert(cert []byte) ClientOption {
-	return func(client *Client) {
-		client.caCert = cert
-	}
-}
-
-// WithClientInsecureSkipVerify configures the client to skip TLS certificate verification (not recommended for production)
+// WithClientInsecureSkipVerify sets the TLS configuration to skip certificate verification (not recommended for production).
 func WithClientInsecureSkipVerify() ClientOption {
 	return func(client *Client) {
-		client.insecureSkipVerify = true
+		if client.tlsConfig == nil {
+			client.tlsConfig = &tls.Config{}
+		}
+		client.tlsConfig.InsecureSkipVerify = true
 	}
 }
 
@@ -82,14 +83,9 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 	}
 
 	// set up client connection with TLS if certificates are provided
-	if len(c.clientCert) > 0 || len(c.clientKey) > 0 || len(c.caCert) > 0 || c.insecureSkipVerify {
-		tlsConfig, err := CreateTLSConfig(ClientTLSConfigType, c.clientCert, c.clientKey, c.caCert, c.insecureSkipVerify)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create TLS config: %w", err)
-		}
-
+	if c.tlsConfig != nil {
 		c.httpClient.Transport = &http.Transport{
-			TLSClientConfig: tlsConfig,
+			TLSClientConfig: c.tlsConfig,
 		}
 	}
 

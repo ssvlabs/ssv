@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/testingutils"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -855,7 +856,7 @@ func TestNew(t *testing.T) {
 		{
 			name:            "WithAllOptions",
 			baseURL:         "https://test.example.com",
-			opts:            []ClientOption{WithLogger(exampleLogger), WithClientCert(certData), WithClientKey(keyData), WithCACert(caCertData)},
+			opts:            []ClientOption{WithLogger(exampleLogger), WithClientTLSCertificates(certData, keyData, caCertData)},
 			expectedBaseURL: "https://test.example.com",
 			checkLogger:     true,
 			expectedLogger:  exampleLogger,
@@ -883,9 +884,10 @@ func TestNew(t *testing.T) {
 			assert.Equal(t, 30*time.Second, client.httpClient.Timeout)
 
 			if tc.checkTLS {
-				assert.Equal(t, certData, client.clientCert)
-				assert.Equal(t, keyData, client.clientKey)
-				assert.Equal(t, caCertData, client.caCert)
+				assert.NotNil(t, client.tlsConfig)
+				transport, ok := client.httpClient.Transport.(*http.Transport)
+				assert.True(t, ok)
+				assert.NotNil(t, transport.TLSClientConfig)
 			}
 		})
 	}
@@ -1007,11 +1009,9 @@ func TestClientTLS(t *testing.T) {
 
 			var clientOpts []ClientOption
 			if tc.clientCert != nil && tc.clientKey != nil {
-				clientOpts = append(clientOpts, WithClientCert(tc.clientCert))
-				clientOpts = append(clientOpts, WithClientKey(tc.clientKey))
-			}
-			if tc.caCert != nil {
-				clientOpts = append(clientOpts, WithCACert(tc.caCert))
+				clientOpts = append(clientOpts, WithClientTLSCertificates(tc.clientCert, tc.clientKey, tc.caCert))
+			} else if tc.caCert != nil {
+				clientOpts = append(clientOpts, WithClientTLSCertificates(nil, nil, tc.caCert))
 			}
 			if tc.skipVerify {
 				clientOpts = append(clientOpts, WithClientInsecureSkipVerify())
@@ -1092,12 +1092,15 @@ func TestClientTLSOptions(t *testing.T) {
 			var clientOpts []ClientOption
 
 			if tc.clientCert != nil && tc.clientKey != nil {
-				clientOpts = append(clientOpts, WithClientCert(tc.clientCert))
-				clientOpts = append(clientOpts, WithClientKey(tc.clientKey))
+				if tc.caCert != nil {
+					clientOpts = append(clientOpts, WithClientTLSCertificates(tc.clientCert, tc.clientKey, tc.caCert))
+				} else {
+					clientOpts = append(clientOpts, WithClientTLSCertificates(tc.clientCert, tc.clientKey, nil))
+				}
+			} else if tc.caCert != nil {
+				clientOpts = append(clientOpts, WithClientTLSCertificates(nil, nil, tc.caCert))
 			}
-			if tc.caCert != nil {
-				clientOpts = append(clientOpts, WithCACert(tc.caCert))
-			}
+
 			if tc.skipVerify {
 				clientOpts = append(clientOpts, WithClientInsecureSkipVerify())
 			}
@@ -1124,132 +1127,6 @@ func TestClientTLSOptions(t *testing.T) {
 				}
 
 				require.Equal(t, tc.expectSkipVerify, transport.TLSClientConfig.InsecureSkipVerify)
-			}
-		})
-	}
-}
-
-func TestLoadTLSOptions(t *testing.T) {
-	t.Parallel()
-
-	// Create temporary files for testing
-	clientCertFile, err := os.CreateTemp("", "client-cert-*.pem")
-	require.NoError(t, err)
-	defer os.Remove(clientCertFile.Name())
-
-	clientKeyFile, err := os.CreateTemp("", "client-key-*.pem")
-	require.NoError(t, err)
-	defer os.Remove(clientKeyFile.Name())
-
-	caCertFile, err := os.CreateTemp("", "ca-cert-*.pem")
-	require.NoError(t, err)
-	defer os.Remove(caCertFile.Name())
-
-	// Generate test certificates
-	caCert, _, clientCert, clientKey := testingutils.GenerateCertificates(t, "localhost")
-
-	// Write test data to temp files
-	err = os.WriteFile(clientCertFile.Name(), clientCert, 0644)
-	require.NoError(t, err)
-
-	err = os.WriteFile(clientKeyFile.Name(), clientKey, 0644)
-	require.NoError(t, err)
-
-	err = os.WriteFile(caCertFile.Name(), caCert, 0644)
-	require.NoError(t, err)
-
-	testCases := []struct {
-		name          string
-		config        ClientTLSConfig
-		expectError   bool
-		expectedOpts  int
-		errorContains string
-	}{
-		{
-			name: "All certificate files",
-			config: ClientTLSConfig{
-				ClientCertFile:   clientCertFile.Name(),
-				ClientKeyFile:    clientKeyFile.Name(),
-				ClientCACertFile: caCertFile.Name(),
-			},
-			expectError:  false,
-			expectedOpts: 3,
-		},
-		{
-			name: "Client cert and key only",
-			config: ClientTLSConfig{
-				ClientCertFile: clientCertFile.Name(),
-				ClientKeyFile:  clientKeyFile.Name(),
-			},
-			expectError:  false,
-			expectedOpts: 2,
-		},
-		{
-			name: "CA cert only",
-			config: ClientTLSConfig{
-				ClientCACertFile: caCertFile.Name(),
-			},
-			expectError:  false,
-			expectedOpts: 1,
-		},
-		{
-			name: "ServerInsecureSkipVerify only",
-			config: ClientTLSConfig{
-				ClientInsecureSkipVerify: true,
-			},
-			expectError:  false,
-			expectedOpts: 1,
-		},
-		{
-			name: "All options",
-			config: ClientTLSConfig{
-				ClientCertFile:           clientCertFile.Name(),
-				ClientKeyFile:            clientKeyFile.Name(),
-				ClientCACertFile:         caCertFile.Name(),
-				ClientInsecureSkipVerify: true,
-			},
-			expectError:  false,
-			expectedOpts: 4,
-		},
-		{
-			name: "Non-existent client cert file",
-			config: ClientTLSConfig{
-				ClientCertFile: "/non/existent/file",
-			},
-			expectError:   true,
-			errorContains: "client certificate file does not exist",
-		},
-		{
-			name: "Non-existent client key file",
-			config: ClientTLSConfig{
-				ClientKeyFile: "/non/existent/file",
-			},
-			expectError:   true,
-			errorContains: "client key file does not exist",
-		},
-		{
-			name: "Non-existent CA cert file",
-			config: ClientTLSConfig{
-				ClientCACertFile: "/non/existent/file",
-			},
-			expectError:   true,
-			errorContains: "CA certificate file does not exist",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			opts, err := LoadTLSOptions(tc.config)
-
-			if tc.expectError {
-				require.Error(t, err)
-				if tc.errorContains != "" {
-					require.Contains(t, err.Error(), tc.errorContains)
-				}
-			} else {
-				require.NoError(t, err)
-				require.NotNil(t, opts)
-				require.Len(t, opts, tc.expectedOpts)
 			}
 		})
 	}
@@ -1287,42 +1164,48 @@ func TestTLSConfigCLIIntegration(t *testing.T) {
 	// Test cases that simulate CLI configuration
 	testCases := []struct {
 		name          string
-		tlsConfig     ClientTLSConfig
+		tlsConfig     ssvsignertls.ClientConfig
 		expectOptions int
 		expectError   bool
 	}{
 		{
 			name: "Full TLS configuration",
-			tlsConfig: ClientTLSConfig{
+			tlsConfig: ssvsignertls.ClientConfig{
 				ClientCertFile:           clientCertFile.Name(),
 				ClientKeyFile:            clientKeyFile.Name(),
 				ClientCACertFile:         caCertFile.Name(),
 				ClientInsecureSkipVerify: false,
 			},
-			expectOptions: 3,
+			expectOptions: 1, // One option with the full TLS config
 			expectError:   false,
 		},
 		{
 			name: "CA cert only",
-			tlsConfig: ClientTLSConfig{
+			tlsConfig: ssvsignertls.ClientConfig{
 				ClientCACertFile: caCertFile.Name(),
 			},
-			expectOptions: 1,
+			expectOptions: 1, // One option with CA cert only
 			expectError:   false,
 		},
 		{
-			name: "ServerInsecureSkipVerify only",
-			tlsConfig: ClientTLSConfig{
+			name: "InsecureSkipVerify only",
+			tlsConfig: ssvsignertls.ClientConfig{
 				ClientInsecureSkipVerify: true,
 			},
-			expectOptions: 1,
+			expectOptions: 1, // One option with InsecureSkipVerify
+			expectError:   false,
+		},
+		{
+			name:          "No TLS configuration",
+			tlsConfig:     ssvsignertls.ClientConfig{},
+			expectOptions: 0, // No options when no TLS config is provided
 			expectError:   false,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// 1. Load options from ClientTLSConfig
+			// 1. Load options from ssvsignertls.ClientConfig
 			options, err := LoadTLSOptions(tc.tlsConfig)
 
 			if tc.expectError {
@@ -1332,6 +1215,10 @@ func TestTLSConfigCLIIntegration(t *testing.T) {
 
 			require.NoError(t, err)
 			require.Len(t, options, tc.expectOptions)
+
+			if tc.expectOptions == 0 {
+				return // No need to check further
+			}
 
 			// 2. Create client with options
 			logger, _ := zap.NewDevelopment()
@@ -1359,6 +1246,150 @@ func TestTLSConfigCLIIntegration(t *testing.T) {
 
 			if tc.tlsConfig.ClientCertFile != "" && tc.tlsConfig.ClientKeyFile != "" {
 				require.NotEmpty(t, transport.TLSClientConfig.Certificates)
+			}
+		})
+	}
+}
+
+func TestLoadTLSOptions(t *testing.T) {
+	t.Parallel()
+
+	// Create temporary files for testing
+	clientCertFile, err := os.CreateTemp("", "client-cert-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(clientCertFile.Name())
+
+	clientKeyFile, err := os.CreateTemp("", "client-key-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(clientKeyFile.Name())
+
+	caCertFile, err := os.CreateTemp("", "ca-cert-*.pem")
+	require.NoError(t, err)
+	defer os.Remove(caCertFile.Name())
+
+	// Generate test certificates
+	caCert, _, clientCert, clientKey := testingutils.GenerateCertificates(t, "localhost")
+
+	// Write test data to temp files
+	err = os.WriteFile(clientCertFile.Name(), clientCert, 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(clientKeyFile.Name(), clientKey, 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(caCertFile.Name(), caCert, 0644)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name          string
+		config        ssvsignertls.ClientConfig
+		expectError   bool
+		expectedOpts  int
+		errorContains string
+	}{
+		{
+			name: "All certificate files",
+			config: ssvsignertls.ClientConfig{
+				ClientCertFile:   clientCertFile.Name(),
+				ClientKeyFile:    clientKeyFile.Name(),
+				ClientCACertFile: caCertFile.Name(),
+			},
+			expectError:  false,
+			expectedOpts: 1, // WithClientTLSConfig with full cert configuration
+		},
+		{
+			name: "Client cert and key only",
+			config: ssvsignertls.ClientConfig{
+				ClientCertFile: clientCertFile.Name(),
+				ClientKeyFile:  clientKeyFile.Name(),
+			},
+			expectError:  false,
+			expectedOpts: 1, // WithClientTLSConfig with client cert and key
+		},
+		{
+			name: "CA cert only",
+			config: ssvsignertls.ClientConfig{
+				ClientCACertFile: caCertFile.Name(),
+			},
+			expectError:  false,
+			expectedOpts: 1, // WithClientTLSConfig with CA cert only
+		},
+		{
+			name: "InsecureSkipVerify only",
+			config: ssvsignertls.ClientConfig{
+				ClientInsecureSkipVerify: true,
+			},
+			expectError:  false,
+			expectedOpts: 1, // WithClientTLSConfig with InsecureSkipVerify
+		},
+		{
+			name: "All options",
+			config: ssvsignertls.ClientConfig{
+				ClientCertFile:           clientCertFile.Name(),
+				ClientKeyFile:            clientKeyFile.Name(),
+				ClientCACertFile:         caCertFile.Name(),
+				ClientInsecureSkipVerify: true,
+			},
+			expectError:  false,
+			expectedOpts: 1, // WithClientTLSConfig with all options
+		},
+		{
+			name:         "No configuration",
+			config:       ssvsignertls.ClientConfig{},
+			expectError:  false,
+			expectedOpts: 0, // No options when no config provided
+		},
+		{
+			name: "Non-existent client cert file",
+			config: ssvsignertls.ClientConfig{
+				ClientCertFile: "/non/existent/file",
+				ClientKeyFile:  clientKeyFile.Name(),
+			},
+			expectError:   true,
+			errorContains: "client certificate file does not exist",
+		},
+		{
+			name: "Non-existent client key file",
+			config: ssvsignertls.ClientConfig{
+				ClientCertFile: clientCertFile.Name(),
+				ClientKeyFile:  "/non/existent/file",
+			},
+			expectError:   true,
+			errorContains: "client key file does not exist",
+		},
+		{
+			name: "Non-existent CA cert file",
+			config: ssvsignertls.ClientConfig{
+				ClientCACertFile: "/non/existent/file",
+			},
+			expectError:   true,
+			errorContains: "CA certificate file does not exist",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts, err := LoadTLSOptions(tc.config)
+
+			if tc.expectError {
+				require.Error(t, err)
+				if tc.errorContains != "" {
+					require.Contains(t, err.Error(), tc.errorContains)
+				}
+			} else {
+				require.NoError(t, err)
+				require.Len(t, opts, tc.expectedOpts)
+
+				if tc.expectedOpts > 0 {
+					// Create a client to verify the option works
+					logger, _ := zap.NewDevelopment()
+					allOptions := append([]ClientOption{WithLogger(logger)}, opts...)
+
+					client, err := NewClient("https://localhost:8000", allOptions...)
+					require.NoError(t, err)
+					require.NotNil(t, client)
+					require.NotNil(t, client.tlsConfig)
+				}
 			}
 		})
 	}

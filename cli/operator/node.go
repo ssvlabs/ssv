@@ -66,6 +66,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -86,7 +87,7 @@ type config struct {
 	P2pNetworkConfig             p2pv1.Config              `yaml:"p2p"`
 	KeyStore                     KeyStore                  `yaml:"KeyStore"`
 	SSVSignerEndpoint            string                    `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
-	SSVSignerTLS                 ssvsigner.ClientTLSConfig `yaml:"SSVSignerTLS" env-prefix:"SSV_SIGNER_TLS_"`
+	SSVSignerTLS                 ssvsignertls.ClientConfig `yaml:"SSVSignerTLS" env-prefix:"SSV_SIGNER_TLS_"`
 	Graffiti                     string                    `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
 	OperatorPrivateKey           string                    `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                       `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
@@ -163,13 +164,15 @@ var StartNodeCmd = &cobra.Command{
 			}
 
 			clientOpts := []ssvsigner.ClientOption{ssvsigner.WithLogger(logger)}
-			if cfg.SSVSignerTLS.HasTLSConfig() {
-				tlsOpts, err := ssvsigner.LoadTLSOptions(cfg.SSVSignerTLS)
+			if cfg.SSVSignerTLS.HasConfig() {
+				cert, key, caCert, err := ssvsignertls.LoadCertificatesFromFiles(cfg.SSVSignerTLS.ClientCertFile, cfg.SSVSignerTLS.ClientKeyFile, cfg.SSVSignerTLS.ClientCACertFile)
 				if err != nil {
 					logger.Fatal("failed to load TLS configuration", zap.Error(err))
 				}
 
-				clientOpts = append(clientOpts, tlsOpts...)
+				tlsOpts := ssvsigner.WithClientTLSCertificates(cert, key, caCert)
+
+				clientOpts = append(clientOpts, tlsOpts)
 			}
 
 			ssvSignerClient, err = ssvsigner.NewClient(cfg.SSVSignerEndpoint, clientOpts...)
