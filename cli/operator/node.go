@@ -59,7 +59,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"

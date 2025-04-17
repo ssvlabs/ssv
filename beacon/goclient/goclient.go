@@ -19,14 +19,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (

@@ -15,7 +15,6 @@ import (
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSubscribeToHeadEvents(t *testing.T) {

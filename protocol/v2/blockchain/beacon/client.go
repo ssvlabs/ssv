@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"

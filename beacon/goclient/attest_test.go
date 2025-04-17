@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
