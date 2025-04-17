@@ -8,7 +8,7 @@ import (
 )
 
 func TestDomainTypeFromString(t *testing.T) {
-	tests := []struct {
+	testCases := []struct {
 		name    string
 		input   string
 		want    spectypes.DomainType
@@ -39,7 +39,7 @@ func TestDomainTypeFromString(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := DomainTypeFromString(tt.input)
