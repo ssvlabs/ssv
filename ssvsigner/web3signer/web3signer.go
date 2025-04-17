@@ -2,6 +2,7 @@ package web3signer
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net/http"
 	"strings"
@@ -16,15 +17,35 @@ type Web3Signer struct {
 	httpClient *http.Client
 }
 
-func New(baseURL string) *Web3Signer {
+type Option func(*Web3Signer)
+
+// WithTLSConfig sets the TLS configuration for the Web3Signer.
+func WithTLSConfig(config *tls.Config) Option {
+	return func(s *Web3Signer) {
+		if config != nil {
+			s.httpClient.Transport = &http.Transport{
+				TLSClientConfig: config,
+			}
+		}
+	}
+}
+
+// New creates a new Web3Signer client with the given base URL and optional TLS configuration.
+func New(baseURL string, opts ...Option) *Web3Signer {
 	baseURL = strings.TrimRight(baseURL, "/")
 
-	return &Web3Signer{
+	signer := &Web3Signer{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+
+	for _, opt := range opts {
+		opt(signer)
+	}
+
+	return signer
 }
 
 // ListKeys lists keys in Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Public-Key/operation/ETH2_LIST

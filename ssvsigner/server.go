@@ -3,11 +3,13 @@ package ssvsigner
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"strings"
 	"time"
 
@@ -21,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -41,12 +44,55 @@ type Server struct {
 	operatorPrivKey keys.OperatorPrivateKey
 	remoteSigner    remoteSigner
 	router          *router.Router
+
+	tlsConfig *tls.Config
+}
+
+// ServerOption defines a function that configures a Server.
+type ServerOption func(*Server)
+
+// WithServerTLSConfig sets the TLS configuration for the server.
+func WithServerTLSConfig(config *tls.Config) ServerOption {
+	return func(server *Server) {
+		server.tlsConfig = config
+	}
+}
+
+// WithServerTLSCertificates sets the TLS configuration for the server.
+// InsecureSkipVerify is set to false by default.
+func WithServerTLSCertificates(serverCert, serverKey, caCert []byte) ServerOption {
+	return func(server *Server) {
+		tlsConfig, err := ssvsignertls.CreateConfig(ssvsignertls.ServerConfigType,
+			serverCert,
+			serverKey,
+			caCert,
+			false,
+		)
+
+		if err != nil {
+			server.logger.Error("failed to create server TLS config", zap.Error(err))
+			return
+		}
+
+		server.tlsConfig = tlsConfig
+	}
+}
+
+// WithServerInsecureSkipVerify sets the TLS configuration to skip certificate verification (not recommended for production).
+func WithServerInsecureSkipVerify() ServerOption {
+	return func(server *Server) {
+		if server.tlsConfig == nil {
+			server.tlsConfig = &tls.Config{}
+		}
+		server.tlsConfig.InsecureSkipVerify = true
+	}
 }
 
 func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
 	remoteSigner remoteSigner,
+	opts ...ServerOption,
 ) *Server {
 	r := router.New()
 
@@ -55,6 +101,10 @@ func NewServer(
 		operatorPrivKey: operatorPrivKey,
 		remoteSigner:    remoteSigner,
 		router:          r,
+	}
+
+	for _, opt := range opts {
+		opt(server)
 	}
 
 	r.GET(pathValidators, server.handleListValidators)
@@ -87,6 +137,31 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 		}()
 		r.router.Handler(ctx)
 	}
+}
+
+// ListenAndServe starts the server on the specified address.
+// If TLS is configured, it will use HTTPS.
+func (r *Server) ListenAndServe(addr string) error {
+	handler := r.Handler()
+
+	if r.tlsConfig != nil {
+		r.logger.Info("starting ssv-signer server with TLS", zap.String("addr", addr))
+
+		// TCP listener
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
+
+		// wrap the listener with TLS
+		tlsListener := tls.NewListener(ln, r.tlsConfig)
+
+		// serve with the TLS listener
+		return fasthttp.Serve(tlsListener, handler)
+	}
+
+	r.logger.Info("starting ssv-signer server without TLS", zap.String("addr", addr))
+	return fasthttp.ListenAndServe(addr, handler)
 }
 
 func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {

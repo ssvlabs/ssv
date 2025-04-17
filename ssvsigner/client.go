@@ -3,6 +3,7 @@ package ssvsigner
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -21,9 +23,51 @@ type Client struct {
 	logger     *zap.Logger
 	baseURL    string
 	httpClient *http.Client
+
+	tlsConfig *tls.Config
 }
 
-func NewClient(baseURL string, opts ...ClientOption) *Client {
+// ClientOption defines a function that configures a Client.
+type ClientOption func(*Client)
+
+// WithLogger sets a custom logger for the client.
+func WithLogger(logger *zap.Logger) ClientOption {
+	return func(client *Client) {
+		client.logger = logger
+	}
+}
+
+// WithClientTLSConfig sets the TLS configuration for the client.
+func WithClientTLSConfig(tlsConfig *tls.Config) ClientOption {
+	return func(client *Client) {
+		client.tlsConfig = tlsConfig
+	}
+}
+
+// WithClientTLSCertificates sets the TLS configuration for the client.
+// InsecureSkipVerify is set to false by default.
+func WithClientTLSCertificates(cert, key, caCert []byte) ClientOption {
+	return func(client *Client) {
+		tlsConfig, err := ssvsignertls.CreateConfig(ssvsignertls.ClientConfigType, cert, key, caCert, false)
+		if err != nil {
+			client.logger.Error("failed to create client TLS config", zap.Error(err))
+		}
+
+		client.tlsConfig = tlsConfig
+	}
+}
+
+// WithClientInsecureSkipVerify sets the TLS configuration to skip certificate verification (not recommended for production).
+func WithClientInsecureSkipVerify() ClientOption {
+	return func(client *Client) {
+		if client.tlsConfig == nil {
+			client.tlsConfig = &tls.Config{}
+		}
+		client.tlsConfig.InsecureSkipVerify = true
+	}
+}
+
+func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	c := &Client{
@@ -38,15 +82,14 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 		opt(c)
 	}
 
-	return c
-}
-
-type ClientOption func(*Client)
-
-func WithLogger(logger *zap.Logger) ClientOption {
-	return func(client *Client) {
-		client.logger = logger
+	// set up client connection with TLS if certificates are provided
+	if c.tlsConfig != nil {
+		c.httpClient.Transport = &http.Transport{
+			TLSClientConfig: c.tlsConfig,
+		}
 	}
+
+	return c, nil
 }
 
 func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKey, err error) {

@@ -6,7 +6,7 @@ For SSV Remote signer overview, check [design documentation](./DESIGN.md).
 
 ## Setup ssv-signer
 
-To set up ssv-signer, we need to set up web3signer with a slashing protection DB.  
+To set up ssv-signer, we need to set up web3signer with a slashing protection DB.
 
 ### Setup slashing protection DB
 
@@ -23,9 +23,10 @@ Docker example:
 ```
 
 - Apply `web3signer` migrations to the DB
-  - Download and unpack `web3signer` from https://github.com/Consensys/web3signer/releases
-  - Apply all migrations from V1 to V12 in `web3signer`'s `migrations/postgresql` folder maintaining their order and replacing `${MIGRATION_NAME}.sql` with the migration name
-  - It may be done using `psql` or `flyway`
+    - Download and unpack `web3signer` from https://github.com/Consensys/web3signer/releases
+    - Apply all migrations from V1 to V12 in `web3signer`'s `migrations/postgresql` folder maintaining their order and
+      replacing `${MIGRATION_NAME}.sql` with the migration name
+    - It may be done using `psql` or `flyway`
 
 PSQL example:
 
@@ -45,9 +46,10 @@ Consensys tutorial: https://docs.web3signer.consensys.io/get-started/start-web3s
 
 #### Short summary
 
-- Run `web3signer` with the arguments in the example. You might need to change HTTP port, Ethereum network, PostgreSQL address
-  - Either download and unpack `web3signer` from https://github.com/Consensys/web3signer/releases
-  - Or use `web3signer` Docker image
+- Run `web3signer` with the arguments in the example. You might need to change HTTP port, Ethereum network, PostgreSQL
+  address
+    - Either download and unpack `web3signer` from https://github.com/Consensys/web3signer/releases
+    - Or use `web3signer` Docker image
 
 Docker example:
 
@@ -64,12 +66,92 @@ Release file example:
 ### Run `ssv-signer`
 
 - Run `./cmd/ssv-signer` passing the following arguments:
-  - `LISTEN_ADDR` - address to listen on (`:8080` by default [TODO: needs changing?])
-  - `WEB3SIGNER_ENDPOINT` - `web3signer`'s address from the previous step 
-  - `PRIVATE_KEY` or (`PRIVATE_KEY_FILE` and `PASSWORD_FILE`) - operator private key or path to operator keystore and password files
+    - `LISTEN_ADDR` - address to listen on (`:8080` by default)
+    - `WEB3SIGNER_ENDPOINT` - `web3signer`'s address from the previous step
+    - `PRIVATE_KEY` or (`PRIVATE_KEY_FILE` and `PASSWORD_FILE`) - operator private key or path to operator keystore and
+      password files
 
 Example:
 
 ```bash
   PRIVATE_KEY=OPERATOR_PRIVATE_KEY LISTEN_ADDR=0.0.0.0:8080 WEB3SIGNER_ENDPOINT=http://localhost:9000 ./ssv-signer
 ```
+
+### Configure TLS for SSV-Signer
+
+SSV-Signer supports TLS for securing connections in three ways:
+
+1. **Server TLS** - For securing incoming connections to SSV-Signer
+2. **Client TLS** - For securing connections from SSV-Signer to Web3Signer
+3. **Mutual TLS** - For both server and client TLS with certificate verification
+
+#### Server TLS Configuration
+
+To enable TLS for the SSV-Signer server:
+
+```bash
+PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
+LISTEN_ADDR=0.0.0.0:8443 \
+WEB3SIGNER_ENDPOINT=http://localhost:9000 \
+SERVER_CERT_FILE=/path/to/server.crt \
+SERVER_KEY_FILE=/path/to/server.key \
+SERVER_CA_CERT_FILE=/path/to/ca.crt \
+./ssv-signer
+```
+
+The server will:
+
+- Require client certificates if SERVER_CA_CERT_FILE is provided
+- Use the provided server certificate and key for TLS
+- Support TLS 1.3 by default
+
+#### Client TLS Configuration
+
+To enable TLS when connecting to Web3Signer with HTTPS:
+
+```bash
+PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
+LISTEN_ADDR=0.0.0.0:8080 \
+WEB3SIGNER_ENDPOINT=https://localhost:9000 \
+CLIENT_CERT_FILE=/path/to/client.crt \
+CLIENT_KEY_FILE=/path/to/client.key \
+CLIENT_CA_CERT_FILE=/path/to/ca.crt \
+./ssv-signer
+```
+
+The client will:
+
+- Present the client certificate to Web3Signer
+- Verify Web3Signer's certificate using the provided CA certificate
+- Support TLS 1.3 by default
+
+#### Combined TLS Configuration
+
+To use TLS for both server and client:
+
+```bash
+PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
+LISTEN_ADDR=0.0.0.0:8443 \
+WEB3SIGNER_ENDPOINT=https://localhost:9000 \
+SERVER_CERT_FILE=/path/to/server.crt \
+SERVER_KEY_FILE=/path/to/server.key \
+CLIENT_CERT_FILE=/path/to/client.crt \
+CLIENT_KEY_FILE=/path/to/client.key \
+SERVER_CA_CERT_FILE=/path/to/ca.crt \
+CLIENT_CA_CERT_FILE=/path/to/ca.crt \
+./ssv-signer
+```
+
+#### Insecure TLS for Testing
+
+For testing environments only, you can skip certificate verification:
+
+```bash
+PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
+LISTEN_ADDR=0.0.0.0:8080 \
+WEB3SIGNER_ENDPOINT=https://localhost:9000 \
+CLIENT_INSECURE_SKIP_VERIFY=true \
+./ssv-signer
+```
+
+**Warning**: This option bypasses security checks and should not be used in production.
