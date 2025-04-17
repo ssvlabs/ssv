@@ -2,7 +2,7 @@
 
 ## Overview
 
-SSV Remote Signer is a security-focused service that separates the key management functions from the SSV node. This separation enhances security by isolating cryptographic keys from the node software, protecting them from potential node vulnerabilities.
+SSV Remote Signer is a service that separates the key management functions from the SSV node. This separation enhances security by isolating cryptographic keys from the node software, protecting them from potential node vulnerabilities.
 
 The service consists of two main components:
 1. **Web3Signer** - A third-party service that provides secure key management and slashing protection
