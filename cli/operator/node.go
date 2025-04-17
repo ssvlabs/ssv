@@ -66,7 +66,6 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -80,24 +79,26 @@ type KeyStore struct {
 
 type config struct {
 	global_config.GlobalConfig   `yaml:"global"`
-	DBOptions                    basedb.Options            `yaml:"db"`
-	SSVOptions                   operator.Options          `yaml:"ssv"`
-	ExecutionClient              executionclient.Options   `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient              beaconprotocol.Options    `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig             p2pv1.Config              `yaml:"p2p"`
-	KeyStore                     KeyStore                  `yaml:"KeyStore"`
-	SSVSignerEndpoint            string                    `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
-	SSVSignerTLS                 ssvsignertls.ClientConfig `yaml:"SSVSignerTLS" env-prefix:"SSV_SIGNER_TLS_"`
-	Graffiti                     string                    `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
-	OperatorPrivateKey           string                    `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
-	MetricsAPIPort               int                       `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
-	EnableProfile                bool                      `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
-	NetworkPrivateKey            string                    `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
-	WsAPIPort                    int                       `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
-	WithPing                     bool                      `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
-	SSVAPIPort                   int                       `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
-	LocalEventsPath              string                    `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
-	EnableDoppelgangerProtection bool                      `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
+	DBOptions                    basedb.Options          `yaml:"db"`
+	SSVOptions                   operator.Options        `yaml:"ssv"`
+	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient              beaconprotocol.Options  `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
+	KeyStore                     KeyStore                `yaml:"KeyStore"`
+	SSVSignerEndpoint            string                  `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
+	SSVSignerClientCertFile      string                  `yaml:"SSVSignerClientCertFile" env:"SSV_SIGNER_CLIENT_CERT_FILE" env-description:"Path to ssv-signer client certificate file"`
+	SSVSignerClientKeyFile       string                  `yaml:"SSVSignerClientKeyFile"  env:"SSV_SIGNER_CLIENT_KEY_FILE" env-description:"Path to ssv-signer client key file"`
+	SSVSignerClientCACertFile    string                  `yaml:"SSVSignerClientCACertFile" env:"SSV_SIGNER_CLIENT_CA_CERT_FILE" env-description:"Path to ssv-signer client CA certificate file"`
+	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
+	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
+	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
+	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
+	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
+	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
+	WithPing                     bool                    `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
+	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
+	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
+	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
 }
 
 var cfg config
@@ -163,19 +164,13 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 
-			clientOpts := []ssvsigner.ClientOption{ssvsigner.WithLogger(logger)}
-			if cfg.SSVSignerTLS.HasConfig() {
-				cert, key, caCert, err := ssvsignertls.LoadCertificatesFromFiles(cfg.SSVSignerTLS.ClientCertFile, cfg.SSVSignerTLS.ClientKeyFile, cfg.SSVSignerTLS.ClientCACertFile)
-				if err != nil {
-					logger.Fatal("failed to load TLS configuration", zap.Error(err))
-				}
-
-				tlsOpts := ssvsigner.WithClientTLSCertificates(cert, key, caCert)
-
-				clientOpts = append(clientOpts, tlsOpts)
-			}
-
-			ssvSignerClient, err = ssvsigner.NewClient(cfg.SSVSignerEndpoint, clientOpts...)
+			ssvSignerClient, err := ssvsigner.NewClient(
+				cfg.SSVSignerEndpoint,
+				cfg.SSVSignerClientCertFile,
+				cfg.SSVSignerClientKeyFile,
+				cfg.SSVSignerClientCACertFile,
+				ssvsigner.WithLogger(logger),
+			)
 			if err != nil {
 				logger.Fatal("failed to create SSV signer client", zap.Error(err))
 			}

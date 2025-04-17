@@ -2,14 +2,16 @@ package web3signer
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
+
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 )
 
 type Web3Signer struct {
@@ -17,35 +19,24 @@ type Web3Signer struct {
 	httpClient *http.Client
 }
 
-type Option func(*Web3Signer)
-
-// WithTLSConfig sets the TLS configuration for the Web3Signer.
-func WithTLSConfig(config *tls.Config) Option {
-	return func(s *Web3Signer) {
-		if config != nil {
-			s.httpClient.Transport = &http.Transport{
-				TLSClientConfig: config,
-			}
-		}
-	}
-}
-
 // New creates a new Web3Signer client with the given base URL and optional TLS configuration.
-func New(baseURL string, opts ...Option) *Web3Signer {
+func New(baseURL, certPath, keyPath, caPath string) (*Web3Signer, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
+	transport := http.DefaultTransport
 
-	signer := &Web3Signer{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+	if certPath != "" || keyPath != "" || caPath != "" {
+		tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
+		if err != nil {
+			return nil, fmt.Errorf("web3signer TLS: %w", err)
+		}
+
+		transport = &http.Transport{TLSClientConfig: tc}
 	}
 
-	for _, opt := range opts {
-		opt(signer)
-	}
-
-	return signer
+	return &Web3Signer{
+		baseURL:    baseURL,
+		httpClient: &http.Client{Transport: transport, Timeout: 30 * time.Second},
+	}, nil
 }
 
 // ListKeys lists keys in Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Public-Key/operation/ETH2_LIST

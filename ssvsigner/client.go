@@ -3,7 +3,6 @@ package ssvsigner
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,8 +13,9 @@ import (
 	"github.com/carlmjohnson/requests"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -23,8 +23,6 @@ type Client struct {
 	logger     *zap.Logger
 	baseURL    string
 	httpClient *http.Client
-
-	tlsConfig *tls.Config
 }
 
 // ClientOption defines a function that configures a Client.
@@ -37,56 +35,28 @@ func WithLogger(logger *zap.Logger) ClientOption {
 	}
 }
 
-// WithClientTLSConfig sets the TLS configuration for the client.
-func WithClientTLSConfig(tlsConfig *tls.Config) ClientOption {
-	return func(client *Client) {
-		client.tlsConfig = tlsConfig
-	}
-}
-
-// WithClientTLSCertificates sets the TLS configuration for the client.
-// InsecureSkipVerify is set to false by default.
-func WithClientTLSCertificates(cert, key, caCert []byte) ClientOption {
-	return func(client *Client) {
-		tlsConfig, err := ssvsignertls.CreateConfig(ssvsignertls.ClientConfigType, cert, key, caCert, false)
-		if err != nil {
-			client.logger.Error("failed to create client TLS config", zap.Error(err))
-		}
-
-		client.tlsConfig = tlsConfig
-	}
-}
-
-// WithClientInsecureSkipVerify sets the TLS configuration to skip certificate verification (not recommended for production).
-func WithClientInsecureSkipVerify() ClientOption {
-	return func(client *Client) {
-		if client.tlsConfig == nil {
-			client.tlsConfig = &tls.Config{}
-		}
-		client.tlsConfig.InsecureSkipVerify = true
-	}
-}
-
-func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
+func NewClient(baseURL, certPath, keyPath, caPath string, opts ...ClientOption) (*Client, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
+	var transport = http.DefaultTransport
 
 	c := &Client{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		logger: zap.NewNop(),
+		baseURL:    baseURL,
+		httpClient: &http.Client{Transport: transport, Timeout: 30 * time.Second},
+		logger:     zap.NewNop(),
 	}
 
 	for _, opt := range opts {
 		opt(c)
 	}
 
-	// set up client connection with TLS if certificates are provided
-	if c.tlsConfig != nil {
-		c.httpClient.Transport = &http.Transport{
-			TLSClientConfig: c.tlsConfig,
+	if certPath != "" || keyPath != "" || caPath != "" {
+		tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
+		if err != nil {
+			return nil, fmt.Errorf("client TLS setup: %w", err)
 		}
+
+		c.httpClient.Transport = &http.Transport{TLSClientConfig: tc}
+
 	}
 
 	return c, nil

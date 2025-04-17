@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -26,47 +26,58 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 		server.Close()
 	})
 
-	web3Signer := New(server.URL)
+	web3Signer, err := New(server.URL, "", "", "")
+	require.NoError(t, err)
 
 	return server, web3Signer
+}
+
+func mustWriteTemp(t *testing.T, data []byte, pattern string) string {
+	t.Helper()
+
+	f, err := os.CreateTemp("", pattern)
+	require.NoError(t, err)
+	defer f.Close()
+
+	_, err = f.Write(data)
+	require.NoError(t, err)
+
+	return f.Name()
+}
+
+func mustBLSFromString(s string) phase0.BLSPubKey {
+	pk, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+
+	if len(pk) != len(phase0.BLSPubKey{}) {
+		panic("invalid public key length")
+	}
+
+	return phase0.BLSPubKey(pk)
 }
 
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		baseURL string
-		opts    []Option
+	testCases := []struct {
+		name            string
+		baseURL         string
+		certPath        string
+		keyPath         string
+		caPath          string
+		expectedBaseURL string
 	}{
-		{
-			name:    "Valid URL",
-			baseURL: "http://localhost:9000",
-		},
-		{
-			name:    "Valid URL with trailing slash",
-			baseURL: "http://localhost:9000/",
-		},
-		{
-			name:    "Valid URL with TLS config",
-			baseURL: "http://localhost:9000",
-			opts:    []Option{WithTLSConfig(&tls.Config{InsecureSkipVerify: true})},
-		},
+		{"ValidURL", "http://localhost:9000", "", "", "", "http://localhost:9000"},
+		{"WithSlash", "http://localhost:9000/", "", "", "", "http://localhost:9000"},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			client := New(tt.baseURL, tt.opts...)
-			require.NotNil(t, client)
-
-			expectedBaseURL := tt.baseURL
-			if expectedBaseURL[len(expectedBaseURL)-1] == '/' {
-				expectedBaseURL = expectedBaseURL[:len(expectedBaseURL)-1]
-			}
-
-			require.Equal(t, expectedBaseURL, client.baseURL)
+			client, err := New(tt.baseURL, tt.certPath, tt.keyPath, tt.caPath)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedBaseURL, client.baseURL)
 		})
 	}
 }
@@ -74,7 +85,7 @@ func TestNew(t *testing.T) {
 func TestListKeys(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name        string
 		statusCode  int
 		resp        ListKeysResponse
@@ -101,7 +112,7 @@ func TestListKeys(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -130,7 +141,7 @@ func TestListKeys(t *testing.T) {
 func TestImportKeystore(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name        string
 		req         ImportKeystoreRequest
 		statusCode  int
@@ -171,7 +182,7 @@ func TestImportKeystore(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -206,7 +217,7 @@ func TestImportKeystore(t *testing.T) {
 func TestDeleteKeystore(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name                 string
 		req                  DeleteKeystoreRequest
 		statusCode           int
@@ -246,7 +257,7 @@ func TestDeleteKeystore(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -295,7 +306,7 @@ func TestSign(t *testing.T) {
 		},
 	}
 
-	tests := []struct {
+	testCases := []struct {
 		name            string
 		pubKey          phase0.BLSPubKey
 		payload         SignRequest
@@ -368,7 +379,7 @@ func TestSign(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -396,111 +407,58 @@ func TestSign(t *testing.T) {
 	}
 }
 
-func TestTLSConfig(t *testing.T) {
+func TestTLSConfigFiles(t *testing.T) {
 	t.Parallel()
 
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
-	}
-	web3Signer := New("https://example.com", WithTLSConfig(tlsConfig))
+	ca, _, cert, key := testingutils.GenerateCertificates(t, "localhost")
+	certFile := mustWriteTemp(t, cert, "cert-*.pem")
+	keyFile := mustWriteTemp(t, key, "key-*.pem")
+	caFile := mustWriteTemp(t, ca, "ca-*.pem")
 
-	transport, ok := web3Signer.httpClient.Transport.(*http.Transport)
+	client, err := New("https://example.com", certFile, keyFile, caFile)
+	require.NoError(t, err)
+
+	transport, ok := client.httpClient.Transport.(*http.Transport)
 	require.True(t, ok)
-	require.NotNil(t, transport.TLSClientConfig)
-	require.True(t, transport.TLSClientConfig.InsecureSkipVerify)
+
+	cfg := transport.TLSClientConfig
+	require.NotNil(t, cfg)
+	require.Len(t, cfg.Certificates, 1)
+	require.NotNil(t, cfg.RootCAs)
 }
 
 func TestTLSConnection(t *testing.T) {
+	t.Parallel()
+
 	caCert, _, serverCert, serverKey := testingutils.GenerateCertificates(t, "localhost")
-
-	// create CA cert pool
-	caCertPool := x509.NewCertPool()
-	require.True(t, caCertPool.AppendCertsFromPEM(caCert))
-
-	// create server certificate
 	serverTLSCert, err := tls.X509KeyPair(serverCert, serverKey)
 	require.NoError(t, err)
 
-	testCases := []struct {
-		name          string
-		serverTLS     bool
-		clientTLS     *tls.Config
-		expectError   bool
-		errorContains string
-	}{
-		{
-			name:        "No TLS",
-			serverTLS:   false,
-			clientTLS:   nil,
-			expectError: false,
-		},
-		{
-			name:        "TLS Server with valid client config",
-			serverTLS:   true,
-			clientTLS:   &tls.Config{RootCAs: caCertPool},
-			expectError: false,
-		},
-		{
-			name:        "TLS Server with insecure skip verify",
-			serverTLS:   true,
-			clientTLS:   &tls.Config{InsecureSkipVerify: true},
-			expectError: false,
-		},
-		{
-			name:          "TLS Server with no client config",
-			serverTLS:     true,
-			clientTLS:     &tls.Config{RootCAs: x509.NewCertPool()},
-			expectError:   true,
-			errorContains: "certificate signed by unknown authority",
-		},
-	}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("[]"))
+	})
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == pathPublicKeys {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte("[]"))
-				}
-			})
+	srv := httptest.NewUnstartedServer(handler)
+	srv.TLS = &tls.Config{Certificates: []tls.Certificate{serverTLSCert}}
 
-			var server *httptest.Server
-			if tc.serverTLS {
-				server = httptest.NewUnstartedServer(handler)
-				server.TLS = &tls.Config{
-					Certificates: []tls.Certificate{serverTLSCert},
-				}
-				server.StartTLS()
-			} else {
-				server = httptest.NewServer(handler)
-			}
-			defer server.Close()
+	srv.StartTLS()
+	defer srv.Close()
 
-			web3Signer := New(server.URL, WithTLSConfig(tc.clientTLS))
-			_, err := web3Signer.ListKeys(context.Background())
+	// success with CA
+	caFile := mustWriteTemp(t, caCert, "ca-*.pem")
+	client, err := New(srv.URL, "", "", caFile)
+	require.NoError(t, err)
 
-			if tc.expectError {
-				require.Error(t, err)
-				if tc.errorContains != "" {
-					require.Contains(t, err.Error(), tc.errorContains)
-				}
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
+	_, err = client.ListKeys(context.Background())
+	require.NoError(t, err)
 
-func mustBLSFromString(s string) phase0.BLSPubKey {
-	pk, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
+	// failure without CA
+	client2, err := New(srv.URL, "", "", "")
+	require.NoError(t, err)
 
-	if len(pk) != len(phase0.BLSPubKey{}) {
-		panic("invalid public key length")
-	}
-
-	return phase0.BLSPubKey(pk)
+	_, err = client2.ListKeys(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to verify certificate")
 }

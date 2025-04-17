@@ -21,8 +21,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/tls/testingutils"
+
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -45,7 +45,7 @@ func (s *SSVSignerClientSuite) SetupTest() {
 		s.serverHits++
 		s.mux.ServeHTTP(w, r)
 	}))
-	s.client, err = NewClient(s.server.URL, WithLogger(s.logger))
+	s.client, err = NewClient(s.server.URL, "", "", "", WithLogger(s.logger))
 	s.Require().NoError(err, "failed to create client")
 }
 
@@ -707,13 +707,13 @@ func (s *SSVSignerClientSuite) TestNew() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := NewClient(tc.baseURL)
+			client, err := NewClient(tc.baseURL, "", "", "")
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectedBaseURL, client.baseURL)
 			assert.NotNil(t, client.httpClient)
 
 			logger, _ := zap.NewDevelopment()
-			clientWithLogger, err := NewClient(tc.baseURL, WithLogger(logger))
+			clientWithLogger, err := NewClient(tc.baseURL, "", "", "", WithLogger(logger))
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectedBaseURL, clientWithLogger.baseURL)
 			assert.Equal(t, logger, clientWithLogger.logger)
@@ -738,7 +738,7 @@ func TestCustomHTTPClient(t *testing.T) {
 		client.httpClient = customClient
 	}
 
-	c, err := NewClient("http://example.com", withCustomClient)
+	c, err := NewClient("http://example.com", "", "", "", withCustomClient)
 
 	require.NoError(t, err)
 	assert.Equal(t, customClient, c.httpClient)
@@ -763,7 +763,7 @@ func TestRequestErrors(t *testing.T) {
 	defer server.Close()
 
 	logger, _ := zap.NewDevelopment()
-	client, err := NewClient(server.URL, WithLogger(logger))
+	client, err := NewClient(server.URL, "", "", "", WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.AddValidators(context.Background(), ShareKeys{
@@ -796,7 +796,7 @@ func TestResponseHandlingErrors(t *testing.T) {
 	defer server.Close()
 
 	logger, _ := zap.NewDevelopment()
-	client, err := NewClient(server.URL, WithLogger(logger))
+	client, err := NewClient(server.URL, "", "", "", WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.AddValidators(context.Background(), ShareKeys{
@@ -815,11 +815,6 @@ func TestNew(t *testing.T) {
 	logger, zapErr := zap.NewDevelopment()
 	require.NoError(t, zapErr)
 
-	exampleLogger := zap.NewExample()
-	certData := []byte("")
-	keyData := []byte("")
-	caCertData := []byte("")
-
 	testCases := []struct {
 		name            string
 		baseURL         string
@@ -827,7 +822,6 @@ func TestNew(t *testing.T) {
 		expectedBaseURL string
 		checkLogger     bool
 		expectedLogger  *zap.Logger
-		checkTLS        bool
 	}{
 		{
 			name:            "NormalURL",
@@ -853,22 +847,13 @@ func TestNew(t *testing.T) {
 			checkLogger:     true,
 			expectedLogger:  logger,
 		},
-		{
-			name:            "WithAllOptions",
-			baseURL:         "https://test.example.com",
-			opts:            []ClientOption{WithLogger(exampleLogger), WithClientTLSCertificates(certData, keyData, caCertData)},
-			expectedBaseURL: "https://test.example.com",
-			checkLogger:     true,
-			expectedLogger:  exampleLogger,
-			checkTLS:        true,
-		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			client, err := NewClient(tc.baseURL, tc.opts...)
+			client, err := NewClient(tc.baseURL, "", "", "", tc.opts...)
 			require.NoError(t, err)
 			require.NotNil(t, client)
 
@@ -882,13 +867,6 @@ func TestNew(t *testing.T) {
 
 			assert.NotNil(t, client.httpClient)
 			assert.Equal(t, 30*time.Second, client.httpClient.Timeout)
-
-			if tc.checkTLS {
-				assert.NotNil(t, client.tlsConfig)
-				transport, ok := client.httpClient.Transport.(*http.Transport)
-				assert.True(t, ok)
-				assert.NotNil(t, transport.TLSClientConfig)
-			}
 		})
 	}
 }
@@ -910,7 +888,7 @@ func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
 	const inputURL = "https://test.example.com/"
 	const expectedURL = "https://test.example.com"
 
-	client, err := NewClient(inputURL)
+	client, err := NewClient(inputURL, "", "", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, client)
@@ -925,13 +903,12 @@ func TestClientTLS(t *testing.T) {
 	testCases := []struct {
 		name           string
 		serverTLS      bool
+		serverRequires bool
 		clientCert     []byte
 		clientKey      []byte
 		caCert         []byte
-		skipVerify     bool
 		expectError    bool
-		errorContains  string
-		serverRequires bool
+		wantErrSubstr  string
 	}{
 		{
 			name:        "No TLS",
@@ -939,94 +916,71 @@ func TestClientTLS(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:           "Server TLS with CA cert",
+			name:           "Server TLS no CA",
 			serverTLS:      true,
-			caCert:         caCert,
-			expectError:    false,
 			serverRequires: false,
-		},
-		{
-			name:           "Server TLS with skipVerify",
-			serverTLS:      true,
-			skipVerify:     true,
-			expectError:    false,
-			serverRequires: false,
-		},
-		{
-			name:           "Server TLS with no CA or skipVerify",
-			serverTLS:      true,
 			expectError:    true,
-			errorContains:  "certificate is not trusted",
-			serverRequires: false,
+			wantErrSubstr:  "certificate",
 		},
 		{
-			name:           "Server TLS requiring client cert, client provides",
+			name:        "Server TLS with CA",
+			serverTLS:   true,
+			caCert:      caCert,
+			expectError: false,
+		},
+		{
+			name:           "Mutual TLS client provided",
 			serverTLS:      true,
-			clientCert:     serverCert, // server cert is used as client cert
+			serverRequires: true,
+			clientCert:     serverCert,
 			clientKey:      serverKey,
 			caCert:         caCert,
 			expectError:    false,
-			serverRequires: true,
 		},
 		{
-			name:           "Server TLS requiring client cert, client doesn't provide",
+			name:           "Mutual TLS client missing",
 			serverTLS:      true,
+			serverRequires: true,
 			caCert:         caCert,
 			expectError:    true,
-			errorContains:  "certificate",
-			serverRequires: true,
+			wantErrSubstr:  "certificate",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var serverTLSConfig *tls.Config
+			var tlsCfg *tls.Config
 			if tc.serverTLS {
-				// setup server TLS config
-				if tc.serverRequires {
-					serverTLSConfig = testingutils.CreateServerTLSConfig(t, serverCert, serverKey, caCert, true)
-				} else {
-					serverTLSConfig = testingutils.CreateServerTLSConfig(t, serverCert, serverKey, nil, false)
-				}
+				tlsCfg = testingutils.CreateServerTLSConfig(
+					t, serverCert, serverKey, tc.caCert, tc.serverRequires,
+				)
 			}
-
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == pathValidators {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte("[]"))
-				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("[]"))
 			})
-
-			server := httptest.NewUnstartedServer(handler)
+			srv := httptest.NewUnstartedServer(handler)
 			if tc.serverTLS {
-				server.TLS = serverTLSConfig
-				server.StartTLS()
+				srv.TLS = tlsCfg
+				srv.StartTLS()
 			} else {
-				server.Start()
+				srv.Start()
 			}
-			defer server.Close()
+			defer srv.Close()
 
-			var clientOpts []ClientOption
-			if tc.clientCert != nil && tc.clientKey != nil {
-				clientOpts = append(clientOpts, WithClientTLSCertificates(tc.clientCert, tc.clientKey, tc.caCert))
-			} else if tc.caCert != nil {
-				clientOpts = append(clientOpts, WithClientTLSCertificates(nil, nil, tc.caCert))
-			}
-			if tc.skipVerify {
-				clientOpts = append(clientOpts, WithClientInsecureSkipVerify())
-			}
+			tmpCert := mustWriteTemp(t, tc.clientCert, "client-*.pem")
+			tmpKey := mustWriteTemp(t, tc.clientKey, "clientkey-*.pem")
+			tmpCA := mustWriteTemp(t, tc.caCert, "ca-*.pem")
 
-			client, err := NewClient(server.URL, clientOpts...)
+			client, err := NewClient(srv.URL, tmpCert, tmpKey, tmpCA)
 			require.NoError(t, err)
 
-			// test ListValidators which makes an HTTP request
 			_, err = client.ListValidators(context.Background())
-
 			if tc.expectError {
 				require.Error(t, err)
-				if tc.errorContains != "" {
-					require.Contains(t, err.Error(), tc.errorContains)
+				if tc.wantErrSubstr != "" {
+					require.Contains(t, err.Error(), tc.wantErrSubstr)
 				}
 			} else {
 				require.NoError(t, err)
@@ -1045,89 +999,38 @@ func TestClientTLSOptions(t *testing.T) {
 		clientCert        []byte
 		clientKey         []byte
 		caCert            []byte
-		skipVerify        bool
 		expectTLSConfig   bool
 		expectCertificate bool
 		expectRootCAs     bool
-		expectSkipVerify  bool
 	}{
-		{
-			name:            "No TLS options",
-			expectTLSConfig: false,
-		},
-		{
-			name:              "With client certificate",
-			clientCert:        clientCert,
-			clientKey:         clientKey,
-			expectTLSConfig:   true,
-			expectCertificate: true,
-		},
-		{
-			name:            "With CA certificate",
-			caCert:          caCert,
-			expectTLSConfig: true,
-			expectRootCAs:   true,
-		},
-		{
-			name:             "With skip verify",
-			skipVerify:       true,
-			expectTLSConfig:  true,
-			expectSkipVerify: true,
-		},
-		{
-			name:              "With all options",
-			clientCert:        clientCert,
-			clientKey:         clientKey,
-			caCert:            caCert,
-			skipVerify:        true,
-			expectTLSConfig:   true,
-			expectCertificate: true,
-			expectRootCAs:     true,
-			expectSkipVerify:  true,
-		},
+		{"No TLS options", nil, nil, nil, false, false, false},
+		{"With client certificate", clientCert, clientKey, nil, true, true, false},
+		{"With CA certificate", nil, nil, caCert, true, false, true},
+		{"With all options", clientCert, clientKey, caCert, true, true, true},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var clientOpts []ClientOption
+			tmpCert := mustWriteTemp(t, tc.clientCert, "client-*.pem")
+			tmpKey := mustWriteTemp(t, tc.clientKey, "clientkey-*.pem")
+			tmpCA := mustWriteTemp(t, tc.caCert, "ca-*.pem")
 
-			if tc.clientCert != nil && tc.clientKey != nil {
-				if tc.caCert != nil {
-					clientOpts = append(clientOpts, WithClientTLSCertificates(tc.clientCert, tc.clientKey, tc.caCert))
-				} else {
-					clientOpts = append(clientOpts, WithClientTLSCertificates(tc.clientCert, tc.clientKey, nil))
-				}
-			} else if tc.caCert != nil {
-				clientOpts = append(clientOpts, WithClientTLSCertificates(nil, nil, tc.caCert))
-			}
-
-			if tc.skipVerify {
-				clientOpts = append(clientOpts, WithClientInsecureSkipVerify())
-			}
-
-			client, err := NewClient("https://example.com", clientOpts...)
+			client, err := NewClient("https://example.com", tmpCert, tmpKey, tmpCA)
 			require.NoError(t, err)
 
-			transport, ok := client.httpClient.Transport.(*http.Transport)
+			transport, _ := client.httpClient.Transport.(*http.Transport)
 			if tc.expectTLSConfig {
-				require.True(t, ok)
-				require.NotNil(t, transport)
-				require.NotNil(t, transport.TLSClientConfig)
+				cfg := transport.TLSClientConfig
+				require.NotNil(t, cfg)
 
 				if tc.expectCertificate {
-					if tc.name == "With all options" {
-						require.Greater(t, len(transport.TLSClientConfig.Certificates), 0)
-					} else {
-						require.Len(t, transport.TLSClientConfig.Certificates, 1)
-					}
+					require.Greater(t, len(cfg.Certificates), 0)
 				}
-
 				if tc.expectRootCAs {
-					require.NotNil(t, transport.TLSClientConfig.RootCAs)
+					require.NotNil(t, cfg.RootCAs)
 				}
-
-				require.Equal(t, tc.expectSkipVerify, transport.TLSClientConfig.InsecureSkipVerify)
 			}
+
 		})
 	}
 }
@@ -1135,112 +1038,77 @@ func TestClientTLSOptions(t *testing.T) {
 func TestTLSConfigCLIIntegration(t *testing.T) {
 	t.Parallel()
 
-	// Create temporary files for testing
-	clientCertFile, err := os.CreateTemp("", "client-cert-*.pem")
-	require.NoError(t, err)
-	defer os.Remove(clientCertFile.Name())
+	clientCertFile, clientKeyFile, caCertFile := writeCertFiles(t)
 
-	clientKeyFile, err := os.CreateTemp("", "client-key-*.pem")
-	require.NoError(t, err)
-	defer os.Remove(clientKeyFile.Name())
-
-	caCertFile, err := os.CreateTemp("", "ca-cert-*.pem")
-	require.NoError(t, err)
-	defer os.Remove(caCertFile.Name())
-
-	// Generate test certificates
-	caCert, _, clientCert, clientKey := testingutils.GenerateCertificates(t, "localhost")
-
-	// Write test data to temp files
-	err = os.WriteFile(clientCertFile.Name(), clientCert, 0644)
-	require.NoError(t, err)
-
-	err = os.WriteFile(clientKeyFile.Name(), clientKey, 0644)
-	require.NoError(t, err)
-
-	err = os.WriteFile(caCertFile.Name(), caCert, 0644)
-	require.NoError(t, err)
-
-	// Test cases that simulate CLI configuration
-	testCases := []struct {
-		name          string
-		tlsConfig     ssvsignertls.ClientConfig
-		expectOptions int
-		expectError   bool
+	cases := []struct {
+		name    string
+		cert    string
+		key     string
+		ca      string
+		wantCA  bool
+		wantCrt bool
 	}{
-		{
-			name: "Full TLS configuration",
-			tlsConfig: ssvsignertls.ClientConfig{
-				ClientCertFile:           clientCertFile.Name(),
-				ClientKeyFile:            clientKeyFile.Name(),
-				ClientCACertFile:         caCertFile.Name(),
-				ClientInsecureSkipVerify: false,
-			},
-			expectOptions: 1, // One option with the full TLS config
-			expectError:   false,
-		},
-		{
-			name: "CA cert only",
-			tlsConfig: ssvsignertls.ClientConfig{
-				ClientCACertFile: caCertFile.Name(),
-			},
-			expectOptions: 1, // One option with CA cert only
-			expectError:   false,
-		},
-		{
-			name: "InsecureSkipVerify only",
-			tlsConfig: ssvsignertls.ClientConfig{
-				ClientInsecureSkipVerify: true,
-			},
-			expectOptions: 1, // One option with InsecureSkipVerify
-			expectError:   false,
-		},
-		{
-			name:          "No TLS configuration",
-			tlsConfig:     ssvsignertls.ClientConfig{},
-			expectOptions: 0, // No options when no TLS config is provided
-			expectError:   false,
-		},
+		{"Full TLS", clientCertFile, clientKeyFile, caCertFile, true, true},
+		{"CA only", "", "", caCertFile, true, false},
+		{"Cert only", clientCertFile, clientKeyFile, "", false, true},
+		{"None", "", "", "", false, false},
 	}
 
-	for _, tc := range testCases {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.expectError {
-				require.Error(t, err)
-				return
-			}
-
-			if tc.expectOptions == 0 {
-				return // No need to check further
-			}
-
-			logger, _ := zap.NewDevelopment()
-			allOptions := append([]ClientOption{WithLogger(logger)},
-				WithClientTLSCertificates(clientCert, clientKey, caCert),
-				WithClientInsecureSkipVerify())
-
-			// Use localhost as a dummy endpoint
-			client, err := NewClient("https://localhost:8000", allOptions...)
+			client, err := NewClient("https://localhost:9000", tc.cert, tc.key, tc.ca)
 			require.NoError(t, err)
-			require.NotNil(t, client)
 
 			transport, ok := client.httpClient.Transport.(*http.Transport)
 			require.True(t, ok)
-			require.NotNil(t, transport)
-			require.NotNil(t, transport.TLSClientConfig)
 
-			// Verify specific TLS settings
-			if tc.tlsConfig.ClientInsecureSkipVerify {
-				require.True(t, transport.TLSClientConfig.InsecureSkipVerify)
-			}
-
-			if tc.tlsConfig.ClientCACertFile != "" {
-				require.NotNil(t, transport.TLSClientConfig.RootCAs)
-			}
-
-			if tc.tlsConfig.ClientCertFile != "" && tc.tlsConfig.ClientKeyFile != "" {
-				require.NotEmpty(t, transport.TLSClientConfig.Certificates)
+			if tc.wantCA || tc.wantCrt {
+				cfg := transport.TLSClientConfig
+				require.NotNil(t, cfg)
+				if tc.wantCA {
+					require.NotNil(t, cfg.RootCAs)
+				}
+				if tc.wantCrt {
+					require.Greater(t, len(cfg.Certificates), 0)
+				}
 			}
 		})
 	}
+}
+
+func mustWriteTemp(t *testing.T, data []byte, pattern string) string {
+	t.Helper()
+
+	if len(data) == 0 {
+		return ""
+	}
+
+	f, err := os.CreateTemp("", pattern)
+	require.NoError(t, err)
+	defer f.Close()
+
+	_, err = f.Write(data)
+	require.NoError(t, err)
+
+	return f.Name()
+}
+
+func writeCertFiles(t *testing.T) (string, string, string) {
+	t.Helper()
+
+	ca, _, cert, key := testingutils.GenerateCertificates(t, "localhost")
+	caF, err := os.CreateTemp("", "ca-*.pem")
+	require.NoError(t, err)
+
+	certF, err := os.CreateTemp("", "crt-*.pem")
+	require.NoError(t, err)
+
+	keyF, err := os.CreateTemp("", "key-*.pem")
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(caF.Name(), ca, 0644))
+	require.NoError(t, os.WriteFile(certF.Name(), cert, 0644))
+	require.NoError(t, os.WriteFile(keyF.Name(), key, 0644))
+
+	return certF.Name(), keyF.Name(), caF.Name()
 }

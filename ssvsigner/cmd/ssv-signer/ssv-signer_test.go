@@ -99,13 +99,11 @@ func TestParseEmbeddedFlags(t *testing.T) {
 				"--client-cert-file=/path/to/client.crt",
 				"--client-key-file=/path/to/client.key",
 				"--client-ca-cert-file=/path/to/ca.crt",
-				"--client-insecure-skip-verify",
 			},
 			validate: func(t *testing.T, cli *CLI) {
-				assert.Equal(t, "/path/to/client.crt", cli.Client.ClientCertFile)
-				assert.Equal(t, "/path/to/client.key", cli.Client.ClientKeyFile)
-				assert.Equal(t, "/path/to/ca.crt", cli.Client.ClientCACertFile)
-				assert.True(t, cli.Client.ClientInsecureSkipVerify)
+				assert.Equal(t, "/path/to/client.crt", cli.ClientCertFile)
+				assert.Equal(t, "/path/to/client.key", cli.ClientKeyFile)
+				assert.Equal(t, "/path/to/ca.crt", cli.ClientCACertFile)
 			},
 		},
 		{
@@ -117,13 +115,11 @@ func TestParseEmbeddedFlags(t *testing.T) {
 				"--server-cert-file", "/path/to/server.crt",
 				"--server-key-file", "/path/to/server.key",
 				"--server-ca-cert-file", "/path/to/ca.crt",
-				"--server-insecure-skip-verify",
 			},
 			validate: func(t *testing.T, cli *CLI) {
-				assert.Equal(t, "/path/to/server.crt", cli.Server.ServerCertFile)
-				assert.Equal(t, "/path/to/server.key", cli.Server.ServerKeyFile)
-				assert.Equal(t, "/path/to/ca.crt", cli.Server.ServerCACertFile)
-				assert.True(t, cli.Server.ServerInsecureSkipVerify)
+				assert.Equal(t, "/path/to/server.crt", cli.ServerCertFile)
+				assert.Equal(t, "/path/to/server.key", cli.ServerKeyFile)
+				assert.Equal(t, "/path/to/ca.crt", cli.ServerCACertFile)
 			},
 		},
 		{
@@ -141,10 +137,10 @@ func TestParseEmbeddedFlags(t *testing.T) {
 			validate: func(t *testing.T, cli *CLI) {
 				assert.Equal(t, ":9090", cli.ListenAddr)
 				assert.Equal(t, "https://web3signer.example.com", cli.Web3SignerEndpoint)
-				assert.Equal(t, "/path/to/client.crt", cli.Client.ClientCertFile)
-				assert.Equal(t, "/path/to/client.key", cli.Client.ClientKeyFile)
-				assert.Equal(t, "/path/to/server.crt", cli.Server.ServerCertFile)
-				assert.Equal(t, "/path/to/server.key", cli.Server.ServerKeyFile)
+				assert.Equal(t, "/path/to/client.crt", cli.ClientCertFile)
+				assert.Equal(t, "/path/to/client.key", cli.ClientKeyFile)
+				assert.Equal(t, "/path/to/server.crt", cli.ServerCertFile)
+				assert.Equal(t, "/path/to/server.key", cli.ServerKeyFile)
 			},
 		},
 	}
@@ -201,10 +197,9 @@ func TestEnvironmentVariables(t *testing.T) {
 			validate: func(t *testing.T, cli *CLI) {
 				assert.Equal(t, "http://example.com", cli.Web3SignerEndpoint)
 				assert.Equal(t, base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)), cli.PrivateKey)
-				assert.Equal(t, "/path/to/client.crt", cli.Client.ClientCertFile)
-				assert.Equal(t, "/path/to/client.key", cli.Client.ClientKeyFile)
-				assert.Equal(t, "/path/to/ca.crt", cli.Client.ClientCACertFile)
-				assert.True(t, cli.Client.ClientInsecureSkipVerify)
+				assert.Equal(t, "/path/to/client.crt", cli.ClientCertFile)
+				assert.Equal(t, "/path/to/client.key", cli.ClientKeyFile)
+				assert.Equal(t, "/path/to/ca.crt", cli.ClientCACertFile)
 			},
 		},
 		{
@@ -220,10 +215,9 @@ func TestEnvironmentVariables(t *testing.T) {
 			validate: func(t *testing.T, cli *CLI) {
 				assert.Equal(t, "http://example.com", cli.Web3SignerEndpoint)
 				assert.Equal(t, base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)), cli.PrivateKey)
-				assert.Equal(t, "/path/to/server.crt", cli.Server.ServerCertFile)
-				assert.Equal(t, "/path/to/server.key", cli.Server.ServerKeyFile)
-				assert.Equal(t, "/path/to/ca.crt", cli.Server.ServerCACertFile)
-				assert.True(t, cli.Server.ServerInsecureSkipVerify)
+				assert.Equal(t, "/path/to/server.crt", cli.ServerCertFile)
+				assert.Equal(t, "/path/to/server.key", cli.ServerKeyFile)
+				assert.Equal(t, "/path/to/ca.crt", cli.ServerCACertFile)
 			},
 		},
 	}
@@ -271,18 +265,6 @@ func TestFlagEnvVarMapping(t *testing.T) {
 		envTag := field.Tag.Get("env")
 		require.Equal(t, expectedEnvVar, envTag)
 	}
-
-	clientField, found := cliType.FieldByName("Client")
-	require.True(t, found)
-
-	embedTag := clientField.Tag.Get("embed")
-	require.Equal(t, "", embedTag)
-
-	serverField, found := cliType.FieldByName("Server")
-	require.True(t, found)
-
-	embedTag = serverField.Tag.Get("embed")
-	require.Equal(t, "", embedTag)
 }
 
 // TestInitializeWithFlags tests that the CLI struct fields can be properly initialized with direct assignment.
@@ -299,17 +281,15 @@ func TestInitializeWithFlags(t *testing.T) {
 			configure: func(cli *CLI) {
 				cli.Web3SignerEndpoint = "http://example.com"
 				cli.PrivateKey = base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM))
-				cli.Client.ClientCertFile = "/path/to/client.crt"
-				cli.Client.ClientKeyFile = "/path/to/client.key"
-				cli.Client.ClientCACertFile = "/path/to/ca.crt"
-				cli.Client.ClientInsecureSkipVerify = true
+				cli.ClientCertFile = "/path/to/client.crt"
+				cli.ClientKeyFile = "/path/to/client.key"
+				cli.ClientCACertFile = "/path/to/ca.crt"
 			},
 			validate: func(t *testing.T, cli *CLI) {
 				assert.Equal(t, "http://example.com", cli.Web3SignerEndpoint)
-				assert.Equal(t, "/path/to/client.crt", cli.Client.ClientCertFile)
-				assert.Equal(t, "/path/to/client.key", cli.Client.ClientKeyFile)
-				assert.Equal(t, "/path/to/ca.crt", cli.Client.ClientCACertFile)
-				assert.True(t, cli.Client.ClientInsecureSkipVerify)
+				assert.Equal(t, "/path/to/client.crt", cli.ClientCertFile)
+				assert.Equal(t, "/path/to/client.key", cli.ClientKeyFile)
+				assert.Equal(t, "/path/to/ca.crt", cli.ClientCACertFile)
 			},
 		},
 		{
@@ -317,17 +297,15 @@ func TestInitializeWithFlags(t *testing.T) {
 			configure: func(cli *CLI) {
 				cli.Web3SignerEndpoint = "http://example.com"
 				cli.PrivateKey = base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM))
-				cli.Server.ServerCertFile = "/path/to/server.crt"
-				cli.Server.ServerKeyFile = "/path/to/server.key"
-				cli.Server.ServerCACertFile = "/path/to/ca.crt"
-				cli.Server.ServerInsecureSkipVerify = true
+				cli.ServerCertFile = "/path/to/server.crt"
+				cli.ServerKeyFile = "/path/to/server.key"
+				cli.ServerCACertFile = "/path/to/ca.crt"
 			},
 			validate: func(t *testing.T, cli *CLI) {
 				assert.Equal(t, "http://example.com", cli.Web3SignerEndpoint)
-				assert.Equal(t, "/path/to/server.crt", cli.Server.ServerCertFile)
-				assert.Equal(t, "/path/to/server.key", cli.Server.ServerKeyFile)
-				assert.Equal(t, "/path/to/ca.crt", cli.Server.ServerCACertFile)
-				assert.True(t, cli.Server.ServerInsecureSkipVerify)
+				assert.Equal(t, "/path/to/server.crt", cli.ServerCertFile)
+				assert.Equal(t, "/path/to/server.key", cli.ServerKeyFile)
+				assert.Equal(t, "/path/to/ca.crt", cli.ServerCACertFile)
 			},
 		},
 		{
@@ -336,18 +314,18 @@ func TestInitializeWithFlags(t *testing.T) {
 				cli.ListenAddr = ":9090"
 				cli.Web3SignerEndpoint = "https://web3signer.example.com"
 				cli.PrivateKey = base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM))
-				cli.Client.ClientCertFile = "/path/to/client.crt"
-				cli.Client.ClientKeyFile = "/path/to/client.key"
-				cli.Server.ServerCertFile = "/path/to/server.crt"
-				cli.Server.ServerKeyFile = "/path/to/server.key"
+				cli.ClientCertFile = "/path/to/client.crt"
+				cli.ClientKeyFile = "/path/to/client.key"
+				cli.ServerCertFile = "/path/to/server.crt"
+				cli.ServerKeyFile = "/path/to/server.key"
 			},
 			validate: func(t *testing.T, cli *CLI) {
 				assert.Equal(t, ":9090", cli.ListenAddr)
 				assert.Equal(t, "https://web3signer.example.com", cli.Web3SignerEndpoint)
-				assert.Equal(t, "/path/to/client.crt", cli.Client.ClientCertFile)
-				assert.Equal(t, "/path/to/client.key", cli.Client.ClientKeyFile)
-				assert.Equal(t, "/path/to/server.crt", cli.Server.ServerCertFile)
-				assert.Equal(t, "/path/to/server.key", cli.Server.ServerKeyFile)
+				assert.Equal(t, "/path/to/client.crt", cli.ClientCertFile)
+				assert.Equal(t, "/path/to/client.key", cli.ClientKeyFile)
+				assert.Equal(t, "/path/to/server.crt", cli.ServerCertFile)
+				assert.Equal(t, "/path/to/server.key", cli.ServerKeyFile)
 			},
 		},
 	}

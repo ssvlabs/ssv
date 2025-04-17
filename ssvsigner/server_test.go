@@ -22,8 +22,9 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/tls/testingutils"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -564,7 +565,7 @@ func (t *testRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKe
 func TestGenerateRandomPassword(t *testing.T) {
 	server := &Server{}
 
-	tests := []struct {
+	testCases := []struct {
 		length int
 	}{
 		{8},
@@ -572,7 +573,7 @@ func TestGenerateRandomPassword(t *testing.T) {
 		{16},
 	}
 
-	for _, test := range tests {
+	for _, test := range testCases {
 		t.Run(fmt.Sprintf("PasswordLength%d", test.length), func(t *testing.T) {
 			password, err := server.generateRandomPassword(test.length)
 			require.NoError(t, err)
@@ -601,37 +602,15 @@ func TestTLSServer(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		tlsConfig       *tls.Config
-		tlsOption       ServerOption
+		serverCertPEM   []byte
+		serverKeyPEM    []byte
+		caCertPEM       []byte
 		expectTLSConfig bool
 	}{
-		{
-			name:            "No TLS",
-			tlsConfig:       nil,
-			expectTLSConfig: false,
-		},
-		{
-			name: "With TLS Config",
-			tlsConfig: &tls.Config{
-				MinVersion: tls.VersionTLS13,
-			},
-			tlsOption:       WithServerTLSConfig(&tls.Config{MinVersion: tls.VersionTLS13}),
-			expectTLSConfig: true,
-		},
-		{
-			name: "With TLS Certificates",
-			tlsOption: WithServerTLSCertificates(
-				serverCert,
-				serverKey,
-				caCert,
-			),
-			expectTLSConfig: true,
-		},
-		{
-			name:            "With ServerInsecureSkipVerify",
-			tlsOption:       WithServerInsecureSkipVerify(),
-			expectTLSConfig: true,
-		},
+		{"No TLS", nil, nil, nil, false},
+		{"With CA only", nil, nil, caCert, false},
+		{"With Cert+Key only", serverCert, serverKey, nil, true},
+		{"With Mutual TLS", serverCert, serverKey, caCert, true},
 	}
 
 	for _, tc := range testCases {
@@ -639,10 +618,7 @@ func TestTLSServer(t *testing.T) {
 			logger, err := zap.NewDevelopment()
 			require.NoError(t, err)
 
-			pubKey := &testOperatorPublicKey{
-				pubKeyBase64: "test_pubkey_base64",
-			}
-
+			pubKey := &testOperatorPublicKey{pubKeyBase64: "test_pubkey_base64"}
 			operatorPrivKey := &testOperatorPrivateKey{
 				base64Value:   "test_operator_key_base64",
 				bytesValue:    []byte("test_bytes"),
@@ -652,24 +628,20 @@ func TestTLSServer(t *testing.T) {
 				publicKey:     pubKey,
 				signResult:    []byte("signature_bytes"),
 			}
+			remoteSigner := &testRemoteSigner{listKeysResult: []phase0.BLSPubKey{{1, 2, 3}}}
 
-			remoteSigner := &testRemoteSigner{
-				listKeysResult: []phase0.BLSPubKey{{1, 2, 3}},
-			}
+			server := NewServer(logger, operatorPrivKey, remoteSigner)
 
-			var opts []ServerOption
-			if tc.tlsOption != nil {
-				opts = append(opts, tc.tlsOption)
-			}
+			// write each PEM blob to a temp file (empty blobs yield empty path)
+			certFile := mustWriteTemp(t, tc.serverCertPEM, "server-cert-*.pem")
+			keyFile := mustWriteTemp(t, tc.serverKeyPEM, "server-key-*.pem")
+			caFile := mustWriteTemp(t, tc.caCertPEM, "ca-cert-*.pem")
 
-			server := NewServer(logger, operatorPrivKey, remoteSigner, opts...)
+			err = server.SetTLS(certFile, keyFile, caFile)
+			require.NoError(t, err)
 
 			if tc.expectTLSConfig {
 				require.NotNil(t, server.tlsConfig)
-				if tc.tlsConfig != nil {
-					// check specific TLS config values
-					require.Equal(t, tc.tlsConfig.MinVersion, server.tlsConfig.MinVersion)
-				}
 			} else {
 				require.Nil(t, server.tlsConfig)
 			}
@@ -686,22 +658,11 @@ func TestServerTLSListenAndServe(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		serverOptions []ServerOption
 		useTLS        bool
 		expectSuccess bool
 	}{
-		{
-			name:          "TLS Server",
-			serverOptions: []ServerOption{WithServerTLSCertificates(serverCert, serverKey, nil)},
-			useTLS:        true,
-			expectSuccess: true,
-		},
-		{
-			name:          "Non-TLS Server",
-			serverOptions: []ServerOption{},
-			useTLS:        false,
-			expectSuccess: true,
-		},
+		{"TLS Server", true, true},
+		{"Non-TLS Server", false, true},
 	}
 
 	for _, tc := range testCases {
@@ -709,82 +670,70 @@ func TestServerTLSListenAndServe(t *testing.T) {
 			logger, err := zap.NewDevelopment()
 			require.NoError(t, err)
 
-			// create test objects
 			pubKey := &testOperatorPublicKey{pubKeyBase64: "test_pubkey_base64"}
 			operatorPrivKey := &testOperatorPrivateKey{publicKey: pubKey}
-			remoteSigner := &testRemoteSigner{
-				listKeysResult: []phase0.BLSPubKey{{1, 2, 3}},
+			remoteSigner := &testRemoteSigner{listKeysResult: []phase0.BLSPubKey{{1, 2, 3}}}
+
+			srv := NewServer(logger, operatorPrivKey, remoteSigner)
+			if tc.useTLS {
+				// write PEM blobs to files
+				certFile := mustWriteTemp(t, serverCert, "listen-cert-*.pem")
+				keyFile := mustWriteTemp(t, serverKey, "listen-key-*.pem")
+				// pass empty CA → one‑way TLS
+				require.NoError(t, srv.SetTLS(certFile, keyFile, ""))
+			} else {
+				// no files → no TLS
+				require.NoError(t, srv.SetTLS("", "", ""))
 			}
 
-			// create server with appropriate options
-			server := NewServer(logger, operatorPrivKey, remoteSigner, tc.serverOptions...)
-
-			// find an available port for testing
-			listener, err := net.Listen("tcp", "localhost:0")
+			// grab a free port
+			ln, err := net.Listen("tcp", "localhost:0")
 			require.NoError(t, err)
-			serverAddress := listener.Addr().String()
-			listener.Close()
+			addr := ln.Addr().String()
+			ln.Close()
 
 			errCh := make(chan error, 1)
 			stopCh := make(chan struct{})
 			go func() {
-				err := server.ListenAndServe(serverAddress)
-				if err != nil {
+				if err := srv.ListenAndServe(addr); err != nil {
 					select {
-					case <-stopCh: // server was intentionally stopped
-						// expected error during shutdown, ignore
+					case <-stopCh:
 					default:
 						errCh <- err
 					}
 				}
 				close(errCh)
 			}()
-
-			// allow time for server to start
 			time.Sleep(100 * time.Millisecond)
 
-			// test connection to server using appropriate protocol
 			protocol := "http"
 			if tc.useTLS {
 				protocol = "https"
 			}
 
-			clientSuccess := false
-			var resp *http.Response
-			var requestErr error
+			var (
+				clientSuccess bool
+				resp          *http.Response
+				reqErr        error
+			)
 
-			// create appropriate client based on protocol
 			if tc.useTLS {
-				tlsConfig := &tls.Config{
-					InsecureSkipVerify: true,
-				}
-
-				if caCert != nil {
-					caCertPool := x509.NewCertPool()
-					caCertPool.AppendCertsFromPEM(caCert)
-					tlsConfig.RootCAs = caCertPool
-				}
-
-				client := &http.Client{
-					Transport: &http.Transport{
-						TLSClientConfig: tlsConfig,
-					},
-				}
-				resp, requestErr = client.Get(fmt.Sprintf("%s://%s%s", protocol, serverAddress, pathValidators))
+				tlsCfg := &tls.Config{InsecureSkipVerify: true}
+				caPool := x509.NewCertPool()
+				caPool.AppendCertsFromPEM(caCert)
+				tlsCfg.RootCAs = caPool
+				client := &http.Client{Transport: &http.Transport{TLSClientConfig: tlsCfg}}
+				resp, reqErr = client.Get(fmt.Sprintf("%s://%s%s", protocol, addr, pathValidators))
 			} else {
-				// use standard client for non-TLS connections
-				resp, requestErr = http.Get(fmt.Sprintf("%s://%s%s", protocol, serverAddress, pathValidators))
+				resp, reqErr = http.Get(fmt.Sprintf("%s://%s%s", protocol, addr, pathValidators))
 			}
 
-			if requestErr == nil {
+			if reqErr == nil {
 				defer resp.Body.Close()
 				clientSuccess = resp.StatusCode == http.StatusOK
-			} else {
-				t.Logf("client request error: %v", requestErr)
 			}
 
 			close(stopCh)
-
 			if tc.expectSuccess {
 				require.True(t, clientSuccess, "client request should succeed")
 			}
@@ -794,8 +743,7 @@ func TestServerTLSListenAndServe(t *testing.T) {
 				if err != nil && tc.expectSuccess {
 					t.Errorf("unexpected server error: %v", err)
 				}
-			case <-time.After(time.Second): // timeout - server is still running
-				// this is expected as fasthttp.Server doesn't have a clean shutdown mechanism in this test
+			case <-time.After(time.Second):
 			}
 		})
 	}

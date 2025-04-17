@@ -20,10 +20,11 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -44,55 +45,13 @@ type Server struct {
 	operatorPrivKey keys.OperatorPrivateKey
 	remoteSigner    remoteSigner
 	router          *router.Router
-
-	tlsConfig *tls.Config
-}
-
-// ServerOption defines a function that configures a Server.
-type ServerOption func(*Server)
-
-// WithServerTLSConfig sets the TLS configuration for the server.
-func WithServerTLSConfig(config *tls.Config) ServerOption {
-	return func(server *Server) {
-		server.tlsConfig = config
-	}
-}
-
-// WithServerTLSCertificates sets the TLS configuration for the server.
-// InsecureSkipVerify is set to false by default.
-func WithServerTLSCertificates(serverCert, serverKey, caCert []byte) ServerOption {
-	return func(server *Server) {
-		tlsConfig, err := ssvsignertls.CreateConfig(ssvsignertls.ServerConfigType,
-			serverCert,
-			serverKey,
-			caCert,
-			false,
-		)
-
-		if err != nil {
-			server.logger.Error("failed to create server TLS config", zap.Error(err))
-			return
-		}
-
-		server.tlsConfig = tlsConfig
-	}
-}
-
-// WithServerInsecureSkipVerify sets the TLS configuration to skip certificate verification (not recommended for production).
-func WithServerInsecureSkipVerify() ServerOption {
-	return func(server *Server) {
-		if server.tlsConfig == nil {
-			server.tlsConfig = &tls.Config{}
-		}
-		server.tlsConfig.InsecureSkipVerify = true
-	}
+	tlsConfig       *tls.Config
 }
 
 func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
 	remoteSigner remoteSigner,
-	opts ...ServerOption,
 ) *Server {
 	r := router.New()
 
@@ -101,10 +60,6 @@ func NewServer(
 		operatorPrivKey: operatorPrivKey,
 		remoteSigner:    remoteSigner,
 		router:          r,
-	}
-
-	for _, opt := range opts {
-		opt(server)
 	}
 
 	r.GET(pathValidators, server.handleListValidators)
@@ -118,7 +73,19 @@ func NewServer(
 	return server
 }
 
-func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
+func (s *Server) SetTLS(certPath, keyPath, caPath string) error {
+	if certPath == "" && keyPath == "" {
+		return nil
+	}
+	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, true)
+	if err != nil {
+		return err
+	}
+	s.tlsConfig = tc
+	return nil
+}
+
+func (s *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 	return func(ctx *fasthttp.RequestCtx) {
 		start := time.Now()
 		defer func() {
@@ -135,60 +102,55 @@ func (r *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 				time.Since(start),
 			)
 		}()
-		r.router.Handler(ctx)
+		s.router.Handler(ctx)
 	}
 }
 
 // ListenAndServe starts the server on the specified address.
 // If TLS is configured, it will use HTTPS.
-func (r *Server) ListenAndServe(addr string) error {
-	handler := r.Handler()
+func (s *Server) ListenAndServe(addr string) error {
+	handler := s.Handler()
 
-	if r.tlsConfig != nil {
-		r.logger.Info("starting ssv-signer server with TLS", zap.String("addr", addr))
-
-		// TCP listener
+	if s.tlsConfig != nil {
+		s.logger.Info("starting with TLS", zap.String("addr", addr))
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			return err
 		}
 
-		// wrap the listener with TLS
-		tlsListener := tls.NewListener(ln, r.tlsConfig)
-
-		// serve with the TLS listener
-		return fasthttp.Serve(tlsListener, handler)
+		tlsLn := tls.NewListener(ln, s.tlsConfig)
+		return fasthttp.Serve(tlsLn, handler)
 	}
 
-	r.logger.Info("starting ssv-signer server without TLS", zap.String("addr", addr))
+	s.logger.Info("starting without TLS", zap.String("addr", addr))
 	return fasthttp.ListenAndServe(addr, handler)
 }
 
-func (r *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
-	logger := r.logger.With(zap.String("method", "handleListValidators"))
+func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {
+	logger := s.logger.With(zap.String("method", "handleListValidators"))
 	logger.Debug("received request")
 
 	start := time.Now()
-	resp, err := r.remoteSigner.ListKeys(ctx)
+	resp, err := s.remoteSigner.ListKeys(ctx)
 	recordRemoteSignerOperation(ctx, opRemoteSignerListKeys, err, time.Since(start))
 
 	if err != nil {
-		r.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
 	}
 
 	logger.Info("request finished successfully", fields.Count(len(resp)))
-	r.writeJSON(ctx, logger, resp)
+	s.writeJSON(ctx, logger, resp)
 }
 
-func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
-	logger := r.logger.With(zap.String("method", "handleAddValidator"))
+func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
+	logger := s.logger.With(zap.String("method", "handleAddValidator"))
 	logger.Debug("received request")
 
 	var req AddValidatorRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("failed to unmarshal request body", zap.Error(err))
-		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
 
@@ -200,10 +162,10 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 
 		// The password is used to encrypt a keystore and to decrypt and save it in web3signer afterwards.
 		// So, there's no need to store the password. We can just generate a random password for each keystore.
-		keystorePassword, err := r.generateRandomPassword(16)
+		keystorePassword, err := s.generateRandomPassword(16)
 		if err != nil {
 			logger.Warn("failed to generate random password", zap.Error(err))
-			r.writeJSONErr(
+			s.writeJSONErr(
 				ctx,
 				logger,
 				fasthttp.StatusUnprocessableEntity,
@@ -212,14 +174,14 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 			return
 		}
 
-		keystoreJSON, err := r.keystoreJSONFromEncryptedShare(
+		keystoreJSON, err := s.keystoreJSONFromEncryptedShare(
 			share.EncryptedPrivKey,
 			share.PubKey,
 			keystorePassword,
 		)
 		if err != nil {
 			logger.Warn("failed to get keystore from encrypted share", zap.Error(err))
-			r.writeJSONErr(
+			s.writeJSONErr(
 				ctx,
 				logger,
 				fasthttp.StatusUnprocessableEntity,
@@ -233,10 +195,10 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	resp, err := r.remoteSigner.ImportKeystore(ctx, importKeystoreReq)
+	resp, err := s.remoteSigner.ImportKeystore(ctx, importKeystoreReq)
 	recordRemoteSignerOperation(ctx, opRemoteSignerImportKeystore, err, time.Since(start))
 	if err != nil {
-		r.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
 	}
 
@@ -256,15 +218,15 @@ func (r *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	logger.Info("request finished successfully", zap.Int("imported_count", importedCount))
-	r.writeJSON(ctx, logger, resp)
+	s.writeJSON(ctx, logger, resp)
 }
 
-func (r *Server) keystoreJSONFromEncryptedShare(
+func (s *Server) keystoreJSONFromEncryptedShare(
 	encryptedPrivKey hexutil.Bytes,
 	sharePubKey phase0.BLSPubKey,
 	keystorePassword string,
 ) (string, error) {
-	sharePrivKeyHex, err := r.operatorPrivKey.Decrypt(encryptedPrivKey)
+	sharePrivKeyHex, err := s.operatorPrivKey.Decrypt(encryptedPrivKey)
 	if err != nil {
 		return "", fmt.Errorf("decrypt share: %w", err)
 	}
@@ -296,7 +258,7 @@ func (r *Server) keystoreJSONFromEncryptedShare(
 	return string(keystoreJSON), nil
 }
 
-func (r *Server) generateRandomPassword(length int) (string, error) {
+func (s *Server) generateRandomPassword(length int) (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 	password := make([]byte, length)
@@ -310,24 +272,24 @@ func (r *Server) generateRandomPassword(length int) (string, error) {
 	return string(password), nil
 }
 
-func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
-	logger := r.logger.With(zap.String("method", "handleRemoveValidator"))
+func (s *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
+	logger := s.logger.With(zap.String("method", "handleRemoveValidator"))
 	logger.Debug("received request")
 
 	var req web3signer.DeleteKeystoreRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("failed to unmarshal request body", zap.Error(err))
-		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
 
 	logger = logger.With(zap.Int("req_count", len(req.Pubkeys)))
 
 	start := time.Now()
-	resp, err := r.remoteSigner.DeleteKeystore(ctx, req)
+	resp, err := s.remoteSigner.DeleteKeystore(ctx, req)
 	recordRemoteSignerOperation(ctx, opRemoteSignerDeleteKeystore, err, time.Since(start))
 	if err != nil {
-		r.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
 	}
 
@@ -347,18 +309,18 @@ func (r *Server) handleRemoveValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	logger.Info("request finished successfully", zap.Int("deleted_count", deletedCount))
-	r.writeJSON(ctx, logger, resp)
+	s.writeJSON(ctx, logger, resp)
 }
 
-func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
-	logger := r.logger.With(zap.String("method", "handleSignValidator"))
+func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
+	logger := s.logger.With(zap.String("method", "handleSignValidator"))
 	logger.Debug("received request")
 
 	identifierValue := ctx.UserValue("identifier")
-	blsPubKey, err := r.extractShareKey(identifierValue)
+	blsPubKey, err := s.extractShareKey(identifierValue)
 	if err != nil {
 		logger.Warn("failed to extract share key", zap.Error(err))
-		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("extract share key: %w", err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("extract share key: %w", err))
 		return
 	}
 
@@ -367,26 +329,26 @@ func (r *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	var req web3signer.SignRequest
 	if err := json.Unmarshal(ctx.PostBody(), &req); err != nil {
 		logger.Warn("failed to unmarshal request body", zap.Error(err))
-		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("unmarshal request body: %w", err))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, fmt.Errorf("unmarshal request body: %w", err))
 		return
 	}
 
 	logger = logger.With(zap.String("type", string(req.Type)))
 
 	start := time.Now()
-	resp, err := r.remoteSigner.Sign(ctx, blsPubKey, req)
+	resp, err := s.remoteSigner.Sign(ctx, blsPubKey, req)
 	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
 	if err != nil {
 		logger = logger.With(zap.String("req", string(ctx.PostBody())))
-		r.handleWeb3SignerErr(ctx, logger, resp, err)
+		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
 	}
 
 	logger.Info("request finished successfully")
-	r.writeJSON(ctx, logger, resp)
+	s.writeJSON(ctx, logger, resp)
 }
 
-func (r *Server) extractShareKey(identifierValue any) (phase0.BLSPubKey, error) {
+func (s *Server) extractShareKey(identifierValue any) (phase0.BLSPubKey, error) {
 	sharePubKeyHex, ok := identifierValue.(string)
 	if !ok {
 		return phase0.BLSPubKey{}, fmt.Errorf("unexpected share public key type %T", identifierValue)
@@ -404,26 +366,26 @@ func (r *Server) extractShareKey(identifierValue any) (phase0.BLSPubKey, error) 
 	return phase0.BLSPubKey(sharePubKey), nil
 }
 
-func (r *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
-	logger := r.logger.With(zap.String("method", "handleOperatorIdentity"))
+func (s *Server) handleOperatorIdentity(ctx *fasthttp.RequestCtx) {
+	logger := s.logger.With(zap.String("method", "handleOperatorIdentity"))
 	logger.Debug("received request")
 
-	pubKeyB64, err := r.operatorPrivKey.Public().Base64()
+	pubKeyB64, err := s.operatorPrivKey.Public().Base64()
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
-		r.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
+		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
 		return
 	}
 
 	logger.Info("request finished successfully")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeString(ctx, logger, pubKeyB64)
+	s.writeString(ctx, logger, pubKeyB64)
 }
 
-func (r *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
+func (s *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
 	payload := ctx.PostBody()
 
-	logger := r.logger.With(
+	logger := s.logger.With(
 		zap.String("method", "handleSignOperator"),
 		zap.Int("payload_size", len(payload)),
 	)
@@ -432,23 +394,23 @@ func (r *Server) handleSignOperator(ctx *fasthttp.RequestCtx) {
 
 	if len(payload) == 0 {
 		logger.Warn("request has no payload")
-		r.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, errors.New("request payload is empty"))
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest, errors.New("request payload is empty"))
 		return
 	}
 
-	signature, err := r.operatorPrivKey.Sign(payload)
+	signature, err := s.operatorPrivKey.Sign(payload)
 	if err != nil {
 		logger.Error("request failed", zap.Error(err))
-		r.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
+		s.writeJSONErr(ctx, logger, fasthttp.StatusInternalServerError, err)
 		return
 	}
 
 	logger.Info("request finished successfully")
 	ctx.SetStatusCode(fasthttp.StatusOK)
-	r.writeBytes(ctx, logger, signature)
+	s.writeBytes(ctx, logger, signature)
 }
 
-func (r *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, resp any, err error) {
+func (s *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, resp any, err error) {
 	statusCode := fasthttp.StatusInternalServerError
 	if he := new(web3signer.HTTPResponseError); errors.As(err, &he) {
 		statusCode = he.Status
@@ -460,24 +422,24 @@ func (r *Server) handleWeb3SignerErr(ctx *fasthttp.RequestCtx, logger *zap.Logge
 		zap.Any("resp", resp),
 	)
 	ctx.SetStatusCode(statusCode)
-	r.writeJSON(ctx, logger, resp)
+	s.writeJSON(ctx, logger, resp)
 }
 
-func (r *Server) writeString(ctx *fasthttp.RequestCtx, logger *zap.Logger, s string) {
-	if _, err := ctx.WriteString(s); err != nil {
+func (s *Server) writeString(ctx *fasthttp.RequestCtx, logger *zap.Logger, str string) {
+	if _, err := ctx.WriteString(str); err != nil {
 		logger.Error("failed to write response", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 	}
 }
 
-func (r *Server) writeBytes(ctx *fasthttp.RequestCtx, logger *zap.Logger, b []byte) {
+func (s *Server) writeBytes(ctx *fasthttp.RequestCtx, logger *zap.Logger, b []byte) {
 	if _, err := ctx.Write(b); err != nil {
 		logger.Error("failed to write response", zap.Error(err))
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 	}
 }
 
-func (r *Server) writeJSON(ctx *fasthttp.RequestCtx, logger *zap.Logger, v any) {
+func (s *Server) writeJSON(ctx *fasthttp.RequestCtx, logger *zap.Logger, v any) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		logger.Error("failed to marshal JSON", zap.Error(err))
@@ -486,7 +448,7 @@ func (r *Server) writeJSON(ctx *fasthttp.RequestCtx, logger *zap.Logger, v any) 
 		b, err = json.Marshal(errResp)
 		if err != nil {
 			logger.Error("failed to marshal JSON error", zap.Error(err))
-			r.writeString(ctx, logger, fmt.Sprintf("failed to marshal JSON error: %v", err))
+			s.writeString(ctx, logger, fmt.Sprintf("failed to marshal JSON error: %v", err))
 			return
 		}
 	}
@@ -499,8 +461,8 @@ func (r *Server) writeJSON(ctx *fasthttp.RequestCtx, logger *zap.Logger, v any) 
 }
 
 // writeJSONErr calls writeJSON, so it shouldn't be called from writeJSON
-func (r *Server) writeJSONErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, statusCode int, err error) {
+func (s *Server) writeJSONErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, statusCode int, err error) {
 	ctx.SetStatusCode(statusCode)
 	errResp := web3signer.ErrorMessage{Message: err.Error()}
-	r.writeJSON(ctx, logger, errResp)
+	s.writeJSON(ctx, logger, errResp)
 }
