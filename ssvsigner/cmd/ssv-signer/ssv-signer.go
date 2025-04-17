@@ -1,11 +1,9 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
 	"log"
 	"net/url"
-	"os"
 
 	"github.com/alecthomas/kong"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -72,12 +70,12 @@ func run(logger *zap.Logger, cli CLI) error {
 	}
 
 	// TLS configurations
-	clientTLSConfig, err := createClientTLSConfig(logger, cli)
+	clientTLSConfig, err := ssvsignertls.CreateClientConfig(cli.Client)
 	if err != nil {
 		return fmt.Errorf("failed to create client TLS configuration: %w", err)
 	}
 
-	serverTLSConfig, err := createServerTLSConfig(logger, cli)
+	serverTLSConfig, err := ssvsignertls.CreateServerConfig(cli.Server)
 	if err != nil {
 		return fmt.Errorf("failed to create server TLS configuration: %w", err)
 	}
@@ -111,20 +109,14 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
-	// Validate client TLS configuration
-	if cli.Client.ClientCertFile != "" && cli.Client.ClientKeyFile == "" {
-		return fmt.Errorf("client certificate provided without key")
-	}
-	if cli.Client.ClientKeyFile != "" && cli.Client.ClientCertFile == "" {
-		return fmt.Errorf("client key provided without certificate")
+	_, _, _, err := ssvsignertls.LoadCertificatesFromFiles(cli.Client.ClientCertFile, cli.Client.ClientKeyFile, cli.Client.ClientCACertFile)
+	if err != nil {
+		return fmt.Errorf("invalid client TLS configuration: %w", err)
 	}
 
-	// Validate server TLS configuration
-	if cli.Server.ServerCertFile != "" && cli.Server.ServerKeyFile == "" {
-		return fmt.Errorf("server certificate provided without key")
-	}
-	if cli.Server.ServerKeyFile != "" && cli.Server.ServerCertFile == "" {
-		return fmt.Errorf("server key provided without certificate")
+	_, _, _, err = ssvsignertls.LoadCertificatesFromFiles(cli.Server.ServerCertFile, cli.Server.ServerKeyFile, cli.Server.ServerCACertFile)
+	if err != nil {
+		return fmt.Errorf("invalid server TLS configuration: %w", err)
 	}
 
 	return nil
@@ -145,71 +137,4 @@ func loadOperatorPrivateKey(cli CLI) (keys.OperatorPrivateKey, error) {
 		return nil, fmt.Errorf("failed to load operator key from file: %w", err)
 	}
 	return pk, nil
-}
-
-// loadCertFile loads a certificate file if the path is provided.
-func loadCertFile(path string) ([]byte, error) {
-	if path == "" {
-		return nil, nil
-	}
-
-	// #nosec G304
-	cert, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("could not read certificate file %s: %w", path, err)
-	}
-
-	return cert, nil
-}
-
-// createClientTLSConfig creates TLS configuration for client connections.
-func createClientTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
-	// If no TLS configuration is provided, return nil
-	if !cli.Client.HasConfig() {
-		return nil, nil
-	}
-
-	// Log warning if insecure skip verify is enabled
-	if cli.Client.ClientInsecureSkipVerify {
-		logger.Warn("client TLS configured with ClientInsecureSkipVerify=true (not recommended for production)")
-	}
-
-	// Use the centralized TLS configuration function
-	tlsConfig, err := ssvsignertls.CreateClientConfig(cli.Client)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client TLS configuration: %w", err)
-	}
-
-	// If TLS configuration was created successfully, log it
-	if tlsConfig != nil {
-		logger.Info("client TLS configured successfully")
-	}
-
-	return tlsConfig, nil
-}
-
-// createServerTLSConfig creates TLS configuration for the server.
-func createServerTLSConfig(logger *zap.Logger, cli CLI) (*tls.Config, error) {
-	// If no server certificate and key are provided, return nil
-	if cli.Server.ServerCertFile == "" || cli.Server.ServerKeyFile == "" {
-		return nil, nil
-	}
-
-	// Log warning if insecure skip verify is enabled
-	if cli.Server.ServerInsecureSkipVerify {
-		logger.Warn("server TLS configured with ServerInsecureSkipVerify=true (not recommended for production)")
-	}
-
-	// Use the centralized TLS configuration function
-	tlsConfig, err := ssvsignertls.CreateServerConfig(cli.Server)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create server TLS configuration: %w", err)
-	}
-
-	// If TLS configuration was created successfully, log it
-	if tlsConfig != nil {
-		logger.Info("server TLS configured successfully")
-	}
-
-	return tlsConfig, nil
 }
