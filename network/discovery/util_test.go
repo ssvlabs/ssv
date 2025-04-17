@@ -95,10 +95,8 @@ func testingDiscovery(t *testing.T) *DiscV5Service {
 func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
 	n := networkconfig.HoleskyStage
 	return networkconfig.NetworkConfig{
-		Name: n.Name,
-		BeaconConfig: networkconfig.BeaconConfig{
-			Beacon: n.Beacon,
-		},
+		Name:         n.Name,
+		BeaconConfig: n.BeaconConfig,
 		SSVConfig: networkconfig.SSVConfig{
 			DomainType:           n.DomainType,
 			RegistrySyncOffset:   n.RegistrySyncOffset,
@@ -110,13 +108,13 @@ func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.Network
 
 // NetworkConfig for staying in pre-fork
 func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
+	forkEpoch := networkconfig.HoleskyStage.EstimatedCurrentEpoch() + 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 
 // NetworkConfig for staying in post-fork
 func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
+	forkEpoch := networkconfig.HoleskyStage.EstimatedCurrentEpoch() - 1000
 	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 

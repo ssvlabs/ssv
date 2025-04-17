@@ -15,12 +15,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -192,7 +191,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 			zap.NewNop(),
 			Options{
 				Context:        ctx,
-				Network:        beacon.NewNetwork(types.MainNetwork),
+				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 				BeaconNodeAddr: server.URL,
 				CommonTimeout:  1 * time.Second,
 				LongTimeout:    1 * time.Second,
@@ -449,7 +448,7 @@ func createClient(
 	client, err := New(zap.NewNop(),
 		Options{
 			Context:                     ctx,
-			Network:                     beacon.NewNetwork(types.MainNetwork),
+			BeaconConfig:                networkconfig.Mainnet.BeaconConfig,
 			BeaconNodeAddr:              beaconServerURL,
 			CommonTimeout:               defaultHardTimeout,
 			LongTimeout:                 time.Second,

@@ -2,16 +2,20 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var Sepolia = NetworkConfig{
 	Name: "sepolia",
 	BeaconConfig: BeaconConfig{
-		Beacon: beacon.NewNetwork(spectypes.SepoliaNetwork),
+		BeaconName:    string(spectypes.SepoliaNetwork),
+		SlotDuration:  spectypes.SepoliaNetwork.SlotDurationSec(),
+		SlotsPerEpoch: phase0.Slot(spectypes.SepoliaNetwork.SlotsPerEpoch()),
+		ForkVersion:   spectypes.SepoliaNetwork.ForkVersion(),
+		GenesisTime:   time.Unix(int64(spectypes.SepoliaNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x69},

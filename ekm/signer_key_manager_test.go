@@ -39,7 +39,7 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManager {
+func testKeyManager(t *testing.T, network networkconfig.Network) KeyManager {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -48,12 +48,10 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 	require.NoError(t, err)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{}
-		network.Beacon = utils.SetupMockBeaconNetwork(t, nil)
-		network.DomainType = networkconfig.TestNetwork.DomainType
+		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, nil)
 	}
 
-	km, err := NewETHKeyManagerSigner(logger, db, *network, "")
+	km, err := NewETHKeyManagerSigner(logger, db, network, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -85,7 +83,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.BeaconConfig, logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
 
