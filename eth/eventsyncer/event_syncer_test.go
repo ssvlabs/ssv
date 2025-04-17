@@ -98,7 +98,7 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, err)
 
 	pkstr := base64.StdEncoding.EncodeToString(opPubKey)
-	pckd, err := eventparser.PackOperatorPublicKey([]byte(pkstr))
+	pckd, err := eventparser.PackOperatorPublicKey(pkstr)
 	require.NoError(t, err)
 
 	// Generate test chain after a connection to the server.

@@ -79,10 +79,10 @@ func TestBase64Encoding(t *testing.T) {
 	require.NoError(t, err, "Failed to encode public key")
 	require.NotEmpty(t, encodedPubKey, "Encoded public key should not be empty")
 
-	decodedPrivKeyBytes, err := base64.StdEncoding.DecodeString(string(encodedPrivKey))
+	decodedPrivKeyBytes, err := base64.StdEncoding.DecodeString(encodedPrivKey)
 	require.NoError(t, err, "Encoded private key should be a valid Base64 string")
 
-	_, err = base64.StdEncoding.DecodeString(string(encodedPubKey))
+	_, err = base64.StdEncoding.DecodeString(encodedPubKey)
 	require.NoError(t, err, "Encoded public key should be a valid Base64 string")
 
 	require.Equal(t, privKey.Bytes(), decodedPrivKeyBytes, "Decoded private key bytes do not match original private key")

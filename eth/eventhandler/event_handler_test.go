@@ -220,7 +220,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
 				OperatorId: op.id,
 				Owner:      testAddr,
-				PublicKey:  encodedPubKey,
+				PublicKey:  []byte(encodedPubKey),
 			})
 			require.ErrorContains(t, err, "operator public key already exists")
 
@@ -247,7 +247,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
 				OperatorId: op.id,
 				Owner:      testAddr,
-				PublicKey:  encodedPubKey,
+				PublicKey:  []byte(encodedPubKey),
 			})
 			require.ErrorContains(t, err, "operator ID already exists")
 

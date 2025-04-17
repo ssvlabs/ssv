@@ -109,7 +109,7 @@ func getTestingData(t *testing.T) TestData {
 		SenderPrivateKey:         privateKey,
 		SenderPeerID:             peerID2,
 		RecipientPeerID:          peerID1,
-		SenderBase64PublicKeyPEM: string(senderPublicKey),
+		SenderBase64PublicKeyPEM: senderPublicKey,
 		Handshaker:               mockHandshaker,
 		Conn:                     mockConn,
 		NetworkPrivateKey:        networkPrivateKey,
