@@ -120,7 +120,7 @@ type GoClient struct {
 	log *zap.Logger
 	ctx context.Context
 
-	beaconConfigMu   sync.Mutex
+	beaconConfigMu   sync.RWMutex
 	beaconConfig     *networkconfig.BeaconConfig
 	beaconConfigInit chan struct{}
 
@@ -245,24 +245,25 @@ func New(
 	case <-client.beaconConfigInit:
 	}
 
-	if client.beaconConfig == nil {
+	config := client.getBeaconConfig()
+	if config == nil {
 		return nil, fmt.Errorf("no beacon config set")
 	}
 
 	client.blockRootToSlotCache = ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
-		uint64(client.beaconConfig.SlotsPerEpoch) * BlockRootToSlotCacheCapacityEpochs),
+		uint64(config.SlotsPerEpoch) * BlockRootToSlotCacheCapacityEpochs),
 	)
 
 	client.attestationDataCache = ttlcache.New(
 		// we only fetch attestation data during the slot of the relevant duty (and never later),
 		// hence caching it for 2 slots is sufficient
-		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * client.beaconConfig.SlotDuration),
+		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * config.SlotDuration),
 	)
 
 	slotTickerProvider := func() slotticker.SlotTicker {
 		return slotticker.New(logger, slotticker.Config{
-			SlotDuration: client.beaconConfig.SlotDuration,
-			GenesisTime:  client.beaconConfig.GenesisTime,
+			SlotDuration: config.SlotDuration,
+			GenesisTime:  config.GenesisTime,
 		})
 	}
 
@@ -276,6 +277,13 @@ func New(
 	}
 
 	return client, nil
+}
+
+// getBeaconConfig provides thread-safe access to the beacon configuration
+func (gc *GoClient) getBeaconConfig() *networkconfig.BeaconConfig {
+	gc.beaconConfigMu.RLock()
+	defer gc.beaconConfigMu.RUnlock()
+	return gc.beaconConfig
 }
 
 func (gc *GoClient) initMultiClient(ctx context.Context) error {
@@ -380,8 +388,9 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return
 			}
 			gc.ForkLock.RLock()
+			config := gc.getBeaconConfig()
 			logger.Info("retrieved fork epochs",
-				zap.Uint64("current_data_version", uint64(gc.DataVersion(gc.beaconConfig.EstimatedCurrentEpoch()))),
+				zap.Uint64("current_data_version", uint64(gc.DataVersion(config.EstimatedCurrentEpoch()))),
 				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
 				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
 				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),

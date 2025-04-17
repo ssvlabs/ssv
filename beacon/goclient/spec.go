@@ -18,10 +18,12 @@ const (
 	DefaultSlotsPerEpoch = phase0.Slot(32)
 )
 
-// BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
+// BeaconConfig returns the network Beacon configuration
 func (gc *GoClient) BeaconConfig() networkconfig.BeaconConfig {
-	// It should always be non-nil for external calls because it's initialized in GoClient's constructor.
-	return *gc.beaconConfig
+	// BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
+	// It fails otherwise.
+	config := gc.getBeaconConfig()
+	return *config
 }
 
 // fetchBeaconConfig must be called once on GoClient's initialization
