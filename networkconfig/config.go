@@ -3,12 +3,7 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"time"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
@@ -33,13 +28,9 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                 string
-	Beacon               beacon.BeaconNetwork
-	DomainType           spectypes.DomainType
-	RegistrySyncOffset   *big.Int
-	RegistryContractAddr string // TODO: ethcommon.Address
-	Bootnodes            []string
-	DiscoveryProtocolID  [6]byte
+	Name string
+	BeaconConfig
+	SSVConfig
 }
 
 func (n NetworkConfig) String() string {
