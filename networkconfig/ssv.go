@@ -60,6 +60,7 @@ type marshaledConfig struct {
 	DiscoveryProtocolID  hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 }
 
+// Helper method to avoid duplication between MarshalJSON and MarshalYAML
 func (s SSVConfig) marshal() marshaledConfig {
 	aux := marshaledConfig{
 		DomainType:           s.DomainType[:],
@@ -80,19 +81,8 @@ func (s SSVConfig) MarshalYAML() (interface{}, error) {
 	return s.marshal(), nil
 }
 
-func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	aux := &struct {
-		DomainType           hexutil.Bytes     `yaml:"DomainType,omitempty"`
-		RegistrySyncOffset   *big.Int          `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr ethcommon.Address `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes            []string          `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID  hexutil.Bytes     `yaml:"DiscoveryProtocolID,omitempty"`
-	}{}
-
-	if err := unmarshal(aux); err != nil {
-		return err
-	}
-
+// Helper method to avoid duplication between UnmarshalJSON and UnmarshalYAML
+func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 	if len(aux.DomainType) != 4 {
 		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
 	}
@@ -112,36 +102,22 @@ func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
-func (s *SSVConfig) UnmarshalJSON(data []byte) error {
-	aux := &struct {
-		DomainType           hexutil.Bytes     `json:"DomainType,omitempty"`
-		RegistrySyncOffset   *big.Int          `json:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr ethcommon.Address `json:"RegistryContractAddr,omitempty"`
-		Bootnodes            []string          `json:"Bootnodes,omitempty"`
-		DiscoveryProtocolID  hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty"`
-	}{}
-
-	if err := json.Unmarshal(data, aux); err != nil {
+func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var aux marshaledConfig
+	if err := unmarshal(&aux); err != nil {
 		return err
 	}
 
-	if len(aux.DomainType) != 4 {
-		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
+	return s.unmarshalFromConfig(aux)
+}
+
+func (s *SSVConfig) UnmarshalJSON(data []byte) error {
+	var aux marshaledConfig
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
 	}
 
-	if len(aux.DiscoveryProtocolID) != 6 {
-		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
-	}
-
-	*s = SSVConfig{
-		DomainType:           spectypes.DomainType(aux.DomainType),
-		RegistrySyncOffset:   aux.RegistrySyncOffset,
-		RegistryContractAddr: aux.RegistryContractAddr,
-		Bootnodes:            aux.Bootnodes,
-		DiscoveryProtocolID:  [6]byte(aux.DiscoveryProtocolID),
-	}
-
-	return nil
+	return s.unmarshalFromConfig(aux)
 }
 
 func (s SSVConfig) GetDomainType() spectypes.DomainType {
