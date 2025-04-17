@@ -621,9 +621,9 @@ func TestTLSServer(t *testing.T) {
 		{
 			name: "With TLS Certificates",
 			tlsOption: WithTLSCertificates(
-				string(serverCert),
-				string(serverKey),
-				string(caCert),
+				serverCert,
+				serverKey,
+				caCert,
 			),
 			expectTLSConfig: true,
 		},
@@ -692,7 +692,7 @@ func TestServerTLSListenAndServe(t *testing.T) {
 	}{
 		{
 			name:          "TLS Server",
-			serverOptions: []ServerOption{WithTLSCertificates(string(serverCert), string(serverKey), "")},
+			serverOptions: []ServerOption{WithTLSCertificates(serverCert, serverKey, nil)},
 			useTLS:        true,
 			expectSuccess: true,
 		},

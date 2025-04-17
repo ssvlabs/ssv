@@ -118,7 +118,7 @@ func TestCreateTLSConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg, err := createTLSConfig(tt.clientCert, tt.clientKey, tt.caCert, tt.insecureSkipVerify)
+			cfg, err := CreateTLSConfig(ClientTLSConfigType, tt.clientCert, tt.clientKey, tt.caCert, tt.insecureSkipVerify)
 
 			if tt.wantErr {
 				require.Error(t, err)

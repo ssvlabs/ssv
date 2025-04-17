@@ -3,8 +3,6 @@ package ssvsigner
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -85,7 +83,7 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 
 	// set up client connection with TLS if certificates are provided
 	if len(c.clientCert) > 0 || len(c.clientKey) > 0 || len(c.caCert) > 0 || c.insecureSkipVerify {
-		tlsConfig, err := createTLSConfig(c.clientCert, c.clientKey, c.caCert, c.insecureSkipVerify)
+		tlsConfig, err := CreateTLSConfig(ClientTLSConfigType, c.clientCert, c.clientKey, c.caCert, c.insecureSkipVerify)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create TLS config: %w", err)
 		}
@@ -294,30 +292,4 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	}
 
 	return missing, nil
-}
-
-// createTLSConfig creates a TLS configuration for clients from raw certificate data
-func createTLSConfig(clientCert, clientKey, caCert []byte, insecureSkipVerify bool) (*tls.Config, error) {
-	tlsConfig := &tls.Config{
-		MinVersion:         tls.VersionTLS13,
-		InsecureSkipVerify: insecureSkipVerify,
-	}
-
-	if len(clientCert) > 0 && len(clientKey) > 0 {
-		cert, err := tls.X509KeyPair(clientCert, clientKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load client certificate: %w", err)
-		}
-		tlsConfig.Certificates = []tls.Certificate{cert}
-	}
-
-	if len(caCert) > 0 {
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caCert) {
-			return nil, fmt.Errorf("failed to append CA certificate to pool")
-		}
-		tlsConfig.RootCAs = caCertPool
-	}
-
-	return tlsConfig, nil
 }

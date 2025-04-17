@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -69,18 +68,18 @@ func WithTLSConfig(config *tls.Config) ServerOption {
 	}
 }
 
-// WithTLSCertificates sets the TLS configuration for the server using certificate files.
-func WithTLSCertificates(serverCert, serverKey, caCert string) ServerOption {
+// WithTLSCertificates sets the TLS configuration for the server using raw certificate data.
+func WithTLSCertificates(serverCert, serverKey, caCert []byte) ServerOption {
 	return func(server *Server) {
-		opts := ServerTLSConfig{
-			ServerCertFile:   serverCert,
-			ServerKeyFile:    serverKey,
-			ServerCACertFile: caCert,
-		}
+		tlsConfig, err := CreateTLSConfig(ServerTLSConfigType,
+			serverCert,
+			serverKey,
+			caCert,
+			false, // InsecureSkipVerify is set to false by default
+		)
 
-		tlsConfig, err := createServerTLSConfig(opts)
 		if err != nil {
-			server.logger.Error("failed to create TLS config", zap.Error(err))
+			server.logger.Error("failed to create TLS config from raw data", zap.Error(err))
 			return
 		}
 
@@ -513,33 +512,4 @@ func (r *Server) writeJSONErr(ctx *fasthttp.RequestCtx, logger *zap.Logger, stat
 	ctx.SetStatusCode(statusCode)
 	errResp := web3signer.ErrorMessage{Message: err.Error()}
 	r.writeJSON(ctx, logger, errResp)
-}
-
-// createServerTLSConfig creates a TLS configuration for servers.
-func createServerTLSConfig(opts ServerTLSConfig) (*tls.Config, error) {
-	tlsConfig := &tls.Config{
-		MinVersion:         tls.VersionTLS13,
-		InsecureSkipVerify: opts.ServerInsecureSkipVerify,
-	}
-
-	if len(opts.ServerCertFile) > 0 && len(opts.ServerKeyFile) > 0 {
-		cert, err := tls.X509KeyPair([]byte(opts.ServerCertFile), []byte(opts.ServerKeyFile))
-		if err != nil {
-			return nil, fmt.Errorf("failed to load server certificate: %w", err)
-		}
-		tlsConfig.Certificates = []tls.Certificate{cert}
-	} else {
-		return nil, fmt.Errorf("server certificate and key are required")
-	}
-
-	if len(opts.ServerCACertFile) > 0 {
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM([]byte(opts.ServerCACertFile)) {
-			return nil, fmt.Errorf("failed to append CA certificate to pool")
-		}
-		tlsConfig.ClientCAs = caCertPool
-		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
-	}
-
-	return tlsConfig, nil
 }
