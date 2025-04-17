@@ -460,5 +460,6 @@ func TestTLSConnection(t *testing.T) {
 
 	_, err = client2.ListKeys(context.Background())
 	require.Error(t, err)
+	require.ErrorAs(t, err, &HTTPResponseError{})
 	require.Contains(t, err.Error(), "failed to verify certificate")
 }

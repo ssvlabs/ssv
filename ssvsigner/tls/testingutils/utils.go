@@ -121,7 +121,7 @@ func CreateServerTLSConfig(t *testing.T, serverCert, serverKey, caCert []byte, c
 
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
+		MinVersion:   tls.VersionTLS13,
 	}
 
 	if clientAuth && caCert != nil {
