@@ -38,14 +38,13 @@ func TestGenesis(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockDataStore{},
 			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)
@@ -69,14 +68,13 @@ func TestGenesis(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockDataStore{},
 			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)
@@ -97,14 +95,13 @@ func TestGenesis(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockDataStore{},
 			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)

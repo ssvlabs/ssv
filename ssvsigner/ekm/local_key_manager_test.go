@@ -21,10 +21,11 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/threshold"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 const (
@@ -43,10 +44,9 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operator
 	require.NoError(t, err)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{
-			Beacon:     utils.SetupMockBeaconNetwork(t, nil),
-			DomainType: networkconfig.TestNetwork.DomainType,
-		}
+		network = &networkconfig.NetworkConfig{}
+		network.Beacon = utils.SetupMockBeaconNetwork(t, nil)
+		network.DomainType = networkconfig.TestNetwork.DomainType
 	}
 
 	km, err := NewLocalKeyManager(logger, db, *network, operatorPrivateKey)

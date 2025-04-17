@@ -24,14 +24,13 @@ func Test_computeVoluntaryExitDomain(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        beacon.NewNetwork(spectypes.MainNetwork),
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockDataStore{},
 			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)
