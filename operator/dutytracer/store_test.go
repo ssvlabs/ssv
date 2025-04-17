@@ -347,6 +347,17 @@ func TestCommitteeDutyStore(t *testing.T) {
 	storedDuty7_2, err := dutyStore.GetCommitteeDuty(slot7, committeeID2)
 	assert.ErrorIs(t, err, store.ErrNotFound)
 	require.Nil(t, storedDuty7_2)
+
+	{ // check that sync committee and attester signers are included in decideds
+		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &model.SignerData{Signer: 1})
+		dutyTrace5.SyncCommittee = append(dutyTrace5.SyncCommittee, &model.SignerData{Signer: 2})
+		dutyTrace5.Attester = append(dutyTrace5.Attester, &model.SignerData{Signer: 3})
+		dd, err := tracer.GetCommitteeDecideds(slot7, validatorPK)
+		require.NoError(t, err)
+		require.NotNil(t, dd)
+		require.Len(t, dd, 1)
+		require.Equal(t, []spectypes.OperatorID{1, 2, 3}, dd[0].Signers)
+	}
 }
 
 func TestValidatorDutyStore(t *testing.T) {
@@ -431,6 +442,18 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.NotNil(t, dd)
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{5}, dd[0].Signers)
+
+	// test that decideds include signers in the 'Post' consensus messages
+	mod.Post = append(mod.Post, &model.PartialSigTrace{Signer: 99})
+	mod.Post = append(mod.Post, &model.PartialSigTrace{Signer: 100})
+	mod.Decideds = append(mod.Decideds, &model.DecidedTrace{
+		Signers: []spectypes.OperatorID{100},
+	})
+	dd, err = tracer.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK2})
+	require.NoError(t, err)
+	require.NotNil(t, dd)
+	require.Len(t, dd, 1)
+	require.Equal(t, []spectypes.OperatorID{99, 100}, dd[0].Signers)
 
 	// evict slot 3 and 4
 	slot6 := phase0.Slot(4)
