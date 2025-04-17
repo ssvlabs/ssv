@@ -1,13 +1,12 @@
 package networkconfig
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -54,82 +53,60 @@ func (s SSVConfig) String() string {
 }
 
 type marshaledConfig struct {
-	DomainType           string   `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
-	RegistrySyncOffset   *big.Int `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
-	RegistryContractAddr string   `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
-	Bootnodes            []string `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
-	DiscoveryProtocolID  string   `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	DomainType           hexutil.Bytes     `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
+	RegistrySyncOffset   *big.Int          `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr ethcommon.Address `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes            []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+	DiscoveryProtocolID  hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 }
 
-func (s *SSVConfig) marshal() (marshaledConfig, error) {
+func (s SSVConfig) marshal() marshaledConfig {
 	aux := marshaledConfig{
-		DomainType:           "0x" + hex.EncodeToString(s.DomainType[:]),
+		DomainType:           s.DomainType[:],
 		RegistrySyncOffset:   s.RegistrySyncOffset,
-		RegistryContractAddr: s.RegistryContractAddr.String(),
+		RegistryContractAddr: s.RegistryContractAddr,
 		Bootnodes:            s.Bootnodes,
-		DiscoveryProtocolID:  "0x" + hex.EncodeToString(s.DiscoveryProtocolID[:]),
+		DiscoveryProtocolID:  s.DiscoveryProtocolID[:],
 	}
 
-	return aux, nil
+	return aux
 }
 
 func (s SSVConfig) MarshalJSON() ([]byte, error) {
-	aux, err := s.marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	return json.Marshal(aux)
+	return json.Marshal(s.marshal())
 }
 
 func (s SSVConfig) MarshalYAML() (interface{}, error) {
-	aux, err := s.marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	return aux, nil
+	return s.marshal(), nil
 }
 
 func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	aux := &struct {
-		DomainType           string   `yaml:"DomainType,omitempty"`
-		RegistrySyncOffset   *big.Int `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr string   `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes            []string `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID  string   `yaml:"DiscoveryProtocolID,omitempty"`
+		DomainType           hexutil.Bytes     `yaml:"DomainType,omitempty"`
+		RegistrySyncOffset   *big.Int          `yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr ethcommon.Address `yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes            []string          `yaml:"Bootnodes,omitempty"`
+		DiscoveryProtocolID  hexutil.Bytes     `yaml:"DiscoveryProtocolID,omitempty"`
 	}{}
 
 	if err := unmarshal(aux); err != nil {
 		return err
 	}
 
-	domain, err := hex.DecodeString(strings.TrimPrefix(aux.DomainType, "0x"))
-	if err != nil {
-		return fmt.Errorf("decode domain: %w", err)
+	if len(aux.DomainType) != 4 {
+		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
 	}
 
-	var domainArr spectypes.DomainType
-	if len(domain) != 0 {
-		domainArr = spectypes.DomainType(domain)
-	}
-
-	discoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(aux.DiscoveryProtocolID, "0x"))
-	if err != nil {
-		return fmt.Errorf("decode discovery protocol ID: %w", err)
-	}
-
-	var discoveryProtocolIDArr [6]byte
-	if len(discoveryProtocolID) != 0 {
-		discoveryProtocolIDArr = [6]byte(discoveryProtocolID)
+	if len(aux.DiscoveryProtocolID) != 6 {
+		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
 	}
 
 	*s = SSVConfig{
-		DomainType:           domainArr,
+		DomainType:           spectypes.DomainType(aux.DomainType),
 		RegistrySyncOffset:   aux.RegistrySyncOffset,
-		RegistryContractAddr: ethcommon.HexToAddress(aux.RegistryContractAddr),
+		RegistryContractAddr: aux.RegistryContractAddr,
 		Bootnodes:            aux.Bootnodes,
-		DiscoveryProtocolID:  discoveryProtocolIDArr,
+		DiscoveryProtocolID:  [6]byte(aux.DiscoveryProtocolID),
 	}
 
 	return nil
