@@ -80,7 +80,7 @@ type config struct {
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
 	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient              beaconprotocol.Options  `yaml:"eth2"` // TODO: consensus_client in yaml
+	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
@@ -204,7 +204,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.Context = cmd.Context()
 		cfg.ConsensusClient.BeaconConfig = networkConfig.BeaconConfig
 
-		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
+		consensusClient := setupConsensusClient(logger, slotTickerProvider)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -477,7 +477,6 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
 				},
 			)
@@ -721,12 +720,8 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	return n
 }
 
-func setupConsensusClient(
-	logger *zap.Logger,
-	operatorDataStore operatordatastore.OperatorDataStore,
-	slotTickerProvider slotticker.Provider,
-) *goclient.GoClient {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, slotTickerProvider)
+func setupConsensusClient(logger *zap.Logger, slotTickerProvider slotticker.Provider) *goclient.GoClient {
+	cl, err := goclient.New(logger, cfg.ConsensusClient, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))

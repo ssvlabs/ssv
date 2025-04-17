@@ -217,14 +217,13 @@ func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeou
 func mockClientWithNetwork(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration, beaconConfig networkconfig.BeaconConfig) (beacon.BeaconNode, error) {
 	return New(
 		zap.NewNop(),
-		beacon.Options{
+		Options{
 			Context:        ctx,
 			BeaconConfig:   beaconConfig,
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		},
-		tests.MockDataStore{},
 		tests.MockSlotTickerProvider,
 	)
 }
