@@ -49,7 +49,16 @@ func TestMsgValidator(t *testing.T) {
 	committeeID := share.CommitteeID()
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
-	mv := validation.New(networkconfig.TestNetwork, ns.ValidatorStore(), dutystore.New(), signatureVerifier, phase0.Epoch(0), validation.WithLogger(logger))
+	mv := validation.New(
+		networkconfig.TestNetwork,
+		ns.ValidatorStore(),
+		ns,
+		dutystore.New(),
+		signatureVerifier,
+		phase0.Epoch(0),
+		validation.WithLogger(logger),
+	)
+
 	require.NotNil(t, mv)
 
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
