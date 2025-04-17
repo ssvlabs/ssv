@@ -14,8 +14,6 @@ func CreateConfigFromFiles(configType ConfigType, certFile, keyFile, caFile stri
 		InsecureSkipVerify: insecureSkipVerify,
 	}
 
-	// If insecureSkipVerify is true, we should log a warning, but this is handled by the caller
-
 	// Load certificate and key if provided
 	if certFile != "" && keyFile != "" {
 		cert, err := loadCertificateAndKey(certFile, keyFile)
@@ -59,8 +57,6 @@ func CreateConfig(configType ConfigType, cert, key, caCert []byte, insecureSkipV
 		MinVersion:         MinimumTLSVersion,
 		InsecureSkipVerify: insecureSkipVerify,
 	}
-
-	// If insecureSkipVerify is true, we should log a warning, but this is handled by the caller
 
 	// Load certificate and key if provided
 	if len(cert) > 0 && len(key) > 0 {
