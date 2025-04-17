@@ -5,7 +5,7 @@
 ## Table of Contents
 
 - [Usage](#usage)
-    - [Flags](#flags)
+  - [Flags](#flags)
 - [Examples](#examples)
 - [Configuration](#configuration)
 
