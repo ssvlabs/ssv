@@ -179,7 +179,7 @@ type GoClient struct {
 // New init new client and go-client instance
 func New(
 	logger *zap.Logger,
-	opt beaconprotocol.Options,
+	opt Options,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))

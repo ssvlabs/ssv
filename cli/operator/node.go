@@ -80,7 +80,7 @@ type config struct {
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
 	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient              beaconprotocol.Options  `yaml:"eth2"` // TODO: consensus_client in yaml
+	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
@@ -477,7 +477,6 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
 				},
 			)

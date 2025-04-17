@@ -190,7 +190,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: server.URL,
@@ -447,7 +447,7 @@ func createClient(
 	beaconServerURL string,
 	withWeightedAttestationData bool) (*GoClient, error) {
 	client, err := New(zap.NewNop(),
-		beacon.Options{
+		Options{
 			Context:                     ctx,
 			Network:                     beacon.NewNetwork(types.MainNetwork),
 			BeaconNodeAddr:              beaconServerURL,
