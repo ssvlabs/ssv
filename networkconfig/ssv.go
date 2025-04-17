@@ -112,6 +112,38 @@ func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
+func (s *SSVConfig) UnmarshalJSON(data []byte) error {
+	aux := &struct {
+		DomainType           hexutil.Bytes     `json:"DomainType,omitempty"`
+		RegistrySyncOffset   *big.Int          `json:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr ethcommon.Address `json:"RegistryContractAddr,omitempty"`
+		Bootnodes            []string          `json:"Bootnodes,omitempty"`
+		DiscoveryProtocolID  hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty"`
+	}{}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if len(aux.DomainType) != 4 {
+		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
+	}
+
+	if len(aux.DiscoveryProtocolID) != 6 {
+		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
+	}
+
+	*s = SSVConfig{
+		DomainType:           spectypes.DomainType(aux.DomainType),
+		RegistrySyncOffset:   aux.RegistrySyncOffset,
+		RegistryContractAddr: aux.RegistryContractAddr,
+		Bootnodes:            aux.Bootnodes,
+		DiscoveryProtocolID:  [6]byte(aux.DiscoveryProtocolID),
+	}
+
+	return nil
+}
+
 func (s SSVConfig) GetDomainType() spectypes.DomainType {
 	return s.DomainType
 }
