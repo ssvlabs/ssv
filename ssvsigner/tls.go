@@ -7,7 +7,19 @@ import (
 	"os"
 )
 
-// ClientTLSConfig defines TLS configuration options for client connections
+// TLSConfigType represents the type of TLS configuration (client or server).
+type TLSConfigType string
+
+const (
+	// ClientTLSConfigType represents a client TLS configuration
+	ClientTLSConfigType TLSConfigType = "client"
+	// ServerTLSConfigType represents a server TLS configuration
+	ServerTLSConfigType TLSConfigType = "server"
+	//minimumTLSVersion is the minimum TLS version supported
+	minimumTLSVersion = tls.VersionTLS13
+)
+
+// ClientTLSConfig defines TLS configuration options for client connections.
 type ClientTLSConfig struct {
 	// ClientCertFile is the path to the client certificate file
 	ClientCertFile string `yaml:"ClientCertFile" env:"CLIENT_CERT_FILE" env-description:"Path to certificate file for TLS connection to SSV Signer"`
@@ -19,7 +31,7 @@ type ClientTLSConfig struct {
 	ClientInsecureSkipVerify bool `yaml:"ClientInsecureSkipVerify" env:"CLIENT_INSECURE_SKIP_VERIFY" env-description:"Skip TLS certificate verification (not recommended for production)"`
 }
 
-// HasTLSConfig returns true if any TLS configuration is provided
+// HasTLSConfig returns true if any TLS configuration is provided.
 func (c *ClientTLSConfig) HasTLSConfig() bool {
 	return c.ClientCertFile != "" ||
 		c.ClientKeyFile != "" ||
@@ -39,7 +51,7 @@ type ServerTLSConfig struct {
 	ServerInsecureSkipVerify bool `yaml:"ServerInsecureSkipVerify" env:"SERVER_INSECURE_SKIP_VERIFY" env-description:"Skip TLS certificate verification for server (not recommended for production)"`
 }
 
-// LoadTLSOptions loads certificate files from disk and creates ClientOptions for TLS configuration
+// LoadTLSOptions loads certificate files from disk and creates ClientOptions for TLS configuration.
 func LoadTLSOptions(config ClientTLSConfig) ([]ClientOption, error) {
 	var options []ClientOption
 
@@ -90,19 +102,7 @@ func LoadTLSOptions(config ClientTLSConfig) ([]ClientOption, error) {
 	return options, nil
 }
 
-// TLSConfigType represents the type of TLS configuration (client or server)
-type TLSConfigType string
-
-const (
-	// ClientTLSConfigType represents a client TLS configuration
-	ClientTLSConfigType TLSConfigType = "client"
-	// ServerTLSConfigType represents a server TLS configuration
-	ServerTLSConfigType TLSConfigType = "server"
-	//minimumTLSVersion is the minimum TLS version supported
-	minimumTLSVersion = tls.VersionTLS13
-)
-
-// CreateClientTLSConfig creates a TLS configuration for client connections from certificate files
+// CreateClientTLSConfig creates a TLS configuration for client connections from certificate files.
 func CreateClientTLSConfig(config ClientTLSConfig) (*tls.Config, error) {
 	return CreateTLSConfigFromFiles(
 		ClientTLSConfigType,
@@ -113,7 +113,7 @@ func CreateClientTLSConfig(config ClientTLSConfig) (*tls.Config, error) {
 	)
 }
 
-// CreateServerTLSConfig creates a TLS configuration for the server from certificate files
+// CreateServerTLSConfig creates a TLS configuration for the server from certificate files.
 func CreateServerTLSConfig(config ServerTLSConfig) (*tls.Config, error) {
 	return CreateTLSConfigFromFiles(
 		ServerTLSConfigType,
@@ -124,8 +124,8 @@ func CreateServerTLSConfig(config ServerTLSConfig) (*tls.Config, error) {
 	)
 }
 
-// CreateTLSConfigFromFiles creates a TLS configuration for either client or server from certificate files
-// It handles loading certificates from files, setting up CA certificates, and configuring security settings
+// CreateTLSConfigFromFiles creates a TLS configuration for either client or server from certificate files.
+// It handles loading certificates from files, setting up CA certificates, and configuring security settings.
 func CreateTLSConfigFromFiles(configType TLSConfigType, certFile, keyFile, caFile string, insecureSkipVerify bool) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		MinVersion:         minimumTLSVersion,
@@ -211,7 +211,7 @@ func CreateTLSConfig(configType TLSConfigType, cert, key, caCert []byte, insecur
 	return tlsConfig, nil
 }
 
-// loadCertificateAndKey loads a certificate and key from files
+// loadCertificateAndKey loads a certificate and key from files.
 func loadCertificateAndKey(certFile, keyFile string) (tls.Certificate, error) {
 	cert, err := loadCertFile(certFile)
 	if err != nil {
@@ -231,7 +231,8 @@ func loadCertificateAndKey(certFile, keyFile string) (tls.Certificate, error) {
 	return tlsCert, nil
 }
 
-// loadCertFile loads a certificate file
+// loadCertFile loads a certificate file and returns its contents.
+// Returns nil if the path is empty.
 func loadCertFile(path string) ([]byte, error) {
 	if path == "" {
 		return nil, nil
