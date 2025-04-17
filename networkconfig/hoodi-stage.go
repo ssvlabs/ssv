@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -20,7 +21,7 @@ var HoodiStage = NetworkConfig{
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x14},
 		RegistrySyncOffset:   new(big.Int).SetInt64(1004),
-		RegistryContractAddr: "0x0aaace4e8affc47c6834171c88d342a4abd8f105",
+		RegistryContractAddr: ethcommon.HexToAddress("0x0aaace4e8affc47c6834171c88d342a4abd8f105"),
 		DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 		Bootnodes: []string{
 			// SSV Labs

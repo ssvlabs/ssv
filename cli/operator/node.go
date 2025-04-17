@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -219,7 +218,7 @@ var StartNodeCmd = &cobra.Command{
 			ec, err := executionclient.New(
 				cmd.Context(),
 				executionAddrList[0],
-				ethcommon.HexToAddress(ssvNetworkConfig.RegistryContractAddr),
+				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
 				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
@@ -237,7 +236,7 @@ var StartNodeCmd = &cobra.Command{
 			ec, err := executionclient.NewMulti(
 				cmd.Context(),
 				executionAddrList,
-				ethcommon.HexToAddress(ssvNetworkConfig.RegistryContractAddr),
+				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
 				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
 				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
@@ -519,7 +518,6 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 			return fmt.Errorf("incompatible config change: %w", err)
 		}
 	} else {
-
 		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
 			return fmt.Errorf("failed to store config: %w", err)
 		}
@@ -673,9 +671,20 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 }
 
 func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
-	ssvConfig, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
-	if err != nil {
-		return networkconfig.SSVConfig{}, err
+	var ssvConfig networkconfig.SSVConfig
+
+	if cfg.SSVOptions.CustomNetwork != nil {
+		ssvConfig = *cfg.SSVOptions.CustomNetwork
+		logger.Info("using custom network config")
+	} else if cfg.SSVOptions.NetworkName != "" {
+		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
+		if err != nil {
+			return ssvConfig, err
+		}
+		ssvConfig = snc
+		logger.Info("found network config by name",
+			zap.String("name", cfg.SSVOptions.NetworkName),
+		)
 	}
 
 	if cfg.SSVOptions.CustomDomainType != "" {
@@ -694,7 +703,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
 		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
 		binary.BigEndian.PutUint32(ssvConfig.DomainType[:], postForkDomain)
 
-		logger.Info("running with custom domain type",
+		logger.Warn("running with custom domain type; it's deprecated, consider using custom network instead",
 			fields.Domain(ssvConfig.DomainType),
 		)
 	}
@@ -707,7 +716,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
 	logger.Info("setting ssv network",
 		zap.Any("config", ssvConfig),
 		zap.String("nodeType", nodeType),
-		zap.String("registryContract", ssvConfig.RegistryContractAddr),
+		zap.String("registryContract", ssvConfig.RegistryContractAddr.String()),
 	)
 
 	return ssvConfig, nil

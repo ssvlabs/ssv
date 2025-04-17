@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -36,7 +37,7 @@ type SSV interface {
 type SSVConfig struct {
 	DomainType           spectypes.DomainType
 	RegistrySyncOffset   *big.Int
-	RegistryContractAddr string // TODO: ethcommon.Address
+	RegistryContractAddr ethcommon.Address
 	Bootnodes            []string
 	DiscoveryProtocolID  [6]byte
 }

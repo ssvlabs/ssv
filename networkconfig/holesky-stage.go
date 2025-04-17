@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -20,7 +21,7 @@ var HoleskyStage = NetworkConfig{
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},
 		RegistrySyncOffset:   new(big.Int).SetInt64(84599),
-		RegistryContractAddr: "0x0d33801785340072C452b994496B19f196b7eE15",
+		RegistryContractAddr: ethcommon.HexToAddress("0x0d33801785340072C452b994496B19f196b7eE15"),
 		DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 		Bootnodes: []string{
 			// Public bootnode:
