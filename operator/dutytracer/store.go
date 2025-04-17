@@ -170,6 +170,14 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.Vali
 		signers = append(signers, d.Signers...)
 	}
 
+	for _, round := range duty.SyncCommittee {
+		signers = append(signers, round.Signer)
+	}
+
+	for _, round := range duty.Attester {
+		signers = append(signers, round.Signer)
+	}
+
 	slices.Sort(signers)
 	signers = slices.Compact(signers)
 
@@ -193,6 +201,10 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 
 		for _, d := range duty.Decideds {
 			signers = append(signers, d.Signers...)
+		}
+
+		for _, post := range duty.Post {
+			signers = append(signers, post.Signer)
 		}
 
 		slices.Sort(signers)
