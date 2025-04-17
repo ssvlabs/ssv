@@ -107,7 +107,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	node := listener.LocalNode().Node()
 	logger.Info("Running",
 		zap.String("node", node.String()),
-		zap.Any("config", n.ssvConfig),
+		zap.Stringer("config", n.ssvConfig),
 		fields.ProtocolID(n.ssvConfig.DiscoveryProtocolID),
 	)
 

@@ -22,12 +22,12 @@ type NetworkConfig struct {
 }
 
 func (n NetworkConfig) String() string {
-	b, err := json.MarshalIndent(n, "", "\t")
+	jsonBytes, err := json.Marshal(n)
 	if err != nil {
-		return "<malformed>"
+		panic(err)
 	}
 
-	return string(b)
+	return string(jsonBytes)
 }
 
 func (n NetworkConfig) NetworkName() string {

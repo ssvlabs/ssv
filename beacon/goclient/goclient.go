@@ -2,7 +2,6 @@ package goclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -346,7 +345,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return
 			}
 
-			gc.log.Info("consensus client connected",
+			logger.Info("consensus client connected",
 				zap.String("client", string(ParseNodeClient(nodeVersionResp.Data))),
 				zap.String("version", nodeVersionResp.Data),
 			)
@@ -363,16 +362,15 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			currentConfig, err := gc.applyBeaconConfig(s.Address(), beaconConfig)
 			if err != nil {
 				logger.Fatal("client returned unexpected beacon config, make sure all clients use the same Ethereum network",
-					zap.Any("client_config", beaconConfig),
-					zap.Any("expected_config", currentConfig),
+					zap.Stringer("client_config", beaconConfig),
+					zap.Stringer("expected_config", currentConfig),
 				)
 				return // Tests may override Fatal's behavior
 			}
 
 			spec, err := s.Spec(ctx, &api.SpecOpts{})
 			if err != nil {
-				gc.log.Error(clResponseErrMsg,
-					zap.String("address", s.Address()),
+				logger.Error(clResponseErrMsg,
 					zap.String("api", "Spec"),
 					zap.Error(err),
 				)
@@ -380,8 +378,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			}
 
 			if err := gc.checkForkValues(spec); err != nil {
-				gc.log.Error("failed to check fork values",
-					zap.String("address", s.Address()),
+				logger.Error("failed to check fork values",
 					zap.Error(err),
 				)
 				return
@@ -426,13 +423,8 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkco
 		gc.beaconConfig = &beaconConfig
 		close(gc.beaconConfigInit)
 
-		configDump, err := json.Marshal(beaconConfig)
-		if err != nil {
-			return networkconfig.BeaconConfig{}, fmt.Errorf("marshal config: %w", err)
-		}
-
 		gc.log.Info("beacon config has been initialized",
-			zap.String("beacon_config", string(configDump)),
+			zap.Stringer("beacon_config", beaconConfig),
 			fields.Address(nodeAddress),
 		)
 		return beaconConfig, nil

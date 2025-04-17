@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -40,6 +41,15 @@ type SSVConfig struct {
 	DiscoveryProtocolID  [6]byte
 }
 
-func (ssv SSVConfig) GetDomainType() spectypes.DomainType {
-	return ssv.DomainType
+func (s SSVConfig) String() string {
+	marshaled, err := json.Marshal(s)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(marshaled)
+}
+
+func (s SSVConfig) GetDomainType() spectypes.DomainType {
+	return s.DomainType
 }
