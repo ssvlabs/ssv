@@ -59,7 +59,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -80,7 +79,7 @@ type config struct {
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
 	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient              beaconprotocol.Options  `yaml:"eth2"` // TODO: consensus_client in yaml
+	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
@@ -486,7 +485,6 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
-					NetworkConfig:     networkConfig,
 					ParticipantStores: storageMap,
 				},
 			)

@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSubscribeToHeadEvents(t *testing.T) {
@@ -72,7 +71,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 }
 
 func eventsTestClient(t *testing.T, serverURL string) *GoClient {
-	server, err := New(zap.NewNop(), beacon.Options{
+	server, err := New(zap.NewNop(), Options{
 		BeaconNodeAddr: serverURL,
 		Context:        context.Background(),
 	})

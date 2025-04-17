@@ -25,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (
@@ -181,7 +180,7 @@ type GoClient struct {
 // New init new client and go-client instance
 func New(
 	logger *zap.Logger,
-	opt beaconprotocol.Options,
+	opt Options,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
 

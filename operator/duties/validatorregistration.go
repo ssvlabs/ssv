@@ -10,7 +10,7 @@ import (
 )
 
 // frequencyEpochs defines how frequently we want to submit validator-registrations.
-const frequencyEpochs = phase0.Epoch(10)
+const frequencyEpochs = 10
 
 type ValidatorRegistrationHandler struct {
 	baseHandler
@@ -38,7 +38,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	defer h.logger.Info("duty handler exited")
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
-	registrationSlots := h.beaconConfig.GetSlotsPerEpoch() * phase0.Slot(frequencyEpochs)
+	registrationSlots := h.beaconConfig.GetSlotsPerEpoch() * frequencyEpochs
 
 	next := h.ticker.Next()
 	for {
