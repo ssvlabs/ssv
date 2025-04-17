@@ -14,7 +14,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/ssvsigner/testingutils"
+	"github.com/ssvlabs/ssv/ssvsigner/tls/testingutils"
 )
 
 func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Web3Signer) {

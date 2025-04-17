@@ -6,42 +6,6 @@ import (
 	"os"
 )
 
-// loadCertificateAndKey loads a certificate and key from files.
-func loadCertificateAndKey(certFile, keyFile string) (tls.Certificate, error) {
-	cert, err := loadCertFile(certFile)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("failed to read certificate file: %w", err)
-	}
-
-	key, err := loadCertFile(keyFile)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("failed to read key file: %w", err)
-	}
-
-	tlsCert, err := tls.X509KeyPair(cert, key)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
-	}
-
-	return tlsCert, nil
-}
-
-// loadCertFile loads a certificate file and returns its contents.
-// Returns nil if the path is empty.
-func loadCertFile(path string) ([]byte, error) {
-	if path == "" {
-		return nil, nil
-	}
-
-	// #nosec G304 - This is a safe file read operation
-	cert, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("could not read certificate file %s: %w", path, err)
-	}
-
-	return cert, nil
-}
-
 // LoadCertificatesFromFiles loads certificate from the specified files.
 func LoadCertificatesFromFiles(certFile, keyFile, caCertFile string) (cert, key, caCert []byte, err error) {
 	// Check if client cert and key are provided
@@ -86,4 +50,40 @@ func LoadCertificatesFromFiles(certFile, keyFile, caCertFile string) (cert, key,
 	}
 
 	return cert, key, caCert, nil
+}
+
+// loadCertificateAndKey loads a certificate and key from files.
+func loadCertificateAndKey(certFile, keyFile string) (tls.Certificate, error) {
+	cert, err := loadCertFile(certFile)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to read certificate file: %w", err)
+	}
+
+	key, err := loadCertFile(keyFile)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to read key file: %w", err)
+	}
+
+	tlsCert, err := tls.X509KeyPair(cert, key)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
+	}
+
+	return tlsCert, nil
+}
+
+// loadCertFile loads a certificate file and returns its contents.
+// Returns nil if the path is empty.
+func loadCertFile(path string) ([]byte, error) {
+	if path == "" {
+		return nil, nil
+	}
+
+	// #nosec G304 - This is a safe file read operation
+	cert, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("could not read certificate file %s: %w", path, err)
+	}
+
+	return cert, nil
 }

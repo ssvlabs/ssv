@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/testingutils"
+	"github.com/ssvlabs/ssv/ssvsigner/tls/testingutils"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
