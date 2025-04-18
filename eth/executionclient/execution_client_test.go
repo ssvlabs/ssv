@@ -2,6 +2,7 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http/httptest"
@@ -66,9 +67,11 @@ type testEnv struct {
 	contractAddr ethcommon.Address
 	auth         *bind.TransactOpts
 	client       *ExecutionClient
+	clientClosed bool       // track if the client has been closed
+	clientMu     sync.Mutex // mutex to protect clientClosed
 }
 
-// setupTestEnv creates a new test environment with simulators, contracts, and clients setup.
+// setupTestEnv creates a new test environment with simulators, contracts, and clients' setup.
 func setupTestEnv(t *testing.T, testTimeout time.Duration) *testEnv {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	t.Cleanup(cancel)
@@ -124,9 +127,37 @@ func (env *testEnv) createClient(options ...Option) error {
 	if err != nil {
 		return err
 	}
-	env.t.Cleanup(func() { require.NoError(env.t, env.client.Close()) })
+
+	env.clientMu.Lock()
+	env.clientClosed = false
+	env.clientMu.Unlock()
+
+	// Setup cleanup that checks if a client was already manually closed
+	env.t.Cleanup(func() {
+		env.clientMu.Lock()
+		defer env.clientMu.Unlock()
+		if !env.clientClosed && env.client != nil {
+			_ = env.client.Close() // ignore close error during cleanup
+		}
+	})
 
 	return env.client.Healthy(env.ctx)
+}
+
+// closeClient safely closes the client and marks it as closed to prevent double-closing
+func (env *testEnv) closeClient() error {
+	env.clientMu.Lock()
+	defer env.clientMu.Unlock()
+
+	if env.clientClosed || env.client == nil {
+		return nil // Already closed or never created
+	}
+
+	err := env.client.Close()
+	if err == nil {
+		env.clientClosed = true
+	}
+	return err
 }
 
 // createBlocksWithLogs creates a specified number of blocks with Call transactions.
@@ -278,69 +309,153 @@ func TestFetchHistoricalLogs(t *testing.T) {
 }
 
 func TestStreamLogs(t *testing.T) {
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	t.Run("successfully streams logs", func(t *testing.T) {
+		logger, err := zap.NewDevelopment()
+		require.NoError(t, err)
 
-	env := setupTestEnv(t, 2*time.Second)
+		env := setupTestEnv(t, 2*time.Second)
 
-	// Deploy the contract
-	contract, err := env.deployCallableContract()
-	require.NoError(t, err)
+		// Deploy the contract
+		contract, err := env.deployCallableContract()
+		require.NoError(t, err)
 
-	// Create a client and connect to the simulator
-	const followDistance = 2
-	err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance))
-	require.NoError(t, err)
+		// Create a client and connect to the simulator
+		const followDistance = 2
+		err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance))
+		require.NoError(t, err)
 
-	logs := env.client.StreamLogs(env.ctx, 0)
-	var streamedLogs []ethtypes.Log
-	var streamedLogsCount atomic.Int64
-	go func() {
-		// Receive emitted events, this func will exit when test exits.
-		for block := range logs {
-			streamedLogs = append(streamedLogs, block.Logs...)
-			streamedLogsCount.Add(int64(len(block.Logs)))
-		}
-	}()
+		logs := env.client.StreamLogs(env.ctx, 0)
+		var streamedLogs []ethtypes.Log
+		var streamedLogsCount atomic.Int64
+		go func() {
+			// Receive emitted events, this func will exit when the test exits.
+			for block := range logs {
+				streamedLogs = append(streamedLogs, block.Logs...)
+				streamedLogsCount.Add(int64(len(block.Logs)))
+			}
+		}()
 
-	// Create blocks with transactions
-	delay := time.Millisecond * 10
-	err = env.createBlocksWithLogs(contract, blocksWithLogsLength, delay)
-	require.NoError(t, err)
+		// Create blocks with transactions
+		delay := time.Millisecond * 10
+		err = env.createBlocksWithLogs(contract, blocksWithLogsLength, delay)
+		require.NoError(t, err)
 
-	// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
-Wait1:
-	for {
-		select {
-		case <-env.ctx.Done():
-			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", env.ctx.Err(), streamedLogsCount.Load())
-		case <-time.After(time.Millisecond * 5):
-			if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
-				break Wait1
+		// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
+	Wait1:
+		for {
+			select {
+			case <-env.ctx.Done():
+				require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", env.ctx.Err(), streamedLogsCount.Load())
+			case <-time.After(time.Millisecond * 5):
+				if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
+					break Wait1
+				}
 			}
 		}
-	}
 
-	// Create empty blocks with no transactions to advance the chain
-	// followDistance blocks ahead.
-	for i := 0; i < followDistance; i++ {
-		env.sim.Commit()
-		time.Sleep(delay)
-	}
-	// Wait for streamed logs to advance accordingly.
-Wait2:
-	for {
-		select {
-		case <-env.ctx.Done():
-			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", env.ctx.Err(), streamedLogsCount.Load())
-		case <-time.After(time.Millisecond * 5):
-			if streamedLogsCount.Load() == int64(blocksWithLogsLength) {
-				break Wait2
+		// Create empty blocks with no transactions to advance the chain
+		// followDistance blocks ahead.
+		for i := 0; i < followDistance; i++ {
+			env.sim.Commit()
+			time.Sleep(delay)
+		}
+		// Wait for streamed logs to advance accordingly.
+	Wait2:
+		for {
+			select {
+			case <-env.ctx.Done():
+				require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", env.ctx.Err(), streamedLogsCount.Load())
+			case <-time.After(time.Millisecond * 5):
+				if streamedLogsCount.Load() == int64(blocksWithLogsLength) {
+					break Wait2
+				}
 			}
 		}
-	}
-	require.NotEmpty(t, streamedLogs)
-	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
+		require.NotEmpty(t, streamedLogs)
+		require.Equal(t, blocksWithLogsLength, len(streamedLogs))
+	})
+
+	t.Run("returns when context is canceled", func(t *testing.T) {
+		logger, err := zap.NewDevelopment()
+		require.NoError(t, err)
+
+		env := setupTestEnv(t, 2*time.Second)
+
+		// Deploy the contract
+		_, err = env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
+
+		// Create a context that can be canceled
+		ctx, cancel := context.WithCancel(env.ctx)
+		defer cancel()
+
+		// Start streaming logs
+		logs := env.client.StreamLogs(ctx, 0)
+
+		// Set up a channel to detect when the log channel is closed
+		done := make(chan struct{})
+		go func() {
+			// This goroutine should exit when the log channel is closed
+			for range logs {
+				// Just consume logs
+			}
+			close(done)
+		}()
+
+		// Cancel the context to trigger the first return case
+		cancel()
+
+		// Wait for the log channel to be closed
+		select {
+		case <-done:
+			// Success - the log channel was closed
+		case <-time.After(1 * time.Second):
+			require.Fail(t, "StreamLogs did not return when context was canceled")
+		}
+	})
+
+	t.Run("returns when client is closed", func(t *testing.T) {
+		logger, err := zap.NewDevelopment()
+		require.NoError(t, err)
+
+		env := setupTestEnv(t, 2*time.Second)
+
+		// Deploy the contract
+		_, err = env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
+
+		// Start streaming logs
+		logs := env.client.StreamLogs(env.ctx, 0)
+
+		// Set up a channel to detect when the log channel is closed
+		done := make(chan struct{})
+		go func() {
+			// This goroutine should exit when the log channel is closed
+			for range logs {
+				// Just consume logs
+			}
+			close(done)
+		}()
+
+		// Close the client to trigger the second return case
+		require.NoError(t, env.closeClient())
+
+		// Wait for the log channel to be closed
+		select {
+		case <-done:
+			// Success - the log channel was closed
+		case <-time.After(1 * time.Second):
+			require.Fail(t, "StreamLogs did not return when client was closed")
+		}
+	})
 }
 
 // TestFetchLogsInBatches tests the fetchLogsInBatches function of the client.
@@ -1045,6 +1160,53 @@ func TestSyncProgress(t *testing.T) {
 			return p, nil
 		}
 		err = client.Healthy(env.ctx)
+		require.NoError(t, err)
+	})
+}
+
+// TestHealthy tests the Healthy method of the client.
+func TestHealthy(t *testing.T) {
+	t.Run("returns ErrClosed when client is closed", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		_, err := env.deploySimContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient()
+		require.NoError(t, err)
+
+		// Close the client using our safe method
+		require.NoError(t, env.closeClient())
+
+		// Healthy should return ErrClosed
+		err = env.client.Healthy(env.ctx)
+		require.ErrorIs(t, err, ErrClosed)
+	})
+
+	t.Run("returns nil when health check was recently performed", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		_, err := env.deploySimContract()
+		require.NoError(t, err)
+
+		// Create a client with a health invalidation interval
+		err = env.createClient(WithHealthInvalidationInterval(10 * time.Second))
+		require.NoError(t, err)
+
+		// First call to Healthy should perform the actual health check
+		err = env.client.Healthy(env.ctx)
+		require.NoError(t, err)
+
+		// Mock the syncProgressFn to return an error, to verify it's not called
+		env.client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+			return nil, errors.New("this should not be called")
+		}
+
+		// Second call to Healthy should return nil without performing the health check
+		err = env.client.Healthy(env.ctx)
 		require.NoError(t, err)
 	})
 }
