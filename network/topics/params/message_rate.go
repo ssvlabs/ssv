@@ -118,7 +118,7 @@ func calculateMessageRateForTopic(committees []*storage.Committee) float64 {
 
 	for _, committee := range committees {
 		committeeSize := len(committee.Operators)
-		numValidators := len(committee.Validators)
+		numValidators := len(committee.Shares)
 
 		totalMsgRate += expectedNumberOfCommitteeDutiesPerEpochDueToAttestationCached(numValidators) * float64(dutyWithoutPreConsensus(committeeSize))
 		totalMsgRate += expectedSingleSCCommitteeDutiesPerEpochCached(numValidators) * float64(dutyWithoutPreConsensus(committeeSize))

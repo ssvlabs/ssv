@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -14,11 +13,6 @@ const frequencyEpochs = uint64(10)
 
 type ValidatorRegistrationHandler struct {
 	baseHandler
-}
-
-type ValidatorRegistration struct {
-	ValidatorIndex phase0.ValidatorIndex
-	FeeRecipient   string
 }
 
 func NewValidatorRegistrationHandler() *ValidatorRegistrationHandler {
@@ -52,7 +46,6 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(frequencyEpochs))
 
-			var vrs []ValidatorRegistration
 			for _, share := range shares {
 				if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
 					continue
@@ -65,17 +58,13 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 					ValidatorIndex: share.ValidatorIndex,
 					PubKey:         pk,
 					Slot:           slot,
-					// no need for other params
 				}})
 
-				vrs = append(vrs, ValidatorRegistration{
-					ValidatorIndex: share.ValidatorIndex,
-					FeeRecipient:   hex.EncodeToString(share.FeeRecipientAddress[:]),
-				})
+				h.logger.Debug("validator registration duty sent",
+					zap.Uint64("slot", uint64(slot)),
+					zap.Uint64("validator_index", uint64(share.ValidatorIndex)))
+				zap.String("validator_pubkey", pk.String())
 			}
-			h.logger.Debug("validator registration duties sent",
-				zap.Uint64("slot", uint64(slot)),
-				zap.Any("validator_registrations", vrs))
 
 		case <-h.indicesChange:
 			continue

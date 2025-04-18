@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -19,16 +21,22 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+//go:generate mockgen -package=mocks -destination=./mocks/validator_registration.go -source=./validator_registration.go
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         beacon.BeaconNode
-	network        specqbft.Network
-	signer         spectypes.BeaconSigner
-	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
+	beacon                beacon.BeaconNode
+	network               specqbft.Network
+	signer                spectypes.BeaconSigner
+	operatorSigner        ssvtypes.OperatorSigner
+	valCheck              specqbft.ProposedValueCheckF
+	recipientsStorage     recipientsStorage
+	validatorOwnerAddress common.Address
 
 	gasLimit uint64
 }
@@ -37,10 +45,12 @@ func NewValidatorRegistrationRunner(
 	domainType spectypes.DomainType,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
+	validatorOwnerAddress common.Address,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
+	recipientsStorage recipientsStorage,
 	gasLimit uint64,
 ) (Runner, error) {
 	if len(share) != 1 {
@@ -55,11 +65,14 @@ func NewValidatorRegistrationRunner(
 			Share:          share,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		operatorSigner: operatorSigner,
-		gasLimit:       gasLimit,
+		beacon:                beacon,
+		network:               network,
+		signer:                signer,
+		operatorSigner:        operatorSigner,
+		recipientsStorage:     recipientsStorage,
+		validatorOwnerAddress: validatorOwnerAddress,
+
+		gasLimit: gasLimit,
 	}, nil
 }
 
@@ -78,7 +91,6 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		return errors.Wrap(err, "failed processing validator registration message")
 	}
 
-	// TODO: (Alan) revert
 	logger.Debug("got partial sig",
 		zap.Uint64("signer", signedMsg.Messages[0].Signer),
 		zap.Bool("quorum", quorum))
@@ -100,11 +112,6 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	share := r.GetShare()
-	if share == nil {
-		return errors.New("no share to get validator public key")
-	}
-
 	registration, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {
 		return errors.Wrap(err, "could not calculate validator registration")
@@ -124,7 +131,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	}
 
 	logger.Debug("validator registration submitted successfully",
-		fields.FeeRecipient(share.FeeRecipientAddress[:]),
+		fields.FeeRecipient(registration.FeeRecipient[:]),
 		zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	r.GetState().Finished = true
@@ -208,18 +215,21 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 }
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0.Slot) (*v1.ValidatorRegistration, error) {
-	share := r.GetShare()
-	if share == nil {
-		return nil, errors.New("no share to get validator public key")
-	}
-
 	pk := phase0.BLSPubKey{}
-	copy(pk[:], share.ValidatorPubKey[:])
+	copy(pk[:], r.GetShare().ValidatorPubKey[:])
 
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(slot)
 
+	rData, found, err := r.recipientsStorage.GetRecipientData(nil, r.validatorOwnerAddress)
+	if err != nil {
+		return nil, fmt.Errorf("get recipient data from storage: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("get recipient data from storage: not found")
+	}
+
 	return &v1.ValidatorRegistration{
-		FeeRecipient: share.FeeRecipientAddress,
+		FeeRecipient: rData.FeeRecipient,
 		GasLimit:     r.gasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
@@ -278,4 +288,8 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+type recipientsStorage interface {
+	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
 }

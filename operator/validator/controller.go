@@ -184,9 +184,8 @@ type controller struct {
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
 
-	recentlyStartedValidators uint64
-	indicesChange             chan struct{}
-	validatorExitCh           chan duties.ExitDescriptor
+	indicesChange   chan struct{}
+	validatorExitCh chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -595,6 +594,8 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
+	recordDutyExecuted(ctx, duty.RunnerRole())
+
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 	pk := make([]byte, 48)
@@ -621,6 +622,8 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 }
 
 func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+	recordDutyExecuted(ctx, duty.RunnerRole())
+
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
 		if err != nil {
@@ -753,7 +756,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts := c.validatorOptions
 		opts.SSVShare = share
 		opts.Operator = operator
-		opts.DutyRunners, err = SetupRunners(validatorCtx, c.logger, opts)
+		opts.DutyRunners, err = SetupRunners(validatorCtx, c.logger, c.recipientsStorage, opts)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
@@ -892,7 +895,7 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 			fields.Validator(share.ValidatorPubKey[:]), fields.FeeRecipient(data.FeeRecipient[:]))
 		feeRecipient = data.FeeRecipient
 	}
-	share.SetFeeRecipient(feeRecipient)
+	share.FeeRecipientAddress = feeRecipient
 
 	return nil
 }
@@ -910,13 +913,10 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	if v.Share.ValidatorIndex == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
-	started, err := c.validatorStart(v)
+	_, err := c.validatorStart(v)
 	if err != nil {
 		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
-	}
-	if started {
-		c.recentlyStartedValidators++
 	}
 
 	return true, nil // TODO: what should be returned if c.validatorStart(v) returns false?
@@ -1079,6 +1079,7 @@ func SetupCommitteeRunners(
 func SetupRunners(
 	ctx context.Context,
 	logger *zap.Logger,
+	recipientsStorage Recipients,
 	options validator.Options,
 ) (runner.ValidatorDutyRunners, error) {
 
@@ -1138,7 +1139,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.SSVShare.OwnerAddress, options.Beacon, options.Network, options.Signer, options.OperatorSigner, recipientsStorage, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(domainType, options.NetworkConfig.Beacon.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		}

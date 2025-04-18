@@ -3,6 +3,7 @@ package goclient
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -83,6 +84,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 			return
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
+			slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
 
 			// Select registrations to submit.
 			gc.registrationMu.Lock()
@@ -98,7 +100,6 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 				}
 
 				// Distribute the registrations evenly across the epoch based on the pubkeys.
-				slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
 				validatorDescriptor := xxhash.Sum64(validatorPk[:])
 				shouldSubmit := validatorDescriptor%gc.network.SlotsPerEpoch() == slotInEpoch
 
@@ -109,12 +110,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 			}
 
 			// Submit validator registrations in chunks.
-			// TODO: replace with slices.Chunk after we've upgraded to Go 1.23
-			const chunkSize = 500
-			for start := 0; start < len(registrations); start += chunkSize {
-				end := min(start+chunkSize, len(registrations))
-				chunk := registrations[start:end]
-
+			for chunk := range slices.Chunk(registrations, 500) {
 				reqStart := time.Now()
 				err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, chunk)
 				recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
