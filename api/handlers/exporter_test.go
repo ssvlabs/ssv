@@ -9,17 +9,23 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/api"
+	exportertypes "github.com/ssvlabs/ssv/exporter/v2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 // mockParticipantStore is a basic mock for qbftstorage.ParticipantStore.
@@ -465,4 +471,688 @@ func TestExporterDecideds_ErrorGetParticipantsInRange(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Contains(t, resp.Message, "error getting participants")
 	require.Contains(t, resp.Message, "forced error on GetParticipantsInRange")
+}
+
+// duty trace tests
+
+// mockTraceStore is a mock implementation of DutyTraceStore
+type mockTraceStore struct {
+	validatorDecideds        map[string][]qbftstorage.ParticipantsRangeEntry
+	committeeDecideds        map[string][]qbftstorage.ParticipantsRangeEntry
+	GetValidatorDutyFunc     func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
+	GetCommitteeDutyFunc     func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error)
+	GetCommitteeDutiesFunc   func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error)
+	GetCommitteeIDFunc       func(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
+	GetValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetCommitteeDecidedsFunc func(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+}
+
+func newMockTraceStore() *mockTraceStore {
+	return &mockTraceStore{
+		validatorDecideds: make(map[string][]qbftstorage.ParticipantsRangeEntry),
+		committeeDecideds: make(map[string][]qbftstorage.ParticipantsRangeEntry),
+	}
+}
+
+func (m *mockTraceStore) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error) {
+	if m.GetValidatorDutyFunc != nil {
+		return m.GetValidatorDutyFunc(role, slot, pubkey)
+	}
+	return nil, nil
+}
+
+func (m *mockTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error) {
+	if m.GetCommitteeDutyFunc != nil {
+		return m.GetCommitteeDutyFunc(slot, committeeID)
+	}
+	return nil, nil
+}
+
+func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error) {
+	if m.GetCommitteeDutiesFunc != nil {
+		return m.GetCommitteeDutiesFunc(slot)
+	}
+	return nil, nil
+}
+
+func (m *mockTraceStore) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
+	if m.GetCommitteeIDFunc != nil {
+		return m.GetCommitteeIDFunc(slot, pubkey)
+	}
+	return spectypes.CommitteeID{}, 0, nil
+}
+
+func (m *mockTraceStore) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error) {
+	if m.GetValidatorDecidedsFunc != nil {
+		return m.GetValidatorDecidedsFunc(role, slot, pubKeys)
+	}
+	key := fmt.Sprintf("%d-%d", role, slot)
+	return m.validatorDecideds[key], nil
+}
+
+func (m *mockTraceStore) GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error) {
+	if m.GetCommitteeDecidedsFunc != nil {
+		return m.GetCommitteeDecidedsFunc(slot, pubKey)
+	}
+	key := fmt.Sprintf("%d-%s", slot, hex.EncodeToString(pubKey[:]))
+	return m.committeeDecideds[key], nil
+}
+
+func (m *mockTraceStore) AddValidatorDecided(role spectypes.BeaconRole, slot phase0.Slot, pubKey spectypes.ValidatorPK, signers []uint64) {
+	key := fmt.Sprintf("%d-%d", role, slot)
+	entry := qbftstorage.ParticipantsRangeEntry{
+		Slot:    slot,
+		PubKey:  pubKey,
+		Signers: signers,
+	}
+	m.validatorDecideds[key] = append(m.validatorDecideds[key], entry)
+}
+
+func (m *mockTraceStore) AddCommitteeDecided(slot phase0.Slot, pubKey spectypes.ValidatorPK, signers []uint64) {
+	key := fmt.Sprintf("%d-%s", slot, hex.EncodeToString(pubKey[:]))
+	entry := qbftstorage.ParticipantsRangeEntry{
+		Slot:    slot,
+		PubKey:  pubKey,
+		Signers: signers,
+	}
+	m.committeeDecideds[key] = append(m.committeeDecideds[key], entry)
+}
+
+// TestExporterTraceDecideds runs table-driven tests for the TraceDecideds handler
+func TestExporterTraceDecideds(t *testing.T) {
+	tests := []struct {
+		name           string
+		request        map[string]any
+		setupMock      func(*mockTraceStore)
+		expectedStatus int
+		validateResp   func(*testing.T, *httptest.ResponseRecorder)
+	}{
+		{
+			name: "valid request - validator decideds",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+				store.AddValidatorDecided(spectypes.BNRoleProposer, phase0.Slot(150), pk, []uint64{1, 2, 3})
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, "PROPOSER", resp.Data[0].Role)
+				assert.Equal(t, uint64(150), resp.Data[0].Slot)
+				assert.Equal(t, []uint64{1, 2, 3}, resp.Data[0].Message.Signers)
+			},
+		},
+		{
+			name: "valid request - committee decideds",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"ATTESTER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+				store.AddCommitteeDecided(phase0.Slot(150), pk, []uint64{1, 2, 3})
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, "ATTESTER", resp.Data[0].Role)
+				assert.Equal(t, uint64(150), resp.Data[0].Slot)
+				assert.Equal(t, []uint64{1, 2, 3}, resp.Data[0].Message.Signers)
+			},
+		}, {
+			name: "valid request - empty signers array - proposer role",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				entry := qbftstorage.ParticipantsRangeEntry{
+					Signers: []uint64{},
+				}
+				store.AddValidatorDecided(spectypes.BNRoleProposer, phase0.Slot(150), pk, entry.Signers)
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 0) // Empty signers array should be filtered out
+			},
+		},
+		{
+			name: "valid request - empty signers array - attester role",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"ATTESTER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				entry := qbftstorage.ParticipantsRangeEntry{
+					Signers: []uint64{},
+				}
+				store.AddCommitteeDecided(phase0.Slot(150), pk, entry.Signers)
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 0) // Empty signers array should be filtered out
+			},
+		},
+		{
+			name: "invalid request - no pubkeys",
+			request: map[string]any{
+				"from":  100,
+				"to":    200,
+				"roles": []string{"PROPOSER"},
+			},
+			setupMock:      func(store *mockTraceStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "at least one pubkey is required", resp.Message)
+			},
+		},
+		{
+			name: "invalid request - invalid pubkey length",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": api.HexSlice{api.Hex("0x123")}, // malformed hex - too short for a pubkey
+			},
+			setupMock:      func(store *mockTraceStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "invalid pubkey length", resp.Message)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMockTraceStore()
+			tt.setupMock(store)
+
+			exporter := &Exporter{
+				TraceStore: store,
+			}
+
+			reqBody, err := json.Marshal(tt.request)
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPost, "/trace/decideds", strings.NewReader(string(reqBody)))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			err = exporter.TraceDecideds(rec, req)
+			if err != nil {
+				rec.Code = tt.expectedStatus
+				errorResp := map[string]string{
+					"status": http.StatusText(tt.expectedStatus),
+					"error":  err.Error(),
+				}
+				jsonResp, _ := json.Marshal(errorResp)
+				rec.Body.Write(jsonResp)
+				rec.Header().Set("Content-Type", "application/json")
+			}
+			tt.validateResp(t, rec)
+		})
+	}
+}
+
+func makeCommitteeDutyTrace(slot phase0.Slot) *exportertypes.CommitteeDutyTrace {
+	return &exportertypes.CommitteeDutyTrace{
+		Slot:        slot,
+		CommitteeID: spectypes.CommitteeID{1},
+		ConsensusTrace: exportertypes.ConsensusTrace{
+			Rounds: []*exportertypes.RoundTrace{
+				{
+					Proposer: spectypes.OperatorID(1),
+					ProposalTrace: &exportertypes.ProposalTrace{
+						QBFTTrace: exportertypes.QBFTTrace{
+							Round:        1,
+							BeaconRoot:   phase0.Root{1},
+							Signer:       spectypes.OperatorID(1),
+							ReceivedTime: uint64(time.Now().Unix()),
+						},
+					},
+				},
+			},
+			Decideds: []*exportertypes.DecidedTrace{
+				{
+					Round:        1,
+					BeaconRoot:   phase0.Root{1},
+					Signers:      []spectypes.OperatorID{1, 2},
+					ReceivedTime: uint64(time.Now().Unix()),
+				},
+			},
+		},
+		OperatorIDs: []spectypes.OperatorID{1, 2, 3},
+		SyncCommittee: []*exportertypes.SignerData{
+			{
+				Signer:       spectypes.OperatorID(1),
+				ValidatorIdx: []phase0.ValidatorIndex{1},
+			},
+		},
+		ProposalData: []byte{1, 2, 3},
+	}
+}
+
+// TestExporterCommitteeTraces tests the CommitteeTraces handler
+func TestExporterCommitteeTraces(t *testing.T) {
+	tests := []struct {
+		name            string
+		request         map[string]any
+		setupMock       func(*mockTraceStore, *mockValidatorStore)
+		expectedStatus  int
+		validateErrResp func(*testing.T, error)
+		validateResp    func(*testing.T, *httptest.ResponseRecorder)
+	}{
+		{
+			name: "valid request - all committees",
+			request: map[string]any{
+				"from": 100,
+				"to":   100,
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				store.GetCommitteeDutiesFunc = func(slot phase0.Slot) (traces []*exportertypes.CommitteeDutyTrace, err error) {
+					traces = []*exportertypes.CommitteeDutyTrace{
+						makeCommitteeDutyTrace(slot),
+					}
+					return traces, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp committeeTraceResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, uint64(100), resp.Data[0].Slot)
+				assert.Len(t, resp.Data[0].Decideds, 1)
+				assert.Len(t, resp.Data[0].Consensus, 1)
+				assert.Len(t, resp.Data[0].SyncCommittee, 1)
+				assert.Len(t, resp.Data[0].SyncCommittee, 1)
+				assert.NotEmpty(t, resp.Data[0].Proposal)
+			},
+		},
+		{
+			name: "valid request - specific committee IDs",
+			request: map[string]any{
+				"from":         100,
+				"to":           100,
+				"committeeIDs": []string{"0eb9655577d1af04ff5d382848be15d1454b04838713bfb1ac209808fe3e9f7f"},
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error) {
+					return makeCommitteeDutyTrace(slot), nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp committeeTraceResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, uint64(100), resp.Data[0].Slot)
+				assert.Len(t, resp.Data[0].Decideds, 1)
+				assert.Len(t, resp.Data[0].Consensus, 1)
+				assert.Len(t, resp.Data[0].SyncCommittee, 1)
+				assert.NotEmpty(t, resp.Data[0].Proposal)
+			},
+		},
+		{
+			name: "invalid request - from > to",
+			request: map[string]any{
+				"from": 200,
+				"to":   100,
+			},
+			expectedStatus: http.StatusBadRequest,
+			validateErrResp: func(t *testing.T, err error) {
+				assert.ErrorContains(t, err, "'from' must be less than or equal to 'to'")
+			},
+		},
+		{
+			name: "invalid request - invalid committee ID length",
+			request: map[string]any{
+				"from":         100,
+				"to":           200,
+				"committeeIDs": api.HexSlice{api.Hex("0x123")},
+			},
+			expectedStatus: http.StatusBadRequest,
+			validateErrResp: func(t *testing.T, err error) {
+				assert.ErrorContains(t, err, "invalid committee ID length")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMockTraceStore()
+			validatorStore := newMockValidatorStore()
+			if tt.setupMock != nil {
+				tt.setupMock(store, validatorStore)
+			}
+
+			exporter := &Exporter{
+				TraceStore: store,
+				Validators: validatorStore,
+			}
+
+			body, err := json.Marshal(tt.request)
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPost, "/traces/committee", strings.NewReader(string(body)))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			err = exporter.CommitteeTraces(rec, req)
+			if tt.expectedStatus != http.StatusOK {
+				assert.Error(t, err)
+				tt.validateErrResp(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, rec.Code)
+			tt.validateResp(t, rec)
+		})
+	}
+}
+
+// TestExporterValidatorTraces runs table-driven tests for the ValidatorTraces handler
+func TestExporterValidatorTraces(t *testing.T) {
+	tests := []struct {
+		name           string
+		request        map[string]any
+		setupMock      func(*mockTraceStore, *mockValidatorStore)
+		expectedStatus int
+		validateResp   func(*testing.T, *httptest.ResponseRecorder)
+	}{
+		{
+			name: "valid request - by pubkeys",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error) {
+					return &dutytracer.ValidatorDutyTrace{
+						ValidatorDutyTrace: exportertypes.ValidatorDutyTrace{
+							Slot:      150,
+							Role:      role,
+							Validator: 1,
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp validatorTraceResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
+				assert.Equal(t, "PROPOSER", resp.Data[0].Role)
+				assert.Equal(t, phase0.ValidatorIndex(1), resp.Data[0].Validator)
+			},
+		},
+		{
+			name: "valid request - by indices",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{"PROPOSER"},
+				"indices": []uint64{1},
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				validatorStore.ValidatorByIndexFunc = func(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
+					share := &ssvtypes.SSVShare{}
+					copy(share.ValidatorPubKey[:], pkBytes)
+					return share, true
+				}
+
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error) {
+					return &dutytracer.ValidatorDutyTrace{
+						ValidatorDutyTrace: exportertypes.ValidatorDutyTrace{
+							Slot:      150,
+							Role:      role,
+							Validator: 1,
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*validatorTrace `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
+				assert.Equal(t, "PROPOSER", resp.Data[0].Role)
+				assert.Equal(t, phase0.ValidatorIndex(1), resp.Data[0].Validator)
+			},
+		},
+		{
+			name: "invalid request - no pubkeys or indices",
+			request: map[string]any{
+				"from":  100,
+				"to":    200,
+				"roles": []string{"PROPOSER"},
+			},
+			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "either pubkeys or indices is required", resp.Message)
+			},
+		},
+		{
+			name: "invalid request - validator not found",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"PROPOSER"},
+				"indices": []uint64{1},
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				validatorStore.ValidatorByIndexFunc = func(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
+					return nil, false
+				}
+			},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "validator not found: 1", resp.Message)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newMockTraceStore()
+			validatorStore := newMockValidatorStore()
+			tt.setupMock(store, validatorStore)
+
+			exporter := &Exporter{
+				TraceStore: store,
+				Validators: validatorStore,
+			}
+
+			reqBody, err := json.Marshal(tt.request)
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodPost, "/validator/traces", strings.NewReader(string(reqBody)))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			err = exporter.ValidatorTraces(rec, req)
+			if err != nil {
+				rec.Code = tt.expectedStatus
+				errorResp := map[string]string{
+					"status": http.StatusText(tt.expectedStatus),
+					"error":  err.Error(),
+				}
+				jsonResp, _ := json.Marshal(errorResp)
+				rec.Body.Write(jsonResp)
+				rec.Header().Set("Content-Type", "application/json")
+			}
+			tt.validateResp(t, rec)
+		})
+	}
+}
+
+// mockValidatorStore is a mock implementation of storage.ValidatorStore
+type mockValidatorStore struct {
+	ValidatorByIndexFunc        func(phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool)
+	CommitteeFunc               func(spectypes.CommitteeID) (*storage.Committee, bool)
+	CommitteesFunc              func() []*storage.Committee
+	OperatorCommitteesFunc      func(operatorID uint64) []*storage.Committee
+	ValidatorIndexFunc          func(pubkey spectypes.ValidatorPK) (phase0.ValidatorIndex, bool)
+	ValidatorFunc               func(pubKey []byte) (*ssvtypes.SSVShare, bool)
+	ValidatorsFunc              func() []*ssvtypes.SSVShare
+	ParticipatingValidatorsFunc func(epoch phase0.Epoch) []*ssvtypes.SSVShare
+	OperatorValidatorsFunc      func(id spectypes.OperatorID) []*ssvtypes.SSVShare
+	ParticipatingCommitteesFunc func(epoch phase0.Epoch) []*storage.Committee
+	WithOperatorIDFunc          func(operatorID func() spectypes.OperatorID) storage.SelfValidatorStore
+}
+
+func newMockValidatorStore() *mockValidatorStore {
+	return &mockValidatorStore{}
+}
+
+func (m *mockValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
+	if m.ValidatorByIndexFunc != nil {
+		return m.ValidatorByIndexFunc(index)
+	}
+	return nil, false
+}
+
+func (m *mockValidatorStore) Committee(id spectypes.CommitteeID) (*storage.Committee, bool) {
+	if m.CommitteeFunc != nil {
+		return m.CommitteeFunc(id)
+	}
+	return nil, false
+}
+
+func (m *mockValidatorStore) Committees() []*storage.Committee {
+	if m.CommitteesFunc != nil {
+		return m.CommitteesFunc()
+	}
+	return nil
+}
+
+func (m *mockValidatorStore) OperatorCommittees(operatorID uint64) []*storage.Committee {
+	if m.OperatorCommitteesFunc != nil {
+		return m.OperatorCommitteesFunc(operatorID)
+	}
+	return nil
+}
+
+func (m *mockValidatorStore) ValidatorIndex(pubkey spectypes.ValidatorPK) (phase0.ValidatorIndex, bool) {
+	if m.ValidatorIndexFunc != nil {
+		return m.ValidatorIndexFunc(pubkey)
+	}
+	return 0, false
+}
+
+func (m *mockValidatorStore) Validator(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+	if m.ValidatorFunc != nil {
+		return m.ValidatorFunc(pubKey)
+	}
+	return nil, false
+}
+
+func (m *mockValidatorStore) Validators() []*ssvtypes.SSVShare {
+	if m.ValidatorsFunc != nil {
+		return m.ValidatorsFunc()
+	}
+	return nil
+}
+
+func (m *mockValidatorStore) ParticipatingValidators(epoch phase0.Epoch) []*ssvtypes.SSVShare {
+	if m.ParticipatingValidatorsFunc != nil {
+		return m.ParticipatingValidatorsFunc(epoch)
+	}
+	return nil
+}
+
+func (m *mockValidatorStore) OperatorValidators(id spectypes.OperatorID) []*ssvtypes.SSVShare {
+	if m.OperatorValidatorsFunc != nil {
+		return m.OperatorValidatorsFunc(id)
+	}
+	return nil
+}
+
+func (m *mockValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.Committee {
+	if m.ParticipatingCommitteesFunc != nil {
+		return m.ParticipatingCommitteesFunc(epoch)
+	}
+	return nil
+}
+
+func (m *mockValidatorStore) WithOperatorID(operatorID func() spectypes.OperatorID) storage.SelfValidatorStore {
+	if m.WithOperatorIDFunc != nil {
+		return m.WithOperatorIDFunc(operatorID)
+	}
+	return nil
 }
