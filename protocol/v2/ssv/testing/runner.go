@@ -2,9 +2,10 @@ package testing
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
+	"github.com/ethereum/go-ethereum/common"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -17,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/testing/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
 
@@ -114,6 +116,9 @@ var ConstructBaseRunner = func(
 	shareMap[share.ValidatorIndex] = share
 	dutyGuard := validator.NewCommitteeDutyGuard()
 
+	rStorage := mocks.NewMockrecipientsStorage()
+	rStorage.FeeRecipient = share.FeeRecipientAddress
+
 	var r runner.Runner
 	var err error
 
@@ -177,10 +182,12 @@ var ConstructBaseRunner = func(
 			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
+			common.Address{},
 			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
+			rStorage,
 			spectypes.DefaultGasLimit,
 		)
 	case spectypes.RoleVoluntaryExit:
@@ -208,7 +215,7 @@ var ConstructBaseRunner = func(
 		)
 		r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 	default:
-		return nil, errors.New("unknown role type")
+		return nil, fmt.Errorf("unknown role type: %s", role)
 	}
 	return r, err
 }
@@ -432,10 +439,12 @@ var ConstructBaseRunnerWithShareMap = func(
 			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
+			common.Address{},
 			tests.NewTestingBeaconNodeWrapped(),
 			net,
 			km,
 			opSigner,
+			nil, // recipientStorage is unused in these tests
 			spectypes.DefaultGasLimit,
 		)
 	case spectypes.RoleVoluntaryExit:
@@ -465,7 +474,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			r.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 		}
 	default:
-		return nil, errors.New("unknown role type")
+		return nil, fmt.Errorf("unknown role type: %s", role)
 	}
 	return r, err
 }

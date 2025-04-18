@@ -222,6 +222,7 @@ func mockClientWithNetwork(ctx context.Context, serverURL string, commonTimeout,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		},
+		nil,
 		tests.MockSlotTickerProvider,
 	)
 }

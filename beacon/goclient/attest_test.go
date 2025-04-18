@@ -197,6 +197,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 				CommonTimeout:  1 * time.Second,
 				LongTimeout:    1 * time.Second,
 			},
+			nil,
 			func() slotticker.SlotTicker {
 				return slotticker.New(zap.NewNop(), slotticker.Config{
 					SlotDuration: 12 * time.Second,
@@ -455,6 +456,7 @@ func createClient(
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
 		},
+		nil,
 		func() slotticker.SlotTicker {
 			return slotticker.New(zap.NewNop(), slotticker.Config{
 				SlotDuration: 12 * time.Second,
