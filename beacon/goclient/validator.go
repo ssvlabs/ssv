@@ -69,8 +69,13 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 	return nil
 }
 
-// registrationSubmitter periodically submits validator registrations that are relevant for the near
-// future (in batches, 1 batch per slot, also making sure "new" registrations are submitted asap)
+// registrationSubmitter periodically submits validator registrations of 2 types (in batches,
+// 1 batch per slot):
+// - new validator registrations
+// - validator registrations that are relevant for the near future (targeting 10th epoch from now)
+// This allows us to keep the amount of registration submissions small and not having to worry
+// about pruning gc.registrations "cache" (since it might contain registrations for validators that
+// are no longer operating) while still submitting all validator-registrations that matter asap.
 func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
 	ticker := slotTickerProvider()
 	for {
@@ -82,12 +87,10 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 			currentEpoch := gc.network.EstimatedCurrentEpoch()
 			slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
 
-			// Select registrations to submit, we'll submit only registrations relevant in the near
-			// future (targeting 10th epoch from now) to keep the amount of submissions small and
-			// not having to worry about pruning gc.registrations "cache" (since it might contain
-			// registrations for validators that are no longer operating)
+			// Select registrations to submit.
+			targetRegs := make(map[phase0.BLSPubKey]*validatorRegistration, 0)
 			gc.registrationMu.Lock()
-			allRegistrations := make([]*validatorRegistration, 0)
+			// 1. find & add validators participating in 10th epoch from now
 			shares := gc.validatorStore.SelfParticipatingValidators(currentEpoch + 10)
 			for _, share := range shares {
 				pk := phase0.BLSPubKey{}
@@ -98,12 +101,18 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 					// so just skip it for now
 					continue
 				}
-				allRegistrations = append(allRegistrations, r)
+				targetRegs[pk] = r
+			}
+			// 2. find & add newly created validator registrations
+			for pk, r := range gc.registrations {
+				if r.new {
+					targetRegs[pk] = r
+				}
 			}
 			gc.registrationMu.Unlock()
 
 			registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
-			for _, r := range allRegistrations {
+			for _, r := range targetRegs {
 				validatorPk, err := r.PubKey()
 				if err != nil {
 					gc.log.Error("Failed to get validator pubkey", zap.Error(err), fields.Slot(currentSlot))
