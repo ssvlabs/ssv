@@ -14,13 +14,13 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 func TestValidatorCommitteeMapping(t *testing.T) {
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := badger.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 }
 
 func TestCommitteeDutyStore(t *testing.T) {
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := badger.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +361,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 }
 
 func TestValidatorDutyStore(t *testing.T) {
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := badger.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

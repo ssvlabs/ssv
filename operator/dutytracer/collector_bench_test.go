@@ -17,8 +17,8 @@ import (
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func BenchmarkTracer(b *testing.B) {
@@ -34,7 +34,7 @@ func BenchmarkTracer(b *testing.B) {
 
 	_ = f.Close()
 
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	db, err := badger.NewInMemory(zap.NewNop(), basedb.Options{})
 	if err != nil {
 		b.Fatal(err)
 	}

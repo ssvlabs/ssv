@@ -18,12 +18,13 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
@@ -34,8 +35,15 @@ func TestRemoveSlot(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return slotticker.New(zap.NewNop(), slotticker.Config{
+			SlotDuration: 60 * time.Second, //
+			GenesisTime:  time.Now(),
+		})
+	}
+
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(db, role))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -115,8 +123,16 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	ctrl := gomock.NewController(t)
+	ticker := mockslotticker.NewMockSlotTicker(ctrl)
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return ticker
+	}
+
+	ticker.EXPECT().Next().Return(nil).MaxTimes(1)
+
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(db, role))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -175,9 +191,6 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	// test
 	ctx, cancel := context.WithCancel(context.Background())
-
-	ctrl := gomock.NewController(t)
-	ticker := mockslotticker.NewMockSlotTicker(ctrl)
 
 	mockTimeChan := make(chan time.Time)
 	mockSlotChan := make(chan phase0.Slot)

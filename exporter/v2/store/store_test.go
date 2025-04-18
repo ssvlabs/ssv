@@ -11,13 +11,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	store "github.com/ssvlabs/ssv/exporter/v2/store"
+	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestSaveCommitteeDutyLink(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := badger.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -34,7 +34,7 @@ func TestSaveCommitteeDutyLink(t *testing.T) {
 
 func TestSaveCommitteeDutyTrace(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := badger.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -56,7 +56,7 @@ func TestSaveCommitteeDutyTrace(t *testing.T) {
 
 func TestSaveCommitteeDuties(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := badger.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -82,7 +82,7 @@ func TestSaveCommitteeDuties(t *testing.T) {
 
 func TestSaveValidatorDutyTrace(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := badger.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -117,7 +117,7 @@ func TestSaveValidatorDutyTrace(t *testing.T) {
 
 func TestSaveValidatorDuties(t *testing.T) {
 	logger := zap.NewNop()
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := badger.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
