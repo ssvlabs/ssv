@@ -32,7 +32,7 @@ func (t *pebbleTxn) Set(prefix []byte, key []byte, value []byte) error {
 }
 
 func (t *pebbleTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
-	for i := 0; i < n; i++ {
+	for i := range n {
 		item, err := next(i)
 		if err != nil {
 			return err
@@ -52,9 +52,12 @@ func (t *pebbleTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 		}
 		return basedb.Obj{}, true, err
 	}
-	defer func() { _ = closer.Close() }()
+
 	valCopy := make([]byte, len(value))
 	copy(valCopy, value)
+	if err := closer.Close(); err != nil {
+		return basedb.Obj{}, true, err
+	}
 	return basedb.Obj{
 		Key:   key,
 		Value: valCopy,
@@ -94,7 +97,8 @@ func (t *pebbleTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error 
 		return err
 	}
 
-	defer func() { _ = iter.Close() }()
+	defer func() { _ = iter.Close() }() // returns the same 'accumulated' error as iter.Error()
+
 	i := 0
 	// SeekPrefixGE starts prefix iteration mode.
 	for iter.First(); iter.Valid(); iter.Next() {

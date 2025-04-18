@@ -2,7 +2,6 @@ package pebble
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -322,7 +321,7 @@ func TestPebbleTxn_BeginRead(t *testing.T) {
 
 // Helper function to create a test PebbleDB instance
 func newTestPebbleDB(t *testing.T) *PebbleDB {
-	db, err := NewPebbleDB(context.Background(), zap.NewNop(), t.TempDir(), nil)
+	db, err := NewPebbleDB(zap.NewNop(), t.TempDir(), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, db.Close())

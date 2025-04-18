@@ -18,17 +18,11 @@ type PebbleDB struct {
 	logger *zap.Logger
 
 	db *pebble.DB
-
-	ctx    context.Context
-	cancel context.CancelFunc
 }
 
-func NewPebbleDB(pCtx context.Context, logger *zap.Logger, path string, opts *pebble.Options) (*PebbleDB, error) {
-	ctx, cancel := context.WithCancel(pCtx)
+func NewPebbleDB(logger *zap.Logger, path string, opts *pebble.Options) (*PebbleDB, error) {
 	pbdb := &PebbleDB{
 		logger: logger,
-		ctx:    ctx,
-		cancel: cancel,
 	}
 	pdb, err := pebble.Open(path, opts)
 	if err != nil {
@@ -39,7 +33,6 @@ func NewPebbleDB(pCtx context.Context, logger *zap.Logger, path string, opts *pe
 }
 
 func (pdb *PebbleDB) Close() error {
-	pdb.cancel()
 	return pdb.db.Close()
 }
 
@@ -49,7 +42,7 @@ func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 		return basedb.Obj{}, false, nil
 	}
 	if err != nil {
-		return basedb.Obj{}, false, err
+		return basedb.Obj{}, true, err
 	}
 
 	// PebbleDB returned slice is valid until closer.Close() is called
@@ -58,7 +51,7 @@ func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	copy(out, b)
 
 	if err := closer.Close(); err != nil {
-		pdb.logger.Error("close pebble", zap.Error(err))
+		return basedb.Obj{}, true, err
 	}
 
 	return basedb.Obj{Key: key, Value: out}, true, nil
@@ -142,12 +135,6 @@ func (pdb *PebbleDB) GetAll(prefix []byte, iterator func(int, basedb.Obj) error)
 		return err
 	}
 
-	defer func() {
-		if err := iter.Close(); err != nil {
-			pdb.logger.Error("close iterator on get all", zap.Error(err))
-		}
-	}()
-
 	i := 0
 	// SeekPrefixGE starts prefix iteration mode.
 	for iter.First(); iter.Valid(); iter.Next() {
@@ -166,7 +153,7 @@ func (pdb *PebbleDB) GetAll(prefix []byte, iterator func(int, basedb.Obj) error)
 		i++
 	}
 
-	return iter.Error()
+	return iter.Close()
 }
 
 func (pdb *PebbleDB) Begin() basedb.Txn {
@@ -196,21 +183,19 @@ func (pdb *PebbleDB) UsingReader(r basedb.Reader) basedb.Reader {
 func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
 	iter, err := makePrefixIter(pdb.db, prefix)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
-
-	defer func() {
-		if err := iter.Close(); err != nil {
-			pdb.logger.Error("close iterator on count prefix", zap.Error(err))
-		}
-	}()
 
 	count := int64(0)
 	for iter.First(); iter.Valid(); iter.Next() {
 		count++
 	}
 
-	return count, iter.Error()
+	if err := iter.Close(); err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
@@ -220,18 +205,14 @@ func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
 		return err
 	}
 
-	defer func() {
-		if err := iter.Close(); err != nil {
-			pdb.logger.Error("close iterator on drop prefix", zap.Error(err))
-		}
-	}()
-
 	for iter.First(); iter.Valid(); iter.Next() {
 		if err := batch.Delete(iter.Key(), nil); err != nil {
 			return err
 		}
 	}
-	if err := iter.Error(); err != nil {
+
+	if err := iter.Close(); err != nil {
+		_ = batch.Close() // never returns an error
 		return err
 	}
 

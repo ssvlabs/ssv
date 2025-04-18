@@ -602,7 +602,7 @@ func setupBadgerDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*bad
 func setupPebbleDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*pebble.PebbleDB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
 
-	db, err := pebble.NewPebbleDB(cfg.DBOptions.Ctx, logger, dbPath, &cockroachdb.Options{})
+	db, err := pebble.NewPebbleDB(logger, dbPath, &cockroachdb.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}

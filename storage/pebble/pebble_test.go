@@ -19,7 +19,7 @@ func setupTestDB(t *testing.T) *PebbleDB {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	db, err := NewPebbleDB(context.Background(), logger, t.TempDir(), &pebble.Options{})
+	db, err := NewPebbleDB(logger, t.TempDir(), &pebble.Options{})
 	require.NoError(t, err)
 
 	return db
@@ -96,6 +96,14 @@ func TestPebbleDB_GetMany(t *testing.T) {
 		assert.Equal(t, keys[i], obj.Key)
 		assert.Equal(t, values[i], obj.Value)
 	}
+
+	// Test GetMany with non-existent keys
+	err = db.GetMany(prefix, [][]byte{[]byte("non-existent")}, func(obj basedb.Obj) error {
+		t.Errorf("expected no results, got %v", obj)
+		return nil
+	})
+	require.NoError(t, err)
+
 }
 
 func TestPebbleDB_GetAll(t *testing.T) {
