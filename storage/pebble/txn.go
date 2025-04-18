@@ -1,35 +1,36 @@
 package pebble
 
 import (
-	"errors"
+	"io"
 
 	"github.com/cockroachdb/pebble"
+	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 type pebbleTxn struct {
-	batch *pebble.Batch
-	db    *PebbleDB
+	*pebble.Batch
+	logger *zap.Logger
 }
 
-func newPebbleTxn(batch *pebble.Batch, db *PebbleDB) basedb.Txn {
+func newPebbleTxn(logger *zap.Logger, batch *pebble.Batch) basedb.Txn {
 	return &pebbleTxn{
-		batch: batch,
-		db:    db,
+		Batch:  batch,
+		logger: logger,
 	}
 }
 
 func (t *pebbleTxn) Commit() error {
-	return t.batch.Commit(pebble.Sync)
+	return t.Batch.Commit(pebble.Sync)
 }
 
 func (t *pebbleTxn) Discard() {
-	_ = t.batch.Close()
+	_ = t.Close()
 }
 
 func (t *pebbleTxn) Set(prefix []byte, key []byte, value []byte) error {
-	return t.batch.Set(append(prefix, key...), value, nil)
+	return t.Batch.Set(append(prefix, key...), value, nil)
 }
 
 func (t *pebbleTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
@@ -38,7 +39,9 @@ func (t *pebbleTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, er
 		if err != nil {
 			return err
 		}
-		if err := t.batch.Set(append(prefix, item.Key...), item.Value, nil); err != nil {
+		key := append(prefix, item.Key...)
+		err = t.Batch.Set(key, item.Value, nil)
+		if err != nil {
 			return err
 		}
 	}
@@ -46,95 +49,61 @@ func (t *pebbleTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, er
 }
 
 func (t *pebbleTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
-	value, closer, err := t.batch.Get(append(prefix, key...))
-	if errors.Is(err, pebble.ErrNotFound) {
-		return basedb.Obj{}, false, nil
-	}
-	if err != nil {
-		return basedb.Obj{}, true, err
-	}
-
-	valCopy := make([]byte, len(value))
-	copy(valCopy, value)
-
-	if err := closer.Close(); err != nil {
-		return basedb.Obj{}, true, err
-	}
-
-	return basedb.Obj{
-		Key:   key,
-		Value: valCopy,
-	}, true, nil
+	return getter(key, func(key []byte) ([]byte, io.Closer, error) {
+		return t.Batch.Get(append(prefix, key...))
+	})
 }
 
 func (t *pebbleTxn) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
-	for _, key := range keys {
-		fullKey := append(prefix, key...)
-		value, closer, err := t.batch.Get(fullKey)
-		if err != nil {
-			if errors.Is(err, pebble.ErrNotFound) {
-				continue
-			}
-			return err
-		}
-
-		valCopy := make([]byte, len(value))
-		copy(valCopy, value)
-
-		if err := closer.Close(); err != nil {
-			return err
-		}
-
-		obj := basedb.Obj{
-			Key:   key,
-			Value: valCopy,
-		}
-
-		if err := fn(obj); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return manyGetter(t.logger, keys, func(key []byte) ([]byte, io.Closer, error) {
+		return t.Batch.Get(append(prefix, key...))
+	}, fn)
 }
 
 func (t *pebbleTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error {
-	iter, err := makePrefixIter(t.batch, prefix)
+	iter, err := makePrefixIter(t.Batch, prefix)
 	if err != nil {
 		return err
 	}
 
 	defer func() { _ = iter.Close() }()
 
-	i := 0
-	// SeekPrefixGE starts prefix iteration mode.
-	for iter.First(); iter.Valid(); iter.Next() {
-		v, err := iter.ValueAndErr()
-		if err != nil {
-			continue
-		}
-
-		key := make([]byte, len(iter.Key())-len(prefix))
-		copy(key, iter.Key()[len(prefix):])
-
-		val := make([]byte, len(v))
-		copy(val, v)
-
-		err = fn(i, basedb.Obj{
-			Key:   key,
-			Value: val,
-		})
-
-		if err != nil {
-			return err
-		}
-
-		i++
-	}
-
-	return iter.Error()
+	return allGetter(t.logger, iter, prefix, fn)
 }
 
 func (t *pebbleTxn) Delete(prefix []byte, key []byte) error {
-	return t.batch.Delete(append(prefix, key...), nil)
+	return t.Batch.Delete(append(prefix, key...), nil)
+}
+
+// pebbleReadTxn is a read-only transaction on a pebble.Snapshot.
+type pebbleReadTxn struct {
+	*pebble.Snapshot
+	logger *zap.Logger
+}
+
+func (txn *pebbleReadTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+	return getter(key, func(key []byte) ([]byte, io.Closer, error) {
+		return txn.Snapshot.Get(append(prefix, key...))
+	})
+}
+
+func (txn *pebbleReadTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error {
+	iter, err := makePrefixIter(txn.Snapshot, prefix)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = iter.Close() }()
+
+	return allGetter(txn.logger, iter, prefix, fn)
+}
+
+func (txn *pebbleReadTxn) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
+	return manyGetter(txn.logger, keys, func(key []byte) ([]byte, io.Closer, error) {
+		return txn.Snapshot.Get(append(prefix, key...))
+	}, fn)
+}
+
+func (txn *pebbleReadTxn) Discard() {
+	_ = txn.Close() // always nil
 }

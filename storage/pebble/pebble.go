@@ -2,7 +2,7 @@ package pebble
 
 import (
 	"context"
-	"errors"
+	"io"
 
 	"github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
@@ -15,9 +15,8 @@ var _ basedb.Database = &PebbleDB{}
 
 // PebbleDB struct
 type PebbleDB struct {
+	*pebble.DB
 	logger *zap.Logger
-
-	db *pebble.DB
 }
 
 func NewPebbleDB(logger *zap.Logger, path string, opts *pebble.Options) (*PebbleDB, error) {
@@ -28,78 +27,33 @@ func NewPebbleDB(logger *zap.Logger, path string, opts *pebble.Options) (*Pebble
 	if err != nil {
 		return nil, err
 	}
-	pbdb.db = pdb
+	pbdb.DB = pdb
 	return pbdb, nil
 }
 
 func (pdb *PebbleDB) Close() error {
-	return pdb.db.Close()
+	return pdb.DB.Close()
 }
 
 func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
-	b, closer, err := pdb.db.Get(append(prefix, key...))
-	if errors.Is(err, pebble.ErrNotFound) {
-		return basedb.Obj{}, false, nil
-	}
-	if err != nil {
-		return basedb.Obj{}, true, err
-	}
-
-	// PebbleDB returned slice is valid until closer.Close() is called
-	// hence we copy
-	out := make([]byte, len(b))
-	copy(out, b)
-
-	if err := closer.Close(); err != nil {
-		return basedb.Obj{}, true, err
-	}
-
-	return basedb.Obj{Key: key, Value: out}, true, nil
+	return getter(key, func(key []byte) ([]byte, io.Closer, error) {
+		return pdb.DB.Get(append(prefix, key...))
+	})
 }
 
 func (pdb *PebbleDB) Set(prefix, key, value []byte) error {
-	return pdb.db.Set(append(prefix, key...), value, pebble.Sync)
+	return pdb.DB.Set(append(prefix, key...), value, pebble.Sync)
 }
 
 func (pdb *PebbleDB) Delete(prefix, key []byte) error {
-	return pdb.db.Delete(append(prefix, key...), pebble.Sync)
+	return pdb.DB.Delete(append(prefix, key...), pebble.Sync)
 }
 
-func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
-	for _, key := range keys {
+func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
+	return manyGetter(pdb.logger, keys, func(key []byte) ([]byte, io.Closer, error) {
 		fullKey := append(prefix, key...)
-		value, closer, err := pdb.db.Get(fullKey)
-		if err != nil {
-			// If the key isn't found, skip it.
-			if errors.Is(err, pebble.ErrNotFound) {
-				continue
-			}
-			return err
-		}
-
-		// Since the returned value is only valid until closer.Close(),
-		// we make a copy of it.
-		vcopy := make([]byte, len(value))
-		copy(vcopy, value)
-
-		// Close the closer to release resources.
-		if err := closer.Close(); err != nil {
-			return err
-		}
-
-		// Wrap the key/value in an object satisfying basedb.Obj.
-		obj := basedb.Obj{
-			Key:   key,
-			Value: vcopy,
-		}
-
-		// Call the iterator callback.
-		if err := iterator(obj); err != nil {
-			return err
-		}
-	}
-
-	return nil
+		return pdb.DB.Get(fullKey)
+	}, fn)
 }
 
 func makePrefixIter(dbOrBatch pebble.Reader, prefix []byte) (*pebble.Iterator, error) {
@@ -126,50 +80,19 @@ func makePrefixIter(dbOrBatch pebble.Reader, prefix []byte) (*pebble.Iterator, e
 }
 
 func (pdb *PebbleDB) GetAll(prefix []byte, fn func(int, basedb.Obj) error) (err error) {
-	iter, err := makePrefixIter(pdb.db, prefix)
+	iter, err := makePrefixIter(pdb.DB, prefix)
 	if err != nil {
 		return err
 	}
 
 	defer func() { _ = iter.Close() }()
 
-	i := 0
-	// SeekPrefixGE starts prefix iteration mode.
-	for iter.First(); iter.Valid(); iter.Next() {
-		// Even in prefix mode, verify the key begins with the prefix.
-		v, err := iter.ValueAndErr()
-		if err != nil {
-			continue
-		}
-		key := make([]byte, len(iter.Key())-len(prefix))
-		copy(key, iter.Key()[len(prefix):])
-
-		val := make([]byte, len(v))
-		copy(val, v)
-
-		err = fn(i, basedb.Obj{
-			Key:   key,
-			Value: val,
-		})
-
-		if err != nil {
-			return err
-		}
-
-		i++
-	}
-
-	return iter.Error()
+	return allGetter(pdb.logger, iter, prefix, fn)
 }
 
 func (pdb *PebbleDB) Begin() basedb.Txn {
-	txn := pdb.db.NewIndexedBatch()
-	return newPebbleTxn(txn, pdb)
-}
-
-func (pdb *PebbleDB) BeginRead() basedb.ReadTxn {
-	txn := pdb.db.NewIndexedBatch() // TODO: Read txn
-	return newPebbleTxn(txn, pdb)
+	txn := pdb.NewIndexedBatch()
+	return newPebbleTxn(pdb.logger, txn)
 }
 
 func (pdb *PebbleDB) Using(rw basedb.ReadWriter) basedb.ReadWriter {
@@ -187,7 +110,7 @@ func (pdb *PebbleDB) UsingReader(r basedb.Reader) basedb.Reader {
 }
 
 func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
-	iter, err := makePrefixIter(pdb.db, prefix)
+	iter, err := makePrefixIter(pdb.DB, prefix)
 	if err != nil {
 		return 0, err
 	}
@@ -207,8 +130,8 @@ func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
 }
 
 func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
-	batch := pdb.db.NewBatch()
-	iter, err := makePrefixIter(pdb.db, prefix)
+	batch := pdb.NewBatch()
+	iter, err := makePrefixIter(pdb.DB, prefix)
 	if err != nil {
 		return err
 	}
@@ -232,8 +155,8 @@ func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
 }
 
 func (pdb *PebbleDB) Update(fn func(basedb.Txn) error) error {
-	batch := pdb.db.NewIndexedBatch()
-	txn := newPebbleTxn(batch, pdb)
+	batch := pdb.NewIndexedBatch()
+	txn := newPebbleTxn(pdb.logger, batch)
 	if err := fn(txn); err != nil {
 		return err
 	}
@@ -241,8 +164,8 @@ func (pdb *PebbleDB) Update(fn func(basedb.Txn) error) error {
 }
 
 func (pdb *PebbleDB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
-	batch := pdb.db.NewBatch()
-	txn := newPebbleTxn(batch, pdb)
+	batch := pdb.NewBatch()
+	txn := newPebbleTxn(pdb.logger, batch)
 	if err := txn.SetMany(prefix, n, next); err != nil {
 		return err
 	}
@@ -250,12 +173,11 @@ func (pdb *PebbleDB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, e
 }
 
 func (pdb *PebbleDB) QuickGC(ctx context.Context) error {
-	// pebble db does not require periodic gc
-	return nil
+	return nil // pebble db does not require periodic gc
 }
 
 func (pdb *PebbleDB) FullGC(context.Context) error {
-	iter, err := pdb.db.NewIter(nil)
+	iter, err := pdb.NewIter(nil)
 	if err != nil {
 		return err
 	}
@@ -272,5 +194,9 @@ func (pdb *PebbleDB) FullGC(context.Context) error {
 		return err
 	}
 
-	return pdb.db.Compact(first, last, true)
+	return pdb.Compact(first, last, true)
+}
+
+func (pdb *PebbleDB) BeginRead() basedb.ReadTxn {
+	return &pebbleReadTxn{Snapshot: pdb.NewSnapshot(), logger: pdb.logger}
 }
