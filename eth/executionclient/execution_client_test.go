@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -697,6 +698,308 @@ func TestSimSSV(t *testing.T) {
 	block = <-logs
 	require.NotEmpty(t, block.Logs)
 	require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), block.Logs[0].Topics[0])
+}
+
+// TestFilterLogs tests the FilterLogs method of the client.
+func TestFilterLogs(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	t.Run("successfully filters logs", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+
+		// Deploy the contract
+		contract, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
+
+		// Create blocks with transactions
+		err = env.createBlocksWithLogs(contract, 5, 0)
+		require.NoError(t, err)
+
+		// Test the FilterLogs method
+		logs, err := env.client.FilterLogs(env.ctx, ethereum.FilterQuery{
+			Addresses: []ethcommon.Address{env.contractAddr},
+			FromBlock: big.NewInt(0),
+			ToBlock:   big.NewInt(6),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, logs)
+		require.Equal(t, 5, len(logs))
+
+		// Verify log details
+		for _, log := range logs {
+			require.Equal(t, env.contractAddr, log.Address)
+			require.Equal(t, ethcommon.HexToHash("0x81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b8"), log.Topics[0])
+		}
+	})
+
+	t.Run("error when FilterLogs fails", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client - connection should succeed initially
+		err = env.createClient(
+			WithLogger(logger),
+			WithConnectionTimeout(100*time.Millisecond),
+		)
+		require.NoError(t, err) // Connection is established initially
+
+		// Create a context with a very short timeout to ensure FilterLogs fails
+		timeoutCtx, cancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
+		defer cancel()
+
+		// FilterLogs should fail because of the short timeout
+		logs, err := env.client.FilterLogs(timeoutCtx, ethereum.FilterQuery{
+			Addresses: []ethcommon.Address{env.contractAddr},
+			FromBlock: big.NewInt(0),
+			ToBlock:   big.NewInt(1),
+		})
+		require.Error(t, err)
+		require.Empty(t, logs)
+	})
+}
+
+// TestSubscribeFilterLogs tests the SubscribeFilterLogs method of the client.
+func TestSubscribeFilterLogs(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	t.Run("successfully subscribes to filter logs", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 2*time.Second)
+
+		// Deploy the contract
+		contract, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
+
+		// Set up a channel to receive logs
+		logCh := make(chan ethtypes.Log)
+
+		// Subscribe to filter logs
+		query := ethereum.FilterQuery{
+			Addresses: []ethcommon.Address{env.contractAddr},
+		}
+		sub, err := env.client.SubscribeFilterLogs(env.ctx, query, logCh)
+		require.NoError(t, err)
+		require.NotNil(t, sub)
+
+		// Create a goroutine to collect logs
+		var receivedLogs []ethtypes.Log
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 3; i++ {
+				select {
+				case log := <-logCh:
+					receivedLogs = append(receivedLogs, log)
+				case err := <-sub.Err():
+					require.NoError(t, err)
+					return
+				case <-env.ctx.Done():
+					return
+				}
+			}
+		}()
+
+		// Create blocks with transactions
+		err = env.createBlocksWithLogs(contract, 3, 10*time.Millisecond)
+		require.NoError(t, err)
+
+		// Wait for logs to be received
+		wg.Wait()
+
+		// Verify logs were received
+		require.Equal(t, 3, len(receivedLogs))
+		for _, log := range receivedLogs {
+			require.Equal(t, env.contractAddr, log.Address)
+			require.Equal(t, ethcommon.HexToHash("0x81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b8"), log.Topics[0])
+		}
+
+		// Unsubscribe
+		sub.Unsubscribe()
+	})
+
+	t.Run("error when SubscribeFilterLogs fails", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client - connection should succeed initially
+		err = env.createClient(
+			WithLogger(logger),
+			WithConnectionTimeout(100*time.Millisecond),
+		)
+		require.NoError(t, err) // Connection is established initially
+
+		// Create a context with a very short timeout to ensure SubscribeFilterLogs fails
+		timeoutCtx, cancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
+		defer cancel()
+
+		// Set up a channel to receive logs
+		logCh := make(chan ethtypes.Log)
+
+		// Subscribe to filter logs - should fail because of the short timeout
+		query := ethereum.FilterQuery{
+			Addresses: []ethcommon.Address{env.contractAddr},
+		}
+		sub, err := env.client.SubscribeFilterLogs(timeoutCtx, query, logCh)
+		require.Error(t, err)
+		require.Nil(t, sub)
+	})
+}
+
+// TestBlockByNumber tests the BlockByNumber method of the client.
+func TestBlockByNumber(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	t.Run("successfully gets block by number", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+
+		// Deploy the contract
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
+
+		// Create some blocks
+		for i := 0; i < 5; i++ {
+			env.sim.Commit()
+		}
+
+		// Test the BlockByNumber method with specific block number
+		block, err := env.client.BlockByNumber(env.ctx, big.NewInt(2))
+		require.NoError(t, err)
+		require.NotNil(t, block)
+		require.Equal(t, uint64(2), block.NumberU64())
+
+		// Test the BlockByNumber method with nil (latest block)
+		latestBlock, err := env.client.BlockByNumber(env.ctx, nil)
+		require.NoError(t, err)
+		require.NotNil(t, latestBlock)
+		require.Equal(t, uint64(6), latestBlock.NumberU64()) // Genesis + 1 from deploy + 5 from loop
+	})
+
+	t.Run("error when BlockByNumber fails", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client - connection should succeed initially
+		err = env.createClient(
+			WithLogger(logger),
+			WithConnectionTimeout(100*time.Millisecond),
+		)
+		require.NoError(t, err) // Connection is established initially
+
+		// Create a context with a very short timeout to ensure BlockByNumber fails
+		timeoutCtx, cancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
+		defer cancel()
+
+		// BlockByNumber should fail because of the short timeout
+		block, err := env.client.BlockByNumber(timeoutCtx, big.NewInt(1))
+		require.Error(t, err)
+		require.Nil(t, block)
+	})
+}
+
+// TestHeaderByNumber tests the HeaderByNumber method of the client.
+func TestHeaderByNumber(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	t.Run("successfully gets header by number", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+
+		// Deploy the contract
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client and connect to the simulator
+		err = env.createClient(WithLogger(logger))
+		require.NoError(t, err)
+
+		// Create some blocks
+		for i := 0; i < 5; i++ {
+			env.sim.Commit()
+		}
+
+		// Test the HeaderByNumber method with specific block number
+		header, err := env.client.HeaderByNumber(env.ctx, big.NewInt(2))
+		require.NoError(t, err)
+		require.NotNil(t, header)
+		require.Equal(t, uint64(2), header.Number.Uint64())
+
+		// Test the HeaderByNumber method with nil (latest block)
+		latestHeader, err := env.client.HeaderByNumber(env.ctx, nil)
+		require.NoError(t, err)
+		require.NotNil(t, latestHeader)
+		require.Equal(t, uint64(6), latestHeader.Number.Uint64()) // Genesis + 1 from deploy + 5 from loop
+	})
+
+	t.Run("error when HeaderByNumber fails", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client - connection should succeed initially
+		err = env.createClient(
+			WithLogger(logger),
+			WithConnectionTimeout(100*time.Millisecond),
+		)
+		require.NoError(t, err) // Connection is established initially
+
+		// Create a context with a very short timeout to ensure HeaderByNumber fails
+		timeoutCtx, cancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
+		defer cancel()
+
+		// HeaderByNumber should fail because of the short timeout
+		header, err := env.client.HeaderByNumber(timeoutCtx, big.NewInt(1))
+		require.Error(t, err)
+		require.Nil(t, header)
+	})
+}
+
+// TestFilterer tests the Filterer method of the client.
+func TestFilterer(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	env := setupTestEnv(t, 1*time.Second)
+
+	// Deploy the contract
+	_, err := env.deployCallableContract()
+	require.NoError(t, err)
+
+	// Create a client and connect to the simulator
+	err = env.createClient(WithLogger(logger))
+	require.NoError(t, err)
+
+	// Test the Filterer method
+	filterer, err := env.client.Filterer()
+	require.NoError(t, err)
+	require.NotNil(t, filterer)
 }
 
 // TestSyncProgress tests the sync progress of the client.
