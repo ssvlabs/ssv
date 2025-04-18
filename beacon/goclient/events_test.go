@@ -79,6 +79,7 @@ func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 		Network:        beacon.NewNetwork(types.MainNetwork),
 	},
 		tests.MockDataStore{},
+		nil,
 		tests.MockSlotTickerProvider)
 
 	require.NoError(t, err)

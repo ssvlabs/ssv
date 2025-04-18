@@ -99,6 +99,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 			logger.Debug("validator registration duty sent",
 				zap.Uint64("slot", uint64(slot)),
 				zap.Uint64("validator_index", uint64(v.Share.ValidatorIndex)),
+				zap.String("validator_pubkey", pk.String()),
 				zap.String("validator_fee_recipient", hex.EncodeToString(recipient[:])))
 		}
 		return true

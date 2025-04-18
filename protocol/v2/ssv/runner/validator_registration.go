@@ -25,8 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/validator_registration.go -source=./validator_registration.go
-
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 

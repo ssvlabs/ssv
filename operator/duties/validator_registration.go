@@ -62,8 +62,8 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 				h.logger.Debug("validator registration duty sent",
 					zap.Uint64("slot", uint64(slot)),
-					zap.Uint64("validator_index", uint64(share.ValidatorIndex)))
-				zap.String("validator_pubkey", pk.String())
+					zap.Uint64("validator_index", uint64(share.ValidatorIndex)),
+					zap.String("validator_pubkey", pk.String()))
 			}
 
 		case <-h.indicesChange:

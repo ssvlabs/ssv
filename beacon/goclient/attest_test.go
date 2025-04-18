@@ -200,6 +200,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 				LongTimeout:    1 * time.Second,
 			},
 			operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
+			nil,
 			func() slotticker.SlotTicker {
 				return slotticker.New(zap.NewNop(), slotticker.Config{
 					SlotDuration: 12 * time.Second,
@@ -459,6 +460,7 @@ func createClient(
 			WithWeightedAttestationData: withWeightedAttestationData,
 		},
 		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
+		nil,
 		func() slotticker.SlotTicker {
 			return slotticker.New(zap.NewNop(), slotticker.Config{
 				SlotDuration: 12 * time.Second,

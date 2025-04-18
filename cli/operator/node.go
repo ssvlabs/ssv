@@ -175,6 +175,7 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
+		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
@@ -204,7 +205,12 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.Context = cmd.Context()
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
+		consensusClient := setupConsensusClient(
+			logger,
+			operatorDataStore,
+			validatorProvider,
+			slotTickerProvider,
+		)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -347,7 +353,7 @@ var StartNodeCmd = &cobra.Command{
 		metadataSyncer := metadata.NewSyncer(
 			logger,
 			nodeStorage.Shares(),
-			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+			validatorProvider,
 			networkConfig.Beacon,
 			consensusClient,
 			fixedSubnets,
@@ -360,7 +366,7 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
 				Network:            networkConfig,
 				BeaconNode:         consensusClient,
-				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+				ValidatorProvider:  validatorProvider,
 				SlotTickerProvider: slotTickerProvider,
 				Logger:             logger,
 			})
@@ -725,9 +731,10 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 func setupConsensusClient(
 	logger *zap.Logger,
 	operatorDataStore operatordatastore.OperatorDataStore,
+	validatorStore registrystorage.SelfValidatorStore,
 	slotTickerProvider slotticker.Provider,
 ) *goclient.GoClient {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, slotTickerProvider)
+	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, validatorStore, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))

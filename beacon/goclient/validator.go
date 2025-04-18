@@ -11,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/cespare/xxhash/v2"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -70,12 +69,8 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 	return nil
 }
 
-// registrationSubmitter periodically submits validator registrations in batches, 1 batch per slot
-// making sure
-//   - every new(fresh) validator registration is submitted at the earliest slot possible once
-//     GoClient is aware of it
-//   - every validator registration GoClient is aware of is submitted at least once during 1 epoch
-//     period
+// registrationSubmitter periodically submits validator registrations that are relevant for the near
+// future (in batches, 1 batch per slot, also making sure "new" registrations are submitted asap)
 func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
 	ticker := slotTickerProvider()
 	for {
@@ -84,11 +79,27 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 			return
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
+			currentEpoch := gc.network.EstimatedCurrentEpoch()
 			slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
 
-			// Select registrations to submit.
+			// Select registrations to submit, we'll submit only registrations relevant in the near
+			// future (targeting 10th epoch from now) to keep the amount of submissions small and
+			// not having to worry about pruning gc.registrations "cache" (since it might contain
+			// registrations for validators that are no longer operating)
 			gc.registrationMu.Lock()
-			allRegistrations := maps.Values(gc.registrations)
+			allRegistrations := make([]*validatorRegistration, 0)
+			shares := gc.validatorStore.SelfParticipatingValidators(currentEpoch + 10)
+			for _, share := range shares {
+				pk := phase0.BLSPubKey{}
+				copy(pk[:], share.ValidatorPubKey[:])
+				r, ok := gc.registrations[pk]
+				if !ok {
+					// we haven't constructed corresponding validator registration for submission yet,
+					// so just skip it for now
+					continue
+				}
+				allRegistrations = append(allRegistrations, r)
+			}
 			gc.registrationMu.Unlock()
 
 			registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
