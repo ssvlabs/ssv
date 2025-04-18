@@ -220,7 +220,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 						highestBlock = blockLogs.BlockNumber
 					}
 				}
-				// Emit empty block logCh to indicate that we have advanced to this block.
+				// Emit an empty BlockLogs to indicate progression to the next block.
 				if highestBlock < toBlock {
 					logCh <- BlockLogs{BlockNumber: toBlock}
 				}
