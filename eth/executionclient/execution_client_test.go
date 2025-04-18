@@ -2,6 +2,7 @@ package executionclient
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -31,15 +32,6 @@ var (
 	testAddr = crypto.PubkeyToAddress(testKey.PublicKey)
 )
 
-func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
-	return simulator.NewBackend(
-		ethtypes.GenesisAlloc{
-			testAddr: {Balance: big.NewInt(10000000000000000)},
-		},
-		simulated.WithBlockGasLimit(10000000),
-	)
-}
-
 /*
 Example contract to test event emission:
 
@@ -54,114 +46,252 @@ const callableBin = "6080604052348015600f57600080fd5b5060998061001e6000396000f3f
 
 const blocksWithLogsLength = 30
 
-func TestFetchHistoricalLogs(t *testing.T) {
-	logger := zaptest.NewLogger(t)
-	const testTimeout = 1 * time.Second
+func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
+	return simulator.NewBackend(
+		ethtypes.GenesisAlloc{
+			testAddr: {Balance: big.NewInt(10000000000000000)},
+		},
+		simulated.WithBlockGasLimit(10000000),
+	)
+}
+
+// testEnv is a helper struct to set up and manage test environment.
+type testEnv struct {
+	ctx          context.Context
+	t            *testing.T
+	sim          *simulator.Backend
+	rpcServer    *httptest.Server
+	wsURL        string
+	contractAddr ethcommon.Address
+	auth         *bind.TransactOpts
+	client       *ExecutionClient
+}
+
+// setupTestEnv creates a new test environment with simulators, contracts, and clients setup.
+func setupTestEnv(t *testing.T, testTimeout time.Duration) *testEnv {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	// Create simulator instance
 	sim := simTestBackend(testAddr)
+	t.Cleanup(func() { require.NoError(t, sim.Close()) })
 
-	// Create JSON-RPC handler
+	// Create JSON-RPC handler and setup WS server
 	rpcServer, _ := sim.Node().RPCHandler()
-	// Expose handler on a test server with ws open
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	defer rpcServer.Stop()
-	defer httpsrv.Close()
-	addr := httpToWebSocketURL(httpsrv.URL)
+	t.Cleanup(func() {
+		rpcServer.Stop()
+		httpsrv.Close()
+	})
+	wsURL := httpToWebSocketURL(httpsrv.URL)
 
-	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	// Setup auth for transactions
 	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim.Client())
-	if err != nil {
-		t.Errorf("deploying contract: %v", err)
-	}
-	sim.Commit()
 
-	// Create a client and connect to the simulator
-	const followDistance = 8
-	client, err := New(
-		ctx,
-		addr,
-		contractAddr,
-		WithLogger(logger),
-		WithFollowDistance(followDistance),
-		WithConnectionTimeout(2*time.Second),
-		WithReconnectionInitialInterval(2*time.Second),
+	return &testEnv{
+		ctx:       ctx,
+		t:         t,
+		sim:       sim,
+		rpcServer: httpsrv,
+		wsURL:     wsURL,
+		auth:      auth,
+	}
+}
+
+// deployCallableContract deploys the test contract for event testing.
+func (env *testEnv) deployCallableContract() (*bind.BoundContract, error) {
+	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	contractAddr, _, contract, err := bind.DeployContract(
+		env.auth,
+		parsed,
+		ethcommon.FromHex(callableBin),
+		env.sim.Client(),
 	)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, err
+	}
+	env.contractAddr = contractAddr
+	env.sim.Commit()
+	return contract, nil
+}
 
-	err = client.Healthy(ctx)
-	require.NoError(t, err)
+// createClient creates and validates a new execution client with given options.
+func (env *testEnv) createClient(options ...Option) error {
+	allOptions := append([]Option{}, options...)
+	var err error
+	env.client, err = New(env.ctx, env.wsURL, env.contractAddr, allOptions...)
+	if err != nil {
+		return err
+	}
+	env.t.Cleanup(func() { require.NoError(env.t, env.client.Close()) })
 
-	// Create blocks with transactions
-	for i := 0; i < blocksWithLogsLength; i++ {
-		_, err := contract.Transact(auth, "Call")
+	return env.client.Healthy(env.ctx)
+}
+
+// createBlocksWithLogs creates a specified number of blocks with Call transactions.
+func (env *testEnv) createBlocksWithLogs(contract *bind.BoundContract, count int, delay time.Duration) error {
+	for i := 0; i < count; i++ {
+		_, err := contract.Transact(env.auth, "Call")
 		if err != nil {
-			t.Errorf("transacting: %v", err)
+			return err
 		}
-		sim.Commit()
+		env.sim.Commit()
+		if delay > 0 {
+			time.Sleep(delay)
+		}
 	}
+	return nil
+}
 
-	// Fetch all logs history starting from block 0
-	var fetchedLogs []ethtypes.Log
-	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
-	for block := range logs {
-		fetchedLogs = append(fetchedLogs, block.Logs...)
-	}
-	require.NoError(t, err)
-	require.NotEmpty(t, fetchedLogs)
+// TestFetchHistoricalLogs tests the FetchHistoricalLogs function of the client.
+func TestFetchHistoricalLogs(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 
-	expectedSeenLogs := blocksWithLogsLength - followDistance
-	require.Equal(t, expectedSeenLogs, len(fetchedLogs))
+	t.Run("successfully fetches historical logs within follow distance", func(t *testing.T) {
+		t.Parallel()
 
-	select {
-	case err := <-fetchErrCh:
+		env := setupTestEnv(t, 1*time.Second)
+		contract, err := env.deployCallableContract()
 		require.NoError(t, err)
-	case <-ctx.Done():
-		require.Fail(t, "timeout")
-	}
 
-	require.NoError(t, client.Close())
-	require.NoError(t, sim.Close())
+		// Create a client and connect to the simulator
+		const followDistance = 8
+		err = env.createClient(
+			WithLogger(logger),
+			WithFollowDistance(followDistance),
+			WithConnectionTimeout(2*time.Second),
+			WithReconnectionInitialInterval(2*time.Second),
+		)
+		require.NoError(t, err)
+
+		// Create blocks with transactions
+		err = env.createBlocksWithLogs(contract, blocksWithLogsLength, 0)
+		require.NoError(t, err)
+
+		// Fetch all logs history starting from block 0
+		var fetchedLogs []ethtypes.Log
+		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0)
+		require.NoError(t, err)
+
+		for block := range logs {
+			fetchedLogs = append(fetchedLogs, block.Logs...)
+		}
+		require.NotEmpty(t, fetchedLogs)
+
+		expectedSeenLogs := blocksWithLogsLength - followDistance
+		require.Equal(t, expectedSeenLogs, len(fetchedLogs))
+
+		select {
+		case err := <-fetchErrCh:
+			require.NoError(t, err)
+		case <-env.ctx.Done():
+			require.Fail(t, "timeout")
+		}
+	})
+
+	t.Run("error when currentBlock < followDistance", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client with a large followDistance
+		const followDistance = 100 // Much larger than the current block number
+		err = env.createClient(
+			WithLogger(logger),
+			WithFollowDistance(followDistance),
+			WithConnectionTimeout(2*time.Second),
+			WithReconnectionInitialInterval(2*time.Second),
+		)
+		require.NoError(t, err)
+
+		// Fetch logs - should fail because the currentBlock < followDistance
+		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, 0)
+		require.ErrorIs(t, err, ErrNothingToSync)
+		require.Nil(t, logs)
+		require.Nil(t, fetchErrCh)
+	})
+
+	t.Run("error when toBlock < fromBlock", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		contract, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client
+		const followDistance = 8
+		err = env.createClient(
+			WithLogger(logger),
+			WithFollowDistance(followDistance),
+			WithConnectionTimeout(2*time.Second),
+			WithReconnectionInitialInterval(2*time.Second),
+		)
+		require.NoError(t, err)
+
+		// Create some blocks
+		err = env.createBlocksWithLogs(contract, 10, 0)
+		require.NoError(t, err)
+
+		// Fetch logs with fromBlock > toBlock
+		currentBlock, err := env.client.client.BlockNumber(env.ctx)
+		require.NoError(t, err)
+
+		// Set fromBlock to a value greater than the currentBlock - followDistance
+		fromBlock := currentBlock - followDistance + 10
+
+		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(env.ctx, fromBlock)
+		require.ErrorIs(t, err, ErrNothingToSync)
+		require.Nil(t, logs)
+		require.Nil(t, fetchErrCh)
+	})
+
+	t.Run("error when BlockNumber fails", func(t *testing.T) {
+		t.Parallel()
+
+		env := setupTestEnv(t, 1*time.Second)
+		_, err := env.deployCallableContract()
+		require.NoError(t, err)
+
+		// Create a client - connection should succeed initially
+		err = env.createClient(
+			WithLogger(logger),
+			WithFollowDistance(8),
+			WithConnectionTimeout(100*time.Millisecond),
+			WithReconnectionInitialInterval(100*time.Millisecond),
+		)
+		require.NoError(t, err) // Connection is established initially
+
+		// Create a context with a very short timeout to ensure BlockNumber fails
+		blockNumCtx, blockNumCancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
+		defer blockNumCancel()
+
+		// Fetch logs - should fail because BlockNumber returns an error
+		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(blockNumCtx, 0)
+		require.Error(t, err)
+		require.Nil(t, logs)
+		require.Nil(t, fetchErrCh)
+		require.ErrorContains(t, err, "failed to get current block")
+	})
 }
 
 func TestStreamLogs(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	const testTimeout = 2 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
 
-	// Create sim instance with a delay between block execution
-	delay := time.Millisecond * 10
-	sim := simTestBackend(testAddr)
-
-	rpcServer, _ := sim.Node().RPCHandler()
-	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	defer rpcServer.Stop()
-	defer httpsrv.Close()
-	addr := httpToWebSocketURL(httpsrv.URL)
+	env := setupTestEnv(t, 2*time.Second)
 
 	// Deploy the contract
-	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
-	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim.Client())
-	if err != nil {
-		t.Errorf("deploying contract: %v", err)
-	}
-	sim.Commit()
+	contract, err := env.deployCallableContract()
+	require.NoError(t, err)
 
 	// Create a client and connect to the simulator
 	const followDistance = 2
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance))
 	require.NoError(t, err)
 
-	err = client.Healthy(ctx)
-	require.NoError(t, err)
-
-	logs := client.StreamLogs(ctx, 0)
+	logs := env.client.StreamLogs(env.ctx, 0)
 	var streamedLogs []ethtypes.Log
 	var streamedLogsCount atomic.Int64
 	go func() {
@@ -173,21 +303,16 @@ func TestStreamLogs(t *testing.T) {
 	}()
 
 	// Create blocks with transactions
-	for i := 0; i < blocksWithLogsLength; i++ {
-		_, err := contract.Transact(auth, "Call")
-		if err != nil {
-			t.Errorf("transacting: %v", err)
-		}
-		sim.Commit()
-		time.Sleep(delay)
-	}
+	delay := time.Millisecond * 10
+	err = env.createBlocksWithLogs(contract, blocksWithLogsLength, delay)
+	require.NoError(t, err)
 
 	// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
 Wait1:
 	for {
 		select {
-		case <-ctx.Done():
-			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", ctx.Err(), streamedLogsCount.Load())
+		case <-env.ctx.Done():
+			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", env.ctx.Err(), streamedLogsCount.Load())
 		case <-time.After(time.Millisecond * 5):
 			if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
 				break Wait1
@@ -198,15 +323,15 @@ Wait1:
 	// Create empty blocks with no transactions to advance the chain
 	// followDistance blocks ahead.
 	for i := 0; i < followDistance; i++ {
-		sim.Commit()
+		env.sim.Commit()
 		time.Sleep(delay)
 	}
 	// Wait for streamed logs to advance accordingly.
 Wait2:
 	for {
 		select {
-		case <-ctx.Done():
-			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", ctx.Err(), streamedLogsCount.Load())
+		case <-env.ctx.Done():
+			require.Failf(t, "timed out", "err: %v, streamedLogsCount: %d", env.ctx.Err(), streamedLogsCount.Load())
 		case <-time.After(time.Millisecond * 5):
 			if streamedLogsCount.Load() == int64(blocksWithLogsLength) {
 				break Wait2
@@ -215,55 +340,32 @@ Wait2:
 	}
 	require.NotEmpty(t, streamedLogs)
 	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
-
-	require.NoError(t, client.Close())
-	require.NoError(t, sim.Close())
 }
 
+// TestFetchLogsInBatches tests the fetchLogsInBatches function of the client.
 func TestFetchLogsInBatches(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	const testTimeout = 1 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
-
-	// Create simulator instance
-	sim := simTestBackend(testAddr)
-
-	rpcServer, _ := sim.Node().RPCHandler()
-	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	defer rpcServer.Stop()
-	defer httpsrv.Close()
-	addr := httpToWebSocketURL(httpsrv.URL)
+	env := setupTestEnv(t, 1*time.Second)
 
 	// Deploy the contract
-	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
-	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim.Client())
-	if err != nil {
-		t.Errorf("deploying contract: %v", err)
-	}
-	sim.Commit()
+	contract, err := env.deployCallableContract()
+	require.NoError(t, err)
 
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithLogBatchSize(2))
+	err = env.createClient(WithLogger(logger), WithLogBatchSize(2))
 	require.NoError(t, err)
 
 	// Create blocks with transactions
-	for i := 0; i < blocksWithLogsLength; i++ {
-		_, err := contract.Transact(auth, "Call")
-		if err != nil {
-			t.Errorf("transacting: %v", err)
-		}
-		sim.Commit()
-	}
+	err = env.createBlocksWithLogs(contract, blocksWithLogsLength, 0)
+	require.NoError(t, err)
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
-		logChan, errChan := client.fetchLogsInBatches(ctx, 10, 5)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5)
 		select {
 		case <-logChan:
 			require.Fail(t, "Should not receive log when startBlock > endBlock")
 		case err := <-errChan:
 			require.ErrorIs(t, err, ErrBadInput)
-		case <-ctx.Done():
+		case <-env.ctx.Done():
 			require.Fail(t, "fetchLogsInBatches did not return in time when startBlock > endBlock")
 		}
 	})
@@ -271,13 +373,13 @@ func TestFetchLogsInBatches(t *testing.T) {
 	t.Run("startBlock is same as endBlock", func(t *testing.T) {
 		var blockNumbers []uint64
 
-		logChan, errChan := client.fetchLogsInBatches(ctx, 5, 5)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 5, 5)
 		select {
 		case block := <-logChan:
 			blockNumbers = append(blockNumbers, block.BlockNumber)
 		case err := <-errChan:
 			t.Fatalf("fetchLogsInBatches failed: %v", err)
-		case <-ctx.Done():
+		case <-env.ctx.Done():
 			require.Fail(t, "fetchLogsInBatches did not return in time when fromBlock == toBlock")
 		}
 
@@ -287,7 +389,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	t.Run("startBlock is less than endBlock", func(t *testing.T) {
 		var blockNumbers []uint64
 
-		logChan, errChan := client.fetchLogsInBatches(ctx, 3, 11)
+		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 3, 11)
 		for block := range logChan {
 			blockNumbers = append(blockNumbers, block.BlockNumber)
 		}
@@ -301,10 +403,10 @@ func TestFetchLogsInBatches(t *testing.T) {
 	})
 
 	t.Run("context is canceled", func(t *testing.T) {
-		canceledCtx, cancel := context.WithCancel(ctx)
+		canceledCtx, cancel := context.WithCancel(env.ctx)
 		cancel()
 
-		logChan, errChan := client.fetchLogsInBatches(canceledCtx, 0, 5)
+		logChan, errChan := env.client.fetchLogsInBatches(canceledCtx, 0, 5)
 		select {
 		case <-logChan:
 			require.Fail(t, "Should not receive log when context is canceled")
@@ -313,9 +415,6 @@ func TestFetchLogsInBatches(t *testing.T) {
 		case <-canceledCtx.Done():
 		}
 	})
-
-	require.NoError(t, client.Close())
-	require.NoError(t, sim.Close())
 }
 
 // TestChainReorganizationLogs check that the client receives removed logs correctly.
@@ -419,57 +518,56 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// require.NoError(t, sim.Close())
 }
 
-// TestSimSSV deploys the simplified SSVNetwork contract to generate events and receive at the client
+// deploySimContract deploys the SSV simulator contract.
+func (env *testEnv) deploySimContract() (*simcontract.Simcontract, error) {
+	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
+	contractAddr, _, _, err := bind.DeployContract(
+		env.auth,
+		parsed,
+		ethcommon.FromHex(simcontract.SimcontractMetaData.Bin),
+		env.sim.Client(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	env.contractAddr = contractAddr
+	env.sim.Commit()
+
+	// Verify contract code exists
+	contractCode, err := env.sim.Client().CodeAt(env.ctx, contractAddr, nil)
+	if err != nil {
+		return nil, err
+	}
+	if len(contractCode) == 0 {
+		return nil, fmt.Errorf("empty contract code")
+	}
+
+	// Return the bound contract
+	return simcontract.NewSimcontract(contractAddr, env.sim.Client())
+}
+
+// TestSimSSV deploys the simplified SSVNetwork contract to generate events and receive at the client.
 func TestSimSSV(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	const testTimeout = 1 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
 
-	// Create simulator instance
-	sim := simTestBackend(testAddr)
+	env := setupTestEnv(t, 1*time.Second)
 
-	// Create JSON-RPC handler
-	rpcServer, _ := sim.Node().RPCHandler()
-	// Expose handler on a test server with ws open
-	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	defer rpcServer.Stop()
-	defer httpsrv.Close()
-	addr := httpToWebSocketURL(httpsrv.URL)
-
-	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
-	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim.Client())
-	if err != nil {
-		t.Errorf("deploying contract: %v", err)
-	}
-	sim.Commit()
-
-	// Check contract code at the simulated blockchain
-	contractCode, err := sim.Client().CodeAt(ctx, contractAddr, nil)
-	if err != nil {
-		t.Errorf("getting contract code: %v", err)
-	}
-	require.NotEmpty(t, contractCode)
+	// Deploy the SSV contract
+	boundContract, err := env.deploySimContract()
+	require.NoError(t, err)
 
 	// Create a client and connect to the simulator
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(0))
+	err = env.createClient(WithLogger(logger), WithFollowDistance(0))
 	require.NoError(t, err)
 
-	err = client.Healthy(ctx)
-	require.NoError(t, err)
-
-	logs := client.StreamLogs(ctx, 0)
-
-	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
-	require.NoError(t, err)
+	logs := env.client.StreamLogs(env.ctx, 0)
 
 	// Emit event OperatorAdded
-	tx, err := boundContract.RegisterOperator(auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
+	tx, err := boundContract.RegisterOperator(env.auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
 	require.NoError(t, err)
-	sim.Commit()
-	receipt, err := sim.Client().TransactionReceipt(ctx, tx.Hash())
+	env.sim.Commit()
+	receipt, err := env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
 	if err != nil {
 		t.Errorf("get receipt: %v", err)
 	}
@@ -479,10 +577,10 @@ func TestSimSSV(t *testing.T) {
 	require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
 	// Emit event OperatorRemoved
-	tx, err = boundContract.RemoveOperator(auth, 1)
+	tx, err = boundContract.RemoveOperator(env.auth, 1)
 	require.NoError(t, err)
-	sim.Commit()
-	receipt, err = sim.Client().TransactionReceipt(ctx, tx.Hash())
+	env.sim.Commit()
+	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
 	if err != nil {
 		t.Errorf("get receipt: %v", err)
 	}
@@ -493,7 +591,7 @@ func TestSimSSV(t *testing.T) {
 
 	// Emit event ValidatorAdded
 	tx, err = boundContract.RegisterValidator(
-		auth, ethcommon.Hex2Bytes("0x1"),
+		env.auth, ethcommon.Hex2Bytes("0x1"),
 		[]uint64{1, 2, 3},
 		ethcommon.Hex2Bytes("0x2"),
 		big.NewInt(100_000_000),
@@ -505,8 +603,8 @@ func TestSimSSV(t *testing.T) {
 			Balance:         big.NewInt(100_000_000),
 		})
 	require.NoError(t, err)
-	sim.Commit()
-	receipt, err = sim.Client().TransactionReceipt(ctx, tx.Hash())
+	env.sim.Commit()
+	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
 	if err != nil {
 		t.Errorf("get receipt: %v", err)
 	}
@@ -517,7 +615,7 @@ func TestSimSSV(t *testing.T) {
 
 	// Emit event ValidatorRemoved
 	tx, err = boundContract.RemoveValidator(
-		auth,
+		env.auth,
 		ethcommon.Hex2Bytes("0x1"),
 		[]uint64{1, 2, 3},
 		simcontract.CallableCluster{
@@ -528,8 +626,8 @@ func TestSimSSV(t *testing.T) {
 			Balance:         big.NewInt(100_000_000),
 		})
 	require.NoError(t, err)
-	sim.Commit()
-	receipt, err = sim.Client().TransactionReceipt(ctx, tx.Hash())
+	env.sim.Commit()
+	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
 	if err != nil {
 		t.Errorf("get receipt: %v", err)
 	}
@@ -540,7 +638,7 @@ func TestSimSSV(t *testing.T) {
 
 	// Emit event ClusterLiquidated
 	tx, err = boundContract.Liquidate(
-		auth,
+		env.auth,
 		ethcommon.HexToAddress("0x1"),
 		[]uint64{1, 2, 3},
 		simcontract.CallableCluster{
@@ -551,8 +649,8 @@ func TestSimSSV(t *testing.T) {
 			Balance:         big.NewInt(100_000_000),
 		})
 	require.NoError(t, err)
-	sim.Commit()
-	receipt, err = sim.Client().TransactionReceipt(ctx, tx.Hash())
+	env.sim.Commit()
+	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
 	if err != nil {
 		t.Errorf("get receipt: %v", err)
 	}
@@ -563,7 +661,7 @@ func TestSimSSV(t *testing.T) {
 
 	// Emit event ClusterReactivated
 	tx, err = boundContract.Reactivate(
-		auth,
+		env.auth,
 		[]uint64{1, 2, 3},
 		big.NewInt(100_000_000),
 		simcontract.CallableCluster{
@@ -574,8 +672,8 @@ func TestSimSSV(t *testing.T) {
 			Balance:         big.NewInt(100_000_000),
 		})
 	require.NoError(t, err)
-	sim.Commit()
-	receipt, err = sim.Client().TransactionReceipt(ctx, tx.Hash())
+	env.sim.Commit()
+	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
 	if err != nil {
 		t.Errorf("get receipt: %v", err)
 	}
@@ -586,12 +684,12 @@ func TestSimSSV(t *testing.T) {
 
 	// Emit event FeeRecipientAddressUpdated
 	tx, err = boundContract.SetFeeRecipientAddress(
-		auth,
+		env.auth,
 		ethcommon.HexToAddress("0x1"),
 	)
 	require.NoError(t, err)
-	sim.Commit()
-	receipt, err = sim.Client().TransactionReceipt(ctx, tx.Hash())
+	env.sim.Commit()
+	receipt, err = env.sim.Client().TransactionReceipt(env.ctx, tx.Hash())
 	if err != nil {
 		t.Errorf("get receipt: %v", err)
 	}
@@ -599,62 +697,43 @@ func TestSimSSV(t *testing.T) {
 	block = <-logs
 	require.NotEmpty(t, block.Logs)
 	require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), block.Logs[0].Topics[0])
-
-	require.NoError(t, client.Close())
-	require.NoError(t, sim.Close())
 }
 
+// TestSyncProgress tests the sync progress of the client.
 func TestSyncProgress(t *testing.T) {
-	const testTimeout = 1 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
+	env := setupTestEnv(t, 1*time.Second)
 
-	// Create simulator instance
-	sim := simTestBackend(testAddr)
-
-	// Create JSON-RPC handler
-	rpcServer, _ := sim.Node().RPCHandler()
-	// Expose handler on a test server with ws open
-	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	defer rpcServer.Stop()
-	defer httpsrv.Close()
-	addr := httpToWebSocketURL(httpsrv.URL)
-
-	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
-	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim.Client())
-	if err != nil {
-		t.Errorf("deploying contract: %v", err)
-	}
-	sim.Commit()
-
-	// Check contract code at the simulated blockchain
-	contractCode, err := sim.Client().CodeAt(ctx, contractAddr, nil)
-	if err != nil {
-		t.Errorf("getting contract code: %v", err)
-	}
-	require.NotEmpty(t, contractCode)
-
-	// Create a client and connect to the simulator
-	client, err := New(ctx, addr, contractAddr, WithHealthInvalidationInterval(0))
+	// Deploy the contract
+	_, err := env.deploySimContract()
 	require.NoError(t, err)
 
-	err = client.Healthy(ctx)
+	// Create a client and connect to the simulator
+	err = env.createClient(WithHealthInvalidationInterval(0))
+	require.NoError(t, err)
+
+	err = env.client.Healthy(env.ctx)
 	require.NoError(t, err)
 
 	t.Run("out of sync", func(t *testing.T) {
-		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
+		env.client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
 			p.CurrentBlock = 5
 			p.HighestBlock = 6
 			return p, nil
 		}
-		err = client.Healthy(ctx)
+		err = env.client.Healthy(env.ctx)
 		require.ErrorIs(t, err, errSyncing)
 	})
+
 	t.Run("within tolerable limits", func(t *testing.T) {
-		client, err := New(ctx, addr, contractAddr, WithSyncDistanceTolerance(2))
+		client, err := New(
+			env.ctx,
+			env.wsURL,
+			env.contractAddr,
+			WithSyncDistanceTolerance(2),
+		)
 		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, client.Close()) })
 
 		client.syncProgressFn = func(context.Context) (*ethereum.SyncProgress, error) {
 			p := new(ethereum.SyncProgress)
@@ -662,11 +741,12 @@ func TestSyncProgress(t *testing.T) {
 			p.HighestBlock = 7
 			return p, nil
 		}
-		err = client.Healthy(ctx)
+		err = client.Healthy(env.ctx)
 		require.NoError(t, err)
 	})
 }
 
+// httpToWebSocketURL converts an HTTP URL to a WebSocket URL.
 func httpToWebSocketURL(url string) string {
 	return "ws:" + strings.TrimPrefix(url, "http:")
 }
