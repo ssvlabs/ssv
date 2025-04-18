@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"testing"
@@ -25,8 +26,8 @@ import (
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
-	"golang.org/x/exp/maps"
 
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -60,7 +61,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	dutyStore := dutystore.New()
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
 
-	committee := maps.Keys(ks.Shares)
+	committee := slices.Collect(maps.Keys(ks.Shares))
 	slices.Sort(committee)
 
 	committeeID := shares.active.CommitteeID()
@@ -627,9 +628,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
 		currentSlot := &utils.SlotValue{}
-		mockNetworkConfig := networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, currentSlot),
-		}
+		mockNetworkConfig := networkconfig.NetworkConfig{}
+		mockNetworkConfig.Beacon = utils.SetupMockBeaconNetwork(t, currentSlot)
 
 		const epoch = 1
 		currentSlot.SetSlot(netCfg.Beacon.FirstSlotAtEpoch(epoch))
@@ -662,9 +662,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
 		currentSlot := &utils.SlotValue{}
-		mockNetworkConfig := networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, currentSlot),
-		}
+		mockNetworkConfig := networkconfig.NetworkConfig{}
+		mockNetworkConfig.Beacon = utils.SetupMockBeaconNetwork(t, currentSlot)
 
 		const epoch = 1
 		currentSlot.SetSlot(mockNetworkConfig.Beacon.FirstSlotAtEpoch(epoch))
@@ -1812,12 +1811,14 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, inactiveShare))
 
 	slot := netCfg.Beacon.EstimatedCurrentSlot()
-	epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
+	activationEpoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
+	exitEpoch := goclient.FarFutureEpoch
 
 	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
 		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
-		ActivationEpoch: epoch,
+		ActivationEpoch: activationEpoch,
+		ExitEpoch:       exitEpoch,
 		Liquidated:      false,
 	}
 
@@ -1830,7 +1831,8 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	nonUpdatedMetadataNextEpochShare := &ssvtypes.SSVShare{
 		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:          eth2apiv1.ValidatorStatePendingQueued,
-		ActivationEpoch: epoch + 1,
+		ActivationEpoch: activationEpoch + 1,
+		ExitEpoch:       exitEpoch,
 		Liquidated:      false,
 	}
 

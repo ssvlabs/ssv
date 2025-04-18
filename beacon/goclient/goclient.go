@@ -112,10 +112,6 @@ type MultiClient interface {
 	eth2client.ValidatorLivenessProvider
 }
 
-type operatorDataStore interface {
-	AwaitOperatorID() spectypes.OperatorID
-}
-
 type validatorStore interface {
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 }
@@ -138,8 +134,7 @@ type GoClient struct {
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
-	operatorDataStore operatorDataStore
-	validatorStore    validatorStore
+	validatorStore validatorStore
 
 	// registrationMu synchronises access to registrations
 	registrationMu sync.Mutex
@@ -191,8 +186,7 @@ type GoClient struct {
 // New init new client and go-client instance
 func New(
 	logger *zap.Logger,
-	opt beaconprotocol.Options,
-	operatorDataStore operatorDataStore,
+	opt Options,
 	validatorStore validatorStore,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
@@ -212,7 +206,6 @@ func New(
 		ctx:                   opt.Context,
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
-		operatorDataStore:     operatorDataStore,
 		validatorStore:        validatorStore,
 		registrations:         map[phase0.BLSPubKey]*validatorRegistration{},
 		attestationDataCache: ttlcache.New(

@@ -3,12 +3,12 @@ package storage
 import (
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -149,7 +149,7 @@ func (c *validatorStore) Committees() []*Committee {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return maps.Values(c.byCommitteeID)
+	return slices.Collect(maps.Values(c.byCommitteeID))
 }
 
 func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committee {

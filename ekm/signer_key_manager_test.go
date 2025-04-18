@@ -48,10 +48,9 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManag
 	require.NoError(t, err)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{
-			Beacon:     utils.SetupMockBeaconNetwork(t, nil),
-			DomainType: networkconfig.TestNetwork.DomainType,
-		}
+		network = &networkconfig.NetworkConfig{}
+		network.Beacon = utils.SetupMockBeaconNetwork(t, nil)
+		network.DomainType = networkconfig.TestNetwork.DomainType
 	}
 
 	km, err := NewETHKeyManagerSigner(logger, db, *network, "")
