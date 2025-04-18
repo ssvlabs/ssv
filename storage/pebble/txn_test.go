@@ -12,10 +12,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// Pebble DB txn requires its own set of tests because it has a different behaviour:
-// - it doesn't support concurrent transactions
-// - it doesn't support committing a transaction after it's been discarded
-
 func TestPebbleTxn_Commit(t *testing.T) {
 	db := newTestPebbleDB(t)
 	txn := db.Begin()
