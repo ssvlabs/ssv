@@ -95,13 +95,16 @@ func testingDiscovery(t *testing.T) *DiscV5Service {
 func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
 	n := networkconfig.HoleskyStage
 	return networkconfig.NetworkConfig{
-		Name:                 n.Name,
-		Beacon:               n.Beacon,
-		DomainType:           n.DomainType,
-		GenesisEpoch:         n.GenesisEpoch,
-		RegistrySyncOffset:   n.RegistrySyncOffset,
-		RegistryContractAddr: n.RegistryContractAddr,
-		Bootnodes:            n.Bootnodes,
+		Name: n.Name,
+		BeaconConfig: networkconfig.BeaconConfig{
+			Beacon: n.Beacon,
+		},
+		SSVConfig: networkconfig.SSVConfig{
+			DomainType:           n.DomainType,
+			RegistrySyncOffset:   n.RegistrySyncOffset,
+			RegistryContractAddr: n.RegistryContractAddr,
+			Bootnodes:            n.Bootnodes,
+		},
 	}
 }
 

@@ -12,14 +12,12 @@ import (
 	"github.com/ssvlabs/ssv/api"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
-	"github.com/ssvlabs/ssv/networkconfig"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type Exporter struct {
-	NetworkConfig     networkconfig.NetworkConfig
 	ParticipantStores *ibftstorage.ParticipantStores
 	TraceStore        DutyTraceStore
 	Validators        registrystorage.ValidatorStore
