@@ -67,12 +67,7 @@ func (pdb *PebbleDB) Delete(prefix, key []byte) error {
 
 func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
 	for _, key := range keys {
-		// Create a new slice for the full key (prefix + key)
-		fullKey := make([]byte, len(prefix)+len(key))
-		copy(fullKey, prefix)
-		copy(fullKey[len(prefix):], key)
-
-		// Retrieve the value from Pebble.
+		fullKey := append(prefix, key...)
 		value, closer, err := pdb.db.Get(fullKey)
 		if err != nil {
 			// If the key isn't found, skip it.
@@ -103,6 +98,7 @@ func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -129,11 +125,13 @@ func makePrefixIter(dbOrBatch pebble.Reader, prefix []byte) (*pebble.Iterator, e
 	return dbOrBatch.NewIter(prefixIterOptions(prefix))
 }
 
-func (pdb *PebbleDB) GetAll(prefix []byte, iterator func(int, basedb.Obj) error) error {
+func (pdb *PebbleDB) GetAll(prefix []byte, fn func(int, basedb.Obj) error) (err error) {
 	iter, err := makePrefixIter(pdb.db, prefix)
 	if err != nil {
 		return err
 	}
+
+	defer func() { _ = iter.Close() }()
 
 	i := 0
 	// SeekPrefixGE starts prefix iteration mode.
@@ -143,17 +141,25 @@ func (pdb *PebbleDB) GetAll(prefix []byte, iterator func(int, basedb.Obj) error)
 		if err != nil {
 			continue
 		}
-		err = iterator(i, basedb.Obj{
-			Key:   iter.Key()[len(prefix):],
-			Value: v,
+		key := make([]byte, len(iter.Key())-len(prefix))
+		copy(key, iter.Key()[len(prefix):])
+
+		val := make([]byte, len(v))
+		copy(val, v)
+
+		err = fn(i, basedb.Obj{
+			Key:   key,
+			Value: val,
 		})
+
 		if err != nil {
 			return err
 		}
+
 		i++
 	}
 
-	return iter.Close()
+	return iter.Error()
 }
 
 func (pdb *PebbleDB) Begin() basedb.Txn {
@@ -186,12 +192,14 @@ func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
 		return 0, err
 	}
 
+	defer func() { _ = iter.Close() }()
+
 	count := int64(0)
 	for iter.First(); iter.Valid(); iter.Next() {
 		count++
 	}
 
-	if err := iter.Close(); err != nil {
+	if err := iter.Error(); err != nil {
 		return 0, err
 	}
 
@@ -205,14 +213,18 @@ func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
 		return err
 	}
 
+	defer func() {
+		_ = iter.Close()
+		_ = batch.Close() // never returns an error
+	}()
+
 	for iter.First(); iter.Valid(); iter.Next() {
 		if err := batch.Delete(iter.Key(), nil); err != nil {
 			return err
 		}
 	}
 
-	if err := iter.Close(); err != nil {
-		_ = batch.Close() // never returns an error
+	if err := iter.Error(); err != nil {
 		return err
 	}
 

@@ -46,25 +46,27 @@ func (t *pebbleTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, er
 
 func (t *pebbleTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	value, closer, err := t.batch.Get(append(prefix, key...))
+	if errors.Is(err, pebble.ErrNotFound) {
+		return basedb.Obj{}, false, nil
+	}
 	if err != nil {
-		if errors.Is(err, pebble.ErrNotFound) {
-			return basedb.Obj{}, false, nil
-		}
 		return basedb.Obj{}, true, err
 	}
 
 	valCopy := make([]byte, len(value))
 	copy(valCopy, value)
+
 	if err := closer.Close(); err != nil {
 		return basedb.Obj{}, true, err
 	}
+
 	return basedb.Obj{
 		Key:   key,
 		Value: valCopy,
 	}, true, nil
 }
 
-func (t *pebbleTxn) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
+func (t *pebbleTxn) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
 	for _, key := range keys {
 		fullKey := append(prefix, key...)
 		value, closer, err := t.batch.Get(fullKey)
@@ -77,17 +79,21 @@ func (t *pebbleTxn) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.O
 
 		valCopy := make([]byte, len(value))
 		copy(valCopy, value)
+
 		if err := closer.Close(); err != nil {
 			return err
 		}
+
 		obj := basedb.Obj{
 			Key:   key,
 			Value: valCopy,
 		}
-		if err := iterator(obj); err != nil {
+
+		if err := fn(obj); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -97,7 +103,7 @@ func (t *pebbleTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error 
 		return err
 	}
 
-	defer func() { _ = iter.Close() }() // returns the same 'accumulated' error as iter.Error()
+	defer func() { _ = iter.Close() }()
 
 	i := 0
 	// SeekPrefixGE starts prefix iteration mode.
@@ -106,7 +112,6 @@ func (t *pebbleTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error 
 		if err != nil {
 			continue
 		}
-		i++ // TODO: should we index including failed keys?
 
 		key := make([]byte, len(iter.Key())-len(prefix))
 		copy(key, iter.Key()[len(prefix):])
@@ -118,9 +123,12 @@ func (t *pebbleTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error 
 			Key:   key,
 			Value: val,
 		})
+
 		if err != nil {
 			return err
 		}
+
+		i++
 	}
 
 	return iter.Error()

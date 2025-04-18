@@ -136,6 +136,23 @@ func TestPebbleDB_GetAll(t *testing.T) {
 	assert.Equal(t, len(testData), count)
 }
 
+func TestPebbleDB_GetAll_Error(t *testing.T) {
+	db := setupTestDB(t)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	prefix := []byte("test-prefix")
+	err := db.Set(prefix, []byte("key1"), []byte("value1"))
+	require.NoError(t, err)
+
+	err = db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		return errors.New("test error")
+	})
+
+	require.Error(t, err)
+}
+
 func TestPebbleDB_Txn(t *testing.T) {
 	db := setupTestDB(t)
 
