@@ -393,7 +393,6 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		Scoring: &topics.ScoringConfig{
 			IPWhitelist:        nil,
 			IPColocationWeight: 0,
-			OneEpochDuration:   time.Minute,
 		},
 		MsgValidator:           msgValidator,
 		ScoreInspector:         scoreInspector,

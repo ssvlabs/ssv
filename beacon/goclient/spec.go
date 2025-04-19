@@ -14,8 +14,14 @@ import (
 )
 
 const (
-	DefaultSlotDuration  = 12 * time.Second
-	DefaultSlotsPerEpoch = phase0.Slot(32)
+	DefaultSlotDuration                         = 12 * time.Second
+	DefaultSlotsPerEpoch                        = phase0.Slot(32)
+	DefaultEpochsPerSyncCommitteePeriod         = phase0.Epoch(256)
+	DefaultSyncCommitteeSize                    = uint64(512)
+	DefaultSyncCommitteeSubnetCount             = uint64(4)
+	DefaultTargetAggregatorsPerSyncSubcommittee = uint64(16)
+	DefaultTargetAggregatorsPerCommittee        = uint64(16)
+	DefaultIntervalsPerSlot                     = uint64(3)
 )
 
 // BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
@@ -74,6 +80,66 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		}
 	}
 
+	epochsPerSyncCommitteePeriod := DefaultEpochsPerSyncCommitteePeriod
+	if epochsPerSyncCommitteePeriodRaw, ok := specResponse.Data["EPOCHS_PER_SYNC_COMMITTEE_PERIOD"]; ok {
+		if epochsPerSyncCommitteePeriodDecoded, ok := epochsPerSyncCommitteePeriodRaw.(uint64); ok {
+			epochsPerSyncCommitteePeriod = phase0.Epoch(epochsPerSyncCommitteePeriodDecoded)
+		} else {
+			gc.log.Warn("epochs per sync committee not known by chain, using default value",
+				zap.Any("value", epochsPerSyncCommitteePeriod))
+		}
+	}
+
+	syncCommitteeSize := DefaultSyncCommitteeSize
+	if syncCommitteeSizeRaw, ok := specResponse.Data["SYNC_COMMITTEE_SIZE"]; ok {
+		if syncCommitteeSizeDecoded, ok := syncCommitteeSizeRaw.(uint64); ok {
+			syncCommitteeSize = syncCommitteeSizeDecoded
+		} else {
+			gc.log.Warn("sync committee size not known by chain, using default value",
+				zap.Any("value", syncCommitteeSize))
+		}
+	}
+
+	targetAggregatorsPerCommittee := DefaultTargetAggregatorsPerCommittee
+	if targetAggregatorsPerCommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_COMMITTEE"]; ok {
+		if targetAggregatorsPerCommitteeDecoded, ok := targetAggregatorsPerCommitteeRaw.(uint64); ok {
+			targetAggregatorsPerCommittee = targetAggregatorsPerCommitteeDecoded
+		} else {
+			gc.log.Warn("target aggregators per committee not known by chain, using default value",
+				zap.Any("value", targetAggregatorsPerCommittee))
+		}
+	}
+
+	targetAggregatorsPerSyncSubcommittee := DefaultTargetAggregatorsPerSyncSubcommittee
+	if targetAggregatorsPerSyncSubcommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"]; ok {
+		if targetAggregatorsPerSyncSubcommitteeDecoded, ok := targetAggregatorsPerSyncSubcommitteeRaw.(uint64); ok {
+			targetAggregatorsPerSyncSubcommittee = targetAggregatorsPerSyncSubcommitteeDecoded
+		} else {
+			gc.log.Warn("target aggregators per sync subcommittee not known by chain, using default value",
+				zap.Any("value", targetAggregatorsPerSyncSubcommittee))
+		}
+	}
+
+	intervalsPerSlot := DefaultIntervalsPerSlot
+	if intervalsPerSlotRaw, ok := specResponse.Data["INTERVALS_PER_SLOT"]; ok {
+		if intervalsPerSlotDecoded, ok := intervalsPerSlotRaw.(uint64); ok {
+			intervalsPerSlot = intervalsPerSlotDecoded
+		} else {
+			gc.log.Warn("intervals per slot not known by chain, using default value",
+				zap.Any("value", intervalsPerSlot))
+		}
+	}
+
+	syncCommitteeSubnetCount := DefaultSyncCommitteeSubnetCount
+	if syncCommitteeSubnetCountRaw, ok := specResponse.Data["SYNC_COMMITTEE_SUBNET_COUNT"]; ok {
+		if syncCommitteeSubnetCountDecoded, ok := syncCommitteeSubnetCountRaw.(uint64); ok {
+			syncCommitteeSubnetCount = syncCommitteeSubnetCountDecoded
+		} else {
+			gc.log.Warn("sync committee subnet count not known by chain, using default value",
+				zap.Any("value", syncCommitteeSubnetCount))
+		}
+	}
+
 	start = time.Now()
 	genesisResponse, err := client.Genesis(gc.ctx, &api.GenesisOpts{})
 	recordRequestDuration(gc.ctx, "Genesis", client.Address(), http.MethodGet, time.Since(start), err)
@@ -91,11 +157,18 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	}
 
 	beaconConfig := networkconfig.BeaconConfig{
-		BeaconName:    networkName,
-		SlotDuration:  slotDuration,
-		SlotsPerEpoch: slotsPerEpoch,
-		ForkVersion:   genesisResponse.Data.GenesisForkVersion,
-		GenesisTime:   genesisResponse.Data.GenesisTime,
+		BeaconName:                           networkName,
+		SlotDuration:                         slotDuration,
+		SlotsPerEpoch:                        slotsPerEpoch,
+		EpochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,
+		SyncCommitteeSize:                    syncCommitteeSize,
+		SyncCommitteeSubnetCount:             syncCommitteeSubnetCount,
+		TargetAggregatorsPerSyncSubcommittee: targetAggregatorsPerSyncSubcommittee,
+		TargetAggregatorsPerCommittee:        targetAggregatorsPerCommittee,
+		IntervalsPerSlot:                     intervalsPerSlot,
+		ForkVersion:                          genesisResponse.Data.GenesisForkVersion,
+		GenesisTime:                          genesisResponse.Data.GenesisTime,
+		GenesisValidatorsRoot:                genesisResponse.Data.GenesisValidatorsRoot,
 	}
 
 	return beaconConfig, nil

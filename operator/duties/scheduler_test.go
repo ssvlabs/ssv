@@ -134,7 +134,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 		},
 	).AnyTimes()
 
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EpochsPerSyncCommitteePeriod().Return(phase0.Epoch(256)).AnyTimes()
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochsPerSyncCommitteePeriod().Return(phase0.Epoch(256)).AnyTimes()
 
 	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)

@@ -22,7 +22,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	gc.waitToSlotTwoThirds(slot)
 
 	// differ from spec because we need to subscribe to subnet
-	isAggregator, err := isAggregator(committeeLength, slotSig)
+	isAggregator, err := gc.isAggregator(committeeLength, slotSig)
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to check if validator is an aggregator: %w", err)
 	}
@@ -180,8 +180,8 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *spec.VersionedSigne
 //	 committee = get_beacon_committee(state, slot, index)
 //	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
 //	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
-func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
-	modulo := committeeCount / TargetAggregatorsPerCommittee
+func (gc *GoClient) isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
+	modulo := committeeCount / gc.beaconConfig.TargetAggregatorsPerCommittee
 	if modulo == 0 {
 		// Modulo must be at least 1.
 		modulo = 1
@@ -193,9 +193,9 @@ func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 
 // waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)
 func (gc *GoClient) waitToSlotTwoThirds(slot phase0.Slot) {
-	oneThird := gc.beaconConfig.SlotDuration / 3 /* one third of slot duration */
+	oneInterval := gc.beaconConfig.IntervalDuration() /* one third of slot duration */
 
-	finalTime := gc.beaconConfig.GetSlotStartTime(slot).Add(2 * oneThird)
+	finalTime := gc.beaconConfig.GetSlotStartTime(slot).Add(2 * oneInterval)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return

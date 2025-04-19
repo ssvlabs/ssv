@@ -317,5 +317,5 @@ func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
 }
 
 func (h *SyncCommitteeHandler) slotsPerPeriod() phase0.Slot {
-	return phase0.Slot(h.beaconConfig.EpochsPerSyncCommitteePeriod()) * h.beaconConfig.GetSlotsPerEpoch()
+	return phase0.Slot(h.beaconConfig.GetEpochsPerSyncCommitteePeriod()) * h.beaconConfig.GetSlotsPerEpoch()
 }
