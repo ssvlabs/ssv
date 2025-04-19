@@ -73,18 +73,6 @@ func NewServer(
 	return server
 }
 
-func (s *Server) SetTLS(certPath, keyPath, caPath string) error {
-	if certPath == "" && keyPath == "" {
-		return nil
-	}
-	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, true)
-	if err != nil {
-		return err
-	}
-	s.tlsConfig = tc
-	return nil
-}
-
 func (s *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 	return func(ctx *fasthttp.RequestCtx) {
 		start := time.Now()
@@ -124,6 +112,21 @@ func (s *Server) ListenAndServe(addr string) error {
 
 	s.logger.Info("starting without TLS", zap.String("addr", addr))
 	return fasthttp.ListenAndServe(addr, handler)
+}
+
+// SetTLS configures the server to use TLS by loading the given certificate, key, and CA paths into the TLS configuration.
+func (s *Server) SetTLS(certPath, keyPath, caPath string) error {
+	if certPath == "" && keyPath == "" {
+		return nil
+	}
+
+	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, true)
+	if err != nil {
+		return err
+	}
+
+	s.tlsConfig = tc
+	return nil
 }
 
 func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {

@@ -45,7 +45,7 @@ func (s *SSVSignerClientSuite) SetupTest() {
 		s.serverHits++
 		s.mux.ServeHTTP(w, r)
 	}))
-	s.client, err = NewClient(s.server.URL, "", "", "", WithLogger(s.logger))
+	s.client, err = NewClient(s.server.URL, WithLogger(s.logger))
 	s.Require().NoError(err, "failed to create client")
 }
 
@@ -707,13 +707,13 @@ func (s *SSVSignerClientSuite) TestNew() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := NewClient(tc.baseURL, "", "", "")
+			client, err := NewClient(tc.baseURL)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectedBaseURL, client.baseURL)
 			assert.NotNil(t, client.httpClient)
 
 			logger, _ := zap.NewDevelopment()
-			clientWithLogger, err := NewClient(tc.baseURL, "", "", "", WithLogger(logger))
+			clientWithLogger, err := NewClient(tc.baseURL, WithLogger(logger))
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectedBaseURL, clientWithLogger.baseURL)
 			assert.Equal(t, logger, clientWithLogger.logger)
@@ -734,12 +734,13 @@ func TestCustomHTTPClient(t *testing.T) {
 		},
 	}
 
-	withCustomClient := func(client *Client) {
+	withCustomClient := func(client *Client) error {
 		client.httpClient = customClient
+		return nil
 	}
 
-	c, err := NewClient("http://example.com", "", "", "", withCustomClient)
-
+	logger, _ := zap.NewDevelopment()
+	c, err := NewClient("http://example.com", WithLogger(logger), withCustomClient)
 	require.NoError(t, err)
 	assert.Equal(t, customClient, c.httpClient)
 }
@@ -763,7 +764,7 @@ func TestRequestErrors(t *testing.T) {
 	defer server.Close()
 
 	logger, _ := zap.NewDevelopment()
-	client, err := NewClient(server.URL, "", "", "", WithLogger(logger))
+	client, err := NewClient(server.URL, WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.AddValidators(context.Background(), ShareKeys{
@@ -796,7 +797,7 @@ func TestResponseHandlingErrors(t *testing.T) {
 	defer server.Close()
 
 	logger, _ := zap.NewDevelopment()
-	client, err := NewClient(server.URL, "", "", "", WithLogger(logger))
+	client, err := NewClient(server.URL, WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.AddValidators(context.Background(), ShareKeys{
@@ -853,7 +854,7 @@ func TestNew(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			client, err := NewClient(tc.baseURL, "", "", "", tc.opts...)
+			client, err := NewClient(tc.baseURL, tc.opts...)
 			require.NoError(t, err)
 			require.NotNil(t, client)
 
@@ -888,7 +889,7 @@ func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
 	const inputURL = "https://test.example.com/"
 	const expectedURL = "https://test.example.com"
 
-	client, err := NewClient(inputURL, "", "", "")
+	client, err := NewClient(inputURL)
 
 	require.NoError(t, err)
 	require.NotNil(t, client)
@@ -973,7 +974,7 @@ func TestClientTLS(t *testing.T) {
 			tmpKey := mustWriteTemp(t, tc.clientKey, "clientkey-*.pem")
 			tmpCA := mustWriteTemp(t, tc.caCert, "ca-*.pem")
 
-			client, err := NewClient(srv.URL, tmpCert, tmpKey, tmpCA)
+			client, err := NewClient(srv.URL, WithTLS(tmpCert, tmpKey, tmpCA))
 			require.NoError(t, err)
 
 			_, err = client.ListValidators(context.Background())
@@ -1015,7 +1016,7 @@ func TestClientTLSOptions(t *testing.T) {
 			tmpKey := mustWriteTemp(t, tc.clientKey, "clientkey-*.pem")
 			tmpCA := mustWriteTemp(t, tc.caCert, "ca-*.pem")
 
-			client, err := NewClient("https://example.com", tmpCert, tmpKey, tmpCA)
+			client, err := NewClient("https://example.com", WithTLS(tmpCert, tmpKey, tmpCA))
 			require.NoError(t, err)
 
 			transport, _ := client.httpClient.Transport.(*http.Transport)
@@ -1056,7 +1057,7 @@ func TestTLSConfigCLIIntegration(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := NewClient("https://localhost:9000", tc.cert, tc.key, tc.ca)
+			client, err := NewClient("https://localhost:9000", WithTLS(tc.cert, tc.key, tc.ca))
 			require.NoError(t, err)
 
 			transport, ok := client.httpClient.Transport.(*http.Transport)

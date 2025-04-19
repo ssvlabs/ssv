@@ -72,7 +72,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		return err
 	}
 
-	web3SignerClient, err := web3signer.New(cli.Web3SignerEndpoint, cli.ClientKeyFile, cli.ClientCertFile, cli.ClientCACertFile)
+	web3SignerClient, err := web3signer.New(cli.Web3SignerEndpoint, web3signer.WithTLS(cli.ClientCertFile, cli.ClientKeyFile, cli.ClientCACertFile))
 	if err != nil {
 		return fmt.Errorf("init web3signer: %w", err)
 	}

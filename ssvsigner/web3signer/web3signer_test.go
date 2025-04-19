@@ -26,7 +26,7 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 		server.Close()
 	})
 
-	web3Signer, err := New(server.URL, "", "", "")
+	web3Signer, err := New(server.URL)
 	require.NoError(t, err)
 
 	return server, web3Signer
@@ -75,7 +75,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := New(tt.baseURL, tt.certPath, tt.keyPath, tt.caPath)
+			client, err := New(tt.baseURL, WithTLS(tt.certPath, tt.keyPath, tt.caPath))
 			require.NoError(t, err)
 			require.Equal(t, tt.expectedBaseURL, client.baseURL)
 		})
@@ -415,7 +415,7 @@ func TestTLSConfigFiles(t *testing.T) {
 	keyFile := mustWriteTemp(t, key, "key-*.pem")
 	caFile := mustWriteTemp(t, ca, "ca-*.pem")
 
-	client, err := New("https://example.com", certFile, keyFile, caFile)
+	client, err := New("https://example.com", WithTLS(certFile, keyFile, caFile))
 	require.NoError(t, err)
 
 	transport, ok := client.httpClient.Transport.(*http.Transport)
@@ -448,14 +448,14 @@ func TestTLSConnection(t *testing.T) {
 
 	// success with CA
 	caFile := mustWriteTemp(t, caCert, "ca-*.pem")
-	client, err := New(srv.URL, "", "", caFile)
+	client, err := New(srv.URL, WithTLS("", "", caFile))
 	require.NoError(t, err)
 
 	_, err = client.ListKeys(context.Background())
 	require.NoError(t, err)
 
 	// failure without CA
-	client2, err := New(srv.URL, "", "", "")
+	client2, err := New(srv.URL)
 	require.NoError(t, err)
 
 	_, err = client2.ListKeys(context.Background())

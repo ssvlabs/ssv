@@ -19,24 +19,32 @@ type Web3Signer struct {
 	httpClient *http.Client
 }
 
-// New creates a new Web3Signer client with the given base URL and optional TLS configuration.
-func New(baseURL, certPath, keyPath, caPath string) (*Web3Signer, error) {
+// Option defines a function that configures a Web3Signer client.
+type Option func(*Web3Signer) error
+
+// WithTLS is for setting the TLS.
+func WithTLS(certPath, keyPath, caPath string) Option {
+	return func(client *Web3Signer) error {
+		return client.configureTLS(certPath, keyPath, caPath)
+	}
+}
+
+// New creates a new Web3Signer client with the given base URL and optional configuration.
+func New(baseURL string, opts ...Option) (*Web3Signer, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
-	transport := http.DefaultTransport
 
-	if certPath != "" || keyPath != "" || caPath != "" {
-		tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
-		if err != nil {
-			return nil, fmt.Errorf("web3signer TLS: %w", err)
-		}
-
-		transport = &http.Transport{TLSClientConfig: tc}
+	client := &Web3Signer{
+		baseURL:    baseURL,
+		httpClient: &http.Client{Transport: http.DefaultTransport, Timeout: 30 * time.Second},
 	}
 
-	return &Web3Signer{
-		baseURL:    baseURL,
-		httpClient: &http.Client{Transport: transport, Timeout: 30 * time.Second},
-	}, nil
+	for _, opt := range opts {
+		if err := opt(client); err != nil {
+			return nil, err
+		}
+	}
+
+	return client, nil
 }
 
 // ListKeys lists keys in Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Public-Key/operation/ETH2_LIST
@@ -104,4 +112,16 @@ func (c *Web3Signer) handleWeb3SignerErr(err error) error {
 	}
 
 	return HTTPResponseError{Err: err, Status: http.StatusInternalServerError}
+}
+
+// configureTLS configures TLS for the Web3Signer by setting up the HTTP client with certificates and CA paths.
+func (c *Web3Signer) configureTLS(certPath, keyPath, caPath string) error {
+	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
+	if err != nil {
+		return fmt.Errorf("web3signer TLS: %w", err)
+	}
+
+	c.httpClient.Transport = &http.Transport{TLSClientConfig: tc}
+
+	return nil
 }

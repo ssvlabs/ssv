@@ -57,7 +57,7 @@ func run(logger *zap.Logger, cli CLI) error {
 	}
 
 	ctx := context.Background()
-	web3SignerClient, err := web3signer.New(cli.Web3SignerEndpoint, "", "", "")
+	web3SignerClient, err := web3signer.New(cli.Web3SignerEndpoint)
 	if err != nil {
 		return fmt.Errorf("create web3signer client: %w", err)
 	}

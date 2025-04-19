@@ -166,10 +166,8 @@ var StartNodeCmd = &cobra.Command{
 
 			ssvSignerClient, err := ssvsigner.NewClient(
 				cfg.SSVSignerEndpoint,
-				cfg.SSVSignerClientCertFile,
-				cfg.SSVSignerClientKeyFile,
-				cfg.SSVSignerClientCACertFile,
 				ssvsigner.WithLogger(logger),
+				ssvsigner.WithTLS(cfg.SSVSignerClientCertFile, cfg.SSVSignerClientKeyFile, cfg.SSVSignerClientCACertFile),
 			)
 			if err != nil {
 				logger.Fatal("failed to create SSV signer client", zap.Error(err))

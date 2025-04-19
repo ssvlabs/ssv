@@ -25,38 +25,42 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// ClientOption defines a function that configures a Client.
-type ClientOption func(*Client)
+// ClientOption is used to handle client options.
+type ClientOption func(*Client) error
 
 // WithLogger sets a custom logger for the client.
 func WithLogger(logger *zap.Logger) ClientOption {
-	return func(client *Client) {
+	return func(client *Client) error {
 		client.logger = logger
+
+		return nil
 	}
 }
 
-func NewClient(baseURL, certPath, keyPath, caPath string, opts ...ClientOption) (*Client, error) {
+// WithTLS is for setting the TLS.
+func WithTLS(certPath, keyPath, caPath string) ClientOption {
+	return func(client *Client) error {
+		return client.configureTLS(certPath, keyPath, caPath)
+	}
+}
+
+func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
-	var transport = http.DefaultTransport
 
 	c := &Client{
 		baseURL:    baseURL,
-		httpClient: &http.Client{Transport: transport, Timeout: 30 * time.Second},
+		httpClient: &http.Client{Transport: http.DefaultTransport, Timeout: 30 * time.Second},
 		logger:     zap.NewNop(),
 	}
 
 	for _, opt := range opts {
-		opt(c)
+		if err := opt(c); err != nil {
+			return nil, err
+		}
 	}
 
-	if certPath != "" || keyPath != "" || caPath != "" {
-		tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
-		if err != nil {
-			return nil, fmt.Errorf("client TLS setup: %w", err)
-		}
-
-		c.httpClient.Transport = &http.Transport{TLSClientConfig: tc}
-
+	if c.httpClient == nil {
+		c.httpClient = &http.Client{Transport: http.DefaultTransport, Timeout: 30 * time.Second}
 	}
 
 	return c, nil
@@ -258,4 +262,16 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	}
 
 	return missing, nil
+}
+
+// configureTLS configures the TLS settings for the HTTP client using the given certificate, key, and CA file paths.
+func (c *Client) configureTLS(certPath, keyPath, caPath string) error {
+	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
+	if err != nil {
+		return fmt.Errorf("ssvsigner TLS: %w", err)
+	}
+
+	c.httpClient.Transport = &http.Transport{TLSClientConfig: tc}
+
+	return nil
 }
