@@ -16,10 +16,7 @@ import (
 func setupTestDB(t *testing.T) *PebbleDB {
 	t.Helper()
 
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
-
-	db, err := NewPebbleDB(context.Background(), logger, t.TempDir(), &pebble.Options{})
+	db, err := NewPebbleDB(zap.NewNop(), t.TempDir(), &pebble.Options{})
 	require.NoError(t, err)
 
 	return db
@@ -96,6 +93,14 @@ func TestPebbleDB_GetMany(t *testing.T) {
 		assert.Equal(t, keys[i], obj.Key)
 		assert.Equal(t, values[i], obj.Value)
 	}
+
+	// Test GetMany with non-existent keys
+	err = db.GetMany(prefix, [][]byte{[]byte("non-existent")}, func(obj basedb.Obj) error {
+		t.Errorf("expected no results, got %v", obj)
+		return nil
+	})
+	require.NoError(t, err)
+
 }
 
 func TestPebbleDB_GetAll(t *testing.T) {
@@ -119,6 +124,7 @@ func TestPebbleDB_GetAll(t *testing.T) {
 	// Test GetAll
 	count := 0
 	err := db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		assert.Equal(t, count, i)
 		count++
 		assert.Contains(t, testData, string(obj.Key))
 		assert.Equal(t, testData[string(obj.Key)], string(obj.Value))
@@ -126,6 +132,23 @@ func TestPebbleDB_GetAll(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, len(testData), count)
+}
+
+func TestPebbleDB_GetAll_Error(t *testing.T) {
+	db := setupTestDB(t)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	prefix := []byte("test-prefix")
+	err := db.Set(prefix, []byte("key1"), []byte("value1"))
+	require.NoError(t, err)
+
+	err = db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		return errors.New("test error")
+	})
+
+	require.Error(t, err)
 }
 
 func TestPebbleDB_Txn(t *testing.T) {
@@ -269,13 +292,13 @@ func TestPebbleDB_CountPrefix(t *testing.T) {
 	// Count items with prefix
 	count, err := db.CountPrefix(prefix)
 	require.NoError(t, err)
-	require.Equal(t, int64(3), count)
+	assert.Equal(t, int64(3), count)
 
 	// Count items with different prefix
 	otherPrefix := []byte("other_prefix")
 	count, err = db.CountPrefix(otherPrefix)
 	require.NoError(t, err)
-	require.Equal(t, int64(0), count)
+	assert.Equal(t, int64(0), count)
 }
 
 func TestPebbleDB_DropPrefix(t *testing.T) {
@@ -309,7 +332,7 @@ func TestPebbleDB_DropPrefix(t *testing.T) {
 	obj, found, err := db.Get(prefix2, []byte("key1"))
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, []byte("value3"), obj.Value)
+	assert.Equal(t, []byte("value3"), obj.Value)
 }
 
 func TestPebbleDB_Update(t *testing.T) {
@@ -329,7 +352,7 @@ func TestPebbleDB_Update(t *testing.T) {
 	obj, found, err := db.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value)
 
 	// Test error handling
 	expectedErr := errors.New("update error")
@@ -337,7 +360,7 @@ func TestPebbleDB_Update(t *testing.T) {
 		return expectedErr
 	})
 	require.Error(t, err)
-	require.Equal(t, expectedErr, err)
+	assert.Equal(t, expectedErr, err)
 }
 
 func TestPebbleDB_Using(t *testing.T) {
@@ -353,7 +376,7 @@ func TestPebbleDB_Using(t *testing.T) {
 	// Test Using with nil ReadWriter returns the database itself
 	rw := db.Using(nil)
 	require.NotNil(t, rw)
-	require.Equal(t, db, rw)
+	assert.Equal(t, db, rw)
 
 	// Test Using with a transaction
 	txn := db.Begin()
@@ -366,13 +389,13 @@ func TestPebbleDB_Using(t *testing.T) {
 	// Use the transaction
 	rw = db.Using(txn)
 	require.NotNil(t, rw)
-	require.Equal(t, txn, rw)
+	assert.Equal(t, txn, rw)
 
 	// Verify we can read the value through the returned ReadWriter
 	obj, found, err := rw.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value)
 }
 
 func TestPebbleDB_UsingReader(t *testing.T) {
@@ -392,7 +415,7 @@ func TestPebbleDB_UsingReader(t *testing.T) {
 	// Test UsingReader with nil Reader returns the database itself
 	r := db.UsingReader(nil)
 	require.NotNil(t, r)
-	require.Equal(t, db, r)
+	assert.Equal(t, db, r)
 
 	// Test UsingReader with a read transaction
 	readTxn := db.BeginRead()
@@ -401,11 +424,11 @@ func TestPebbleDB_UsingReader(t *testing.T) {
 	// Use the read transaction
 	r = db.UsingReader(readTxn)
 	require.NotNil(t, r)
-	require.Equal(t, readTxn, r)
+	assert.Equal(t, readTxn, r)
 
 	// Verify we can read the value through the returned Reader
 	obj, found, err := r.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value)
 }

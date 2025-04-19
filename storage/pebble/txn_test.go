@@ -2,20 +2,17 @@ package pebble
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
-
-// Pebble DB txn requires its own set of tests because it has a different behaviour:
-// - it doesn't support concurrent transactions
-// - it doesn't support committing a transaction after it's been discarded
 
 func TestPebbleTxn_Commit(t *testing.T) {
 	db := newTestPebbleDB(t)
@@ -47,8 +44,8 @@ func TestPebbleTxn_Set(t *testing.T) {
 	obj, found, err := txn.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, key, obj.Key)
-	require.Equal(t, value, obj.Value)
+	assert.Equal(t, key, obj.Key)
+	assert.Equal(t, value, obj.Value)
 }
 
 func TestPebbleTxn_SetMany(t *testing.T) {
@@ -73,8 +70,8 @@ func TestPebbleTxn_SetMany(t *testing.T) {
 		obj, found, err := txn.Get(prefix, item.Key)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, item.Key, obj.Key)
-		require.Equal(t, item.Value, obj.Value)
+		assert.Equal(t, item.Key, obj.Key)
+		assert.Equal(t, item.Value, obj.Value)
 	}
 }
 
@@ -98,8 +95,8 @@ func TestPebbleTxn_Get(t *testing.T) {
 	obj, found, err := txn.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, key, obj.Key)
-	require.Equal(t, value, obj.Value)
+	assert.Equal(t, key, obj.Key)
+	assert.Equal(t, value, obj.Value)
 }
 
 func TestPebbleTxn_GetMany(t *testing.T) {
@@ -137,8 +134,8 @@ func TestPebbleTxn_GetMany(t *testing.T) {
 
 	// Verify results
 	for i, result := range results {
-		require.Equal(t, items[i].Key, result.Key)
-		require.Equal(t, items[i].Value, result.Value)
+		assert.Equal(t, items[i].Key, result.Key)
+		assert.Equal(t, items[i].Value, result.Value)
 	}
 }
 
@@ -162,8 +159,11 @@ func TestPebbleTxn_GetAll(t *testing.T) {
 	}
 
 	var results []basedb.Obj
+	var count int
 	err := txn.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		assert.Equal(t, count, i)
 		results = append(results, obj)
+		count++
 		return nil
 	})
 	require.NoError(t, err)
@@ -175,8 +175,8 @@ func TestPebbleTxn_GetAll(t *testing.T) {
 
 	// Verify results
 	for i, result := range results {
-		require.Equal(t, items[i].Key, result.Key)
-		require.Equal(t, items[i].Value, result.Value)
+		assert.Equal(t, items[i].Key, result.Key)
+		assert.Equal(t, items[i].Value, result.Value)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestPebbleTxn_Delete(t *testing.T) {
 	obj, found, err := txn.Get(prefix, key)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, value, obj.Value)
+	assert.Equal(t, value, obj.Value)
 
 	// Delete value
 	err = txn.Delete(prefix, key)
@@ -243,7 +243,7 @@ func TestPebbleTxn_GetMany_IteratorError(t *testing.T) {
 		return expectedErr
 	})
 	require.Error(t, err)
-	require.Equal(t, expectedErr, err)
+	assert.Equal(t, expectedErr, err)
 }
 
 func TestPebbleTxn_GetAll_IteratorError(t *testing.T) {
@@ -264,7 +264,7 @@ func TestPebbleTxn_GetAll_IteratorError(t *testing.T) {
 		return expectedErr
 	})
 	require.Error(t, err)
-	require.Equal(t, expectedErr, err)
+	assert.Equal(t, expectedErr, err)
 }
 
 func TestPebbleTxn_SetMany_Error(t *testing.T) {
@@ -279,7 +279,7 @@ func TestPebbleTxn_SetMany_Error(t *testing.T) {
 		return basedb.Obj{}, expectedErr
 	})
 	require.Error(t, err)
-	require.Equal(t, expectedErr, err)
+	assert.Equal(t, expectedErr, err)
 }
 
 func TestPebbleTxn_CommitAfterDiscard(t *testing.T) {
@@ -320,9 +320,300 @@ func TestPebbleTxn_BeginRead(t *testing.T) {
 	readTxn.Discard() // Should not panic
 }
 
+func TestPebbleTxn_Isolation(t *testing.T) {
+	db := newTestPebbleDB(t)
+
+	prefix := []byte("test_prefix")
+	key := []byte("test_key")
+	value1 := []byte("value1")
+	value2 := []byte("value2")
+
+	// Start two concurrent transactions
+	txn1 := db.Begin()
+	txn2 := db.Begin()
+
+	// Write different values in each transaction
+	require.NoError(t, txn1.Set(prefix, key, value1))
+	require.NoError(t, txn2.Set(prefix, key, value2))
+
+	// Verify each transaction sees its own value
+	obj, found, err := txn1.Get(prefix, key)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, value1, obj.Value)
+
+	obj, found, err = txn2.Get(prefix, key)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, value2, obj.Value)
+
+	// Commit first transaction
+	require.NoError(t, txn1.Commit())
+
+	// Verify second transaction still sees its own value
+	obj, found, err = txn2.Get(prefix, key)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, value2, obj.Value)
+}
+
+func TestPebbleReadTxn_GetAll(t *testing.T) {
+	db := newTestPebbleDB(t)
+	prefix := []byte("test_prefix")
+
+	// Set up test data
+	testData := []basedb.Obj{
+		{Key: []byte("key1"), Value: []byte("value1")},
+		{Key: []byte("key2"), Value: []byte("value2")},
+		{Key: []byte("key3"), Value: []byte("value3")},
+	}
+
+	// Write data using a write transaction
+	err := db.Update(func(txn basedb.Txn) error {
+		for _, item := range testData {
+			if err := txn.Set(prefix, item.Key, item.Value); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Test 1: Basic GetAll functionality
+	t.Run("basic functionality", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		var results []basedb.Obj
+		err := readTxn.GetAll(prefix, func(i int, obj basedb.Obj) error {
+			results = append(results, obj)
+			return nil
+		})
+		require.NoError(t, err)
+		require.Len(t, results, len(testData))
+
+		// Sort results for consistent comparison
+		slices.SortFunc(results, func(a, b basedb.Obj) int {
+			return bytes.Compare(a.Key, b.Key)
+		})
+
+		for i, result := range results {
+			require.Equal(t, testData[i].Key, result.Key)
+			require.Equal(t, testData[i].Value, result.Value)
+		}
+	})
+
+	// Test 2: Empty prefix
+	t.Run("empty prefix", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		count := 0
+		err := readTxn.GetAll([]byte{}, func(i int, obj basedb.Obj) error {
+			count++
+			return nil
+		})
+		require.NoError(t, err)
+		require.Greater(t, count, 0) // Should find all keys in the database
+	})
+
+	// Test 3: Non-existent prefix
+	t.Run("non-existent prefix", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		count := 0
+		err := readTxn.GetAll([]byte("non_existent"), func(i int, obj basedb.Obj) error {
+			count++
+			return nil
+		})
+		require.NoError(t, err)
+		require.Equal(t, 0, count)
+	})
+
+	// Test 4: Iterator error
+	t.Run("iterator error", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		expectedErr := errors.New("iterator error")
+		err := readTxn.GetAll(prefix, func(i int, obj basedb.Obj) error {
+			return expectedErr
+		})
+		require.Error(t, err)
+		require.Equal(t, expectedErr, err)
+	})
+
+	// Test 5: Concurrent reads
+	t.Run("concurrent reads", func(t *testing.T) {
+		const numGoroutines = 10
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+
+		for range numGoroutines {
+			go func() {
+				defer wg.Done()
+				readTxn := db.BeginRead()
+				defer readTxn.Discard()
+
+				count := 0
+				err := readTxn.GetAll(prefix, func(i int, obj basedb.Obj) error {
+					count++
+					return nil
+				})
+				require.NoError(t, err)
+				require.Equal(t, len(testData), count)
+			}()
+		}
+
+		wg.Wait()
+	})
+}
+
+func TestPebbleReadTxn_GetMany(t *testing.T) {
+	db := newTestPebbleDB(t)
+	prefix := []byte("test_prefix")
+
+	// Set up test data
+	testData := []basedb.Obj{
+		{Key: []byte("key1"), Value: []byte("value1")},
+		{Key: []byte("key2"), Value: []byte("value2")},
+		{Key: []byte("key3"), Value: []byte("value3")},
+	}
+
+	// Write data using a write transaction
+	err := db.Update(func(txn basedb.Txn) error {
+		for _, item := range testData {
+			if err := txn.Set(prefix, item.Key, item.Value); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Test 1: Basic GetMany functionality
+	t.Run("basic functionality", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		keys := make([][]byte, len(testData))
+		for i, item := range testData {
+			keys[i] = item.Key
+		}
+
+		var results []basedb.Obj
+		err := readTxn.GetMany(prefix, keys, func(obj basedb.Obj) error {
+			results = append(results, obj)
+			return nil
+		})
+		require.NoError(t, err)
+		require.Len(t, results, len(testData))
+
+		// Sort results for consistent comparison
+		slices.SortFunc(results, func(a, b basedb.Obj) int {
+			return bytes.Compare(a.Key, b.Key)
+		})
+
+		for i, result := range results {
+			require.Equal(t, testData[i].Key, result.Key)
+			require.Equal(t, testData[i].Value, result.Value)
+		}
+	})
+
+	// Test 2: Empty keys list
+	t.Run("empty keys list", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		var results []basedb.Obj
+		err := readTxn.GetMany(prefix, [][]byte{}, func(obj basedb.Obj) error {
+			results = append(results, obj)
+			return nil
+		})
+		require.NoError(t, err)
+		require.Empty(t, results)
+	})
+
+	// Test 3: Non-existent keys
+	t.Run("non-existent keys", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		var results []basedb.Obj
+		err := readTxn.GetMany(prefix, [][]byte{[]byte("non_existent")}, func(obj basedb.Obj) error {
+			results = append(results, obj)
+			return nil
+		})
+		require.NoError(t, err)
+		require.Empty(t, results)
+	})
+
+	// Test 4: Mixed existent and non-existent keys
+	t.Run("mixed keys", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		keys := [][]byte{
+			testData[0].Key,
+			[]byte("non_existent"),
+			testData[1].Key,
+		}
+
+		var results []basedb.Obj
+		err := readTxn.GetMany(prefix, keys, func(obj basedb.Obj) error {
+			results = append(results, obj)
+			return nil
+		})
+		require.NoError(t, err)
+		require.Len(t, results, 2) // Should only find the two existing keys
+	})
+
+	// Test 5: Iterator error
+	t.Run("iterator error", func(t *testing.T) {
+		readTxn := db.BeginRead()
+		defer readTxn.Discard()
+
+		keys := [][]byte{testData[0].Key}
+		expectedErr := errors.New("iterator error")
+		err := readTxn.GetMany(prefix, keys, func(obj basedb.Obj) error {
+			return expectedErr
+		})
+		require.Error(t, err)
+		require.Equal(t, expectedErr, err)
+	})
+
+	// Test 6: Concurrent reads
+	t.Run("concurrent reads", func(t *testing.T) {
+		const numGoroutines = 10
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+
+		keys := [][]byte{testData[0].Key, testData[1].Key}
+
+		for range numGoroutines {
+			go func() {
+				defer wg.Done()
+				readTxn := db.BeginRead()
+				defer readTxn.Discard()
+
+				count := 0
+				err := readTxn.GetMany(prefix, keys, func(obj basedb.Obj) error {
+					count++
+					return nil
+				})
+				require.NoError(t, err)
+				require.Equal(t, 2, count)
+			}()
+		}
+
+		wg.Wait()
+	})
+}
+
 // Helper function to create a test PebbleDB instance
 func newTestPebbleDB(t *testing.T) *PebbleDB {
-	db, err := NewPebbleDB(context.Background(), zap.NewNop(), t.TempDir(), nil)
+	db, err := NewPebbleDB(zap.NewNop(), t.TempDir(), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, db.Close())
