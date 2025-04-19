@@ -121,7 +121,15 @@ func (c *Web3Signer) configureTLS(certPath, keyPath, caPath string) error {
 		return fmt.Errorf("web3signer TLS: %w", err)
 	}
 
-	c.httpClient.Transport = &http.Transport{TLSClientConfig: tc}
+	var transport *http.Transport
+	if t, ok := c.httpClient.Transport.(*http.Transport); ok {
+		transport = t.Clone()
+	} else {
+		transport = http.DefaultTransport.(*http.Transport).Clone()
+	}
+
+	transport.TLSClientConfig = tc
+	c.httpClient.Transport = transport
 
 	return nil
 }

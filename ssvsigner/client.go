@@ -59,10 +59,6 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 		}
 	}
 
-	if c.httpClient == nil {
-		c.httpClient = &http.Client{Transport: http.DefaultTransport, Timeout: 30 * time.Second}
-	}
-
 	return c, nil
 }
 
@@ -264,14 +260,22 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	return missing, nil
 }
 
-// configureTLS configures the TLS settings for the HTTP client using the given certificate, key, and CA file paths.
+// configureTLS configures the client's Transport with TLS settings using provided certificate, key, and CA paths.
 func (c *Client) configureTLS(certPath, keyPath, caPath string) error {
 	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
 	if err != nil {
 		return fmt.Errorf("ssvsigner TLS: %w", err)
 	}
 
-	c.httpClient.Transport = &http.Transport{TLSClientConfig: tc}
+	var transport *http.Transport
+	if t, ok := c.httpClient.Transport.(*http.Transport); ok {
+		transport = t.Clone()
+	} else {
+		transport = http.DefaultTransport.(*http.Transport).Clone()
+	}
+
+	transport.TLSClientConfig = tc
+	c.httpClient.Transport = transport
 
 	return nil
 }
