@@ -8,8 +8,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -18,7 +16,7 @@ const (
 
 // forkingDV5Listener wraps a pre-fork and a post-fork listener.
 // Before the fork, it performs operations on both services.
-// Aftet the fork, it performs operations only on the post-fork service.
+// After the fork, it performs operations only on the post-fork service.
 type forkingDV5Listener struct {
 	logger           *zap.Logger
 	preForkListener  Listener
@@ -26,7 +24,7 @@ type forkingDV5Listener struct {
 	iteratorTimeout  time.Duration
 }
 
-func NewForkingDV5Listener(logger *zap.Logger, preFork, postFork Listener, iteratorTimeout time.Duration, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
+func NewForkingDV5Listener(logger *zap.Logger, preFork, postFork Listener, iteratorTimeout time.Duration) *forkingDV5Listener {
 	if iteratorTimeout == 0 {
 		iteratorTimeout = defaultIteratorTimeout
 	}
