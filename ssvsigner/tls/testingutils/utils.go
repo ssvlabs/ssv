@@ -12,6 +12,12 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+const (
+	minimumTLSVersion = tls.VersionTLS13
 )
 
 // GenerateCertificates generates a CA certificate and a server certificate signed by the CA.
@@ -21,15 +27,11 @@ func GenerateCertificates(t *testing.T, host string) (caCert, caKey, serverCert,
 
 	// Generate CA key and certificate
 	caPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("Failed to generate CA private key: %v", err)
-	}
+	require.NoError(t, err)
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		t.Fatalf("Failed to generate serial number: %v", err)
-	}
+	require.NoError(t, err)
 
 	caTemplate := &x509.Certificate{
 		SerialNumber: serialNumber,
@@ -46,20 +48,14 @@ func GenerateCertificates(t *testing.T, host string) (caCert, caKey, serverCert,
 	}
 
 	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		t.Fatalf("Failed to create CA certificate: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Generate server key and certificate
 	serverPrivKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("Failed to generate server private key: %v", err)
-	}
+	require.NoError(t, err)
 
 	serialNumber, err = rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		t.Fatalf("Failed to generate serial number: %v", err)
-	}
+	require.NoError(t, err)
 
 	serverTemplate := &x509.Certificate{
 		SerialNumber: serialNumber,
@@ -84,26 +80,20 @@ func GenerateCertificates(t *testing.T, host string) (caCert, caKey, serverCert,
 
 	// Create the server certificate
 	serverDER, err := x509.CreateCertificate(rand.Reader, serverTemplate, caTemplate, &serverPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		t.Fatalf("Failed to create server certificate: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Encode CA cert and key to PEM
 	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
 	caKeyDER, err := x509.MarshalPKCS8PrivateKey(caPrivKey)
+	require.NoError(t, err)
 
-	if err != nil {
-		t.Fatalf("Failed to marshal CA private key: %v", err)
-	}
 	caKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: caKeyDER})
 
 	// Encode server cert and key to PEM
 	serverCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverDER})
 	serverKeyDER, err := x509.MarshalPKCS8PrivateKey(serverPrivKey)
+	require.NoError(t, err)
 
-	if err != nil {
-		t.Fatalf("Failed to marshal server private key: %v", err)
-	}
 	serverKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: serverKeyDER})
 
 	return caCertPEM, caKeyPEM, serverCertPEM, serverKeyPEM
@@ -115,20 +105,17 @@ func CreateServerTLSConfig(t *testing.T, serverCert, serverKey, caCert []byte, c
 
 	// Create server certificate
 	cert, err := tls.X509KeyPair(serverCert, serverKey)
-	if err != nil {
-		t.Fatalf("Failed to create X509 key pair: %v", err)
-	}
+	require.NoError(t, err)
 
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS13,
+		MinVersion:   minimumTLSVersion,
 	}
 
 	if clientAuth && caCert != nil {
 		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caCert) {
-			t.Fatal("Failed to append CA certificate to cert pool")
-		}
+		require.True(t, caCertPool.AppendCertsFromPEM(caCert))
+
 		tlsConfig.ClientCAs = caCertPool
 		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 	}
