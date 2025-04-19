@@ -24,7 +24,6 @@ type forkingDV5Listener struct {
 	preForkListener  Listener
 	postForkListener Listener
 	iteratorTimeout  time.Duration
-	netCfg           networkconfig.NetworkConfig
 }
 
 func NewForkingDV5Listener(logger *zap.Logger, preFork, postFork Listener, iteratorTimeout time.Duration, netConfig networkconfig.NetworkConfig) *forkingDV5Listener {
@@ -36,7 +35,6 @@ func NewForkingDV5Listener(logger *zap.Logger, preFork, postFork Listener, itera
 		preForkListener:  preFork,
 		postForkListener: postFork,
 		iteratorTimeout:  iteratorTimeout,
-		netCfg:           netConfig,
 	}
 }
 
