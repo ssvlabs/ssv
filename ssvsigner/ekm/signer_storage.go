@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -13,7 +14,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/encryptor"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
@@ -26,6 +26,10 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+// signer_storage.go provides a concrete implementation of Storage (backed by
+// basedb.Database) to store wallet and slashing data. It also supports optional
+// encryption of the stored data via SetEncryptionKey.
+
 const (
 	prefix                = "signer_data-"
 	walletPrefix          = prefix + "wallet-"
@@ -37,6 +41,7 @@ const (
 )
 
 // Storage represents the interface for ssv node storage
+// TODO: review if we need all of them
 type Storage interface {
 	registry.RegistryStore
 	core.Storage
@@ -44,13 +49,19 @@ type Storage interface {
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
-	SetEncryptionKey(newKey string) error
+	SetEncryptionKey(hexKey string) error
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 
 	BeaconNetwork() beacon.BeaconNetwork
 }
 
+// storage is an internal struct implementing the Storage interface. It uses
+// a basedb.Database for persistence, locks for concurrency protection, and
+// an optional encryption key to secure stored wallet/account data.
+//
+// The object keys are prefixed by network name and entity name
+// (walletPrefix, highestAttPrefix, etc.).
 type storage struct {
 	db            basedb.Database
 	network       beacon.BeaconNetwork
@@ -63,18 +74,20 @@ func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *
 	return &storage{
 		db:      db,
 		network: network,
-		logger:  logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
+		logger:  logger.Named(logging.NameSignerStorage).Named(prefix + "storage"),
 		lock:    sync.RWMutex{},
 	}
 }
 
-// SetEncryptionKey Add a new method to the storage type
-func (s *storage) SetEncryptionKey(newKey string) error {
+// SetEncryptionKey sets the hex-encoded encryption key used
+// to encrypt/decrypt account data. If no key is set (empty),
+// the data is stored in plaintext.
+func (s *storage) SetEncryptionKey(hexKey string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	// Decode hexadecimal string into byte array
-	keyBytes, err := hex.DecodeString(newKey)
+	keyBytes, err := hex.DecodeString(hexKey)
 	if err != nil {
 		return errors.New("the key must be a valid hexadecimal string")
 	}
@@ -109,13 +122,14 @@ func (s *storage) SaveWallet(wallet core.Wallet) error {
 
 	data, err := json.Marshal(wallet)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal wallet")
+		return fmt.Errorf("marshal wallet: %w", err)
 	}
 
 	return s.db.Set(s.objPrefix(walletPrefix), []byte(walletPath), data)
 }
 
-// OpenWallet returns nil,err if no wallet was found
+// OpenWallet returns the main HD wallet if present, otherwise an error.
+// The returned wallet is configured with this storage as its backend.
 func (s *storage) OpenWallet() (core.Wallet, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -126,7 +140,7 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 		return nil, errors.New("could not find wallet")
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open wallet")
+		return nil, fmt.Errorf("open wallet: %w", err)
 	}
 	if len(obj.Value) == 0 {
 		return nil, errors.New("failed to open wallet")
@@ -134,18 +148,19 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 	// decode
 	var ret *hd.Wallet
 	if err := json.Unmarshal(obj.Value, &ret); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal HD Wallet object")
+		return nil, fmt.Errorf("unmarshal HD Wallet object: %w", err)
 	}
 	ret.SetContext(&core.WalletContext{Storage: s})
 	return ret, nil
 }
 
-// ListAccounts returns an empty array for no accounts
+// ListAccounts returns all validator accounts known to the wallet storage.
+// If no accounts are found, returns an empty slice with no error.
 func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
 	return s.ListAccountsTxn(nil)
 }
 
-// ListAccountsTxn returns an empty array for no accounts
+// ListAccountsTxn returns an empty array for no accounts.
 func (s *storage) ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -155,11 +170,11 @@ func (s *storage) ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, err
 	err := s.db.UsingReader(r).GetAll(s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
 		value, err := s.decryptData(obj.Value)
 		if err != nil {
-			return errors.Wrap(err, "failed to decrypt accounts")
+			return fmt.Errorf("decrypt accounts: %w", err)
 		}
 		acc, err := s.decodeAccount(value)
 		if err != nil {
-			return errors.Wrap(err, "failed to list accounts")
+			return fmt.Errorf("list accounts: %w", err)
 		}
 		ret = append(ret, acc)
 		return nil
@@ -174,7 +189,7 @@ func (s *storage) SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAcc
 
 	data, err := json.Marshal(account)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal account")
+		return fmt.Errorf("marshal account: %w", err)
 	}
 
 	key := fmt.Sprintf(accountsPath, account.ID().String())
@@ -183,15 +198,16 @@ func (s *storage) SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAcc
 	if err != nil {
 		return err
 	}
+
 	return s.db.Using(rw).Set(s.objPrefix(accountsPrefix), []byte(key), encryptedValue)
 }
 
-// SaveAccount saves the given account
+// SaveAccount saves the given account.
 func (s *storage) SaveAccount(account core.ValidatorAccount) error {
 	return s.SaveAccountTxn(nil, account)
 }
 
-// DeleteAccount deletes account by uuid
+// DeleteAccount deletes account by uuid.
 func (s *storage) DeleteAccount(accountID uuid.UUID) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -200,9 +216,7 @@ func (s *storage) DeleteAccount(accountID uuid.UUID) error {
 	return s.db.Delete(s.objPrefix(accountsPrefix), []byte(key))
 }
 
-var ErrCantDecrypt = errors.New("can't decrypt stored wallet, wrong password?")
-
-// OpenAccount returns nil,nil if no account was found
+// OpenAccount returns nil,nil if no account was found.
 func (s *storage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -215,11 +229,11 @@ func (s *storage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount, error
 		return nil, errors.New("account not found")
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open account")
+		return nil, fmt.Errorf("open account: %w", err)
 	}
 	decryptedData, err := s.decryptData(obj.Value)
 	if err != nil {
-		return nil, errors.Wrap(ErrCantDecrypt, err.Error())
+		return nil, fmt.Errorf("decrypt stored wallet (wrong password?): %w", err)
 	}
 	return s.decodeAccount(decryptedData)
 }
@@ -232,18 +246,18 @@ func (s *storage) decodeAccount(byts []byte) (core.ValidatorAccount, error) {
 	// decode
 	var ret *wallets.HDAccount
 	if err := json.Unmarshal(byts, &ret); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal HD account object")
+		return nil, fmt.Errorf("unmarshal HD account object: %w", err)
 	}
 	ret.SetContext(&core.WalletContext{Storage: s})
 
 	return ret, nil
 }
 
-// SetEncryptor sets the given encryptor to the wallet.
-func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {
+// SetEncryptor sets the given encryptor to the wallet. It's a no-op to match the core.AccountStorage interface.
+func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {}
 
-}
-
+// SaveHighestAttestation persists the highest known AttestationData for the
+// given public key. Used to ensure we do not sign slashable attestations.
 func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.AttestationData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -258,12 +272,14 @@ func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.Atte
 
 	data, err := attestation.MarshalSSZ()
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal attestation")
+		return fmt.Errorf("marshal attestation: %w", err)
 	}
 
 	return s.db.Set(s.objPrefix(highestAttPrefix), pubKey, data)
 }
 
+// RetrieveHighestAttestation fetches the stored highest attestation data.
+// Returns attestation data, whether it was found, and error.
 func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -275,19 +291,19 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.Attestation
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestAttPrefix), pubKey)
 	if err != nil {
-		return nil, found, errors.Wrap(err, "could not get highest attestation from db")
+		return nil, found, fmt.Errorf("could not get highest attestation from db: %w", err)
 	}
 	if !found {
 		return nil, false, nil
 	}
 	if len(obj.Value) == 0 {
-		return nil, found, errors.Wrap(err, "highest attestation value is empty")
+		return nil, found, fmt.Errorf("highest attestation value is empty: %w", err)
 	}
 
 	// decode
 	ret := &phase0.AttestationData{}
 	if err := ret.UnmarshalSSZ(obj.Value); err != nil {
-		return nil, found, errors.Wrap(err, "could not unmarshal attestation data")
+		return nil, found, fmt.Errorf("could not unmarshal attestation data: %w", err)
 	}
 	return ret, found, nil
 }
@@ -299,6 +315,8 @@ func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
 	return s.db.Delete(s.objPrefix(highestAttPrefix), pubKey)
 }
 
+// SaveHighestProposal stores the highest known proposal slot for the given
+// public key to prevent slashable block proposals.
 func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -317,6 +335,8 @@ func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	return s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, data)
 }
 
+// RetrieveHighestProposal loads the highest proposal slot from storage.
+// Returns attestation data, whether it was found, and error.
 func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -328,13 +348,13 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, err
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestProposalPrefix), pubKey)
 	if err != nil {
-		return 0, found, errors.Wrap(err, "could not get highest proposal from db")
+		return 0, found, fmt.Errorf("could not get highest proposal from db: %w", err)
 	}
 	if !found {
 		return 0, found, nil
 	}
 	if len(obj.Value) == 0 {
-		return 0, found, errors.Wrap(err, "highest proposal value is empty")
+		return 0, found, fmt.Errorf("highest proposal value is empty: %w", err)
 	}
 
 	// decode
@@ -356,7 +376,7 @@ func (s *storage) decryptData(objectValue []byte) ([]byte, error) {
 
 	decryptedData, err := s.decrypt(objectValue)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to decrypt wallet")
+		return nil, fmt.Errorf("decrypt wallet: %w", err)
 	}
 
 	return decryptedData, nil
@@ -369,13 +389,13 @@ func (s *storage) encryptData(objectValue []byte) ([]byte, error) {
 
 	encryptedData, err := s.encrypt(objectValue)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encrypt wallet")
+		return nil, fmt.Errorf("encrypt wallet: %w", err)
 	}
 
 	return encryptedData, nil
 }
 
-func (s *storage) encrypt(data []byte) ([]byte, error) {
+func (s *storage) encrypt(plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(s.encryptionKey)
 	if err != nil {
 		return nil, err
@@ -388,10 +408,10 @@ func (s *storage) encrypt(data []byte) ([]byte, error) {
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, err
 	}
-	return gcm.Seal(nonce, nonce, data, nil), nil
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
-func (s *storage) decrypt(data []byte) ([]byte, error) {
+func (s *storage) decrypt(nonceCipherText []byte) ([]byte, error) {
 	block, err := aes.NewCipher(s.encryptionKey)
 	if err != nil {
 		return nil, err
@@ -401,11 +421,11 @@ func (s *storage) decrypt(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	nonceSize := gcm.NonceSize()
-	if len(data) < nonceSize {
+	if len(nonceCipherText) < nonceSize {
 		return nil, errors.New("malformed ciphertext")
 	}
 
-	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+	nonce, ciphertext := nonceCipherText[:nonceSize], nonceCipherText[nonceSize:]
 	// #nosec G407 false positive: https://github.com/securego/gosec/issues/1211
 	return gcm.Open(nil, nonce, ciphertext, nil)
 }

@@ -11,6 +11,7 @@ import (
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 const (
@@ -25,7 +26,7 @@ type Options struct {
 	Storage             *storage.ParticipantStores
 	SSVShare            *ssvtypes.SSVShare
 	Operator            *spectypes.CommitteeMember
-	Signer              spectypes.BeaconSigner
+	Signer              ekm.BeaconSigner
 	OperatorSigner      ssvtypes.OperatorSigner
 	DoppelgangerHandler runner.DoppelgangerProvider
 	DutyRunners         runner.ValidatorDutyRunners
