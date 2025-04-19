@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -20,7 +21,7 @@ var Mainnet = NetworkConfig{
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.AlanMainnet,
 		RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
-		RegistryContractAddr: "0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1",
+		RegistryContractAddr: ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
 		DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 		Bootnodes: []string{
 			// SSV Labs
