@@ -1,13 +1,12 @@
 package networkconfig
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -55,89 +54,74 @@ func (s SSVConfig) String() string {
 }
 
 type marshaledConfig struct {
-	DomainType              string   `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
-	RegistrySyncOffset      *big.Int `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
-	RegistryContractAddr    string   `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
-	Bootnodes               []string `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
-	DiscoveryProtocolID     string   `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
-	TotalEthereumValidators int      `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
+	DomainType              hexutil.Bytes     `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
+	RegistrySyncOffset      *big.Int          `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr    ethcommon.Address `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes               []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 }
 
-func (s *SSVConfig) marshal() (marshaledConfig, error) {
+// Helper method to avoid duplication between MarshalJSON and MarshalYAML
+func (s SSVConfig) marshal() marshaledConfig {
 	aux := marshaledConfig{
-		DomainType:              "0x" + hex.EncodeToString(s.DomainType[:]),
+		DomainType:              s.DomainType[:],
 		RegistrySyncOffset:      s.RegistrySyncOffset,
-		RegistryContractAddr:    s.RegistryContractAddr.String(),
+		RegistryContractAddr:    s.RegistryContractAddr,
 		Bootnodes:               s.Bootnodes,
-		DiscoveryProtocolID:     "0x" + hex.EncodeToString(s.DiscoveryProtocolID[:]),
+		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
 	}
 
-	return aux, nil
+	return aux
 }
 
 func (s SSVConfig) MarshalJSON() ([]byte, error) {
-	aux, err := s.marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	return json.Marshal(aux)
+	return json.Marshal(s.marshal())
 }
 
 func (s SSVConfig) MarshalYAML() (interface{}, error) {
-	aux, err := s.marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	return aux, nil
+	return s.marshal(), nil
 }
 
-func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	aux := &struct {
-		DomainType              string   `yaml:"DomainType,omitempty"`
-		RegistrySyncOffset      *big.Int `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr    string   `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes               []string `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID     string   `yaml:"DiscoveryProtocolID,omitempty"`
-		TotalEthereumValidators int      `yaml:"TotalEthereumValidators,omitempty"`
-	}{}
-
-	if err := unmarshal(aux); err != nil {
-		return err
+// Helper method to avoid duplication between UnmarshalJSON and UnmarshalYAML
+func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
+	if len(aux.DomainType) != 4 {
+		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
 	}
 
-	domain, err := hex.DecodeString(strings.TrimPrefix(aux.DomainType, "0x"))
-	if err != nil {
-		return fmt.Errorf("decode domain: %w", err)
-	}
-
-	var domainArr spectypes.DomainType
-	if len(domain) != 0 {
-		domainArr = spectypes.DomainType(domain)
-	}
-
-	discoveryProtocolID, err := hex.DecodeString(strings.TrimPrefix(aux.DiscoveryProtocolID, "0x"))
-	if err != nil {
-		return fmt.Errorf("decode discovery protocol ID: %w", err)
-	}
-
-	var discoveryProtocolIDArr [6]byte
-	if len(discoveryProtocolID) != 0 {
-		discoveryProtocolIDArr = [6]byte(discoveryProtocolID)
+	if len(aux.DiscoveryProtocolID) != 6 {
+		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
 	}
 
 	*s = SSVConfig{
-		DomainType:              domainArr,
+		DomainType:              spectypes.DomainType(aux.DomainType),
 		RegistrySyncOffset:      aux.RegistrySyncOffset,
-		RegistryContractAddr:    ethcommon.HexToAddress(aux.RegistryContractAddr),
+		RegistryContractAddr:    aux.RegistryContractAddr,
 		Bootnodes:               aux.Bootnodes,
-		DiscoveryProtocolID:     discoveryProtocolIDArr,
+		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
 		TotalEthereumValidators: aux.TotalEthereumValidators,
 	}
 
 	return nil
+}
+
+func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var aux marshaledConfig
+	if err := unmarshal(&aux); err != nil {
+		return err
+	}
+
+	return s.unmarshalFromConfig(aux)
+}
+
+func (s *SSVConfig) UnmarshalJSON(data []byte) error {
+	var aux marshaledConfig
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	return s.unmarshalFromConfig(aux)
 }
 
 func (s SSVConfig) GetDomainType() spectypes.DomainType {
