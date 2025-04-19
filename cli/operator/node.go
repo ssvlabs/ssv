@@ -77,6 +77,13 @@ type KeyStore struct {
 	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Path to password file for private key decryption"`
 }
 
+type SSVSignerConfig struct {
+	Endpoint         string `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
+	ClientCertFile   string `yaml:"ClientCertFile" env:"CLIENT_CERT_FILE" env-description:"Path to ssv-signer client certificate file"`
+	ClientKeyFile    string `yaml:"ClientKeyFile" env:"CLIENT_KEY_FILE" env-description:"Path to ssv-signer client key file"`
+	ClientCACertFile string `yaml:"ClientCACertFile" env:"CLIENT_CA_CERT_FILE" env-description:"Path to ssv-signer client CA certificate file"`
+}
+
 type config struct {
 	global_config.GlobalConfig   `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
@@ -85,10 +92,7 @@ type config struct {
 	ConsensusClient              beaconprotocol.Options  `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
-	SSVSignerEndpoint            string                  `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
-	SSVSignerClientCertFile      string                  `yaml:"SSVSignerClientCertFile" env:"SSV_SIGNER_CLIENT_CERT_FILE" env-description:"Path to ssv-signer client certificate file"`
-	SSVSignerClientKeyFile       string                  `yaml:"SSVSignerClientKeyFile"  env:"SSV_SIGNER_CLIENT_KEY_FILE" env-description:"Path to ssv-signer client key file"`
-	SSVSignerClientCACertFile    string                  `yaml:"SSVSignerClientCACertFile" env:"SSV_SIGNER_CLIENT_CA_CERT_FILE" env-description:"Path to ssv-signer client CA certificate file"`
+	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
@@ -157,17 +161,17 @@ var StartNodeCmd = &cobra.Command{
 		var operatorPubKeyBase64 string
 
 		if usingSSVSigner {
-			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
+			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
 			logger.Info("using ssv-signer for signing")
 
-			if _, err := url.ParseRequestURI(cfg.SSVSignerEndpoint); err != nil {
+			if _, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 
 			ssvSignerClient, err := ssvsigner.NewClient(
-				cfg.SSVSignerEndpoint,
+				cfg.SSVSigner.Endpoint,
 				ssvsigner.WithLogger(logger),
-				ssvsigner.WithTLS(cfg.SSVSignerClientCertFile, cfg.SSVSignerClientKeyFile, cfg.SSVSignerClientCACertFile),
+				ssvsigner.WithTLS(cfg.SSVSigner.ClientCertFile, cfg.SSVSigner.ClientKeyFile, cfg.SSVSigner.ClientCACertFile),
 			)
 			if err != nil {
 				logger.Fatal("failed to create SSV signer client", zap.Error(err))
@@ -639,7 +643,7 @@ func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPriv
 }
 
 func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usingPrivKey bool) {
-	if cfg.SSVSignerEndpoint != "" {
+	if cfg.SSVSigner.Endpoint != "" {
 		usingSSVSigner = true
 	}
 	if cfg.KeyStore.PrivateKeyFile != "" || cfg.KeyStore.PasswordFile != "" {
@@ -653,14 +657,14 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 	}
 
 	logger = logger.
-		With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint),
+		With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint),
 			zap.String("private_key_file", cfg.KeyStore.PrivateKeyFile),
 			zap.String("password_file", cfg.KeyStore.PasswordFile),
 			zap.Int("operator_private_key_len", len(cfg.OperatorPrivateKey)), // not exposing the private key
 		)
 
 	if usingSSVSigner && (usingKeystore || usingPrivKey) {
-		logger.Fatal("cannot enable both remote signing (SSVSignerEndpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)")
+		logger.Fatal("cannot enable both remote signing (SSVSigner.Endpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)")
 	} else if usingKeystore && usingPrivKey {
 		logger.Fatal("cannot enable both OperatorPrivateKey and PrivateKeyFile")
 	}
