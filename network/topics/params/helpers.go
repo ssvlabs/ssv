@@ -7,10 +7,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	oneEpochDuration = (12 * time.Second) * 32
-)
-
 // scoreDecay determines the decay rate from the provided time period till
 // the decayToZero value. Ex: ( 1 -> 0.01)
 func scoreDecay(totalDecayDuration time.Duration, decayIntervalDuration time.Duration) float64 {

@@ -211,7 +211,6 @@ func (mv *messageValidator) getValidationLock(messageID spectypes.MessageID) *sy
 
 		lock := &sync.Mutex{}
 
-		epochDuration := time.Duration(mv.netCfg.GetSlotsPerEpoch()) * mv.netCfg.GetSlotDuration() // #nosec G115 - slots per epoch never exceeds math.MaxInt64
 		// validationLockTTL specifies how much time a particular validation lock is meant to
 		// live. It must be large enough for validation lock to never expire while we still are
 		// expecting to process messages targeting that same validation lock. For a message
@@ -220,8 +219,7 @@ func (mv *messageValidator) getValidationLock(messageID spectypes.MessageID) *sy
 		// be allowed to take place).
 		// 2 epoch duration is a safe TTL to use - message validation will reject processing
 		// for any message older than that.
-		validationLockTTL := 2 * epochDuration
-		mv.validationLockCache.Set(messageID, lock, validationLockTTL)
+		mv.validationLockCache.Set(messageID, lock, 2*mv.netCfg.EpochDuration())
 
 		return lock, nil
 	})

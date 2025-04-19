@@ -37,11 +37,12 @@ type SSV interface {
 }
 
 type SSVConfig struct {
-	DomainType           spectypes.DomainType
-	RegistrySyncOffset   *big.Int
-	RegistryContractAddr ethcommon.Address
-	Bootnodes            []string
-	DiscoveryProtocolID  [6]byte
+	DomainType              spectypes.DomainType
+	RegistrySyncOffset      *big.Int
+	RegistryContractAddr    ethcommon.Address
+	Bootnodes               []string
+	DiscoveryProtocolID     [6]byte
+	TotalEthereumValidators int // value needs to be maintained — consider getting it from external API with default or per-network value(s) as fallback
 }
 
 func (s SSVConfig) String() string {
@@ -54,20 +55,22 @@ func (s SSVConfig) String() string {
 }
 
 type marshaledConfig struct {
-	DomainType           string   `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
-	RegistrySyncOffset   *big.Int `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
-	RegistryContractAddr string   `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
-	Bootnodes            []string `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
-	DiscoveryProtocolID  string   `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	DomainType              string   `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
+	RegistrySyncOffset      *big.Int `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr    string   `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes               []string `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+	DiscoveryProtocolID     string   `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	TotalEthereumValidators int      `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 }
 
 func (s *SSVConfig) marshal() (marshaledConfig, error) {
 	aux := marshaledConfig{
-		DomainType:           "0x" + hex.EncodeToString(s.DomainType[:]),
-		RegistrySyncOffset:   s.RegistrySyncOffset,
-		RegistryContractAddr: s.RegistryContractAddr.String(),
-		Bootnodes:            s.Bootnodes,
-		DiscoveryProtocolID:  "0x" + hex.EncodeToString(s.DiscoveryProtocolID[:]),
+		DomainType:              "0x" + hex.EncodeToString(s.DomainType[:]),
+		RegistrySyncOffset:      s.RegistrySyncOffset,
+		RegistryContractAddr:    s.RegistryContractAddr.String(),
+		Bootnodes:               s.Bootnodes,
+		DiscoveryProtocolID:     "0x" + hex.EncodeToString(s.DiscoveryProtocolID[:]),
+		TotalEthereumValidators: s.TotalEthereumValidators,
 	}
 
 	return aux, nil
@@ -93,11 +96,12 @@ func (s SSVConfig) MarshalYAML() (interface{}, error) {
 
 func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	aux := &struct {
-		DomainType           string   `yaml:"DomainType,omitempty"`
-		RegistrySyncOffset   *big.Int `yaml:"RegistrySyncOffset,omitempty"`
-		RegistryContractAddr string   `yaml:"RegistryContractAddr,omitempty"`
-		Bootnodes            []string `yaml:"Bootnodes,omitempty"`
-		DiscoveryProtocolID  string   `yaml:"DiscoveryProtocolID,omitempty"`
+		DomainType              string   `yaml:"DomainType,omitempty"`
+		RegistrySyncOffset      *big.Int `yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr    string   `yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes               []string `yaml:"Bootnodes,omitempty"`
+		DiscoveryProtocolID     string   `yaml:"DiscoveryProtocolID,omitempty"`
+		TotalEthereumValidators int      `yaml:"TotalEthereumValidators,omitempty"`
 	}{}
 
 	if err := unmarshal(aux); err != nil {
@@ -125,11 +129,12 @@ func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	}
 
 	*s = SSVConfig{
-		DomainType:           domainArr,
-		RegistrySyncOffset:   aux.RegistrySyncOffset,
-		RegistryContractAddr: ethcommon.HexToAddress(aux.RegistryContractAddr),
-		Bootnodes:            aux.Bootnodes,
-		DiscoveryProtocolID:  discoveryProtocolIDArr,
+		DomainType:              domainArr,
+		RegistrySyncOffset:      aux.RegistrySyncOffset,
+		RegistryContractAddr:    ethcommon.HexToAddress(aux.RegistryContractAddr),
+		Bootnodes:               aux.Bootnodes,
+		DiscoveryProtocolID:     discoveryProtocolIDArr,
+		TotalEthereumValidators: aux.TotalEthereumValidators,
 	}
 
 	return nil

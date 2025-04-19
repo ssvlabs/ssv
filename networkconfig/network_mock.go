@@ -42,6 +42,20 @@ func (m *MockNetwork) EXPECT() *MockNetworkMockRecorder {
 	return m.recorder
 }
 
+// EpochDuration mocks base method.
+func (m *MockNetwork) EpochDuration() time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EpochDuration")
+	ret0, _ := ret[0].(time.Duration)
+	return ret0
+}
+
+// EpochDuration indicates an expected call of EpochDuration.
+func (mr *MockNetworkMockRecorder) EpochDuration() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochDuration", reflect.TypeOf((*MockNetwork)(nil).EpochDuration))
+}
+
 // EpochStartTime mocks base method.
 func (m *MockNetwork) EpochStartTime(epoch phase0.Epoch) time.Time {
 	m.ctrl.T.Helper()
@@ -54,20 +68,6 @@ func (m *MockNetwork) EpochStartTime(epoch phase0.Epoch) time.Time {
 func (mr *MockNetworkMockRecorder) EpochStartTime(epoch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochStartTime", reflect.TypeOf((*MockNetwork)(nil).EpochStartTime), epoch)
-}
-
-// EpochsPerSyncCommitteePeriod mocks base method.
-func (m *MockNetwork) EpochsPerSyncCommitteePeriod() phase0.Epoch {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EpochsPerSyncCommitteePeriod")
-	ret0, _ := ret[0].(phase0.Epoch)
-	return ret0
-}
-
-// EpochsPerSyncCommitteePeriod indicates an expected call of EpochsPerSyncCommitteePeriod.
-func (mr *MockNetworkMockRecorder) EpochsPerSyncCommitteePeriod() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockNetwork)(nil).EpochsPerSyncCommitteePeriod))
 }
 
 // EstimatedCurrentEpoch mocks base method.
@@ -224,6 +224,20 @@ func (mr *MockNetworkMockRecorder) GetEpochFirstSlot(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochFirstSlot", reflect.TypeOf((*MockNetwork)(nil).GetEpochFirstSlot), epoch)
 }
 
+// GetEpochsPerSyncCommitteePeriod mocks base method.
+func (m *MockNetwork) GetEpochsPerSyncCommitteePeriod() phase0.Epoch {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEpochsPerSyncCommitteePeriod")
+	ret0, _ := ret[0].(phase0.Epoch)
+	return ret0
+}
+
+// GetEpochsPerSyncCommitteePeriod indicates an expected call of GetEpochsPerSyncCommitteePeriod.
+func (mr *MockNetworkMockRecorder) GetEpochsPerSyncCommitteePeriod() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockNetwork)(nil).GetEpochsPerSyncCommitteePeriod))
+}
+
 // GetGenesisTime mocks base method.
 func (m *MockNetwork) GetGenesisTime() time.Time {
 	m.ctrl.T.Helper()
@@ -292,6 +306,34 @@ func (m *MockNetwork) GetSlotsPerEpoch() phase0.Slot {
 func (mr *MockNetworkMockRecorder) GetSlotsPerEpoch() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotsPerEpoch", reflect.TypeOf((*MockNetwork)(nil).GetSlotsPerEpoch))
+}
+
+// GetSyncCommitteeSize mocks base method.
+func (m *MockNetwork) GetSyncCommitteeSize() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSyncCommitteeSize")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// GetSyncCommitteeSize indicates an expected call of GetSyncCommitteeSize.
+func (mr *MockNetworkMockRecorder) GetSyncCommitteeSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeSize", reflect.TypeOf((*MockNetwork)(nil).GetSyncCommitteeSize))
+}
+
+// IntervalDuration mocks base method.
+func (m *MockNetwork) IntervalDuration() time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IntervalDuration")
+	ret0, _ := ret[0].(time.Duration)
+	return ret0
+}
+
+// IntervalDuration indicates an expected call of IntervalDuration.
+func (mr *MockNetworkMockRecorder) IntervalDuration() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IntervalDuration", reflect.TypeOf((*MockNetwork)(nil).IntervalDuration))
 }
 
 // IsFirstSlotOfEpoch mocks base method.
