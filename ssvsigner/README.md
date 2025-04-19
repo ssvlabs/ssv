@@ -2,11 +2,11 @@
 
 ## Overview
 
-SSV Remote Signer is a service that separates the key management functions from the SSV node. This separation enhances security by isolating cryptographic keys from the node software, protecting them from potential node vulnerabilities.
+SSV Remote Signer is a service that separates the key management functions from the SSV node.
 
 The service consists of two main components:
 1. **Web3Signer** - A third-party service that provides secure key management and slashing protection
-2. **SSV-Signer** - A lightweight service that connects SSV nodes to Web3Signer
+2. **SSV-Signer** - A lightweight service that connects SSV nodes to Web3Signer; it can also be used as a library for local signing
 
 For more detailed technical overview, check [design documentation](./DESIGN.md).
 
@@ -33,7 +33,7 @@ docker run -e POSTGRES_PASSWORD=password -e POSTGRES_USER=postgres -e POSTGRES_D
 
 - Apply `web3signer` migrations to the DB
   - Download and unpack `web3signer` from https://github.com/Consensys/web3signer/releases
-  - Apply all migrations from V1 to V12 in `web3signer`'s `migrations/postgresql` folder maintaining their order and replacing `${MIGRATION_NAME}.sql` with the migration name
+  - Apply all migrations from V1 to V12 in `web3signer`'s `migrations/postgresql` folder maintaining their order and replacing `V1_initial.sql` with the migration name
   - It may be done using `psql` or `flyway`
 
 PSQL example:
@@ -173,21 +173,18 @@ SSV-Signer exposes the following API endpoints:
 
 ### Key Management Issues
 
-**Problem**: "Failed to decrypt share" error when adding validators  
-**Solution**: Ensure the operator private key provided to SSV-Signer matches the one used to encrypt the validator shares.
-
-**Problem**: Missing keys after restart  
-**Solution**: The SSV node syncs validator shares to the signer during operation. If restarting from an existing database, some manual coordination may be required to ensure all shares are properly registered with the signer.
+**Problem**: Already existing keys after restart
+**Solution**: The SSV node syncs validator shares to the signer during the first start. If restarting from a new clean database, cleaning keys in Web3Signer is required to ensure all shares are properly registered.
 
 ## Security Considerations
 
-1. **Network Security**: Ensure communication between all components occurs over secure networks. Consider using TLS for production environments.
-2. **Key Protection**: Store operator keys securely; consider hardware security modules for production environments.
-3**Access Control**: Limit access to the SSV-Signer and Web3Signer endpoints to only the necessary services.
+1. **Network Security**: Ensure communication between all components occurs over secure networks.
+2. **Key Protection**: Store operator keys securely restricting access to them
+3. **Access Control**: Limit access to the SSV-Signer and Web3Signer endpoints to only the necessary services.
 
 ## Performance Considerations
 
-1. **Resource Requirements**: Web3Signer may require significant resources for large validator sets.
+1. **Resource Requirements**: Web3Signer may require significant resources for large validator sets. If Web3Signer has a large number of keys, it requires very long time to initialize. 
 2. **Latency**: Keep the SSV-Signer and Web3Signer services close to the SSV node to minimize signing latency.
 3. **Database Performance**: For operators with many validators, ensure the PostgreSQL database is properly sized and optimized.
 
@@ -202,7 +199,7 @@ When migrating from local signing to remote signing:
 
 ## Limitations
 
-1. The remote signer doesn't automatically sync all validator shares on startup. It receives shares as the node processes them.
+1. The remote signer doesn't automatically sync all validator shares on startup. It receives shares as the node processes events.
 2. Changing operators with an existing database is not supported.
 3. Web3Signer is a third-party component with its own limitations and dependencies.
 
