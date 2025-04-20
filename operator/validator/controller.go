@@ -577,7 +577,6 @@ func (c *controller) startEligibleValidators(ctx context.Context, pubKeys []spec
 		// Start validator (if not already started).
 		// TODO: why its in the map if not started?
 		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
-			v.Share.SetBeaconMetadata(share.BeaconMetadata())
 			started, err := c.startValidator(v)
 			if err != nil {
 				c.logger.Warn("could not start validator", zap.Error(err))
