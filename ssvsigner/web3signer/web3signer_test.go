@@ -37,12 +37,21 @@ func mustWriteTemp(t *testing.T, data []byte, pattern string) string {
 
 	f, err := os.CreateTemp("", pattern)
 	require.NoError(t, err)
-	defer f.Close()
+
+	filename := f.Name()
+
+	// clean up the file after a test
+	t.Cleanup(func() {
+		os.Remove(filename)
+	})
 
 	_, err = f.Write(data)
 	require.NoError(t, err)
 
-	return f.Name()
+	err = f.Close()
+	require.NoError(t, err)
+
+	return filename
 }
 
 func mustBLSFromString(s string) phase0.BLSPubKey {
