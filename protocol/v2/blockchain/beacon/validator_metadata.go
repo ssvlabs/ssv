@@ -25,11 +25,6 @@ func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
 		m.ExitEpoch == other.ExitEpoch
 }
 
-// BecameEligible checks if the validator transitioned from unknown to eligible states.
-func (m *ValidatorMetadata) BecameEligible(before *ValidatorMetadata) bool {
-	return before.Unknown() && !m.Unknown() && !m.Exited() && !m.Slashed()
-}
-
 // Unknown returns true if the validator is unknown
 func (m *ValidatorMetadata) Unknown() bool {
 	return m.Status == eth2apiv1.ValidatorStateUnknown

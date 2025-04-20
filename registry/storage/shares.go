@@ -387,16 +387,18 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 				continue
 			}
 
-			if !share.MetadataEquals(metadata) {
-				share.SetBeaconMetadata(metadata)
-				changedShares = append(changedShares, share)
-
-				if changedMetadata == nil {
-					changedMetadata = make(beacon.ValidatorMetadataMap)
-				}
-
-				changedMetadata[pk] = metadata
+			if metadata.Equals(share.BeaconMetadata()) {
+				continue
 			}
+
+			// Update the share with the new metadata
+			share.SetBeaconMetadata(metadata)
+			changedShares = append(changedShares, share)
+
+			if changedMetadata == nil {
+				changedMetadata = make(beacon.ValidatorMetadataMap)
+			}
+			changedMetadata[pk] = metadata
 		}
 
 		if len(changedShares) == 0 {

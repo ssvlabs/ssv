@@ -66,20 +66,17 @@ func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
 
 // BeaconMetadata creates and returns a new ValidatorMetadata instance from SSVShare.
 func (s *SSVShare) BeaconMetadata() *beacon.ValidatorMetadata {
-	if s == nil {
-		return nil
-	}
-
 	return &beacon.ValidatorMetadata{
 		Status:          s.Status,
 		Index:           s.ValidatorIndex,
 		ActivationEpoch: s.ActivationEpoch,
+		ExitEpoch:       s.ExitEpoch,
 	}
 }
 
 // SetBeaconMetadata updates the share's metadata fields and sets the update timestamp.
 func (s *SSVShare) SetBeaconMetadata(metadata *beacon.ValidatorMetadata) {
-	if s == nil || metadata == nil {
+	if metadata == nil {
 		return
 	}
 
@@ -88,18 +85,6 @@ func (s *SSVShare) SetBeaconMetadata(metadata *beacon.ValidatorMetadata) {
 	s.ActivationEpoch = metadata.ActivationEpoch
 	s.ExitEpoch = metadata.ExitEpoch
 	s.BeaconMetadataLastUpdated = time.Now()
-}
-
-// MetadataEquals checks if the provided metadata matches the share's current metadata.
-func (s *SSVShare) MetadataEquals(other *beacon.ValidatorMetadata) bool {
-	if s == nil || other == nil {
-		return false
-	}
-
-	return s.ValidatorIndex == other.Index &&
-		s.Status == other.Status &&
-		s.ActivationEpoch == other.ActivationEpoch &&
-		s.ExitEpoch == other.ExitEpoch
 }
 
 // HasBeaconMetadata checks whether SSVShare has been enriched with respective Beacon metadata.

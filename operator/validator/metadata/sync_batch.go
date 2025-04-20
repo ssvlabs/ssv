@@ -28,7 +28,7 @@ func (s SyncBatch) DetectValidatorStateChanges() (eligibleToStart, slashed, exit
 			continue
 		}
 
-		if after.BecameEligible(before) {
+		if before.Unknown() && !after.Unknown() && !after.Exited() && !after.Slashed() {
 			eligibleToStart = append(eligibleToStart, pk)
 		}
 

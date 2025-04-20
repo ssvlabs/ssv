@@ -49,18 +49,6 @@ func TestValidatorMetadata_Status(t *testing.T) {
 	})
 }
 
-func TestValidatorMetadata_BecameEligible(t *testing.T) {
-	unknown := &ValidatorMetadata{Status: eth2apiv1.ValidatorStateUnknown}
-	active := &ValidatorMetadata{Status: eth2apiv1.ValidatorStateActiveOngoing}
-	exited := &ValidatorMetadata{Status: eth2apiv1.ValidatorStateExitedUnslashed}
-	slashed := &ValidatorMetadata{Status: eth2apiv1.ValidatorStateActiveSlashed}
-
-	require.True(t, active.BecameEligible(unknown))
-	require.False(t, exited.BecameEligible(unknown))
-	require.False(t, slashed.BecameEligible(unknown))
-	require.False(t, unknown.BecameEligible(unknown))
-}
-
 func TestValidatorMetadata_Equals(t *testing.T) {
 	meta1 := &ValidatorMetadata{Status: eth2apiv1.ValidatorStateActiveOngoing, Index: 1, ActivationEpoch: 2}
 	meta2 := &ValidatorMetadata{Status: eth2apiv1.ValidatorStateActiveOngoing, Index: 1, ActivationEpoch: 2}
