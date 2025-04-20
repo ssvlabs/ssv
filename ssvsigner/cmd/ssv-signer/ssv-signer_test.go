@@ -147,8 +147,6 @@ func TestParseEmbeddedFlags(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
 			os.Args = tc.args
 
 			cli := &CLI{}
@@ -167,7 +165,6 @@ func TestParseEmbeddedFlags(t *testing.T) {
 
 // TestEnvironmentVariables tests parsing embedded structure values from environment variables.
 func TestEnvironmentVariables(t *testing.T) {
-	t.Parallel()
 
 	originalEnv := os.Environ()
 	defer func() {
