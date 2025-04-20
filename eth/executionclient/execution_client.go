@@ -13,6 +13,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
@@ -411,6 +412,8 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	}
 	defer sub.Unsubscribe()
 
+	var lastFinalized uint64
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -426,13 +429,48 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
-			if header.Number.Uint64() < ec.followDistance {
-				continue
+			ec.logger.Debug("New head received",
+				zap.Uint64("head_number", header.Number.Uint64()),
+				zap.String("head_hash", header.Hash().Hex()),
+				zap.String("head_parent_hash", header.ParentHash.Hex()))
+
+			//if header.Number.Uint64() < ec.followDistance {
+			//	continue
+			//}
+			//toBlock := header.Number.Uint64() - ec.followDistance
+			//if toBlock < fromBlock {
+			//	continue
+			//}
+
+			finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+			if err != nil {
+				ec.logger.Error(elResponseErrMsg,
+					zap.String("operation", "HeaderByNumber"),
+					zap.Error(err))
+				return fromBlock, fmt.Errorf("get finalized block: %w", err)
 			}
-			toBlock := header.Number.Uint64() - ec.followDistance
+			toBlock := finalizedBlock.Number.Uint64()
+
+			if toBlock != lastFinalized {
+				finalizedEpoch := toBlock / 32
+				ec.logger.Info("⏱ Finalized block changed",
+					zap.Uint64("new_finalized", toBlock),
+					zap.Uint64("epoch", finalizedEpoch),
+					zap.Uint64("previous_finalized", lastFinalized))
+				lastFinalized = toBlock
+			}
+
+			// Wait until the finalized block number (toBlock) catches up to the block we want to start syncing from (fromBlock).
+			// For example, if we last processed block 123456, fromBlock = 123457.
+			// If Ethereum finality is only at 123454, we must wait until it reaches 123457 to continue.
+			// This prevents fetching logs from unfinalized (and potentially reorged) blocks.
 			if toBlock < fromBlock {
+				ec.logger.Info("Waiting for finalized block to reach fromBlock",
+					zap.Uint64("from_block", fromBlock),
+					zap.Uint64("finalized_block", toBlock))
 				continue
 			}
+
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
 				logs <- block
