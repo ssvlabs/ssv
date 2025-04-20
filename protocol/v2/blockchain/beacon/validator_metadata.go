@@ -10,7 +10,6 @@ type ValidatorMetadataMap map[spectypes.ValidatorPK]*ValidatorMetadata
 
 // ValidatorMetadata represents validator metadata from Ethereum beacon node
 type ValidatorMetadata struct {
-	Balance         phase0.Gwei              `json:"balance"`
 	Status          eth2apiv1.ValidatorState `json:"status"`
 	Index           phase0.ValidatorIndex    `json:"index"`
 	ActivationEpoch phase0.Epoch             `json:"activation_epoch"`

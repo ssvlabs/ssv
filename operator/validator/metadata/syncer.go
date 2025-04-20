@@ -170,7 +170,6 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (beac
 	results := make(beacon.ValidatorMetadataMap, len(validatorsIndexMap))
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
-			Balance:         v.Balance,
 			Status:          v.Status,
 			Index:           v.Index,
 			ActivationEpoch: v.Validator.ActivationEpoch,
