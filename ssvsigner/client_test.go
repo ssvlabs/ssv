@@ -1098,18 +1098,32 @@ func writeCertFiles(t *testing.T) (string, string, string) {
 	t.Helper()
 
 	ca, _, cert, key := testingutils.GenerateCertificates(t, "localhost")
+
 	caF, err := os.CreateTemp("", "ca-*.pem")
 	require.NoError(t, err)
+	defer caF.Close()
 
 	certF, err := os.CreateTemp("", "crt-*.pem")
 	require.NoError(t, err)
+	defer certF.Close()
 
 	keyF, err := os.CreateTemp("", "key-*.pem")
 	require.NoError(t, err)
+	defer keyF.Close()
 
-	require.NoError(t, os.WriteFile(caF.Name(), ca, 0644))
-	require.NoError(t, os.WriteFile(certF.Name(), cert, 0644))
-	require.NoError(t, os.WriteFile(keyF.Name(), key, 0644))
+	caPath := caF.Name()
+	certPath := certF.Name()
+	keyPath := keyF.Name()
 
-	return certF.Name(), keyF.Name(), caF.Name()
+	t.Cleanup(func() {
+		os.Remove(caPath)
+		os.Remove(certPath)
+		os.Remove(keyPath)
+	})
+
+	require.NoError(t, os.WriteFile(caPath, ca, 0644))
+	require.NoError(t, os.WriteFile(certPath, cert, 0644))
+	require.NoError(t, os.WriteFile(keyPath, key, 0600))
+
+	return certPath, keyPath, caPath
 }
