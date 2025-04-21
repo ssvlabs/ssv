@@ -132,10 +132,11 @@ func (h *CommitteeHandler) addToCommitteeMap(
 				ValidatorDuties: []*spectypes.ValidatorDuty{},
 			},
 		}
+		
+		committeeDutyMap[committee.id] = cd
 	}
 
 	cd.duty.ValidatorDuties = append(cd.duty.ValidatorDuties, specDuty)
-	committeeDutyMap[committee.id] = cd
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
