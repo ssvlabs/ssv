@@ -132,7 +132,7 @@ func (h *CommitteeHandler) addToCommitteeMap(
 				ValidatorDuties: []*spectypes.ValidatorDuty{},
 			},
 		}
-		
+
 		committeeDutyMap[committee.id] = cd
 	}
 
