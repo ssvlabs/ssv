@@ -29,11 +29,8 @@ type CLI struct {
 
 func main() {
 	cli := CLI{}
-	err := kong.Parse(&cli)
-	if err != nil {
-		log.Fatal(err)
-	}
-	
+	_ = kong.Parse(&cli)
+
 	cfg := zap.NewProductionConfig()
 	if cli.LogFormat == "console" {
 		cfg.Encoding = "console"
