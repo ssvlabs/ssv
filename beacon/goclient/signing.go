@@ -17,6 +17,20 @@ import (
 	"go.uber.org/zap"
 )
 
+func (gc *GoClient) voluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+	value := gc.voluntaryExitDomainCached.Load()
+	if value != nil {
+		return *value, nil
+	}
+
+	v, err := gc.computeVoluntaryExitDomain(ctx)
+	if err != nil {
+		return phase0.Domain{}, fmt.Errorf("compute voluntary exit domain: %w", err)
+	}
+	gc.voluntaryExitDomainCached.Store(&v)
+	return v, nil
+}
+
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
 	start := time.Now()
 	specResponse, err := gc.multiClient.Spec(gc.ctx, &api.SpecOpts{})
@@ -40,9 +54,6 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		)
 		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
 	}
-
-	// TODO: consider storing fork version and genesis validators root in goClient
-	//		instead of fetching it every time
 
 	forkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
 	if !ok {
@@ -96,7 +107,8 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 
 func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	switch domain {
-	case spectypes.DomainApplicationBuilder: // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
+	case spectypes.DomainApplicationBuilder:
+		// DomainApplicationBuilder is constructed based on SSV network configuration
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
 			CurrentVersion:        gc.network.ForkVersion(),
@@ -110,7 +122,9 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
 	case spectypes.DomainVoluntaryExit:
-		return gc.computeVoluntaryExitDomain(gc.ctx)
+		// Deneb upgrade introduced https://eips.ethereum.org/EIPS/eip-7044 that requires special
+		// handling for DomainVoluntaryExit
+		return gc.voluntaryExitDomain(gc.ctx)
 	}
 
 	start := time.Now()
