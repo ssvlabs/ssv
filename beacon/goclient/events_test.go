@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -22,7 +22,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	t.Run("Should launch event listener when go client is instantiated", func(t *testing.T) {
 		eventsEndpointSubscribedCh := make(chan any)
 
-		server := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		server := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if strings.Contains(r.URL.Path, "/eth/v1/events") {
 				eventsEndpointSubscribedCh <- struct{}{}
 			}
@@ -45,7 +45,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	})
 
 	t.Run("Should create subscriber", func(t *testing.T) {
-		server := tests.MockServer(nil)
+		server := mocks.MockServer(nil)
 		client := eventsTestClient(t, server.URL)
 		defer server.Close()
 
@@ -59,7 +59,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 	})
 
 	t.Run("Should not create subscriber and return error when supported topics does not contain HeadEventTopic", func(t *testing.T) {
-		server := tests.MockServer(nil)
+		server := mocks.MockServer(nil)
 		client := eventsTestClient(t, server.URL)
 		client.supportedTopics = []EventTopic{}
 		defer server.Close()
@@ -73,13 +73,16 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 }
 
 func eventsTestClient(t *testing.T, serverURL string) *GoClient {
-	server, err := New(zap.NewNop(), Options{
-		BeaconNodeAddr: serverURL,
-		Context:        context.Background(),
-		Network:        beacon.NewNetwork(types.MainNetwork),
-	},
-		nil,
-		tests.MockSlotTickerProvider)
+	server, err := New(
+		zap.NewNop(),
+		Options{
+			BeaconNodeAddr: serverURL,
+			Context:        context.Background(),
+			Network:        beacon.NewNetwork(types.MainNetwork),
+		},
+		mocks.NewValidatorStore(),
+		mocks.NewSlotTickerProvider,
+	)
 
 	require.NoError(t, err)
 	return server

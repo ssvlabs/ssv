@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -197,7 +198,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 				CommonTimeout:  1 * time.Second,
 				LongTimeout:    1 * time.Second,
 			},
-			nil,
+			mocks.NewValidatorStore(),
 			func() slotticker.SlotTicker {
 				return slotticker.New(zap.NewNop(), slotticker.Config{
 					SlotDuration: 12 * time.Second,
@@ -456,7 +457,7 @@ func createClient(
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
 		},
-		nil,
+		mocks.NewValidatorStore(),
 		func() slotticker.SlotTicker {
 			return slotticker.New(zap.NewNop(), slotticker.Config{
 				SlotDuration: 12 * time.Second,
