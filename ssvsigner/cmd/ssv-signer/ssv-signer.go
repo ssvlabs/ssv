@@ -23,13 +23,32 @@ type CLI struct {
 	PrivateKey         string `env:"PRIVATE_KEY" xor:"keys" required:""`
 	PrivateKeyFile     string `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files"`
 	PasswordFile       string `env:"PASSWORD_FILE" and:"files"`
+	LogLevel           string `env:"LOG_LEVEL" default:"info" enum:"debug,info,warn,error" help:"Set log level (debug, info, warn, error)"`
+	LogFormat          string `env:"LOG_FORMAT" default:"console" enum:"console,json" help:"Set log format (console, json)"`
 }
 
 func main() {
 	cli := CLI{}
-	_ = kong.Parse(&cli)
+	err := kong.Parse(&cli)
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	cfg := zap.NewProductionConfig()
+	if cli.LogFormat == "console" {
+		cfg.Encoding = "console"
+		cfg.EncoderConfig = zap.NewDevelopmentEncoderConfig()
+	} else {
+		cfg.Encoding = "json"
+	}
 
-	logger, err := zap.NewDevelopment()
+	level := zap.NewAtomicLevel()
+	if err := level.UnmarshalText([]byte(cli.LogLevel)); err != nil {
+		log.Fatalf("failed to parse log level: %v", err)
+	}
+	cfg.Level = level
+
+	logger, err := cfg.Build()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,6 +70,8 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.String("private_key_file", cli.PrivateKeyFile),
 		zap.String("password_file", cli.PasswordFile),
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
+		zap.String("log_level", cli.LogLevel),
+		zap.String("log_format", cli.LogFormat),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
