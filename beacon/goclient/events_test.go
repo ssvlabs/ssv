@@ -77,7 +77,7 @@ func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 		zap.NewNop(),
 		Options{
 			BeaconNodeAddr: serverURL,
-			Context:        context.Background(),
+			Context:        t.Context(),
 			Network:        beacon.NewNetwork(types.MainNetwork),
 		},
 		mocks.NewValidatorStore(),
