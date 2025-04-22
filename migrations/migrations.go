@@ -10,8 +10,8 @@ import (
 
 	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -53,20 +53,20 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db          basedb.Database
-	NodeStorage operatorstorage.Storage
-	DbPath      string
-	Network     beacon.Network
+	Db            basedb.Database
+	NodeStorage   operatorstorage.Storage
+	DbPath        string
+	NetworkConfig networkconfig.NetworkConfig
 }
 
 // nolint
 func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error) {
-	return operatorstorage.NewNodeStorage(logger, o.Db)
+	return operatorstorage.NewNodeStorage(o.NetworkConfig, logger, o.Db)
 }
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.Network, logger)
+	return ekm.NewSignerStorage(o.Db, o.NetworkConfig.Beacon, logger)
 }
 
 // Run executes the migrations.
