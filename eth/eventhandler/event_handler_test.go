@@ -71,9 +71,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	currentSlot := &utils.SlotValue{}
 	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
-	mockNetworkConfig := &networkconfig.NetworkConfig{
-		Beacon: mockBeaconNetwork,
-	}
+	mockNetworkConfig := &networkconfig.NetworkConfig{}
+	mockNetworkConfig.Beacon = mockBeaconNetwork
 
 	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
 	if err != nil {
@@ -1364,9 +1363,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	operatorDataStore := operatordatastore.New(operatorData)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, &utils.SlotValue{}),
-		}
+		network = &networkconfig.NetworkConfig{}
+		network.Beacon = utils.SetupMockBeaconNetwork(t, &utils.SlotValue{})
 	}
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, *network, "")
@@ -1450,7 +1448,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
