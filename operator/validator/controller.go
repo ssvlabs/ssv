@@ -180,7 +180,7 @@ type controller struct {
 	messageValidator     validation.MessageValidator
 
 	// committeeObservers is a cache of initialized committeeObserver instances
-	committeesObservers      *hashmap.Map[spectypes.MessageID, *committeeObserver] // todo: need to evict?
+	committeesObservers      *hashmap.Map[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
 	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
