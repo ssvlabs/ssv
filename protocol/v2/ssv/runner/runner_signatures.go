@@ -30,15 +30,11 @@ func (b *BaseRunner) signBeaconObject(
 	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
 		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
 	}
-	sharePubKey := runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey
-	if len(sharePubKey) != len(spec.BLSPubKey{}) {
-		return nil, fmt.Errorf("invalid share pubkey length for validator index %d", duty.ValidatorIndex)
-	}
 	sig, r, err := runner.GetSigner().SignBeaconObject(
 		ctx,
 		obj,
 		domain,
-		spec.BLSPubKey(sharePubKey),
+		spec.BLSPubKey(runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey),
 		slot,
 		signatureDomain,
 	)
