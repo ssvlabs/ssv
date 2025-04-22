@@ -266,6 +266,7 @@ var StartNodeCmd = &cobra.Command{
 		messageValidator := validation.New(
 			networkConfig,
 			nodeStorage.ValidatorStore(),
+			nodeStorage,
 			dutyStore,
 			signatureVerifier,
 			consensusClient.ForkEpochElectra,
