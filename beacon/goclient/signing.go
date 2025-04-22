@@ -108,7 +108,8 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	switch domain {
 	case spectypes.DomainApplicationBuilder:
-		// DomainApplicationBuilder is constructed based on SSV network configuration
+		// DomainApplicationBuilder is constructed based on what Ethereum network we are connected
+		// to (Mainnet, Hoodi, etc.)
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
 			CurrentVersion:        gc.network.ForkVersion(),
