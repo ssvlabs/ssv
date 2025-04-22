@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -32,7 +33,7 @@ type Syncer struct {
 	logger            *zap.Logger
 	shareStorage      shareStorage
 	validatorStore    selfValidatorStore
-	beaconNetwork     beacon.BeaconNetwork
+	networkConfig     networkconfig.NetworkConfig
 	beaconNode        beacon.BeaconNode
 	fixedSubnets      networkcommons.Subnets
 	syncInterval      time.Duration
@@ -54,7 +55,7 @@ func NewSyncer(
 	logger *zap.Logger,
 	shareStorage shareStorage,
 	validatorStore selfValidatorStore,
-	beaconNetwork beacon.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	beaconNode beacon.BeaconNode,
 	fixedSubnets networkcommons.Subnets,
 	opts ...Option,
@@ -63,7 +64,7 @@ func NewSyncer(
 		logger:            logger,
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,
-		beaconNetwork:     beaconNetwork,
+		networkConfig:     networkConfig,
 		beaconNode:        beaconNode,
 		fixedSubnets:      fixedSubnets,
 		syncInterval:      defaultSyncInterval,
