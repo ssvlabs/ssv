@@ -16,12 +16,18 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
 type CLI struct {
 	Web3SignerEndpoint string `env:"WEB3SIGNER_ENDPOINT" required:""`
 	BatchSize          int    `env:"BATCH_SIZE" default:"20"` // reduce if getting context deadline exceeded; increase if it's fast
+
+	// Client TLS configuration (for connecting to Web3Signer)
+	ClientKeystoreFile         string `env:"CLIENT_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
+	ClientKeystorePasswordFile string `env:"CLIENT_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	ClientKnownServersFile     string `env:"CLIENT_KNOWN_SERVERS_FILE" env-description:"Path to known servers file for authenticating Web3Signer"`
 }
 
 func main() {
@@ -46,6 +52,7 @@ func run(logger *zap.Logger, cli CLI) error {
 	logger.Debug("running",
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
 		zap.Int("batch_size", cli.BatchSize),
+		zap.Bool("client_tls_enabled", cli.ClientKeystoreFile != "" || cli.ClientKnownServersFile != ""),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
@@ -56,8 +63,38 @@ func run(logger *zap.Logger, cli CLI) error {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
+	tlsConfig := tls.Config{
+		ClientKeystoreFile:         cli.ClientKeystoreFile,
+		ClientKeystorePasswordFile: cli.ClientKeystorePasswordFile,
+		ClientKnownServersFile:     cli.ClientKnownServersFile,
+	}
+
+	if err := tlsConfig.ValidateClientTLS(); err != nil {
+		return fmt.Errorf("client TLS config: %w", err)
+	}
+
 	ctx := context.Background()
-	web3SignerClient, err := web3signer.New(cli.Web3SignerEndpoint)
+
+	// Configure Web3Signer client with TLS options
+	var web3SignerClient *web3signer.Web3Signer
+	var err error
+
+	if cli.ClientKeystoreFile != "" || cli.ClientKnownServersFile != "" {
+		// Load client TLS configuration
+		certificate, fingerprints, err := tlsConfig.LoadClientTLS()
+		if err != nil {
+			return fmt.Errorf("load client TLS config: %w", err)
+		}
+
+		web3SignerClient, err = web3signer.New(
+			cli.Web3SignerEndpoint,
+			web3signer.WithTLS(certificate, fingerprints),
+		)
+	} else {
+		web3SignerClient, err = web3signer.New(cli.Web3SignerEndpoint)
+
+	}
+
 	if err != nil {
 		return fmt.Errorf("create web3signer client: %w", err)
 	}

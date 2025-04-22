@@ -127,4 +127,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
+	software.sslmate.com/src/go-pkcs12 v0.5.0 // indirect
 )

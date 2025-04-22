@@ -66,6 +66,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -78,10 +79,10 @@ type KeyStore struct {
 }
 
 type SSVSignerConfig struct {
-	Endpoint         string `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
-	ClientCertFile   string `yaml:"ClientCertFile" env:"CLIENT_CERT_FILE" env-description:"Path to ssv-signer client certificate file"`
-	ClientKeyFile    string `yaml:"ClientKeyFile" env:"CLIENT_KEY_FILE" env-description:"Path to ssv-signer client key file"`
-	ClientCACertFile string `yaml:"ClientCACertFile" env:"CLIENT_CA_CERT_FILE" env-description:"Path to ssv-signer client CA certificate file"`
+	Endpoint                   string `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
+	ClientKeystoreFile         string `yaml:"ClientKeystoreFile" env:"CLIENT_KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
+	ClientKeystorePasswordFile string `yaml:"ClientKeystorePasswordFile" env:"CLIENT_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	ClientKnownServersFile     string `yaml:"ClientKnownServersFile" env:"CLIENT_KNOWN_SERVERS_FILE" env-description:"Path to ssv-signer client known servers file"`
 }
 
 type config struct {
@@ -168,13 +169,30 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 
+			var ssvSignerOptions []ssvsigner.ClientOption
+			ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithLogger(logger))
+
+			if cfg.SSVSigner.ClientKeystoreFile != "" || cfg.SSVSigner.ClientKnownServersFile != "" {
+				tlsConfig := ssvsignertls.Config{
+					ClientKeystoreFile:         cfg.SSVSigner.ClientKeystoreFile,
+					ClientKeystorePasswordFile: cfg.SSVSigner.ClientKeystorePasswordFile,
+					ClientKnownServersFile:     cfg.SSVSigner.ClientKnownServersFile,
+				}
+
+				certificate, trustedFingerprints, err := tlsConfig.LoadClientTLS()
+				if err != nil {
+					logger.Fatal("failed to load ssv-signer client TLS config", zap.Error(err))
+				}
+
+				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLS(certificate, trustedFingerprints))
+			}
+
 			ssvSignerClient, err := ssvsigner.NewClient(
 				cfg.SSVSigner.Endpoint,
-				ssvsigner.WithLogger(logger),
-				ssvsigner.WithTLS(cfg.SSVSigner.ClientCertFile, cfg.SSVSigner.ClientKeyFile, cfg.SSVSigner.ClientCACertFile),
+				ssvSignerOptions...,
 			)
 			if err != nil {
-				logger.Fatal("failed to create SSV signer client", zap.Error(err))
+				logger.Fatal("failed to create ssv-signer client", zap.Error(err))
 			}
 
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())

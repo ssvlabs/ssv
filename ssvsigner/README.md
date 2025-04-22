@@ -79,60 +79,134 @@ Example:
 
 ### Configure TLS for SSV-Signer
 
-SSV-Signer supports TLS for securing connections in two primary configurations:
+SSV-Signer supports TLS to secure connections in two ways:
 
-1. **Server TLS** - Secures incoming connections to SSV-Signer
-2. **Client TLS** - Secures connections from SSV-Signer to Web3Signer
+1. **Server TLS** - Secures incoming connections to SSV-Signer from SSV nodes
+2. **Client TLS** - Secures outgoing connections from SSV-Signer to Web3Signer
 
-#### Server TLS Configuration
+The TLS implementation is designed to match Web3Signer's TLS approach exactly, ensuring compatibility and simplifying
+configuration for users who are already familiar with Web3Signer.
 
-To enable TLS for the SSV-Signer server:
+#### Using PKCS12 Keystores
+
+SSV-Signer uses PKCS12 keystores for certificates, matching Web3Signer's approach. A PKCS12 keystore (.p12 file)
+contains both the certificate and its private key.
+
+To generate a PKCS12 keystore:
+
+```bash
+# Generate private key and certificate
+openssl req -newkey rsa:2048 -nodes -keyout key.pem -x509 -days 365 -out cert.pem
+
+# Create PKCS12 keystore from the key and certificate
+openssl pkcs12 -export -out keystore.p12 -inkey key.pem -in cert.pem -name "tls-key"
+```
+
+You'll be prompted to enter a password for the keystore. Save this password as you'll need it for configuration.
+
+#### Known Clients/Servers Authentication
+
+TLS authentication in SSV-Signer is based on certificate fingerprints, matching Web3Signer's approach. This method (
+sometimes called "certificate pinning") verifies the identity of clients/servers by comparing their certificate
+fingerprints with expected values.
+
+The known clients/servers files have the following formats:
+
+**Known Clients File Format:**
+
+```
+# Format: <common_name> <sha256-fingerprint>
+client1 DF:65:B8:02:08:5E:91:82:0F:91:F5:1C:96:56:92:C4:1A:F6:C6:27:FD:6C:FC:31:F2:BB:90:17:22:59:5B:50
+client2 AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90
+```
+
+**Known Servers File Format:**
+
+```
+# Format: <hostname>:<port> <sha256-fingerprint>
+localhost:9000 6C:B2:3E:F9:88:43:5E:62:69:9F:A9:9D:41:14:03:BA:83:24:AC:04:CE:BD:92:49:1B:8D:B2:A4:86:39:4C:BB
+web3signer.example.com:9000 6C:B2:3E:F9:88:43:5E:62:69:9F:A9:9D:41:14:03:BA:83:24:AC:04:CE:BD:92:49:1B:8D:B2:A4:86:39:4C:BB
+```
+
+To get a certificate's fingerprint:
+
+```bash
+# For PEM certificates
+openssl x509 -in cert.pem -fingerprint -sha256 -noout
+
+# For PKCS12 keystores
+keytool -list -v -keystore keystore.p12 -storetype PKCS12
+```
+
+#### Server TLS Configuration (SSV-Signer accepting connections)
+
+To configure SSV-Signer to use TLS for incoming connections:
 
 ```bash
 PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
 LISTEN_ADDR=0.0.0.0:8443 \
 WEB3SIGNER_ENDPOINT=http://localhost:9000 \
-SERVER_CERT_FILE=/path/to/server.crt \
-SERVER_KEY_FILE=/path/to/server.key \
-SERVER_CA_CERT_FILE=/path/to/ca.crt \
+SERVER_KEYSTORE_FILE=/path/to/server.p12 \
+SERVER_KEYSTORE_PASSWORD_FILE=/path/to/server_password.txt \
+SERVER_KNOWN_CLIENTS_FILE=/path/to/known_clients.txt \
 ./ssv-signer
 ```
 
-- `SERVER_CERT_FILE` and `SERVER_KEY_FILE` are required to enable server TLS
-- `SERVER_CA_CERT_FILE` enables client certificate verification (mutual TLS)
-- Server TLS uses TLS 1.3 and modern cipher suites for optimal security
+This is equivalent to Web3Signer's:
 
-#### Client TLS Configuration
+```bash
+--tls-keystore-file=/path/to/keystore.p12 \
+--tls-keystore-password-file=/path/to/password.txt \
+--tls-known-clients-file=/path/to/knownClients.txt
+```
 
-To enable TLS when connecting to Web3Signer:
+#### Client TLS Configuration (SSV-Signer connecting to Web3Signer)
+
+To configure SSV-Signer to use TLS when connecting to Web3Signer:
 
 ```bash
 PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
 LISTEN_ADDR=0.0.0.0:8080 \
 WEB3SIGNER_ENDPOINT=https://localhost:9000 \
-CLIENT_CERT_FILE=/path/to/client.crt \
-CLIENT_KEY_FILE=/path/to/client.key \
-CLIENT_CA_CERT_FILE=/path/to/ca.crt \
+CLIENT_KEYSTORE_FILE=/path/to/client.p12 \
+CLIENT_KEYSTORE_PASSWORD_FILE=/path/to/client_password.txt \
+CLIENT_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 ./ssv-signer
 ```
 
-- `CLIENT_CERT_FILE` and `CLIENT_KEY_FILE` are used for client authentication
-- `CLIENT_CA_CERT_FILE` is used to verify the Web3Signer server certificate
-- Both certificate and key files must be specified together
+This corresponds to Web3Signer's downstream TLS configuration.
 
-#### Full Mutual TLS Configuration
+#### Full Mutual TLS Example
 
-For complete end-to-end encryption with certificate verification:
+A complete setup with both server and client TLS would look like:
 
 ```bash
 PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
 LISTEN_ADDR=0.0.0.0:8443 \
 WEB3SIGNER_ENDPOINT=https://localhost:9000 \
-SERVER_CERT_FILE=/path/to/server.crt \
-SERVER_KEY_FILE=/path/to/server.key \
-SERVER_CA_CERT_FILE=/path/to/server-ca.crt \
-CLIENT_CERT_FILE=/path/to/client.crt \
-CLIENT_KEY_FILE=/path/to/client.key \
-CLIENT_CA_CERT_FILE=/path/to/client-ca.crt \
+# Server TLS (accepting connections)
+SERVER_KEYSTORE_FILE=/path/to/server.p12 \
+SERVER_KEYSTORE_PASSWORD_FILE=/path/to/server_password.txt \
+SERVER_KNOWN_CLIENTS_FILE=/path/to/known_clients.txt \
+# Client TLS (connecting to Web3Signer)
+CLIENT_KEYSTORE_FILE=/path/to/client.p12 \
+CLIENT_KEYSTORE_PASSWORD_FILE=/path/to/client_password.txt \
+CLIENT_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 ./ssv-signer
 ```
+
+#### Command Line Options Reference
+
+| SSV-Signer Option               | Description                                          | Web3Signer Equivalent                          |
+|---------------------------------|------------------------------------------------------|------------------------------------------------|
+| `SERVER_KEYSTORE_FILE`          | Server PKCS12 keystore file                          | `--tls-keystore-file`                          |
+| `SERVER_KEYSTORE_PASSWORD_FILE` | Path to file containing password for server keystore | `--tls-keystore-password-file`                 |
+| `SERVER_KNOWN_CLIENTS_FILE`     | Known clients fingerprints file                      | `--tls-known-clients-file`                     |
+| `CLIENT_KEYSTORE_FILE`          | Client PKCS12 keystore file                          | `--downstream-http-tls-keystore-file`          |
+| `CLIENT_KEYSTORE_PASSWORD_FILE` | Path to file containing password for client keystore | `--downstream-http-tls-keystore-password-file` |
+| `CLIENT_KNOWN_SERVERS_FILE`     | Known servers fingerprints file                      | `--downstream-http-tls-known-servers-file`     |
+
+#### Security Recommendations
+
+1. **Use TLS 1.3**: SSV-Signer defaults to TLS 1.3 for maximum security
+2. **Rotate certificates regularly**: Update your certificates and fingerprints periodically

@@ -3,6 +3,7 @@ package ssvsigner
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -30,17 +31,30 @@ type ClientOption func(*Client) error
 
 // WithLogger sets a custom logger for the client.
 func WithLogger(logger *zap.Logger) ClientOption {
-	return func(client *Client) error {
-		client.logger = logger
-
+	return func(c *Client) error {
+		c.logger = logger
 		return nil
 	}
 }
 
-// WithTLS is for setting the TLS.
-func WithTLS(certPath, keyPath, caPath string) ClientOption {
+// WithTLS configures TLS for the client.
+// This method sets up the client with TLS using the provided certificate and trusted fingerprints.
+//
+// Parameters:
+//   - certificate: client certificate for mutual TLS authentication
+//     (optional, can be empty if the server doesn't require client authentication)
+//   - trustedFingerprints: map of hostname:port strings to SHA-256 certificate fingerprints
+//     (optional, can be nil if certificate pinning is not required)
+//
+// Returns a ClientOption that configures the client with TLS.
+func WithTLS(certificate tls.Certificate, trustedFingerprints map[string]string) ClientOption {
 	return func(client *Client) error {
-		return client.configureTLS(certPath, keyPath, caPath)
+		tlsConfig, err := ssvsignertls.LoadClientConfig(certificate, trustedFingerprints)
+		if err != nil {
+			return fmt.Errorf("ssvsigner TLS: %w", err)
+		}
+
+		return client.setTLSConfig(tlsConfig)
 	}
 }
 
@@ -260,13 +274,9 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	return missing, nil
 }
 
-// configureTLS configures the client's Transport with TLS settings using provided certificate, key, and CA paths.
-func (c *Client) configureTLS(certPath, keyPath, caPath string) error {
-	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
-	if err != nil {
-		return fmt.Errorf("ssvsigner TLS: %w", err)
-	}
-
+// setTLSConfig applies the given TLS configuration to the HTTP client.
+// This method ensures that the HTTP client's transport is properly configured for TLS communication.
+func (c *Client) setTLSConfig(tlsConfig *tls.Config) error {
 	var transport *http.Transport
 	if t, ok := c.httpClient.Transport.(*http.Transport); ok {
 		transport = t.Clone()
@@ -274,7 +284,7 @@ func (c *Client) configureTLS(certPath, keyPath, caPath string) error {
 		transport = http.DefaultTransport.(*http.Transport).Clone()
 	}
 
-	transport.TLSClientConfig = tc
+	transport.TLSClientConfig = tlsConfig
 	c.httpClient.Transport = transport
 
 	return nil

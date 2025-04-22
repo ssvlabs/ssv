@@ -2,31 +2,19 @@ package web3signer
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/carlmjohnson/requests"
-
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 )
 
 type Web3Signer struct {
 	baseURL    string
 	httpClient *http.Client
-}
-
-// Option defines a function that configures a Web3Signer client.
-type Option func(*Web3Signer) error
-
-// WithTLS is for setting the TLS.
-func WithTLS(certPath, keyPath, caPath string) Option {
-	return func(client *Web3Signer) error {
-		return client.configureTLS(certPath, keyPath, caPath)
-	}
 }
 
 // New creates a new Web3Signer client with the given base URL and optional configuration.
@@ -114,13 +102,9 @@ func (c *Web3Signer) handleWeb3SignerErr(err error) error {
 	return HTTPResponseError{Err: err, Status: http.StatusInternalServerError}
 }
 
-// configureTLS configures TLS for the Web3Signer by setting up the HTTP client with certificates and CA paths.
-func (c *Web3Signer) configureTLS(certPath, keyPath, caPath string) error {
-	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, false)
-	if err != nil {
-		return fmt.Errorf("web3signer TLS: %w", err)
-	}
-
+// setTLSConfig applies the given TLS configuration to the HTTP client.
+// This method ensures that the HTTP client's transport is properly configured for TLS communication.
+func (c *Web3Signer) setTLSConfig(tlsConfig *tls.Config) error {
 	var transport *http.Transport
 	if t, ok := c.httpClient.Transport.(*http.Transport); ok {
 		transport = t.Clone()
@@ -128,7 +112,7 @@ func (c *Web3Signer) configureTLS(certPath, keyPath, caPath string) error {
 		transport = http.DefaultTransport.(*http.Transport).Clone()
 	}
 
-	transport.TLSClientConfig = tc
+	transport.TLSClientConfig = tlsConfig
 	c.httpClient.Transport = transport
 
 	return nil

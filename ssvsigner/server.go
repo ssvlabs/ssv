@@ -43,7 +43,7 @@ const (
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
-	remoteSigner    remoteSigner
+	remoteSigner    web3signer.RemoteSigner
 	router          *router.Router
 	tlsConfig       *tls.Config
 }
@@ -51,7 +51,7 @@ type Server struct {
 func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
-	remoteSigner remoteSigner,
+	remoteSigner web3signer.RemoteSigner,
 ) *Server {
 	r := router.New()
 
@@ -114,18 +114,22 @@ func (s *Server) ListenAndServe(addr string) error {
 	return fasthttp.ListenAndServe(addr, handler)
 }
 
-// SetTLS configures the server to use TLS by loading the given certificate, key, and CA paths into the TLS configuration.
-func (s *Server) SetTLS(certPath, keyPath, caPath string) error {
-	if certPath == "" && keyPath == "" {
-		return nil
-	}
-
-	tc, err := ssvsignertls.LoadTLSConfig(certPath, keyPath, caPath, true)
+// SetTLS configures TLS for the server.
+//
+// Parameters:
+//   - certificate: server certificate to present to clients (required)
+//   - trustedFingerprints: map of client names to expected certificate fingerprints
+//     (optional, if provided, client authentication will be required)
+//
+// Returns an error if the TLS configuration is invalid.
+func (s *Server) SetTLS(certificate tls.Certificate, trustedFingerprints map[string]string) error {
+	tlsConfig, err := ssvsignertls.LoadServerConfig(certificate, trustedFingerprints)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to configure server TLS: %w", err)
 	}
 
-	s.tlsConfig = tc
+	s.tlsConfig = tlsConfig
+
 	return nil
 }
 

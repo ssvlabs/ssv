@@ -8,13 +8,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
-
-	"github.com/ssvlabs/ssv/ssvsigner/tls/testingutils"
 )
 
 func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, *Web3Signer) {
@@ -30,28 +27,6 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 	require.NoError(t, err)
 
 	return server, web3Signer
-}
-
-func mustWriteTemp(t *testing.T, data []byte, pattern string) string {
-	t.Helper()
-
-	f, err := os.CreateTemp("", pattern)
-	require.NoError(t, err)
-
-	filename := f.Name()
-
-	// clean up the file after a test
-	t.Cleanup(func() {
-		os.Remove(filename)
-	})
-
-	_, err = f.Write(data)
-	require.NoError(t, err)
-
-	err = f.Close()
-	require.NoError(t, err)
-
-	return filename
 }
 
 func mustBLSFromString(s string) phase0.BLSPubKey {
@@ -73,18 +48,15 @@ func TestNew(t *testing.T) {
 	testCases := []struct {
 		name            string
 		baseURL         string
-		certPath        string
-		keyPath         string
-		caPath          string
 		expectedBaseURL string
 	}{
-		{"ValidURL", "http://localhost:9000", "", "", "", "http://localhost:9000"},
-		{"WithSlash", "http://localhost:9000/", "", "", "", "http://localhost:9000"},
+		{"ValidURL", "http://localhost:9000", "http://localhost:9000"},
+		{"WithSlash", "http://localhost:9000/", "http://localhost:9000"},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := New(tt.baseURL, WithTLS(tt.certPath, tt.keyPath, tt.caPath))
+			client, err := New(tt.baseURL)
 			require.NoError(t, err)
 			require.Equal(t, tt.expectedBaseURL, client.baseURL)
 		})
@@ -416,15 +388,35 @@ func TestSign(t *testing.T) {
 	}
 }
 
-func TestTLSConfigFiles(t *testing.T) {
+func TestTLSConfig(t *testing.T) {
 	t.Parallel()
 
-	ca, _, cert, key := testingutils.GenerateCertificates(t, "localhost")
-	certFile := mustWriteTemp(t, cert, "cert-*.pem")
-	keyFile := mustWriteTemp(t, key, "key-*.pem")
-	caFile := mustWriteTemp(t, ca, "ca-*.pem")
+	cert := []byte(`-----BEGIN CERTIFICATE-----
+MIIBhTCCASugAwIBAgIQIRi6zePL6mKjOipn+dNuaTAKBggqhkjOPQQDAjASMRAw
+DgYDVQQKEwdBY21lIENvMB4XDTE3MTAyMDE5NDMwNloXDTE4MTAyMDE5NDMwNlow
+EjEQMA4GA1UEChMHQWNtZSBDbzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABD0d
+7VNhbWvZLWPuj/RtHFjvtJBEwOkhbN/BnnE8rnZR8+sbwnc/KhCk3FhnpHZnQz7B
+5aETbbIgmuvewdjvSBSjYzBhMA4GA1UdDwEB/wQEAwICpDATBgNVHSUEDDAKBggr
+BgEFBQcDATAPBgNVHRMBAf8EBTADAQH/MCkGA1UdEQQiMCCCDmxvY2FsaG9zdDo1
+NDUzgg4xMjcuMC4wLjE6NTQ1MzAKBggqhkjOPQQDAgNIADBFAiEA2zpJEPQyz6/l
+Wf86aX6PepsntZv2GYlA5UpabfT2EZICICpJ5h/iI+i341gBmLiAFQOyTDT+/wQc
+6MF9+Yw1Yy0t
+-----END CERTIFICATE-----`)
 
-	client, err := New("https://example.com", WithTLS(certFile, keyFile, caFile))
+	key := []byte(`-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIIrYSSNQFaA2Hwf1duRSxKtLYX5CB04fSeQ6tF1aY/PuoAoGCCqGSM49
+AwEHoUQDQgAEPR3tU2Fta9ktY+6P9G0cWO+0kETA6SFs38GecTyudlHz6xvCdz8q
+EKTcWGekdmdDPsHloRNtsiCa697B2O9IFA==
+-----END EC PRIVATE KEY-----`)
+
+	tlsCert, err := tls.X509KeyPair(cert, key)
+	require.NoError(t, err)
+
+	trustedFingerprints := map[string]string{
+		"example.com:443": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	}
+
+	client, err := New("https://example.com", WithTLS(tlsCert, trustedFingerprints))
 	require.NoError(t, err)
 
 	transport, ok := client.httpClient.Transport.(*http.Transport)
@@ -433,42 +425,6 @@ func TestTLSConfigFiles(t *testing.T) {
 	cfg := transport.TLSClientConfig
 	require.NotNil(t, cfg)
 	require.Len(t, cfg.Certificates, 1)
-	require.NotNil(t, cfg.RootCAs)
-}
-
-func TestTLSConnection(t *testing.T) {
-	t.Parallel()
-
-	caCert, _, serverCert, serverKey := testingutils.GenerateCertificates(t, "localhost")
-	serverTLSCert, err := tls.X509KeyPair(serverCert, serverKey)
-	require.NoError(t, err)
-
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("[]"))
-	})
-
-	srv := httptest.NewUnstartedServer(handler)
-	srv.TLS = &tls.Config{Certificates: []tls.Certificate{serverTLSCert}}
-
-	srv.StartTLS()
-	defer srv.Close()
-
-	// success with CA
-	caFile := mustWriteTemp(t, caCert, "ca-*.pem")
-	client, err := New(srv.URL, WithTLS("", "", caFile))
-	require.NoError(t, err)
-
-	_, err = client.ListKeys(context.Background())
-	require.NoError(t, err)
-
-	// failure without CA
-	client2, err := New(srv.URL)
-	require.NoError(t, err)
-
-	_, err = client2.ListKeys(context.Background())
-	require.Error(t, err)
-	require.ErrorAs(t, err, &HTTPResponseError{})
-	require.Contains(t, err.Error(), "failed to verify certificate")
+	require.True(t, cfg.InsecureSkipVerify)
+	require.NotNil(t, cfg.VerifyConnection)
 }

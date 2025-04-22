@@ -12,6 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	"github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -22,13 +23,15 @@ type CLI struct {
 	PrivateKeyFile     string `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files"`
 	PasswordFile       string `env:"PASSWORD_FILE" and:"files"`
 
-	// TLS configuration
-	ClientCertFile   string `env:"CLIENT_CERT_FILE" env-description:"Path to certificate file for TLS connection to SSV Signer"`
-	ClientKeyFile    string `env:"CLIENT_KEY_FILE" env-description:"Path to key file for TLS connection to SSV Signer"`
-	ClientCACertFile string `env:"CLIENT_CA_CERT_FILE" env-description:"Path to CA certificate file for TLS connection to SSV Signer"`
-	ServerCACertFile string `env:"SERVER_CA_CERT_FILE" env-description:"Path to CA certificate file for client authentication on server"`
-	ServerCertFile   string `env:"SERVER_CERT_FILE" env-description:"Path to certificate file for server TLS connections"`
-	ServerKeyFile    string `env:"SERVER_KEY_FILE" env-description:"Path to key file for server TLS connections"`
+	// Server TLS configuration (for incoming connections to SSV Signer)
+	ServerKeystoreFile         string `env:"SERVER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for server TLS connections"`
+	ServerKeystorePasswordFile string `env:"SERVER_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for server keystore file"`
+	ServerKnownClientsFile     string `env:"SERVER_KNOWN_CLIENTS_FILE" env-description:"Path to known clients file for authenticating clients"`
+
+	// Client TLS configuration (for connecting to Web3Signer)
+	ClientKeystoreFile         string `env:"CLIENT_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
+	ClientKeystorePasswordFile string `env:"CLIENT_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	ClientKnownServersFile     string `env:"CLIENT_KNOWN_SERVERS_FILE" env-description:"Path to known servers file for authenticating Web3Signer"`
 }
 
 func main() {
@@ -55,15 +58,28 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.String("listen_addr", cli.ListenAddr),
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
-		zap.Bool("server_tls_enabled", cli.ServerCertFile != "" && cli.ServerKeyFile != ""),
-		zap.Bool("client_tls_enabled", cli.ClientCertFile != "" && cli.ClientKeyFile != ""),
+		zap.Bool("server_tls_enabled", cli.ServerKeystoreFile != ""),
+		zap.Bool("client_tls_enabled", cli.ClientKeystoreFile != ""),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
 		return fmt.Errorf("init BLS: %w", err)
 	}
 
-	if err := validateConfig(cli); err != nil {
+	// Create TLS config from CLI parameters
+	tlsConfig := tls.Config{
+		// Server TLS config
+		ServerKeystoreFile:         cli.ServerKeystoreFile,
+		ServerKeystorePasswordFile: cli.ServerKeystorePasswordFile,
+		ServerKnownClientsFile:     cli.ServerKnownClientsFile,
+
+		// Client TLS config
+		ClientKeystoreFile:         cli.ClientKeystoreFile,
+		ClientKeystorePasswordFile: cli.ClientKeystorePasswordFile,
+		ClientKnownServersFile:     cli.ClientKnownServersFile,
+	}
+
+	if err := validateConfig(cli, tlsConfig); err != nil {
 		return err
 	}
 
@@ -72,26 +88,53 @@ func run(logger *zap.Logger, cli CLI) error {
 		return err
 	}
 
-	web3SignerClient, err := web3signer.New(cli.Web3SignerEndpoint, web3signer.WithTLS(cli.ClientCertFile, cli.ClientKeyFile, cli.ClientCACertFile))
+	// Configure Web3Signer client with TLS options
+	var web3SignerClient *web3signer.Web3Signer
+	if cli.ClientKeystoreFile != "" || cli.ClientKnownServersFile != "" {
+		// Load client TLS configuration
+		certificate, fingerprints, err := tlsConfig.LoadClientTLS()
+		if err != nil {
+			return fmt.Errorf("load client TLS config: %w", err)
+		}
+
+		web3SignerClient, err = web3signer.New(
+			cli.Web3SignerEndpoint,
+			web3signer.WithTLS(certificate, fingerprints),
+		)
+	} else {
+		web3SignerClient, err = web3signer.New(cli.Web3SignerEndpoint)
+	}
+
 	if err != nil {
 		return fmt.Errorf("init web3signer: %w", err)
 	}
 
 	srv := ssvsigner.NewServer(logger, operatorPrivateKey, web3SignerClient)
-	if err := srv.SetTLS(cli.ServerCertFile, cli.ServerKeyFile, cli.ServerCACertFile); err != nil {
-		return fmt.Errorf("server TLS: %w", err)
+
+	// Configure server TLS
+	if cli.ServerKeystoreFile != "" {
+		// Load server TLS configuration
+		certificate, fingerprints, err := tlsConfig.LoadServerTLS()
+		if err != nil {
+			return fmt.Errorf("load server TLS config: %w", err)
+		}
+
+		// Set TLS configuration
+		if err := srv.SetTLS(certificate, fingerprints); err != nil {
+			return fmt.Errorf("server TLS: %w", err)
+		}
 	}
 
 	logger.Info("Starting ssv-signer server",
 		zap.String("addr", cli.ListenAddr),
-		zap.Bool("tls_enabled", cli.ServerCertFile != "" && cli.ServerKeyFile != ""),
+		zap.Bool("tls_enabled", cli.ServerKeystoreFile != ""),
 	)
 
 	return srv.ListenAndServe(cli.ListenAddr)
 }
 
 // validateConfig validates the CLI configuration.
-func validateConfig(cli CLI) error {
+func validateConfig(cli CLI, tlsConfig tls.Config) error {
 	// PrivateKeyFile and PasswordFile use the same 'and' group,
 	// so setting them as 'required' wouldn't allow to start with PrivateKey.
 	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
@@ -102,13 +145,13 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
-	if (cli.ClientCertFile != "" && cli.ClientKeyFile == "") ||
-		(cli.ClientKeyFile != "" && cli.ClientCertFile == "") {
-		return fmt.Errorf("both CLIENT_CERT_FILE and CLIENT_KEY_FILE must be set together")
+	// Validate TLS configurations
+	if err := tlsConfig.ValidateServerTLS(); err != nil {
+		return fmt.Errorf("server TLS config: %w", err)
 	}
-	if (cli.ServerCertFile != "" && cli.ServerKeyFile == "") ||
-		(cli.ServerKeyFile != "" && cli.ServerCertFile == "") {
-		return fmt.Errorf("both SERVER_CERT_FILE and SERVER_KEY_FILE must be set together")
+
+	if err := tlsConfig.ValidateClientTLS(); err != nil {
+		return fmt.Errorf("client TLS config: %w", err)
 	}
 
 	return nil
