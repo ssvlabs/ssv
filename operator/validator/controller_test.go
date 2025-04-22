@@ -80,7 +80,7 @@ func TestNewController(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	registryStorage, newStorageErr := storage.NewNodeStorage(logger, db)
+	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	require.NoError(t, newStorageErr)
 
 	controllerOptions := ControllerOptions{

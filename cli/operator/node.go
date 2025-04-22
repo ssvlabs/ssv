@@ -63,7 +63,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -139,14 +138,14 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
+		db, err := setupDB(logger, networkConfig)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
 
-		nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
 		if err != nil {
 			logger.Fatal("failed to create node storage", zap.Error(err))
 		}
@@ -337,6 +336,7 @@ var StartNodeCmd = &cobra.Command{
 		messageValidator := validation.New(
 			networkConfig,
 			nodeStorage.ValidatorStore(),
+			nodeStorage,
 			dutyStore,
 			signatureVerifier,
 			consensusClient.ForkEpochElectra,
@@ -417,7 +417,7 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
-			networkConfig.Beacon,
+			networkConfig,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -722,7 +722,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -736,9 +736,9 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	}
 
 	migrationOpts := migrations.Options{
-		Db:      db,
-		DbPath:  cfg.DBOptions.Path,
-		Network: eth2Network,
+		Db:            db,
+		DbPath:        cfg.DBOptions.Path,
+		NetworkConfig: networkConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {

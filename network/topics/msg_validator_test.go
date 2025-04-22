@@ -41,7 +41,7 @@ func TestMsgValidator(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := operatorstorage.NewNodeStorage(logger, db)
+	ns, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	require.NoError(t, err)
 
 	require.NoError(t, ns.Shares().Save(nil, share))
@@ -49,7 +49,16 @@ func TestMsgValidator(t *testing.T) {
 	committeeID := share.CommitteeID()
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
-	mv := validation.New(networkconfig.TestNetwork, ns.ValidatorStore(), dutystore.New(), signatureVerifier, phase0.Epoch(0), validation.WithLogger(logger))
+	mv := validation.New(
+		networkconfig.TestNetwork,
+		ns.ValidatorStore(),
+		ns,
+		dutystore.New(),
+		signatureVerifier,
+		phase0.Epoch(0),
+		validation.WithLogger(logger),
+	)
+
 	require.NotNil(t, mv)
 
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
