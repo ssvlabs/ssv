@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
@@ -81,15 +82,21 @@ func (gc *GoClient) startEventListener(ctx context.Context) error {
 		originate from the same Beacon Node that provided the attestation data.
 	*/
 	logger.Info("subscribing to events")
+
+	opts := &api.EventsOpts{
+		Topics:  strTopics,
+		Handler: gc.eventHandler,
+	}
+
 	if gc.withWeightedAttestationData {
 		for _, client := range gc.clients {
-			if err := client.Events(ctx, strTopics, gc.eventHandler); err != nil {
+			if err := client.Events(ctx, opts); err != nil {
 				logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
 				return err
 			}
 		}
 	} else {
-		if err := gc.multiClient.Events(ctx, strTopics, gc.eventHandler); err != nil {
+		if err := gc.multiClient.Events(ctx, opts); err != nil {
 			logger.Error(clResponseErrMsg, zap.String("api", "Events"), zap.Error(err))
 			return err
 		}
