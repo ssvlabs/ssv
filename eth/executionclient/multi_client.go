@@ -319,8 +319,9 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 	}
 	err := p.Wait()
 
-	// Record the current count of healthy clients
+	// Record the current count of healthy clients and all clients count.
 	recordHealthyClientsCount(ctx, healthyCount.Load())
+	recordAllClientsCount(ctx, int64(len(mc.clients)))
 
 	if healthyClients.Load() {
 		mc.lastHealthy.Store(time.Now().Unix())

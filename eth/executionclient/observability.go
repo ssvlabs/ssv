@@ -82,6 +82,12 @@ var (
 			metric.WithUnit("{clients}"),
 			metric.WithDescription("number of healthy clients in the multi client")))
 
+	allClientsGauge = observability.NewMetric(
+		meter.Int64Gauge(
+			metricName("multi_client.all_clients"),
+			metric.WithUnit("{clients}"),
+			metric.WithDescription("number of clients in the multi client")))
+
 	clientInitCounter = observability.NewMetric(
 		meter.Int64Counter(
 			metricName("client.init"),
@@ -155,6 +161,11 @@ func recordMultiClientMethodCall(ctx context.Context, method string, nodeAddr st
 // recordHealthyClientsCount records the number of healthy clients
 func recordHealthyClientsCount(ctx context.Context, count int64) {
 	healthyClientsGauge.Record(ctx, count)
+}
+
+// recordAllClientsCount records the number of clients
+func recordAllClientsCount(ctx context.Context, count int64) {
+	allClientsGauge.Record(ctx, count)
 }
 
 // recordClientInit records metrics for client initialization
