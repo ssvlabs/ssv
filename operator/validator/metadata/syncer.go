@@ -3,13 +3,14 @@ package metadata
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math/big"
+	"slices"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
@@ -55,7 +56,6 @@ func NewSyncer(
 	logger *zap.Logger,
 	shareStorage shareStorage,
 	validatorStore selfValidatorStore,
-	networkConfig networkconfig.NetworkConfig,
 	beaconNode beacon.BeaconNode,
 	fixedSubnets networkcommons.Subnets,
 	opts ...Option,
@@ -64,7 +64,6 @@ func NewSyncer(
 		logger:            logger,
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,
-		networkConfig:     networkConfig,
 		beaconNode:        beaconNode,
 		fixedSubnets:      fixedSubnets,
 		syncInterval:      defaultSyncInterval,
@@ -252,7 +251,7 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 		return SyncBatch{}, false, nil
 	}
 
-	afterMetadata, err := s.Sync(ctx, maps.Keys(beforeMetadata))
+	afterMetadata, err := s.Sync(ctx, slices.Collect(maps.Keys(beforeMetadata)))
 	if err != nil {
 		return SyncBatch{}, false, fmt.Errorf("sync: %w", err)
 	}

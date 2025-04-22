@@ -11,13 +11,12 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -97,7 +96,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			noSubnets, err := commons.FromString("0x00000000000000000000000000000000")
 			require.NoError(t, err)
 
-			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork, beaconNode, noSubnets)
+			syncer := NewSyncer(logger, sharesStorage, validatorStore, beaconNode, noSubnets)
 			_, err = syncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
@@ -417,7 +416,6 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
-			networkConfig:     networkconfig.TestNetwork,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -512,7 +510,6 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        errMockBeaconNode,
-			networkConfig:     networkconfig.TestNetwork,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -586,7 +583,6 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
-			networkConfig:     networkconfig.TestNetwork,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -661,7 +657,6 @@ func TestWithUpdateInterval(t *testing.T) {
 		logger,
 		mockShareStorage,
 		mockValidatorStore,
-		networkconfig.TestNetwork,
 		mockBeaconNode,
 		noSubnets,
 		WithSyncInterval(interval),
