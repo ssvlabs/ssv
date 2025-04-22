@@ -42,21 +42,7 @@ func main() {
 	cli := CLI{}
 	_ = kong.Parse(&cli)
 
-	cfg := zap.NewProductionConfig()
-	if cli.LogFormat == "console" {
-		cfg.Encoding = "console"
-		cfg.EncoderConfig = zap.NewDevelopmentEncoderConfig()
-	} else {
-		cfg.Encoding = "json"
-	}
-
-	level := zap.NewAtomicLevel()
-	if err := level.UnmarshalText([]byte(cli.LogLevel)); err != nil {
-		log.Fatalf("failed to parse log level: %v", err)
-	}
-	cfg.Level = level
-
-	logger, err := cfg.Build()
+	logger, err := setupLogger(cli.LogLevel, cli.LogFormat)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,12 +53,12 @@ func main() {
 	}()
 
 	if err := run(logger, cli); err != nil {
-		logger.Fatal("Application failed", zap.Error(err))
+		logger.Fatal("application failed", zap.Error(err))
 	}
 }
 
 func run(logger *zap.Logger, cli CLI) error {
-	logger.Debug("Starting ssv-signer",
+	logger.Debug("starting ssv-signer",
 		zap.String("listen_addr", cli.ListenAddr),
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
@@ -83,85 +69,126 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Bool("client_tls_enabled", cli.ClientKeystoreFile != ""),
 	)
 
-	if err := bls.Init(bls.BLS12_381); err != nil {
-		return fmt.Errorf("init BLS: %w", err)
-	}
-
-	// PrivateKeyFile and PasswordFile use the same 'and' group,
-	// so setting them as 'required' wouldn't allow to start with PrivateKey.
-	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
-		return fmt.Errorf("neither private key nor keystore provided")
-	}
-
-	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
-		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
-	}
-
-	// Create TLS config from CLI parameters
 	tlsConfig := tls.Config{
-		// Server TLS config
 		ServerKeystoreFile:         cli.ServerKeystoreFile,
 		ServerKeystorePasswordFile: cli.ServerKeystorePasswordFile,
 		ServerKnownClientsFile:     cli.ServerKnownClientsFile,
 
-		// Client TLS config
 		ClientKeystoreFile:         cli.ClientKeystoreFile,
 		ClientKeystorePasswordFile: cli.ClientKeystorePasswordFile,
 		ClientKnownServersFile:     cli.ClientKnownServersFile,
 	}
 
-	var operatorPrivateKey keys.OperatorPrivateKey
-	if cli.PrivateKey != "" {
-		pk, err := keys.PrivateKeyFromString(cli.PrivateKey)
-		if err != nil {
-			return fmt.Errorf("failed to parse private key: %w", err)
-		}
-		operatorPrivateKey = pk
-	} else {
-		pk, err := keystore.LoadOperatorKeystore(cli.PrivateKeyFile, cli.PasswordFile)
-		if err != nil {
-			return fmt.Errorf("failed to load operator key from file: %w", err)
-		}
-		operatorPrivateKey = pk
+	if err := validateConfig(cli, tlsConfig); err != nil {
+		return err
 	}
 
-	var web3SignerClient *web3signer.Web3Signer
-	var err error
+	if err := bls.Init(bls.BLS12_381); err != nil {
+		return fmt.Errorf("init bls: %w", err)
+	}
 
-	if cli.ClientKeystoreFile != "" || cli.ClientKnownServersFile != "" {
-		// Load client TLS configuration
+	operatorPrivateKey, err := loadOperatorKey(cli.PrivateKey, cli.PrivateKeyFile, cli.PasswordFile)
+	if err != nil {
+		return err
+	}
+
+	web3SignerClient, err := setupWeb3SignerClient(cli.Web3SignerEndpoint, cli.RequestTimeout, tlsConfig)
+	if err != nil {
+		return err
+	}
+
+	return startServer(logger, cli.ListenAddr, operatorPrivateKey, web3SignerClient, tlsConfig)
+}
+
+func setupLogger(logLevel, logFormat string) (*zap.Logger, error) {
+	cfg := zap.NewProductionConfig()
+	if logFormat == "console" {
+		cfg.Encoding = "console"
+		cfg.EncoderConfig = zap.NewDevelopmentEncoderConfig()
+	} else {
+		cfg.Encoding = "json"
+	}
+
+	level := zap.NewAtomicLevel()
+	if err := level.UnmarshalText([]byte(logLevel)); err != nil {
+		return nil, fmt.Errorf("parse log level: %w", err)
+	}
+	cfg.Level = level
+
+	return cfg.Build()
+}
+
+func validateConfig(cli CLI, tlsConfig tls.Config) error {
+	// Validate private key configuration
+	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
+		return fmt.Errorf("neither private key nor keystore provided")
+	}
+
+	// Validate Web3Signer endpoint
+	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
+		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
+	}
+
+	// Validate TLS configurations
+	if err := tlsConfig.ValidateServerTLS(); err != nil {
+		return fmt.Errorf("invalid server TLS config: %w", err)
+	}
+
+	if err := tlsConfig.ValidateClientTLS(); err != nil {
+		return fmt.Errorf("invalid client TLS config: %w", err)
+	}
+
+	return nil
+}
+
+func loadOperatorKey(privateKeyStr, privateKeyFile, passwordFile string) (keys.OperatorPrivateKey, error) {
+	if privateKeyStr != "" {
+		pk, err := keys.PrivateKeyFromString(privateKeyStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse private key: %w", err)
+		}
+		return pk, nil
+	}
+
+	pk, err := keystore.LoadOperatorKeystore(privateKeyFile, passwordFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load operator key from file: %w", err)
+	}
+	return pk, nil
+}
+
+func setupWeb3SignerClient(endpoint string, timeout time.Duration, tlsConfig tls.Config) (*web3signer.Web3Signer, error) {
+	if tlsConfig.ClientKeystoreFile != "" || tlsConfig.ClientKnownServersFile != "" {
 		certificate, fingerprints, err := tlsConfig.LoadClientTLS()
 		if err != nil {
-			return fmt.Errorf("load client TLS config: %w", err)
+			return nil, fmt.Errorf("load client TLS config: %w", err)
 		}
 
-		// Collect all options
-		options := []web3signer.Option{
-			web3signer.WithRequestTimeout(cli.RequestTimeout),
+		// Create client with TLS
+		return web3signer.New(
+			endpoint,
+			web3signer.WithRequestTimeout(timeout),
 			web3signer.WithTLS(certificate, fingerprints),
-		}
-
-		web3SignerClient, err = web3signer.New(cli.Web3SignerEndpoint, options...)
-	} else {
-		web3SignerClient, err = web3signer.New(
-			cli.Web3SignerEndpoint,
-			web3signer.WithRequestTimeout(cli.RequestTimeout),
 		)
 	}
 
-	if err != nil {
-		return fmt.Errorf("init web3signer: %w", err)
-	}
+	// Create client without TLS
+	return web3signer.New(
+		endpoint,
+		web3signer.WithRequestTimeout(timeout),
+	)
+}
 
-	logger.Info("Starting ssv-signer server",
-		zap.String("addr", cli.ListenAddr),
-		zap.Bool("tls_enabled", cli.ServerKeystoreFile != ""),
+func startServer(logger *zap.Logger, listenAddr string, operatorKey keys.OperatorPrivateKey, web3SignerClient *web3signer.Web3Signer, tlsConfig tls.Config) error {
+	logger.Info("starting ssv-signer server",
+		zap.String("addr", listenAddr),
+		zap.Bool("tls_enabled", tlsConfig.ServerKeystoreFile != ""),
 	)
 
-	srv := ssvsigner.NewServer(logger, operatorPrivateKey, web3SignerClient)
+	srv := ssvsigner.NewServer(logger, operatorKey, web3SignerClient)
 
-	// Configure server TLS
-	if cli.ServerKeystoreFile != "" {
+	// Configure server TLS if needed
+	if tlsConfig.ServerKeystoreFile != "" {
 		// Load server TLS configuration
 		certificate, fingerprints, err := tlsConfig.LoadServerTLS()
 		if err != nil {
@@ -170,9 +197,9 @@ func run(logger *zap.Logger, cli CLI) error {
 
 		// Set TLS configuration
 		if err := srv.SetTLS(certificate, fingerprints); err != nil {
-			return fmt.Errorf("server TLS: %w", err)
+			return fmt.Errorf("set server TLS config: %w", err)
 		}
 	}
 
-	return srv.ListenAndServe(cli.ListenAddr)
+	return srv.ListenAndServe(listenAddr)
 }

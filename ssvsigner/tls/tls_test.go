@@ -159,7 +159,6 @@ func TestLoadClientConfig(t *testing.T) {
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
 				assert.Equal(t, uint16(MinTLSVersion), cfg.MinVersion)
 				assert.Len(t, cfg.Certificates, 1)
-				assert.False(t, cfg.InsecureSkipVerify)
 			},
 		},
 		{
@@ -169,7 +168,6 @@ func TestLoadClientConfig(t *testing.T) {
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
 				assert.Equal(t, uint16(MinTLSVersion), cfg.MinVersion)
 				assert.Empty(t, cfg.Certificates)
-				assert.True(t, cfg.InsecureSkipVerify)
 				assert.NotNil(t, cfg.VerifyConnection)
 			},
 		},
@@ -181,7 +179,6 @@ func TestLoadClientConfig(t *testing.T) {
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
 				assert.Equal(t, uint16(MinTLSVersion), cfg.MinVersion)
 				assert.Len(t, cfg.Certificates, 1)
-				assert.True(t, cfg.InsecureSkipVerify)
 				assert.NotNil(t, cfg.VerifyConnection)
 			},
 		},
@@ -275,7 +272,7 @@ func TestLoadServerConfig(t *testing.T) {
 	}
 }
 
-// TestLoadKeystoreCertificate tests the LoadKeystoreCertificate function.
+// TestLoadKeystoreCertificate tests the loadKeystoreCertificate function.
 func TestLoadKeystoreCertificate(t *testing.T) {
 	t.Parallel()
 
@@ -310,14 +307,14 @@ func TestLoadKeystoreCertificate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := LoadKeystoreCertificate(tc.keystoreFile, tc.password)
+			_, err := loadKeystoreCertificate(tc.keystoreFile, tc.password)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.expectedError)
 		})
 	}
 }
 
-// TestLoadFingerprintsFile tests the LoadFingerprintsFile function.
+// TestLoadFingerprintsFile tests the loadFingerprintsFile function.
 func TestLoadFingerprintsFile(t *testing.T) {
 	t.Parallel()
 
@@ -389,7 +386,7 @@ func TestLoadFingerprintsFile(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			fingerprints, err := LoadFingerprintsFile(tc.filePath)
+			fingerprints, err := loadFingerprintsFile(tc.filePath)
 
 			if tc.expectError {
 				assert.Error(t, err)
@@ -445,10 +442,10 @@ func TestFingerprintFormatting(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			formatted := FormatFingerprintWithColons(tc.input)
+			formatted := formatFingerprintWithColons(tc.input)
 			assert.Equal(t, tc.formatted, formatted)
 
-			parsed := ParseFingerprint(tc.input)
+			parsed := parseFingerprint(tc.input)
 			assert.Equal(t, tc.parsed, parsed)
 		})
 	}

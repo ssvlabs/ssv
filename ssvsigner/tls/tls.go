@@ -47,7 +47,7 @@ func (c *Config) LoadServerTLS() (tls.Certificate, map[string]string, error) {
 			return tls.Certificate{}, nil, fmt.Errorf("get server keystore password: %w", err)
 		}
 
-		cert, err := LoadKeystoreCertificate(c.ServerKeystoreFile, password)
+		cert, err := loadKeystoreCertificate(c.ServerKeystoreFile, password)
 		if err != nil {
 			return tls.Certificate{}, nil, fmt.Errorf("load server certificate: %w", err)
 		}
@@ -56,7 +56,7 @@ func (c *Config) LoadServerTLS() (tls.Certificate, map[string]string, error) {
 
 	// Load known clients if provided
 	if c.ServerKnownClientsFile != "" {
-		fingerprints, err = LoadFingerprintsFile(c.ServerKnownClientsFile)
+		fingerprints, err = loadFingerprintsFile(c.ServerKnownClientsFile)
 		if err != nil {
 			return tls.Certificate{}, nil, fmt.Errorf("load known clients: %w", err)
 		}
@@ -81,7 +81,7 @@ func (c *Config) LoadClientTLS() (tls.Certificate, map[string]string, error) {
 			return tls.Certificate{}, nil, fmt.Errorf("get client keystore password: %w", err)
 		}
 
-		cert, err := LoadKeystoreCertificate(c.ClientKeystoreFile, password)
+		cert, err := loadKeystoreCertificate(c.ClientKeystoreFile, password)
 		if err != nil {
 			return tls.Certificate{}, nil, fmt.Errorf("load client certificate: %w", err)
 		}
@@ -90,7 +90,7 @@ func (c *Config) LoadClientTLS() (tls.Certificate, map[string]string, error) {
 
 	// Load known servers if provided
 	if c.ClientKnownServersFile != "" {
-		fingerprints, err = LoadFingerprintsFile(c.ClientKnownServersFile)
+		fingerprints, err = loadFingerprintsFile(c.ClientKnownServersFile)
 		if err != nil {
 			return tls.Certificate{}, nil, fmt.Errorf("load known servers: %w", err)
 		}
@@ -204,21 +204,18 @@ func LoadClientConfig(certificate tls.Certificate, trustedFingerprints map[strin
 			expectedFingerprint, ok := trustedFingerprints[host]
 			if ok {
 				// Clean up the expected fingerprint (remove colons, convert to lowercase)
-				expectedFingerprint = ParseFingerprint(expectedFingerprint)
+				expectedFingerprint = parseFingerprint(expectedFingerprint)
 				if expectedFingerprint == fingerprintHex {
 					return nil
 				}
 				return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
 					host,
-					FormatFingerprintWithColons(expectedFingerprint),
-					FormatFingerprintWithColons(fingerprintHex))
+					formatFingerprintWithColons(expectedFingerprint),
+					formatFingerprintWithColons(fingerprintHex))
 			}
 
-			return fmt.Errorf("server certificate fingerprint not trusted: %s", FormatFingerprintWithColons(fingerprintHex))
+			return fmt.Errorf("server certificate fingerprint not trusted: %s", formatFingerprintWithColons(fingerprintHex))
 		}
-
-		// Set InsecureSkipVerify to true since we're doing our own verification
-		tlsConfig.InsecureSkipVerify = true
 	}
 
 	return tlsConfig, nil
@@ -272,14 +269,14 @@ func LoadServerConfig(certificate tls.Certificate, trustedFingerprints map[strin
 			// Check if the client name is in our trusted fingerprints map
 			if expectedFingerprint, ok := trustedFingerprints[clientName]; ok {
 				// Clean up the expected fingerprint (remove colons, convert to lowercase)
-				expectedFingerprint = ParseFingerprint(expectedFingerprint)
+				expectedFingerprint = parseFingerprint(expectedFingerprint)
 				if expectedFingerprint == fingerprintHex {
 					return nil
 				}
 				return fmt.Errorf("client certificate fingerprint mismatch for %s: expected %s, got %s",
 					clientName,
-					FormatFingerprintWithColons(expectedFingerprint),
-					FormatFingerprintWithColons(fingerprintHex))
+					formatFingerprintWithColons(expectedFingerprint),
+					formatFingerprintWithColons(fingerprintHex))
 			}
 
 			return fmt.Errorf("client certificate common name not in known clients list: %s", clientName)
@@ -292,7 +289,7 @@ func LoadServerConfig(certificate tls.Certificate, trustedFingerprints map[strin
 	return tlsConfig, nil
 }
 
-// LoadKeystoreCertificate loads a certificate from a keystore file.
+// loadKeystoreCertificate loads a certificate from a keystore file.
 // The keystore file is expected to be in PKCS12 format, matching Web3Signer's approach.
 //
 // Parameters:
@@ -300,7 +297,7 @@ func LoadServerConfig(certificate tls.Certificate, trustedFingerprints map[strin
 // - password: password to decrypt the keystore
 //
 // Returns the loaded certificate or an error if loading fails.
-func LoadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, error) {
+func loadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, error) {
 	p12Data, err := os.ReadFile(keystoreFile)
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("read keystore file: %w", err)
@@ -319,7 +316,6 @@ func LoadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, er
 		certChain[i] = cert.Raw
 	}
 
-	// Create and return the TLS certificate
 	tlsCert := tls.Certificate{
 		Certificate: certChain,
 		PrivateKey:  privateKey,
@@ -329,7 +325,7 @@ func LoadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, er
 	return tlsCert, nil
 }
 
-// LoadFingerprintsFile loads a file with lines in the format: <id> <fingerprint>
+// loadFingerprintsFile loads a file with lines in the format: <id> <fingerprint>
 // This generic function can load both known clients and known servers fingerprint files.
 // The format matches Web3Signer's fingerprint files format exactly.
 //
@@ -337,7 +333,7 @@ func LoadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, er
 // - filePath: a path to the fingerprint file
 //
 // Returns a map of IDs to fingerprints or an error if loading fails.
-func LoadFingerprintsFile(filePath string) (map[string]string, error) {
+func loadFingerprintsFile(filePath string) (map[string]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("open fingerprints file: %w", err)
@@ -366,7 +362,7 @@ func LoadFingerprintsFile(filePath string) (map[string]string, error) {
 		fingerprint := parts[1]
 
 		// Standardize a fingerprint format (remove colons, convert to lowercase)
-		fingerprint = ParseFingerprint(fingerprint)
+		fingerprint = parseFingerprint(fingerprint)
 
 		fingerprints[id] = fingerprint
 	}
@@ -378,14 +374,14 @@ func LoadFingerprintsFile(filePath string) (map[string]string, error) {
 	return fingerprints, nil
 }
 
-// FormatFingerprintWithColons formats a fingerprint string with colons between each byte.
+// formatFingerprintWithColons formats a fingerprint string with colons between each byte.
 // This is useful for display purposes as many tools show fingerprints in this format.
 //
 // Parameters:
 // - fingerprint: the fingerprint as a hexadecimal string without separators
 //
 // Returns the fingerprint with colons inserted between each byte.
-func FormatFingerprintWithColons(fingerprint string) string {
+func formatFingerprintWithColons(fingerprint string) string {
 	fingerprint = strings.ReplaceAll(fingerprint, ":", "")
 	var formatted strings.Builder
 	for i := 0; i < len(fingerprint); i += 2 {
@@ -401,7 +397,7 @@ func FormatFingerprintWithColons(fingerprint string) string {
 	return formatted.String()
 }
 
-// ParseFingerprint parses a fingerprint string in various formats
+// parseFingerprint parses a fingerprint string in various formats
 // (with or without colons, uppercase or lowercase) and returns
 // a standardized lowercase fingerprint without colons.
 //
@@ -409,7 +405,7 @@ func FormatFingerprintWithColons(fingerprint string) string {
 // - fingerprint: the fingerprint string to parse
 //
 // Returns the standardized fingerprint.
-func ParseFingerprint(fingerprint string) string {
+func parseFingerprint(fingerprint string) string {
 	// Remove all colons and convert to the lowercase
 	return strings.ToLower(strings.ReplaceAll(fingerprint, ":", ""))
 }

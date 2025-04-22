@@ -444,6 +444,5 @@ EKTcWGekdmdDPsHloRNtsiCa697B2O9IFA==
 	cfg := transport.TLSClientConfig
 	require.NotNil(t, cfg)
 	require.Len(t, cfg.Certificates, 1)
-	require.True(t, cfg.InsecureSkipVerify)
 	require.NotNil(t, cfg.VerifyConnection)
 }

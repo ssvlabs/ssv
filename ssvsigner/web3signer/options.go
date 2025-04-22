@@ -11,6 +11,7 @@ import (
 // Option defines a function that configures a Web3Signer client.
 type Option func(*Web3Signer) error
 
+// WithRequestTimeout sets the timeout for HTTP requests made by the Web3Signer client.
 func WithRequestTimeout(timeout time.Duration) Option {
 	return func(w3s *Web3Signer) error {
 		w3s.httpClient.Timeout = timeout
