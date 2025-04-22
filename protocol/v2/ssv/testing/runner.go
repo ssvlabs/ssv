@@ -2,7 +2,6 @@ package testing
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -19,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -79,10 +77,6 @@ var ConstructBaseRunner = func(
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 	dgHandler := doppelganger.NoOpHandler{}
 
-	sharePubKey, err := types.BLSPubKeyFromBytes(share.SharePubKey)
-	if err != nil {
-		return nil, fmt.Errorf("invalid share pubkey for validator index %d", share.ValidatorIndex)
-	}
 	var valCheck specqbft.ProposedValueCheckF
 	switch role {
 	case spectypes.RoleCommittee:
@@ -90,7 +84,7 @@ var ConstructBaseRunner = func(
 			[]phase0.BLSPubKey{phase0.BLSPubKey(share.SharePubKey)}, spectestingutils.TestingDutyEpoch)
 	case spectypes.RoleProposer:
 		valCheck = ssv.ProposerValueCheckF(km, spectypes.BeaconTestNetwork,
-			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex, sharePubKey)
+			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
 	case spectypes.RoleAggregator:
 		valCheck = ssv.AggregatorValueCheckF(km, spectypes.BeaconTestNetwork,
 			(spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex)
@@ -122,6 +116,7 @@ var ConstructBaseRunner = func(
 	dutyGuard := validator.NewCommitteeDutyGuard()
 
 	var r runner.Runner
+	var err error
 
 	switch role {
 	case spectypes.RoleCommittee:

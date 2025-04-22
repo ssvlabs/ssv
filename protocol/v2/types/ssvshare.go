@@ -3,7 +3,6 @@ package types
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 	"slices"
 	"sort"
 	"sync/atomic"
@@ -224,11 +223,4 @@ func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID 
 	}
 	// Hash
 	return sha256.Sum256(bytes)
-}
-
-func BLSPubKeyFromBytes(bytes []byte) (phase0.BLSPubKey, error) {
-	if len(bytes) != len(phase0.BLSPubKey{}) {
-		return phase0.BLSPubKey{}, fmt.Errorf("invalid pubkey length %d", len(bytes))
-	}
-	return phase0.BLSPubKey(bytes), nil
 }
