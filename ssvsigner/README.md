@@ -88,6 +88,27 @@ web3signer --http-listen-port=9000 \
   --key-manager-api-enabled=true
 ```
 
+For TLS-enabled Web3Signer:
+
+```bash
+web3signer --http-listen-port=9000 \
+  eth2 \
+  --network=mainnet \
+  --slashing-protection-db-url="jdbc:postgresql://${POSTGRES_HOST}/web3signer" \
+  --slashing-protection-db-username=postgres \
+  --slashing-protection-db-password=password \
+  --key-manager-api-enabled=true \
+  --tls-keystore-file=/path/to/keystore.p12 \
+  --tls-keystore-password-file=/path/to/password.txt \
+  --tls-known-clients-file=/path/to/knownClients.txt
+```
+
+This configures Web3Signer to accept secure connections from SSV-Signer. When TLS is enabled on Web3Signer, make sure
+to:
+
+1. Use `https://` in the `WEB3SIGNER_ENDPOINT` value for SSV-Signer
+2. Configure client TLS options for SSV-Signer to connect securely
+
 #### Important Web3Signer Options:
 
 | Option                              | Description                                           |
@@ -98,6 +119,9 @@ web3signer --http-listen-port=9000 \
 | `--slashing-protection-db-username` | Database username                                     |
 | `--slashing-protection-db-password` | Database password                                     |
 | `--key-manager-api-enabled`         | Enables the Key Manager API (required for SSV-Signer) |
+| `--tls-keystore-file`               | PKCS12 keystore file for server TLS                   |
+| `--tls-keystore-password-file`      | File containing the keystore password                 |
+| `--tls-known-clients-file`          | File with trusted client certificate fingerprints     |
 
 ### 3. Run SSV-Signer
 
@@ -118,12 +142,21 @@ WEB3SIGNER_ENDPOINT=http://localhost:9000 \
 
 #### SSV-Signer Configuration Options:
 
-| Option              | Environment Variable  | Required | Default | Description                                  |
-|---------------------|-----------------------|----------|---------|----------------------------------------------|
-| Listen Address      | `LISTEN_ADDR`         | Yes      | `:8080` | Address and port for the signer to listen on |
-| Web3Signer Endpoint | `WEB3SIGNER_ENDPOINT` | Yes      | -       | URL of the Web3Signer service                |
-| Private Key File    | `PRIVATE_KEY_FILE`    | Yes      | -       | Path to operator's keystore file             |
-| Password File       | `PASSWORD_FILE`       | Yes      | -       | Path to file containing keystore password    |
+| Option                        | Environment Variable            | Required | Default | Description                                         |
+|-------------------------------|---------------------------------|----------|---------|-----------------------------------------------------|
+| Listen Address                | `LISTEN_ADDR`                   | Yes      | `:8080` | Address and port for the signer to listen on        |
+| Web3Signer Endpoint           | `WEB3SIGNER_ENDPOINT`           | Yes      | -       | URL of the Web3Signer service                       |
+| Private Key File              | `PRIVATE_KEY_FILE`              | Yes*     | -       | Path to operator's keystore file                    |
+| Password File                 | `PASSWORD_FILE`                 | Yes*     | -       | Path to file containing keystore password           |
+| Private Key                   | `PRIVATE_KEY`                   | Yes*     | -       | Operator's private key (alternative to keystore)    |
+| Server Keystore File          | `SERVER_KEYSTORE_FILE`          | No       | -       | PKCS12 keystore for server TLS                      |
+| Server Keystore Password File | `SERVER_KEYSTORE_PASSWORD_FILE` | No       | -       | Password file for server keystore                   |
+| Server Known Clients File     | `SERVER_KNOWN_CLIENTS_FILE`     | No       | -       | Trusted client fingerprints for client auth         |
+| Client Keystore File          | `CLIENT_KEYSTORE_FILE`          | No       | -       | PKCS12 keystore for client TLS                      |
+| Client Keystore Password File | `CLIENT_KEYSTORE_PASSWORD_FILE` | No       | -       | Password file for client keystore                   |
+| Client Known Servers File     | `CLIENT_KNOWN_SERVERS_FILE`     | No       | -       | Trusted server fingerprints for server verification |
+
+\* Either `PRIVATE_KEY` or both `PRIVATE_KEY_FILE` and `PASSWORD_FILE` are required
 
 ### 4. Configure SSV Node to Use Remote Signer
 
@@ -265,8 +298,46 @@ CLIENT_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 
 #### Security Recommendations
 
-1. **Use TLS 1.3**: SSV-Signer defaults to TLS 1.3 for maximum security
-2. **Rotate certificates regularly**: Update your certificates and fingerprints periodically
+1. **TLS 1.3 Required**: SSV-Signer enforces TLS 1.3 as the minimum version for all TLS connections, providing better
+   security and performance than older versions
+2. **Certificate Fingerprint Verification**: The implementation uses certificate fingerprints for authentication,
+   preventing MITM attacks without requiring a trusted CA hierarchy
+3. **Rotate certificates regularly**: Update your certificates and fingerprints periodically (recommended every 6-12
+   months)
+4. **Use strong credentials**: Generate keystores with strong passwords and use secure password files with appropriate
+   permissions
+
+#### TLS Configuration Options and Validation Rules
+
+SSV-Signer supports various TLS configuration combinations for both server and client connections. Understanding these
+options helps ensure secure and proper setup.
+
+**Server TLS Validation Rules** (SSV-Signer accepting connections):
+
+| Configuration | SERVER_KEYSTORE_FILE | SERVER_KEYSTORE_PASSWORD_FILE | SERVER_KNOWN_CLIENTS_FILE | Validity  | Description                                                    |
+|---------------|----------------------|-------------------------------|---------------------------|-----------|----------------------------------------------------------------|
+| No TLS        | ❌                    | ❌                             | ❌                         | ✅ Valid   | No TLS encryption for incoming connections                     |
+| Basic TLS     | ✅                    | ✅                             | ❌                         | ✅ Valid   | Server presents certificate but doesn't verify clients         |
+| Mutual TLS    | ✅                    | ✅                             | ✅                         | ✅ Valid   | Server verifies client certificates against known fingerprints |
+| Invalid       | ✅                    | ❌                             | ❌                         | ❌ Invalid | Missing keystore password file                                 |
+| Invalid       | ❌                    | ❌                             | ✅                         | ❌ Invalid | Client verification without server certificate                 |
+
+**Client TLS Validation Rules** (SSV-Signer connecting to Web3Signer):
+
+| Configuration      | CLIENT_KEYSTORE_FILE | CLIENT_KEYSTORE_PASSWORD_FILE | CLIENT_KNOWN_SERVERS_FILE | Validity  | Description                                                |
+|--------------------|----------------------|-------------------------------|---------------------------|-----------|------------------------------------------------------------|
+| No TLS             | ❌                    | ❌                             | ❌                         | ✅ Valid   | No TLS for outgoing connections (use HTTP endpoint)        |
+| Fingerprint Only   | ❌                    | ❌                             | ✅                         | ✅ Valid   | Verify server certificate against known fingerprints       |
+| Client Certificate | ✅                    | ✅                             | ❌                         | ✅ Valid   | Present client certificate for mutual TLS                  |
+| Full Mutual TLS    | ✅                    | ✅                             | ✅                         | ✅ Valid   | Present client certificate and verify server (most secure) |
+| Invalid            | ✅                    | ❌                             | ❌                         | ❌ Invalid | Missing keystore password file                             |
+
+When implementing TLS, consider:
+
+- For production environments, use Full Mutual TLS configuration for maximum security
+- The server always requires both keystore and password file if TLS is enabled
+- Client side can use fingerprint verification without presenting a certificate
+- TLS 1.3 is enforced as the minimum protocol version for all TLS connections
 
 ## API Endpoints
 

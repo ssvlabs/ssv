@@ -41,11 +41,19 @@ func TestConfigValidateServerTLS(t *testing.T) {
 			errorContains: "server keystore password file is required",
 		},
 		{
-			name: "no tls configuration",
+			name:   "no tls configuration",
+			config: Config{
+				// Empty config - no TLS
+			},
+			expectError: false,
+		},
+		{
+			name: "only known clients file",
 			config: Config{
 				ServerKnownClientsFile: filepath.Join(tempDir, "known-clients.txt"),
 			},
-			expectError: false,
+			expectError:   true,
+			errorContains: "server keystore file is required when specifying known clients file",
 		},
 	}
 

@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
@@ -34,7 +33,7 @@ type SSVSignerClientSuite struct {
 func (s *SSVSignerClientSuite) SetupTest() {
 	var err error
 	s.logger, err = zap.NewDevelopment()
-	s.Require().NoError(err, "Failed to create logger")
+	s.Require().NoError(err, "failed to create logger")
 
 	s.mux = http.NewServeMux()
 	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,11 +58,11 @@ func (s *SSVSignerClientSuite) resetMux() {
 // assertErrorResult asserts that the error matches expectations.
 func (s *SSVSignerClientSuite) assertErrorResult(err error, expectError bool, t *testing.T) {
 	if expectError {
-		require.Error(t, err, "Expected an error")
+		require.Error(t, err)
 	} else {
-		require.NoError(t, err, "Unexpected error")
+		require.NoError(t, err)
 	}
-	assert.Equal(t, 1, s.serverHits, "Expected server to be hit once")
+	assert.Equal(t, 1, s.serverHits)
 }
 
 // writeJSONResponse writes a JSON response with the given status code and data.
@@ -863,7 +862,7 @@ func TestNew(t *testing.T) {
 			}
 
 			assert.NotNil(t, client.httpClient)
-			assert.Equal(t, 30*time.Second, client.httpClient.Timeout)
+			assert.Equal(t, DefaultRequestTimeout, client.httpClient.Timeout)
 		})
 	}
 }

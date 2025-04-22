@@ -31,6 +31,154 @@ type Config struct {
 	ClientKnownServersFile     string // web3signer --downstream-http-tls-known-servers-file
 }
 
+// LoadClientConfig creates a client TLS configuration based on the provided parameters.
+// It configures certificate for mutual TLS and certificate fingerprint verification for additional security.
+// This matches Web3Signer's approach to TLS connection verification.
+//
+// Configuration scenarios:
+// 1. No certificate, no fingerprints - Basic TLS with standard certificate validation
+// 2. Certificate only - Client provides identity to server (mutual TLS)
+// 3. Fingerprints only - Server identity strictly verified against expected fingerprints
+// 4. Certificate and fingerprints - Full mutual TLS with fingerprint verification (most secure)
+//
+// Parameters:
+// - certificate: client certificate to present to the server (can be empty)
+// - trustedFingerprints: map of server host:port to expected certificate fingerprints (can be nil)
+//
+// Returns a properly configured tls.Config object or an error if the configuration is invalid.
+func LoadClientConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
+	tlsConfig := &tls.Config{
+		MinVersion: MinTLSVersion,
+	}
+
+	// Add a certificate if provided
+	if certificate.Certificate != nil {
+		tlsConfig.Certificates = []tls.Certificate{certificate}
+	}
+
+	// Set up certificate verification if fingerprints provided
+	if len(trustedFingerprints) > 0 {
+		// Keep track of verified connections using context
+		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
+			if len(state.PeerCertificates) == 0 {
+				return fmt.Errorf("no server certificate provided")
+			}
+
+			cert := state.PeerCertificates[0]
+
+			// Calculate fingerprint of the certificate
+			fingerprint := sha256.Sum256(cert.Raw)
+			fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
+
+			// Get the hostname from the state
+			host := state.ServerName
+
+			// If empty, try to get from the certificate
+			if host == "" && len(cert.DNSNames) > 0 {
+				host = cert.DNSNames[0]
+			} else if host == "" {
+				host = cert.Subject.CommonName
+			}
+
+			// Check if the fingerprint matches the expected fingerprint for this host
+			expectedFingerprint, ok := trustedFingerprints[host]
+			if ok {
+				// Clean up the expected fingerprint (remove colons, convert to lowercase)
+				expectedFingerprint = parseFingerprint(expectedFingerprint)
+				if expectedFingerprint == fingerprintHex {
+					return nil
+				}
+				return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
+					host,
+					formatFingerprintWithColons(expectedFingerprint),
+					formatFingerprintWithColons(fingerprintHex))
+			}
+
+			return fmt.Errorf("server certificate fingerprint not trusted: %s", formatFingerprintWithColons(fingerprintHex))
+		}
+	}
+
+	return tlsConfig, nil
+}
+
+// LoadServerConfig creates a server TLS configuration based on the provided parameters.
+// It configures server certificates and certificate verification.
+// This matches Web3Signer's approach to TLS authentication for server connections.
+//
+// Configuration scenarios:
+// 1. Certificate only - Basic TLS, server presents identity, no client verification
+// 2. Certificate and fingerprints - Mutual TLS with client verification against fingerprints
+//
+// Security notes:
+// - Server certificate is always required for TLS servers
+// - When fingerprints are provided, clients must present certificates
+// - Client certificates are verified against the known clients fingerprints
+// - Client authentication is based on certificate common name and its fingerprint
+//
+// Parameters:
+// - certificate: server certificate to present to clients (required)
+// - trustedFingerprints: map of client common names to expected certificate fingerprints (optional)
+//
+// Returns a properly configured tls.Config object or an error if the configuration is invalid.
+func LoadServerConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
+	// Validate inputs
+	if certificate.Certificate == nil {
+		return nil, fmt.Errorf("server certificate is required")
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion:   MinTLSVersion,
+		Certificates: []tls.Certificate{certificate},
+	}
+
+	// Configure client authentication based on fingerprints
+	if len(trustedFingerprints) > 0 {
+		tlsConfig.ClientAuth = tls.RequireAnyClientCert
+
+		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			if len(rawCerts) == 0 {
+				return fmt.Errorf("no client certificate provided")
+			}
+
+			// Parse the certificate from raw data
+			cert, err := x509.ParseCertificate(rawCerts[0])
+			if err != nil {
+				return fmt.Errorf("failed to parse client certificate: %w", err)
+			}
+
+			// Get the client's common name from the certificate
+			clientName := cert.Subject.CommonName
+			if clientName == "" {
+				return fmt.Errorf("client certificate has no common name")
+			}
+
+			// Calculate the fingerprint of the certificate
+			fingerprint := sha256.Sum256(cert.Raw)
+			fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
+
+			// Check if the client name is in our trusted fingerprints map
+			if expectedFingerprint, ok := trustedFingerprints[clientName]; ok {
+				// Clean up the expected fingerprint (remove colons, convert to lowercase)
+				expectedFingerprint = parseFingerprint(expectedFingerprint)
+				if expectedFingerprint == fingerprintHex {
+					return nil
+				}
+				return fmt.Errorf("client certificate fingerprint mismatch for %s: expected %s, got %s",
+					clientName,
+					formatFingerprintWithColons(expectedFingerprint),
+					formatFingerprintWithColons(fingerprintHex))
+			}
+
+			return fmt.Errorf("client certificate common name not in known clients list: %s", clientName)
+		}
+	} else {
+		// If no trusted fingerprints, don't require client certificate
+		tlsConfig.ClientAuth = tls.NoClientCert
+	}
+
+	return tlsConfig, nil
+}
+
 // LoadServerTLS loads the server TLS configuration from the provided config.
 // Returns certificates and trusted fingerprints for server configuration.
 func (c *Config) LoadServerTLS() (tls.Certificate, map[string]string, error) {
@@ -100,29 +248,50 @@ func (c *Config) LoadClientTLS() (tls.Certificate, map[string]string, error) {
 }
 
 // ValidateServerTLS validates the server TLS configuration.
+// It verifies that TLS configuration is consistent based on multiple valid use cases.
 func (c *Config) ValidateServerTLS() error {
-	if c.ServerKeystoreFile == "" {
+	// Case 1: No server TLS config provided - TLS is optional
+	if c.ServerKeystoreFile == "" && c.ServerKnownClientsFile == "" {
 		return nil
 	}
 
-	if c.ServerKeystorePasswordFile == "" {
-		return fmt.Errorf("server keystore password file is required when using a keystore file")
+	// Case 2: Server keystore file provided but no password file
+	if c.ServerKeystoreFile != "" && c.ServerKeystorePasswordFile == "" {
+		return fmt.Errorf("server keystore password file is required when using a server keystore file")
 	}
 
+	// Case 3: Only known clients file provided without server certificate
+	// This is invalid because a server must have a certificate to accept TLS connections
+	if c.ServerKeystoreFile == "" && c.ServerKnownClientsFile != "" {
+		return fmt.Errorf("server keystore file is required when specifying known clients file")
+	}
+
+	// Case 4: Server keystore and password file provided (with or without known clients)
+	// This is a valid configuration
 	return nil
 }
 
 // ValidateClientTLS validates the client TLS configuration.
+// It verifies that TLS configuration is consistent based on multiple valid use cases.
 func (c *Config) ValidateClientTLS() error {
-	// Special case: client config can have only known servers without a certificate
+	// Case 1: No client TLS config provided - TLS is optional
 	if c.ClientKeystoreFile == "" && c.ClientKnownServersFile == "" {
 		return nil
 	}
 
-	if c.ClientKeystoreFile != "" && c.ClientKeystorePasswordFile == "" {
-		return fmt.Errorf("client keystore password file is required when using a keystore file")
+	// Case 2: Only known servers file provided without client certificate
+	// This is valid - the client can verify server certificates without presenting its own
+	if c.ClientKeystoreFile == "" && c.ClientKnownServersFile != "" {
+		return nil
 	}
 
+	// Case 3: Client keystore file provided but no password file
+	if c.ClientKeystoreFile != "" && c.ClientKeystorePasswordFile == "" {
+		return fmt.Errorf("client keystore password file is required when using a client keystore file")
+	}
+
+	// Case 4: Client keystore and password file provided (with or without known servers)
+	// This is a valid configuration for mutual TLS
 	return nil
 }
 
@@ -155,138 +324,6 @@ func loadPasswordFromFile(filePath string) (string, error) {
 	// Trim any newlines or whitespace
 	password := strings.TrimSpace(string(data))
 	return password, nil
-}
-
-// LoadClientConfig creates a client TLS configuration based on the provided parameters.
-// It configures certificate for mutual TLS and certificate fingerprint verification for additional security.
-// This matches Web3Signer's approach to TLS connection verification.
-//
-// Parameters:
-// - certificate: client certificate to present to the server (can be empty)
-// - trustedFingerprints: map of server host:port to expected certificate fingerprints (can be nil)
-//
-// Returns a properly configured tls.Config object or an error if the configuration is invalid.
-func LoadClientConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
-	tlsConfig := &tls.Config{
-		MinVersion: MinTLSVersion,
-	}
-
-	// Add a certificate if provided
-	if certificate.Certificate != nil {
-		tlsConfig.Certificates = []tls.Certificate{certificate}
-	}
-
-	// Set up certificate verification if fingerprints provided
-	if len(trustedFingerprints) > 0 {
-		// Keep track of verified connections using context
-		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
-			if len(state.PeerCertificates) == 0 {
-				return fmt.Errorf("no server certificate provided")
-			}
-
-			cert := state.PeerCertificates[0]
-
-			// Calculate fingerprint of the certificate
-			fingerprint := sha256.Sum256(cert.Raw)
-			fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
-
-			// Get the hostname from the state
-			host := state.ServerName
-
-			// If empty, try to get from the certificate
-			if host == "" && len(cert.DNSNames) > 0 {
-				host = cert.DNSNames[0]
-			} else if host == "" {
-				host = cert.Subject.CommonName
-			}
-
-			// Check if the fingerprint matches the expected fingerprint for this host
-			expectedFingerprint, ok := trustedFingerprints[host]
-			if ok {
-				// Clean up the expected fingerprint (remove colons, convert to lowercase)
-				expectedFingerprint = parseFingerprint(expectedFingerprint)
-				if expectedFingerprint == fingerprintHex {
-					return nil
-				}
-				return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
-					host,
-					formatFingerprintWithColons(expectedFingerprint),
-					formatFingerprintWithColons(fingerprintHex))
-			}
-
-			return fmt.Errorf("server certificate fingerprint not trusted: %s", formatFingerprintWithColons(fingerprintHex))
-		}
-	}
-
-	return tlsConfig, nil
-}
-
-// LoadServerConfig creates a server TLS configuration based on the provided parameters.
-// It configures server certificates and certificate verification.
-// This matches Web3Signer's approach to TLS authentication for server connections.
-//
-// Parameters:
-// - certificate: server certificate to present to clients (required)
-// - trustedFingerprints: map of client common names to expected certificate fingerprints (optional)
-//
-// Returns a properly configured tls.Config object or an error if the configuration is invalid.
-func LoadServerConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
-	// Validate inputs
-	if certificate.Certificate == nil {
-		return nil, fmt.Errorf("server certificate is required")
-	}
-
-	tlsConfig := &tls.Config{
-		MinVersion:   MinTLSVersion,
-		Certificates: []tls.Certificate{certificate},
-	}
-
-	// Configure client authentication based on fingerprints
-	if len(trustedFingerprints) > 0 {
-		tlsConfig.ClientAuth = tls.RequireAnyClientCert
-
-		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			if len(rawCerts) == 0 {
-				return fmt.Errorf("no client certificate provided")
-			}
-
-			// Parse the certificate from raw data
-			cert, err := x509.ParseCertificate(rawCerts[0])
-			if err != nil {
-				return fmt.Errorf("failed to parse client certificate: %w", err)
-			}
-
-			// Get the client's common name from the certificate
-			clientName := cert.Subject.CommonName
-			if clientName == "" {
-				return fmt.Errorf("client certificate has no common name")
-			}
-
-			// Calculate the fingerprint of the certificate
-			fingerprint := sha256.Sum256(cert.Raw)
-			fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
-
-			// Check if the client name is in our trusted fingerprints map
-			if expectedFingerprint, ok := trustedFingerprints[clientName]; ok {
-				// Clean up the expected fingerprint (remove colons, convert to lowercase)
-				expectedFingerprint = parseFingerprint(expectedFingerprint)
-				if expectedFingerprint == fingerprintHex {
-					return nil
-				}
-				return fmt.Errorf("client certificate fingerprint mismatch for %s: expected %s, got %s",
-					clientName,
-					formatFingerprintWithColons(expectedFingerprint),
-					formatFingerprintWithColons(fingerprintHex))
-			}
-
-			return fmt.Errorf("client certificate common name not in known clients list: %s", clientName)
-		}
-	} else {
-		// If no trusted fingerprints, don't require client certificate
-		tlsConfig.ClientAuth = tls.NoClientCert
-	}
-
-	return tlsConfig, nil
 }
 
 // loadKeystoreCertificate loads a certificate from a keystore file.
