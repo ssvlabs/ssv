@@ -23,6 +23,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -61,11 +67,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -85,7 +86,8 @@ type config struct {
 	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
-	SSVSignerEndpoint            string                  `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
+	SSVSignerEndpoint            string                  `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be a correct URL"`
+	SSVSignerRequestTimeout      time.Duration           `yaml:"SSVSignerRequestTimeout" env:"SSV_SIGNER_REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
@@ -157,11 +159,15 @@ var StartNodeCmd = &cobra.Command{
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
 			logger.Info("using ssv-signer for signing")
 
-			if _, err := url.ParseRequestURI(cfg.SSVSignerEndpoint); err != nil {
+			if _, err := url.Parse(cfg.SSVSignerEndpoint); err != nil {
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 
-			ssvSignerClient = ssvsigner.NewClient(cfg.SSVSignerEndpoint, ssvsigner.WithLogger(logger))
+			ssvSignerClient = ssvsigner.NewClient(
+				cfg.SSVSignerEndpoint,
+				ssvsigner.WithLogger(logger),
+				ssvsigner.WithRequestTimeout(cfg.SSVSignerRequestTimeout),
+			)
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
@@ -180,7 +186,8 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
 			}
 
-			if err := saveOperatorPubKeyBase64(nodeStorage, operatorPubKeyBase64); err != nil {
+			// Ensure the pubkey is saved on first run and never changes afterwards
+			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
 				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
 			}
 		} else {
@@ -193,8 +200,8 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not extract private key from keystore", zap.Error(err))
 				}
 
-				operatorPrivKeyPEM := base64.StdEncoding.EncodeToString(decryptedKeystore)
-				if err := saveOperatorPrivKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
+				pemBase64 := base64.StdEncoding.EncodeToString(decryptedKeystore)
+				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, pemBase64); err != nil {
 					logger.Fatal("could not save operator private key", zap.Error(err))
 				}
 
@@ -206,7 +213,7 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not decode operator private key", zap.Error(err))
 				}
 
-				if err := saveOperatorPrivKey(nodeStorage, operatorPrivKey, cfg.OperatorPrivateKey); err != nil {
+				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, cfg.OperatorPrivateKey); err != nil {
 					logger.Fatal("could not save operator private key", zap.Error(err))
 				}
 			}
@@ -613,17 +620,17 @@ func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPriv
 		return nil, nil, fmt.Errorf("could not read password file: %w", err)
 	}
 
-	decryptedKeystore, err := keystore.DecryptKeystore(encryptedJSON, string(keyStorePassword))
+	operatorPrivKeyBytes, err := keystore.DecryptKeystore(encryptedJSON, string(keyStorePassword))
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not decrypt operator private key keystore: %w", err)
 	}
 
-	operatorPrivKey, err := keys.PrivateKeyFromBytes(decryptedKeystore)
+	operatorPrivKey, err := keys.PrivateKeyFromBytes(operatorPrivKeyBytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not extract operator private key from file: %w", err)
+		return nil, nil, fmt.Errorf("could not extract operator private key from bytes: %w", err)
 	}
 
-	return operatorPrivKey, decryptedKeystore, nil
+	return operatorPrivKey, operatorPrivKeyBytes, nil
 }
 
 func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usingPrivKey bool) {
@@ -787,17 +794,22 @@ func setupOperatorDataStore(
 	return operatordatastore.New(operatorData)
 }
 
-func saveOperatorPrivKey(
+// ensureOperatorPrivateKey makes sure the operator private key hash
+// is saved exactly once and never changes thereafter.
+// On first run it saves the current hash; on subsequent runs it errors
+// if the stored hash doesn’t match either the current or legacy hash.
+func ensureOperatorPrivateKey(
 	nodeStorage operatorstorage.Storage,
 	operatorPrivKey keys.OperatorPrivateKey,
 	operatorPrivKeyPEM string,
 ) error {
-	storedPrivKeyHash, found, err := nodeStorage.GetPrivateKeyHash()
+	storedHash, found, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil {
 		return fmt.Errorf("could not get hashed private key: %w", err)
 	}
 
-	configStoragePrivKeyHash := operatorPrivKey.StorageHash()
+	// Current hashing method (PEM‑encoded → StorageHash)
+	currentHash := operatorPrivKey.StorageHash()
 
 	// Backwards compatibility for the old hashing method,
 	// which was hashing the text from the configuration directly,
@@ -806,14 +818,21 @@ func saveOperatorPrivKey(
 	if err != nil {
 		return fmt.Errorf("could not decode private key: %w", err)
 	}
-	configStoragePrivKeyLegacyHash := rsaencryption.HashKeyBytes(cliPrivKeyDecoded)
+
+	// Legacy hashing method (base64‑decoded bytes → HashKeyBytes)
+	legacyHash := rsaencryption.HashKeyBytes(cliPrivKeyDecoded)
 
 	if !found {
-		if err := nodeStorage.SavePrivateKeyHash(configStoragePrivKeyHash); err != nil {
+		// First run: persist the hash.
+		if err := nodeStorage.SavePrivateKeyHash(currentHash); err != nil {
 			return fmt.Errorf("could not save hashed private key: %w", err)
 		}
-	} else if configStoragePrivKeyHash != storedPrivKeyHash &&
-		configStoragePrivKeyLegacyHash != storedPrivKeyHash {
+		return nil
+	}
+
+	// Subsequent runs: enforce immutability.
+	if currentHash != storedHash &&
+		legacyHash != storedHash {
 		// Prevent the node from running with a different key.
 		return fmt.Errorf("operator private key is not matching the one encrypted the storage")
 	}
@@ -821,21 +840,30 @@ func saveOperatorPrivKey(
 	return nil
 }
 
-func saveOperatorPubKeyBase64(nodeStorage operatorstorage.Storage, operatorPubKeyBase64 string) error {
+// ensureOperatorPubKey makes sure the operator public key is stored exactly once
+// and never changes. On first run it saves the key; thereafter it returns an error
+// if the stored key and the new key don’t match.
+func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBase64 string) error {
 	storedPubKey, found, err := nodeStorage.GetPublicKey()
 	if err != nil {
 		return fmt.Errorf("could not get public key: %w", err)
 	}
 
 	if !found {
+		// No key yet in storage → first run, so save it.
 		if err := nodeStorage.SavePublicKey(operatorPubKeyBase64); err != nil {
 			return fmt.Errorf("could not save public key: %w", err)
 		}
-	} else if storedPubKey != operatorPubKeyBase64 {
+		return nil
+	}
+
+	// Key already exists → enforce immutability
+	if storedPubKey != operatorPubKeyBase64 {
 		// Prevent the node from running with a different key.
 		return fmt.Errorf("operator public key is not matching the one in the storage")
 	}
 
+	// Everything matches
 	return nil
 }
 

@@ -33,7 +33,7 @@ func TestDecryptKeystore(t *testing.T) {
 	t.Run("with invalid data", func(t *testing.T) {
 		t.Parallel()
 
-		encryptedJSONData := []byte(`{"version":4,"pubKey":"` + testPubKeyBase64 + `","crypto":{"kdf":"scrypt","checksum":{"function":"sha256","params":{"dklen":32,"salt":"base64EncodedSalt"},"message":"base64EncodedMessage"},"cipher":{"function":"aes-128-ctr","params":{"iv":"base64EncodedIV"},"message":"base64EncodedEncryptedMessage"},"kdfparams":{"n":262144,"r":8,"p":1,"salt":"base64EncodedSalt"}}}`)
+		encryptedJSONData := []byte(`{"version":4,"pubkey":"` + testPubKeyBase64 + `","crypto":{"kdf":"scrypt","checksum":{"function":"sha256","params":{"dklen":32,"salt":"base64EncodedSalt"},"message":"base64EncodedMessage"},"cipher":{"function":"aes-128-ctr","params":{"iv":"base64EncodedIV"},"message":"base64EncodedEncryptedMessage"},"kdfparams":{"n":262144,"r":8,"p":1,"salt":"base64EncodedSalt"}}}`)
 		_, err := DecryptKeystore(encryptedJSONData, testPassword)
 		require.Error(t, err)
 	})
@@ -72,7 +72,7 @@ func TestEncryptKeystore(t *testing.T) {
 		var jsonData map[string]interface{}
 		err = json.Unmarshal(data, &jsonData)
 		require.NoError(t, err)
-		require.Equal(t, testPubKeyBase64, jsonData["pubKey"])
+		require.Equal(t, testPubKeyBase64, jsonData["pubkey"])
 
 		decrtypted, err := DecryptKeystore(data, testPassword)
 		require.NoError(t, err)

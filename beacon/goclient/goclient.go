@@ -325,7 +325,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				zap.String("version", nodeVersionResp.Data),
 			)
 
-			genesis, err := genesisImpl(ctx, gc.log, s)
+			genesis, err := genesisForClient(ctx, gc.log, s)
 			if err != nil {
 				gc.log.Error(clResponseErrMsg,
 					zap.String("address", s.Address()),

@@ -62,7 +62,7 @@ Consensys tutorial: https://docs.web3signer.consensys.io/get-started/start-web3s
 Docker example:
 
 ```bash
-docker run -p 9000:9000 consensys/web3signer:develop \
+docker run -p 9000:9000 consensys/web3signer:latest \
   --http-listen-port=9000 \
   eth2 \
   --network=mainnet \
@@ -100,18 +100,9 @@ web3signer --http-listen-port=9000 \
 - Run `./cmd/ssv-signer` passing the following arguments:
   - `LISTEN_ADDR` - address to listen on (`:8080` by default)
   - `WEB3SIGNER_ENDPOINT` - `web3signer`'s address from the previous step 
-  - `PRIVATE_KEY` or (`PRIVATE_KEY_FILE` and `PASSWORD_FILE`) - operator private key or path to operator keystore and password files
+  - `PRIVATE_KEY_FILE` and `PASSWORD_FILE` - operator private key or path to operator keystore and password files
 
-Using environment variables with raw private key:
-
-```bash
-PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
-LISTEN_ADDR=0.0.0.0:8080 \
-WEB3SIGNER_ENDPOINT=http://localhost:9000 \
-./ssv-signer
-```
-
-Or using a keystore file:
+Using environment variables with a keystore file:
 
 ```bash
 PRIVATE_KEY_FILE=/path/to/keystore.json \
@@ -123,16 +114,12 @@ WEB3SIGNER_ENDPOINT=http://localhost:9000 \
 
 #### SSV-Signer Configuration Options:
 
-| Option | Environment Variable | Required | Default | Description |
-|--------|---------------------|----------|---------|-------------|
-| Listen Address | `LISTEN_ADDR` | Yes | `:8080` | Address and port for the signer to listen on |
-| Web3Signer Endpoint | `WEB3SIGNER_ENDPOINT` | Yes | - | URL of the Web3Signer service |
-| Private Key | `PRIVATE_KEY` | Yes* | - | Operator's private key in raw format |
-| Private Key File | `PRIVATE_KEY_FILE` | Yes* | - | Path to operator's keystore file |
-| Password File | `PASSWORD_FILE` | Yes** | - | Path to file containing keystore password |
-
-\* Either `PRIVATE_KEY` or `PRIVATE_KEY_FILE` must be provided  
-\** Required when using `PRIVATE_KEY_FILE`
+| Option              | Environment Variable  | Required | Default | Description                                  |
+|---------------------|-----------------------|----------|---------|----------------------------------------------|
+| Listen Address      | `LISTEN_ADDR`         | Yes      | `:8080` | Address and port for the signer to listen on |
+| Web3Signer Endpoint | `WEB3SIGNER_ENDPOINT` | Yes      | -       | URL of the Web3Signer service                |
+| Private Key File    | `PRIVATE_KEY_FILE`    | Yes      | -       | Path to operator's keystore file             |
+| Password File       | `PASSWORD_FILE`       | Yes      | -       | Path to file containing keystore password    |
 
 ### 4. Configure SSV Node to Use Remote Signer
 

@@ -13,9 +13,9 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -52,7 +52,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		return fmt.Errorf("init BLS: %w", err)
 	}
 
-	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
+	if _, err := url.Parse(cli.Web3SignerEndpoint); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 

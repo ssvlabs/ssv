@@ -13,7 +13,14 @@ type ShareDecryptionError struct {
 }
 
 func (e ShareDecryptionError) Error() string {
+	if e.Err == nil {
+		return "share decryption error: nil"
+	}
 	return "share decryption error: " + e.Err.Error()
+}
+
+func (e ShareDecryptionError) Unwrap() error {
+	return e.Err
 }
 
 // KeyManager is the main interface for managing validator shares and performing slashing protection.

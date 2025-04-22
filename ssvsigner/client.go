@@ -14,8 +14,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
+
+const DefaultRequestTimeout = 10 * time.Second
 
 type Client struct {
 	logger     *zap.Logger
@@ -29,7 +32,7 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 	c := &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: DefaultRequestTimeout,
 		},
 		logger: zap.NewNop(),
 	}
@@ -46,6 +49,12 @@ type ClientOption func(*Client)
 func WithLogger(logger *zap.Logger) ClientOption {
 	return func(client *Client) {
 		client.logger = logger
+	}
+}
+
+func WithRequestTimeout(timeout time.Duration) ClientOption {
+	return func(client *Client) {
+		client.httpClient.Timeout = timeout
 	}
 }
 

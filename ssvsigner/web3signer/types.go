@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
@@ -153,8 +152,14 @@ func (ap *AggregateAndProof) MarshalJSON() ([]byte, error) {
 }
 
 func (ap *AggregateAndProof) UnmarshalJSON(data []byte) error {
-	if strings.Contains(string(data), "committee_bits") {
-		return json.Unmarshal(data, &ap.Electra)
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+	if attestation, ok := m["aggregate"].(map[string]any); ok {
+		if _, ok := attestation["committee_bits"]; ok {
+			return json.Unmarshal(data, &ap.Electra)
+		}
 	}
 
 	return json.Unmarshal(data, &ap.Phase0)
@@ -193,4 +198,8 @@ type HTTPResponseError struct {
 
 func (h HTTPResponseError) Error() string {
 	return fmt.Sprintf("error status %d: %s", h.Status, h.Err.Error())
+}
+
+func (h HTTPResponseError) Unwrap() error {
+	return h.Err
 }

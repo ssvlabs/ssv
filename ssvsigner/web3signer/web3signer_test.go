@@ -42,6 +42,10 @@ func TestNew(t *testing.T) {
 			name:    "Valid URL with trailing slash",
 			baseURL: "http://localhost:9000/",
 		},
+		{
+			name:    "Empty URL",
+			baseURL: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -52,7 +56,7 @@ func TestNew(t *testing.T) {
 			require.NotNil(t, client)
 
 			expectedBaseURL := tt.baseURL
-			if expectedBaseURL[len(expectedBaseURL)-1] == '/' {
+			if len(expectedBaseURL) != 0 && expectedBaseURL[len(expectedBaseURL)-1] == '/' {
 				expectedBaseURL = expectedBaseURL[:len(expectedBaseURL)-1]
 			}
 

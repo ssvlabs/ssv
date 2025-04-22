@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"time"
 
 	"github.com/alecthomas/kong"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -18,13 +19,14 @@ import (
 )
 
 type CLI struct {
-	ListenAddr         string `env:"LISTEN_ADDR" default:":8080" required:""` // TODO: finalize port
-	Web3SignerEndpoint string `env:"WEB3SIGNER_ENDPOINT" required:""`
-	PrivateKey         string `env:"PRIVATE_KEY" xor:"keys" required:""`
-	PrivateKeyFile     string `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files"`
-	PasswordFile       string `env:"PASSWORD_FILE" and:"files"`
-	LogLevel           string `env:"LOG_LEVEL" default:"info" enum:"debug,info,warn,error" help:"Set log level (debug, info, warn, error)"`
-	LogFormat          string `env:"LOG_FORMAT" default:"console" enum:"console,json" help:"Set log format (console, json)"`
+	ListenAddr         string        `env:"LISTEN_ADDR" default:":8080" required:"" help:"The address and port to listen on (e.g. :8080)"` // TODO: finalize port
+	Web3SignerEndpoint string        `env:"WEB3SIGNER_ENDPOINT" required:"" help:"URL of the web3signer service"`
+	PrivateKey         string        `env:"PRIVATE_KEY" xor:"keys" required:"" help:"Base64‑encoded PEM blob (RSA PRIVATE KEY) for operator; exclusive with PRIVATE_KEY_FILE"`
+	PrivateKeyFile     string        `env:"PRIVATE_KEY_FILE" xor:"keys" and:"files" help:"Path to an encrypted keystore JSON file (v4 format) containing an RSA private key; exclusive with PRIVATE_KEY"`
+	PasswordFile       string        `env:"PASSWORD_FILE" and:"files" help:"Path to file containing the password used to decrypt the keystore JSON file"`
+	LogLevel           string        `env:"LOG_LEVEL" default:"info" enum:"debug,info,warn,error" help:"Set log level (debug, info, warn, error)"`
+	LogFormat          string        `env:"LOG_FORMAT" default:"console" enum:"console,json" help:"Set log format (console, json)"`
+	RequestTimeout     time.Duration `env:"REQUEST_TIMEOUT" default:"10s" help:"Timeout for outgoing HTTP requests (e.g. 500ms, 10s)"`
 }
 
 func main() {
@@ -69,6 +71,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
 		zap.String("log_level", cli.LogLevel),
 		zap.String("log_format", cli.LogFormat),
+		zap.Duration("request_timeout", cli.RequestTimeout),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
@@ -81,7 +84,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		return errors.New("neither private key nor keystore provided")
 	}
 
-	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
+	if _, err := url.Parse(cli.Web3SignerEndpoint); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
@@ -100,7 +103,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		operatorPrivateKey = pk
 	}
 
-	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint)
+	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint, web3signer.WithRequestTimeout(cli.RequestTimeout))
 
 	logger.Info("Starting ssv-signer server", zap.String("addr", cli.ListenAddr))
 

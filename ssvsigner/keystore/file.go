@@ -53,7 +53,7 @@ func EncryptKeystore(privkey []byte, pubKeyBase64, password string) ([]byte, err
 		return nil, fmt.Errorf("encrypt private key: %w", err)
 	}
 
-	encryptedKeystoreJSON["pubKey"] = pubKeyBase64
+	encryptedKeystoreJSON["pubkey"] = pubKeyBase64
 
 	encryptedData, err := json.Marshal(encryptedKeystoreJSON)
 	if err != nil {
@@ -67,13 +67,13 @@ func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.Op
 	//nolint: gosec
 	encryptedJSON, err := os.ReadFile(encryptedPrivateKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("could not read PEM file: %w", err)
+		return nil, fmt.Errorf("read keystore file: %w", err)
 	}
 
 	//nolint: gosec
 	keyStorePassword, err := os.ReadFile(passwordFile)
 	if err != nil {
-		return nil, fmt.Errorf("could not read password file: %w", err)
+		return nil, fmt.Errorf("read password file: %w", err)
 	}
 
 	if len(bytes.TrimSpace(keyStorePassword)) == 0 {
@@ -82,12 +82,12 @@ func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.Op
 
 	decryptedKeystore, err := DecryptKeystore(encryptedJSON, string(keyStorePassword))
 	if err != nil {
-		return nil, fmt.Errorf("could not decrypt operator private key keystore: %w", err)
+		return nil, fmt.Errorf("decrypt operator private key keystore: %w", err)
 	}
 
 	operatorPrivKey, err := keys.PrivateKeyFromBytes(decryptedKeystore)
 	if err != nil {
-		return nil, fmt.Errorf("could not extract operator private key from file: %w", err)
+		return nil, fmt.Errorf("extract operator private key from keystore: %w", err)
 	}
 
 	return operatorPrivKey, nil

@@ -64,11 +64,6 @@ func TestCheckForkValues(t *testing.T) {
 			expectedErr: "spec response is nil",
 		},
 		{
-			name:        "nil data",
-			response:    nil,
-			expectedErr: "spec response is nil",
-		},
-		{
 			name:             "missing ALTAIR",
 			initialAltair:    FarFutureEpoch,
 			initialBellatrix: FarFutureEpoch,

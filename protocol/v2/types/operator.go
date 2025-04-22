@@ -4,6 +4,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 func OperatorIDsFromOperators(operators []*spectypes.Operator) []spectypes.OperatorID {
@@ -20,18 +21,14 @@ type OperatorSigner interface {
 	GetOperatorID() spectypes.OperatorID
 }
 
-type signer interface {
-	Sign(data []byte) ([]byte, error)
-}
-
 type SsvOperatorSigner struct {
-	signer
+	keys.OperatorSigner
 	GetOperatorIdF func() spectypes.OperatorID
 }
 
-func NewSsvOperatorSigner(signer signer, getOperatorId func() spectypes.OperatorID) *SsvOperatorSigner {
+func NewSsvOperatorSigner(operatorSigner keys.OperatorSigner, getOperatorId func() spectypes.OperatorID) *SsvOperatorSigner {
 	return &SsvOperatorSigner{
-		signer:         signer,
+		OperatorSigner: operatorSigner,
 		GetOperatorIdF: getOperatorId,
 	}
 }
