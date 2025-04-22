@@ -52,6 +52,19 @@ func (e Error) Text() string {
 	return e.text
 }
 
+func (e Error) Unwrap() error {
+	return e.innerErr
+}
+
+func (e Error) Is(target error) bool {
+	var t Error
+	if !errors.As(target, &t) {
+		return false
+	}
+
+	return e.text == t.text
+}
+
 var (
 	ErrWrongDomain                             = Error{text: "wrong domain"}
 	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
@@ -116,6 +129,8 @@ var (
 	ErrDuplicatedMessage                       = Error{text: "message is duplicated", reject: true}
 	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
+	ErrUnknownOperator                         = Error{text: "operator is unknown"}
+	ErrOperatorValidation                      = Error{text: "failed to validate operator data"}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
