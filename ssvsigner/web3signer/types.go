@@ -6,41 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
-	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
-
-const (
-	pathPublicKeys = "/api/v1/eth2/publicKeys"
-	pathKeystores  = "/eth/v1/keystores"
-	pathSign       = "/api/v1/eth2/sign/"
-)
-
-type ListKeysResponse []phase0.BLSPubKey
-
-type ImportKeystoreRequest struct {
-	Keystores          []string `json:"keystores"`
-	Passwords          []string `json:"passwords"`
-	SlashingProtection string   `json:"slashing_protection,omitempty"`
-}
-
-type ImportKeystoreResponse struct {
-	Data    []KeyManagerResponseData `json:"data,omitempty"`
-	Message string                   `json:"message,omitempty"`
-}
-
-type DeleteKeystoreRequest struct {
-	Pubkeys []phase0.BLSPubKey `json:"pubkeys"`
-}
-
-type DeleteKeystoreResponse struct {
-	Data               []KeyManagerResponseData `json:"data,omitempty"`
-	SlashingProtection string                   `json:"slashing_protection,omitempty"`
-	Message            string                   `json:"message,omitempty"`
-}
 
 type KeyManagerResponseData struct {
 	Status  Status `json:"status"`
@@ -57,22 +26,6 @@ const (
 	StatusNotFound   Status = "not_found"
 	StatusError      Status = "error"
 )
-
-type SignRequest struct {
-	ForkInfo                    ForkInfo                          `json:"fork_info"`
-	SigningRoot                 phase0.Root                       `json:"signing_root,omitempty"`
-	Type                        SignedObjectType                  `json:"type"`
-	Attestation                 *phase0.AttestationData           `json:"attestation,omitempty"`
-	BeaconBlock                 *BeaconBlockData                  `json:"beacon_block,omitempty"`
-	VoluntaryExit               *phase0.VoluntaryExit             `json:"voluntary_exit,omitempty"`
-	AggregateAndProof           *AggregateAndProof                `json:"aggregate_and_proof,omitempty"`
-	AggregationSlot             *AggregationSlot                  `json:"aggregation_slot,omitempty"`
-	RandaoReveal                *RandaoReveal                     `json:"randao_reveal,omitempty"`
-	SyncCommitteeMessage        *SyncCommitteeMessage             `json:"sync_committee_message,omitempty"`
-	SyncAggregatorSelectionData *SyncCommitteeAggregatorSelection `json:"sync_aggregator_selection_data,omitempty"`
-	ContributionAndProof        *altair.ContributionAndProof      `json:"contribution_and_proof,omitempty"`
-	ValidatorRegistration       *v1.ValidatorRegistration         `json:"validator_registration,omitempty"`
-}
 
 type ForkInfo struct {
 	Fork                  *phase0.Fork `json:"fork"`
@@ -181,10 +134,6 @@ type SyncCommitteeMessage struct {
 type SyncCommitteeAggregatorSelection struct {
 	Slot              phase0.Slot           `json:"slot"`
 	SubcommitteeIndex phase0.CommitteeIndex `json:"subcommittee_index"` // phase0.CommitteeIndex type to marshal to string
-}
-
-type SignResponse struct {
-	Signature phase0.BLSSignature `json:"signature"`
 }
 
 type ErrorMessage struct {
