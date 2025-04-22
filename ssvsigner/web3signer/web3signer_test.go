@@ -50,15 +50,34 @@ func TestNew(t *testing.T) {
 		baseURL         string
 		expectedBaseURL string
 	}{
-		{"ValidURL", "http://localhost:9000", "http://localhost:9000"},
-		{"WithSlash", "http://localhost:9000/", "http://localhost:9000"},
+		{
+			name:    "Valid URL",
+			baseURL: "http://localhost:9000",
+		},
+		{
+			name:    "Valid URL with trailing slash",
+			baseURL: "http://localhost:9000/",
+		},
+		{
+			name:    "Empty URL",
+			baseURL: "",
+		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			client, err := New(tt.baseURL)
 			require.NoError(t, err)
-			require.Equal(t, tt.expectedBaseURL, client.baseURL)
+			require.NotNil(t, client)
+
+			expectedBaseURL := tt.baseURL
+			if len(expectedBaseURL) != 0 && expectedBaseURL[len(expectedBaseURL)-1] == '/' {
+				expectedBaseURL = expectedBaseURL[:len(expectedBaseURL)-1]
+			}
+
+			require.Equal(t, expectedBaseURL, client.baseURL)
 		})
 	}
 }

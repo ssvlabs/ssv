@@ -283,7 +283,7 @@ func TestLoadKeystoreCertificate(t *testing.T) {
 
 	// Create a dummy file with some invalid data
 	invalidKeystoreFile := filepath.Join(tempDir, "invalid-keystore.p12")
-	err := os.WriteFile(invalidKeystoreFile, []byte("not a valid PKCS12 file"), 0600)
+	err := os.WriteFile(invalidKeystoreFile, []byte("not a valid PKCS12 file"), 0o600)
 	require.NoError(t, err, "Failed to write invalid keystore file")
 
 	testCases := []struct {
@@ -333,7 +333,7 @@ func TestLoadFingerprintsFile(t *testing.T) {
 		client3 00:11:22:33:44:55:66:77
 		`
 	clientsFile := filepath.Join(tempDir, "known-clients.txt")
-	require.NoError(t, os.WriteFile(clientsFile, []byte(clientsContent), 0600))
+	require.NoError(t, os.WriteFile(clientsFile, []byte(clientsContent), 0o600))
 
 	// Create known servers file
 	serversContent := `
@@ -345,7 +345,7 @@ func TestLoadFingerprintsFile(t *testing.T) {
 		example.com:8080 00:11:22:33:44:55:66:77
 		`
 	serversFile := filepath.Join(tempDir, "known-servers.txt")
-	require.NoError(t, os.WriteFile(serversFile, []byte(serversContent), 0600))
+	require.NoError(t, os.WriteFile(serversFile, []byte(serversContent), 0o600))
 
 	// Create invalid format file
 	invalidContent := `
@@ -353,7 +353,7 @@ func TestLoadFingerprintsFile(t *testing.T) {
 		invalid format
 		`
 	invalidFile := filepath.Join(tempDir, "invalid.txt")
-	require.NoError(t, os.WriteFile(invalidFile, []byte(invalidContent), 0600))
+	require.NoError(t, os.WriteFile(invalidFile, []byte(invalidContent), 0o600))
 
 	testCases := []struct {
 		name         string

@@ -13,11 +13,11 @@ import (
 )
 
 func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
-	return genesisImpl(ctx, gc.log, gc.multiClient)
+	return genesisForClient(ctx, gc.log, gc.multiClient)
 }
 
 // It's used in both Genesis and singleClientHooks, so we need some common implementation to avoid code repetition.
-func genesisImpl(ctx context.Context, log *zap.Logger, provider client.Service) (*apiv1.Genesis, error) {
+func genesisForClient(ctx context.Context, log *zap.Logger, provider client.Service) (*apiv1.Genesis, error) {
 	start := time.Now()
 	// Genesis result is cached in the client and updated once in a while.
 	// So calling this method often shouldn't worsen the performance.

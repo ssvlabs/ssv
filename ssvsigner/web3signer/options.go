@@ -3,12 +3,21 @@ package web3signer
 import (
 	"crypto/tls"
 	"fmt"
+	"time"
 
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 )
 
 // Option defines a function that configures a Web3Signer client.
 type Option func(*Web3Signer) error
+
+func WithRequestTimeout(timeout time.Duration) Option {
+	return func(w3s *Web3Signer) error {
+		w3s.httpClient.Timeout = timeout
+
+		return nil
+	}
+}
 
 // WithTLS configures TLS for the Web3Signer client.
 // This method configures the client with TLS using the provided certificate and trusted fingerprints.

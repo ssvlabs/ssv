@@ -53,14 +53,13 @@ func TestCurrentFork(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockDataStore{},
 			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)
@@ -85,14 +84,13 @@ func TestCurrentFork(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockDataStore{},
 			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)
@@ -126,14 +124,13 @@ func TestCurrentFork(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockDataStore{},
 			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)

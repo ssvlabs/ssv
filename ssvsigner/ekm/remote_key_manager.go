@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
@@ -17,15 +18,18 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/ssvlabs/eth2-key-manager/core"
+	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/storage/basedb"
+
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // RemoteKeyManager implements KeyManager by delegating signing operations to
@@ -41,6 +45,8 @@ type RemoteKeyManager struct {
 	consensusClient consensusClient
 	getOperatorId   func() spectypes.OperatorID
 	operatorPubKey  keys.OperatorPublicKey
+	signLocksMu     sync.RWMutex
+	signLocks       map[signKey]*sync.RWMutex
 	slashingProtector
 }
 
@@ -90,6 +96,7 @@ func NewRemoteKeyManager(
 		slashingProtector: NewSlashingProtector(logger, signerStore, protection),
 		getOperatorId:     getOperatorId,
 		operatorPubKey:    operatorPubKey,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}, nil
 }
 
@@ -160,6 +167,10 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	switch signatureDomain {
 	case spectypes.DomainAttester:
+		val := km.lock(sharePubkey, "attestation")
+		val.Lock()
+		defer val.Unlock()
+
 		data, err := km.handleDomainAttester(obj, sharePubkey)
 		if err != nil {
 			return spectypes.Signature{}, phase0.Root{}, err
@@ -169,6 +180,10 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		req.Attestation = data
 
 	case spectypes.DomainProposer:
+		val := km.lock(sharePubkey, "proposal")
+		val.Lock()
+		defer val.Unlock()
+
 		block, err := km.handleDomainProposer(obj, sharePubkey)
 		if err != nil {
 			return spectypes.Signature{}, phase0.Root{}, err
@@ -221,6 +236,10 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		req.RandaoReveal = &web3signer.RandaoReveal{Epoch: phase0.Epoch(data)}
 
 	case spectypes.DomainSyncCommittee:
+		val := km.lock(sharePubkey, "sync_committee")
+		val.Lock()
+		defer val.Unlock()
+
 		data, ok := obj.(spectypes.SSZBytes)
 		if !ok {
 			return nil, phase0.Root{}, errors.New("could not cast obj to SSZBytes")
@@ -233,6 +252,10 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		}
 
 	case spectypes.DomainSyncCommitteeSelectionProof:
+		val := km.lock(sharePubkey, "sync_committee_selection_data")
+		val.Lock()
+		defer val.Unlock()
+
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
 		if !ok {
 			return nil, phase0.Root{}, errors.New("could not cast obj to SyncAggregatorSelectionData")
@@ -245,6 +268,10 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		}
 
 	case spectypes.DomainContributionAndProof:
+		val := km.lock(sharePubkey, "sync_committee_selection_and_proof")
+		val.Lock()
+		defer val.Unlock()
+
 		data, ok := obj.(*altair.ContributionAndProof)
 		if !ok {
 			return nil, phase0.Root{}, errors.New("could not cast obj to ContributionAndProof")
@@ -287,6 +314,14 @@ func (km *RemoteKeyManager) handleDomainAttester(
 	data, ok := obj.(*phase0.AttestationData)
 	if !ok {
 		return nil, errors.New("could not cast obj to AttestationData")
+	}
+
+	network := core.Network(km.netCfg.Beacon.GetBeaconNetwork())
+	if !signer.IsValidFarFutureEpoch(network, data.Target.Epoch) {
+		return nil, fmt.Errorf("target epoch too far into the future")
+	}
+	if !signer.IsValidFarFutureEpoch(network, data.Source.Epoch) {
+		return nil, fmt.Errorf("source epoch too far into the future")
 	}
 
 	if err := km.IsAttestationSlashable(sharePubkey, data); err != nil {
@@ -413,6 +448,12 @@ func (km *RemoteKeyManager) handleDomainProposer(
 	}
 
 	blockSlot := ret.BlockHeader.Slot
+
+	network := core.Network(km.netCfg.Beacon.GetBeaconNetwork())
+	if !signer.IsValidFarFutureSlot(network, blockSlot) {
+		return nil, fmt.Errorf("proposed block slot too far into the future")
+	}
+
 	if err := km.IsBeaconBlockSlashable(sharePubkey, blockSlot); err != nil {
 		return nil, err
 	}
@@ -460,4 +501,25 @@ func (km *RemoteKeyManager) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte
 
 func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {
 	return km.getOperatorId()
+}
+
+type signKey struct {
+	pubkey    phase0.BLSPubKey
+	operation string
+}
+
+func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation string) *sync.RWMutex {
+	km.signLocksMu.Lock()
+	defer km.signLocksMu.Unlock()
+
+	key := signKey{
+		pubkey:    sharePubkey,
+		operation: operation,
+	}
+	if val, ok := km.signLocks[key]; ok {
+		return val
+	}
+
+	km.signLocks[key] = &sync.RWMutex{}
+	return km.signLocks[key]
 }

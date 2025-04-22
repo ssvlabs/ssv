@@ -48,6 +48,7 @@ func main() {
 		logger.Fatal("Application failed", zap.Error(err))
 	}
 }
+
 func run(logger *zap.Logger, cli CLI) error {
 	logger.Debug("running",
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
@@ -59,7 +60,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		return fmt.Errorf("init BLS: %w", err)
 	}
 
-	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
+	if _, err := url.Parse(cli.Web3SignerEndpoint); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
@@ -92,7 +93,6 @@ func run(logger *zap.Logger, cli CLI) error {
 		)
 	} else {
 		web3SignerClient, err = web3signer.New(cli.Web3SignerEndpoint)
-
 	}
 
 	if err != nil {

@@ -17,8 +17,11 @@ import (
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
+
+const DefaultRequestTimeout = 10 * time.Second
 
 type Client struct {
 	logger     *zap.Logger
@@ -33,6 +36,7 @@ type ClientOption func(*Client) error
 func WithLogger(logger *zap.Logger) ClientOption {
 	return func(c *Client) error {
 		c.logger = logger
+
 		return nil
 	}
 }
@@ -62,9 +66,12 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	c := &Client{
-		baseURL:    baseURL,
-		httpClient: &http.Client{Transport: http.DefaultTransport, Timeout: 30 * time.Second},
-		logger:     zap.NewNop(),
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Transport: http.DefaultTransport,
+			Timeout:   DefaultRequestTimeout,
+		},
+		logger: zap.NewNop(),
 	}
 
 	for _, opt := range opts {
@@ -74,6 +81,13 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 	}
 
 	return c, nil
+}
+
+func WithRequestTimeout(timeout time.Duration) ClientOption {
+	return func(client *Client) error {
+		client.httpClient.Timeout = timeout
+		return nil
+	}
 }
 
 func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKey, err error) {
@@ -166,7 +180,6 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		Delete().
 		ToJSON(&resp).
 		Fetch(ctx)
-
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
@@ -221,7 +234,6 @@ func (c *Client) OperatorIdentity(ctx context.Context) (pubKeyBase64 string, err
 		Path(pathOperatorIdentity).
 		ToString(&resp).
 		Fetch(ctx)
-
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
@@ -245,7 +257,6 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 		Post().
 		ToBytesBuffer(&respBuf).
 		Fetch(ctx)
-
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}

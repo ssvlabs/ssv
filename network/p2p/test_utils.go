@@ -141,7 +141,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		return nil, err
 	}
 
-	nodeStorage, err := storage.NewNodeStorage(logger, db)
+	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +182,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
 		nodeStorage.ValidatorStore(),
+		nodeStorage,
 		dutyStore,
 		signatureVerifier,
 		phase0.Epoch(0),
@@ -208,6 +209,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		cfg.MessageValidator = validation.New(
 			networkconfig.TestNetwork,
 			nodeStorage.ValidatorStore(),
+			nodeStorage,
 			dutyStore,
 			signatureVerifier,
 			phase0.Epoch(0),

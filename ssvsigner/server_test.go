@@ -59,13 +59,15 @@ func (s *ServerTestSuite) SetupTest() {
 				{
 					Status: web3signer.StatusImported,
 				},
-			}},
+			},
+		},
 		DeleteResult: web3signer.DeleteKeystoreResponse{
 			Data: []web3signer.KeyManagerResponseData{
 				{
 					Status: web3signer.StatusDeleted,
 				},
-			}},
+			},
+		},
 		SignResult: web3signer.SignResponse{
 			Signature: phase0.BLSSignature{1, 1, 1},
 		},

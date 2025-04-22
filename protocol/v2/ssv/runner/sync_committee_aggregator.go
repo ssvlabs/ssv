@@ -312,7 +312,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 			successfullySubmittedContributions++
 			logger.Debug("✅ successfully submitted sync committee aggregator",
 				fields.SubmissionTime(time.Since(start)),
-			)
+				fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
 			break
 		}
 	}
