@@ -55,6 +55,7 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
 	}
 
+	// EIP-7044 requires using CAPELLA_FORK_VERSION for DomainVoluntaryExit: https://eips.ethereum.org/EIPS/eip-7044
 	forkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
 	if !ok {
 		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
