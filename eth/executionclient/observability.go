@@ -148,8 +148,7 @@ func recordMultiClientMethodCall(ctx context.Context, method string, nodeAddr st
 	multiClientMethodDurationHistogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
 
 	if err != nil {
-		errorAttrs := append(attrs, attribute.String("error", err.Error()))
-		multiClientMethodErrorsCounter.Add(ctx, 1, metric.WithAttributes(errorAttrs...))
+		multiClientMethodErrorsCounter.Add(ctx, 1)
 	}
 }
 
@@ -167,7 +166,6 @@ func recordClientInit(ctx context.Context, nodeAddr string, success bool, err er
 	clientInitCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 
 	if !success {
-		errorAttrs := append(attrs, attribute.String("error", err.Error()))
-		clientInitErrorCounter.Add(ctx, 1, metric.WithAttributes(errorAttrs...))
+		clientInitErrorCounter.Add(ctx, 1)
 	}
 }
