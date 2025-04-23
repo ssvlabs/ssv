@@ -303,7 +303,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		fields.Domain(discOpts.NetworkConfig.DomainType),
 	)
 
-	dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second, dvs.networkConfig)
+	dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second)
 	dvs.bootnodes = dv5PreForkCfg.Bootnodes // Just take bootnodes from one of the config since they're equal
 
 	return nil

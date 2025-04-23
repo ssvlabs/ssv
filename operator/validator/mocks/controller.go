@@ -51,20 +51,6 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 	return m.recorder
 }
 
-// AllActiveIndices mocks base method.
-func (m *MockController) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllActiveIndices", epoch, afterInit)
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockControllerMockRecorder) AllActiveIndices(epoch, afterInit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch, afterInit)
-}
-
 // ExecuteCommitteeDuty mocks base method.
 func (m *MockController) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID types.CommitteeID, duty *types.CommitteeDuty) {
 	m.ctrl.T.Helper()
@@ -101,6 +87,20 @@ func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint
 func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex, ownValidator any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex, ownValidator)
+}
+
+// FilterIndices mocks base method.
+func (m *MockController) FilterIndices(afterInit bool, filter func(*types0.SSVShare) bool) []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FilterIndices", afterInit, filter)
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// FilterIndices indicates an expected call of FilterIndices.
+func (mr *MockControllerMockRecorder) FilterIndices(afterInit, filter any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterIndices", reflect.TypeOf((*MockController)(nil).FilterIndices), afterInit, filter)
 }
 
 // GetValidator mocks base method.

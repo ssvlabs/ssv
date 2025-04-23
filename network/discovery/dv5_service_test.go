@@ -25,8 +25,12 @@ import (
 )
 
 var TestNetwork = networkconfig.NetworkConfig{
-	Beacon:     beacon.NewNetwork(spectypes.BeaconTestNetwork),
-	DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+	BeaconConfig: networkconfig.BeaconConfig{
+		Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
+	},
+	SSVConfig: networkconfig.SSVConfig{
+		DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+	},
 }
 
 func TestCheckPeer(t *testing.T) {
