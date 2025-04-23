@@ -321,13 +321,14 @@ func loadPasswordFromFile(filePath string) (string, error) {
 		return "", fmt.Errorf("read password file: %w", err)
 	}
 
-	// Trim any newlines or whitespace
 	password := strings.TrimSpace(string(data))
 	return password, nil
 }
 
 // loadKeystoreCertificate loads a certificate from a keystore file.
 // The keystore file is expected to be in PKCS12 format, matching Web3Signer's approach.
+// Note: While Web3Signer handles PKCS12 decoding internally via command-line parameters,
+// this implementation explicitly decodes the keystore to extract certificates and keys.
 //
 // Parameters:
 // - keystoreFile: path to the keystore file
@@ -346,12 +347,11 @@ func loadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, er
 		return tls.Certificate{}, fmt.Errorf("decode PKCS12 keystore: %w", err)
 	}
 
-	x509Certs := []*x509.Certificate{certificate}
-
-	certChain := make([][]byte, len(x509Certs))
-	for i, cert := range x509Certs {
-		certChain[i] = cert.Raw
+	if certificate == nil {
+		return tls.Certificate{}, fmt.Errorf("no certificate found in keystore")
 	}
+
+	certChain := [][]byte{certificate.Raw}
 
 	tlsCert := tls.Certificate{
 		Certificate: certChain,
