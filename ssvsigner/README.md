@@ -166,7 +166,7 @@ SSV-Signer exposes the following API endpoints:
 ## Security Considerations
 
 1. **Network Security**: Ensure communication between all components occurs over secure networks.
-2. **Key Protection**: Store operator keys securely restricting access to them
+2. **Key Protection**: Store operator keys securely restricting access to them.
 3. **Access Control**: Limit access to the SSV-Signer and Web3Signer endpoints to only the necessary services.
 
 ## Performance Considerations
@@ -186,7 +186,7 @@ When migrating from local signing to remote signing:
 
 ## Limitations
 
-1. The remote signer doesn't automatically sync all validator shares on startup. It receives shares as the node processes events.
+1. The SSV node adds shares to the remote signer and removes them while syncing events. So, when the SSV node is started with a fresh DB, the keys still remain in the remote signing provider (e.g. Web3Signer) and must be removed manually. Also, if a remote signing provider instance (e.g. Web3Signer) is changed without copying the keys, the SSV node must be restarted with a fresh DB to sync the events.
 2. Changing operators with an existing database is not supported.
 3. Web3Signer is a third-party component with its own limitations and dependencies.
 
