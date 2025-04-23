@@ -229,9 +229,9 @@ To configure SSV-Signer to use TLS for incoming connections:
 PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
 LISTEN_ADDR=0.0.0.0:8443 \
 WEB3SIGNER_ENDPOINT=http://localhost:9000 \
-SERVER_KEYSTORE_FILE=/path/to/server.p12 \
-SERVER_KEYSTORE_PASSWORD_FILE=/path/to/server_password.txt \
-SERVER_KNOWN_CLIENTS_FILE=/path/to/known_clients.txt \
+KEYSTORE_FILE=/path/to/server.p12 \
+KEYSTORE_PASSWORD_FILE=/path/to/server_password.txt \
+KNOWN_CLIENTS_FILE=/path/to/known_clients.txt \
 ./ssv-signer
 ```
 
@@ -251,9 +251,9 @@ To configure SSV-Signer to use TLS when connecting to Web3Signer:
 PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
 LISTEN_ADDR=0.0.0.0:8080 \
 WEB3SIGNER_ENDPOINT=https://localhost:9000 \
-CLIENT_KEYSTORE_FILE=/path/to/client.p12 \
-CLIENT_KEYSTORE_PASSWORD_FILE=/path/to/client_password.txt \
-CLIENT_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
+WEB3SIGNER_KEYSTORE_FILE=/path/to/client.p12 \
+WEB3SIGNER_KEYSTORE_PASSWORD_FILE=/path/to/client_password.txt \
+WEB3SIGNER_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 ./ssv-signer
 ```
 
@@ -268,26 +268,26 @@ PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
 LISTEN_ADDR=0.0.0.0:8443 \
 WEB3SIGNER_ENDPOINT=https://localhost:9000 \
 # Server TLS (accepting connections from SSV node)
-SERVER_KEYSTORE_FILE=/path/to/server.p12 \
-SERVER_KEYSTORE_PASSWORD_FILE=/path/to/server_password.txt \
-SERVER_KNOWN_CLIENTS_FILE=/path/to/known_clients.txt \
+KEYSTORE_FILE=/path/to/server.p12 \
+KEYSTORE_PASSWORD_FILE=/path/to/server_password.txt \
+KNOWN_CLIENTS_FILE=/path/to/known_clients.txt \
 # Client TLS (connecting to Web3Signer)
-CLIENT_KEYSTORE_FILE=/path/to/client.p12 \
-CLIENT_KEYSTORE_PASSWORD_FILE=/path/to/client_password.txt \
-CLIENT_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
+WEB3SIGNER_KEYSTORE_FILE=/path/to/client.p12 \
+WEB3SIGNER_KEYSTORE_PASSWORD_FILE=/path/to/client_password.txt \
+WEB3SIGNER_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 ./ssv-signer
 ```
 
 #### Command Line Options Reference
 
-| SSV-Signer Option               | Description                                           |
-|---------------------------------|-------------------------------------------------------|
-| `SERVER_KEYSTORE_FILE`          | Server PKCS12 keystore file                           |
-| `SERVER_KEYSTORE_PASSWORD_FILE` | Path to file containing password for server keystore  |
-| `SERVER_KNOWN_CLIENTS_FILE`     | Known clients fingerprints file                       |
-| `CLIENT_KEYSTORE_FILE`          | Client PKCS12 keystore file for Web3Signer connection |
-| `CLIENT_KEYSTORE_PASSWORD_FILE` | Path to file containing password for client keystore  |
-| `CLIENT_KNOWN_SERVERS_FILE`     | Known Web3Signer servers fingerprints file            |
+| SSV-Signer Option                   | Description                                           |
+|-------------------------------------|-------------------------------------------------------|
+| `KEYSTORE_FILE`                     | Server PKCS12 keystore file                           |
+| `KEYSTORE_PASSWORD_FILE`            | Path to file containing password for server keystore  |
+| `KNOWN_CLIENTS_FILE`                | Known clients fingerprints file                       |
+| `WEB3SIGNER_KEYSTORE_FILE`          | Client PKCS12 keystore file for Web3Signer connection |
+| `WEB3SIGNER_KEYSTORE_PASSWORD_FILE` | Path to file containing password for client keystore  |
+| `WEB3SIGNER_KNOWN_SERVERS_FILE`     | Known Web3Signer servers fingerprints file            |
 
 #### Security Recommendations
 
@@ -310,23 +310,23 @@ options helps ensure secure and proper setup.
 
 **Server TLS Validation Rules** (SSV-Signer accepting connections from SSV node):
 
-| Configuration | SERVER_KEYSTORE_FILE | SERVER_KEYSTORE_PASSWORD_FILE | SERVER_KNOWN_CLIENTS_FILE | Validity  | Description                                                    |
-|---------------|----------------------|-------------------------------|---------------------------|-----------|----------------------------------------------------------------|
-| No TLS        | ❌                    | ❌                             | ❌                         | ✅ Valid   | No TLS encryption for incoming connections                     |
-| Basic TLS     | ✅                    | ✅                             | ❌                         | ✅ Valid   | Server presents certificate but doesn't verify clients         |
-| Mutual TLS    | ✅                    | ✅                             | ✅                         | ✅ Valid   | Server verifies client certificates against known fingerprints |
-| Invalid       | ✅                    | ❌                             | ❌                         | ❌ Invalid | Missing keystore password file                                 |
-| Invalid       | ❌                    | ❌                             | ✅                         | ❌ Invalid | Client verification without server certificate                 |
+| Configuration | KEYSTORE_FILE | KEYSTORE_PASSWORD_FILE | KNOWN_CLIENTS_FILE | Validity  | Description                                                    |
+|---------------|---------------|------------------------|--------------------|-----------|----------------------------------------------------------------|
+| No TLS        | ❌             | ❌                      | ❌                  | ✅ Valid   | No TLS encryption for incoming connections                     |
+| Basic TLS     | ✅             | ✅                      | ❌                  | ✅ Valid   | Server presents certificate but doesn't verify clients         |
+| Mutual TLS    | ✅             | ✅                      | ✅                  | ✅ Valid   | Server verifies client certificates against known fingerprints |
+| Invalid       | ✅             | ❌                      | ❌                  | ❌ Invalid | Missing keystore password file                                 |
+| Invalid       | ❌             | ❌                      | ✅                  | ❌ Invalid | Client verification without server certificate                 |
 
 **Client TLS Validation Rules** (SSV-Signer connecting to Web3Signer):
 
-| Configuration      | CLIENT_KEYSTORE_FILE | CLIENT_KEYSTORE_PASSWORD_FILE | CLIENT_KNOWN_SERVERS_FILE | Validity  | Description                                                |
-|--------------------|----------------------|-------------------------------|---------------------------|-----------|------------------------------------------------------------|
-| No TLS             | ❌                    | ❌                             | ❌                         | ✅ Valid   | No TLS for outgoing connections (use HTTP endpoint)        |
-| Fingerprint Only   | ❌                    | ❌                             | ✅                         | ✅ Valid   | Verify server certificate against known fingerprints       |
-| Client Certificate | ✅                    | ✅                             | ❌                         | ✅ Valid   | Present client certificate for mutual TLS                  |
-| Full Mutual TLS    | ✅                    | ✅                             | ✅                         | ✅ Valid   | Present client certificate and verify server (most secure) |
-| Invalid            | ✅                    | ❌                             | ❌                         | ❌ Invalid | Missing keystore password file                             |
+| Configuration      | WEB3SIGNER_KEYSTORE_FILE | WEB3SIGNER_KEYSTORE_PASSWORD_FILE | WEB3SIGNER_KNOWN_SERVERS_FILE | Validity  | Description                                                |
+|--------------------|--------------------------|-----------------------------------|-------------------------------|-----------|------------------------------------------------------------|
+| No TLS             | ❌                        | ❌                                 | ❌                             | ✅ Valid   | No TLS for outgoing connections (use HTTP endpoint)        |
+| Fingerprint Only   | ❌                        | ❌                                 | ✅                             | ✅ Valid   | Verify server certificate against known fingerprints       |
+| Client Certificate | ✅                        | ✅                                 | ❌                             | ✅ Valid   | Present client certificate for mutual TLS                  |
+| Full Mutual TLS    | ✅                        | ✅                                 | ✅                             | ✅ Valid   | Present client certificate and verify server (most secure) |
+| Invalid            | ✅                        | ❌                                 | ❌                             | ❌ Invalid | Missing keystore password file                             |
 
 When implementing TLS, consider:
 
