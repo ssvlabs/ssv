@@ -142,21 +142,12 @@ WEB3SIGNER_ENDPOINT=http://localhost:9000 \
 
 #### SSV-Signer Configuration Options:
 
-| Option                        | Environment Variable            | Required | Default | Description                                         |
-|-------------------------------|---------------------------------|----------|---------|-----------------------------------------------------|
-| Listen Address                | `LISTEN_ADDR`                   | Yes      | `:8080` | Address and port for the signer to listen on        |
-| Web3Signer Endpoint           | `WEB3SIGNER_ENDPOINT`           | Yes      | -       | URL of the Web3Signer service                       |
-| Private Key File              | `PRIVATE_KEY_FILE`              | Yes*     | -       | Path to operator's keystore file                    |
-| Password File                 | `PASSWORD_FILE`                 | Yes*     | -       | Path to file containing keystore password           |
-| Private Key                   | `PRIVATE_KEY`                   | Yes*     | -       | Operator's private key (alternative to keystore)    |
-| Server Keystore File          | `SERVER_KEYSTORE_FILE`          | No       | -       | PKCS12 keystore for server TLS                      |
-| Server Keystore Password File | `SERVER_KEYSTORE_PASSWORD_FILE` | No       | -       | Password file for server keystore                   |
-| Server Known Clients File     | `SERVER_KNOWN_CLIENTS_FILE`     | No       | -       | Trusted client fingerprints for client auth         |
-| Client Keystore File          | `CLIENT_KEYSTORE_FILE`          | No       | -       | PKCS12 keystore for client TLS                      |
-| Client Keystore Password File | `CLIENT_KEYSTORE_PASSWORD_FILE` | No       | -       | Password file for client keystore                   |
-| Client Known Servers File     | `CLIENT_KNOWN_SERVERS_FILE`     | No       | -       | Trusted server fingerprints for server verification |
-
-\* Either `PRIVATE_KEY` or both `PRIVATE_KEY_FILE` and `PASSWORD_FILE` are required
+| Option              | Environment Variable  | Required | Default | Description                                  |
+|---------------------|-----------------------|----------|---------|----------------------------------------------|
+| Listen Address      | `LISTEN_ADDR`         | Yes      | `:8080` | Address and port for the signer to listen on |
+| Web3Signer Endpoint | `WEB3SIGNER_ENDPOINT` | Yes      | -       | URL of the Web3Signer service                |
+| Private Key File    | `PRIVATE_KEY_FILE`    | Yes      | -       | Path to operator's keystore file             |
+| Password File       | `PASSWORD_FILE`       | Yes      | -       | Path to file containing keystore password    |
 
 ### 4. Configure SSV Node to Use Remote Signer
 
@@ -376,7 +367,7 @@ database, cleaning keys in Web3Signer is required to ensure all shares are prope
 ## Security Considerations
 
 1. **Network Security**: Ensure communication between all components occurs over secure networks.
-2. **Key Protection**: Store operator keys securely restricting access to them
+2. **Key Protection**: Store operator keys securely restricting access to them.
 3. **Access Control**: Limit access to the SSV-Signer and Web3Signer endpoints to only the necessary services.
 
 ## Performance Considerations
@@ -398,8 +389,10 @@ When migrating from local signing to remote signing:
 
 ## Limitations
 
-1. The remote signer doesn't automatically sync all validator shares on startup. It receives shares as the node
-   processes events.
+1. The SSV node adds shares to the remote signer and removes them while syncing events. So, when the SSV node is started
+   with a fresh DB, the keys still remain in the remote signing provider (e.g. Web3Signer) and must be removed manually.
+   Also, if a remote signing provider instance (e.g. Web3Signer) is changed without copying the keys, the SSV node must
+   be restarted with a fresh DB to sync the events.
 2. Changing operators with an existing database is not supported.
 3. Web3Signer is a third-party component with its own limitations and dependencies.
 
