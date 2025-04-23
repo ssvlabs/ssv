@@ -100,7 +100,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	handler := s.Handler()
 
 	if s.tlsConfig != nil {
-		s.logger.Info("starting with TLS", zap.String("addr", addr))
+		s.logger.Info("starting server with TLS", zap.String("addr", addr))
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			return err
@@ -110,7 +110,7 @@ func (s *Server) ListenAndServe(addr string) error {
 		return fasthttp.Serve(tlsLn, handler)
 	}
 
-	s.logger.Info("starting without TLS", zap.String("addr", addr))
+	s.logger.Info("starting server without TLS", zap.String("addr", addr))
 	return fasthttp.ListenAndServe(addr, handler)
 }
 

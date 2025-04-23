@@ -159,7 +159,7 @@ func (w3s *Web3Signer) handleWeb3SignerErr(err error) error {
 }
 
 // applyTLSConfig clones the existing transport and applies the TLS configuration to the HTTP client.
-func (w3s *Web3Signer) applyTLSConfig(tlsConfig *tls.Config) error {
+func (w3s *Web3Signer) applyTLSConfig(tlsConfig *tls.Config) {
 	var transport *http.Transport
 	if t, ok := w3s.httpClient.Transport.(*http.Transport); ok {
 		transport = t.Clone()
@@ -169,6 +169,4 @@ func (w3s *Web3Signer) applyTLSConfig(tlsConfig *tls.Config) error {
 
 	transport.TLSClientConfig = tlsConfig
 	w3s.httpClient.Transport = transport
-
-	return nil
 }

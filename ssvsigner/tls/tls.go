@@ -21,14 +21,14 @@ const MinTLSVersion = tls.VersionTLS13
 // https://docs.web3signer.consensys.io/how-to/configure-tls
 type Config struct {
 	// Server TLS configuration (for incoming connections to SSV Signer)
-	ServerKeystoreFile         string // web3signer --tls-keystore-file
-	ServerKeystorePasswordFile string // web3signer --tls-keystore-password-file
-	ServerKnownClientsFile     string // web3signer --tls-known-clients-file
+	ServerKeystoreFile         string
+	ServerKeystorePasswordFile string
+	ServerKnownClientsFile     string
 
 	// Client TLS configuration (for connecting to Web3Signer)
-	ClientKeystoreFile         string // web3signer --downstream-http-tls-keystore-file
-	ClientKeystorePasswordFile string // web3signer --downstream-http-tls-keystore-password-file
-	ClientKnownServersFile     string // web3signer --downstream-http-tls-known-servers-file
+	ClientKeystoreFile         string
+	ClientKeystorePasswordFile string
+	ClientKnownServersFile     string
 }
 
 // LoadClientConfig creates a client TLS configuration based on the provided parameters.
@@ -443,6 +443,5 @@ func formatFingerprintWithColons(fingerprint string) string {
 //
 // Returns the standardized fingerprint.
 func parseFingerprint(fingerprint string) string {
-	// Remove all colons and convert to the lowercase
 	return strings.ToLower(strings.ReplaceAll(fingerprint, ":", ""))
 }

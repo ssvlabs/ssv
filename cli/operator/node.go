@@ -81,9 +81,9 @@ type KeyStore struct {
 type SSVSignerConfig struct {
 	Endpoint                   string        `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
 	RequestTimeout             time.Duration `yaml:"RequestTimeout" env:"REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
-	ClientKeystoreFile         string        `yaml:"ClientKeystoreFile" env:"CLIENT_KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
-	ClientKeystorePasswordFile string        `yaml:"ClientKeystorePasswordFile" env:"CLIENT_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
-	ClientKnownServersFile     string        `yaml:"ClientKnownServersFile" env:"CLIENT_KNOWN_SERVERS_FILE" env-description:"Path to ssv-signer client known servers file"`
+	ClientKeystoreFile         string        `yaml:"Web3SignerKeystoreFile" env:"CLIENT_KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
+	ClientKeystorePasswordFile string        `yaml:"Web3SignerKeystorePasswordFile" env:"CLIENT_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	ClientKnownServersFile     string        `yaml:"Web3KnownServersFile" env:"CLIENT_KNOWN_SERVERS_FILE" env-description:"Path to ssv-signer client known servers file"`
 }
 
 type config struct {

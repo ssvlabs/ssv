@@ -28,14 +28,14 @@ type CLI struct {
 	RequestTimeout     time.Duration `env:"REQUEST_TIMEOUT" default:"10s" help:"Timeout for outgoing HTTP requests (e.g. 500ms, 10s)"`
 
 	// Server TLS configuration (for incoming connections to SSV Signer)
-	ServerKeystoreFile         string `env:"SERVER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for server TLS connections"`
-	ServerKeystorePasswordFile string `env:"SERVER_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for server keystore file"`
-	ServerKnownClientsFile     string `env:"SERVER_KNOWN_CLIENTS_FILE" env-description:"Path to known clients file for authenticating clients"`
+	KeystoreFile         string `env:"KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for server TLS connections"`
+	KeystorePasswordFile string `env:"KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for server keystore file"`
+	KnownClientsFile     string `env:"KNOWN_CLIENTS_FILE" env-description:"Path to known clients file for authenticating clients"`
 
 	// Client TLS configuration (for connecting to Web3Signer)
-	ClientKeystoreFile         string `env:"CLIENT_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
-	ClientKeystorePasswordFile string `env:"CLIENT_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
-	ClientKnownServersFile     string `env:"CLIENT_KNOWN_SERVERS_FILE" env-description:"Path to known servers file for authenticating Web3Signer"`
+	Web3SignerKeystoreFile         string `env:"WEB3SIGNER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
+	Web3SignerKeystorePasswordFile string `env:"WEB3SIGNER_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	Web3SignerKnownServersFile     string `env:"WEB3SIGNER_KNOWN_SERVERS_FILE" env-description:"Path to known servers file for authenticating Web3Signer"`
 }
 
 func main() {
@@ -65,18 +65,18 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.String("log_level", cli.LogLevel),
 		zap.String("log_format", cli.LogFormat),
 		zap.Duration("request_timeout", cli.RequestTimeout),
-		zap.Bool("server_tls_enabled", cli.ServerKeystoreFile != ""),
-		zap.Bool("client_tls_enabled", cli.ClientKeystoreFile != ""),
+		zap.Bool("server_tls_enabled", cli.KeystoreFile != ""),
+		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != ""),
 	)
 
 	tlsConfig := tls.Config{
-		ServerKeystoreFile:         cli.ServerKeystoreFile,
-		ServerKeystorePasswordFile: cli.ServerKeystorePasswordFile,
-		ServerKnownClientsFile:     cli.ServerKnownClientsFile,
+		ServerKeystoreFile:         cli.KeystoreFile,
+		ServerKeystorePasswordFile: cli.KeystorePasswordFile,
+		ServerKnownClientsFile:     cli.KnownClientsFile,
 
-		ClientKeystoreFile:         cli.ClientKeystoreFile,
-		ClientKeystorePasswordFile: cli.ClientKeystorePasswordFile,
-		ClientKnownServersFile:     cli.ClientKnownServersFile,
+		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
+		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
+		ClientKnownServersFile:     cli.Web3SignerKnownServersFile,
 	}
 
 	if err := validateConfig(cli, tlsConfig); err != nil {

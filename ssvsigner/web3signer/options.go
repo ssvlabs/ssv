@@ -2,7 +2,6 @@ package web3signer
 
 import (
 	"crypto/tls"
-	"fmt"
 	"time"
 
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
@@ -33,9 +32,11 @@ func WithTLS(certificate tls.Certificate, trustedFingerprints map[string]string)
 	return func(client *Web3Signer) error {
 		tlsConfig, err := ssvsignertls.LoadClientConfig(certificate, trustedFingerprints)
 		if err != nil {
-			return fmt.Errorf("web3signer TLS: %w", err)
+			return err
 		}
 
-		return client.applyTLSConfig(tlsConfig)
+		client.applyTLSConfig(tlsConfig)
+
+		return nil
 	}
 }
