@@ -64,7 +64,7 @@ type storage struct {
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(networkConfig networkconfig.NetworkConfig, logger *zap.Logger, db basedb.Database) (Storage, error) {
+func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,
@@ -74,7 +74,7 @@ func NewNodeStorage(networkConfig networkconfig.NetworkConfig, logger *zap.Logge
 
 	var err error
 
-	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(networkConfig, db, OperatorStoragePrefix)
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, OperatorStoragePrefix)
 	if err != nil {
 		return nil, err
 	}

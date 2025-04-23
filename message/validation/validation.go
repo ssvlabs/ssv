@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/ssvlabs/ssv/utils/casts"
 	"slices"
 	"sync"
 	"time"
@@ -26,7 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 

@@ -193,7 +193,7 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 
 func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, epoch phase0.Epoch) bool {
 	share, found := h.validatorProvider.Validator(duty.PubKey[:])
-	if !found || !share.IsParticipating(h.network, epoch) {
+	if !found || !share.IsParticipating(h.beaconConfig, epoch) {
 		return false
 	}
 

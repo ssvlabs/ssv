@@ -191,7 +191,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	}
 
 	eligibleIndices := h.validatorController.FilterIndices(waitForInitial, func(s *types.SSVShare) bool {
-		return s.IsParticipating(h.network, epoch)
+		return s.IsParticipating(h.beaconConfig, epoch)
 	})
 
 	if len(eligibleIndices) == 0 {

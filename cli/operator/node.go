@@ -138,7 +138,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.BeaconConfig)
+		db, err := setupDB(logger, networkConfig)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -299,7 +299,6 @@ var StartNodeCmd = &cobra.Command{
 				ssvSignerClient,
 				consensusClient,
 				db,
-				networkConfig,
 				operatorDataStore.GetOperatorID,
 			)
 			if err != nil {
@@ -417,7 +416,7 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
-			networkConfig,
+			networkConfig.BeaconConfig,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -722,7 +721,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
+func setupDB(logger *zap.Logger, beaconConfig networkconfig.Beacon) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -736,9 +735,9 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv
 	}
 
 	migrationOpts := migrations.Options{
-		Db:            db,
-		DbPath:        cfg.DBOptions.Path,
-		NetworkConfig: networkConfig,
+		Db:           db,
+		DbPath:       cfg.DBOptions.Path,
+		BeaconConfig: beaconConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {

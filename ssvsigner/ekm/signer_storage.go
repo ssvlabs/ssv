@@ -44,7 +44,11 @@ const (
 // TODO: review if we need all of them
 type Storage interface {
 	registry.RegistryStore
-	core.Storage
+
+	// Name returns storage name.
+	Name() string
+	core.WalletStorage
+	core.AccountStorage
 	core.SlashingStore
 
 	RemoveHighestAttestation(pubKey []byte) error

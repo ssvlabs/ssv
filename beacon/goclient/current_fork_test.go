@@ -11,10 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const forkSchedulePath = "/eth/v1/config/fork_schedule"
@@ -22,7 +20,7 @@ const forkSchedulePath = "/eth/v1/config/fork_schedule"
 func TestCurrentFork(t *testing.T) {
 	ctx := context.Background()
 
-	network := beacon.NewNetwork(types.MainNetwork)
+	beaconConfig := networkconfig.Mainnet.BeaconConfig
 
 	t.Run("success", func(t *testing.T) {
 		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
@@ -55,7 +53,7 @@ func TestCurrentFork(t *testing.T) {
 			zap.NewNop(),
 			Options{
 				Context:        ctx,
-				Network:        network,
+				BeaconConfig:   beaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
@@ -86,7 +84,7 @@ func TestCurrentFork(t *testing.T) {
 			zap.NewNop(),
 			Options{
 				Context:        ctx,
-				Network:        network,
+				BeaconConfig:   beaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
@@ -126,7 +124,7 @@ func TestCurrentFork(t *testing.T) {
 			zap.NewNop(),
 			Options{
 				Context:        ctx,
-				Network:        network,
+				BeaconConfig:   beaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
