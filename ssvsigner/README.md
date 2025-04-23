@@ -107,7 +107,9 @@ This configures Web3Signer to accept secure connections from SSV-Signer. When TL
 to:
 
 1. Use `https://` in the `WEB3SIGNER_ENDPOINT` value for SSV-Signer
-2. Configure client TLS options for SSV-Signer to connect securely
+2. Configure client TLS options for SSV-Signer to connect securely (
+   see [Client TLS Configuration](#client-tls-configuration-ssv-signer-connecting-to-web3signer) section for detailed
+   examples)
 
 #### Important Web3Signer Options:
 
@@ -265,7 +267,7 @@ A complete setup with both server and client TLS would look like:
 PRIVATE_KEY=OPERATOR_PRIVATE_KEY \
 LISTEN_ADDR=0.0.0.0:8443 \
 WEB3SIGNER_ENDPOINT=https://localhost:9000 \
-# Server TLS (accepting connections)
+# Server TLS (accepting connections from SSV node)
 SERVER_KEYSTORE_FILE=/path/to/server.p12 \
 SERVER_KEYSTORE_PASSWORD_FILE=/path/to/server_password.txt \
 SERVER_KNOWN_CLIENTS_FILE=/path/to/known_clients.txt \
@@ -278,14 +280,14 @@ CLIENT_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 
 #### Command Line Options Reference
 
-| SSV-Signer Option               | Description                                          | Web3Signer Equivalent                          |
-|---------------------------------|------------------------------------------------------|------------------------------------------------|
-| `SERVER_KEYSTORE_FILE`          | Server PKCS12 keystore file                          | `--tls-keystore-file`                          |
-| `SERVER_KEYSTORE_PASSWORD_FILE` | Path to file containing password for server keystore | `--tls-keystore-password-file`                 |
-| `SERVER_KNOWN_CLIENTS_FILE`     | Known clients fingerprints file                      | `--tls-known-clients-file`                     |
-| `CLIENT_KEYSTORE_FILE`          | Client PKCS12 keystore file                          | `--downstream-http-tls-keystore-file`          |
-| `CLIENT_KEYSTORE_PASSWORD_FILE` | Path to file containing password for client keystore | `--downstream-http-tls-keystore-password-file` |
-| `CLIENT_KNOWN_SERVERS_FILE`     | Known servers fingerprints file                      | `--downstream-http-tls-known-servers-file`     |
+| SSV-Signer Option               | Description                                           |
+|---------------------------------|-------------------------------------------------------|
+| `SERVER_KEYSTORE_FILE`          | Server PKCS12 keystore file                           |
+| `SERVER_KEYSTORE_PASSWORD_FILE` | Path to file containing password for server keystore  |
+| `SERVER_KNOWN_CLIENTS_FILE`     | Known clients fingerprints file                       |
+| `CLIENT_KEYSTORE_FILE`          | Client PKCS12 keystore file for Web3Signer connection |
+| `CLIENT_KEYSTORE_PASSWORD_FILE` | Path to file containing password for client keystore  |
+| `CLIENT_KNOWN_SERVERS_FILE`     | Known Web3Signer servers fingerprints file            |
 
 #### Security Recommendations
 
@@ -294,7 +296,10 @@ CLIENT_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 2. **Certificate Fingerprint Verification**: The implementation uses certificate fingerprints for authentication,
    preventing MITM attacks without requiring a trusted CA hierarchy
 3. **Rotate certificates regularly**: Update your certificates and fingerprints periodically (recommended every 6-12
-   months)
+   months). Certificate rotation helps limit the impact of potential private key compromises, ensures that outdated
+   cryptographic methods aren't used long-term, and maintains alignment with evolving security standards. For more
+   information on certificate lifecycle management,
+   see [NIST Guidelines for TLS Implementations](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-52r2.pdf).
 4. **Use strong credentials**: Generate keystores with strong passwords and use secure password files with appropriate
    permissions
 
@@ -303,7 +308,7 @@ CLIENT_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 SSV-Signer supports various TLS configuration combinations for both server and client connections. Understanding these
 options helps ensure secure and proper setup.
 
-**Server TLS Validation Rules** (SSV-Signer accepting connections):
+**Server TLS Validation Rules** (SSV-Signer accepting connections from SSV node):
 
 | Configuration | SERVER_KEYSTORE_FILE | SERVER_KEYSTORE_PASSWORD_FILE | SERVER_KNOWN_CLIENTS_FILE | Validity  | Description                                                    |
 |---------------|----------------------|-------------------------------|---------------------------|-----------|----------------------------------------------------------------|

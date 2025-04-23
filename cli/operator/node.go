@@ -79,11 +79,11 @@ type KeyStore struct {
 }
 
 type SSVSignerConfig struct {
-	Endpoint                   string        `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
-	RequestTimeout             time.Duration `yaml:"RequestTimeout" env:"REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
-	ClientKeystoreFile         string        `yaml:"Web3SignerKeystoreFile" env:"CLIENT_KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
-	ClientKeystorePasswordFile string        `yaml:"Web3SignerKeystorePasswordFile" env:"CLIENT_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
-	ClientKnownServersFile     string        `yaml:"Web3KnownServersFile" env:"CLIENT_KNOWN_SERVERS_FILE" env-description:"Path to ssv-signer client known servers file"`
+	Endpoint             string        `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be parsable with url.Parse"`
+	RequestTimeout       time.Duration `yaml:"RequestTimeout" env:"REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
+	KeystoreFile         string        `yaml:"KeystoreFile" env:"KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
+	KeystorePasswordFile string        `yaml:"KeystorePasswordFile" env:"KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	KnownServersFile     string        `yaml:"ServersFile" env:"KNOWN_SERVERS_FILE" env-description:"Path to ssv-signer client known servers file"`
 }
 
 type config struct {
@@ -173,16 +173,16 @@ var StartNodeCmd = &cobra.Command{
 			var ssvSignerOptions []ssvsigner.ClientOption
 			ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithLogger(logger), ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout))
 
-			if cfg.SSVSigner.ClientKeystoreFile != "" || cfg.SSVSigner.ClientKnownServersFile != "" {
+			if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.KnownServersFile != "" {
 				tlsConfig := ssvsignertls.Config{
-					ClientKeystoreFile:         cfg.SSVSigner.ClientKeystoreFile,
-					ClientKeystorePasswordFile: cfg.SSVSigner.ClientKeystorePasswordFile,
-					ClientKnownServersFile:     cfg.SSVSigner.ClientKnownServersFile,
+					ClientKeystoreFile:         cfg.SSVSigner.KeystoreFile,
+					ClientKeystorePasswordFile: cfg.SSVSigner.KeystorePasswordFile,
+					ClientKnownServersFile:     cfg.SSVSigner.KnownServersFile,
 				}
 
 				certificate, trustedFingerprints, err := tlsConfig.LoadClientTLS()
 				if err != nil {
-					logger.Fatal("failed to load ssv-signer client TLS config", zap.Error(err))
+					logger.Fatal("failed to load ssv-signer TLS config", zap.Error(err))
 				}
 
 				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLS(certificate, trustedFingerprints))

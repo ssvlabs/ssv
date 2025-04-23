@@ -25,9 +25,9 @@ type CLI struct {
 	BatchSize          int    `env:"BATCH_SIZE" default:"20"` // reduce if getting context deadline exceeded; increase if it's fast
 
 	// Client TLS configuration (for connecting to Web3Signer)
-	ClientKeystoreFile         string `env:"CLIENT_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
-	ClientKeystorePasswordFile string `env:"CLIENT_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
-	ClientKnownServersFile     string `env:"CLIENT_KNOWN_SERVERS_FILE" env-description:"Path to known servers file for authenticating Web3Signer"`
+	Web3SignerKeystoreFile         string `env:"WEB3SIGNER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
+	Web3SignerKeystorePasswordFile string `env:"WEB3SIGNER_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	Web3SignerKnownServersFile     string `env:"WEB3SIGNER_KNOWN_SERVERS_FILE" env-description:"Path to known servers file for authenticating Web3Signer"`
 }
 
 func main() {
@@ -53,7 +53,7 @@ func run(logger *zap.Logger, cli CLI) error {
 	logger.Debug("running",
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
 		zap.Int("batch_size", cli.BatchSize),
-		zap.Bool("client_tls_enabled", cli.ClientKeystoreFile != "" || cli.ClientKnownServersFile != ""),
+		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != "" || cli.Web3SignerKnownServersFile != ""),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
@@ -65,9 +65,9 @@ func run(logger *zap.Logger, cli CLI) error {
 	}
 
 	tlsConfig := tls.Config{
-		ClientKeystoreFile:         cli.ClientKeystoreFile,
-		ClientKeystorePasswordFile: cli.ClientKeystorePasswordFile,
-		ClientKnownServersFile:     cli.ClientKnownServersFile,
+		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
+		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
+		ClientKnownServersFile:     cli.Web3SignerKnownServersFile,
 	}
 
 	if err := tlsConfig.ValidateClientTLS(); err != nil {
@@ -80,7 +80,7 @@ func run(logger *zap.Logger, cli CLI) error {
 	var web3SignerClient *web3signer.Web3Signer
 	var err error
 
-	if cli.ClientKeystoreFile != "" || cli.ClientKnownServersFile != "" {
+	if cli.Web3SignerKeystoreFile != "" || cli.Web3SignerKnownServersFile != "" {
 		// Load client TLS configuration
 		certificate, fingerprints, err := tlsConfig.LoadClientTLS()
 		if err != nil {
