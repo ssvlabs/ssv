@@ -2,19 +2,22 @@ package instance
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 // uponRoundChange process round change messages.
 // Assumes round change message is valid!
 func (i *Instance) uponRoundChange(
+	ctx context.Context,
 	logger *zap.Logger,
 	instanceStartValue []byte,
 	msg *specqbft.ProcessingMessage,
@@ -82,6 +85,8 @@ func (i *Instance) uponRoundChange(
 
 		r, _ := specqbft.HashDataRoot(valueToPropose) // TODO: err check although already happenes in createproposal
 
+		i.metrics.RecordRoundChange(ctx, msg.QBFTMessage.Round, reasonJustified)
+
 		logger.Debug("🔄 got justified round change, broadcasting proposal message",
 			fields.Round(i.State.Round),
 			zap.Any("round_change_signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
@@ -95,7 +100,10 @@ func (i *Instance) uponRoundChange(
 		if newRound <= i.State.Round {
 			return nil // no need to advance round
 		}
-		err := i.uponChangeRoundPartialQuorum(logger, newRound, instanceStartValue)
+
+		i.metrics.RecordRoundChange(ctx, newRound, reasonPartialQuorum)
+
+		err := i.uponChangeRoundPartialQuorum(ctx, logger, newRound, instanceStartValue)
 		if err != nil {
 			return err
 		}
@@ -103,8 +111,8 @@ func (i *Instance) uponRoundChange(
 	return nil
 }
 
-func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
-	i.bumpToRound(newRound)
+func (i *Instance) uponChangeRoundPartialQuorum(ctx context.Context, logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
+	i.bumpToRound(ctx, newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 
 	i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
@@ -118,6 +126,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	if err != nil {
 		return errors.Wrap(err, "failed to hash instance start value")
 	}
+
 	logger.Debug("📢 got partial quorum, broadcasting round change message",
 		fields.Round(i.State.Round),
 		fields.Root(root),

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -9,17 +10,17 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/logging/fields"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
-type NewDecidedHandler func(msg qbftstorage.ParticipantsRangeEntry)
+type NewDecidedHandler func(msg qbftstorage.Participation)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
@@ -53,7 +54,7 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) error {
+func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
 		return errors.Wrap(err, "value invalid")
@@ -70,7 +71,7 @@ func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height
 	c.Height = height
 
 	newInstance := c.addAndStoreNewInstance()
-	newInstance.Start(logger, value, height)
+	newInstance.Start(ctx, logger, value, height)
 	c.forceStopAllInstanceExceptCurrent()
 	return nil
 }
@@ -84,7 +85,7 @@ func (c *Controller) forceStopAllInstanceExceptCurrent() {
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
+func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedMessage *spectypes.SignedSSVMessage) (*spectypes.SignedSSVMessage, error) {
 	msg, err := specqbft.NewProcessingMessage(signedMessage)
 	if err != nil {
 		return nil, errors.New("could not create ProcessingMessage from signed message")
@@ -114,11 +115,11 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, signedMessage *spectypes.Sig
 		return nil, fmt.Errorf("could not process future msg: %w", err)
 	}
 
-	return c.UponExistingInstanceMsg(logger, msg)
+	return c.UponExistingInstanceMsg(ctx, logger, msg)
 }
 
-func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
-	inst := c.InstanceForHeight(logger, msg.QBFTMessage.Height)
+func (c *Controller) UponExistingInstanceMsg(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
+	inst := c.StoredInstances.FindInstance(msg.QBFTMessage.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
 	}
@@ -130,7 +131,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.P
 		return nil, errors.New("not processing consensus message since instance is already decided")
 	}
 
-	decided, _, decidedMsg, err := inst.ProcessMsg(logger, msg)
+	decided, _, decidedMsg, err := inst.ProcessMsg(ctx, logger, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}
@@ -156,32 +157,6 @@ func (c *Controller) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 	}
 
 	return nil
-}
-
-func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Height) *instance.Instance {
-	// Search in memory.
-	if inst := c.StoredInstances.FindInstance(height); inst != nil {
-		return inst
-	}
-
-	// Search in storage, if full node.
-	if !c.fullNode {
-		return nil
-	}
-	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
-	if err != nil {
-		logger.Debug("❗ could not load instance from storage",
-			fields.Height(height),
-			zap.Uint64("ctrl_height", uint64(c.Height)),
-			zap.Error(err))
-		return nil
-	}
-	if storedInst == nil {
-		return nil
-	}
-	inst := instance.NewInstance(c.config, c.CommitteeMember, c.Identifier, storedInst.State.Height, c.OperatorSigner)
-	inst.State = storedInst.State
-	return inst
 }
 
 // GetIdentifier returns QBFT Identifier, used to identify messages

@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -49,6 +50,19 @@ func (e Error) Silent() bool {
 
 func (e Error) Text() string {
 	return e.text
+}
+
+func (e Error) Unwrap() error {
+	return e.innerErr
+}
+
+func (e Error) Is(target error) bool {
+	var t Error
+	if !errors.As(target, &t) {
+		return false
+	}
+
+	return e.text == t.text
 }
 
 var (
@@ -116,9 +130,11 @@ var (
 	ErrInvalidPartialSignatureTypeCount        = Error{text: "sent more partial signature messages of a certain type than allowed", reject: true}
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 	ErrEncodeOperators                         = Error{text: "encode operators", reject: true}
+	ErrUnknownOperator                         = Error{text: "operator is unknown"}
+	ErrOperatorValidation                      = Error{text: "failed to validate operator data"}
 )
 
-func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
@@ -127,7 +143,7 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 
 	var valErr Error
 	if !errors.As(err, &valErr) {
-		mv.metrics.MessageIgnored(err.Error(), loggerFields.Role, loggerFields.Consensus.Round)
+		recordIgnoredMessage(ctx, loggerFields.Role, err.Error())
 		logger.Debug("ignoring invalid message", zap.Error(err))
 		return pubsub.ValidationIgnore
 	}
@@ -136,7 +152,7 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 		if !valErr.Silent() {
 			logger.Debug("ignoring invalid message", zap.Error(valErr))
 		}
-		mv.metrics.MessageIgnored(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
+		recordIgnoredMessage(ctx, loggerFields.Role, valErr.Text())
 		return pubsub.ValidationIgnore
 	}
 
@@ -144,13 +160,11 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 		logger.Debug("rejecting invalid message", zap.Error(valErr))
 	}
 
-	mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
+	recordRejectedMessage(ctx, loggerFields.Role, valErr.Text())
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
-	loggerFields := mv.buildLoggerFields(decodedMessage)
-	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
-
+func (mv *messageValidator) handleValidationSuccess(ctx context.Context, decodedMessage *queue.SSVMessage) pubsub.ValidationResult {
+	recordAcceptedMessage(ctx, decodedMessage.GetID().GetRoleType())
 	return pubsub.ValidationAccept
 }

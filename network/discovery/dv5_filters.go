@@ -4,8 +4,10 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 // limitNodeFilter returns true if the limit is exceeded
@@ -48,6 +50,26 @@ func (dvs *DiscV5Service) ssvNodeFilter(logger *zap.Logger) func(node *enode.Nod
 	}
 }
 
+func (dvs *DiscV5Service) alreadyConnectedFilter() func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		pid, err := PeerID(node)
+		if err != nil {
+			return false
+		}
+		return dvs.conns.Connectedness(pid) != libp2pnetwork.Connected
+	}
+}
+
+func (dvs *DiscV5Service) recentlyTrimmedFilter() func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		pid, err := PeerID(node)
+		if err != nil {
+			return false
+		}
+		return !dvs.trimmedRecently.Has(pid)
+	}
+}
+
 // subnetFilter checks if the node has an interest in the given subnet
 func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
@@ -78,10 +100,26 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 		if err != nil {
 			return false
 		}
-		shared := records.SharedSubnets(dvs.subnets, nodeSubnets, n)
+		shared := commons.SharedSubnets(dvs.subnets, nodeSubnets, n)
 		// logger.Debug("shared subnets", zap.Ints("shared", shared),
 		//	zap.String("node", node.String()))
 
 		return len(shared) >= n
+	}
+}
+
+// subnetFilter checks if the node has already been discovered recently and filters it out
+// if so
+func (dvs *DiscV5Service) alreadyDiscoveredFilter(logger *zap.Logger) func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		pID, err := PeerID(node)
+		if err != nil {
+			logger.Warn("could not get peer ID from node record", zap.Error(err))
+			return false
+		}
+		if dvs.discoveredPeersPool.Has(pID) {
+			return false // this peer is already being considered
+		}
+		return true
 	}
 }

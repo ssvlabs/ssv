@@ -2,19 +2,21 @@ package instance
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 // uponProposal process proposal message
 // Assumes proposal message is valid!
-func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMessage, proposeMsgContainer *specqbft.MsgContainer) error {
+func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage, proposeMsgContainer *specqbft.MsgContainer) error {
 	addedMsg, err := proposeMsgContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not add proposal msg to container")
@@ -34,9 +36,9 @@ func (i *Instance) uponProposal(logger *zap.Logger, msg *specqbft.ProcessingMess
 	if msg.QBFTMessage.Round > i.State.Round {
 		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, msg.QBFTMessage.Round)
 	}
-	i.bumpToRound(newRound)
+	i.bumpToRound(ctx, newRound)
 
-	i.metrics.EndStageProposal()
+	i.metrics.EndStage(ctx, newRound, stageProposal)
 
 	// value root
 	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)

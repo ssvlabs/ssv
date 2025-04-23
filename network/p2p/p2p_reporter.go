@@ -3,12 +3,10 @@ package p2pv1
 import (
 	"math"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/network/commons"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	ssvpeers "github.com/ssvlabs/ssv/network/peers"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
@@ -19,7 +17,7 @@ func (n *p2pNetwork) ReportValidation(logger *zap.Logger, msg *spectypes.SSVMess
 	if !n.isReady() {
 		return
 	}
-	data, err := commons.EncodeNetworkMsg(msg)
+	data, err := msg.Encode()
 	if err != nil {
 		logger.Warn("could not encode message", zap.Error(err))
 		return

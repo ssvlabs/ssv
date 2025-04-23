@@ -8,12 +8,12 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type SyncCommitteeHandler struct {
@@ -87,8 +87,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
-			h.processExecution(period, slot)
-			h.processFetching(ctx, period, true)
+			h.processExecution(ctx, period, slot)
+			h.processFetching(ctx, epoch, period, true)
 			cancel()
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
@@ -138,15 +138,15 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-	h.processFetching(ctx, period, false)
+	h.processFetching(ctx, epoch, period, false)
 }
 
-func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, waitForInitial bool) {
+func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if h.fetchCurrentPeriod {
-		if err := h.fetchAndProcessDuties(ctx, period, waitForInitial); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch, period, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 			return
 		}
@@ -154,7 +154,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 	}
 
 	if h.fetchNextPeriod {
-		if err := h.fetchAndProcessDuties(ctx, period+1, waitForInitial); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch, period+1, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
 		}
@@ -162,23 +162,10 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 	}
 }
 
-func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot) {
+func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
 	// range over duties and execute
 	duties := h.duties.CommitteePeriodDuties(period)
 	if duties == nil {
-		return
-	}
-
-	if !h.network.PastAlanForkAtEpoch(h.network.Beacon.EstimatedEpochAtSlot(slot)) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties)*2)
-		for _, d := range duties {
-			if h.shouldExecute(d, slot) {
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommittee))
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, slot, genesisspectypes.BNRoleSyncCommitteeContribution))
-			}
-		}
-
-		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
 		return
 	}
 
@@ -189,42 +176,47 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 }
 
-func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
+// Period can be current or future.
+// If the period passed is the current period – the sync committee target epoch should be the current epoch.
+// If the period passed is a future period – the sync committee target epoch should be the first epoch of that future period.
+// The epoch passed is always the current epoch.
+func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) error {
 	start := time.Now()
-	firstEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period)
-	currentEpoch := h.network.Beacon.EstimatedCurrentEpoch()
-	if firstEpoch < currentEpoch {
-		firstEpoch = currentEpoch
-	}
-	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch, waitForInitial)
-	if len(allActiveIndices) == 0 {
-		h.logger.Debug("no active validators for period", fields.Epoch(currentEpoch), zap.Uint64("period", period))
+	if period > h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
+		epoch = h.network.Beacon.FirstEpochOfSyncPeriod(period)
+	}
+
+	eligibleIndices := h.validatorController.FilterIndices(waitForInitial, func(s *types.SSVShare) bool {
+		return s.IsParticipating(h.network, epoch)
+	})
+
+	if len(eligibleIndices) == 0 {
+		h.logger.Debug("no eligible validators for period", fields.Epoch(epoch), zap.Uint64("period", period))
 		return nil
 	}
 
-	inCommitteeIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(firstEpoch))
-	inCommitteeIndicesSet := map[phase0.ValidatorIndex]struct{}{}
-	for _, idx := range inCommitteeIndices {
-		inCommitteeIndicesSet[idx] = struct{}{}
-	}
-
-	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, firstEpoch, allActiveIndices)
+	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
 
+	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)
+	selfIndices := make(map[phase0.ValidatorIndex]struct{}, len(selfShares))
+	for _, share := range selfShares {
+		selfIndices[share.ValidatorIndex] = struct{}{}
+	}
+
 	storeDuties := make([]dutystore.StoreSyncCommitteeDuty, 0, len(duties))
-	for _, d := range duties {
-		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
+	for _, duty := range duties {
+		_, inCommittee := selfIndices[duty.ValidatorIndex]
 		storeDuties = append(storeDuties, dutystore.StoreSyncCommitteeDuty{
-			ValidatorIndex: d.ValidatorIndex,
-			Duty:           d,
-			InCommittee:    inCommitteeDuty,
+			ValidatorIndex: duty.ValidatorIndex,
+			Duty:           duty,
+			InCommittee:    inCommittee,
 		})
 	}
 	h.duties.Set(period, storeDuties)
@@ -232,6 +224,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	h.prepareDutiesResultLog(period, duties, start)
 
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
+	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
 	if len(subscriptions) > 0 {
 		if deadline, ok := ctx.Deadline(); ok {
@@ -267,20 +260,6 @@ func (h *SyncCommitteeHandler) prepareDutiesResultLog(period uint64, duties []*e
 		fields.Duration(start))
 }
 
-func (h *SyncCommitteeHandler) toGenesisSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
-	indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
-	for i, index := range duty.ValidatorSyncCommitteeIndices {
-		indices[i] = uint64(index)
-	}
-	return &genesisspectypes.Duty{
-		Type:                          role,
-		PubKey:                        duty.PubKey,
-		Slot:                          slot, // in order for the duty scheduler to execute
-		ValidatorIndex:                duty.ValidatorIndex,
-		ValidatorSyncCommitteeIndices: indices,
-	}
-}
-
 func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
 	indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
 	for i, index := range duty.ValidatorSyncCommitteeIndices {
@@ -297,6 +276,23 @@ func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 
 func (h *SyncCommitteeHandler) shouldExecute(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+
+	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
+	if !exists {
+		h.logger.Warn("validator not found", fields.Validator(duty.PubKey[:]))
+		return false
+	}
+
+	if v.MinParticipationEpoch() > currentEpoch {
+		h.logger.Debug("validator not yet participating",
+			fields.Validator(duty.PubKey[:]),
+			zap.Uint64("min_participation_epoch", uint64(v.MinParticipationEpoch())),
+			zap.Uint64("current_epoch", uint64(currentEpoch)),
+		)
+		return false
+	}
+
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == slot {
 		return true

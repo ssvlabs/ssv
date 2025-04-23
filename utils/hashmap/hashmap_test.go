@@ -19,12 +19,14 @@ import (
 
 func TestNew(t *testing.T) {
 	t.Parallel()
+
 	m := New[uintptr, uintptr]()
 	assert.Equal(t, 0, m.SlowLen())
 }
 
 func TestSetString(t *testing.T) {
 	t.Parallel()
+
 	m := New[int, string]()
 	elephant := "elephant"
 	monkey := "monkey"
@@ -50,6 +52,7 @@ func TestSetString(t *testing.T) {
 
 func TestSetUint8(t *testing.T) {
 	t.Parallel()
+
 	m := New[uint8, int]()
 
 	m.Set(1, 128) // insert
@@ -66,6 +69,7 @@ func TestSetUint8(t *testing.T) {
 
 func TestSetInt16(t *testing.T) {
 	t.Parallel()
+
 	m := New[int16, int]()
 
 	m.Set(1, 128) // insert
@@ -82,6 +86,7 @@ func TestSetInt16(t *testing.T) {
 
 func TestSetFloat32(t *testing.T) {
 	t.Parallel()
+
 	m := New[float32, int]()
 
 	m.Set(1.1, 128) // insert
@@ -98,6 +103,7 @@ func TestSetFloat32(t *testing.T) {
 
 func TestSetFloat64(t *testing.T) {
 	t.Parallel()
+
 	m := New[float64, int]()
 
 	m.Set(1.1, 128) // insert
@@ -114,6 +120,7 @@ func TestSetFloat64(t *testing.T) {
 
 func TestSetInt64(t *testing.T) {
 	t.Parallel()
+
 	m := New[int64, int]()
 
 	m.Set(1, 128) // insert
@@ -130,6 +137,7 @@ func TestSetInt64(t *testing.T) {
 
 func TestByteArray(t *testing.T) {
 	t.Parallel()
+
 	m := New[[4]byte, int]()
 
 	m.Set([4]byte{1, 2, 3, 4}, 128) // insert
@@ -146,6 +154,7 @@ func TestByteArray(t *testing.T) {
 
 func TestGetNonExistingItem(t *testing.T) {
 	t.Parallel()
+
 	m := New[int, string]()
 	value, ok := m.Get(1)
 	assert.False(t, ok)
@@ -154,6 +163,7 @@ func TestGetNonExistingItem(t *testing.T) {
 
 func TestStringer(t *testing.T) {
 	t.Parallel()
+
 	m := New[int, string]()
 
 	// Test with zero items
@@ -172,6 +182,7 @@ func TestStringer(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	t.Parallel()
+
 	m := New[int, string]()
 	elephant := "elephant"
 	monkey := "monkey"
@@ -217,6 +228,7 @@ func TestGetAndDelete(t *testing.T) {
 
 func TestRange(t *testing.T) {
 	t.Parallel()
+
 	m := New[int, string]()
 
 	items := map[int]string{}
@@ -255,6 +267,8 @@ func TestRange(t *testing.T) {
 
 // nolint: funlen, gocognit
 func TestHashMap_parallel(t *testing.T) {
+	t.Parallel()
+
 	m := New[int, int]()
 
 	max := 10
@@ -264,35 +278,29 @@ func TestHashMap_parallel(t *testing.T) {
 		t.Helper()
 		done := make(chan error)
 		var times int64
-		// This goroutines will terminate test in case if closure hangs.
 		go func() {
-			for {
-				select {
-				case <-time.After(d + 500*time.Millisecond):
-					if atomic.LoadInt64(&times) == 0 {
-						done <- fmt.Errorf("closure was not executed even once, something blocks it")
-					}
-					close(done)
-				case <-done:
-				}
+			// This will let us signal to the caller that do() function timed out.
+			select {
+			case <-time.After(d + 500*time.Millisecond):
+				done <- fmt.Errorf("do() func timed out, closure fn has been executed %d times", atomic.LoadInt64(&times))
+			case <-done:
 			}
 		}()
 		go func() {
 			timer := time.NewTimer(d)
 			defer timer.Stop()
-		InfLoop:
 			for {
 				for i := 0; i < max; i++ {
 					select {
 					case <-timer.C:
-						break InfLoop
+						close(done)
+						return
 					default:
 					}
 					fn(t, i)
 					atomic.AddInt64(&times, 1)
 				}
 			}
-			close(done)
 		}()
 		return done
 	}
@@ -338,6 +346,7 @@ func TestHashMap_parallel(t *testing.T) {
 
 func TestHashMap_SetConcurrent(t *testing.T) {
 	t.Parallel()
+
 	m := New[string, int]()
 
 	var wg sync.WaitGroup
@@ -390,9 +399,11 @@ func TestConcurrentInsertDelete(t *testing.T) {
 	}
 }
 
-func TestGetOrInsert(t *testing.T) {
+func TestGetOrSet(t *testing.T) {
 	t.Parallel()
+
 	m := New[int, string]()
+
 	value, ok := m.GetOrSet(1, "1")
 	assert.False(t, ok)
 	assert.Equal(t, "1", value)
@@ -402,7 +413,28 @@ func TestGetOrInsert(t *testing.T) {
 	assert.Equal(t, "1", value)
 }
 
-func TestGetOrInsertHangIssue67(_ *testing.T) {
+func TestCompareAndSwap(t *testing.T) {
+	t.Parallel()
+
+	m := New[int, string]()
+
+	ok := m.CompareAndSwap(1, "", "replacing zero value doesn't count as swap, and doesn't even succeed")
+	assert.False(t, ok)
+
+	value, ok := m.Get(1)
+	assert.False(t, ok)
+	assert.Empty(t, value)
+
+	m.Set(1, "0")
+	ok = m.CompareAndSwap(1, "1", "2")
+	assert.False(t, ok)
+	ok = m.CompareAndSwap(1, "0", "2")
+	assert.True(t, ok)
+}
+
+func TestGetOrInsertHangIssue67(t *testing.T) {
+	t.Parallel()
+
 	m := New[string, int]()
 
 	var wg sync.WaitGroup
@@ -427,6 +459,8 @@ func TestGetOrInsertHangIssue67(_ *testing.T) {
 
 // See https://github.com/ssvlabs/ssv/issues/1682
 func TestIssue1682(t *testing.T) {
+	t.Parallel()
+
 	type validatorStatus int
 
 	const (
@@ -465,11 +499,9 @@ func TestIssue1682(t *testing.T) {
 						defer wg.Done()
 						time.Sleep(time.Duration(randSeed().Intn(2000)) * time.Millisecond)
 						_, found := m.GetOrSet(cmtID, validatorStatusSubscribing)
+						time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 						if !found {
-							time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 							m.Set(cmtID, validatorStatusSubscribed)
-						} else {
-							time.Sleep(time.Duration(randSeed().Intn(200)) * time.Millisecond)
 						}
 					}()
 				}
@@ -482,23 +514,23 @@ func TestIssue1682(t *testing.T) {
 			}()
 
 			ticker := time.NewTicker(1 * time.Millisecond)
-			var keys []string
 			defer ticker.Stop()
 		Loop:
 			for {
-				keys = []string{}
-				m.Range(func(key string, value validatorStatus) bool {
-					keys = append(keys, key)
+				// This simply imitates a workload that relies on Map.Range func.
+				var keysTmp []string
+				m.Range(func(key string, _ validatorStatus) bool {
+					keysTmp = append(keysTmp, key)
 					return true
 				})
 				select {
 				case <-done:
-					keys = []string{}
-					m.Range(func(key string, value validatorStatus) bool {
+					var keys []string
+					m.Range(func(key string, _ validatorStatus) bool {
 						keys = append(keys, key)
 						return true
 					})
-					keysHex := []string{}
+					var keysHex []string
 					for _, key := range keys {
 						keysHex = append(keysHex, hex.EncodeToString([]byte(key)))
 					}

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -74,9 +72,9 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 				h.fetchFirst = false
 				h.indicesChanged = false
 				h.processFetching(ctx, currentEpoch)
-				h.processExecution(currentEpoch, slot)
+				h.processExecution(ctx, currentEpoch, slot)
 			} else {
-				h.processExecution(currentEpoch, slot)
+				h.processExecution(ctx, currentEpoch, slot)
 				if h.indicesChanged {
 					h.indicesChanged = false
 					h.processFetching(ctx, currentEpoch)
@@ -125,26 +123,17 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	defer cancel()
 
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
+		// Set empty duties to inform DutyStore that fetch for this epoch is done.
+		h.duties.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{})
+
 		h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 		return
 	}
 }
 
-func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
+func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
-		return
-	}
-
-	if !h.network.PastAlanForkAtEpoch(epoch) {
-		toExecute := make([]*genesisspectypes.Duty, 0, len(duties))
-		for _, d := range duties {
-			if h.shouldExecute(d) {
-				toExecute = append(toExecute, h.toGenesisSpecDuty(d, genesisspectypes.BNRoleProposer))
-			}
-		}
-
-		h.dutiesExecutor.ExecuteGenesisDuties(h.logger, toExecute)
 		return
 	}
 
@@ -155,35 +144,39 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
 		}
 	}
-	h.dutiesExecutor.ExecuteDuties(h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 }
 
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 
-	allIndices := indicesFromShares(h.validatorProvider.ParticipatingValidators(epoch))
-	if len(allIndices) == 0 {
-		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
+	var allEligibleIndices []phase0.ValidatorIndex
+	for _, share := range h.validatorProvider.Validators() {
+		if share.IsParticipatingAndAttesting(epoch) {
+			allEligibleIndices = append(allEligibleIndices, share.ValidatorIndex)
+		}
+	}
+	if len(allEligibleIndices) == 0 {
+		h.logger.Debug("no eligible validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
-	selfIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
-	selfIndicesSet := map[phase0.ValidatorIndex]struct{}{}
-	for _, idx := range selfIndices {
-		selfIndicesSet[idx] = struct{}{}
+	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
+	for _, share := range h.validatorProvider.SelfValidators() {
+		if share.IsParticipatingAndAttesting(epoch) {
+			selfEligibleIndices[share.ValidatorIndex] = struct{}{}
+		}
 	}
 
-	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allIndices)
+	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allEligibleIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
 
-	h.duties.ResetEpoch(epoch)
-
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0, len(duties))
 	for _, d := range duties {
-		_, inCommitteeDuty := selfIndicesSet[d.ValidatorIndex]
+		_, inCommitteeDuty := selfEligibleIndices[d.ValidatorIndex]
 		storeDuties = append(storeDuties, dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
 			Slot:           d.Slot,
 			ValidatorIndex: d.ValidatorIndex,
@@ -205,15 +198,6 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
 	return &spectypes.ValidatorDuty{
-		Type:           role,
-		PubKey:         duty.PubKey,
-		Slot:           duty.Slot,
-		ValidatorIndex: duty.ValidatorIndex,
-	}
-}
-
-func (h *ProposerHandler) toGenesisSpecDuty(duty *eth2apiv1.ProposerDuty, role genesisspectypes.BeaconRole) *genesisspectypes.Duty {
-	return &genesisspectypes.Duty{
 		Type:           role,
 		PubKey:         duty.PubKey,
 		Slot:           duty.Slot,

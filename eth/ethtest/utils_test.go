@@ -15,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
@@ -23,12 +23,13 @@ import (
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
@@ -164,7 +165,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig, operator.privateKey)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -176,6 +177,8 @@ func setupEventHandler(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+
+	dgHandler := doppelganger.NoOpHandler{}
 
 	if useMockCtrl {
 		validatorCtrl := mocks.NewMockController(ctrl)
@@ -191,6 +194,7 @@ func setupEventHandler(
 			operator.privateKey,
 			keyManager,
 			bc,
+			dgHandler,
 			eventhandler.WithFullNode(),
 			eventhandler.WithLogger(logger),
 		)
@@ -222,6 +226,7 @@ func setupEventHandler(
 		operator.privateKey,
 		keyManager,
 		bc,
+		dgHandler,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)
@@ -242,7 +247,7 @@ func setupOperatorStorage(
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
@@ -252,13 +257,7 @@ func setupOperatorStorage(
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	privKey := operator.privateKey
-	privKeyHash, err := privKey.StorageHash()
-	if err != nil {
-		logger.Fatal("failed to encode operator private key", zap.Error(err))
-	}
-
-	if err := nodeStorage.SavePrivateKeyHash(privKeyHash); err != nil {
+	if err := nodeStorage.SavePrivateKeyHash(operator.privateKey.StorageHash()); err != nil {
 		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 
@@ -267,13 +266,13 @@ func setupOperatorStorage(
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(encodedPubKey))
 	if err != nil {
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey:    encodedPubKey,
+			PublicKey:    []byte(encodedPubKey),
 			ID:           operator.id,
 			OwnerAddress: *ownerAddress,
 		}

@@ -27,12 +27,12 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's external IP"`
-	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
+	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"Private key for bootnode identity (generated if empty)"`
+	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override bootnode's external IP address"`
+	TCPPort    uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for P2P transport"`
 	UDPPort    uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
-	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to the boot node's database"`
-	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet"`
+	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to bootnode database directory"`
+	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to"`
 }
 
 // Node represents the behavior of boot node
@@ -164,26 +164,15 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port uint16
 		log.Fatal(err)
 	}
 
-	// Allocate a fake connection to forward postFork packets to the preFork listener.
-	unhandled := make(chan discover.ReadPacket, 100) // size taken from https://github.com/ethereum/go-ethereum/blob/v1.13.5/p2p/server.go#L551
-	sharedConn := &discovery.SharedUDPConn{UDPConn: conn, Unhandled: unhandled}
-
-	postForkListener, err := discover.ListenV5(conn, localNode, discover.Config{
+	listener, err := discover.ListenV5(conn, localNode, discover.Config{
 		PrivateKey:   privateKey,
-		Unhandled:    unhandled,
 		V5ProtocolID: &n.network.DiscoveryProtocolID,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	preForkListener, err := discover.ListenV5(sharedConn, localNode, discover.Config{
-		PrivateKey: privateKey,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	return discovery.NewForkingDV5Listener(logger, preForkListener, postForkListener, 5*time.Second, n.network)
+	return listener
 }
 
 func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey, ipAddr net.IP, port uint16) (*enode.LocalNode, error) {
@@ -198,26 +187,6 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 	} else {
 		logger.Info("Running with External IP", zap.String("external_ip", n.externalIP))
 	}
-
-	// if *forkVersion != "" {
-	//	fVersion, err = hex.DecodeString(*forkVersion)
-	//	if err != nil {
-	//		return nil, errors.Wrap(err, "Could not retrieve fork version")
-	//	}
-	//	if len(fVersion) != 4 {
-	//		return nil, errors.Errorf("Invalid fork version size expected %d but got %d", 4, len(fVersion))
-	//	}
-	//}
-	// if *genesisValidatorRoot != "" {
-	//	retRoot, err := hex.DecodeString(*genesisValidatorRoot)
-	//	if err != nil {
-	//		return nil, errors.Wrap(err, "Could not retrieve genesis validator root")
-	//	}
-	//	if len(retRoot) != 32 {
-	//		return nil, errors.Errorf("Invalid root size, expected 32 but got %d", len(retRoot))
-	//	}
-	//	genRoot = bytesutil.ToBytes32(retRoot)
-	//}
 
 	localNode := enode.NewLocalNode(db, privKey)
 	localNode.Set(enr.WithEntry("ssv", true))

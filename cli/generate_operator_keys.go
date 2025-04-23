@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ssvlabs/ssv/operator/keystore"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 var generateOperatorKeysCmd = &cobra.Command{
@@ -54,7 +54,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 				logger.Fatal("Failed to read password file", zap.Error(err))
 			}
 
-			encryptedJSON, encryptedJSONErr := keystore.EncryptKeystore(privKey.Bytes(), string(pubKeyBase64), string(passwordBytes))
+			encryptedJSON, encryptedJSONErr := keystore.EncryptKeystore(privKey.Bytes(), pubKeyBase64, string(passwordBytes))
 			if encryptedJSONErr != nil {
 				logger.Fatal("Failed to encrypt private key", zap.Error(err))
 			}
@@ -66,8 +66,8 @@ var generateOperatorKeysCmd = &cobra.Command{
 				logger.Info("private key encrypted and stored in encrypted_private_key.json")
 			}
 		} else {
-			logger.Info("generated public key (base64)", zap.String("pk", string(pubKeyBase64)))
-			logger.Info("generated private key (base64)", zap.String("sk", string(privKey.Base64())))
+			logger.Info("generated public key (base64)", zap.String("pk", pubKeyBase64))
+			logger.Info("generated private key (base64)", zap.String("sk", privKey.Base64()))
 		}
 	},
 }

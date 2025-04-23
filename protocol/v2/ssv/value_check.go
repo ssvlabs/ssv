@@ -6,9 +6,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 func dutyValueCheck(
@@ -38,9 +39,9 @@ func dutyValueCheck(
 }
 
 func BeaconVoteValueCheckF(
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	slot phase0.Slot,
-	sharePublicKeys []spectypes.ShareValidatorPK,
+	sharePublicKeys []phase0.BLSPubKey,
 	estimatedCurrentEpoch phase0.Epoch,
 ) specqbft.ProposedValueCheckF {
 	return func(data []byte) error {
@@ -78,11 +79,11 @@ func BeaconVoteValueCheckF(
 }
 
 func ProposerValueCheckF(
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	network spectypes.BeaconNetwork,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
-	sharePublicKey []byte,
+	sharePublicKey phase0.BLSPubKey,
 ) specqbft.ProposedValueCheckF {
 	return func(data []byte) error {
 		cd := &spectypes.ValidatorConsensusData{}
@@ -117,7 +118,7 @@ func ProposerValueCheckF(
 }
 
 func AggregatorValueCheckF(
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	network spectypes.BeaconNetwork,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
@@ -139,7 +140,7 @@ func AggregatorValueCheckF(
 }
 
 func SyncCommitteeContributionValueCheckF(
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	network spectypes.BeaconNetwork,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,

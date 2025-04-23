@@ -5,12 +5,11 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"go.uber.org/mock/gomock"
-
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -140,7 +139,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		}
 	}()
 
-	lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, true)
+	lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 

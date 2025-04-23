@@ -18,12 +18,6 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
-
-		// Ignore genesis messages in the first slot of the fork epoch
-		if mv.netCfg.Beacon.EstimatedCurrentSlot() == mv.netCfg.Beacon.FirstSlotAtEpoch(mv.netCfg.AlanForkEpoch) {
-			e.reject = false
-		}
-
 		return nil, e
 	}
 
@@ -60,26 +54,33 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return ErrSignersNotSorted
 	}
 
-	var prevSigner spectypes.OperatorID
-	for _, signer := range signedSSVMessage.OperatorIDs {
-		// Rule: Signer can't be zero
-		if signer == 0 {
-			return ErrZeroSigner
-		}
-
-		// Rule: Signers must be unique
-		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
-		if signer == prevSigner {
-			return ErrDuplicatedSigner
-		}
-		prevSigner = signer
-	}
-
 	// Rule: Len(Signers) must be equal to Len(Signatures)
 	if len(signedSSVMessage.OperatorIDs) != len(signedSSVMessage.Signatures) {
 		e := ErrSignersAndSignaturesWithDifferentLength
 		e.got = fmt.Sprintf("%d/%d", len(signedSSVMessage.OperatorIDs), len(signedSSVMessage.Signatures))
 		return e
+	}
+
+	var prevSigner spectypes.OperatorID
+
+	for _, signer := range signedSSVMessage.OperatorIDs {
+		// Rule: Signer can't be zero
+		if err := mv.validateSignerNotZero(signer); err != nil {
+			return err
+		}
+
+		// Rule: Signers must be unique
+		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
+		if err := mv.validateSignerUnique(signer, prevSigner); err != nil {
+			return err
+		}
+
+		// Rule: Signer must exist
+		if err := mv.validateSignerIsKnown(signer); err != nil {
+			return err
+		}
+
+		prevSigner = signer
 	}
 
 	// Rule: SSVMessage cannot be nil
@@ -92,8 +93,6 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 }
 
 func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage) error {
-	mv.metrics.SSVMessageType(ssvMessage.MsgType)
-
 	// Rule: SSVMessage.Data must not be empty
 	if len(ssvMessage.Data) == 0 {
 		return ErrEmptyData
@@ -121,7 +120,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage)
 	}
 
 	// Rule: If domain is different then self domain
-	domain := mv.netCfg.DomainType()
+	domain := mv.netCfg.DomainType
 	if !bytes.Equal(ssvMessage.GetID().GetDomain(), domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
@@ -151,6 +150,7 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 	}
 }
 
+// belongsToCommittee checks if the signers belong to the committee.
 func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorID, committee []spectypes.OperatorID) error {
 	// Rule: Signers must belong to validator committee or CommitteeID
 	for _, signer := range operatorIDs {
@@ -160,6 +160,40 @@ func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorI
 			e.want = committee
 			return e
 		}
+	}
+
+	return nil
+}
+
+// validateSignerNotZero checks if the signer ID is not zero.
+func (mv *messageValidator) validateSignerNotZero(signer spectypes.OperatorID) error {
+	if signer == 0 {
+		return ErrZeroSigner
+	}
+	return nil
+}
+
+// validateSignerUnique checks if the signer is unique (not duplicated).
+func (mv *messageValidator) validateSignerUnique(signer, prevSigner spectypes.OperatorID) error {
+	if signer == prevSigner {
+		return ErrDuplicatedSigner
+	}
+	return nil
+}
+
+// validateSignerIsKnown checks if the signer is known.
+func (mv *messageValidator) validateSignerIsKnown(signer spectypes.OperatorID) error {
+	exists, err := mv.operators.OperatorsExist(nil, []spectypes.OperatorID{signer})
+	if err != nil {
+		e := ErrOperatorValidation
+		e.got = signer
+		return e
+	}
+
+	if !exists {
+		e := ErrUnknownOperator
+		e.got = signer
+		return e
 	}
 
 	return nil

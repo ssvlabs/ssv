@@ -5,14 +5,14 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
-	GetShareSigner() spectypes.BeaconSigner
+	GetShareSigner() ekm.BeaconSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() spectypes.DomainType
 }
@@ -25,8 +25,6 @@ type IConfig interface {
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() specqbft.Network
-	// GetStorage returns a storage instance
-	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
 	// GetRoundCutOff returns the round cut off
@@ -34,18 +32,17 @@ type IConfig interface {
 }
 
 type Config struct {
-	BeaconSigner spectypes.BeaconSigner
+	BeaconSigner ekm.BeaconSigner
 	Domain       spectypes.DomainType
 	ValueCheckF  specqbft.ProposedValueCheckF
 	ProposerF    specqbft.ProposerF
-	Storage      qbftstorage.QBFTStore
 	Network      specqbft.Network
 	Timer        roundtimer.Timer
 	CutOffRound  specqbft.Round
 }
 
 // GetShareSigner returns a BeaconSigner instance
-func (c *Config) GetShareSigner() spectypes.BeaconSigner {
+func (c *Config) GetShareSigner() ekm.BeaconSigner {
 	return c.BeaconSigner
 }
 
@@ -67,11 +64,6 @@ func (c *Config) GetProposerF() specqbft.ProposerF {
 // GetNetwork returns a p2p Network instance
 func (c *Config) GetNetwork() specqbft.Network {
 	return c.Network
-}
-
-// GetStorage returns a storage instance
-func (c *Config) GetStorage() qbftstorage.QBFTStore {
-	return c.Storage
 }
 
 // GetTimer returns round timer

@@ -16,13 +16,6 @@ func WithLogger(logger *zap.Logger) Option {
 	}
 }
 
-// WithMetrics enables reporting metrics.
-func WithMetrics(metrics metrics) Option {
-	return func(es *EventSyncer) {
-		es.metrics = metrics
-	}
-}
-
 func WithStalenessThreshold(threshold time.Duration) Option {
 	return func(es *EventSyncer) {
 		es.stalenessThreshold = threshold

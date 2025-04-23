@@ -12,7 +12,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -22,7 +21,6 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -42,14 +40,9 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	shares := []*ssvtypes.SSVShare{
 		{
-			Share: *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-					Index:  spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex).ValidatorIndex,
-				},
-				Liquidated: false,
-			},
+			Share:      *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
+			Status:     eth2apiv1.ValidatorStateActiveOngoing,
+			Liquidated: false,
 		},
 	}
 
@@ -152,7 +145,7 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 
 	fullData := spectestingutils.TestingQBFTFullData
 
-	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType(), ks.ValidatorPK.Serialize(), nonCommitteeRole)
+	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), nonCommitteeRole)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -177,21 +170,16 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
 
 	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
-			},
-			Liquidated: false,
-		},
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateActiveOngoing,
+		Liquidated: false,
 	}
 	committeeID := share.CommitteeID()
 
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType(), encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -211,7 +199,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	return signedSSVMessage
 }
 
-func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round specqbft.Round) types.OperatorID {
+func roundLeader(ks *spectestingutils.TestKeySet, height specqbft.Height, round specqbft.Round) spectypes.OperatorID {
 	share := spectestingutils.TestingShare(ks, 1)
 
 	firstRoundIndex := 0
@@ -228,10 +216,10 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 	require.NoError(t, err)
 	dutyExecutorID := pk
 	if role == spectypes.RoleCommittee {
-		committeeID := ssvtypes.ComputeCommitteeID([]types.OperatorID{1, 2, 3, 4})
+		committeeID := ssvtypes.ComputeCommitteeID([]spectypes.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType(), dutyExecutorID, role)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
@@ -306,7 +294,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	for {
 		noPeers := false
 		for _, node := range ln.Nodes {
-			peers, _ := node.PeersByTopic()
+			peers := node.PeersByTopic()
 			if len(peers) < 2 {
 				noPeers = true
 			}
@@ -320,4 +308,23 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	}
 
 	return ln, routers, nil
+}
+
+func Test_score(t *testing.T) {
+	const desiredScore = 3
+
+	score0 := score(desiredScore, 0)
+	score1 := score(desiredScore, 1)
+	score2 := score(desiredScore, 2)
+	score3 := score(desiredScore, 3)
+	score4 := score(desiredScore, 4)
+	score5 := score(desiredScore, 5)
+	score6 := score(desiredScore, 6)
+
+	assert.GreaterOrEqual(t, score0, 5*score1)
+	assert.GreaterOrEqual(t, score1, 4*score2)
+	assert.GreaterOrEqual(t, score2, 3*score3)
+	assert.GreaterOrEqual(t, score3, 2*score4)
+	assert.GreaterOrEqual(t, score4, score5)
+	assert.GreaterOrEqual(t, score5, score6)
 }
