@@ -52,7 +52,7 @@ func TestHandleLocalEvent(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		require.NoError(t, eh.HandleLocalEvents(parsedData))
+		require.NoError(t, eh.HandleLocalEvents(ctx, parsedData))
 	})
 
 	// TODO: test correct signature
@@ -91,6 +91,6 @@ func TestHandleLocalEvent(t *testing.T) {
 			require.False(t, found)
 		}
 
-		require.ErrorIs(t, eh.HandleLocalEvents(parsedData), ErrSignatureVerification)
+		require.ErrorIs(t, eh.HandleLocalEvents(ctx, parsedData), ErrSignatureVerification)
 	})
 }

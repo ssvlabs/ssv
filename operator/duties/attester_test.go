@@ -34,28 +34,34 @@ func setupAttesterDutiesMock(
 			return duties, nil
 		}).AnyTimes()
 
-	getShares := func(epoch phase0.Epoch) []*types.SSVShare {
-		uniqueIndices := make(map[phase0.ValidatorIndex]bool)
+	getShares := func() []*types.SSVShare {
+		var attestingShares []*types.SSVShare
+		dutiesMap.Range(func(epoch phase0.Epoch, duties []*eth2apiv1.AttesterDuty) bool {
+			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
-		duties, _ := dutiesMap.Get(epoch)
-		for _, d := range duties {
-			uniqueIndices[d.ValidatorIndex] = true
-		}
-
-		shares := make([]*types.SSVShare, 0, len(uniqueIndices))
-		for index := range uniqueIndices {
-			share := &types.SSVShare{
-				Share: spectypes.Share{
-					ValidatorIndex: index,
-				},
+			for _, d := range duties {
+				uniqueIndices[d.ValidatorIndex] = true
 			}
-			shares = append(shares, share)
-		}
 
-		return shares
+			for index := range uniqueIndices {
+				attestingShare := &types.SSVShare{
+					Share: spectypes.Share{
+						ValidatorIndex: index,
+					},
+					ActivationEpoch: epoch,
+					Liquidated:      false,
+					// this particular status is needed so that ActivationEpoch can be taken into consideration when checking the IsAttesting() condition.
+					Status: eth2apiv1.ValidatorStatePendingQueued,
+				}
+				attestingShares = append(attestingShares, attestingShare)
+			}
+			return true
+		})
+
+		return attestingShares
 	}
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
+
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().DoAndReturn(getShares).AnyTimes()
 	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validator(gomock.Any()).DoAndReturn(
 		func(pubKey []byte) (*types.SSVShare, bool) {
 			var ssvShare *types.SSVShare
