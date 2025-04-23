@@ -55,13 +55,7 @@ func TestDecryptRSA(t *testing.T) {
 			var err error
 			var data []byte
 
-			if tc.name == "Success" {
-				sk, err = PEMToPrivateKey([]byte(rsatesting.PrivKeyPEM))
-				require.NoError(t, err)
-
-				data, err = base64.StdEncoding.DecodeString(rsatesting.PrivKeyBase64)
-				require.NoError(t, err)
-			} else {
+			if tc.ciphertext == nil {
 				_, skPem, err := GenerateKeyPairPEM()
 				require.NoError(t, err)
 
@@ -69,6 +63,12 @@ func TestDecryptRSA(t *testing.T) {
 				require.NoError(t, err)
 
 				data = tc.ciphertext
+			} else {
+				sk, err = PEMToPrivateKey([]byte(rsatesting.PrivKeyPEM))
+				require.NoError(t, err)
+
+				data, err = base64.StdEncoding.DecodeString(rsatesting.PrivKeyBase64)
+				require.NoError(t, err)
 			}
 
 			key, err := Decrypt(sk, data)
