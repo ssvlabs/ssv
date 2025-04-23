@@ -1,4 +1,4 @@
-package internal
+package mocks
 
 import (
 	"context"

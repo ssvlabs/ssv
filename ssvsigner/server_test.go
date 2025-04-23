@@ -10,13 +10,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/ssvlabs/ssv/ssvsigner/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/ssvsigner/internal"
 
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
@@ -24,10 +23,10 @@ import (
 type ServerTestSuite struct {
 	suite.Suite
 	logger          *zap.Logger
-	operatorPrivKey *internal.TestOperatorPrivateKey
-	remoteSigner    *internal.TestRemoteSigner
+	operatorPrivKey *mocks.TestOperatorPrivateKey
+	remoteSigner    *mocks.TestRemoteSigner
 	server          *Server
-	pubKey          *internal.TestOperatorPublicKey
+	pubKey          *mocks.TestOperatorPublicKey
 }
 
 func (s *ServerTestSuite) SetupTest() {
@@ -38,11 +37,11 @@ func (s *ServerTestSuite) SetupTest() {
 	err = bls.Init(bls.BLS12_381)
 	s.Require().NoError(err)
 
-	s.pubKey = &internal.TestOperatorPublicKey{
+	s.pubKey = &mocks.TestOperatorPublicKey{
 		PubKeyBase64: "test_pubkey_base64",
 	}
 
-	s.operatorPrivKey = &internal.TestOperatorPrivateKey{
+	s.operatorPrivKey = &mocks.TestOperatorPrivateKey{
 		Base64Value:      "test_operator_key_base64",
 		BytesValue:       []byte("test_bytes"),
 		StorageHashValue: "test_storage_hash",
@@ -52,7 +51,7 @@ func (s *ServerTestSuite) SetupTest() {
 		SignResult:       []byte("signature_bytes"),
 	}
 
-	s.remoteSigner = &internal.TestRemoteSigner{
+	s.remoteSigner = &mocks.TestRemoteSigner{
 		ListKeysResult: []phase0.BLSPubKey{{1, 2, 3}, {4, 5, 6}},
 		ImportResult: web3signer.ImportKeystoreResponse{
 			Data: []web3signer.KeyManagerResponseData{
