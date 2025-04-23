@@ -161,7 +161,7 @@ func TestSharesStorage(t *testing.T) {
 
 		db := &countingSetDB{BadgerDB: storage.db}
 
-		shares, _, _ := NewSharesStorage(db, []byte("test"))
+		shares, _, _ := NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
 
 		err = shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 			share.ValidatorPubKey: {
