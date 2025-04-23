@@ -150,19 +150,25 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 
-	allIndices := indicesFromShares(h.validatorProvider.ParticipatingValidators(epoch))
-	if len(allIndices) == 0 {
-		h.logger.Debug("no active validators for epoch", fields.Epoch(epoch))
+	var allEligibleIndices []phase0.ValidatorIndex
+	for _, share := range h.validatorProvider.Validators() {
+		if share.IsParticipatingAndAttesting(epoch) {
+			allEligibleIndices = append(allEligibleIndices, share.ValidatorIndex)
+		}
+	}
+	if len(allEligibleIndices) == 0 {
+		h.logger.Debug("no eligible validators for epoch", fields.Epoch(epoch))
 		return nil
 	}
 
-	selfIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
-	selfIndicesSet := map[phase0.ValidatorIndex]struct{}{}
-	for _, idx := range selfIndices {
-		selfIndicesSet[idx] = struct{}{}
+	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
+	for _, share := range h.validatorProvider.SelfValidators() {
+		if share.IsParticipatingAndAttesting(epoch) {
+			selfEligibleIndices[share.ValidatorIndex] = struct{}{}
+		}
 	}
 
-	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allIndices)
+	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allEligibleIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
@@ -170,7 +176,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0, len(duties))
 	for _, d := range duties {
-		_, inCommitteeDuty := selfIndicesSet[d.ValidatorIndex]
+		_, inCommitteeDuty := selfEligibleIndices[d.ValidatorIndex]
 		storeDuties = append(storeDuties, dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
 			Slot:           d.Slot,
 			ValidatorIndex: d.ValidatorIndex,

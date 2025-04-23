@@ -7,10 +7,9 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 
 	"github.com/ssvlabs/ssv/observability"
-
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 const (
