@@ -58,7 +58,7 @@ func WithTLS(certificate tls.Certificate, trustedFingerprints map[string]string)
 			return fmt.Errorf("ssvsigner TLS: %w", err)
 		}
 
-		return client.setTLSConfig(tlsConfig)
+		return client.applyTLSConfig(tlsConfig)
 	}
 }
 
@@ -285,9 +285,9 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 	return missing, nil
 }
 
-// setTLSConfig applies the given TLS configuration to the HTTP client.
+// applyTLSConfig applies the given TLS configuration to the HTTP client.
 // This method ensures that the HTTP client's transport is properly configured for TLS communication.
-func (c *Client) setTLSConfig(tlsConfig *tls.Config) error {
+func (c *Client) applyTLSConfig(tlsConfig *tls.Config) error {
 	var transport *http.Transport
 	if t, ok := c.httpClient.Transport.(*http.Transport); ok {
 		transport = t.Clone()

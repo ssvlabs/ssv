@@ -158,9 +158,8 @@ func (w3s *Web3Signer) handleWeb3SignerErr(err error) error {
 	return HTTPResponseError{Err: err, Status: http.StatusInternalServerError}
 }
 
-// setTLSConfig applies the given TLS configuration to the HTTP client.
-// This method ensures that the HTTP client's transport is properly configured for TLS communication.
-func (w3s *Web3Signer) setTLSConfig(tlsConfig *tls.Config) error {
+// applyTLSConfig clones the existing transport and applies the TLS configuration to the HTTP client.
+func (w3s *Web3Signer) applyTLSConfig(tlsConfig *tls.Config) error {
 	var transport *http.Transport
 	if t, ok := w3s.httpClient.Transport.(*http.Transport); ok {
 		transport = t.Clone()

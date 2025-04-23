@@ -167,7 +167,7 @@ Update your SSV node configuration to use the remote signer:
 SSV_SIGNER_ENDPOINT=http://ssv-signer-address:8080 ./ssv-node
 ```
 
-### Configure TLS for SSV-Signer
+### 5. Configure TLS for SSV-Signer
 
 SSV-Signer supports TLS to secure connections in two ways:
 

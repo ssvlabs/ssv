@@ -36,6 +36,6 @@ func WithTLS(certificate tls.Certificate, trustedFingerprints map[string]string)
 			return fmt.Errorf("web3signer TLS: %w", err)
 		}
 
-		return client.setTLSConfig(tlsConfig)
+		return client.applyTLSConfig(tlsConfig)
 	}
 }
