@@ -140,6 +140,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	if nonceErr != nil {
 		return nil, fmt.Errorf("failed to get next nonce: %w", nonceErr)
 	}
+	logger = logger.With(zap.Uint16("nonce", uint16(nonce)))
 
 	// Bump nonce. This transaction would be reverted later if the handling fails,
 	// unless the failure is due to a malformed event.
