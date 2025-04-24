@@ -88,9 +88,9 @@ var (
 			metric.WithUnit("{clients}"),
 			metric.WithDescription("number of clients in the multi client")))
 
-	clientInitStatusCounter = observability.NewMetric(
+	clientInitCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("client.init.status"),
+			metricName("client.init"),
 			metric.WithDescription("number of times a client was initialized")))
 )
 
@@ -182,8 +182,13 @@ func recordAllClientsCount(ctx context.Context, count int64) {
 func recordClientInitStatus(ctx context.Context, nodeAddr string, success bool) {
 	attrs := []attribute.KeyValue{
 		semconv.ServerAddress(nodeAddr),
-		attribute.Key("success").Bool(success),
+		executionClientInitStatusAttribute(success),
 	}
 
-	clientInitStatusCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	clientInitCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+func executionClientInitStatusAttribute(value bool) attribute.KeyValue {
+	eventNameAttrName := fmt.Sprintf("%s.init.status", observabilityNamespace)
+	return attribute.Bool(eventNameAttrName, value)
 }
