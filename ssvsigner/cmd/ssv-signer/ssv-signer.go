@@ -84,7 +84,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		return errors.New("neither private key nor keystore provided")
 	}
 
-	if _, err := url.Parse(cli.Web3SignerEndpoint); err != nil {
+	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 

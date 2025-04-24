@@ -158,7 +158,7 @@ var StartNodeCmd = &cobra.Command{
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
 			logger.Info("using ssv-signer for signing")
 
-			if _, err := url.Parse(cfg.SSVSignerEndpoint); err != nil {
+			if _, err := url.ParseRequestURI(cfg.SSVSignerEndpoint); err != nil {
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 

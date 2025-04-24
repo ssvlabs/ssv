@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
@@ -828,13 +827,13 @@ func TestNew(t *testing.T) {
 			assert.Equal(t, expectedBaseURL, client.baseURL)
 
 			if len(tc.opts) > 0 {
-				assert.NotNil(t, client.logger)
+				assert.NotEqual(t, zap.NewNop(), client.logger)
 			} else {
-				assert.Nil(t, client.logger)
+				assert.Equal(t, zap.NewNop(), client.logger)
 			}
 
 			assert.NotNil(t, client.httpClient)
-			assert.Equal(t, 30*time.Second, client.httpClient.Timeout)
+			assert.EqualValues(t, DefaultRequestTimeout, client.httpClient.Timeout)
 		})
 	}
 }
