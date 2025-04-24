@@ -69,17 +69,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != ""),
 	)
 
-	tlsConfig := tls.Config{
-		ServerKeystoreFile:         cli.KeystoreFile,
-		ServerKeystorePasswordFile: cli.KeystorePasswordFile,
-		ServerKnownClientsFile:     cli.KnownClientsFile,
-
-		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
-		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
-		ClientServerCertFile:       cli.Web3SignerServerCertFile,
-	}
-
-	if err := validateConfig(cli, tlsConfig); err != nil {
+	if err := validateConfig(cli); err != nil {
 		return err
 	}
 
@@ -90,6 +80,16 @@ func run(logger *zap.Logger, cli CLI) error {
 	operatorPrivateKey, err := loadOperatorKey(cli.PrivateKey, cli.PrivateKeyFile, cli.PasswordFile)
 	if err != nil {
 		return err
+	}
+
+	tlsConfig := tls.Config{
+		ServerKeystoreFile:         cli.KeystoreFile,
+		ServerKeystorePasswordFile: cli.KeystorePasswordFile,
+		ServerKnownClientsFile:     cli.KnownClientsFile,
+
+		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
+		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
+		ClientServerCertFile:       cli.Web3SignerServerCertFile,
 	}
 
 	web3SignerClient, err := setupWeb3SignerClient(cli.Web3SignerEndpoint, cli.RequestTimeout, tlsConfig)
@@ -118,7 +118,7 @@ func setupLogger(logLevel, logFormat string) (*zap.Logger, error) {
 	return cfg.Build()
 }
 
-func validateConfig(cli CLI, tlsConfig tls.Config) error {
+func validateConfig(cli CLI) error {
 	// Validate private key configuration
 	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
 		return fmt.Errorf("neither private key nor keystore provided")
@@ -127,15 +127,6 @@ func validateConfig(cli CLI, tlsConfig tls.Config) error {
 	// Validate Web3Signer endpoint
 	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
-	}
-
-	// Validate TLS configurations
-	if err := tlsConfig.ValidateServerTLS(); err != nil {
-		return fmt.Errorf("invalid server TLS config: %w", err)
-	}
-
-	if err := tlsConfig.ValidateClientTLS(); err != nil {
-		return fmt.Errorf("invalid client TLS config: %w", err)
 	}
 
 	return nil
@@ -159,8 +150,7 @@ func loadOperatorKey(privateKeyStr, privateKeyFile, passwordFile string) (keys.O
 
 func setupWeb3SignerClient(endpoint string, timeout time.Duration, tlsConfig tls.Config) (*web3signer.Web3Signer, error) {
 	if tlsConfig.ClientKeystoreFile != "" || tlsConfig.ClientServerCertFile != "" {
-		// Use the optimized method to create TLS config directly
-		config, err := tlsConfig.LoadClientConfigForSSV()
+		config, err := tlsConfig.LoadClientTLSConfig()
 		if err != nil {
 			return nil, fmt.Errorf("load client TLS config: %w", err)
 		}
@@ -191,7 +181,7 @@ func startServer(logger *zap.Logger, listenAddr string, operatorKey keys.Operato
 	// Configure server TLS if needed
 	if tlsConfig.ServerKeystoreFile != "" {
 		// Load server TLS configuration
-		config, err := tlsConfig.LoadServerConfigForSSV()
+		config, err := tlsConfig.LoadServerTLSConfig()
 		if err != nil {
 			return fmt.Errorf("load server TLS config: %w", err)
 		}

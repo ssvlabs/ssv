@@ -82,7 +82,7 @@ func run(logger *zap.Logger, cli CLI) error {
 
 	if cli.Web3SignerKeystoreFile != "" || cli.Web3SignerServerCertFile != "" {
 		// Load client TLS configuration using the optimized method
-		config, err := tlsConfig.LoadClientConfigForSSV()
+		config, err := tlsConfig.LoadClientTLSConfig()
 		if err != nil {
 			return fmt.Errorf("load client TLS config: %w", err)
 		}
