@@ -15,8 +15,9 @@ func WithRequestTimeout(timeout time.Duration) Option {
 	}
 }
 
-// WithTLS configures TLS for the Web3Signer client.
-// This method configures the client with TLS using the provided TLS configuration.
+// WithTLS sets the TLS configuration for the HTTP client.
+// This allows secure connections to the Web3Signer server with optional
+// client authentication and server certificate verification.
 //
 // Parameters:
 //   - tlsConfig: TLS configuration for the client

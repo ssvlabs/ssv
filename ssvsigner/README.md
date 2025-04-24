@@ -264,7 +264,11 @@ WEB3SIGNER_SERVER_CERT_FILE=/path/to/server.pem \
 ./ssv-signer
 ```
 
-This corresponds to Web3Signer's downstream TLS configuration.
+When using `WEB3SIGNER_SERVER_CERT_FILE`, SSV-Signer will verify the Web3Signer's server certificate against the
+provided trusted certificate.
+
+This configuration corresponds to Web3Signer's TLS authentication model, where clients can verify server identity using
+certificate fingerprints.
 
 #### Full Mutual TLS Example
 

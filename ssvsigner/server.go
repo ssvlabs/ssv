@@ -114,10 +114,11 @@ func (s *Server) ListenAndServe(addr string) error {
 
 // SetTLS configures TLS for the server.
 //
+// This method takes a pre-configured TLS config object that defines the server's
+// TLS certificate and optional client authentication settings.
+//
 // Parameters:
-//   - certificate: TLS certificate for the server (required for TLS)
-//   - trustedFingerprints: map of client certificate fingerprints to be trusted
-//     (optional, if provided, client authentication will be required)
+//   - tlsConfig: A complete tls.Config object, typically created by tls.LoadServerTLSConfig()
 func (s *Server) SetTLS(tlsConfig *tls.Config) {
 	s.tlsConfig = tlsConfig
 }

@@ -45,7 +45,6 @@ func WithRequestTimeout(timeout time.Duration) ClientOption {
 }
 
 // WithTLSConfig configures TLS for the client using a pre-configured TLS Config object.
-// This is a more direct approach compared to WithTLS.
 //
 // Parameters:
 //   - tlsConfig: a pre-configured tls.Config object
