@@ -5,13 +5,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"golang.org/x/exp/maps"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -119,7 +121,7 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(networkConfig networkconfig.NetworkConfig, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
 		shares:        make(map[string]*types.SSVShare),
 		db:            db,
@@ -132,8 +134,9 @@ func NewSharesStorage(db basedb.Database, prefix []byte) (Shares, ValidatorStore
 	storage.validatorStore = newValidatorStore(
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
+		networkConfig,
 	)
-	if err := storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...); err != nil {
+	if err := storage.validatorStore.handleSharesAdded(slices.Collect(maps.Values(storage.shares))...); err != nil {
 		return nil, nil, err
 	}
 	return storage, storage.validatorStore, nil
@@ -175,7 +178,7 @@ func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.
 	defer s.memoryMtx.RUnlock()
 
 	if len(filters) == 0 {
-		return maps.Values(s.shares)
+		return slices.Collect(maps.Values(s.shares))
 	}
 
 	var shares []*types.SSVShare
