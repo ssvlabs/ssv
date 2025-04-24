@@ -164,7 +164,7 @@ SSV_SIGNER_ENDPOINT=http://ssv-signer-address:8080 ./ssv-node
 
 SSV-Signer supports TLS to secure connections in two ways:
 
-1. **Server TLS** - Secures incoming connections to SSV-Signer from SSV nodes
+1. **Server TLS** - Secures incoming connections from SSV nodes to SSV-Signer
 2. **Client TLS** - Secures outgoing connections from SSV-Signer to Web3Signer
 
 The TLS implementation is designed to match Web3Signer's TLS approach exactly, ensuring compatibility and simplifying
