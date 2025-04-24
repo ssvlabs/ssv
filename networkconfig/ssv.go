@@ -10,7 +10,7 @@ import (
 
 //go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./ssv_mock.go -source=./ssv.go
 
-var SupportedSSVConfigs = map[string]SSVConfig{
+var supportedSSVConfigs = map[string]SSVConfig{
 	Mainnet.Name:      Mainnet.SSVConfig,
 	Holesky.Name:      Holesky.SSVConfig,
 	HoleskyStage.Name: HoleskyStage.SSVConfig,
@@ -22,7 +22,7 @@ var SupportedSSVConfigs = map[string]SSVConfig{
 }
 
 func GetSSVConfigByName(name string) (SSVConfig, error) {
-	if network, ok := SupportedSSVConfigs[name]; ok {
+	if network, ok := supportedSSVConfigs[name]; ok {
 		return network, nil
 	}
 
