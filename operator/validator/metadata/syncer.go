@@ -54,7 +54,7 @@ func NewSyncer(
 	logger *zap.Logger,
 	shareStorage shareStorage,
 	validatorStore selfValidatorStore,
-	beaconNetwork networkconfig.BeaconConfig,
+	beaconConfig networkconfig.BeaconConfig,
 	beaconNode beacon.BeaconNode,
 	fixedSubnets networkcommons.Subnets,
 	opts ...Option,
@@ -63,7 +63,7 @@ func NewSyncer(
 		logger:            logger,
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,
-		beaconConfig:      beaconNetwork,
+		beaconConfig:      beaconConfig,
 		beaconNode:        beaconNode,
 		fixedSubnets:      fixedSubnets,
 		syncInterval:      defaultSyncInterval,
@@ -325,7 +325,7 @@ func (s *Syncer) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase
 
 	// TODO: use context, return if it's done
 	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-		if share.IsParticipating(epoch) {
+		if share.IsParticipating(s.beaconConfig, epoch) {
 			indices = append(indices, share.ValidatorIndex)
 		}
 		return true

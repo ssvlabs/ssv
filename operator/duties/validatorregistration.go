@@ -50,10 +50,14 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			shares := h.validatorProvider.SelfParticipatingValidators(epoch + frequencyEpochs)
+			shares := h.validatorProvider.SelfValidators()
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
+				if !share.IsParticipatingAndAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
+					// Only attesting validators are eligible for registration duties.
+					continue
+				}
 				if phase0.Slot(share.ValidatorIndex)%registrationSlots != slot%registrationSlots {
 					continue
 				}

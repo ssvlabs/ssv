@@ -107,6 +107,7 @@ type MultiClient interface {
 	eth2client.ValidatorRegistrationsSubmitter
 	eth2client.VoluntaryExitSubmitter
 	eth2client.ValidatorLivenessProvider
+	eth2client.ForkScheduleProvider
 }
 
 type EventTopic string
@@ -376,7 +377,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return // Tests may override Fatal's behavior
 			}
 
-			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			spec, err := specImpl(ctx, gc.log, s)
 			if err != nil {
 				logger.Error(clResponseErrMsg,
 					zap.String("api", "Spec"),

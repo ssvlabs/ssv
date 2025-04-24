@@ -8,10 +8,10 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -61,7 +61,7 @@ type Options struct {
 
 // nolint
 func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error) {
-	return operatorstorage.NewNodeStorage(logger, o.Db)
+	return operatorstorage.NewNodeStorage(o.BeaconConfig, logger, o.Db)
 }
 
 // nolint

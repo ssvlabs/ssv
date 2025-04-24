@@ -1,10 +1,12 @@
 package goclient
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
+	client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec/phase0"

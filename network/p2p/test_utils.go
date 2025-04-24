@@ -141,7 +141,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		return nil, err
 	}
 
-	nodeStorage, err := storage.NewNodeStorage(logger, db)
+	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			if !ok {
 				_, err := nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
 					ID:           sm.Signer,
-					PublicKey:    operatorPubkey,
+					PublicKey:    []byte(operatorPubkey),
 					OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
 				})
 				if err != nil {
@@ -175,13 +175,14 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	cfg := NewNetConfig(keys, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
 	cfg.MessageValidator = validation.New(
 		networkconfig.TestNetwork,
 		nodeStorage.ValidatorStore(),
+		nodeStorage,
 		dutyStore,
 		signatureVerifier,
 		phase0.Epoch(0),
@@ -208,6 +209,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		cfg.MessageValidator = validation.New(
 			networkconfig.TestNetwork,
 			nodeStorage.ValidatorStore(),
+			nodeStorage,
 			dutyStore,
 			signatureVerifier,
 			phase0.Epoch(0),
