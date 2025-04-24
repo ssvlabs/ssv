@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -188,7 +187,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				BeaconNodeAddr: server.URL,
 				CommonTimeout:  1 * time.Second,
@@ -438,7 +437,7 @@ func createClient(
 	beaconServerURL string,
 	withWeightedAttestationData bool) (*GoClient, error) {
 	client, err := New(zap.NewNop(),
-		beacon.Options{
+		Options{
 			Context:                     ctx,
 			BeaconNodeAddr:              beaconServerURL,
 			CommonTimeout:               defaultHardTimeout,

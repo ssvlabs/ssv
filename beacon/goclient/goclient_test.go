@@ -162,7 +162,7 @@ func TestTimeouts(t *testing.T) {
 func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
 	return New(
 		zap.NewNop(),
-		beacon.Options{
+		Options{
 			Context:        ctx,
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  commonTimeout,

@@ -24,13 +24,26 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/registry/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
 type MessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+}
+
+// operators defines the minimal interface needed for validation
+type operators interface {
+	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
+}
+
+// validatorStore defines the minimal interface needed for validation
+type validatorStore interface {
+	Validator(pubKey []byte) (*ssvtypes.SSVShare, bool)
+	Committee(id spectypes.CommitteeID) (*registrystorage.Committee, bool)
 }
 
 type messageValidator struct {
@@ -41,7 +54,8 @@ type messageValidator struct {
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
 
-	validatorStore storage.ValidatorStore
+	validatorStore validatorStore
+	operators      operators
 	dutyStore      *dutystore.Store
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
@@ -63,7 +77,8 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
 	netCfg networkconfig.Network,
-	validatorStore storage.ValidatorStore,
+	validatorStore validatorStore,
+	operators operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
 	pectraForkEpoch phase0.Epoch,
@@ -75,6 +90,7 @@ func New(
 		consensusStateIndex: make(map[consensusID]*consensusState),
 		validationLockCache: ttlcache.New[spectypes.MessageID, *sync.Mutex](),
 		validatorStore:      validatorStore,
+		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
 		pectraForkEpoch:     pectraForkEpoch,
@@ -148,7 +164,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
-	// TODO: leverage the ValidatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
+	// TODO: leverage the validatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
 	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return decodedMessage, err
