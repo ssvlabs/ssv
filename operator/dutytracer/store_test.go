@@ -13,6 +13,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
+	"github.com/ssvlabs/ssv/networkconfig"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -26,7 +27,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
 	tracer := New(context.TODO(), zap.NewNop(), vstore, nil, dutyStore, "BN")
 
@@ -185,7 +186,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
 	tracer := New(context.TODO(), zap.NewNop(), vstore, nil, dutyStore, "BN")
 
@@ -385,7 +386,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK1[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
 	tracer := New(context.TODO(), zap.NewNop(), vstore, nil, dutyStore, "BN")
 
