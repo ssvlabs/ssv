@@ -64,36 +64,26 @@ func run(logger *zap.Logger, cli CLI) error {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
+	ctx := context.Background()
+
 	tlsConfig := tls.Config{
 		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
 		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
 		ClientServerCertFile:       cli.Web3SignerServerCertFile,
 	}
 
-	if err := tlsConfig.ValidateClientTLS(); err != nil {
-		return fmt.Errorf("client TLS config: %w", err)
-	}
-
-	ctx := context.Background()
-
-	// Configure Web3Signer client with TLS options
-	var web3SignerClient *web3signer.Web3Signer
-	var err error
+	var options []web3signer.Option
 
 	if cli.Web3SignerKeystoreFile != "" || cli.Web3SignerServerCertFile != "" {
-		// Load client TLS configuration using the optimized method
 		config, err := tlsConfig.LoadClientTLSConfig()
 		if err != nil {
 			return fmt.Errorf("load client TLS config: %w", err)
 		}
 
-		web3SignerClient = web3signer.New(
-			cli.Web3SignerEndpoint,
-			web3signer.WithTLS(config),
-		)
-	} else {
-		web3SignerClient = web3signer.New(cli.Web3SignerEndpoint)
+		options = append(options, web3signer.WithTLS(config))
 	}
+
+	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint, options...)
 
 	fetchStart := time.Now()
 	logger.Info("fetching key list")
