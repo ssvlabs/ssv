@@ -88,15 +88,10 @@ var (
 			metric.WithUnit("{clients}"),
 			metric.WithDescription("number of clients in the multi client")))
 
-	clientInitCounter = observability.NewMetric(
+	clientInitStatusCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("client.init"),
+			metricName("client.init.status"),
 			metric.WithDescription("number of times a client was initialized")))
-
-	clientInitErrorCounter = observability.NewMetric(
-		meter.Int64Counter(
-			metricName("client.init_error"),
-			metric.WithDescription("number of times a client initialization failed")))
 )
 
 func metricName(name string) string {
@@ -137,16 +132,26 @@ func resetExecutionClientStatusGauge(ctx context.Context, nodeAddr string) {
 func recordClientSwitch(ctx context.Context, fromAddr, toAddr string) {
 	clientSwitchCounter.Add(ctx, 1,
 		metric.WithAttributes(
-			attribute.String("from_addr", fromAddr),
-			attribute.String("to_addr", toAddr),
+			executionClientFromAddrAttribute(fromAddr),
+			executionClientToAddrAttribute(toAddr),
 		),
 	)
+}
+
+func executionClientFromAddrAttribute(value string) attribute.KeyValue {
+	eventNameAttrName := fmt.Sprintf("%s.from_addr", observabilityNamespace)
+	return attribute.String(eventNameAttrName, value)
+}
+
+func executionClientToAddrAttribute(value string) attribute.KeyValue {
+	eventNameAttrName := fmt.Sprintf("%s.to_addr", observabilityNamespace)
+	return attribute.String(eventNameAttrName, value)
 }
 
 // recordMultiClientMethodCall records metrics for multi client method calls
 func recordMultiClientMethodCall(ctx context.Context, method string, nodeAddr string, duration time.Duration, err error) {
 	attrs := []attribute.KeyValue{
-		attribute.String("method", method),
+		executionMultiClientMethodAttribute(method),
 		semconv.ServerAddress(nodeAddr),
 	}
 
@@ -156,6 +161,11 @@ func recordMultiClientMethodCall(ctx context.Context, method string, nodeAddr st
 	if err != nil {
 		multiClientMethodErrorsCounter.Add(ctx, 1)
 	}
+}
+
+func executionMultiClientMethodAttribute(value string) attribute.KeyValue {
+	eventNameAttrName := fmt.Sprintf("%s.method", observabilityNamespace)
+	return attribute.String(eventNameAttrName, value)
 }
 
 // recordHealthyClientsCount records the number of healthy clients
@@ -168,15 +178,12 @@ func recordAllClientsCount(ctx context.Context, count int64) {
 	allClientsGauge.Record(ctx, count)
 }
 
-// recordClientInit records metrics for client initialization
-func recordClientInit(ctx context.Context, nodeAddr string, success bool, err error) {
+// recordClientInitStatus records metrics for client initialization
+func recordClientInitStatus(ctx context.Context, nodeAddr string, success bool) {
 	attrs := []attribute.KeyValue{
 		semconv.ServerAddress(nodeAddr),
+		attribute.Key("success").Bool(success),
 	}
 
-	clientInitCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
-
-	if !success {
-		clientInitErrorCounter.Add(ctx, 1)
-	}
+	clientInitStatusCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
 }

@@ -160,7 +160,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
 	)
 	if err != nil {
-		recordClientInit(ctx, mc.nodeAddrs[clientIndex], false, err)
+		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
 		return fmt.Errorf("create single client: %w", err)
 	}
 
@@ -169,7 +169,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		logger.Error("failed to get chain ID",
 			zap.String("address", mc.nodeAddrs[clientIndex]),
 			zap.Error(err))
-		recordClientInit(ctx, mc.nodeAddrs[clientIndex], false, err)
+		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
 		return fmt.Errorf("get chain ID: %w", err)
 	}
 
@@ -180,12 +180,12 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 			zap.String("address", mc.nodeAddrs[clientIndex]),
 			zap.Error(err),
 		)
-		recordClientInit(ctx, mc.nodeAddrs[clientIndex], false, err)
+		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
 		return err
 	}
 
 	mc.clients[clientIndex] = singleClient
-	recordClientInit(ctx, mc.nodeAddrs[clientIndex], true, nil)
+	recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], true)
 	return nil
 }
 
