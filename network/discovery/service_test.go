@@ -34,7 +34,7 @@ func TestNewDiscV5Service(t *testing.T) {
 	assert.NotNil(t, dvs.dv5Listener)
 	assert.NotNil(t, dvs.conns)
 	assert.NotNil(t, dvs.subnetsIdx)
-	assert.NotNil(t, dvs.networkConfig)
+	assert.NotNil(t, dvs.ssvConfig)
 
 	// Check bootnodes
 	CheckBootnodes(t, dvs, testNetConfig)
@@ -145,7 +145,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
 	dvs, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 
@@ -159,7 +159,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
 
 	// Change network config
-	dvs.networkConfig = networkconfig.HoleskyStage
+	dvs.ssvConfig = networkconfig.HoleskyStage.SSVConfig
 	// Test PublishENR method
 	dvs.PublishENR(logger)
 
@@ -172,7 +172,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
 
 	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
@@ -289,7 +289,7 @@ func TestDiscV5ServiceListenerType(t *testing.T) {
 
 	t.Run("Post-Fork", func(t *testing.T) {
 		netConfig := PostForkNetworkConfig()
-		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
+		dvs := testingDiscoveryWithNetworkConfig(t, netConfig.SSVConfig)
 
 		// Check listener type
 		_, ok := dvs.dv5Listener.(*forkingDV5Listener)
@@ -309,7 +309,7 @@ func TestDiscV5ServiceListenerType(t *testing.T) {
 	t.Run("Pre-Fork", func(t *testing.T) {
 
 		netConfig := PreForkNetworkConfig()
-		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
+		dvs := testingDiscoveryWithNetworkConfig(t, netConfig.SSVConfig)
 
 		// Check listener type
 		_, ok := dvs.dv5Listener.(*discover.UDPv5)

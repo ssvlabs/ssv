@@ -122,7 +122,7 @@ func TestCheckPeer(t *testing.T) {
 		ctx:                 ctx,
 		conns:               &mock.MockConnectionIndex{LimitValue: false},
 		subnetsIdx:          subnetIndex,
-		networkConfig:       TestNetwork,
+		ssvConfig:           TestNetwork.SSVConfig,
 		subnets:             mySubnets,
 		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
 		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
