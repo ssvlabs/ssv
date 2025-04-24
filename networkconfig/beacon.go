@@ -160,7 +160,7 @@ func (b BeaconConfig) IntervalDuration() time.Duration {
 
 func (b BeaconConfig) EpochDuration() time.Duration {
 	if b.SlotsPerEpoch > math.MaxInt64 {
-		panic("slot out of range")
+		panic("slots per epoch out of range")
 	}
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
 }
