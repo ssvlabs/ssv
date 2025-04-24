@@ -13,9 +13,9 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -42,12 +42,11 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 	parsedPrivKey, err := keys.PrivateKeyFromString(skPem)
 	require.NoError(t, err)
 
-	parsedPrivKeyHash, err := parsedPrivKey.StorageHash()
-	require.NoError(t, err)
+	parsedPrivKeyHash := parsedPrivKey.StorageHash()
 
 	encodedPubKey, err := parsedPrivKey.Public().Base64()
 	require.NoError(t, err)
-	require.Equal(t, pkPem, string(encodedPubKey))
+	require.Equal(t, pkPem, encodedPubKey)
 
 	require.NoError(t, operatorStorage.SavePrivateKeyHash(parsedPrivKeyHash))
 	extractedHash, found, err := operatorStorage.GetPrivateKeyHash()

@@ -23,9 +23,9 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 func TestMsgValidator(t *testing.T) {
@@ -66,7 +66,7 @@ func TestMsgValidator(t *testing.T) {
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]
 
-	operatorPubKey, err := rsaencryption.ExtractPublicKey(&operatorPrivateKey.PublicKey)
+	operatorPubKey, err := rsaencryption.PublicKeyToBase64PEM(&operatorPrivateKey.PublicKey)
 	require.NoError(t, err)
 
 	od := &storage.OperatorData{
