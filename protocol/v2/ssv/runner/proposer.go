@@ -22,11 +22,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ProposerRunner struct {
@@ -96,11 +97,12 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
+	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
+	signer := signedMsg.Messages[0].Signer
 	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 
 	logger = logger.With(fields.Slot(duty.DutySlot()))
-	logger.Debug("🧩 got partial RANDAO signatures",
-		zap.Uint64("signer", signedMsg.Messages[0].Signer)) // TODO: more than one? check index arr boundries
+	logger.Debug("🧩 got partial RANDAO signatures", zap.Uint64("signer", signer))
 
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {

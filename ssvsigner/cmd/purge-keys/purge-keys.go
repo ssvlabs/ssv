@@ -13,8 +13,9 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
 
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )

@@ -7,10 +7,11 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/ssvlabs/ssv/utils/casts"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/ssvlabs/ssv/utils/casts"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
