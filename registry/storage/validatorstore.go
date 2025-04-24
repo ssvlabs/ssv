@@ -9,6 +9,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -53,9 +55,9 @@ type Committee struct {
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
-func (c *Committee) IsParticipating(epoch phase0.Epoch) bool {
+func (c *Committee) IsParticipating(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
 	for _, validator := range c.Validators {
-		if validator.IsParticipating(epoch) {
+		if validator.IsParticipating(beaconCfg, epoch) {
 			return true
 		}
 	}
@@ -76,12 +78,15 @@ type validatorStore struct {
 	byCommitteeID    map[spectypes.CommitteeID]*Committee
 	byOperatorID     map[spectypes.OperatorID]*sharesAndCommittees
 
+	beaconCfg networkconfig.Beacon
+
 	mu sync.RWMutex
 }
 
 func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
+	beaconCfg networkconfig.Beacon,
 ) *validatorStore {
 	return &validatorStore{
 		shares:           shares,
@@ -89,6 +94,7 @@ func newValidatorStore(
 		byValidatorIndex: make(map[phase0.ValidatorIndex]*types.SSVShare),
 		byCommitteeID:    make(map[spectypes.CommitteeID]*Committee),
 		byOperatorID:     make(map[spectypes.OperatorID]*sharesAndCommittees),
+		beaconCfg:        beaconCfg,
 	}
 }
 
@@ -115,7 +121,7 @@ func (c *validatorStore) Validators() []*types.SSVShare {
 func (c *validatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	var validators []*types.SSVShare
 	for _, share := range c.shares() {
-		if share.IsParticipating(epoch) {
+		if share.IsParticipating(c.beaconCfg, epoch) {
 			validators = append(validators, share)
 		}
 	}
@@ -157,7 +163,7 @@ func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committe
 
 	var committees []*Committee
 	for _, committee := range c.byCommitteeID {
-		if committee.IsParticipating(epoch) {
+		if committee.IsParticipating(c.beaconCfg, epoch) {
 			committees = append(committees, committee)
 		}
 	}
@@ -190,13 +196,14 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 	if c.operatorID == nil {
 		return nil
 	}
-	validators := c.OperatorValidators(c.operatorID())
+	shares := c.OperatorValidators(c.operatorID())
 	var participating []*types.SSVShare
-	for _, validator := range validators {
-		if validator.IsParticipating(epoch) {
-			participating = append(participating, validator)
+	for _, share := range shares {
+		if share.IsParticipating(c.beaconCfg, epoch) {
+			participating = append(participating, share)
 		}
 	}
+
 	return participating
 }
 
@@ -214,7 +221,7 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 	committees := c.OperatorCommittees(c.operatorID())
 	var participating []*Committee
 	for _, committee := range committees {
-		if committee.IsParticipating(epoch) {
+		if committee.IsParticipating(c.beaconCfg, epoch) {
 			participating = append(participating, committee)
 		}
 	}

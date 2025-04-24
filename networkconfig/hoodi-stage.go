@@ -12,7 +12,7 @@ import (
 var HoodiStage = NetworkConfig{
 	Name: "hoodi-stage",
 	BeaconConfig: BeaconConfig{
-		BeaconName:    string(spectypes.HoleskyNetwork),
+		BeaconName:    string(spectypes.HoodiNetwork),
 		SlotDuration:  spectypes.HoodiNetwork.SlotDurationSec(),
 		SlotsPerEpoch: phase0.Slot(spectypes.HoodiNetwork.SlotsPerEpoch()),
 		ForkVersion:   spectypes.HoodiNetwork.ForkVersion(),

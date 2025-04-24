@@ -2,6 +2,7 @@ package networkconfig
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"time"
 
@@ -62,7 +63,7 @@ func (b BeaconConfig) String() string {
 // GetSlotStartTime returns the start time for the given slot
 func (b BeaconConfig) GetSlotStartTime(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
-		panic("slot out of range")
+		panic(fmt.Sprintf("slot %d out of range", slot))
 	}
 	durationSinceGenesisStart := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
 	start := b.GenesisTime.Add(durationSinceGenesisStart)
@@ -81,11 +82,10 @@ func (b BeaconConfig) EstimatedCurrentSlot() phase0.Slot {
 
 // EstimatedSlotAtTime estimates slot at the given time
 func (b BeaconConfig) EstimatedSlotAtTime(time time.Time) phase0.Slot {
-	genesis := b.GenesisTime
-	if time.Before(genesis) {
-		return 0
+	if time.Before(b.GenesisTime) {
+		panic(fmt.Sprintf("time %v is before genesis time %v", time, b.GenesisTime))
 	}
-	timeAfterGenesis := time.Sub(genesis)
+	timeAfterGenesis := time.Sub(b.GenesisTime)
 	return phase0.Slot(timeAfterGenesis / b.SlotDuration) // #nosec G115: genesis can't be negative
 }
 
@@ -145,7 +145,7 @@ func (b BeaconConfig) EpochStartTime(epoch phase0.Epoch) time.Time {
 
 func (b BeaconConfig) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
-		panic("slot out of range")
+		panic(fmt.Sprintf("slot %d out of range", slot))
 	}
 	d := time.Duration(slot) * b.SlotDuration // #nosec G115: slot cannot exceed math.MaxInt64
 	return b.GenesisTime.Add(d)

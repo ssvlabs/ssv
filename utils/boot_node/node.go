@@ -106,7 +106,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	listener := n.createListener(logger, ipAddr, n.discv5port, privKey)
 	node := listener.LocalNode().Node()
 	logger.Info("Running",
-		zap.String("node", node.String()),
+		zap.Stringer("node", node),
 		zap.Stringer("config", n.ssvConfig),
 		fields.ProtocolID(n.ssvConfig.DiscoveryProtocolID),
 	)
