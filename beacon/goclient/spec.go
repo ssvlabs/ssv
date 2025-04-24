@@ -134,9 +134,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		}
 	}
 
-	start := time.Now()
 	genesisResponse, err := genesisForClient(gc.ctx, gc.log, client)
-	recordRequestDuration(gc.ctx, "Genesis", client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Genesis"), zap.Error(err))
 		return networkconfig.BeaconConfig{}, fmt.Errorf("failed to obtain genesis response: %w", err)
