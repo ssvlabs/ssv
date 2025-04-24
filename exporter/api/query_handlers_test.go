@@ -20,9 +20,9 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/operator/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
@@ -234,11 +234,11 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectyp
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		opPubKey, privateKey, err := rsaencryption.GenerateKeys()
+		opPubKey, privateKey, err := rsaencryption.GenerateKeyPairPEM()
 		if err != nil {
 			panic(err)
 		}
-		pk, err := rsaencryption.PemToPrivateKey(privateKey)
+		pk, err := rsaencryption.PEMToPrivateKey(privateKey)
 		if err != nil {
 			panic(err)
 		}
