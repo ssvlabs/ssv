@@ -28,7 +28,7 @@ type Web3Signer struct {
 }
 
 // New creates a new Web3Signer client with the given base URL and optional configuration.
-func New(baseURL string, opts ...Option) (*Web3Signer, error) {
+func New(baseURL string, opts ...Option) *Web3Signer {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	w3s := &Web3Signer{
@@ -40,12 +40,10 @@ func New(baseURL string, opts ...Option) (*Web3Signer, error) {
 	}
 
 	for _, opt := range opts {
-		if err := opt(w3s); err != nil {
-			return nil, err
-		}
+		opt(w3s)
 	}
 
-	return w3s, nil
+	return w3s
 }
 
 type ListKeysResponse []phase0.BLSPubKey

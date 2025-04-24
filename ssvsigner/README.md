@@ -187,15 +187,16 @@ openssl pkcs12 -export -out keystore.p12 -inkey key.pem -in cert.pem -name "tls-
 
 You'll be prompted to enter a password for the keystore. Save this password as you'll need it for configuration.
 
-#### Known Clients/Servers Authentication
+#### Known Clients Authentication and Server Certificate
 
-TLS authentication in SSV-Signer is based on certificate fingerprints, matching Web3Signer's approach. This method (
-sometimes called "certificate pinning") verifies the identity of clients/servers by comparing their certificate
-fingerprints with expected values.
+TLS authentication in SSV-Signer can be configured in two ways:
 
-The known clients/servers files have the following formats:
+1. **Known Clients File** - For server TLS, uses certificate fingerprints for authenticating clients
+2. **Server Certificate File** - For client TLS, uses a trusted PEM certificate for server verification
 
 **Known Clients File Format:**
+
+The known clients file contains fingerprints and has the following format:
 
 ```
 # Format: <common_name> <sha256-fingerprint>
@@ -203,12 +204,18 @@ client1 DF:65:B8:02:08:5E:91:82:0F:91:F5:1C:96:56:92:C4:1A:F6:C6:27:FD:6C:FC:31:
 client2 AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90
 ```
 
-**Known Servers File Format:**
+**Server Certificate File Format:**
+
+The server certificate file contains a complete X.509 certificate in PEM format:
 
 ```
-# Format: <hostname>:<port> <sha256-fingerprint>
-localhost:9000 6C:B2:3E:F9:88:43:5E:62:69:9F:A9:9D:41:14:03:BA:83:24:AC:04:CE:BD:92:49:1B:8D:B2:A4:86:39:4C:BB
-web3signer.example.com:9000 6C:B2:3E:F9:88:43:5E:62:69:9F:A9:9D:41:14:03:BA:83:24:AC:04:CE:BD:92:49:1B:8D:B2:A4:86:39:4C:BB
+-----BEGIN CERTIFICATE-----
+MIIDXTCCAkWgAwIBAgIJAJC1HiIAZAiIMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
+BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+...
+aWRnaXRzIFB0eSBMdGQwHhcNMTUxMjE1MDQzMDUyWhcNMTYxMjE0MDQzMDUyWjBF
+...more base64 encoded data...
+-----END CERTIFICATE-----
 ```
 
 To get a certificate's fingerprint:
@@ -253,7 +260,7 @@ LISTEN_ADDR=0.0.0.0:8080 \
 WEB3SIGNER_ENDPOINT=https://localhost:9000 \
 WEB3SIGNER_KEYSTORE_FILE=/path/to/client.p12 \
 WEB3SIGNER_KEYSTORE_PASSWORD_FILE=/path/to/client_password.txt \
-WEB3SIGNER_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
+WEB3SIGNER_SERVER_CERT_FILE=/path/to/server.pem \
 ./ssv-signer
 ```
 
@@ -274,7 +281,7 @@ KNOWN_CLIENTS_FILE=/path/to/known_clients.txt \
 # Client TLS (connecting to Web3Signer)
 WEB3SIGNER_KEYSTORE_FILE=/path/to/client.p12 \
 WEB3SIGNER_KEYSTORE_PASSWORD_FILE=/path/to/client_password.txt \
-WEB3SIGNER_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
+WEB3SIGNER_SERVER_CERT_FILE=/path/to/server.pem \
 ./ssv-signer
 ```
 
@@ -287,7 +294,7 @@ WEB3SIGNER_KNOWN_SERVERS_FILE=/path/to/known_servers.txt \
 | `KNOWN_CLIENTS_FILE`                | Known clients fingerprints file                       |
 | `WEB3SIGNER_KEYSTORE_FILE`          | Client PKCS12 keystore file for Web3Signer connection |
 | `WEB3SIGNER_KEYSTORE_PASSWORD_FILE` | Path to file containing password for client keystore  |
-| `WEB3SIGNER_KNOWN_SERVERS_FILE`     | Known Web3Signer servers fingerprints file            |
+| `WEB3SIGNER_SERVER_CERT_FILE`       | Server certificate file (PEM format) for Web3Signer   |
 
 #### Security Recommendations
 
@@ -320,13 +327,13 @@ options helps ensure secure and proper setup.
 
 **Client TLS Validation Rules** (SSV-Signer connecting to Web3Signer):
 
-| Configuration      | WEB3SIGNER_KEYSTORE_FILE | WEB3SIGNER_KEYSTORE_PASSWORD_FILE | WEB3SIGNER_KNOWN_SERVERS_FILE | Validity  | Description                                                |
-|--------------------|--------------------------|-----------------------------------|-------------------------------|-----------|------------------------------------------------------------|
-| No TLS             | ❌                        | ❌                                 | ❌                             | ✅ Valid   | No TLS for outgoing connections (use HTTP endpoint)        |
-| Fingerprint Only   | ❌                        | ❌                                 | ✅                             | ✅ Valid   | Verify server certificate against known fingerprints       |
-| Client Certificate | ✅                        | ✅                                 | ❌                             | ✅ Valid   | Present client certificate for mutual TLS                  |
-| Full Mutual TLS    | ✅                        | ✅                                 | ✅                             | ✅ Valid   | Present client certificate and verify server (most secure) |
-| Invalid            | ✅                        | ❌                                 | ❌                             | ❌ Invalid | Missing keystore password file                             |
+| Configuration      | WEB3SIGNER_KEYSTORE_FILE | WEB3SIGNER_KEYSTORE_PASSWORD_FILE | WEB3SIGNER_SERVER_CERT_FILE | Validity  | Description                                                |
+|--------------------|--------------------------|-----------------------------------|-----------------------------|-----------|------------------------------------------------------------|
+| No TLS             | ❌                        | ❌                                 | ❌                           | ✅ Valid   | No TLS for outgoing connections (use HTTP endpoint)        |
+| Certificate Only   | ❌                        | ❌                                 | ✅                           | ✅ Valid   | Verify server using trusted certificate                    |
+| Client Certificate | ✅                        | ✅                                 | ❌                           | ✅ Valid   | Present client certificate for mutual TLS                  |
+| Full Mutual TLS    | ✅                        | ✅                                 | ✅                           | ✅ Valid   | Present client certificate and verify server (most secure) |
+| Invalid            | ✅                        | ❌                                 | ❌                           | ❌ Invalid | Missing keystore password file                             |
 
 When implementing TLS, consider:
 

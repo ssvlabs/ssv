@@ -14,8 +14,6 @@ import (
 	"github.com/carlmjohnson/requests"
 	"go.uber.org/zap"
 
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -30,39 +28,36 @@ type Client struct {
 }
 
 // ClientOption is used to handle client options.
-type ClientOption func(*Client) error
+type ClientOption func(*Client)
 
 // WithLogger sets a custom logger for the client.
 func WithLogger(logger *zap.Logger) ClientOption {
-	return func(c *Client) error {
+	return func(c *Client) {
 		c.logger = logger
-
-		return nil
 	}
 }
 
-// WithTLS configures TLS for the client.
-// This method sets up the client with TLS using the provided certificate and trusted fingerprints.
+// WithRequestTimeout sets a custom timeout for HTTP requests.
+func WithRequestTimeout(timeout time.Duration) ClientOption {
+	return func(client *Client) {
+		client.httpClient.Timeout = timeout
+	}
+}
+
+// WithTLSConfig configures TLS for the client using a pre-configured TLS Config object.
+// This is a more direct approach compared to WithTLS.
 //
 // Parameters:
-//   - certificate: client certificate for mutual TLS authentication
-//     (optional, can be empty if the server doesn't require client authentication)
-//   - trustedFingerprints: map of hostname:port strings to SHA-256 certificate fingerprints
-//     (optional, can be nil if certificate pinning is not required)
+//   - tlsConfig: a pre-configured tls.Config object
 //
-// Returns a ClientOption that configures the client with TLS.
-func WithTLS(certificate tls.Certificate, trustedFingerprints map[string]string) ClientOption {
-	return func(client *Client) error {
-		tlsConfig, err := ssvsignertls.LoadClientConfig(certificate, trustedFingerprints)
-		if err != nil {
-			return fmt.Errorf("ssvsigner TLS: %w", err)
-		}
-
-		return client.applyTLSConfig(tlsConfig)
+// Returns a ClientOption that configures the client with the provided TLS config.
+func WithTLSConfig(tlsConfig *tls.Config) ClientOption {
+	return func(client *Client) {
+		client.applyTLSConfig(tlsConfig)
 	}
 }
 
-func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
+func NewClient(baseURL string, opts ...ClientOption) *Client {
 	baseURL = strings.TrimRight(baseURL, "/")
 
 	c := &Client{
@@ -75,19 +70,10 @@ func NewClient(baseURL string, opts ...ClientOption) (*Client, error) {
 	}
 
 	for _, opt := range opts {
-		if err := opt(c); err != nil {
-			return nil, err
-		}
+		opt(c)
 	}
 
-	return c, nil
-}
-
-func WithRequestTimeout(timeout time.Duration) ClientOption {
-	return func(client *Client) error {
-		client.httpClient.Timeout = timeout
-		return nil
-	}
+	return c
 }
 
 func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKey, err error) {
@@ -287,7 +273,7 @@ func (c *Client) MissingKeys(ctx context.Context, localKeys []phase0.BLSPubKey) 
 
 // applyTLSConfig applies the given TLS configuration to the HTTP client.
 // This method ensures that the HTTP client's transport is properly configured for TLS communication.
-func (c *Client) applyTLSConfig(tlsConfig *tls.Config) error {
+func (c *Client) applyTLSConfig(tlsConfig *tls.Config) {
 	var transport *http.Transport
 	if t, ok := c.httpClient.Transport.(*http.Transport); ok {
 		transport = t.Clone()
@@ -297,6 +283,4 @@ func (c *Client) applyTLSConfig(tlsConfig *tls.Config) error {
 
 	transport.TLSClientConfig = tlsConfig
 	c.httpClient.Transport = transport
-
-	return nil
 }

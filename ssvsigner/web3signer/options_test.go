@@ -14,24 +14,20 @@ func TestWithRequestTimeout(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name        string
-		timeout     time.Duration
-		expectError bool
+		name    string
+		timeout time.Duration
 	}{
 		{
-			name:        "valid timeout",
-			timeout:     5 * time.Second,
-			expectError: false,
+			name:    "valid timeout",
+			timeout: 5 * time.Second,
 		},
 		{
-			name:        "zero timeout",
-			timeout:     0,
-			expectError: false,
+			name:    "zero timeout",
+			timeout: 0,
 		},
 		{
-			name:        "negative timeout",
-			timeout:     -1 * time.Second,
-			expectError: false,
+			name:    "negative timeout",
+			timeout: -1 * time.Second,
 		},
 	}
 
@@ -46,14 +42,9 @@ func TestWithRequestTimeout(t *testing.T) {
 			}
 
 			opt := WithRequestTimeout(tc.timeout)
-			err := opt(w3s)
+			opt(w3s)
 
-			if tc.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.timeout, w3s.httpClient.Timeout)
-			}
+			assert.Equal(t, tc.timeout, w3s.httpClient.Timeout)
 		})
 	}
 }
@@ -61,72 +52,47 @@ func TestWithRequestTimeout(t *testing.T) {
 func TestWithTLS(t *testing.T) {
 	t.Parallel()
 
-	cert := tls.Certificate{
-		Certificate: [][]byte{[]byte("test-certificate")},
-		PrivateKey:  []byte("test-private-key"),
-	}
-
 	testCases := []struct {
-		name                string
-		certificate         tls.Certificate
-		trustedFingerprints map[string]string
-		expectError         bool
-		validateClient      func(t *testing.T, w3s *Web3Signer)
+		name           string
+		tlsConfig      *tls.Config
+		validateClient func(t *testing.T, w3s *Web3Signer)
 	}{
 		{
-			name:                "valid certificate with fingerprints",
-			certificate:         cert,
-			trustedFingerprints: map[string]string{"example.com:443": "aa:bb:cc:dd"},
-			expectError:         false,
+			name: "with certificates",
+			tlsConfig: &tls.Config{
+				Certificates: []tls.Certificate{
+					{
+						Certificate: [][]byte{[]byte("test-certificate")},
+						PrivateKey:  []byte("test-private-key"),
+					},
+				},
+			},
 			validateClient: func(t *testing.T, w3s *Web3Signer) {
 				transport, ok := w3s.httpClient.Transport.(*http.Transport)
 				require.True(t, ok)
 				require.NotNil(t, transport.TLSClientConfig)
 
 				assert.Len(t, transport.TLSClientConfig.Certificates, 1)
-				assert.NotNil(t, transport.TLSClientConfig.VerifyConnection)
 			},
 		},
 		{
-			name:                "valid certificate without fingerprints",
-			certificate:         cert,
-			trustedFingerprints: nil,
-			expectError:         false,
+			name:      "nil config",
+			tlsConfig: nil,
 			validateClient: func(t *testing.T, w3s *Web3Signer) {
 				transport, ok := w3s.httpClient.Transport.(*http.Transport)
 				require.True(t, ok)
-				require.NotNil(t, transport.TLSClientConfig)
-
-				assert.Len(t, transport.TLSClientConfig.Certificates, 1)
-				assert.Nil(t, transport.TLSClientConfig.VerifyConnection)
+				require.Nil(t, transport.TLSClientConfig)
 			},
 		},
 		{
-			name:                "no certificate with fingerprints",
-			certificate:         tls.Certificate{},
-			trustedFingerprints: map[string]string{"example.com:443": "aa:bb:cc:dd"},
-			expectError:         false,
+			name:      "empty config",
+			tlsConfig: &tls.Config{},
 			validateClient: func(t *testing.T, w3s *Web3Signer) {
 				transport, ok := w3s.httpClient.Transport.(*http.Transport)
 				require.True(t, ok)
 				require.NotNil(t, transport.TLSClientConfig)
 
 				assert.Empty(t, transport.TLSClientConfig.Certificates)
-				assert.NotNil(t, transport.TLSClientConfig.VerifyConnection)
-			},
-		},
-		{
-			name:                "no certificate no fingerprints",
-			certificate:         tls.Certificate{},
-			trustedFingerprints: nil,
-			expectError:         false,
-			validateClient: func(t *testing.T, w3s *Web3Signer) {
-				transport, ok := w3s.httpClient.Transport.(*http.Transport)
-				require.True(t, ok)
-				require.NotNil(t, transport.TLSClientConfig)
-
-				assert.Empty(t, transport.TLSClientConfig.Certificates)
-				assert.Nil(t, transport.TLSClientConfig.VerifyConnection)
 			},
 		},
 	}
@@ -141,15 +107,10 @@ func TestWithTLS(t *testing.T) {
 				},
 			}
 
-			opt := WithTLS(tc.certificate, tc.trustedFingerprints)
-			err := opt(w3s)
+			opt := WithTLS(tc.tlsConfig)
+			opt(w3s)
 
-			if tc.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				tc.validateClient(t, w3s)
-			}
+			tc.validateClient(t, w3s)
 		})
 	}
 }
@@ -157,20 +118,22 @@ func TestWithTLS(t *testing.T) {
 func TestMultipleOptions(t *testing.T) {
 	t.Parallel()
 
-	cert := tls.Certificate{
-		Certificate: [][]byte{[]byte("test-certificate")},
-		PrivateKey:  []byte("test-private-key"),
-	}
 	timeout := 30 * time.Second
-	fingerprints := map[string]string{"example.com:443": "aa:bb:cc:dd"}
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{
+			{
+				Certificate: [][]byte{[]byte("test-certificate")},
+				PrivateKey:  []byte("test-private-key"),
+			},
+		},
+	}
 
-	client, err := New(
+	client := New(
 		"https://example.com",
 		WithRequestTimeout(timeout),
-		WithTLS(cert, fingerprints),
+		WithTLS(tlsConfig),
 	)
 
-	require.NoError(t, err)
 	require.NotNil(t, client)
 
 	assert.Equal(t, timeout, client.httpClient.Timeout)
@@ -180,5 +143,4 @@ func TestMultipleOptions(t *testing.T) {
 	require.NotNil(t, transport.TLSClientConfig)
 
 	assert.Len(t, transport.TLSClientConfig.Certificates, 1)
-	assert.NotNil(t, transport.TLSClientConfig.VerifyConnection)
 }

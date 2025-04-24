@@ -20,8 +20,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
-
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
@@ -117,20 +115,11 @@ func (s *Server) ListenAndServe(addr string) error {
 // SetTLS configures TLS for the server.
 //
 // Parameters:
-//   - certificate: server certificate to present to clients (required)
-//   - trustedFingerprints: map of client names to expected certificate fingerprints
+//   - certificate: TLS certificate for the server (required for TLS)
+//   - trustedFingerprints: map of client certificate fingerprints to be trusted
 //     (optional, if provided, client authentication will be required)
-//
-// Returns an error if the TLS configuration is invalid.
-func (s *Server) SetTLS(certificate tls.Certificate, trustedFingerprints map[string]string) error {
-	tlsConfig, err := ssvsignertls.LoadServerConfig(certificate, trustedFingerprints)
-	if err != nil {
-		return fmt.Errorf("failed to configure server TLS: %w", err)
-	}
-
+func (s *Server) SetTLS(tlsConfig *tls.Config) {
 	s.tlsConfig = tlsConfig
-
-	return nil
 }
 
 func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {

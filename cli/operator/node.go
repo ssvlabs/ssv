@@ -83,7 +83,7 @@ type SSVSignerConfig struct {
 	RequestTimeout       time.Duration `yaml:"RequestTimeout" env:"REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
 	KeystoreFile         string        `yaml:"KeystoreFile" env:"KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
 	KeystorePasswordFile string        `yaml:"KeystorePasswordFile" env:"KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
-	KnownServersFile     string        `yaml:"ServersFile" env:"KNOWN_SERVERS_FILE" env-description:"Path to ssv-signer client known servers file"`
+	ServerCertFile       string        `yaml:"ServerCertFile" env:"SERVER_CERT_FILE" env-description:"Path to trusted server certificate file for ssv-signer"`
 }
 
 type config struct {
@@ -173,28 +173,25 @@ var StartNodeCmd = &cobra.Command{
 			var ssvSignerOptions []ssvsigner.ClientOption
 			ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithLogger(logger), ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout))
 
-			if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.KnownServersFile != "" {
-				tlsConfig := ssvsignertls.Config{
+			if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.ServerCertFile != "" {
+				tlsConfig := &ssvsignertls.Config{
 					ClientKeystoreFile:         cfg.SSVSigner.KeystoreFile,
 					ClientKeystorePasswordFile: cfg.SSVSigner.KeystorePasswordFile,
-					ClientKnownServersFile:     cfg.SSVSigner.KnownServersFile,
+					ClientServerCertFile:       cfg.SSVSigner.ServerCertFile,
 				}
 
-				certificate, trustedFingerprints, err := tlsConfig.LoadClientTLS()
+				clientConfig, err := tlsConfig.LoadClientConfigForSSV()
 				if err != nil {
 					logger.Fatal("failed to load ssv-signer TLS config", zap.Error(err))
 				}
 
-				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLS(certificate, trustedFingerprints))
+				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
 			}
 
-			ssvSignerClient, err := ssvsigner.NewClient(
+			ssvSignerClient := ssvsigner.NewClient(
 				cfg.SSVSigner.Endpoint,
 				ssvSignerOptions...,
 			)
-			if err != nil {
-				logger.Fatal("failed to create ssv-signer client", zap.Error(err))
-			}
 
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
@@ -826,7 +823,7 @@ func setupOperatorDataStore(
 // ensureOperatorPrivateKey makes sure the operator private key hash
 // is saved exactly once and never changes thereafter.
 // On first run it saves the current hash; on subsequent runs it errors
-// if the stored hash doesn’t match either the current or legacy hash.
+// if the stored hash doesn't match either the current or legacy hash.
 func ensureOperatorPrivateKey(
 	nodeStorage operatorstorage.Storage,
 	operatorPrivKey keys.OperatorPrivateKey,
@@ -871,7 +868,7 @@ func ensureOperatorPrivateKey(
 
 // ensureOperatorPubKey makes sure the operator public key is stored exactly once
 // and never changes. On first run it saves the key; thereafter it returns an error
-// if the stored key and the new key don’t match.
+// if the stored key and the new key don't match.
 func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBase64 string) error {
 	storedPubKey, found, err := nodeStorage.GetPublicKey()
 	if err != nil {

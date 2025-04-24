@@ -23,8 +23,8 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 		server.Close()
 	})
 
-	web3Signer, err := New(server.URL)
-	require.NoError(t, err)
+	web3Signer := New(server.URL)
+	require.NotNil(t, web3Signer)
 
 	return server, web3Signer
 }
@@ -68,8 +68,7 @@ func TestNew(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			client, err := New(tt.baseURL)
-			require.NoError(t, err)
+			client := New(tt.baseURL)
 			require.NotNil(t, client)
 
 			expectedBaseURL := tt.baseURL
@@ -431,12 +430,11 @@ EKTcWGekdmdDPsHloRNtsiCa697B2O9IFA==
 	tlsCert, err := tls.X509KeyPair(cert, key)
 	require.NoError(t, err)
 
-	trustedFingerprints := map[string]string{
-		"example.com:443": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
 	}
 
-	client, err := New("https://example.com", WithTLS(tlsCert, trustedFingerprints))
-	require.NoError(t, err)
+	client := New("https://example.com", WithTLS(tlsConfig))
 
 	transport, ok := client.httpClient.Transport.(*http.Transport)
 	require.True(t, ok)
@@ -444,5 +442,4 @@ EKTcWGekdmdDPsHloRNtsiCa697B2O9IFA==
 	cfg := transport.TLSClientConfig
 	require.NotNil(t, cfg)
 	require.Len(t, cfg.Certificates, 1)
-	require.NotNil(t, cfg.VerifyConnection)
 }

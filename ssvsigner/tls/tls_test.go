@@ -80,7 +80,7 @@ func TestConfigValidateClientTLS(t *testing.T) {
 	tempDir := t.TempDir()
 	clientKeystoreFile := filepath.Join(tempDir, "client-keystore.p12")
 	passwordFile := filepath.Join(tempDir, "client-password.txt")
-	knownServersFile := filepath.Join(tempDir, "known-servers.txt")
+	serverCertFile := filepath.Join(tempDir, "server-cert.pem")
 
 	testCases := []struct {
 		name          string
@@ -105,9 +105,9 @@ func TestConfigValidateClientTLS(t *testing.T) {
 			errorContains: "client keystore password file is required",
 		},
 		{
-			name: "only known servers",
+			name: "only server certificate",
 			config: Config{
-				ClientKnownServersFile: knownServersFile,
+				ClientServerCertFile: serverCertFile,
 			},
 			expectError: false,
 		},
@@ -134,13 +134,13 @@ func TestConfigValidateClientTLS(t *testing.T) {
 	}
 }
 
-// TestLoadClientConfig tests the LoadClientConfig function.
+// TestLoadClientConfig tests the LoadClientConfig function with Ethereum specific data.
 func TestLoadClientConfig(t *testing.T) {
 	t.Parallel()
 
 	// Create a valid certificate for testing (with non-empty Certificate array)
 	validCert := tls.Certificate{
-		Certificate: [][]byte{[]byte("test certificate data")},
+		Certificate: [][]byte{[]byte("validator-share-signing-certificate")},
 		PrivateKey:  nil,
 	}
 
@@ -152,7 +152,7 @@ func TestLoadClientConfig(t *testing.T) {
 		checkConfig         func(*testing.T, *tls.Config)
 	}{
 		{
-			name:        "empty config",
+			name:        "empty ethereum validator config",
 			expectError: false,
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
 				assert.Equal(t, uint16(MinTLSVersion), cfg.MinVersion)
@@ -161,7 +161,7 @@ func TestLoadClientConfig(t *testing.T) {
 			},
 		},
 		{
-			name:        "with cert",
+			name:        "with validator client cert",
 			certificate: validCert,
 			expectError: false,
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
@@ -170,9 +170,12 @@ func TestLoadClientConfig(t *testing.T) {
 			},
 		},
 		{
-			name:                "with fingerprints",
-			trustedFingerprints: map[string]string{"localhost": "0011223344556677889900aabbccddeeff"},
-			expectError:         false,
+			name: "with web3signer fingerprints",
+			trustedFingerprints: map[string]string{
+				"web3signer.ssv.network": "0011223344556677889900aabbccddeeff",
+				"localhost:9000":         "1122334455667788990011223344556677",
+			},
+			expectError: false,
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
 				assert.Equal(t, uint16(MinTLSVersion), cfg.MinVersion)
 				assert.Empty(t, cfg.Certificates)
@@ -180,9 +183,9 @@ func TestLoadClientConfig(t *testing.T) {
 			},
 		},
 		{
-			name:                "with cert and fingerprints",
+			name:                "with validator cert and web3signer fingerprints",
 			certificate:         validCert,
-			trustedFingerprints: map[string]string{"localhost": "0011223344556677889900aabbccddeeff"},
+			trustedFingerprints: map[string]string{"web3signer.ssv.network": "0011223344556677889900aabbccddeeff"},
 			expectError:         false,
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
 				assert.Equal(t, uint16(MinTLSVersion), cfg.MinVersion)
@@ -213,13 +216,13 @@ func TestLoadClientConfig(t *testing.T) {
 	}
 }
 
-// TestLoadServerConfig tests the LoadServerConfig function.
+// TestLoadServerConfig tests the LoadServerConfig function with SSV specific data.
 func TestLoadServerConfig(t *testing.T) {
 	t.Parallel()
 
 	// Create a valid certificate for testing (with non-empty Certificate array)
 	validCert := tls.Certificate{
-		Certificate: [][]byte{[]byte("test certificate data")},
+		Certificate: [][]byte{[]byte("ssv-signer-certificate-data")},
 		PrivateKey:  nil,
 	}
 
@@ -231,12 +234,12 @@ func TestLoadServerConfig(t *testing.T) {
 		checkConfig         func(*testing.T, *tls.Config)
 	}{
 		{
-			name:        "no certificate",
+			name:        "no ssv-signer certificate",
 			certificate: tls.Certificate{},
 			expectError: true,
 		},
 		{
-			name:        "with cert only",
+			name:        "with ssv-signer cert only",
 			certificate: validCert,
 			expectError: false,
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
@@ -246,9 +249,9 @@ func TestLoadServerConfig(t *testing.T) {
 			},
 		},
 		{
-			name:                "with cert and fingerprints",
+			name:                "with cert and ssv-node fingerprints",
 			certificate:         validCert,
-			trustedFingerprints: map[string]string{"client": "0011223344556677889900aabbccddeeff"},
+			trustedFingerprints: map[string]string{"ssv-node-client": "0011223344556677889900aabbccddeeff"},
 			expectError:         false,
 			checkConfig: func(t *testing.T, cfg *tls.Config) {
 				assert.Equal(t, uint16(MinTLSVersion), cfg.MinVersion)
@@ -455,6 +458,86 @@ func TestFingerprintFormatting(t *testing.T) {
 
 			parsed := parseFingerprint(tc.input)
 			assert.Equal(t, tc.parsed, parsed)
+		})
+	}
+}
+
+// TestLoadServerCertificate tests the loadServerCertificate function.
+func TestLoadServerCertificate(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+
+	// Create a valid certificate for testing - simulating an Ethereum validator service
+	validCertContent := `-----BEGIN CERTIFICATE-----
+MIIDkzCCAnugAwIBAgIUJNgKv8LZFtWAX0Y5MxQ3RvVJPVkwDQYJKoZIhvcNAQEL
+BQAwWTELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM
+DVNhbiBGcmFuY2lzY28xHTAbBgNVBAMMFHdlYjNzaWduZXIuc3N2Lm5ldHdvcmsw
+HhcNMjMwODAxMDAwMDAwWhcNMjQwODAxMDAwMDAwWjBZMQswCQYDVQQGEwJVUzET
+MBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UEBwwNU2FuIEZyYW5jaXNjbzEdMBsG
+A1UEAwwUd2ViM3NpZ25lci5zc3YubmV0d29yazCCASIwDQYJKoZIhvcNAQEBBQAD
+ggEPADCCAQoCggEBAMjS0QgZ0A/HSDtvTrQ2lHPcgLxkZu2HnrQF5oVkAlFngZvt
+CrYjmxgfZmVJVnx/KBgSQy9uP8bmc7JQGX1bA7AAYZdDmGlL3TuU8eZ7koQoQbpQ
+9gNxbQJWGZKLNLHXQ9CgKy2i1FN7KzdVzjuIh4GSJpJRAvYYOmTLQUhvX3rrBf7g
+kE9fLOJbIsRTVcBk5xDXH8EA8hdXX7+eRiXHYQlGF7HUOoOwbV4qVBZ9CatfASJl
+O/wCwIUbFj9CrN7GbF8NGlnR0JzR5sZ4GcSwH7ILc1fhHWgybPHAvKOtKmGhMmD0
+jXnTSUQvsltkt2zRsFPiK5Gm/LwJ0cCTY80CAwEAAaNTMFEwHQYDVR0OBBYEFNJf
+i2NblE2BGm+9Y5AxMUJjm1fzMB8GA1UdIwQYMBaAFNJfi2NblE2BGm+9Y5AxMUJj
+m1fzMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAKfwV6SLuRgZ
+0CtLPZJOyVRxL7bj3Bz2BZ6PAUdAq6vdXr9S1eNVVw9xQlPznMHTBfGbAOHKCYwc
+8iA0+0rizMdAfVZ5szqxQ5fJZzYyJbP0Q/YzjIjIRBYnq9DcAJudwkDz/km7RUUL
+YOhtKyYXpGZ0KOcGrAILQwt4nNKfQ0EtXmGy72FwFnrD8QQeysO2xwCVN+5XCedP
+Kq7PQw8TLXg8gDdaHiLcbFxTCCptrQeYV+38q2ldZcl3BUkbzmtcOkwJTYNgYEJG
+KFQpJQKqYZnBTWvYY8G6KQz/iEFT5AyQJvMtY8g5Z1JBfV7z1ysEESlXZGfVFGnB
+CGZoecHJV8M=
+-----END CERTIFICATE-----`
+	validCertFile := filepath.Join(tempDir, "web3signer-cert.pem")
+	require.NoError(t, os.WriteFile(validCertFile, []byte(validCertContent), 0o600))
+
+	// Create an invalid certificate file
+	invalidCertContent := "This is not a valid PEM certificate file for SSV"
+	invalidCertFile := filepath.Join(tempDir, "invalid-ssv-cert.pem")
+	require.NoError(t, os.WriteFile(invalidCertFile, []byte(invalidCertContent), 0o600))
+
+	testCases := []struct {
+		name          string
+		certFile      string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:        "valid web3signer certificate",
+			certFile:    validCertFile,
+			expectError: false,
+		},
+		{
+			name:          "non-existent validator certificate",
+			certFile:      filepath.Join(tempDir, "eth-validator.pem"),
+			expectError:   true,
+			errorContains: "read certificate file",
+		},
+		{
+			name:          "invalid ssv certificate format",
+			certFile:      invalidCertFile,
+			expectError:   true,
+			errorContains: "failed to decode PEM block",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cert, err := loadServerCertificate(tc.certFile)
+
+			if tc.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.errorContains)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, cert)
+				assert.Equal(t, "web3signer.ssv.network", cert.Subject.CommonName)
+			}
 		})
 	}
 }

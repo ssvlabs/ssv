@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"strings"
@@ -28,7 +29,7 @@ type Config struct {
 	// Client TLS configuration (for connecting to Web3Signer)
 	ClientKeystoreFile         string
 	ClientKeystorePasswordFile string
-	ClientKnownServersFile     string
+	ClientServerCertFile       string
 }
 
 // LoadClientConfig creates a client TLS configuration based on the provided parameters.
@@ -214,15 +215,15 @@ func (c *Config) LoadServerTLS() (tls.Certificate, map[string]string, error) {
 }
 
 // LoadClientTLS loads the client TLS configuration from the provided config.
+// This is a simplified interface that wraps LoadClientConfig for easy configuration.
 // Returns certificate and trusted fingerprints for client configuration.
 func (c *Config) LoadClientTLS() (tls.Certificate, map[string]string, error) {
 	var (
 		certificate  tls.Certificate
 		fingerprints map[string]string
-		err          error
 	)
 
-	// Load certificate if provided
+	// Load client certificate if provided
 	if c.ClientKeystoreFile != "" {
 		password, err := c.getClientKeystorePassword()
 		if err != nil {
@@ -236,15 +237,93 @@ func (c *Config) LoadClientTLS() (tls.Certificate, map[string]string, error) {
 		certificate = cert
 	}
 
-	// Load known servers if provided
-	if c.ClientKnownServersFile != "" {
-		fingerprints, err = loadFingerprintsFile(c.ClientKnownServersFile)
+	// Load trusted server certificate if provided
+	if c.ClientServerCertFile != "" {
+		serverCert, err := loadServerCertificate(c.ClientServerCertFile)
 		if err != nil {
-			return tls.Certificate{}, nil, fmt.Errorf("load known servers: %w", err)
+			return tls.Certificate{}, nil, fmt.Errorf("load trusted server certificate: %w", err)
+		}
+
+		// Calculate fingerprint from the server certificate to use for verification
+		fingerprint := sha256.Sum256(serverCert.Raw)
+		fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
+
+		// Use the certificate's common name or first DNS name as the host identifier
+		hostID := serverCert.Subject.CommonName
+		if hostID == "" && len(serverCert.DNSNames) > 0 {
+			hostID = serverCert.DNSNames[0]
+		}
+
+		if hostID == "" {
+			return tls.Certificate{}, nil, fmt.Errorf("server certificate has no common name or DNS names")
+		}
+
+		fingerprints = map[string]string{
+			hostID: fingerprintHex,
 		}
 	}
 
 	return certificate, fingerprints, nil
+}
+
+// LoadClientConfigForSSV combines the functionality of LoadClientTLS and LoadClientConfig.
+// It's a convenience function that creates a ready-to-use tls.Config object
+// for client connections directly from the configuration options.
+//
+// This is an optimization that avoids creating intermediate data structures
+// when both the certificate and fingerprints are just passed to LoadClientConfig.
+func (c *Config) LoadClientConfigForSSV() (*tls.Config, error) {
+	if c.ClientKeystoreFile == "" && c.ClientServerCertFile == "" {
+		// No TLS configuration needed
+		return &tls.Config{
+			MinVersion: MinTLSVersion,
+		}, nil
+	}
+
+	// Load client certificate if provided
+	var certificate tls.Certificate
+	if c.ClientKeystoreFile != "" {
+		password, err := c.getClientKeystorePassword()
+		if err != nil {
+			return nil, fmt.Errorf("get client keystore password: %w", err)
+		}
+
+		cert, err := loadKeystoreCertificate(c.ClientKeystoreFile, password)
+		if err != nil {
+			return nil, fmt.Errorf("load client certificate: %w", err)
+		}
+		certificate = cert
+	}
+
+	// Load trusted server certificate and convert to fingerprints if provided
+	var trustedFingerprints map[string]string
+	if c.ClientServerCertFile != "" {
+		serverCert, err := loadServerCertificate(c.ClientServerCertFile)
+		if err != nil {
+			return nil, fmt.Errorf("load trusted server certificate: %w", err)
+		}
+
+		// Calculate fingerprint from the server certificate to use for verification
+		fingerprint := sha256.Sum256(serverCert.Raw)
+		fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
+
+		// Use the certificate's common name or first DNS name as the host identifier
+		hostID := serverCert.Subject.CommonName
+		if hostID == "" && len(serverCert.DNSNames) > 0 {
+			hostID = serverCert.DNSNames[0]
+		}
+
+		if hostID == "" {
+			return nil, fmt.Errorf("server certificate has no common name or DNS names")
+		}
+
+		trustedFingerprints = map[string]string{
+			hostID: fingerprintHex,
+		}
+	}
+
+	// Create the final TLS configuration using LoadClientConfig
+	return LoadClientConfig(certificate, trustedFingerprints)
 }
 
 // ValidateServerTLS validates the server TLS configuration.
@@ -275,13 +354,13 @@ func (c *Config) ValidateServerTLS() error {
 // It verifies that TLS configuration is consistent based on multiple valid use cases.
 func (c *Config) ValidateClientTLS() error {
 	// Case 1: No client TLS config provided - TLS is optional
-	if c.ClientKeystoreFile == "" && c.ClientKnownServersFile == "" {
+	if c.ClientKeystoreFile == "" && c.ClientServerCertFile == "" {
 		return nil
 	}
 
-	// Case 2: Only known servers file provided without client certificate
+	// Case 2: Only trusted server certificate file provided without client certificate
 	// This is valid - the client can verify server certificates without presenting its own
-	if c.ClientKeystoreFile == "" && c.ClientKnownServersFile != "" {
+	if c.ClientKeystoreFile == "" && c.ClientServerCertFile != "" {
 		return nil
 	}
 
@@ -290,7 +369,7 @@ func (c *Config) ValidateClientTLS() error {
 		return fmt.Errorf("client keystore password file is required when using a client keystore file")
 	}
 
-	// Case 4: Client keystore and password file provided (with or without known servers)
+	// Case 4: Client keystore and password file provided (with or without server certificate)
 	// This is a valid configuration for mutual TLS
 	return nil
 }
@@ -444,4 +523,69 @@ func formatFingerprintWithColons(fingerprint string) string {
 // Returns the standardized fingerprint.
 func parseFingerprint(fingerprint string) string {
 	return strings.ToLower(strings.ReplaceAll(fingerprint, ":", ""))
+}
+
+// loadServerCertificate loads a PEM-encoded certificate from a file.
+// This function reads a trusted server certificate in X.509 PEM format.
+//
+// Parameters:
+// - certFile: path to the certificate file
+//
+// Returns the parsed X.509 certificate or an error if loading fails.
+func loadServerCertificate(certFile string) (*x509.Certificate, error) {
+	certData, err := os.ReadFile(certFile)
+	if err != nil {
+		return nil, fmt.Errorf("read certificate file: %w", err)
+	}
+
+	// Parse the PEM-encoded certificate
+	block, _ := pem.Decode(certData)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, fmt.Errorf("failed to decode PEM block containing certificate")
+	}
+
+	// Parse the certificate
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse certificate: %w", err)
+	}
+
+	return cert, nil
+}
+
+// LoadServerConfigForSSV combines the functionality of LoadServerTLS and LoadServerConfig.
+// It's a convenience function that creates a ready-to-use tls.Config object
+// for server connections directly from the configuration options.
+func (c *Config) LoadServerConfigForSSV() (*tls.Config, error) {
+	// Check if TLS is configured
+	if c.ServerKeystoreFile == "" {
+		// Return a default TLS config with minimum version set
+		return &tls.Config{
+			MinVersion: MinTLSVersion,
+		}, nil
+	}
+
+	// Load server certificate
+	password, err := c.getServerKeystorePassword()
+	if err != nil {
+		return nil, fmt.Errorf("get server keystore password: %w", err)
+	}
+
+	certificate, err := loadKeystoreCertificate(c.ServerKeystoreFile, password)
+	if err != nil {
+		return nil, fmt.Errorf("load server certificate: %w", err)
+	}
+
+	// Load known clients if provided
+	var trustedFingerprints map[string]string
+	if c.ServerKnownClientsFile != "" {
+		fingerprints, err := loadFingerprintsFile(c.ServerKnownClientsFile)
+		if err != nil {
+			return nil, fmt.Errorf("load known clients: %w", err)
+		}
+		trustedFingerprints = fingerprints
+	}
+
+	// Create the final TLS configuration using LoadServerConfig
+	return LoadServerConfig(certificate, trustedFingerprints)
 }

@@ -40,8 +40,8 @@ func (s *SSVSignerClientSuite) SetupTest() {
 		s.serverHits++
 		s.mux.ServeHTTP(w, r)
 	}))
-	s.client, err = NewClient(s.server.URL, WithLogger(s.logger))
-	s.Require().NoError(err, "failed to create client")
+	s.client = NewClient(s.server.URL, WithLogger(s.logger))
+	s.Require().NotNil(s.client)
 }
 
 func (s *SSVSignerClientSuite) TearDownTest() {
@@ -702,14 +702,14 @@ func (s *SSVSignerClientSuite) TestNew() {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := NewClient(tc.baseURL)
-			require.NoError(t, err)
+			client := NewClient(tc.baseURL)
+
 			assert.Equal(t, tc.expectedBaseURL, client.baseURL)
 			assert.NotNil(t, client.httpClient)
 
 			logger, _ := zap.NewDevelopment()
-			clientWithLogger, err := NewClient(tc.baseURL, WithLogger(logger))
-			require.NoError(t, err)
+			clientWithLogger := NewClient(tc.baseURL, WithLogger(logger))
+
 			assert.Equal(t, tc.expectedBaseURL, clientWithLogger.baseURL)
 			assert.Equal(t, logger, clientWithLogger.logger)
 		})
@@ -729,14 +729,13 @@ func TestCustomHTTPClient(t *testing.T) {
 		},
 	}
 
-	withCustomClient := func(client *Client) error {
+	withCustomClient := func(client *Client) {
 		client.httpClient = customClient
-		return nil
 	}
 
 	logger, _ := zap.NewDevelopment()
-	c, err := NewClient("http://example.com", WithLogger(logger), withCustomClient)
-	require.NoError(t, err)
+	c := NewClient("http://example.com", WithLogger(logger), withCustomClient)
+
 	assert.Equal(t, customClient, c.httpClient)
 }
 
@@ -759,10 +758,9 @@ func TestRequestErrors(t *testing.T) {
 	defer server.Close()
 
 	logger, _ := zap.NewDevelopment()
-	client, err := NewClient(server.URL, WithLogger(logger))
-	require.NoError(t, err)
+	client := NewClient(server.URL, WithLogger(logger))
 
-	err = client.AddValidators(context.Background(), ShareKeys{
+	err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
@@ -792,10 +790,9 @@ func TestResponseHandlingErrors(t *testing.T) {
 	defer server.Close()
 
 	logger, _ := zap.NewDevelopment()
-	client, err := NewClient(server.URL, WithLogger(logger))
-	require.NoError(t, err)
+	client := NewClient(server.URL, WithLogger(logger))
 
-	err = client.AddValidators(context.Background(), ShareKeys{
+	err := client.AddValidators(context.Background(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
@@ -849,20 +846,19 @@ func TestNew(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			client, err := NewClient(tc.baseURL, tc.opts...)
-			require.NoError(t, err)
-			require.NotNil(t, client)
+			newClient := NewClient(tc.baseURL, tc.opts...)
+			require.NotNil(t, newClient)
 
-			assert.Equal(t, tc.expectedBaseURL, client.baseURL)
+			assert.Equal(t, tc.expectedBaseURL, newClient.baseURL)
 
 			if tc.checkLogger && tc.expectedLogger != nil {
-				assert.Equal(t, tc.expectedLogger, client.logger)
+				assert.Equal(t, tc.expectedLogger, newClient.logger)
 			} else {
-				assert.NotNil(t, client.logger) // default noop logger
+				assert.NotNil(t, newClient.logger) // default noop logger
 			}
 
-			assert.NotNil(t, client.httpClient)
-			assert.Equal(t, DefaultRequestTimeout, client.httpClient.Timeout)
+			assert.NotNil(t, newClient.httpClient)
+			assert.Equal(t, DefaultRequestTimeout, newClient.httpClient.Timeout)
 		})
 	}
 }
@@ -884,9 +880,8 @@ func TestNewClient_TrimsTrailingSlashFromURL(t *testing.T) {
 	const inputURL = "https://test.example.com/"
 	const expectedURL = "https://test.example.com"
 
-	client, err := NewClient(inputURL)
+	client := NewClient(inputURL)
 
-	require.NoError(t, err)
 	require.NotNil(t, client)
 	assert.Equal(t, expectedURL, client.baseURL)
 }

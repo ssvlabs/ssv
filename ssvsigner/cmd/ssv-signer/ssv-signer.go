@@ -35,7 +35,7 @@ type CLI struct {
 	// Client TLS configuration (for connecting to Web3Signer)
 	Web3SignerKeystoreFile         string `env:"WEB3SIGNER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
 	Web3SignerKeystorePasswordFile string `env:"WEB3SIGNER_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
-	Web3SignerKnownServersFile     string `env:"WEB3SIGNER_KNOWN_SERVERS_FILE" env-description:"Path to known servers file for authenticating Web3Signer"`
+	Web3SignerServerCertFile       string `env:"WEB3SIGNER_SERVER_CERT_FILE" env-description:"Path to trusted server certificate file for authenticating Web3Signer"`
 }
 
 func main() {
@@ -76,7 +76,7 @@ func run(logger *zap.Logger, cli CLI) error {
 
 		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
 		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
-		ClientKnownServersFile:     cli.Web3SignerKnownServersFile,
+		ClientServerCertFile:       cli.Web3SignerServerCertFile,
 	}
 
 	if err := validateConfig(cli, tlsConfig); err != nil {
@@ -158,8 +158,9 @@ func loadOperatorKey(privateKeyStr, privateKeyFile, passwordFile string) (keys.O
 }
 
 func setupWeb3SignerClient(endpoint string, timeout time.Duration, tlsConfig tls.Config) (*web3signer.Web3Signer, error) {
-	if tlsConfig.ClientKeystoreFile != "" || tlsConfig.ClientKnownServersFile != "" {
-		certificate, fingerprints, err := tlsConfig.LoadClientTLS()
+	if tlsConfig.ClientKeystoreFile != "" || tlsConfig.ClientServerCertFile != "" {
+		// Use the optimized method to create TLS config directly
+		config, err := tlsConfig.LoadClientConfigForSSV()
 		if err != nil {
 			return nil, fmt.Errorf("load client TLS config: %w", err)
 		}
@@ -168,15 +169,15 @@ func setupWeb3SignerClient(endpoint string, timeout time.Duration, tlsConfig tls
 		return web3signer.New(
 			endpoint,
 			web3signer.WithRequestTimeout(timeout),
-			web3signer.WithTLS(certificate, fingerprints),
-		)
+			web3signer.WithTLS(config),
+		), nil
 	}
 
 	// Create client without TLS
 	return web3signer.New(
 		endpoint,
 		web3signer.WithRequestTimeout(timeout),
-	)
+	), nil
 }
 
 func startServer(logger *zap.Logger, listenAddr string, operatorKey keys.OperatorPrivateKey, web3SignerClient *web3signer.Web3Signer, tlsConfig tls.Config) error {
@@ -190,15 +191,12 @@ func startServer(logger *zap.Logger, listenAddr string, operatorKey keys.Operato
 	// Configure server TLS if needed
 	if tlsConfig.ServerKeystoreFile != "" {
 		// Load server TLS configuration
-		certificate, fingerprints, err := tlsConfig.LoadServerTLS()
+		config, err := tlsConfig.LoadServerConfigForSSV()
 		if err != nil {
 			return fmt.Errorf("load server TLS config: %w", err)
 		}
 
-		// Set TLS configuration
-		if err := srv.SetTLS(certificate, fingerprints); err != nil {
-			return fmt.Errorf("set server TLS config: %w", err)
-		}
+		srv.SetTLS(config)
 	}
 
 	return srv.ListenAndServe(listenAddr)
