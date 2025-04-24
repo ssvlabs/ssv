@@ -229,9 +229,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 }
 
 // StreamLogs subscribes to events emitted by the contract.
-func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlockInputValue uint64) <-chan BlockLogs {
-	fromBlock := fromBlockInputValue
-
+func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
 	logs := make(chan BlockLogs)
 
 	go func() {
