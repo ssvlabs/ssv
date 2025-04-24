@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/ssvsigner/tls"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -60,13 +60,13 @@ func run(logger *zap.Logger, cli CLI) error {
 		return fmt.Errorf("init BLS: %w", err)
 	}
 
-	if _, err := url.Parse(cli.Web3SignerEndpoint); err != nil {
+	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
 	ctx := context.Background()
 
-	tlsConfig := tls.Config{
+	tlsConfig := ssvsignertls.Config{
 		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
 		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
 		ClientServerCertFile:       cli.Web3SignerServerCertFile,

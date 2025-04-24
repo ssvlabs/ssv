@@ -112,7 +112,8 @@ func TestLoadOperatorKeystore(t *testing.T) {
 
 		result, err := LoadOperatorKeystore(nonExistentFile, passwordFile)
 		require.Nil(t, result)
-		require.ErrorContains(t, err, "could not read PEM file")
+		require.ErrorContains(t, err, "read keystore file")
+		require.ErrorContains(t, err, "no such file or directory")
 	})
 
 	t.Run("fails when passwordFile does not exist", func(t *testing.T) {
@@ -125,7 +126,8 @@ func TestLoadOperatorKeystore(t *testing.T) {
 
 		result, err := LoadOperatorKeystore(tmpEncryptedFile, passwordFile)
 		require.Nil(t, result)
-		require.ErrorContains(t, err, "could not read password file")
+		require.ErrorContains(t, err, "read password file")
+		require.ErrorContains(t, err, "no such file or directory")
 	})
 
 	t.Run("fails if password file is empty", func(t *testing.T) {
@@ -154,7 +156,7 @@ func TestLoadOperatorKeystore(t *testing.T) {
 		result, err := LoadOperatorKeystore(tmpEncryptedFile, tmpPasswordFile)
 		require.Nil(t, result)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "could not decrypt operator private key keystore")
+		require.Contains(t, err.Error(), "decrypt operator private key keystore")
 	})
 
 	t.Run("fails if PrivateKeyFromBytes returns an error", func(t *testing.T) {
@@ -174,7 +176,7 @@ func TestLoadOperatorKeystore(t *testing.T) {
 		result, err := LoadOperatorKeystore(tmpEncryptedFile, tmpPasswordFile)
 		require.Nil(t, result)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "could not extract operator private key from file")
+		require.Contains(t, err.Error(), "extract operator private key from keystore")
 	})
 
 	t.Run("succeeds with valid files and data", func(t *testing.T) {
