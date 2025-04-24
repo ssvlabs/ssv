@@ -17,6 +17,7 @@ import (
 )
 
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+	// TODO: pull from beacon node
 	specResponse, err := gc.Spec(ctx)
 	if err != nil {
 		return phase0.Domain{}, fmt.Errorf("fetch spec: %w", err)

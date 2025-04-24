@@ -377,7 +377,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return // Tests may override Fatal's behavior
 			}
 
-			spec, err := specImpl(ctx, gc.log, s)
+			spec, err := specForClient(ctx, logger, s)
 			if err != nil {
 				logger.Error(clResponseErrMsg,
 					zap.String("api", "Spec"),
