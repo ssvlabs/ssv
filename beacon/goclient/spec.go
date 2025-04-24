@@ -75,7 +75,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	}
 
 	epochsPerSyncCommitteePeriod := DefaultEpochsPerSyncCommitteePeriod
-	if epochsPerSyncCommitteePeriodRaw, ok := specResponse.Data["EPOCHS_PER_SYNC_COMMITTEE_PERIOD"]; ok {
+	if epochsPerSyncCommitteePeriodRaw, ok := specResponse["EPOCHS_PER_SYNC_COMMITTEE_PERIOD"]; ok {
 		if epochsPerSyncCommitteePeriodDecoded, ok := epochsPerSyncCommitteePeriodRaw.(uint64); ok {
 			epochsPerSyncCommitteePeriod = phase0.Epoch(epochsPerSyncCommitteePeriodDecoded)
 		} else {
@@ -85,7 +85,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	}
 
 	syncCommitteeSize := DefaultSyncCommitteeSize
-	if syncCommitteeSizeRaw, ok := specResponse.Data["SYNC_COMMITTEE_SIZE"]; ok {
+	if syncCommitteeSizeRaw, ok := specResponse["SYNC_COMMITTEE_SIZE"]; ok {
 		if syncCommitteeSizeDecoded, ok := syncCommitteeSizeRaw.(uint64); ok {
 			syncCommitteeSize = syncCommitteeSizeDecoded
 		} else {
@@ -95,7 +95,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	}
 
 	targetAggregatorsPerCommittee := DefaultTargetAggregatorsPerCommittee
-	if targetAggregatorsPerCommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_COMMITTEE"]; ok {
+	if targetAggregatorsPerCommitteeRaw, ok := specResponse["TARGET_AGGREGATORS_PER_COMMITTEE"]; ok {
 		if targetAggregatorsPerCommitteeDecoded, ok := targetAggregatorsPerCommitteeRaw.(uint64); ok {
 			targetAggregatorsPerCommittee = targetAggregatorsPerCommitteeDecoded
 		} else {
@@ -105,7 +105,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	}
 
 	targetAggregatorsPerSyncSubcommittee := DefaultTargetAggregatorsPerSyncSubcommittee
-	if targetAggregatorsPerSyncSubcommitteeRaw, ok := specResponse.Data["TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"]; ok {
+	if targetAggregatorsPerSyncSubcommitteeRaw, ok := specResponse["TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"]; ok {
 		if targetAggregatorsPerSyncSubcommitteeDecoded, ok := targetAggregatorsPerSyncSubcommitteeRaw.(uint64); ok {
 			targetAggregatorsPerSyncSubcommittee = targetAggregatorsPerSyncSubcommitteeDecoded
 		} else {
@@ -115,7 +115,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	}
 
 	intervalsPerSlot := DefaultIntervalsPerSlot
-	if intervalsPerSlotRaw, ok := specResponse.Data["INTERVALS_PER_SLOT"]; ok {
+	if intervalsPerSlotRaw, ok := specResponse["INTERVALS_PER_SLOT"]; ok {
 		if intervalsPerSlotDecoded, ok := intervalsPerSlotRaw.(uint64); ok {
 			intervalsPerSlot = intervalsPerSlotDecoded
 		} else {
@@ -125,7 +125,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	}
 
 	syncCommitteeSubnetCount := DefaultSyncCommitteeSubnetCount
-	if syncCommitteeSubnetCountRaw, ok := specResponse.Data["SYNC_COMMITTEE_SUBNET_COUNT"]; ok {
+	if syncCommitteeSubnetCountRaw, ok := specResponse["SYNC_COMMITTEE_SUBNET_COUNT"]; ok {
 		if syncCommitteeSubnetCountDecoded, ok := syncCommitteeSubnetCountRaw.(uint64); ok {
 			syncCommitteeSubnetCount = syncCommitteeSubnetCountDecoded
 		} else {
@@ -134,7 +134,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		}
 	}
 
-	start = time.Now()
+	start := time.Now()
 	genesisResponse, err := genesisForClient(gc.ctx, gc.log, client)
 	recordRequestDuration(gc.ctx, "Genesis", client.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
@@ -154,7 +154,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		IntervalsPerSlot:                     intervalsPerSlot,
 		ForkVersion:                          genesisResponse.GenesisForkVersion,
 		GenesisTime:                          genesisResponse.GenesisTime,
-		GenesisValidatorsRoot:                genesisResponse.Data.GenesisValidatorsRoot,
+		GenesisValidatorsRoot:                genesisResponse.GenesisValidatorsRoot,
 	}
 
 	return beaconConfig, nil
