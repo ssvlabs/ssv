@@ -35,15 +35,9 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	}
 
 	forkData := &phase0.ForkData{
-		CurrentVersion: forkVersion,
+		CurrentVersion:        forkVersion,
+		GenesisValidatorsRoot: gc.getBeaconConfig().GenesisValidatorsRoot,
 	}
-
-	genesis, err := gc.Genesis(ctx)
-	if err != nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
-	}
-
-	forkData.GenesisValidatorsRoot = genesis.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
 	if err != nil {
