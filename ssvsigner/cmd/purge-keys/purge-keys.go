@@ -16,13 +16,18 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
 type CLI struct {
 	Web3SignerEndpoint string `env:"WEB3SIGNER_ENDPOINT" required:""`
 	BatchSize          int    `env:"BATCH_SIZE" default:"20"` // reduce if getting context deadline exceeded; increase if it's fast
+
+	// Client TLS configuration (for connecting to Web3Signer)
+	Web3SignerKeystoreFile         string `env:"WEB3SIGNER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
+	Web3SignerKeystorePasswordFile string `env:"WEB3SIGNER_KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	Web3SignerServerCertFile       string `env:"WEB3SIGNER_SERVER_CERT_FILE" env-description:"Path to trusted server certificate file for authenticating Web3Signer"`
 }
 
 func main() {
@@ -43,10 +48,12 @@ func main() {
 		logger.Fatal("Application failed", zap.Error(err))
 	}
 }
+
 func run(logger *zap.Logger, cli CLI) error {
 	logger.Debug("running",
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
 		zap.Int("batch_size", cli.BatchSize),
+		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != "" || cli.Web3SignerServerCertFile != ""),
 	)
 
 	if err := bls.Init(bls.BLS12_381); err != nil {
@@ -58,7 +65,25 @@ func run(logger *zap.Logger, cli CLI) error {
 	}
 
 	ctx := context.Background()
-	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint)
+
+	tlsConfig := ssvsignertls.Config{
+		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
+		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
+		ClientServerCertFile:       cli.Web3SignerServerCertFile,
+	}
+
+	var options []web3signer.Option
+
+	if cli.Web3SignerKeystoreFile != "" || cli.Web3SignerServerCertFile != "" {
+		config, err := tlsConfig.LoadClientTLSConfig()
+		if err != nil {
+			return fmt.Errorf("load client TLS config: %w", err)
+		}
+
+		options = append(options, web3signer.WithTLS(config))
+	}
+
+	web3SignerClient := web3signer.New(cli.Web3SignerEndpoint, options...)
 
 	fetchStart := time.Now()
 	logger.Info("fetching key list")
