@@ -46,7 +46,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 
 	networkNameRaw, ok := specResponse["CONFIG_NAME"]
 	if !ok {
-		return networkconfig.BeaconConfig{}, fmt.Errorf("config name not known by chain")
+		return networkconfig.BeaconConfig{}, fmt.Errorf("config name wasn't found in beacon node response")
 	}
 
 	networkName, ok := networkNameRaw.(string)
@@ -59,7 +59,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		if slotDurationDecoded, ok := slotDurationRaw.(time.Duration); ok {
 			slotDuration = slotDurationDecoded
 		} else {
-			gc.log.Warn("seconds per slot not known by chain, using default value",
+			gc.log.Warn("seconds per slot wasn't found in beacon node response, using default value",
 				zap.Any("value", slotDuration))
 		}
 	}
@@ -69,7 +69,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		if slotsPerEpochDecoded, ok := slotsPerEpochRaw.(uint64); ok {
 			slotsPerEpoch = phase0.Slot(slotsPerEpochDecoded)
 		} else {
-			gc.log.Warn("slots per epoch not known by chain, using default value",
+			gc.log.Warn("slots per epoch wasn't found in beacon node response, using default value",
 				zap.Any("value", slotsPerEpoch))
 		}
 	}
@@ -79,7 +79,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		if epochsPerSyncCommitteePeriodDecoded, ok := epochsPerSyncCommitteePeriodRaw.(uint64); ok {
 			epochsPerSyncCommitteePeriod = phase0.Epoch(epochsPerSyncCommitteePeriodDecoded)
 		} else {
-			gc.log.Warn("epochs per sync committee not known by chain, using default value",
+			gc.log.Warn("epochs per sync committee wasn't found in beacon node response, using default value",
 				zap.Any("value", epochsPerSyncCommitteePeriod))
 		}
 	}
@@ -89,7 +89,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		if syncCommitteeSizeDecoded, ok := syncCommitteeSizeRaw.(uint64); ok {
 			syncCommitteeSize = syncCommitteeSizeDecoded
 		} else {
-			gc.log.Warn("sync committee size not known by chain, using default value",
+			gc.log.Warn("sync committee size wasn't found in beacon node response, using default value",
 				zap.Any("value", syncCommitteeSize))
 		}
 	}
@@ -99,7 +99,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		if targetAggregatorsPerCommitteeDecoded, ok := targetAggregatorsPerCommitteeRaw.(uint64); ok {
 			targetAggregatorsPerCommittee = targetAggregatorsPerCommitteeDecoded
 		} else {
-			gc.log.Warn("target aggregators per committee not known by chain, using default value",
+			gc.log.Warn("target aggregators per committee wasn't found in beacon node response, using default value",
 				zap.Any("value", targetAggregatorsPerCommittee))
 		}
 	}
@@ -109,7 +109,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		if targetAggregatorsPerSyncSubcommitteeDecoded, ok := targetAggregatorsPerSyncSubcommitteeRaw.(uint64); ok {
 			targetAggregatorsPerSyncSubcommittee = targetAggregatorsPerSyncSubcommitteeDecoded
 		} else {
-			gc.log.Warn("target aggregators per sync subcommittee not known by chain, using default value",
+			gc.log.Warn("target aggregators per sync subcommittee wasn't found in beacon node response, using default value",
 				zap.Any("value", targetAggregatorsPerSyncSubcommittee))
 		}
 	}
@@ -119,7 +119,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		if intervalsPerSlotDecoded, ok := intervalsPerSlotRaw.(uint64); ok {
 			intervalsPerSlot = intervalsPerSlotDecoded
 		} else {
-			gc.log.Warn("intervals per slot not known by chain, using default value",
+			gc.log.Warn("intervals per slot wasn't found in beacon node response, using default value",
 				zap.Any("value", intervalsPerSlot))
 		}
 	}
@@ -129,7 +129,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 		if syncCommitteeSubnetCountDecoded, ok := syncCommitteeSubnetCountRaw.(uint64); ok {
 			syncCommitteeSubnetCount = syncCommitteeSubnetCountDecoded
 		} else {
-			gc.log.Warn("sync committee subnet count not known by chain, using default value",
+			gc.log.Warn("sync committee subnet count wasn't found in beacon node response, using default value",
 				zap.Any("value", syncCommitteeSubnetCount))
 		}
 	}
