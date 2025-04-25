@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+
 	"github.com/ssvlabs/ssv/ssvsigner"
 )
 
@@ -2164,8 +2165,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
 
-	networkCfg := networkconfig.NetworkConfig{}
-
 	const sampleRSAPublicKey = `
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArVzXJ1Xm3YIY8QYs2MFL
@@ -2206,8 +2205,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
 
-	networkCfg := networkconfig.NetworkConfig{}
-
 	invalidPubKey := "invalid-public-key-format"
 	s.client.On("OperatorIdentity", mock.Anything).Return(invalidPubKey, nil)
 
@@ -2235,8 +2232,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 	s.db.On("Begin").Return(s.txn, nil).Maybe()
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
-
-	networkCfg := networkconfig.NetworkConfig{}
 
 	s.client.On("OperatorIdentity", mock.Anything).Return("", errors.New("err"))
 
