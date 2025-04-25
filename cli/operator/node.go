@@ -170,8 +170,10 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 
-			var ssvSignerOptions []ssvsigner.ClientOption
-			ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithLogger(logger), ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout))
+			ssvSignerOptions := []ssvsigner.ClientOption{
+				ssvsigner.WithLogger(logger),
+				ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout),
+			}
 
 			if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.ServerCertFile != "" {
 				tlsConfig := &ssvsignertls.Config{

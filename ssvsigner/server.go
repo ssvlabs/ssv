@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -50,6 +51,7 @@ func NewServer(
 	logger *zap.Logger,
 	operatorPrivKey keys.OperatorPrivateKey,
 	remoteSigner web3signer.RemoteSigner,
+	opts ...Option,
 ) *Server {
 	r := router.New()
 
@@ -58,6 +60,10 @@ func NewServer(
 		operatorPrivKey: operatorPrivKey,
 		remoteSigner:    remoteSigner,
 		router:          r,
+	}
+
+	for _, opt := range opts {
+		opt(server)
 	}
 
 	r.GET(pathValidators, server.handleListValidators)
@@ -69,6 +75,21 @@ func NewServer(
 	r.POST(pathOperatorSign, server.handleSignOperator)
 
 	return server
+}
+
+type Option func(*Server)
+
+// WithTLS configures TLS for the server.
+//
+// This method takes a pre-configured TLS config object that defines the server's
+// TLS certificate and optional client authentication settings.
+//
+// Parameters:
+//   - tlsConfig: A complete tls.Config object, typically created by tls.LoadServerTLSConfig()
+func WithTLS(tlsConfig *tls.Config) func(*Server) {
+	return func(s *Server) {
+		s.tlsConfig = tlsConfig
+	}
 }
 
 func (s *Server) Handler() func(ctx *fasthttp.RequestCtx) {
@@ -110,17 +131,6 @@ func (s *Server) ListenAndServe(addr string) error {
 
 	s.logger.Info("starting server without TLS", zap.String("addr", addr))
 	return fasthttp.ListenAndServe(addr, handler)
-}
-
-// SetTLS configures TLS for the server.
-//
-// This method takes a pre-configured TLS config object that defines the server's
-// TLS certificate and optional client authentication settings.
-//
-// Parameters:
-//   - tlsConfig: A complete tls.Config object, typically created by tls.LoadServerTLSConfig()
-func (s *Server) SetTLS(tlsConfig *tls.Config) {
-	s.tlsConfig = tlsConfig
 }
 
 func (s *Server) handleListValidators(ctx *fasthttp.RequestCtx) {

@@ -176,8 +176,7 @@ func startServer(logger *zap.Logger, listenAddr string, operatorKey keys.Operato
 		zap.Bool("tls_enabled", tlsConfig.ServerKeystoreFile != ""),
 	)
 
-	srv := ssvsigner.NewServer(logger, operatorKey, web3SignerClient)
-
+	var opts []ssvsigner.Option
 	// Configure server TLS if needed
 	if tlsConfig.ServerKeystoreFile != "" {
 		// Load server TLS configuration
@@ -186,8 +185,9 @@ func startServer(logger *zap.Logger, listenAddr string, operatorKey keys.Operato
 			return fmt.Errorf("load server TLS config: %w", err)
 		}
 
-		srv.SetTLS(config)
+		opts = append(opts, ssvsigner.WithTLS(config))
 	}
 
+	srv := ssvsigner.NewServer(logger, operatorKey, web3SignerClient, opts...)
 	return srv.ListenAndServe(listenAddr)
 }

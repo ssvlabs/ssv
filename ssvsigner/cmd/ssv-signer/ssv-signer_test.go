@@ -111,14 +111,4 @@ func TestCLIConfiguration(t *testing.T) {
 		assert.Equal(t, ":8888", cli.ListenAddr)
 		assert.Equal(t, "http://localhost:9000", cli.Web3SignerEndpoint)
 	})
-
-	t.Run("Configure via direct assignment", func(t *testing.T) {
-		cli := &CLI{}
-
-		cli.ListenAddr = ":7777"
-		cli.Web3SignerEndpoint = "https://example.org/web3signer"
-
-		assert.Equal(t, ":7777", cli.ListenAddr)
-		assert.Equal(t, "https://example.org/web3signer", cli.Web3SignerEndpoint)
-	})
 }

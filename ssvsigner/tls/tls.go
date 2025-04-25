@@ -196,7 +196,7 @@ func (c *Config) loadServerFingerprints() (map[string]string, error) {
 	}
 
 	fingerprint := sha256.Sum256(serverCert.Raw)
-	fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
+	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
 	// Try to get a host identifier from the certificate
 	hostID := serverCert.Subject.CommonName
@@ -281,7 +281,7 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 
 	cert := state.PeerCertificates[0]
 	fingerprint := sha256.Sum256(cert.Raw)
-	fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
+	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
 	// Get the hostname from multiple possible sources
 	host := state.ServerName
@@ -325,7 +325,7 @@ func verifyClientCertificate(rawCerts [][]byte, trustedFingerprints map[string]s
 	}
 
 	fingerprint := sha256.Sum256(cert.Raw)
-	fingerprintHex := strings.ToLower(hex.EncodeToString(fingerprint[:]))
+	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
 	// Check fingerprint against our trusted list
 	if expectedFingerprint, ok := trustedFingerprints[clientName]; ok {
