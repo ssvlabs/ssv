@@ -261,10 +261,6 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 						return nextBlockToProcess, err
 					}
 
-					if err == nil {
-						return nil, errors.New("streamLogsToChan halted without an error")
-					}
-
 					fromBlock = nextBlockToProcess
 					return nil, err
 				}
