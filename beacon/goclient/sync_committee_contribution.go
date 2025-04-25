@@ -24,6 +24,8 @@ func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 
 	// Keep the signature if it's an aggregator.
 	cfg := gc.BeaconConfig()
+
+	// as per spec: https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/validator.md#aggregation-selection
 	modulo := cfg.SyncCommitteeSize / cfg.SyncCommitteeSubnetCount / cfg.TargetAggregatorsPerSyncSubcommittee
 	if modulo == uint64(0) {
 		// Modulo must be at least 1.
