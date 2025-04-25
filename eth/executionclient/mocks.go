@@ -378,16 +378,16 @@ func (mr *MockSingleClientProviderMockRecorder) SyncProgress(ctx any) *gomock.Ca
 }
 
 // streamLogsToChan mocks base method.
-func (m *MockSingleClientProvider) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (uint64, error) {
+func (m *MockSingleClientProvider) streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "streamLogsToChan", ctx, logs, fromBlock)
+	ret := m.ctrl.Call(m, "streamLogsToChan", ctx, logCh, fromBlock)
 	ret0, _ := ret[0].(uint64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // streamLogsToChan indicates an expected call of streamLogsToChan.
-func (mr *MockSingleClientProviderMockRecorder) streamLogsToChan(ctx, logs, fromBlock any) *gomock.Call {
+func (mr *MockSingleClientProviderMockRecorder) streamLogsToChan(ctx, logCh, fromBlock any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "streamLogsToChan", reflect.TypeOf((*MockSingleClientProvider)(nil).streamLogsToChan), ctx, logs, fromBlock)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "streamLogsToChan", reflect.TypeOf((*MockSingleClientProvider)(nil).streamLogsToChan), ctx, logCh, fromBlock)
 }
