@@ -41,7 +41,7 @@ type Provider interface {
 type SingleClientProvider interface {
 	Provider
 	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
-	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (nextBlockToProcess uint64, err error)
+	streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (nextBlockToProcess uint64, err error)
 }
 
 var _ Provider = &ExecutionClient{}
@@ -386,7 +386,7 @@ func (ec *ExecutionClient) isClosed() bool {
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
 // streamLogsToChan *always* returns the next block to process.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
-func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (uint64, error) {
+func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 	heads := make(chan *ethtypes.Header)
 
 	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
@@ -438,7 +438,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
-				logs <- block
+				logCh <- block
 				fromBlock = max(fromBlock, block.BlockNumber+1)
 			}
 			if err := <-fetchErrors; err != nil {
