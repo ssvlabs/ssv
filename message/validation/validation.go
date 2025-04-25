@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ssvlabs/ssv/utils/casts"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
