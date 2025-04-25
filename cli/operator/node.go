@@ -963,7 +963,6 @@ func syncContractEvents(
 		operatorDataStore,
 		operatorDecrypter,
 		keyManager,
-		cfg.SSVOptions.ValidatorOptions.Beacon,
 		doppelgangerHandler,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
