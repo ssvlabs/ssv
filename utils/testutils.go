@@ -94,6 +94,8 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 		},
 	).AnyTimes()
 
+	mockNetwork.EXPECT().EpochDuration().Return(time.Duration(mockNetwork.GetSlotsPerEpoch()) * mockNetwork.GetSlotDuration()).AnyTimes()
+
 	mockNetwork.EXPECT().GetDomainType().Return(domainType).AnyTimes()
 
 	mockNetwork.EXPECT().GetBeaconName().Return(string(beaconNetwork)).AnyTimes()
