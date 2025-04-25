@@ -94,7 +94,7 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 		},
 	).AnyTimes()
 
-	mockNetwork.EXPECT().EpochDuration().Return(time.Duration(mockNetwork.GetSlotsPerEpoch()) * mockNetwork.GetSlotDuration()).AnyTimes()
+	mockNetwork.EXPECT().EpochDuration().Return(time.Duration(mockNetwork.GetSlotsPerEpoch()) * mockNetwork.GetSlotDuration()).AnyTimes() // #nosec G115
 
 	mockNetwork.EXPECT().GetDomainType().Return(domainType).AnyTimes()
 
