@@ -2,22 +2,13 @@ package networkconfig
 
 import (
 	"math/big"
-	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var HoodiStage = NetworkConfig{
-	Name: "hoodi-stage",
-	BeaconConfig: BeaconConfig{
-		BeaconName:    string(spectypes.HoodiNetwork),
-		SlotDuration:  spectypes.HoodiNetwork.SlotDurationSec(),
-		SlotsPerEpoch: phase0.Slot(spectypes.HoodiNetwork.SlotsPerEpoch()),
-		ForkVersion:   spectypes.HoodiNetwork.ForkVersion(),
-		GenesisTime:   time.Unix(int64(spectypes.HoodiNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
-	},
+	Name:         "hoodi-stage",
+	BeaconConfig: Hoodi.BeaconConfig,
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x14},
 		RegistrySyncOffset:   new(big.Int).SetInt64(1004),

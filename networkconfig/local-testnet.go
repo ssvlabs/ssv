@@ -5,17 +5,25 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var LocalTestnet = NetworkConfig{
 	Name: "local-testnet",
 	BeaconConfig: BeaconConfig{
-		BeaconName:    string(spectypes.PraterNetwork),
-		SlotDuration:  spectypes.PraterNetwork.SlotDurationSec(),
-		SlotsPerEpoch: phase0.Slot(spectypes.PraterNetwork.SlotsPerEpoch()),
-		ForkVersion:   spectypes.PraterNetwork.ForkVersion(),
-		GenesisTime:   time.Unix(int64(spectypes.PraterNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
+		BeaconName:                           string(spectypes.PraterNetwork),
+		SlotDuration:                         spectypes.PraterNetwork.SlotDurationSec(),
+		SlotsPerEpoch:                        phase0.Slot(spectypes.PraterNetwork.SlotsPerEpoch()),
+		EpochsPerSyncCommitteePeriod:         256,
+		SyncCommitteeSize:                    512,
+		SyncCommitteeSubnetCount:             4,
+		TargetAggregatorsPerSyncSubcommittee: 16,
+		TargetAggregatorsPerCommittee:        16,
+		IntervalsPerSlot:                     3,
+		ForkVersion:                          spectypes.PraterNetwork.ForkVersion(),
+		GenesisTime:                          time.Unix(int64(spectypes.PraterNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
+		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x043db0d9a83813551ee2f33450d23797757d430911a9320530ad8a0eabc43efb")),
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoV2NetworkID.Byte(), 0x2},

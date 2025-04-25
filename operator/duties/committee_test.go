@@ -55,6 +55,8 @@ func setupCommitteeDutiesMock(
 		},
 	).AnyTimes()
 
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().IntervalDuration().Return(s.beaconConfig.GetSlotDuration() / 3).AnyTimes()
+
 	s.beaconNode.(*MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
 			if waitForDuties.Get() {

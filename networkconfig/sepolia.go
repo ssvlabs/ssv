@@ -12,11 +12,17 @@ import (
 var Sepolia = NetworkConfig{
 	Name: "sepolia",
 	BeaconConfig: BeaconConfig{
-		BeaconName:    string(spectypes.SepoliaNetwork),
-		SlotDuration:  spectypes.SepoliaNetwork.SlotDurationSec(),
-		SlotsPerEpoch: phase0.Slot(spectypes.SepoliaNetwork.SlotsPerEpoch()),
-		ForkVersion:   spectypes.SepoliaNetwork.ForkVersion(),
-		GenesisTime:   time.Unix(int64(spectypes.SepoliaNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
+		BeaconName:                           string(spectypes.SepoliaNetwork),
+		SlotDuration:                         spectypes.SepoliaNetwork.SlotDurationSec(),
+		SlotsPerEpoch:                        phase0.Slot(spectypes.SepoliaNetwork.SlotsPerEpoch()),
+		EpochsPerSyncCommitteePeriod:         256,
+		SyncCommitteeSize:                    512,
+		SyncCommitteeSubnetCount:             4,
+		TargetAggregatorsPerSyncSubcommittee: 16,
+		TargetAggregatorsPerCommittee:        16,
+		IntervalsPerSlot:                     3,
+		ForkVersion:                          spectypes.SepoliaNetwork.ForkVersion(),
+		GenesisTime:                          time.Unix(int64(spectypes.SepoliaNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x69},

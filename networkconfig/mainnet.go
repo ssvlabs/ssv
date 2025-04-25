@@ -6,17 +6,25 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var Mainnet = NetworkConfig{
 	Name: "mainnet",
 	BeaconConfig: BeaconConfig{
-		BeaconName:    string(spectypes.MainNetwork),
-		SlotDuration:  spectypes.MainNetwork.SlotDurationSec(),
-		SlotsPerEpoch: phase0.Slot(spectypes.MainNetwork.SlotsPerEpoch()),
-		ForkVersion:   spectypes.MainNetwork.ForkVersion(),
-		GenesisTime:   time.Unix(int64(spectypes.MainNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
+		BeaconName:                           string(spectypes.MainNetwork),
+		SlotDuration:                         spectypes.MainNetwork.SlotDurationSec(),
+		SlotsPerEpoch:                        phase0.Slot(spectypes.MainNetwork.SlotsPerEpoch()),
+		EpochsPerSyncCommitteePeriod:         256,
+		SyncCommitteeSize:                    512,
+		SyncCommitteeSubnetCount:             4,
+		TargetAggregatorsPerSyncSubcommittee: 16,
+		TargetAggregatorsPerCommittee:        16,
+		IntervalsPerSlot:                     3,
+		ForkVersion:                          spectypes.MainNetwork.ForkVersion(),
+		GenesisTime:                          time.Unix(int64(spectypes.MainNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
+		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95")),
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.AlanMainnet,
