@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Genesis is DEPRECATED. TODO: consider removing
 func (gc *GoClient) Genesis(ctx context.Context) (*apiv1.Genesis, error) {
 	return genesisForClient(ctx, gc.log, gc.multiClient)
 }

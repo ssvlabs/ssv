@@ -60,7 +60,6 @@ type signerClient interface {
 
 type consensusClient interface {
 	ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) // TODO: get from network config
-	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)                   // TODO: get from network config
 }
 
 // NewRemoteKeyManager returns a RemoteKeyManager that fetches the operator's public
@@ -470,14 +469,9 @@ func (km *RemoteKeyManager) getForkInfo(ctx context.Context, epoch phase0.Epoch)
 		return web3signer.ForkInfo{}, fmt.Errorf("get current fork: %w", err)
 	}
 
-	genesis, err := km.consensusClient.Genesis(ctx)
-	if err != nil {
-		return web3signer.ForkInfo{}, fmt.Errorf("get genesis: %w", err)
-	}
-
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
-		GenesisValidatorsRoot: genesis.GenesisValidatorsRoot,
+		GenesisValidatorsRoot: km.beaconConfig.GetGenesisValidatorsRoot(),
 	}, nil
 }
 

@@ -35,6 +35,7 @@ type Beacon interface {
 	GetSlotsPerEpoch() phase0.Slot
 	GetGenesisTime() time.Time
 	GetSyncCommitteeSize() uint64
+	GetGenesisValidatorsRoot() phase0.Root
 	GetBeaconName() string
 	DataVersion(epoch phase0.Epoch) spec.DataVersion
 }
@@ -183,6 +184,10 @@ func (b BeaconConfig) GetGenesisTime() time.Time {
 
 func (b BeaconConfig) GetSyncCommitteeSize() uint64 {
 	return b.SyncCommitteeSize
+}
+
+func (b BeaconConfig) GetGenesisValidatorsRoot() phase0.Root {
+	return b.GenesisValidatorsRoot
 }
 
 func (b BeaconConfig) GetBeaconName() string {

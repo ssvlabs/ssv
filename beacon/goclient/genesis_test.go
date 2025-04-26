@@ -19,7 +19,7 @@ const (
 	specPath    = "/eth/v1/config/spec"
 )
 
-func TestGenesis(t *testing.T) {
+func Test_genesisForClient(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
