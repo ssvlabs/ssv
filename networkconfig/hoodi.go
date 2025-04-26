@@ -22,7 +22,7 @@ var Hoodi = NetworkConfig{
 		TargetAggregatorsPerSyncSubcommittee: 16,
 		TargetAggregatorsPerCommittee:        16,
 		IntervalsPerSlot:                     3,
-		ForkVersion:                          spectypes.HoodiNetwork.ForkVersion(),
+		GenesisForkVersion:                   spectypes.HoodiNetwork.ForkVersion(),
 		GenesisTime:                          time.Unix(int64(spectypes.HoodiNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f")),
 	},

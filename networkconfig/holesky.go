@@ -22,7 +22,7 @@ var Holesky = NetworkConfig{
 		TargetAggregatorsPerSyncSubcommittee: 16,
 		TargetAggregatorsPerCommittee:        16,
 		IntervalsPerSlot:                     3,
-		ForkVersion:                          spectypes.HoleskyNetwork.ForkVersion(),
+		GenesisForkVersion:                   spectypes.HoleskyNetwork.ForkVersion(),
 		GenesisTime:                          time.Unix(int64(spectypes.HoleskyNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1")),
 	},

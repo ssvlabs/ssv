@@ -22,7 +22,7 @@ var Mainnet = NetworkConfig{
 		TargetAggregatorsPerSyncSubcommittee: 16,
 		TargetAggregatorsPerCommittee:        16,
 		IntervalsPerSlot:                     3,
-		ForkVersion:                          spectypes.MainNetwork.ForkVersion(),
+		GenesisForkVersion:                   spectypes.MainNetwork.ForkVersion(),
 		GenesisTime:                          time.Unix(int64(spectypes.MainNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95")),
 	},

@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO: get from network config
 func (gc *GoClient) ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) {
 	start := time.Now()
 	// ForkSchedule result is cached in the client and updated once in a while.

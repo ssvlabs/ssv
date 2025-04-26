@@ -21,7 +21,7 @@ var Sepolia = NetworkConfig{
 		TargetAggregatorsPerSyncSubcommittee: 16,
 		TargetAggregatorsPerCommittee:        16,
 		IntervalsPerSlot:                     3,
-		ForkVersion:                          spectypes.SepoliaNetwork.ForkVersion(),
+		GenesisForkVersion:                   spectypes.SepoliaNetwork.ForkVersion(),
 		GenesisTime:                          time.Unix(int64(spectypes.SepoliaNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},
 	SSVConfig: SSVConfig{

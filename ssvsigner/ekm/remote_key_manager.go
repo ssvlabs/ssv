@@ -59,8 +59,8 @@ type signerClient interface {
 }
 
 type consensusClient interface {
-	ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error)
-	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)
+	ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) // TODO: get from network config
+	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)                   // TODO: get from network config
 }
 
 // NewRemoteKeyManager returns a RemoteKeyManager that fetches the operator's public

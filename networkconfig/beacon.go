@@ -3,9 +3,11 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
@@ -34,6 +36,7 @@ type Beacon interface {
 	GetGenesisTime() time.Time
 	GetSyncCommitteeSize() uint64
 	GetBeaconName() string
+	DataVersion(epoch phase0.Epoch) spec.DataVersion
 }
 
 type BeaconConfig struct {
@@ -46,9 +49,10 @@ type BeaconConfig struct {
 	TargetAggregatorsPerSyncSubcommittee uint64
 	TargetAggregatorsPerCommittee        uint64
 	IntervalsPerSlot                     uint64
-	ForkVersion                          phase0.Version
+	GenesisForkVersion                   phase0.Version
 	GenesisTime                          time.Time
 	GenesisValidatorsRoot                phase0.Root
+	Forks                                map[spec.DataVersion]*phase0.Fork // TODO: 1) support updating electra; 2) lock
 }
 
 func (b BeaconConfig) String() string {
@@ -183,4 +187,69 @@ func (b BeaconConfig) GetSyncCommitteeSize() uint64 {
 
 func (b BeaconConfig) GetBeaconName() string {
 	return b.BeaconName
+}
+
+func (b BeaconConfig) DataVersion(epoch phase0.Epoch) spec.DataVersion {
+	versions := []spec.DataVersion{
+		spec.DataVersionPhase0,
+		spec.DataVersionAltair,
+		spec.DataVersionBellatrix,
+		spec.DataVersionCapella,
+		spec.DataVersionDeneb,
+		spec.DataVersionElectra,
+	}
+
+	for i, v := range versions {
+		if epoch < b.Forks[v].Epoch {
+			if i == 0 {
+				panic("epoch before genesis")
+			}
+			return versions[i-1]
+		}
+	}
+
+	return versions[len(versions)-1]
+}
+
+func (b BeaconConfig) AssertSame(other BeaconConfig) error {
+	if b.BeaconName != other.BeaconName {
+		return fmt.Errorf("different BeaconName")
+	}
+	if b.SlotDuration != other.SlotDuration {
+		return fmt.Errorf("different SlotDuration")
+	}
+	if b.SlotsPerEpoch != other.SlotsPerEpoch {
+		return fmt.Errorf("different SlotsPerEpoch")
+	}
+	if b.EpochsPerSyncCommitteePeriod != other.EpochsPerSyncCommitteePeriod {
+		return fmt.Errorf("different EpochsPerSyncCommitteePeriod")
+	}
+	if b.SyncCommitteeSize != other.SyncCommitteeSize {
+		return fmt.Errorf("different SyncCommitteeSize")
+	}
+	if b.SyncCommitteeSubnetCount != other.SyncCommitteeSubnetCount {
+		return fmt.Errorf("different SyncCommitteeSubnetCount")
+	}
+	if b.TargetAggregatorsPerSyncSubcommittee != other.TargetAggregatorsPerSyncSubcommittee {
+		return fmt.Errorf("different TargetAggregatorsPerSyncSubcommittee")
+	}
+	if b.TargetAggregatorsPerCommittee != other.TargetAggregatorsPerCommittee {
+		return fmt.Errorf("different TargetAggregatorsPerCommittee")
+	}
+	if b.IntervalsPerSlot != other.IntervalsPerSlot {
+		return fmt.Errorf("different IntervalsPerSlot")
+	}
+	if b.GenesisForkVersion != other.GenesisForkVersion {
+		return fmt.Errorf("different GenesisForkVersion")
+	}
+	if b.GenesisTime != other.GenesisTime {
+		return fmt.Errorf("different GenesisTime")
+	}
+	if b.GenesisValidatorsRoot != other.GenesisValidatorsRoot {
+		return fmt.Errorf("different GenesisValidatorsRoot")
+	}
+	if !maps.Equal(b.Forks, other.Forks) {
+		return fmt.Errorf("different Forks")
+	}
+	return nil
 }

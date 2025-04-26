@@ -169,13 +169,6 @@ type GoClient struct {
 
 	lastProcessedHeadEventSlotLock sync.Mutex
 	lastProcessedHeadEventSlot     phase0.Slot
-
-	ForkLock           sync.RWMutex
-	ForkEpochElectra   phase0.Epoch
-	ForkEpochDeneb     phase0.Epoch
-	ForkEpochCapella   phase0.Epoch
-	ForkEpochBellatrix phase0.Epoch
-	ForkEpochAltair    phase0.Epoch
 }
 
 // New init new client and go-client instance
@@ -206,12 +199,6 @@ func New(
 		weightedAttestationDataSoftTimeout: commonTimeout / 2,
 		weightedAttestationDataHardTimeout: commonTimeout,
 		supportedTopics:                    []EventTopic{EventTopicHead},
-		// Initialize forks with FAR_FUTURE_EPOCH.
-		ForkEpochAltair:    math.MaxUint64,
-		ForkEpochBellatrix: math.MaxUint64,
-		ForkEpochCapella:   math.MaxUint64,
-		ForkEpochDeneb:     math.MaxUint64,
-		ForkEpochElectra:   math.MaxUint64,
 	}
 
 	if opt.BeaconNodeAddr == "" {
@@ -377,32 +364,10 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return // Tests may override Fatal's behavior
 			}
 
-			spec, err := specForClient(ctx, logger, s)
-			if err != nil {
-				logger.Error(clResponseErrMsg,
-					zap.String("api", "Spec"),
-					zap.Error(err),
-				)
-				return
-			}
-
-			if err := gc.checkForkValues(spec); err != nil {
-				logger.Error("failed to check fork values",
-					zap.Error(err),
-				)
-				return
-			}
-			gc.ForkLock.RLock()
-			config := gc.getBeaconConfig()
-			logger.Info("retrieved fork epochs",
-				zap.Uint64("current_data_version", uint64(gc.DataVersion(config.EstimatedCurrentEpoch()))),
-				zap.Uint64("altair", uint64(gc.ForkEpochAltair)),
-				zap.Uint64("bellatrix", uint64(gc.ForkEpochBellatrix)),
-				zap.Uint64("capella", uint64(gc.ForkEpochCapella)),
-				zap.Uint64("deneb", uint64(gc.ForkEpochDeneb)),
-				zap.Uint64("electra", uint64(gc.ForkEpochElectra)),
+			logger.Info("retrieved beacon config",
+				zap.Uint64("data_version", uint64(currentConfig.DataVersion(currentConfig.EstimatedCurrentEpoch()))),
+				zap.Any("config", currentConfig), // TODO: check if output format is readable
 			)
-			gc.ForkLock.RUnlock()
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
 			gc.log.Warn("consensus client disconnected",
@@ -440,8 +405,8 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkco
 		return beaconConfig, nil
 	}
 
-	if *gc.beaconConfig != beaconConfig {
-		return *gc.beaconConfig, fmt.Errorf("beacon config misalign, current %v, got %v", gc.beaconConfig, beaconConfig)
+	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
+		return *gc.beaconConfig, fmt.Errorf("beacon config misalign, current %v, got %v, difference: %w", gc.beaconConfig, beaconConfig, err)
 	}
 
 	return *gc.beaconConfig, nil

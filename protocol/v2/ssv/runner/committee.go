@@ -19,12 +19,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var (
@@ -231,7 +232,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	blockedAttesterDuties := 0
 
 	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	version := cr.beacon.DataVersion(epoch)
+	version := cr.BaseRunner.NetworkConfig.DataVersion(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
@@ -688,7 +689,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 	slot := duty.DutySlot()
 	epoch := cr.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
 
-	dataVersion := cr.beacon.DataVersion(epoch)
+	dataVersion := cr.GetBaseRunner().NetworkConfig.DataVersion(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {

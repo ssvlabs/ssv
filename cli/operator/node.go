@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -340,7 +341,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			consensusClient.ForkEpochElectra,
+			networkConfig.Forks[spec.DataVersionElectra].Epoch,
 			validation.WithLogger(logger),
 		)
 
