@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	spec "github.com/attestantio/go-eth2-client/spec"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/ssvlabs/ssv-spec/types"
 	gomock "go.uber.org/mock/gomock"
@@ -182,6 +183,21 @@ func (mr *MockNetworkMockRecorder) FirstSlotAtEpoch(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FirstSlotAtEpoch", reflect.TypeOf((*MockNetwork)(nil).FirstSlotAtEpoch), epoch)
 }
 
+// ForkAtEpoch mocks base method.
+func (m *MockNetwork) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForkAtEpoch", epoch)
+	ret0, _ := ret[0].(spec.DataVersion)
+	ret1, _ := ret[1].(*phase0.Fork)
+	return ret0, ret1
+}
+
+// ForkAtEpoch indicates an expected call of ForkAtEpoch.
+func (mr *MockNetworkMockRecorder) ForkAtEpoch(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkAtEpoch", reflect.TypeOf((*MockNetwork)(nil).ForkAtEpoch), epoch)
+}
+
 // GetBeaconName mocks base method.
 func (m *MockNetwork) GetBeaconName() string {
 	m.ctrl.T.Helper()
@@ -250,6 +266,20 @@ func (m *MockNetwork) GetGenesisTime() time.Time {
 func (mr *MockNetworkMockRecorder) GetGenesisTime() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenesisTime", reflect.TypeOf((*MockNetwork)(nil).GetGenesisTime))
+}
+
+// GetGenesisValidatorsRoot mocks base method.
+func (m *MockNetwork) GetGenesisValidatorsRoot() phase0.Root {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGenesisValidatorsRoot")
+	ret0, _ := ret[0].(phase0.Root)
+	return ret0
+}
+
+// GetGenesisValidatorsRoot indicates an expected call of GetGenesisValidatorsRoot.
+func (mr *MockNetworkMockRecorder) GetGenesisValidatorsRoot() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenesisValidatorsRoot", reflect.TypeOf((*MockNetwork)(nil).GetGenesisValidatorsRoot))
 }
 
 // GetSlotDuration mocks base method.
