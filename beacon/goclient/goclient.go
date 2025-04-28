@@ -113,7 +113,8 @@ type MultiClient interface {
 type EventTopic string
 
 const (
-	EventTopicHead EventTopic = "head"
+	EventTopicHead  EventTopic = "head"
+	EventTopicBlock EventTopic = "block"
 )
 
 // GoClient implementing Beacon struct
@@ -149,9 +150,6 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
-	// blockRootToSlotReqInflight helps prevent duplicate BeaconBlockHeader requests
-	// from running in parallel.
-	blockRootToSlotReqInflight singleflight.Group[phase0.Root, phase0.Slot]
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
 	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
@@ -163,12 +161,14 @@ type GoClient struct {
 
 	withWeightedAttestationData bool
 
+	withParallelSubmissions bool
+
 	subscribersLock      sync.RWMutex
 	headEventSubscribers []subscriber[*apiv1.HeadEvent]
 	supportedTopics      []EventTopic
 
-	lastProcessedHeadEventSlotLock sync.Mutex
-	lastProcessedHeadEventSlot     phase0.Slot
+	lastProcessedEventSlotLock sync.Mutex
+	lastProcessedEventSlot     phase0.Slot
 }
 
 // New init new client and go-client instance
@@ -196,9 +196,10 @@ func New(
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
-		weightedAttestationDataSoftTimeout: commonTimeout / 2,
+		withParallelSubmissions:            opt.WithParallelSubmissions,
+		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHead},
+		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
 	}
 
 	if opt.BeaconNodeAddr == "" {
