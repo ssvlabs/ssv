@@ -5,27 +5,30 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/ekm"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -38,11 +41,10 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 const (
@@ -59,7 +61,7 @@ type MockControllerOptions struct {
 	sharesStorage     SharesStorage
 	beacon            beacon.BeaconNode
 	validatorOptions  validator.Options
-	signer            spectypes.BeaconSigner
+	signer            ekm.BeaconSigner
 	StorageMap        *ibftstorage.ParticipantStores
 	validatorsMap     *validators.ValidatorsMap
 	validatorStore    registrystorage.ValidatorStore
@@ -70,13 +72,16 @@ type MockControllerOptions struct {
 
 func TestNewController(t *testing.T) {
 	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-	_, logger, _, network, _, recipientStorage, bc := setupCommonTestComponents(t)
-	db, err := getBaseStorage(logger)
-	require.NoError(t, err)
-	registryStorage, newStorageErr := storage.NewNodeStorage(logger, db)
-	require.NoError(t, newStorageErr)
+
 	operatorSigner, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
+
+	_, logger, _, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorSigner)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	require.NoError(t, newStorageErr)
 
 	controllerOptions := ControllerOptions{
 		NetworkConfig:     networkconfig.TestNetwork,
@@ -94,7 +99,7 @@ func TestNewController(t *testing.T) {
 }
 
 func TestSetupValidatorsExporter(t *testing.T) {
-	passedEpoch := phase0.Epoch(1)
+	passedEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
 	operators := buildOperators(t)
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(0, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
@@ -114,18 +119,22 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
-			Status:          3, // ValidatorStatePendingInitialized
-			ActivationEpoch: passedEpoch,
-			Liquidated:      false,
+			Status:                    v1.ValidatorStateActiveOngoing,
+			ActivationEpoch:           passedEpoch,
+			ExitEpoch:                 exitEpoch,
+			Liquidated:                false,
+			BeaconMetadataLastUpdated: time.Now(),
 		},
 		{
 			Share: spectypes.Share{
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
-			Status:          3, // Some other status
-			ActivationEpoch: passedEpoch,
-			Liquidated:      false,
+			Status:                    v1.ValidatorStateActiveOngoing,
+			ActivationEpoch:           passedEpoch,
+			ExitEpoch:                 exitEpoch,
+			Liquidated:                false,
+			BeaconMetadataLastUpdated: time.Now(),
 		},
 	}
 	_ = sharesWithMetadata
@@ -133,7 +142,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	sharesWithoutMetadata := []*types.SSVShare{
 		{
 			Share: spectypes.Share{
-				//OperatorID:      1,
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey.GetPublicKey().Serialize()),
 			},
@@ -141,7 +149,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 		},
 		{
 			Share: spectypes.Share{
-				//OperatorID:      2,
 				Committee:       operators,
 				ValidatorPubKey: spectypes.ValidatorPK(secretKey2.GetPublicKey().Serialize()),
 			},
@@ -165,7 +172,10 @@ func TestSetupValidatorsExporter(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
+			operatorPrivateKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
 
 			defer ctrl.Finish()
 			mockValidatorsMap := validators.New(context.TODO())
@@ -303,7 +313,7 @@ func TestSetupValidators(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	// Init global variables
-	passedEpoch := phase0.Epoch(1)
+	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
 	operatorIds := []uint64{1, 2, 3, 4}
 	var validatorPublicKey phase0.BLSPubKey
 
@@ -327,22 +337,27 @@ func TestSetupValidators(t *testing.T) {
 		operators[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
+	shareKey, err := createKey()
+	require.NoError(t, err)
+
 	shareWithMetaData := &types.SSVShare{
 		Share: spectypes.Share{
-			ValidatorIndex: 1,
-			// OperatorID:      2,
+			ValidatorIndex:  1,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+			SharePubKey:     shareKey,
 		},
-		Status:          3, // ValidatorStateActiveOngoing
-		ActivationEpoch: passedEpoch,
+		Status:                    v1.ValidatorStateActiveOngoing,
+		ActivationEpoch:           activationEpoch,
+		ExitEpoch:                 exitEpoch,
+		BeaconMetadataLastUpdated: time.Now(),
 	}
 
 	shareWithoutMetaData := &types.SSVShare{
 		Share: spectypes.Share{
-			// OperatorID:      2,
 			Committee:       operators[:1],
 			ValidatorPubKey: spectypes.ValidatorPK(validatorKey),
+			SharePubKey:     shareKey,
 		},
 		OwnerAddress: common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 	}
@@ -358,12 +373,13 @@ func TestSetupValidators(t *testing.T) {
 
 	opStorage.SaveOperatorData(nil, buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 
-	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
+	bcResponse := map[phase0.ValidatorIndex]*v1.Validator{
 		0: {
-			Status: 3,
+			Status: v1.ValidatorStateActiveOngoing,
 			Index:  2,
 			Validator: &phase0.Validator{
-				ActivationEpoch: passedEpoch,
+				ActivationEpoch: activationEpoch,
+				ExitEpoch:       exitEpoch,
 				PublicKey:       validatorPublicKey,
 			},
 		},
@@ -379,7 +395,7 @@ func TestSetupValidators(t *testing.T) {
 		name               string
 		shares             []*types.SSVShare
 		recipientData      *registrystorage.RecipientData
-		bcResponse         map[phase0.ValidatorIndex]*eth2apiv1.Validator
+		bcResponse         map[phase0.ValidatorIndex]*v1.Validator
 		validatorStartFunc func(validator *validator.Validator) (bool, error)
 	}{
 		{
@@ -572,7 +588,7 @@ func TestGetValidatorStats(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	sharesStorage := mocks.NewMockSharesStorage(ctrl)
 	bc := beacon.NewMockBeaconNode(ctrl)
-	passedEpoch := phase0.Epoch(1)
+	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
 
 	netCfg := networkconfig.TestNetwork
 	bc.EXPECT().GetBeaconNetwork().Return(netCfg.Beacon.GetBeaconNetwork()).AnyTimes()
@@ -591,15 +607,15 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          3, // ValidatorStatePendingInitialized
-				ActivationEpoch: passedEpoch,
+				Status:          v1.ValidatorStateActiveOngoing,
+				ActivationEpoch: activationEpoch,
+				ExitEpoch:       exitEpoch,
 			},
 			{
 				Share: spectypes.Share{
 					Committee: operators[1:],
 				},
-				Status:          1, // Some other status
-				ActivationEpoch: passedEpoch,
+				Status: v1.ValidatorStatePendingInitialized, // Some other status
 			},
 		}
 
@@ -638,8 +654,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          3, // ValidatorStatePendingInitialized
-				ActivationEpoch: passedEpoch,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 		}
 
@@ -670,8 +685,7 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: nil,
 				},
-				Status:          3, // ValidatorStatePendingInitialized
-				ActivationEpoch: passedEpoch,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 		}
 
@@ -709,15 +723,13 @@ func TestGetValidatorStats(t *testing.T) {
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          3, // ValidatorStatePendingInitialized
-				ActivationEpoch: passedEpoch,
+				Status: v1.ValidatorStateActiveOngoing,
 			},
 			{
 				Share: spectypes.Share{
 					Committee: operators,
 				},
-				Status:          1,
-				ActivationEpoch: passedEpoch,
+				Status: v1.ValidatorStatePendingInitialized,
 			},
 		}
 
@@ -938,7 +950,7 @@ func createKey() ([]byte, error) {
 	return pubKey, nil
 }
 
-func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *mocks.MockSharesStorage, *mocks.MockP2PNetwork, ekm.KeyManager, *mocks.MockRecipients, *beacon.MockBeaconNode) {
+func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivateKey) (*gomock.Controller, *zap.Logger, *mocks.MockSharesStorage, *mocks.MockP2PNetwork, ekm.KeyManager, *mocks.MockRecipients, *beacon.MockBeaconNode) {
 	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	bc := beacon.NewMockBeaconNode(ctrl)
@@ -948,7 +960,7 @@ func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, "")
+	km, err := ekm.NewLocalKeyManager(logger, db, networkconfig.TestNetwork, operatorPrivKey)
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }

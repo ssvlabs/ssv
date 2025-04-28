@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/ekm"
-	"github.com/ssvlabs/ssv/logging/fields"
-	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	"github.com/ssvlabs/ssv/storage/basedb"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var (
@@ -25,12 +26,13 @@ var (
 		migration_3_drop_registry_data,
 		migration_4_configlock_add_alan_fork_to_network_name,
 		migration_5_change_share_format_from_gob_to_ssz,
+		migration_6_share_exit_epoch,
 	}
 )
 
 // Run executes the default migrations.
 func Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
-	return defaultMigrations.Run(ctx, logger, opt)
+	return defaultMigrations.Run(ctx, logger.Named("Migrations"), opt)
 }
 
 // CompletedFunc is a function that marks a migration as completed.
@@ -51,20 +53,20 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db          basedb.Database
-	NodeStorage operatorstorage.Storage
-	DbPath      string
-	Network     beacon.Network
+	Db            basedb.Database
+	NodeStorage   operatorstorage.Storage
+	DbPath        string
+	NetworkConfig networkconfig.NetworkConfig
 }
 
 // nolint
 func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error) {
-	return operatorstorage.NewNodeStorage(logger, o.Db)
+	return operatorstorage.NewNodeStorage(o.NetworkConfig, logger, o.Db)
 }
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.Network, logger)
+	return ekm.NewSignerStorage(o.Db, o.NetworkConfig.Beacon, logger)
 }
 
 // Run executes the migrations.

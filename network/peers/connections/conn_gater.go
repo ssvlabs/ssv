@@ -1,7 +1,6 @@
 package connections
 
 import (
-	"github.com/ssvlabs/ssv/utils/ttl"
 	"runtime"
 	"time"
 
@@ -9,12 +8,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 const (
@@ -125,7 +125,7 @@ func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (bool, control.Di
 	return true, 0
 }
 
-func (n *connGater) validateDial(addr multiaddr.Multiaddr) bool {
+func (n *connGater) validateDial(addr ma.Multiaddr) bool {
 	ip, err := manet.ToIP(addr)
 	if err != nil {
 		return false

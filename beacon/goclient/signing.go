@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -18,33 +17,14 @@ import (
 )
 
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
-	start := time.Now()
-	specResponse, err := gc.multiClient.Spec(gc.ctx, &api.SpecOpts{})
-	recordRequestDuration(gc.ctx, "Spec", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	specResponse, err := gc.Spec(ctx)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Spec"),
-			zap.Error(err),
-		)
-		return phase0.Domain{}, fmt.Errorf("failed to obtain spec response: %w", err)
+		return phase0.Domain{}, fmt.Errorf("fetch spec: %w", err)
 	}
-	if specResponse == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "Spec"),
-		)
-		return phase0.Domain{}, fmt.Errorf("spec response is nil")
-	}
-	if specResponse.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "Spec"),
-		)
-		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
-	}
-
 	// TODO: consider storing fork version and genesis validators root in goClient
 	//		instead of fetching it every time
 
-	forkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
+	forkVersionRaw, ok := specResponse["CAPELLA_FORK_VERSION"]
 	if !ok {
 		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
 	}
@@ -57,30 +37,12 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		CurrentVersion: forkVersion,
 	}
 
-	start = time.Now()
-	genesisResponse, err := gc.multiClient.Genesis(ctx, &api.GenesisOpts{})
-	recordRequestDuration(gc.ctx, "Genesis", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	genesis, err := gc.Genesis(ctx)
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "Genesis"),
-			zap.Error(err),
-		)
 		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
-	if genesisResponse == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "Genesis"),
-		)
-		return phase0.Domain{}, fmt.Errorf("genesis response is nil")
-	}
-	if genesisResponse.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "Genesis"),
-		)
-		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
-	}
 
-	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
+	forkData.GenesisValidatorsRoot = genesis.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
 	if err != nil {
@@ -95,7 +57,8 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 }
 
 func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
-	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
+	switch domain {
+	case spectypes.DomainApplicationBuilder: // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
 			CurrentVersion:        gc.network.ForkVersion(),
@@ -108,7 +71,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[:], domain[:])
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
-	} else if domain == spectypes.DomainVoluntaryExit {
+	case spectypes.DomainVoluntaryExit:
 		return gc.computeVoluntaryExitDomain(gc.ctx)
 	}
 

@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/ssvlabs/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv/observability"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/ssvlabs/ssv/observability"
 )
 
 type metrics struct {
@@ -24,35 +25,24 @@ func (m *metrics) StartStage() {
 	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStageProposal(ctx context.Context, round qbft.Round) {
+func (m *metrics) EndStage(ctx context.Context, round qbft.Round, s stage) {
 	validatorStageDurationHistogram.Record(
 		ctx,
 		time.Since(m.stageStart).Seconds(),
 		metric.WithAttributes(
-			stageAttribute(proposalStage),
+			stageAttribute(s),
 			roleAttribute(m.role),
 			observability.DutyRoundAttribute(round)))
 	m.stageStart = time.Now()
 }
 
-func (m *metrics) EndStagePrepare(ctx context.Context, round qbft.Round) {
-	validatorStageDurationHistogram.Record(
+// RecordRoundChange records a round change event with the specified reason.
+func (m *metrics) RecordRoundChange(ctx context.Context, round qbft.Round, reason roundChangeReason) {
+	roundsChangedCounter.Add(
 		ctx,
-		time.Since(m.stageStart).Seconds(),
+		1,
 		metric.WithAttributes(
-			stageAttribute(prepareStage),
 			roleAttribute(m.role),
-			observability.DutyRoundAttribute(round)))
-	m.stageStart = time.Now()
-}
-
-func (m *metrics) EndStageCommit(ctx context.Context, round qbft.Round) {
-	validatorStageDurationHistogram.Record(
-		ctx,
-		time.Since(m.stageStart).Seconds(),
-		metric.WithAttributes(
-			stageAttribute(commitStage),
-			roleAttribute(m.role),
-			observability.DutyRoundAttribute(round)))
-	m.stageStart = time.Now()
+			observability.DutyRoundAttribute(round),
+			reasonAttribute(reason)))
 }

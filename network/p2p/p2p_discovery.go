@@ -9,11 +9,12 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/oleiade/lane/v2"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/utils/async"
-	"go.uber.org/zap"
 )
 
 // SubnetPeers contains the number of peers we are connected to for each subnet.
@@ -168,7 +169,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					}
 					cooldown := min(retryCooldownMax, retryCooldownMin*time.Duration(discoveredPeer.Tries))
 					peerRelevance := min(1, float64(waited)/float64(cooldown))
-					peerScore *= math.Pow(peerRelevance, 2)
+					peerScore *= peerRelevance * peerRelevance
 				}
 
 				// Push the peer.

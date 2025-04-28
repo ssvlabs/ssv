@@ -293,20 +293,6 @@ func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
 	return m.recorder
 }
 
-// ParticipatingValidators mocks base method.
-func (m *MockValidatorProvider) ParticipatingValidators(epoch phase0.Epoch) []*types1.SSVShare {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types1.SSVShare)
-	return ret0
-}
-
-// ParticipatingValidators indicates an expected call of ParticipatingValidators.
-func (mr *MockValidatorProviderMockRecorder) ParticipatingValidators(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).ParticipatingValidators), epoch)
-}
-
 // SelfParticipatingValidators mocks base method.
 func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) []*types1.SSVShare {
 	m.ctrl.T.Helper()
@@ -319,6 +305,20 @@ func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) 
 func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfParticipatingValidators), epoch)
+}
+
+// SelfValidators mocks base method.
+func (m *MockValidatorProvider) SelfValidators() []*types1.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SelfValidators")
+	ret0, _ := ret[0].([]*types1.SSVShare)
+	return ret0
+}
+
+// SelfValidators indicates an expected call of SelfValidators.
+func (mr *MockValidatorProviderMockRecorder) SelfValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfValidators))
 }
 
 // Validator mocks base method.
@@ -334,6 +334,20 @@ func (m *MockValidatorProvider) Validator(pubKey []byte) (*types1.SSVShare, bool
 func (mr *MockValidatorProviderMockRecorder) Validator(pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockValidatorProvider)(nil).Validator), pubKey)
+}
+
+// Validators mocks base method.
+func (m *MockValidatorProvider) Validators() []*types1.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validators")
+	ret0, _ := ret[0].([]*types1.SSVShare)
+	return ret0
+}
+
+// Validators indicates an expected call of Validators.
+func (mr *MockValidatorProviderMockRecorder) Validators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validators", reflect.TypeOf((*MockValidatorProvider)(nil).Validators))
 }
 
 // MockValidatorController is a mock of ValidatorController interface.
@@ -360,16 +374,16 @@ func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder 
 	return m.recorder
 }
 
-// AllActiveIndices mocks base method.
-func (m *MockValidatorController) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
+// FilterIndices mocks base method.
+func (m *MockValidatorController) FilterIndices(afterInit bool, filter func(*types1.SSVShare) bool) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllActiveIndices", epoch, afterInit)
+	ret := m.ctrl.Call(m, "FilterIndices", afterInit, filter)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
-// AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch, afterInit any) *gomock.Call {
+// FilterIndices indicates an expected call of FilterIndices.
+func (mr *MockValidatorControllerMockRecorder) FilterIndices(afterInit, filter any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch, afterInit)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FilterIndices", reflect.TypeOf((*MockValidatorController)(nil).FilterIndices), afterInit, filter)
 }

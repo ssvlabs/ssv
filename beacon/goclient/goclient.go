@@ -20,12 +20,13 @@ import (
 	"github.com/rs/zerolog"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/casts"
-	"go.uber.org/zap"
-	"tailscale.com/util/singleflight"
 )
 
 const (
@@ -108,10 +109,7 @@ type MultiClient interface {
 	eth2client.ValidatorRegistrationsSubmitter
 	eth2client.VoluntaryExitSubmitter
 	eth2client.ValidatorLivenessProvider
-}
-
-type operatorDataStore interface {
-	AwaitOperatorID() spectypes.OperatorID
+	eth2client.ForkScheduleProvider
 }
 
 type EventTopic string
@@ -133,11 +131,12 @@ type GoClient struct {
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
-	operatorDataStore operatorDataStore
-
-	registrationMu       sync.Mutex
-	registrationLastSlot phase0.Slot
-	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
+	// registrationMu synchronises access to registrations
+	registrationMu sync.Mutex
+	// registrations is a set of validator-registrations (their latest versions) to be sent to
+	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
+	// participating validators
+	registrations map[phase0.BLSPubKey]*validatorRegistration
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
@@ -181,8 +180,7 @@ type GoClient struct {
 // New init new client and go-client instance
 func New(
 	logger *zap.Logger,
-	opt beaconprotocol.Options,
-	operatorDataStore operatorDataStore,
+	opt Options,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
@@ -201,8 +199,7 @@ func New(
 		ctx:                   opt.Context,
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
-		operatorDataStore:     operatorDataStore,
-		registrationCache:     make(map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration),
+		registrations:         map[phase0.BLSPubKey]*validatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
 			// hence caching it for 2 slots is sufficient
@@ -329,7 +326,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				zap.String("version", nodeVersionResp.Data),
 			)
 
-			genesis, err := s.Genesis(ctx, &api.GenesisOpts{})
+			genesis, err := genesisForClient(ctx, gc.log, s)
 			if err != nil {
 				gc.log.Error(clResponseErrMsg,
 					zap.String("address", s.Address()),
@@ -339,17 +336,17 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return
 			}
 
-			if expected, err := gc.assertSameGenesisVersion(genesis.Data.GenesisForkVersion); err != nil {
+			if expected, err := gc.assertSameGenesisVersion(genesis.GenesisForkVersion); err != nil {
 				gc.log.Fatal("client returned unexpected genesis fork version, make sure all clients use the same Ethereum network",
 					zap.String("address", s.Address()),
-					zap.Any("client_genesis", genesis.Data.GenesisForkVersion),
+					zap.Any("client_genesis", genesis.GenesisForkVersion),
 					zap.Any("expected_genesis", expected),
 					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
 			}
 
-			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			spec, err := specImpl(ctx, gc.log, s)
 			if err != nil {
 				gc.log.Error(clResponseErrMsg,
 					zap.String("address", s.Address()),

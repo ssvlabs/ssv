@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ProposerRunner struct {
@@ -33,7 +34,7 @@ type ProposerRunner struct {
 
 	beacon              beacon.BeaconNode
 	network             specqbft.Network
-	signer              spectypes.BeaconSigner
+	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
 	valCheck            specqbft.ProposedValueCheckF
@@ -48,7 +49,7 @@ func NewProposerRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	doppelgangerHandler DoppelgangerProvider,
 	valCheck specqbft.ProposedValueCheckF,
@@ -126,7 +127,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.graffiti, fullSig)
 	if err != nil {
-		logger.Error("❌ failed to get blinded beacon block",
+		logger.Error("❌ failed to get beacon block",
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 			fields.BlockTime(time.Since(start)),
 			zap.Error(err))
@@ -198,15 +199,9 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return nil
 	}
 
-	msg, err := r.BaseRunner.signBeaconObject(
-		r,
-		duty,
-		blkToSign,
-		cd.Duty.Slot,
-		spectypes.DomainProposer,
-	)
+	msg, err := r.BaseRunner.signBeaconObject(ctx, r, duty, blkToSign, cd.Duty.Slot, spectypes.DomainProposer)
 	if err != nil {
-		return errors.Wrap(err, "failed signing attestation data")
+		return errors.Wrap(err, "failed signing block")
 	}
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
@@ -341,7 +336,8 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			zap.String("block_hash", blockSummary.Hash.String()),
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),
-			zap.NamedError("summarize_err", summarizeErr))
+			zap.NamedError("summarize_err", summarizeErr),
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
 	}
 
 	r.GetState().Finished = true
@@ -415,7 +411,14 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
-	msg, err := r.BaseRunner.signBeaconObject(r, proposerDuty, spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		proposerDuty,
+		spectypes.SSZUint64(epoch),
+		duty.DutySlot(),
+		spectypes.DomainRandao,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
@@ -485,7 +488,7 @@ func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ProposerRunner) GetSigner() spectypes.BeaconSigner {
+func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 

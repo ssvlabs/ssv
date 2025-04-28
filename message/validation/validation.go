@@ -11,17 +11,24 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ssvlabs/ssv/utils/casts"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"tailscale.com/util/singleflight"
+
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	"github.com/ssvlabs/ssv/registry/storage"
-	"go.uber.org/zap"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -30,20 +37,40 @@ type MessageValidator interface {
 	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
 
+// operators defines the minimal interface needed for validation
+type operators interface {
+	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
+}
+
+// validatorStore defines the minimal interface needed for validation
+type validatorStore interface {
+	Validator(pubKey []byte) (*ssvtypes.SSVShare, bool)
+	Committee(id spectypes.CommitteeID) (*registrystorage.Committee, bool)
+}
+
 type messageValidator struct {
-	logger                *zap.Logger
-	netCfg                networkconfig.NetworkConfig
+	logger          *zap.Logger
+	netCfg          networkconfig.NetworkConfig
+	pectraForkEpoch phase0.Epoch
+
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
-	validatorStore        storage.ValidatorStore
-	dutyStore             *dutystore.Store
-	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
-	pectraForkEpoch       phase0.Epoch
 
-	// validationLocks is a map of lock per SSV message ID to
-	// prevent concurrent access to the same state.
-	validationLocks map[spectypes.MessageID]*sync.Mutex
-	validationMutex sync.Mutex
+	validatorStore validatorStore
+	operators      operators
+	dutyStore      *dutystore.Store
+
+	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
+
+	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
+	// same ID apply any state modifications (during message validation - which is not
+	// stateless) in isolated synchronised manner with respect to each other.
+	validationLockCache *ttlcache.Cache[spectypes.MessageID, *sync.Mutex]
+	// validationLocksInflight helps us prevent generating 2 different validation locks
+	// for messages that must lock on the same lock (messages with same ID) when undergoing
+	// validation (that validation is not stateless - it often requires messageValidator to
+	// update some state).
+	validationLocksInflight singleflight.Group[spectypes.MessageID, *sync.Mutex]
 
 	selfPID    peer.ID
 	selfAccept bool
@@ -52,7 +79,8 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
 	netCfg networkconfig.NetworkConfig,
-	validatorStore storage.ValidatorStore,
+	validatorStore validatorStore,
+	operators operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
 	pectraForkEpoch phase0.Epoch,
@@ -62,8 +90,9 @@ func New(
 		logger:              zap.NewNop(),
 		netCfg:              netCfg,
 		consensusStateIndex: make(map[consensusID]*consensusState),
-		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
+		validationLockCache: ttlcache.New[spectypes.MessageID, *sync.Mutex](),
 		validatorStore:      validatorStore,
+		operators:           operators,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
 		pectraForkEpoch:     pectraForkEpoch,
@@ -72,6 +101,9 @@ func New(
 	for _, opt := range opts {
 		opt(mv)
 	}
+
+	// Start automatic expired item deletion for validationLockCache.
+	go mv.validationLockCache.Start()
 
 	return mv
 }
@@ -134,7 +166,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
-	// TODO: leverage the ValidatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
+	// TODO: leverage the validatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
 	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return decodedMessage, err
@@ -144,8 +176,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
-	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())
-
+	validationMu := mv.getValidationLock(signedSSVMessage.SSVMessage.GetID())
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
@@ -189,19 +220,30 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	return nil
 }
 
-func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) *sync.Mutex {
-	// Lock this SSV message ID to prevent concurrent access to the same state.
-	mv.validationMutex.Lock()
-	// TODO: make sure that we check that message ID exists in advance
-	mutex, ok := mv.validationLocks[messageID]
-	if !ok {
-		mutex = &sync.Mutex{}
-		mv.validationLocks[messageID] = mutex
-		// TODO: Clean the map when mutex won't be needed anymore. Now it's a mutex leak...
-	}
-	mv.validationMutex.Unlock()
+func (mv *messageValidator) getValidationLock(messageID spectypes.MessageID) *sync.Mutex {
+	lock, _, _ := mv.validationLocksInflight.Do(messageID, func() (*sync.Mutex, error) {
+		cachedLock := mv.validationLockCache.Get(messageID)
+		if cachedLock != nil {
+			return cachedLock.Value(), nil
+		}
 
-	return mutex
+		lock := &sync.Mutex{}
+
+		epochDuration := casts.DurationFromUint64(mv.netCfg.Beacon.SlotsPerEpoch()) * mv.netCfg.Beacon.SlotDurationSec()
+		// validationLockTTL specifies how much time a particular validation lock is meant to
+		// live. It must be large enough for validation lock to never expire while we still are
+		// expecting to process messages targeting that same validation lock. For a message
+		// that will get rejected due to being stale (even after acquiring some validation lock)
+		// it doesn't matter which exact lock will get acquired (because no state updates will
+		// be allowed to take place).
+		// 2 epoch duration is a safe TTL to use - message validation will reject processing
+		// for any message older than that.
+		validationLockTTL := 2 * epochDuration
+		mv.validationLockCache.Set(messageID, lock, validationLockTTL)
+
+		return lock, nil
+	})
+	return lock
 }
 
 type CommitteeInfo struct {

@@ -27,7 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
-//go:generate mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
 
 const (
 	// blockPropagationDelay time to propagate around the nodes
@@ -62,14 +62,15 @@ type ExecutionClient interface {
 
 // ValidatorProvider represents the component that controls validators via the scheduler
 type ValidatorProvider interface {
-	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	Validators() []*types.SSVShare
+	SelfValidators() []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	Validator(pubKey []byte) (*types.SSVShare, bool)
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
-	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
+	FilterIndices(afterInit bool, filter func(*types.SSVShare) bool) []phase0.ValidatorIndex
 }
 
 type SchedulerOptions struct {

@@ -1,408 +1,231 @@
-# https://golangci-lint.run/usage/configuration
-
-# options for analysis running
+version: "2"
 run:
-  # default concurrency is a available CPU number
   concurrency: 4
-
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
-  timeout: 5m
-
-  # exit code when at least one issue was found, default is 1
   issues-exit-code: 1
-
-  # include test files or not, default is true
   tests: true
-
-  # Allow multiple parallel golangci-lint instances running.
-  # If false (default) - golangci-lint acquires file lock on start.
   allow-parallel-runners: false
-
-
-# output configuration options
 output:
-  formats: 
-    - format: colored-line-number
-
-  # print lines of code with issue, default is true
-  print-issued-lines: true
-
-  # print linter name in the end of issue text, default is true
-  print-linter-name: true
-
-  # add a prefix to the output file references; default is no prefix
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
   path-prefix: ""
-
-  # sorts results by: filepath, line and column
-  sort-results: false
-
-
-# all available settings of specific linters
-linters-settings:
-  dogsled:
-    # checks assignments with too many blank identifiers; default is 2
-    max-blank-identifiers: 2
-  dupl:
-    # tokens count to trigger issue, 150 by default
-    threshold: 100
-  errcheck:
-    # report about not checking of errors in type assertions: `a := b.(MyStruct)`;
-    # default is false: such cases aren't reported by default.
-    check-type-assertions: false
-
-    # report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`;
-    # default is false: such cases aren't reported by default.
-    check-blank: false
-
-    # List of functions to exclude from checking, where each entry is a single function to exclude.
-    # See https://github.com/kisielk/errcheck#excluding-functions for details.
-    exclude-functions:
-      - fmt:.*
-      - io/ioutil:^Read.*
-
-  exhaustive:
-    # check switch statements in generated files also
-    check-generated: false
-    # indicates that switch statements are to be considered exhaustive if a
-    # 'default' case is present, even if all enum members aren't listed in the
-    # switch
-    default-signifies-exhaustive: false
-  exhaustruct:
-    exclude:
-      - '.*.Test'
-      - '.*.Test2'
-      - '.*.Embedded'
-      - '.*.External'
-  funlen:
-    lines: 60
-    statements: 40
-  gci:
-    # Custom section: groups all imports with the specified Prefix.
-    sections:
-      - prefix(github.com/ssvlabs/ssv)
-  gocognit:
-    # minimal code complexity to report, 30 by default (but we recommend 10-20)
-    min-complexity: 10
-  nestif:
-    # minimal complexity of if statements to report, 5 by default
-    min-complexity: 4
-  goconst:
-    # minimal length of string constant, 3 by default
-    min-len: 3
-    # minimal occurrences count to trigger, 3 by default
-    min-occurrences: 3
-  gocritic:
-    # Which checks should be enabled; can't be combined with 'disabled-checks';
-    # See https://go-critic.github.io/overview#checks-overview
-    # To check which checks are enabled run `GL_DEBUG=gocritic golangci-lint run`
-    # By default list of stable checks is used.
-    enabled-checks:
-      - rangeValCopy
-
-    # Which checks should be disabled; can't be combined with 'enabled-checks'; default is empty
-    disabled-checks:
-      - regexpMust
-
-    # Enable multiple checks by tags, run `GL_DEBUG=gocritic golangci-lint run` to see all tags and checks.
-    # Empty list by default. See https://github.com/go-critic/go-critic#usage -> section "Tags".
-    enabled-tags:
-      - performance
-    disabled-tags:
-      - experimental
-
-    # Settings passed to gocritic.
-    # The settings key is the name of a supported gocritic checker.
-    # The list of supported checkers can be find in https://go-critic.github.io/overview.
-    settings:
-      captLocal: # must be valid enabled check name
-        # whether to restrict checker to params only (default true)
-        paramsOnly: true
-      elseif:
-        # whether to skip balanced if-else pairs (default true)
-        skipBalanced: true
-      hugeParam:
-        # size in bytes that makes the warning trigger (default 80)
-        sizeThreshold: 80
-      nestingReduce:
-        # min number of statements inside a branch to trigger a warning (default 5)
-        bodyWidth: 5
-      rangeExprCopy:
-        # size in bytes that makes the warning trigger (default 512)
-        sizeThreshold: 512
-        # whether to check test functions (default true)
-        skipTestFuncs: true
-      rangeValCopy:
-        # size in bytes that makes the warning trigger (default 128)
-        sizeThreshold: 32
-        # whether to check test functions (default true)
-        skipTestFuncs: true
-      ruleguard:
-        # path to a gorules file for the ruleguard checker
-        rules: ''
-      truncateCmp:
-        # whether to skip int/uint/uintptr types (default true)
-        skipArchDependent: true
-      underef:
-        # whether to skip (*x).method() calls where x is a pointer receiver (default true)
-        skipRecvDeref: true
-  cyclop:
-    # the maximal code complexity to report
-    max-complexity: 10
-    # the maximal average package complexity. If it's higher than 0.0 (float) the check is enabled (default 0.0)
-    package-average: 0.0
-    # should ignore tests (default false)
-    skip-tests: false
-  godot:
-    # comments to be checked: `declarations`, `toplevel`, or `all`
-    scope: declarations
-    # check that each sentence starts with a capital letter
-    capital: false
-  godox:
-    # report any comments starting with keywords, this is useful for TODO or FIXME comments that
-    # might be left in the code accidentally and should be resolved before merging
-    keywords: # default keywords are TODO, BUG, and FIXME, these can be overwritten by this setting
-      - NOTE
-      - OPTIMIZE # marks code that should be optimized before merging
-      - HACK # marks hack-arounds that should be removed before merging
-  gofmt:
-    # simplify code: gofmt with `-s` option, true by default
-    simplify: true
-  goimports:
-    # put imports beginning with prefix after 3rd-party packages;
-    # it's a comma-separated list of prefixes
-    local-prefixes: github.com/ssvlabs/ssv
-  mnd:
-    checks:
-      - argument
-      - case
-      - condition
-      - operation
-      - return
-      - assign
-  govet:
-    
-
-    # settings per analyzer
-    settings:
-      printf: # analyzer name, run `go tool vet help` to see all analyzers
-        funcs: # run `go tool vet help printf` to see available settings for `printf` analyzer
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
-          - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
-
-    # enable or disable analyzers by name
-    enable:
-      - atomicalign
-    enable-all: false
-    disable:
-      - shadow
-    disable-all: false
-  depguard:
-    rules:
-      main:
-        list-mode: original
-        deny:
-          - pkg: github.com/sirupsen/logrus
-            desc: logging is allowed only by go.uber.org/zap
-  lll:
-    # max line length, lines longer will be reported. Default is 120.
-    # '\t' is counted as 1 character by default, and can be changed with the tab-width option
-    line-length: 120
-    # tab width in spaces. Default to 1.
-    tab-width: 1
-  misspell:
-    # Correct spellings using locale preferences for US or UK.
-    # Default is to use a neutral variety of English.
-    # Setting locale to US will correct the British spelling of 'colour' to 'color'.
-    locale: US
-    ignore-words:
-      - someword
-  nakedret:
-    # make an issue if func has more lines of code than this setting and it has naked returns; default is 30
-    max-func-lines: 30
-  prealloc:
-    # XXX: we don't recommend using this linter before doing performance profiling.
-    # For most programs usage of prealloc will be a premature optimization.
-
-    # Report preallocation suggestions only on simple loops that have no returns/breaks/continues/gotos in them.
-    # True by default.
-    simple: true
-    range-loops: true # Report preallocation suggestions on range loops, true by default
-    for-loops: false # Report preallocation suggestions on for loops, false by default
-  predeclared:
-    # comma-separated list of predeclared identifiers to not report on
-    ignore: ""
-    # include method names and field names (i.e., qualified names) in checks
-    q: false
-  nolintlint:
-    # Enable to ensure that nolint directives are all used. Default is true.
-    allow-unused: false
-    # Exclude following linters from requiring an explanation.  Default is [].
-    allow-no-explanation: []
-    # Enable to require an explanation of nonzero length after each nolint directive. Default is false.
-    require-explanation: true
-    # Enable to require nolint directives to mention the specific linter being suppressed. Default is false.
-    require-specific: true
-  rowserrcheck:
-    packages:
-      - github.com/jmoiron/sqlx
-  revive:
-    # see https://github.com/mgechev/revive#available-rules for details.
-    ignore-generated-header: true
-    severity: warning
-    rules:
-      - name: indent-error-flow
-        severity: warning
-  testpackage:
-    # regexp pattern to skip files
-    skip-regexp: (export|internal)_test\.go
-  thelper:
-    # The following configurations enable all checks. It can be omitted because all checks are enabled by default.
-    # You can enable only required checks deleting unnecessary checks.
-    test:
-      first: true
-      name: true
-      begin: true
-    benchmark:
-      first: true
-      name: true
-      begin: true
-    tb:
-      first: true
-      name: true
-      begin: true
-  unparam:
-    # Inspect exported functions, default is false. Set to true if no external program/library imports your code.
-    # XXX: if you enable this setting, unparam will report a lot of false-positives in text editors:
-    # if it's called for subdir of a project it can't find external interfaces. All text editor integrations
-    # with golangci-lint call it on a directory with the changed file.
-    check-exported: false
-  whitespace:
-    multi-if: false   # Enforces newlines (or comments) after every multi-line if statement
-    multi-func: false # Enforces newlines (or comments) after every multi-line function signature
-  wsl:
-    # If true append is only allowed to be cuddled if appending value is
-    # matching variables, fields or types on line above. Default is true.
-    strict-append: true
-    # Allow calls and assignments to be cuddled as long as the lines have any
-    # matching variables, fields or types. Default is true.
-    allow-assign-and-call: true
-    # Allow assignments to be cuddled with anything. Default is false.
-    allow-assign-and-anything: false
-    # Allow multiline assignments to be cuddled. Default is true.
-    allow-multiline-assign: true
-    # Allow declarations (var) to be cuddled.
-    allow-cuddle-declarations: false
-    # Allow trailing comments in ending of blocks
-    allow-trailing-comment: false
-    # Force newlines in end of case at this limit (0 = never).
-    force-case-trailing-whitespace: 0
-    # Force cuddling of err checks with err var assignment
-    force-err-cuddling: false
-    # Allow leading comments to be separated with empty liens
-    allow-separated-leading-comment: false
-  gofumpt:
-    # Choose whether or not to use the extra rules that are disabled
-    # by default
-    extra-rules: false
-  errorlint:
-    # Report non-wrapping error creation using fmt.Errorf
-    errorf: true
-  makezero:
-    # Allow only slices initialized with a length of zero. Default is false.
-    always: false
-  forbidigo:
-    # Forbid the following identifiers
-    forbid:
-      - fmt.Errorf # consider errors.Errorf in github.com/pkg/errors
-      - fmt.Print.* # too much log noise
-      - ginkgo\\.F.* # these are used just for local development
-    # Exclude godoc examples from forbidigo checks.  Default is true.
-    exclude-godoc-examples: false
-
 linters:
   enable:
-    - goconst
-    - unconvert
-    - gosec
-    - errcheck
     - errorlint
-
-  disable-all: false
-
+    - goconst
+    - gosec
+    - unconvert
+  settings:
+    cyclop:
+      max-complexity: 10
+      package-average: 0
+    depguard:
+      rules:
+        main:
+          list-mode: original
+          deny:
+            - pkg: github.com/sirupsen/logrus
+              desc: logging is allowed only by go.uber.org/zap
+    dogsled:
+      max-blank-identifiers: 2
+    dupl:
+      threshold: 100
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+      exclude-functions:
+        - fmt:.*
+        - io/ioutil:^Read.*
+    errorlint:
+      errorf: true
+    exhaustive:
+      default-signifies-exhaustive: false
+    exhaustruct:
+      exclude:
+        - .*.Test
+        - .*.Test2
+        - .*.Embedded
+        - .*.External
+    forbidigo:
+      forbid:
+        - pattern: fmt.Errorf
+        - pattern: fmt.Print.*
+        - pattern: ginkgo\\.F.*
+      exclude-godoc-examples: false
+    funlen:
+      lines: 60
+      statements: 40
+    gocognit:
+      min-complexity: 10
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocritic:
+      enabled-checks:
+        - rangeValCopy
+      disabled-checks:
+        - regexpMust
+      enabled-tags:
+        - performance
+      disabled-tags:
+        - experimental
+      settings:
+        captLocal:
+          paramsOnly: true
+        elseif:
+          skipBalanced: true
+        hugeParam:
+          sizeThreshold: 80
+        nestingReduce:
+          bodyWidth: 5
+        rangeExprCopy:
+          sizeThreshold: 512
+          skipTestFuncs: true
+        rangeValCopy:
+          sizeThreshold: 32
+          skipTestFuncs: true
+        ruleguard:
+          rules: ""
+        truncateCmp:
+          skipArchDependent: true
+        underef:
+          skipRecvDeref: true
+    godot:
+      scope: declarations
+      capital: false
+    godox:
+      keywords:
+        - NOTE
+        - OPTIMIZE
+        - HACK
+    govet:
+      enable:
+        - atomicalign
+      disable:
+        - shadow
+      enable-all: false
+      disable-all: false
+      settings:
+        printf:
+          funcs:
+            - (github.com/golangci/golangci-lint/pkg/logutils.Log).Infof
+            - (github.com/golangci/golangci-lint/pkg/logutils.Log).Warnf
+            - (github.com/golangci/golangci-lint/pkg/logutils.Log).Errorf
+            - (github.com/golangci/golangci-lint/pkg/logutils.Log).Fatalf
+    lll:
+      line-length: 120
+      tab-width: 1
+    makezero:
+      always: false
+    misspell:
+      locale: US
+      ignore-rules:
+        - someword
+    mnd:
+      checks:
+        - argument
+        - case
+        - condition
+        - operation
+        - return
+        - assign
+    nakedret:
+      max-func-lines: 30
+    nestif:
+      min-complexity: 4
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+    predeclared:
+      qualified-name: false
+    revive:
+      severity: warning
+      rules:
+        - name: indent-error-flow
+          severity: warning
+    rowserrcheck:
+      packages:
+        - github.com/jmoiron/sqlx
+    testpackage:
+      skip-regexp: (export|internal)_test\.go
+    thelper:
+      test:
+        first: true
+        name: true
+        begin: true
+      benchmark:
+        first: true
+        name: true
+        begin: true
+      tb:
+        first: true
+        name: true
+        begin: true
+    unparam:
+      check-exported: false
+    whitespace:
+      multi-if: false
+      multi-func: false
+    wsl:
+      strict-append: true
+      allow-assign-and-call: true
+      allow-assign-and-anything: false
+      allow-multiline-assign: true
+      force-case-trailing-whitespace: 0
+      allow-trailing-comment: false
+      allow-separated-leading-comment: false
+      allow-cuddle-declarations: false
+      force-err-cuddling: false
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - dupl
+          - errcheck
+          - gosec
+        path: _test\.go
+      - linters:
+          - gosec
+        path: internal/hmac/
+        text: weak cryptographic primitive
+      - linters:
+          - staticcheck
+        text: 'SA9003:'
+      - linters:
+          - lll
+        source: '^//go:generate '
+      - path: (.+)\.go$
+        text: declaration of "(err|ctx|logger)" shadows declaration at
+    paths:
+      - scripts
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  # List of regexps of issue texts to exclude, empty list by default.
-  # But independently from this option we use default exclude patterns,
-  # it can be disabled by `exclude-use-default: false`. To list all
-  # excluded by default patterns execute `golangci-lint run --help`
-  exclude:
-    -  'declaration of "(err|ctx|logger)" shadows declaration at'
-
-  exclude-dirs-use-default: true
-
-  exclude-dirs:
-    - scripts
-
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-#        - gocyclo
-        - errcheck
-        - dupl
-        - gosec
-
-    # Exclude known linters from partially hard-vendored code,
-    # which is impossible to exclude via "nolint" comments.
-    - path: internal/hmac/
-      text: "weak cryptographic primitive"
-      linters:
-        - gosec
-
-    # Exclude some staticcheck messages
-    - linters:
-        - staticcheck
-      text: "SA9003:"
-
-    # Exclude lll issues for long lines with go:generate
-    - linters:
-        - lll
-      source: "^//go:generate "
-
-  # Independently from option `exclude` we use default exclude patterns,
-  # it can be disabled by this option. To list all
-  # excluded by default patterns execute `golangci-lint run --help`.
-  # Default value for this option is true.
-  exclude-use-default: false
-
-  # The default value is false. If set to true exclude and exclude-rules
-  # regular expressions become case sensitive.
-  exclude-case-sensitive: false
-
-  uniq-by-line: true
-
-  # The list of ids of default excludes to include or disable. By default it's empty.
-  include:
-    - EXC0002 # disable excluding of issues about comments from golint
-
-  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
   max-issues-per-linter: 0
-
-  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
   max-same-issues: 0
-
-  # Show only new issues: if there are unstaged changes or untracked files,
-  # only those changes are analyzed, else only changes in HEAD~ are analyzed.
-  # It's a super-useful option for integration of golangci-lint into existing
-  # large codebase. It's not practical to fix all existing issues at the moment
-  # of integration: much better don't allow issues in new code.
-  # Default is false.
+  uniq-by-line: true
   new: false
-
-  # Show only new issues created in git patch with set file path.
-  #  new-from-patch: path/to/patch/file
-
-  # Fix found issues (if it's supported by the linter)
-  fix: true
+  fix: false
+formatters:
+  settings:
+    gofmt:
+      simplify: true
+    gofumpt:
+      extra-rules: false
+    goimports:
+      local-prefixes:
+        - github.com/ssvlabs/ssv/
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

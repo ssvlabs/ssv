@@ -4,17 +4,15 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/utils/commons"
-
-	"github.com/ssvlabs/ssv/logging"
-
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
 	global_config "github.com/ssvlabs/ssv/cli/config"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
+	"github.com/ssvlabs/ssv/utils/commons"
 )
 
 type config struct {
@@ -42,7 +40,7 @@ var StartBootNodeCmd = &cobra.Command{
 			cfg.LogLevelFormat,
 			cfg.LogFormat,
 			&logging.LogFileOptions{
-				FileName:   cfg.LogFilePath,
+				FilePath:   cfg.LogFilePath,
 				MaxSize:    cfg.LogFileSize,
 				MaxBackups: cfg.LogFileBackups,
 			},

@@ -9,8 +9,9 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/network/records"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 // MaxPeersProvider returns the max peers for the given topic.
@@ -161,7 +162,7 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 	stats.Connected = make([]int, len(stats.PeersCount))
 	var sumConnected int
 	for subnet := range stats.PeersCount {
-		peers := pi.SubnetsIndex.GetSubnetPeers(subnet)
+		peers := pi.GetSubnetPeers(subnet)
 		connectedCount := 0
 		for _, p := range peers {
 			if pi.Connectedness(p) == libp2pnetwork.Connected {
