@@ -65,6 +65,7 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -76,6 +77,14 @@ type KeyStore struct {
 	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Path to password file for private key decryption"`
 }
 
+type SSVSignerConfig struct {
+	Endpoint             string        `yaml:"Endpoint" env:"ENDPOINT" env-description:"Endpoint of ssv-signer. It must be a correct URL"`
+	RequestTimeout       time.Duration `yaml:"RequestTimeout" env:"REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
+	KeystoreFile         string        `yaml:"KeystoreFile" env:"KEYSTORE_FILE" env-description:"Path to ssv-signer client keystore file"`
+	KeystorePasswordFile string        `yaml:"KeystorePasswordFile" env:"KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for client keystore file"`
+	ServerCertFile       string        `yaml:"ServerCertFile" env:"SERVER_CERT_FILE" env-description:"Path to trusted server certificate file for ssv-signer"`
+}
+
 type config struct {
 	global_config.GlobalConfig   `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
@@ -84,8 +93,7 @@ type config struct {
 	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
-	SSVSignerEndpoint            string                  `yaml:"SSVSignerEndpoint" env:"SSV_SIGNER_ENDPOINT" env-description:"Endpoint of ssv-signer. It must be a correct URL"`
-	SSVSignerRequestTimeout      time.Duration           `yaml:"SSVSignerRequestTimeout" env:"SSV_SIGNER_REQUEST_TIMEOUT" env-description:"Request timeout for ssv-signer" env-default:"10s"`
+	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
@@ -168,18 +176,38 @@ var StartNodeCmd = &cobra.Command{
 		var operatorPubKeyBase64 string
 
 		if usingSSVSigner {
-			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint))
+			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
 			logger.Info("using ssv-signer for signing")
 
-			if _, err := url.Parse(cfg.SSVSignerEndpoint); err != nil {
+			if _, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
 			}
 
-			ssvSignerClient = ssvsigner.NewClient(
-				cfg.SSVSignerEndpoint,
+			ssvSignerOptions := []ssvsigner.ClientOption{
 				ssvsigner.WithLogger(logger),
-				ssvsigner.WithRequestTimeout(cfg.SSVSignerRequestTimeout),
+				ssvsigner.WithRequestTimeout(cfg.SSVSigner.RequestTimeout),
+			}
+
+			if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.ServerCertFile != "" {
+				tlsConfig := &ssvsignertls.Config{
+					ClientKeystoreFile:         cfg.SSVSigner.KeystoreFile,
+					ClientKeystorePasswordFile: cfg.SSVSigner.KeystorePasswordFile,
+					ClientServerCertFile:       cfg.SSVSigner.ServerCertFile,
+				}
+
+				clientConfig, err := tlsConfig.LoadClientTLSConfig()
+				if err != nil {
+					logger.Fatal("failed to load ssv-signer TLS config", zap.Error(err))
+				}
+
+				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
+			}
+
+			ssvSignerClient := ssvsigner.NewClient(
+				cfg.SSVSigner.Endpoint,
+				ssvSignerOptions...,
 			)
+
 			operatorPubKeyString, err := ssvSignerClient.OperatorIdentity(cmd.Context())
 			if err != nil {
 				logger.Fatal("ssv-signer unavailable", zap.Error(err))
@@ -642,7 +670,7 @@ func privateKeyFromKeystore(privKeyFile, passwordFile string) (keys.OperatorPriv
 }
 
 func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usingPrivKey bool) {
-	if cfg.SSVSignerEndpoint != "" {
+	if cfg.SSVSigner.Endpoint != "" {
 		usingSSVSigner = true
 	}
 	if cfg.KeyStore.PrivateKeyFile != "" || cfg.KeyStore.PasswordFile != "" {
@@ -656,14 +684,14 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 	}
 
 	logger = logger.
-		With(zap.String("ssv_signer_endpoint", cfg.SSVSignerEndpoint),
+		With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint),
 			zap.String("private_key_file", cfg.KeyStore.PrivateKeyFile),
 			zap.String("password_file", cfg.KeyStore.PasswordFile),
 			zap.Int("operator_private_key_len", len(cfg.OperatorPrivateKey)), // not exposing the private key
 		)
 
 	if usingSSVSigner && (usingKeystore || usingPrivKey) {
-		logger.Fatal("cannot enable both remote signing (SSVSignerEndpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)")
+		logger.Fatal("cannot enable both remote signing (SSVSigner.Endpoint) and local signing (PrivateKeyFile/OperatorPrivateKey)")
 	} else if usingKeystore && usingPrivKey {
 		logger.Fatal("cannot enable both OperatorPrivateKey and PrivateKeyFile")
 	}
@@ -804,7 +832,7 @@ func setupOperatorDataStore(
 // ensureOperatorPrivateKey makes sure the operator private key hash
 // is saved exactly once and never changes thereafter.
 // On first run it saves the current hash; on subsequent runs it errors
-// if the stored hash doesn’t match either the current or legacy hash.
+// if the stored hash doesn't match either the current or legacy hash.
 func ensureOperatorPrivateKey(
 	nodeStorage operatorstorage.Storage,
 	operatorPrivKey keys.OperatorPrivateKey,
@@ -849,7 +877,7 @@ func ensureOperatorPrivateKey(
 
 // ensureOperatorPubKey makes sure the operator public key is stored exactly once
 // and never changes. On first run it saves the key; thereafter it returns an error
-// if the stored key and the new key don’t match.
+// if the stored key and the new key don't match.
 func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBase64 string) error {
 	storedPubKey, found, err := nodeStorage.GetPublicKey()
 	if err != nil {
@@ -969,7 +997,6 @@ func syncContractEvents(
 		operatorDataStore,
 		operatorDecrypter,
 		keyManager,
-		cfg.SSVOptions.ValidatorOptions.Beacon,
 		doppelgangerHandler,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
