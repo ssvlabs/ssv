@@ -45,10 +45,7 @@ const (
 type Storage interface {
 	registry.RegistryStore
 
-	// Name returns storage name.
-	Name() string
-	core.WalletStorage
-	core.AccountStorage
+	core.Storage
 	core.SlashingStore
 
 	RemoveHighestAttestation(pubKey []byte) error

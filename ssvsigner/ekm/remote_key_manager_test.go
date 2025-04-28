@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,8 +26,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+
 	"github.com/ssvlabs/ssv/ssvsigner"
 )
+
+var testNetCfg = networkconfig.HoodiStage // using a real network config because https://github.com/ssvlabs/eth2-key-manager doesn't support min genesis time for networkconfig.TestNetwork
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite
@@ -54,12 +58,13 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -84,12 +89,13 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -113,6 +119,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignWithMockedOperatorKey() {
 		consensusClient: s.consensusClient,
 		getOperatorId:   func() spectypes.OperatorID { return 1 },
 		operatorPubKey:  &MockOperatorPublicKey{},
+		signLocks:       map[signKey]*sync.RWMutex{},
 	}
 
 	payload := []byte("message_to_sign")
@@ -134,11 +141,12 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      mockRemoteSigner,
 		slashingProtector: mockSlashingProtector,
 		operatorPubKey:    mockOperatorPublicKey,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	message := []byte("test message to sign")
@@ -161,12 +169,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
@@ -695,12 +704,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
@@ -739,12 +749,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -786,12 +797,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -842,12 +854,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -898,12 +911,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -954,12 +968,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1031,12 +1046,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1108,12 +1124,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1187,12 +1204,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1266,12 +1284,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1370,12 +1389,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1476,12 +1496,13 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: mockSlashingProtector,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1504,12 +1525,13 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1535,12 +1557,13 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	s.Run("RemoveValidatorsError", func() {
@@ -1559,12 +1582,13 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1586,12 +1610,13 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			beaconConfig:      networkconfig.TestNetwork,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
 			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
 		}
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -1634,9 +1659,10 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessage() {
 
 	rm := &RemoteKeyManager{
 		logger:        zap.NewNop(),
-		beaconConfig:  networkconfig.TestNetwork,
+		beaconConfig:  testNetCfg,
 		signerClient:  mockRemoteSigner,
 		getOperatorId: func() spectypes.OperatorID { return 1 },
+		signLocks:     map[signKey]*sync.RWMutex{},
 	}
 
 	message := &spectypes.SSVMessage{
@@ -1691,12 +1717,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	mockFork := &phase0.Fork{
@@ -1809,12 +1836,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	mockFork := &phase0.Fork{
@@ -1986,12 +2014,13 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		beaconConfig:      networkconfig.TestNetwork,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
 		operatorPubKey:    &MockOperatorPublicKey{},
 		slashingProtector: mockSlashingProtector,
+		signLocks:         map[signKey]*sync.RWMutex{},
 	}
 
 	mockFork := &phase0.Fork{
@@ -2136,8 +2165,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
 
-	networkCfg := networkconfig.NetworkConfig{}
-
 	const sampleRSAPublicKey = `
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArVzXJ1Xm3YIY8QYs2MFL
@@ -2161,7 +2188,7 @@ QwIDAQAB
 
 	_, err := NewRemoteKeyManager(
 		logger,
-		networkCfg,
+		testNetCfg,
 		s.client,
 		s.consensusClient,
 		s.db,
@@ -2178,8 +2205,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
 
-	networkCfg := networkconfig.NetworkConfig{}
-
 	invalidPubKey := "invalid-public-key-format"
 	s.client.On("OperatorIdentity", mock.Anything).Return(invalidPubKey, nil)
 
@@ -2191,7 +2216,7 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 
 	_, err := NewRemoteKeyManager(
 		logger,
-		networkCfg,
+		testNetCfg,
 		s.client,
 		s.consensusClient,
 		s.db,
@@ -2208,8 +2233,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
 
-	networkCfg := networkconfig.NetworkConfig{}
-
 	s.client.On("OperatorIdentity", mock.Anything).Return("", errors.New("err"))
 
 	logger, _ := zap.NewDevelopment()
@@ -2220,7 +2243,7 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 
 	_, err := NewRemoteKeyManager(
 		logger,
-		networkCfg,
+		testNetCfg,
 		s.client,
 		s.consensusClient,
 		s.db,
