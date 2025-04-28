@@ -385,10 +385,10 @@ func (ec *ExecutionClient) isClosed() bool {
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
 // streamLogsToChan *always* returns the last block it fetched, even if it errored.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
-func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
-	heads := make(chan *ethtypes.Header)
+func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logsCh chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+	headersCh := make(chan *ethtypes.Header)
 
-	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
+	// Generally, execution client can stream logsCh using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
 	//
 	// We must receive all events as they determine the state of the ssv network, so a discrepancy can result in slashing.
 	// Therefore, we must be sure that we don't miss any log while streaming.
@@ -403,12 +403,12 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	// It also allowed us to implement more 'atomic' behaviour easier:
 	// We can revert the tx if there was an error in processing all the events of a block.
 	// So we can restart from this block once everything is good.
-	sub, err := ec.client.SubscribeNewHead(ctx, heads)
+	sub, err := ec.client.SubscribeNewHead(ctx, headersCh)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
 			zap.String("operation", "SubscribeNewHead"),
 			zap.Error(err))
-		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
+		return fromBlock, fmt.Errorf("subscribe headersCh: %w", err)
 	}
 	defer sub.Unsubscribe()
 
@@ -428,8 +428,8 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			}
 			return fromBlock, fmt.Errorf("subscription: %w", err)
 
-		case header := <-heads:
-			ec.logger.Debug("New head received",
+		case header := <-headersCh:
+			ec.logger.Debug("new head received",
 				zap.Uint64("head_number", header.Number.Uint64()),
 				zap.String("head_hash", header.Hash().Hex()),
 				zap.String("head_parent_hash", header.ParentHash.Hex()))
@@ -453,7 +453,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 
 			if toBlock != lastFinalized {
 				finalizedEpoch := toBlock / 32
-				ec.logger.Info("⏱ Finalized block changed",
+				ec.logger.Info("⏱ finalized block changed",
 					zap.Uint64("new_finalized", toBlock),
 					zap.Uint64("epoch", finalizedEpoch),
 					zap.Uint64("previous_finalized", lastFinalized))
@@ -463,9 +463,9 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			// Wait until the finalized block number (toBlock) catches up to the block we want to start syncing from (fromBlock).
 			// For example, if we last processed block 123456, fromBlock = 123457.
 			// If Ethereum finality is only at 123454, we must wait until it reaches 123457 to continue.
-			// This prevents fetching logs from unfinalized (and potentially reorged) blocks.
+			// This prevents fetching logsCh from unfinalized (and potentially reorged) blocks.
 			if toBlock < fromBlock {
-				ec.logger.Info("Waiting for finalized block to reach fromBlock",
+				ec.logger.Info("waiting for finalized block to reach fromBlock",
 					zap.Uint64("from_block", fromBlock),
 					zap.Uint64("finalized_block", toBlock))
 				continue
@@ -473,12 +473,12 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
-				logs <- block
+				logsCh <- block
 				lastBlock = block.BlockNumber
 			}
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
-				return lastBlock, fmt.Errorf("fetch logs: %w", err)
+				return lastBlock, fmt.Errorf("fetch logsCh: %w", err)
 			}
 			fromBlock = toBlock + 1
 			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
