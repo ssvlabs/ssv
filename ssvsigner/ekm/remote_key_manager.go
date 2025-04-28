@@ -154,13 +154,8 @@ func (km *RemoteKeyManager) SignBeaconObject(
 ) (spectypes.Signature, phase0.Root, error) {
 	epoch := km.beaconConfig.EstimatedEpochAtSlot(slot)
 
-	forkInfo, err := km.getForkInfo(ctx, epoch)
-	if err != nil {
-		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("get fork info: %w", err)
-	}
-
 	req := web3signer.SignRequest{
-		ForkInfo: forkInfo,
+		ForkInfo: km.getForkInfo(epoch),
 	}
 
 	switch signatureDomain {
@@ -463,16 +458,13 @@ func (km *RemoteKeyManager) handleDomainProposer(
 	return ret, nil
 }
 
-func (km *RemoteKeyManager) getForkInfo(ctx context.Context, epoch phase0.Epoch) (web3signer.ForkInfo, error) {
-	currentFork, err := km.consensusClient.ForkAtEpoch(ctx, epoch)
-	if err != nil {
-		return web3signer.ForkInfo{}, fmt.Errorf("get current fork: %w", err)
-	}
+func (km *RemoteKeyManager) getForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
+	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
 
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
 		GenesisValidatorsRoot: km.beaconConfig.GetGenesisValidatorsRoot(),
-	}, nil
+	}
 }
 
 func (km *RemoteKeyManager) Sign(payload []byte) ([]byte, error) {

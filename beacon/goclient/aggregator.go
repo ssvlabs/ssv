@@ -34,7 +34,9 @@ func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
-	if gc.beaconConfig.DataVersion(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot)) < spec.DataVersionElectra {
+
+	dataVersion, _ := gc.beaconConfig.ForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
+	if dataVersion < spec.DataVersionElectra {
 		attData.Index = committeeIndex
 	}
 

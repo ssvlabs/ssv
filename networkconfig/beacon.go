@@ -37,7 +37,7 @@ type Beacon interface {
 	GetSyncCommitteeSize() uint64
 	GetGenesisValidatorsRoot() phase0.Root
 	GetBeaconName() string
-	DataVersion(epoch phase0.Epoch) spec.DataVersion
+	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
 }
 
 type BeaconConfig struct {
@@ -194,7 +194,7 @@ func (b BeaconConfig) GetBeaconName() string {
 	return b.BeaconName
 }
 
-func (b BeaconConfig) DataVersion(epoch phase0.Epoch) spec.DataVersion {
+func (b BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
 	versions := []spec.DataVersion{
 		spec.DataVersionPhase0,
 		spec.DataVersionAltair,
@@ -209,11 +209,14 @@ func (b BeaconConfig) DataVersion(epoch phase0.Epoch) spec.DataVersion {
 			if i == 0 {
 				panic("epoch before genesis")
 			}
-			return versions[i-1]
+
+			version := versions[i-1]
+			return version, b.Forks[version]
 		}
 	}
 
-	return versions[len(versions)-1]
+	version := versions[len(versions)-1]
+	return version, b.Forks[version]
 }
 
 func (b BeaconConfig) AssertSame(other BeaconConfig) error {

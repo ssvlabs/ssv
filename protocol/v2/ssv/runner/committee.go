@@ -232,7 +232,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	blockedAttesterDuties := 0
 
 	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
-	version := cr.BaseRunner.NetworkConfig.DataVersion(epoch)
+	version, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
@@ -689,7 +689,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 	slot := duty.DutySlot()
 	epoch := cr.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
 
-	dataVersion := cr.GetBaseRunner().NetworkConfig.DataVersion(epoch)
+	dataVersion, _ := cr.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {
