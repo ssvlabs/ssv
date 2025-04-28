@@ -109,6 +109,7 @@ var (
 func metricNameServer(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespaceServer, name)
 }
+
 func metricNameClient(name string) string {
 	return fmt.Sprintf("%s.%s", observabilityNamespaceClient, name)
 }
