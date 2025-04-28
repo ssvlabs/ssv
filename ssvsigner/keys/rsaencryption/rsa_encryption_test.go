@@ -55,7 +55,7 @@ func TestDecryptRSA(t *testing.T) {
 			var err error
 			var data []byte
 
-			if tc.name == "Success" {
+			if tc.ciphertext == nil {
 				sk, err = PEMToPrivateKey([]byte(rsatesting.PrivKeyPEM))
 				require.NoError(t, err)
 
