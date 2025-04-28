@@ -185,9 +185,8 @@ type controller struct {
 	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache              *validator.DomainCache
 
-	recentlyStartedValidators uint64
-	indicesChange             chan struct{}
-	validatorExitCh           chan duties.ExitDescriptor
+	indicesChange   chan struct{}
+	validatorExitCh chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -917,11 +916,8 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
 	}
-	if started {
-		c.recentlyStartedValidators++
-	}
 
-	return true, nil // TODO: what should be returned if c.validatorStart(v) returns false?
+	return started, nil
 }
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {
