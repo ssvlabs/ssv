@@ -159,12 +159,12 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
 
 	// Change network config
-	dvs.networkConfig = networkconfig.HoleskyStage
+	dvs.networkConfig = networkconfig.TestRealNetwork
 	// Test PublishENR method
 	dvs.PublishENR(logger)
 
 	// Check LocalNode has been updated
-	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.HoleskyStage)
+	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.TestRealNetwork)
 }
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {
