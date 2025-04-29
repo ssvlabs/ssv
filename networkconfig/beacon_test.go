@@ -10,7 +10,7 @@ import (
 // TestDataVersion verifies that DataVersion returns the correct version based on fork epochs.
 func TestDataVersion(t *testing.T) {
 	config := &BeaconConfig{
-		Forks: map[spec.DataVersion]*phase0.Fork{
+		Forks: map[spec.DataVersion]phase0.Fork{
 			spec.DataVersionPhase0: {
 				Epoch: phase0.Epoch(0),
 			},

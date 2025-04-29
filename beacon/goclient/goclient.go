@@ -359,8 +359,11 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			currentConfig, err := gc.applyBeaconConfig(s.Address(), beaconConfig)
 			if err != nil {
 				logger.Fatal("client returned unexpected beacon config, make sure all clients use the same Ethereum network",
-					zap.Stringer("client_config", beaconConfig),
-					zap.Stringer("expected_config", currentConfig),
+					zap.Error(err),
+					zap.Any("current_forks", currentConfig.Forks),
+					zap.Any("got_forks", beaconConfig.Forks),
+					//zap.Stringer("client_config", beaconConfig),
+					//zap.Stringer("expected_config", currentConfig),
 				)
 				return // Tests may override Fatal's behavior
 			}
@@ -408,7 +411,7 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkco
 	}
 
 	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
-		return *gc.beaconConfig, fmt.Errorf("beacon config misalign, current %v, got %v, difference: %w", gc.beaconConfig, beaconConfig, err)
+		return *gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
 	}
 
 	return *gc.beaconConfig, nil

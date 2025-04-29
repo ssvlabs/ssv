@@ -53,7 +53,7 @@ type BeaconConfig struct {
 	GenesisForkVersion                   phase0.Version
 	GenesisTime                          time.Time
 	GenesisValidatorsRoot                phase0.Root
-	Forks                                map[spec.DataVersion]*phase0.Fork // TODO: 1) support updating electra; 2) lock
+	Forks                                map[spec.DataVersion]phase0.Fork // TODO: 1) support updating electra; 2) lock
 }
 
 func (b BeaconConfig) String() string {
@@ -211,12 +211,14 @@ func (b BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0
 			}
 
 			version := versions[i-1]
-			return version, b.Forks[version]
+			fork := b.Forks[version]
+			return version, &fork
 		}
 	}
 
 	version := versions[len(versions)-1]
-	return version, b.Forks[version]
+	fork := b.Forks[version]
+	return version, &fork
 }
 
 func (b BeaconConfig) AssertSame(other BeaconConfig) error {
@@ -256,6 +258,7 @@ func (b BeaconConfig) AssertSame(other BeaconConfig) error {
 	if b.GenesisValidatorsRoot != other.GenesisValidatorsRoot {
 		return fmt.Errorf("different GenesisValidatorsRoot")
 	}
+
 	if !maps.Equal(b.Forks, other.Forks) {
 		return fmt.Errorf("different Forks")
 	}

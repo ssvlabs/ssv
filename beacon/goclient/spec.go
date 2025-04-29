@@ -197,7 +197,7 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	return beaconConfig, nil
 }
 
-func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersion]*phase0.Fork, error) {
+func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersion]phase0.Fork, error) {
 	if specResponse == nil {
 		return nil, fmt.Errorf("spec response is nil")
 	}
@@ -277,7 +277,7 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 		return nil, err
 	}
 
-	forkEpochs := map[spec.DataVersion]*phase0.Fork{
+	forkEpochs := map[spec.DataVersion]phase0.Fork{
 		spec.DataVersionPhase0: {
 			PreviousVersion: genesisForkVersion,
 			CurrentVersion:  genesisForkVersion,
