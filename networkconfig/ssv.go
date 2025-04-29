@@ -13,14 +13,14 @@ import (
 //go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./ssv_mock.go -source=./ssv.go
 
 var supportedSSVConfigs = map[string]SSVConfig{
-	Mainnet.Name:      Mainnet.SSVConfig,
-	Holesky.Name:      Holesky.SSVConfig,
-	HoleskyStage.Name: HoleskyStage.SSVConfig,
-	LocalTestnet.Name: LocalTestnet.SSVConfig,
-	HoleskyE2E.Name:   HoleskyE2E.SSVConfig,
-	Hoodi.Name:        Hoodi.SSVConfig,
-	HoodiStage.Name:   HoodiStage.SSVConfig,
-	Sepolia.Name:      Sepolia.SSVConfig,
+	MainnetName:      MainnetSSV,
+	HoleskyName:      HoleskySSV,
+	HoleskyStageName: HoleskyStageSSV,
+	LocalTestnetName: LocalTestnetSSV,
+	HoleskyE2EName:   HoleskyE2ESSV,
+	HoodiName:        HoodiSSV,
+	HoodiStageName:   HoodiStageSSV,
+	SepoliaName:      SepoliaSSV,
 }
 
 func GetSSVConfigByName(name string) (SSVConfig, error) {
