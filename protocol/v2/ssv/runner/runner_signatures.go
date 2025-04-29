@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,32 +15,41 @@ import (
 )
 
 func signBeaconObject(
+	ctx context.Context,
 	runner Runner,
 	duty *spectypes.ValidatorDuty,
-	obj ssz.HashRoot,
+	root ssz.HashRoot,
 	slot spec.Slot,
-	domainType spec.DomainType,
+	signatureDomain spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
 	epoch := runner.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
+	domain, err := runner.GetBeaconNode().DomainData(epoch, signatureDomain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	return signAsValidator(runner, duty.ValidatorIndex, obj, domainType, domain)
+	return signAsValidator(ctx, runner, duty.ValidatorIndex, root, signatureDomain, domain)
 }
 
 func signAsValidator(
+	ctx context.Context,
 	runner Runner,
 	validatorIndex spec.ValidatorIndex,
 	root ssz.HashRoot,
-	domainType spec.DomainType,
+	signatureDomain spec.DomainType,
 	domain spec.Domain,
 ) (*spectypes.PartialSignatureMessage, error) {
 	share, ok := runner.GetShares()[validatorIndex]
 	if !ok {
 		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
 	}
-	sig, r, err := runner.GetSigner().SignBeaconObject(root, domain, share.SharePubKey, domainType)
+	sig, r, err := runner.GetSigner().SignBeaconObject(
+		ctx,
+		root,
+		domain,
+		spec.BLSPubKey(share.SharePubKey),
+		slot,
+		signatureDomain,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}
