@@ -59,7 +59,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	contractAddr := ethcommon.HexToAddress("0x1234")
 
 	customLogger := zap.NewExample()
-	const customFollowDistance = uint64(10)
 	const customTimeout = 100 * time.Millisecond
 	const customReconnectionInterval = 10 * time.Millisecond
 	const customReconnectionMaxInterval = 1 * time.Second
@@ -72,7 +71,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		addresses,
 		contractAddr,
 		WithLoggerMulti(customLogger),
-		WithFollowDistanceMulti(customFollowDistance),
 		WithConnectionTimeoutMulti(customTimeout),
 		WithReconnectionInitialIntervalMulti(customReconnectionInterval),
 		WithReconnectionMaxIntervalMulti(customReconnectionMaxInterval),
@@ -83,7 +81,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, mc)
 	require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
-	require.EqualValues(t, customFollowDistance, mc.followDistance)
 	require.EqualValues(t, customTimeout, mc.connectionTimeout)
 	require.EqualValues(t, customReconnectionInterval, mc.reconnectionInitialInterval)
 	require.EqualValues(t, customReconnectionMaxInterval, mc.reconnectionMaxInterval)

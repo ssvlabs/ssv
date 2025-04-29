@@ -26,22 +26,6 @@ func WithLoggerMulti(logger *zap.Logger) OptionMulti {
 	}
 }
 
-// WithFollowDistance sets finalization offset (a block at this offset into the past
-// from the head block will be considered as very likely finalized).
-func WithFollowDistance(offset uint64) Option {
-	return func(s *ExecutionClient) {
-		s.followDistance = offset
-	}
-}
-
-// WithFollowDistanceMulti sets finalization offset (a block at this offset into the past
-// from the head block will be considered as very likely finalized).
-func WithFollowDistanceMulti(offset uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.followDistance = offset
-	}
-}
-
 // WithConnectionTimeout sets timeout for network connection to eth1 node.
 func WithConnectionTimeout(timeout time.Duration) Option {
 	return func(s *ExecutionClient) {

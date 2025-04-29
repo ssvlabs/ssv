@@ -52,10 +52,7 @@ var _ Provider = &MultiClient{}
 // This shouldn't cause significant duty misses.
 type MultiClient struct {
 	// optional
-	logger *zap.Logger
-	// followDistance defines an offset into the past from the head block such that the block
-	// at this offset will be considered as very likely finalized.
-	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
+	logger                      *zap.Logger
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
@@ -91,7 +88,6 @@ func NewMulti(
 		clientsMu:                   make([]sync.Mutex, len(nodeAddrs)),
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
-		followDistance:              DefaultFollowDistance,
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
@@ -152,7 +148,6 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		mc.nodeAddrs[clientIndex],
 		mc.contractAddress,
 		WithLogger(logger),
-		WithFollowDistance(mc.followDistance),
 		WithConnectionTimeout(mc.connectionTimeout),
 		WithReconnectionInitialInterval(mc.reconnectionInitialInterval),
 		WithReconnectionMaxInterval(mc.reconnectionMaxInterval),

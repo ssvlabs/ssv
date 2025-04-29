@@ -173,7 +173,6 @@ func (e *TestEnv) setup(
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
-		executionclient.WithFollowDistance(*e.followDistance),
 	)
 	if err != nil {
 		return err

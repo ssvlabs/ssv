@@ -79,6 +79,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 	sim.Commit()
 
+	// FIXME: replace with finalized
 	// Create a client and connect to the simulator
 	const followDistance = 8
 	client, err := New(
@@ -86,7 +87,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		addr,
 		contractAddr,
 		WithLogger(logger),
-		WithFollowDistance(followDistance),
 		WithConnectionTimeout(2*time.Second),
 		WithReconnectionInitialInterval(2*time.Second),
 	)
@@ -153,9 +153,10 @@ func TestStreamLogs(t *testing.T) {
 	}
 	sim.Commit()
 
+	// FIXME: replace with finalized
 	// Create a client and connect to the simulator
 	const followDistance = 2
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
@@ -453,8 +454,9 @@ func TestSimSSV(t *testing.T) {
 	}
 	require.NotEmpty(t, contractCode)
 
+	// FIXME: replace with finalized
 	// Create a client and connect to the simulator
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(0))
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
