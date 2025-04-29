@@ -52,18 +52,6 @@ func (m *MockRemoteSigner) OperatorSign(ctx context.Context, payload []byte) ([]
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-type MockConsensusClient struct {
-	mock.Mock
-}
-
-func (m *MockConsensusClient) ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) {
-	args := m.Called(ctx, epoch)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*phase0.Fork), args.Error(1)
-}
-
 type MockBeaconNetwork struct {
 	mock.Mock
 }

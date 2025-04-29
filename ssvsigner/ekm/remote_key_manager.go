@@ -39,14 +39,13 @@ import (
 //
 // RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
-	logger          *zap.Logger
-	beaconConfig    networkconfig.Beacon
-	signerClient    signerClient
-	consensusClient consensusClient
-	getOperatorId   func() spectypes.OperatorID
-	operatorPubKey  keys.OperatorPublicKey
-	signLocksMu     sync.RWMutex
-	signLocks       map[signKey]*sync.RWMutex
+	logger         *zap.Logger
+	beaconConfig   networkconfig.Beacon
+	signerClient   signerClient
+	getOperatorId  func() spectypes.OperatorID
+	operatorPubKey keys.OperatorPublicKey
+	signLocksMu    sync.RWMutex
+	signLocks      map[signKey]*sync.RWMutex
 	slashingProtector
 }
 
@@ -58,10 +57,6 @@ type signerClient interface {
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
 }
 
-type consensusClient interface {
-	ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) // TODO: get from network config
-}
-
 // NewRemoteKeyManager returns a RemoteKeyManager that fetches the operator's public
 // identity from the signerClient, sets up local slashing protection, and uses
 // the provided consensusClient to get the current fork/genesis for sign requests.
@@ -69,7 +64,6 @@ func NewRemoteKeyManager(
 	logger *zap.Logger,
 	beaconConfig networkconfig.Beacon,
 	signerClient signerClient,
-	consensusClient consensusClient,
 	db basedb.Database,
 	getOperatorId func() spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
@@ -90,7 +84,6 @@ func NewRemoteKeyManager(
 		logger:            logger,
 		beaconConfig:      beaconConfig,
 		signerClient:      signerClient,
-		consensusClient:   consensusClient,
 		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
 		getOperatorId:     getOperatorId,
 		operatorPubKey:    operatorPubKey,

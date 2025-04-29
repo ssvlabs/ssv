@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -25,6 +26,44 @@ var Hoodi = NetworkConfig{
 		GenesisForkVersion:                   spectypes.HoodiNetwork.ForkVersion(),
 		GenesisTime:                          time.Unix(int64(spectypes.HoodiNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f")),
+		Forks: map[spec.DataVersion]phase0.Fork{
+			// Phase0 (genesis)
+			spec.DataVersionPhase0: {
+				Epoch:           phase0.Epoch(0),
+				PreviousVersion: phase0.Version{0x10, 0x00, 0x09, 0x10}, // GENESIS_FORK_VERSION
+				CurrentVersion:  phase0.Version{0x10, 0x00, 0x09, 0x10},
+			},
+			// Altair @ epoch 0
+			spec.DataVersionAltair: {
+				Epoch:           phase0.Epoch(0),
+				PreviousVersion: phase0.Version{0x10, 0x00, 0x09, 0x10},
+				CurrentVersion:  phase0.Version{0x20, 0x00, 0x09, 0x10}, // ALTAIR_FORK_VERSION
+			},
+			// Bellatrix (Merge) @ epoch 0
+			spec.DataVersionBellatrix: {
+				Epoch:           phase0.Epoch(0),
+				PreviousVersion: phase0.Version{0x20, 0x00, 0x09, 0x10},
+				CurrentVersion:  phase0.Version{0x30, 0x00, 0x09, 0x10}, // BELLATRIX_FORK_VERSION
+			},
+			// Capella @ epoch 0
+			spec.DataVersionCapella: {
+				Epoch:           phase0.Epoch(0),
+				PreviousVersion: phase0.Version{0x30, 0x00, 0x09, 0x10},
+				CurrentVersion:  phase0.Version{0x40, 0x00, 0x09, 0x10}, // CAPELLA_FORK_VERSION
+			},
+			// Deneb @ epoch 0
+			spec.DataVersionDeneb: {
+				Epoch:           phase0.Epoch(0),
+				PreviousVersion: phase0.Version{0x40, 0x00, 0x09, 0x10},
+				CurrentVersion:  phase0.Version{0x50, 0x00, 0x09, 0x10}, // DENEB_FORK_VERSION
+			},
+			// Electra @ epoch 2048
+			spec.DataVersionElectra: {
+				Epoch:           phase0.Epoch(2048),
+				PreviousVersion: phase0.Version{0x50, 0x00, 0x09, 0x10},
+				CurrentVersion:  phase0.Version{0x60, 0x00, 0x09, 0x10}, // ELECTRA_FORK_VERSION
+			},
+		},
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x3},
