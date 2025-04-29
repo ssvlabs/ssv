@@ -104,8 +104,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	for _, role := range roles {
 		pk := sks[1].GetPublicKey()
-		ssvConfig, err := networkconfig.GetSSVConfigByName(networkconfig.TestRealNetwork.Name)
-		require.NoError(t, err)
+		ssvConfig := networkconfig.TestNetwork.SSVConfig
 		decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 			return oids, &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
