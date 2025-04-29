@@ -80,6 +80,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	sim.Commit()
 
 	// FIXME: replace with finalized
+	// FIXME: check builtin reconnection mechanism
 	// Create a client and connect to the simulator
 	const followDistance = 8
 	client, err := New(
@@ -88,7 +89,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		contractAddr,
 		WithLogger(logger),
 		WithConnectionTimeout(2*time.Second),
-		WithReconnectionInitialInterval(2*time.Second),
 	)
 	require.NoError(t, err)
 

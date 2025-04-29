@@ -52,13 +52,11 @@ var _ Provider = &MultiClient{}
 // This shouldn't cause significant duty misses.
 type MultiClient struct {
 	// optional
-	logger                      *zap.Logger
-	connectionTimeout           time.Duration
-	reconnectionInitialInterval time.Duration
-	reconnectionMaxInterval     time.Duration
-	healthInvalidationInterval  time.Duration
-	logBatchSize                uint64
-	syncDistanceTolerance       uint64
+	logger                     *zap.Logger
+	connectionTimeout          time.Duration
+	healthInvalidationInterval time.Duration
+	logBatchSize               uint64
+	syncDistanceTolerance      uint64
 
 	contractAddress ethcommon.Address
 	chainID         atomic.Pointer[big.Int]
@@ -83,15 +81,13 @@ func NewMulti(
 	}
 
 	multiClient := &MultiClient{
-		nodeAddrs:                   nodeAddrs,
-		clients:                     make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
-		clientsMu:                   make([]sync.Mutex, len(nodeAddrs)),
-		contractAddress:             contractAddr,
-		logger:                      zap.NewNop(),
-		connectionTimeout:           DefaultConnectionTimeout,
-		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
-		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize,
+		nodeAddrs:         nodeAddrs,
+		clients:           make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
+		clientsMu:         make([]sync.Mutex, len(nodeAddrs)),
+		contractAddress:   contractAddr,
+		logger:            zap.NewNop(),
+		connectionTimeout: DefaultConnectionTimeout,
+		logBatchSize:      DefaultHistoricalLogsBatchSize,
 	}
 
 	for _, opt := range opts {
@@ -149,8 +145,6 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		mc.contractAddress,
 		WithLogger(logger),
 		WithConnectionTimeout(mc.connectionTimeout),
-		WithReconnectionInitialInterval(mc.reconnectionInitialInterval),
-		WithReconnectionMaxInterval(mc.reconnectionMaxInterval),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
 	)

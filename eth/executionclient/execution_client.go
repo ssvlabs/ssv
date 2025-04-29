@@ -61,12 +61,10 @@ type ExecutionClient struct {
 	contractAddress ethcommon.Address
 
 	// optional
-	logger                      *zap.Logger
-	connectionTimeout           time.Duration
-	reconnectionInitialInterval time.Duration
-	reconnectionMaxInterval     time.Duration
-	healthInvalidationInterval  time.Duration
-	logBatchSize                uint64
+	logger                     *zap.Logger
+	connectionTimeout          time.Duration
+	healthInvalidationInterval time.Duration
+	logBatchSize               uint64
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
@@ -80,15 +78,13 @@ type ExecutionClient struct {
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
 	client := &ExecutionClient{
-		nodeAddr:                    nodeAddr,
-		contractAddress:             contractAddr,
-		logger:                      zap.NewNop(),
-		connectionTimeout:           DefaultConnectionTimeout,
-		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
-		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
-		closed:                      make(chan struct{}),
+		nodeAddr:                   nodeAddr,
+		contractAddress:            contractAddr,
+		logger:                     zap.NewNop(),
+		connectionTimeout:          DefaultConnectionTimeout,
+		healthInvalidationInterval: DefaultHealthInvalidationInterval,
+		logBatchSize:               DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		closed:                     make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -223,10 +219,10 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 // StreamLogs subscribes to events emitted by the contract.
 func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
-	logs := make(chan BlockLogs)
+	logsCh := make(chan BlockLogs)
 
 	go func() {
-		defer close(logs)
+		defer close(logsCh)
 		tries := 0
 		for {
 			select {
@@ -235,7 +231,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 			case <-ec.closed:
 				return
 			default:
-				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+				lastBlock, err := ec.streamLogsToChan(ctx, logsCh, fromBlock)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 					// Closed gracefully.
 					return
@@ -251,18 +247,19 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				if tries > 2 {
 					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
 				}
+
 				if lastBlock > fromBlock {
-					// Successfully streamed some logs, reset tries.
+					// Successfully streamed some logsCh, reset tries.
 					tries = 0
 				}
 
-				ec.logger.Error("failed to stream registry events, will reconnect", zap.Error(err))
+				ec.logger.Error("failed to stream registry events, resubscribing", zap.Error(err))
 				fromBlock = lastBlock + 1
 			}
 		}
 	}()
 
-	return logs
+	return logsCh
 }
 
 var errSyncing = fmt.Errorf("syncing")
