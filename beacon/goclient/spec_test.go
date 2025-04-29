@@ -23,7 +23,7 @@ func TestSpec(t *testing.T) {
 			zap.NewNop(),
 			Options{
 				Context:        ctx,
-				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,

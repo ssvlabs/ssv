@@ -72,7 +72,7 @@ func Test_genesisForClient(t *testing.T) {
 			logger,
 			Options{
 				Context:        ctx,
-				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
@@ -101,7 +101,7 @@ func Test_genesisForClient(t *testing.T) {
 			logger,
 			Options{
 				Context:        ctx,
-				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
@@ -125,7 +125,7 @@ func Test_genesisForClient(t *testing.T) {
 			logger,
 			Options{
 				Context:        ctx,
-				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,

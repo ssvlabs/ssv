@@ -214,7 +214,7 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 
-			result := tc.Share.IsParticipating(networkconfig.Mainnet, tc.Epoch)
+			result := tc.Share.IsParticipating(networkconfig.TestNetwork, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}

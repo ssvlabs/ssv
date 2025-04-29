@@ -13,7 +13,7 @@ import (
 //go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./ssv_mock.go -source=./ssv.go
 
 var supportedSSVConfigs = map[string]SSVConfig{
-	Mainnet.Name:      Mainnet.SSVConfig,
+	MainnetName:       MainnetSSV,
 	Holesky.Name:      Holesky.SSVConfig,
 	HoleskyStage.Name: HoleskyStage.SSVConfig,
 	LocalTestnet.Name: LocalTestnet.SSVConfig,
