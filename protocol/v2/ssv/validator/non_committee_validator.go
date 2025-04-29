@@ -42,10 +42,21 @@ type CommitteeObserver struct {
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache       *DomainCache
+
+	// cache to identify and skip duplicate computations of attester/sync committee roots
+	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
+
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
 
 	pccMtx                 *sync.Mutex
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
+}
+
+// BeaconVoteCacheKey is a composite key for identifying a unique call
+// to computing attester and sync committee roots.
+type BeaconVoteCacheKey struct {
+	root   phase0.Root
+	height specqbft.Height
 }
 
 type CommitteeObserverOptions struct {
@@ -60,6 +71,7 @@ type CommitteeObserverOptions struct {
 	ValidatorStore    registrystorage.ValidatorStore
 	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
+	BeaconVoteRoots   *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
 	DomainCache       *DomainCache
 }
 
@@ -77,6 +89,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		attesterRoots:     opts.AttesterRoots,
 		syncCommRoots:     opts.SyncCommRoots,
 		domainCache:       opts.DomainCache,
+		beaconVoteRoots:   opts.BeaconVoteRoots,
 		pccMtx:            &sync.Mutex{},
 		rootsMtx:          &sync.RWMutex{},
 	}
@@ -332,7 +345,7 @@ func (o *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigC
 	if err == nil {
 		err = o.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot, share)
 		if err == nil {
-			// Keep the previous sigature since it's correct
+			// Keep the previous signature since it's correct
 			return
 		}
 	}
@@ -384,6 +397,13 @@ func (o *CommitteeObserver) SaveRoots(msg *queue.SSVMessage) error {
 		o.logger.Fatal("unreachable: OnProposalMsg must be called only on qbft messages")
 	}
 
+	bnCacheKey := BeaconVoteCacheKey{root: beaconVote.BlockRoot, height: qbftMsg.Height}
+
+	// if the roots for this beacon vote hash and height have already been computed, skip
+	if o.beaconVoteRoots.Has(bnCacheKey) {
+		return nil
+	}
+
 	epoch := o.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
 	o.rootsMtx.Lock()
@@ -396,6 +416,9 @@ func (o *CommitteeObserver) SaveRoots(msg *queue.SSVMessage) error {
 	if err := o.saveSyncCommRoots(epoch, beaconVote); err != nil {
 		return err
 	}
+
+	// cache the roots for this beacon vote hash and height
+	o.beaconVoteRoots.Set(bnCacheKey, struct{}{}, ttlcache.DefaultTTL)
 
 	return nil
 }

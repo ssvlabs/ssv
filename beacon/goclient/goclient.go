@@ -109,12 +109,14 @@ type MultiClient interface {
 	eth2client.ValidatorRegistrationsSubmitter
 	eth2client.VoluntaryExitSubmitter
 	eth2client.ValidatorLivenessProvider
+	eth2client.ForkScheduleProvider
 }
 
 type EventTopic string
 
 const (
-	EventTopicHead EventTopic = "head"
+	EventTopicHead  EventTopic = "head"
+	EventTopicBlock EventTopic = "block"
 )
 
 // GoClient implementing Beacon struct
@@ -146,9 +148,6 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
-	// blockRootToSlotReqInflight helps prevent duplicate BeaconBlockHeader requests
-	// from running in parallel.
-	blockRootToSlotReqInflight singleflight.Group[phase0.Root, phase0.Slot]
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
 	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
@@ -160,12 +159,14 @@ type GoClient struct {
 
 	withWeightedAttestationData bool
 
+	withParallelSubmissions bool
+
 	subscribersLock      sync.RWMutex
 	headEventSubscribers []subscriber[*apiv1.HeadEvent]
 	supportedTopics      []EventTopic
 
-	lastProcessedHeadEventSlotLock sync.Mutex
-	lastProcessedHeadEventSlot     phase0.Slot
+	lastProcessedEventSlotLock sync.Mutex
+	lastProcessedEventSlot     phase0.Slot
 
 	genesisForkVersion phase0.Version
 	ForkLock           sync.RWMutex
@@ -210,9 +211,10 @@ func New(
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
-		weightedAttestationDataSoftTimeout: commonTimeout / 2,
+		withParallelSubmissions:            opt.WithParallelSubmissions,
+		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHead},
+		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
 		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,
@@ -324,7 +326,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				zap.String("version", nodeVersionResp.Data),
 			)
 
-			genesis, err := s.Genesis(ctx, &api.GenesisOpts{})
+			genesis, err := genesisForClient(ctx, gc.log, s)
 			if err != nil {
 				gc.log.Error(clResponseErrMsg,
 					zap.String("address", s.Address()),
@@ -334,17 +336,17 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 				return
 			}
 
-			if expected, err := gc.assertSameGenesisVersion(genesis.Data.GenesisForkVersion); err != nil {
+			if expected, err := gc.assertSameGenesisVersion(genesis.GenesisForkVersion); err != nil {
 				gc.log.Fatal("client returned unexpected genesis fork version, make sure all clients use the same Ethereum network",
 					zap.String("address", s.Address()),
-					zap.Any("client_genesis", genesis.Data.GenesisForkVersion),
+					zap.Any("client_genesis", genesis.GenesisForkVersion),
 					zap.Any("expected_genesis", expected),
 					zap.Error(err),
 				)
 				return // Tests may override Fatal's behavior
 			}
 
-			spec, err := s.Spec(ctx, &api.SpecOpts{})
+			spec, err := specImpl(ctx, gc.log, s)
 			if err != nil {
 				gc.log.Error(clResponseErrMsg,
 					zap.String("address", s.Address()),
