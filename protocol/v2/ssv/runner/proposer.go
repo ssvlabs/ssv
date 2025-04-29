@@ -125,7 +125,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(context.Background(), duty.Slot, r.graffiti, fullSig)
+	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		logger.Error("❌ failed to get beacon block",
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -319,7 +319,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 				zap.NamedError("summarize_err", summarizeErr),
 			)
 
-			if err := r.GetBeaconNode().SubmitBeaconBlock(context.Background(), vBlk, specSig); err != nil {
+			if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 				logger.Error("❌ could not submit Beacon block",
 					fields.SubmissionTime(time.Since(start)),

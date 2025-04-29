@@ -506,7 +506,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	if len(attestations) > 0 {
 		submissionStart := time.Now()
-		if err := cr.beacon.SubmitAttestations(context.Background(), attestations); err != nil {
+		if err := cr.beacon.SubmitAttestations(ctx, attestations); err != nil {
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
