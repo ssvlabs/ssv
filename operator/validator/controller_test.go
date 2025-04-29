@@ -18,13 +18,12 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -45,8 +44,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -1133,6 +1130,7 @@ func TestHandleMetadataUpdates(t *testing.T) {
 				var shares []*types.SSVShare
 				for _, metadata := range tc.metadataAfter {
 					share := &types.SSVShare{}
+					share.SharePubKey = make([]byte, 48)
 					share.SetBeaconMetadata(metadata)
 					shares = append(shares, share)
 				}
@@ -1226,7 +1224,6 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 		networkConfig:     networkconfig.TestNetwork,
 		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
 		validatorOptions: validator.Options{
-			Signer:        spectestingutils.NewTestingKeyManager(),
 			NetworkConfig: networkconfig.TestNetwork,
 		},
 		validatorStartFunc: func(validator *validator.Validator) (bool, error) {
