@@ -16,10 +16,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -183,13 +183,15 @@ type controller struct {
 	// committeeObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *hashmap.Map[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
-	attesterRoots            *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots            *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache              *validator.DomainCache
 
-	recentlyStartedValidators uint64
-	indicesChange             chan struct{}
-	validatorExitCh           chan duties.ExitDescriptor
+	attesterRoots   *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots   *ttlcache.Cache[phase0.Root, struct{}]
+	beaconVoteRoots *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
+
+	domainCache *validator.DomainCache
+
+	indicesChange   chan struct{}
+	validatorExitCh chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -269,7 +271,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
 		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
-
+		beaconVoteRoots: ttlcache.New(
+			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
+		),
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
@@ -282,6 +286,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
 	go ctrl.domainCache.Start()
+	go ctrl.beaconVoteRoots.Start()
 
 	return &ctrl
 }
@@ -410,6 +415,7 @@ func (c *controller) getCommitteeObserver(msgID spectypes.MessageID) *committeeO
 		AttesterRoots:     c.attesterRoots,
 		SyncCommRoots:     c.syncCommRoots,
 		DomainCache:       c.domainCache,
+		BeaconVoteRoots:   c.beaconVoteRoots,
 	}
 	newObserver := &committeeObserver{
 		CommitteeObserver: validator.NewCommitteeObserver(msgID, committeeObserverOptions),
@@ -904,11 +910,8 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
 	}
-	if started {
-		c.recentlyStartedValidators++
-	}
 
-	return true, nil // TODO: what should be returned if c.validatorStart(v) returns false?
+	return started, nil
 }
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {

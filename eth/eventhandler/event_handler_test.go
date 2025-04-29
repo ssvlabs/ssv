@@ -39,7 +39,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -1378,7 +1377,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		bc := beacon.NewMockBeaconNode(ctrl)
 		validatorCtrl := mocks.NewMockController(ctrl)
 
 		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -1394,7 +1392,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
-			bc,
 			dgHandler,
 			WithFullNode(),
 			WithLogger(logger),
@@ -1405,10 +1402,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 		return eh, validatorCtrl, nil
 	}
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
-	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
 		NetworkConfig:     *network,
@@ -1433,7 +1427,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
-		bc,
 		dgHandler,
 		WithFullNode(),
 		WithLogger(logger))
