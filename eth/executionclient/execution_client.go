@@ -49,7 +49,6 @@ var _ Provider = &ExecutionClient{}
 
 var (
 	ErrClosed        = fmt.Errorf("closed")
-	ErrNotConnected  = fmt.Errorf("not connected")
 	ErrBadInput      = fmt.Errorf("bad input")
 	ErrNothingToSync = errors.New("nothing to sync")
 )
@@ -63,10 +62,7 @@ type ExecutionClient struct {
 	contractAddress ethcommon.Address
 
 	// optional
-	logger *zap.Logger
-	// followDistance defines an offset into the past from the head block such that the block
-	// at this offset will be considered as very likely finalized.
-	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
+	logger                      *zap.Logger
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
@@ -88,7 +84,6 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		nodeAddr:                    nodeAddr,
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
-		followDistance:              DefaultFollowDistance,
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
@@ -127,17 +122,15 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	currentBlock, err := ec.client.BlockNumber(ctx)
+	finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_blockNumber"),
+			zap.String("method", "eth_getBlockByNumber"),
 			zap.Error(err))
-		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
+		return nil, nil, fmt.Errorf("failed to get finalized block: %w", err)
 	}
-	if currentBlock < ec.followDistance {
-		return nil, nil, ErrNothingToSync
-	}
-	toBlock := currentBlock - ec.followDistance
+
+	toBlock := finalizedBlock.Number.Uint64()
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}
@@ -433,14 +426,6 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logsCh chan<- B
 				zap.Uint64("head_number", header.Number.Uint64()),
 				zap.String("head_hash", header.Hash().Hex()),
 				zap.String("head_parent_hash", header.ParentHash.Hex()))
-
-			//if header.Number.Uint64() < ec.followDistance {
-			//	continue
-			//}
-			//toBlock := header.Number.Uint64() - ec.followDistance
-			//if toBlock < fromBlock {
-			//	continue
-			//}
 
 			finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 			if err != nil {
