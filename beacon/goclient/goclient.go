@@ -371,7 +371,7 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			dataVersion, _ := currentConfig.ForkAtEpoch(currentConfig.EstimatedCurrentEpoch())
 			logger.Info("retrieved beacon config",
 				zap.Uint64("data_version", uint64(dataVersion)),
-				zap.Any("config", currentConfig), // TODO: check if output format is readable
+				zap.Stringer("config", currentConfig),
 			)
 		},
 		OnInactive: func(ctx context.Context, s *eth2clienthttp.Service) {
