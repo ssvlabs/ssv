@@ -56,7 +56,11 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	return domain, nil
 }
 
-func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+func (gc *GoClient) DomainData(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	domain phase0.DomainType,
+) (phase0.Domain, error) {
 	switch domain {
 	case spectypes.DomainApplicationBuilder: // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
 		var appDomain phase0.Domain
@@ -72,12 +76,12 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
 	case spectypes.DomainVoluntaryExit:
-		return gc.computeVoluntaryExitDomain(gc.ctx)
+		return gc.computeVoluntaryExitDomain(ctx)
 	}
 
 	start := time.Now()
-	data, err := gc.multiClient.Domain(gc.ctx, domain, epoch)
-	recordRequestDuration(gc.ctx, "Domain", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	data, err := gc.multiClient.Domain(ctx, domain, epoch)
+	recordRequestDuration(ctx, "Domain", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Domain"),

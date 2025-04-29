@@ -18,7 +18,6 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
@@ -122,11 +121,9 @@ const (
 // GoClient implementing Beacon struct
 type GoClient struct {
 	log         *zap.Logger
-	ctx         context.Context
 	network     beaconprotocol.Network
 	clients     []Client
 	multiClient MultiClient
-	specssv.VersionCalls
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -179,6 +176,7 @@ type GoClient struct {
 
 // New init new client and go-client instance
 func New(
+	ctx context.Context,
 	logger *zap.Logger,
 	opt Options,
 	slotTickerProvider slotticker.Provider,
@@ -196,7 +194,6 @@ func New(
 
 	client := &GoClient{
 		log:                   logger.Named("consensus_client"),
-		ctx:                   opt.Context,
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		registrations:         map[phase0.BLSPubKey]*validatorRegistration{},
@@ -230,12 +227,12 @@ func New(
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	for _, beaconAddr := range beaconAddrList {
-		if err := client.addSingleClient(opt.Context, beaconAddr); err != nil {
+		if err := client.addSingleClient(ctx, beaconAddr); err != nil {
 			return nil, err
 		}
 	}
 
-	err := client.initMultiClient(opt.Context)
+	err := client.initMultiClient(ctx)
 	if err != nil {
 		logger.Error("Consensus multi client initialization failed",
 			zap.String("address", opt.BeaconNodeAddr),
@@ -247,12 +244,12 @@ func New(
 
 	client.nodeSyncingFn = client.nodeSyncing
 
-	go client.registrationSubmitter(slotTickerProvider)
+	go client.registrationSubmitter(ctx, slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
 	logger.Info("starting event listener")
-	if err := client.startEventListener(opt.Context); err != nil {
+	if err := client.startEventListener(ctx); err != nil {
 		return nil, errors.Wrap(err, "failed to launch event listener")
 	}
 

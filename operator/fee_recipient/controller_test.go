@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
@@ -59,7 +59,7 @@ func TestSubmitProposal(t *testing.T) {
 		wg.Add(numberOfRequests) // Set up the wait group before starting goroutines
 
 		client := beacon.NewMockBeaconNode(ctrl)
-		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return nil
 		}).Times(numberOfRequests)
@@ -77,7 +77,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(logger)
+		go frCtrl.Start(context.Background(), logger)
 
 		slots := []phase0.Slot{
 			1,                                        // first time
@@ -102,7 +102,7 @@ func TestSubmitProposal(t *testing.T) {
 	t.Run("error handling", func(t *testing.T) {
 		var wg sync.WaitGroup
 		client := beacon.NewMockBeaconNode(ctrl)
-		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return errors.New("failed to submit")
 		}).MinTimes(2).MaxTimes(2)
@@ -117,7 +117,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(logger)
+		go frCtrl.Start(context.Background(), logger)
 		mockTimeChan <- time.Now()
 		wg.Add(2)
 		wg.Wait()

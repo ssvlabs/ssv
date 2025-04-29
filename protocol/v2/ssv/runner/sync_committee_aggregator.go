@@ -78,7 +78,7 @@ func (r *SyncCommitteeAggregatorRunner) HasRunningDuty() bool {
 }
 
 func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing sync committee selection proof message")
 	}
@@ -137,7 +137,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 	r.measurements.PauseDutyFlow()
 	// fetch contributions
-	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.DutySlot(), selectionProofs, subnets)
+	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(ctx, duty.DutySlot(), selectionProofs, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not get sync committee contribution")
 	}
@@ -187,7 +187,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 	// specific duty sig
 	msgs := make([]*spectypes.PartialSignatureMessage, 0)
 	for _, c := range contributions {
-		contribAndProof, _, err := r.generateContributionAndProof(c.Contribution, c.SelectionProofSig)
+		contribAndProof, _, err := r.generateContributionAndProof(ctx, c.Contribution, c.SelectionProofSig)
 		if err != nil {
 			return errors.Wrap(err, "could not generate contribution and proof")
 		}
@@ -243,7 +243,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 }
 
 func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -282,7 +282,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 		for _, contribution := range contributions {
 			start := time.Now()
 			// match the right contrib and proof root to signed root
-			contribAndProof, contribAndProofRoot, err := r.generateContributionAndProof(contribution.Contribution, contribution.SelectionProofSig)
+			contribAndProof, contribAndProofRoot, err := r.generateContributionAndProof(ctx, contribution.Contribution, contribution.SelectionProofSig)
 			if err != nil {
 				return errors.Wrap(err, "could not generate contribution and proof")
 			}
@@ -301,7 +301,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 				Signature: blsSignedContribAndProof,
 			}
 
-			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
+			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(ctx, signedContribAndProof); err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleSyncCommitteeContribution)
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 					fields.SubmissionTime(time.Since(start)),
@@ -330,7 +330,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	return nil
 }
 
-func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(contrib altair.SyncCommitteeContribution, proof phase0.BLSSignature) (*altair.ContributionAndProof, phase0.Root, error) {
+func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
+	ctx context.Context,
+	contrib altair.SyncCommitteeContribution,
+	proof phase0.BLSSignature,
+) (*altair.ContributionAndProof, phase0.Root, error) {
 	contribAndProof := &altair.ContributionAndProof{
 		AggregatorIndex: r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex,
 		Contribution:    &contrib,
@@ -338,7 +342,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(contrib alt
 	}
 
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
-	dContribAndProof, err := r.GetBeaconNode().DomainData(epoch, spectypes.DomainContributionAndProof)
+	dContribAndProof, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
 	if err != nil {
 		return nil, phase0.Root{}, errors.Wrap(err, "could not get domain data")
 	}
@@ -366,7 +370,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	// get contributions
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
@@ -380,7 +384,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 
 	ret := make([]ssz.HashRoot, 0)
 	for _, contrib := range contributions {
-		contribAndProof, _, err := r.generateContributionAndProof(contrib.Contribution, contrib.SelectionProofSig)
+		contribAndProof, _, err := r.generateContributionAndProof(ctx, contrib.Contribution, contrib.SelectionProofSig)
 		if err != nil {
 			return nil, spectypes.DomainError, errors.Wrap(err, "could not generate contribution and proof")
 		}

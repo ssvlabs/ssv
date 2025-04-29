@@ -101,7 +101,7 @@ func TestTimeouts(t *testing.T) {
 		client, err := mockClient(ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		validators, err := client.GetValidatorData(nil) // Should call BeaconState internally.
+		validators, err := client.GetValidatorData(context.Background(), nil) // Should call BeaconState internally.
 		require.NoError(t, err)
 
 		var validatorKeys []phase0.BLSPubKey
@@ -109,7 +109,7 @@ func TestTimeouts(t *testing.T) {
 			validatorKeys = append(validatorKeys, v.Validator.PublicKey)
 		}
 
-		_, err = client.GetValidatorData(validatorKeys) // Shouldn't call BeaconState internally.
+		_, err = client.GetValidatorData(context.Background(), validatorKeys) // Shouldn't call BeaconState internally.
 		require.ErrorContains(t, err, "context deadline exceeded")
 
 		duties, err := client.ProposerDuties(ctx, mockServerEpoch, nil)
@@ -146,7 +146,7 @@ func TestTimeouts(t *testing.T) {
 		client, err := mockClient(ctx, fastServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		validators, err := client.GetValidatorData(nil)
+		validators, err := client.GetValidatorData(context.Background(), nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, validators)
 
@@ -214,9 +214,9 @@ func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeou
 
 func mockClientWithNetwork(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration, network types.BeaconNetwork) (beacon.BeaconNode, error) {
 	return New(
+		ctx,
 		zap.NewNop(),
 		Options{
-			Context:        ctx,
 			Network:        beacon.NewNetwork(network),
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  commonTimeout,

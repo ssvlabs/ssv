@@ -81,11 +81,13 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 }
 
 func eventsTestClient(t *testing.T, serverURL string) *GoClient {
-	server, err := New(zap.NewNop(), Options{
-		BeaconNodeAddr: serverURL,
-		Context:        context.Background(),
-		Network:        beacon.NewNetwork(types.MainNetwork),
-	},
+	server, err := New(
+		context.Background(),
+		zap.NewNop(),
+		Options{
+			BeaconNodeAddr: serverURL,
+			Network:        beacon.NewNetwork(types.MainNetwork),
+		},
 		tests.MockSlotTickerProvider)
 
 	require.NoError(t, err)
