@@ -6,7 +6,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
