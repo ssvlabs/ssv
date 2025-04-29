@@ -13,6 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 const (
@@ -96,8 +98,33 @@ func (s *SSVShare) Slashed() bool {
 	return s.Status == eth2apiv1.ValidatorStateExitedSlashed || s.Status == eth2apiv1.ValidatorStateActiveSlashed
 }
 
-func (s *SSVShare) IsParticipating(epoch phase0.Epoch) bool {
+// IsParticipating returns true if the validator can participate in *any* SSV duty at the given epoch.
+// Note: the validator may be eligible only for sync committee, but not to attest and propose. See IsParticipatingAndAttesting.
+// Requirements: not liquidated and attesting or exited in the current or previous sync committee period.
+func (s *SSVShare) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
+	return !s.Liquidated && s.IsSyncCommitteeEligible(cfg, epoch)
+}
+
+// IsParticipatingAndAttesting returns true if the validator can participate in *all* SSV duties at the given epoch.
+// Requirements: not liquidated and attesting.
+func (s *SSVShare) IsParticipatingAndAttesting(epoch phase0.Epoch) bool {
 	return !s.Liquidated && s.IsAttesting(epoch)
+}
+
+func (s *SSVShare) IsSyncCommitteeEligible(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
+	if s.IsAttesting(epoch) {
+		return true
+	}
+
+	if s.Status.IsExited() || s.Status == eth2apiv1.ValidatorStateWithdrawalPossible || s.Status == eth2apiv1.ValidatorStateActiveSlashed {
+		// if validator exited within Current Period OR Current Period - 1, then it is eligible
+		// because Sync committees are assigned EPOCHS_PER_SYNC_COMMITTEE_PERIOD in advance
+		if epoch >= s.ExitEpoch && cfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)-cfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(s.ExitEpoch) <= 1 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *SSVShare) SetMinParticipationEpoch(epoch phase0.Epoch) {

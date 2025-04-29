@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // VoluntaryExitRunner implements validator voluntary exit duty - this duty doesn't
@@ -26,7 +27,7 @@ type VoluntaryExitRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         spectypes.BeaconSigner
+	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
@@ -39,7 +40,7 @@ func NewVoluntaryExitRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 ) (Runner, error) {
 
@@ -142,7 +143,14 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), voluntaryExit, duty.DutySlot(), spectypes.DomainVoluntaryExit)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		voluntaryExit,
+		duty.DutySlot(),
+		spectypes.DomainVoluntaryExit,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign VoluntaryExit object")
 	}
@@ -222,7 +230,7 @@ func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *VoluntaryExitRunner) GetSigner() spectypes.BeaconSigner {
+func (r *VoluntaryExitRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *VoluntaryExitRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

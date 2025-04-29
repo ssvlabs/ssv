@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -30,7 +31,7 @@ type ValidatorRegistrationRunner struct {
 
 	beacon                beacon.BeaconNode
 	network               specqbft.Network
-	signer                spectypes.BeaconSigner
+	signer                ekm.BeaconSigner
 	operatorSigner        ssvtypes.OperatorSigner
 	valCheck              specqbft.ProposedValueCheckF
 	recipientsStorage     recipientsStorage
@@ -46,7 +47,7 @@ func NewValidatorRegistrationRunner(
 	validatorOwnerAddress common.Address,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	recipientsStorage recipientsStorage,
 	gasLimit uint64,
@@ -167,8 +168,14 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	}
 
 	// sign partial randao
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), vr, duty.DutySlot(),
-		spectypes.DomainApplicationBuilder)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		vr,
+		duty.DutySlot(),
+		spectypes.DomainApplicationBuilder,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign validator registration")
 	}
@@ -261,7 +268,7 @@ func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheck
 	return r.valCheck
 }
 
-func (r *ValidatorRegistrationRunner) GetSigner() spectypes.BeaconSigner {
+func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
