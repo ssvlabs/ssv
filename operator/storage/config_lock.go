@@ -7,6 +7,7 @@ import (
 type ConfigLock struct {
 	NetworkName      string `json:"network_name"`
 	UsingLocalEvents bool   `json:"using_local_events"`
+	UsingSSVSigner   bool   `json:"using_ssv_signer"`
 }
 
 func (stored *ConfigLock) ValidateCompatibility(current *ConfigLock) error {
@@ -20,6 +21,14 @@ func (stored *ConfigLock) ValidateCompatibility(current *ConfigLock) error {
 
 	if !stored.UsingLocalEvents && current.UsingLocalEvents {
 		return fmt.Errorf("enabling local events is not allowed. The database must be removed or reinitialized")
+	}
+
+	if stored.UsingSSVSigner && !current.UsingSSVSigner {
+		return fmt.Errorf("disabling ssv-signer is not allowed. The database must be removed or reinitialized")
+	}
+
+	if !stored.UsingSSVSigner && current.UsingSSVSigner {
+		return fmt.Errorf("enabling ssv-signer is not allowed. The database must be removed or reinitialized")
 	}
 
 	return nil
