@@ -15,11 +15,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type AggregatorRunner struct {
@@ -156,7 +157,14 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	// specific duty sig
-	msg, err := signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), aggregateAndProofHashRoot, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
+	msg, err := signBeaconObject(
+		ctx,
+		r,
+		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+		aggregateAndProofHashRoot,
+		decidedValue.Duty.Slot,
+		spectypes.DomainAggregateAndProof,
+	)
 	if err != nil {
 		return errors.Wrap(err, "failed signing aggregate and proof")
 	}
@@ -300,7 +308,14 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	r.measurements.StartPreConsensus()
 
 	// sign selection proof
-	msg, err := signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(duty.DutySlot()), duty.DutySlot(), spectypes.DomainSelectionProof)
+	msg, err := signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		spectypes.SSZUint64(duty.DutySlot()),
+		duty.DutySlot(),
+		spectypes.DomainSelectionProof,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}

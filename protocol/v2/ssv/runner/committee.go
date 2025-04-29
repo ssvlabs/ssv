@@ -19,12 +19,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var (
@@ -281,8 +282,14 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			}
 
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
-			partialMsg, err := signBeaconObject(cr, validatorDuty, attestationData, validatorDuty.DutySlot(),
-				spectypes.DomainAttester)
+			partialMsg, err := signBeaconObject(
+				ctx,
+				cr,
+				validatorDuty,
+				attestationData,
+				validatorDuty.DutySlot(),
+				spectypes.DomainAttester,
+			)
 			if err != nil {
 				return errors.Wrap(err, "failed signing attestation data")
 			}
@@ -305,8 +312,14 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			totalSyncCommitteeDuties++
 
 			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := signBeaconObject(cr, validatorDuty, spectypes.SSZBytes(blockRoot[:]), validatorDuty.DutySlot(),
-				spectypes.DomainSyncCommittee)
+			partialMsg, err := signBeaconObject(
+				ctx,
+				cr,
+				validatorDuty,
+				spectypes.SSZBytes(blockRoot[:]),
+				validatorDuty.DutySlot(),
+				spectypes.DomainSyncCommittee,
+			)
 			if err != nil {
 				return errors.Wrap(err, "failed signing sync committee message")
 			}

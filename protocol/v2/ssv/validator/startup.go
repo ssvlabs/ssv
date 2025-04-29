@@ -45,9 +45,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 		// TODO: P2P
 		var valpk spectypes.ValidatorPK
 		copy(valpk[:], share.ValidatorPubKey[:])
-
 		if err := n.Subscribe(valpk); err != nil {
-			atomic.StoreUint32(&v.state, uint32(NotStarted))
 			return false, err
 		}
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)

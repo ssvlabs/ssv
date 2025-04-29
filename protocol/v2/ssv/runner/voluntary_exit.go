@@ -13,10 +13,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // ValidatorDuty runner for validator voluntary exit duty
@@ -148,7 +149,14 @@ func (r *VoluntaryExitRunner) executeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
-	msg, err := signBeaconObject(r, duty.(*spectypes.ValidatorDuty), voluntaryExit, duty.DutySlot(), spectypes.DomainVoluntaryExit)
+	msg, err := signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		voluntaryExit,
+		duty.DutySlot(),
+		spectypes.DomainVoluntaryExit,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign VoluntaryExit object")
 	}

@@ -22,11 +22,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ProposerRunner struct {
@@ -200,6 +201,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 	}
 
 	msg, err := signBeaconObject(
+		ctx,
 		r,
 		duty,
 		blkToSign,
@@ -421,7 +423,14 @@ func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, du
 
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
-	msg, err := signBeaconObject(r, proposerDuty, spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
+	msg, err := signBeaconObject(
+		ctx,
+		r,
+		proposerDuty,
+		spectypes.SSZUint64(epoch),
+		duty.DutySlot(),
+		spectypes.DomainRandao,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}

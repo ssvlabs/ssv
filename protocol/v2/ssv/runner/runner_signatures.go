@@ -27,7 +27,7 @@ func signBeaconObject(
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	return signAsValidator(ctx, runner, duty.ValidatorIndex, root, signatureDomain, domain)
+	return signAsValidator(ctx, runner, duty.ValidatorIndex, root, slot, signatureDomain, domain)
 }
 
 func signAsValidator(
@@ -35,6 +35,7 @@ func signAsValidator(
 	runner Runner,
 	validatorIndex spec.ValidatorIndex,
 	root ssz.HashRoot,
+	slot spec.Slot,
 	signatureDomain spec.DomainType,
 	domain spec.Domain,
 ) (*spectypes.PartialSignatureMessage, error) {

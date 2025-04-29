@@ -12,6 +12,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -19,7 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -94,7 +95,6 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	}
 
 	// Log with duty ID.
-	baseRunner := dutyRunner.GetBaseRunner()
 	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(dutyRunner.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
 	logger = v.withDutyID(logger, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
