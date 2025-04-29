@@ -14,7 +14,7 @@ type SyncBatch struct {
 
 // DetectValidatorStateChanges identifies validators whose states changed between syncs.
 // Specifically returns validators that:
-// - became eligible to start (transitioned from Unknown to Active without being slashed/exited)
+// - became eligible to start (transitioned from Unknown to any known state)
 // - became slashed (transitioned to a slashed state)
 // - became exited (transitioned to an exited state)
 func (s SyncBatch) DetectValidatorStateChanges() (eligibleToStart, slashed, exited []spectypes.ValidatorPK) {
@@ -28,7 +28,7 @@ func (s SyncBatch) DetectValidatorStateChanges() (eligibleToStart, slashed, exit
 			continue
 		}
 
-		if before.Unknown() && !after.Unknown() && !after.Exited() && !after.Slashed() {
+		if before.Unknown() && !after.Unknown() {
 			eligibleToStart = append(eligibleToStart, pk)
 		}
 

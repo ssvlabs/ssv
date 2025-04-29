@@ -967,7 +967,6 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 	eligibleToStart, slashedShares, exitedShares := syncBatch.DetectValidatorStateChanges()
 
 	// Start only the validators that became eligible to start as a result of the metadata update.
-	// We do NOT start slashed or exited validators, as they are no longer eligible to participate.
 	if len(eligibleToStart) > 0 || len(slashedShares) > 0 || len(exitedShares) > 0 {
 		c.logger.Debug("validators state changed after metadata sync",
 			zap.Int("eligible_to_start_count", len(eligibleToStart)),
