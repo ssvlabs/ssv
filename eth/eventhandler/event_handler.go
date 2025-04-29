@@ -16,7 +16,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -25,10 +24,10 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -70,7 +69,6 @@ type EventHandler struct {
 	operatorDataStore   operatordatastore.OperatorDataStore
 	operatorDecrypter   keys.OperatorDecrypter
 	keyManager          ekm.KeyManager
-	beacon              beaconprotocol.BeaconNode
 	doppelgangerHandler DoppelgangerProvider
 
 	fullNode bool
@@ -85,7 +83,6 @@ func New(
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
-	beacon beaconprotocol.BeaconNode,
 	doppelgangerHandler DoppelgangerProvider,
 	opts ...Option,
 ) (*EventHandler, error) {
@@ -97,7 +94,6 @@ func New(
 		operatorDataStore:   operatorDataStore,
 		operatorDecrypter:   operatorDecrypter,
 		keyManager:          keyManager,
-		beacon:              beacon,
 		doppelgangerHandler: doppelgangerHandler,
 		logger:              zap.NewNop(),
 	}
@@ -261,7 +257,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		share, err := eh.handleValidatorAdded(txn, validatorAddedEvent)
+		share, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 
@@ -291,7 +287,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil, nil
 		}
 
-		validatorPubKey, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
+		validatorPubKey, err := eh.handleValidatorRemoved(ctx, txn, validatorRemovedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 
@@ -448,12 +444,12 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 	}
 }
 
-func (eh *EventHandler) HandleLocalEvents(localEvents []localevents.Event) error {
+func (eh *EventHandler) HandleLocalEvents(ctx context.Context, localEvents []localevents.Event) error {
 	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
 	for _, event := range localEvents {
-		if err := eh.processLocalEvent(txn, event); err != nil {
+		if err := eh.processLocalEvent(ctx, txn, event); err != nil {
 			return fmt.Errorf("process local event: %w", err)
 		}
 	}
@@ -465,7 +461,7 @@ func (eh *EventHandler) HandleLocalEvents(localEvents []localevents.Event) error
 	return nil
 }
 
-func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Event) error {
+func (eh *EventHandler) processLocalEvent(ctx context.Context, txn basedb.Txn, event localevents.Event) error {
 	switch event.Name {
 	case OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)
@@ -481,13 +477,13 @@ func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Even
 		return nil
 	case ValidatorAdded:
 		data := event.Data.(contract.ContractValidatorAdded)
-		if _, err := eh.handleValidatorAdded(txn, &data); err != nil {
+		if _, err := eh.handleValidatorAdded(ctx, txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 		return nil
 	case ValidatorRemoved:
 		data := event.Data.(contract.ContractValidatorRemoved)
-		if _, err := eh.handleValidatorRemoved(txn, &data); err != nil {
+		if _, err := eh.handleValidatorRemoved(ctx, txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 		return nil
