@@ -3,6 +3,7 @@ package web3signer
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -23,16 +24,31 @@ func setupTestServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 	})
 
 	web3Signer := New(server.URL)
+	require.NotNil(t, web3Signer)
 
 	return server, web3Signer
+}
+
+func mustBLSFromString(s string) phase0.BLSPubKey {
+	pk, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+
+	if len(pk) != len(phase0.BLSPubKey{}) {
+		panic("invalid public key length")
+	}
+
+	return phase0.BLSPubKey(pk)
 }
 
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		baseURL string
+	testCases := []struct {
+		name            string
+		baseURL         string
+		expectedBaseURL string
 	}{
 		{
 			name:    "Valid URL",
@@ -48,7 +64,7 @@ func TestNew(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -68,7 +84,7 @@ func TestNew(t *testing.T) {
 func TestListKeys(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name        string
 		statusCode  int
 		resp        ListKeysResponse
@@ -95,7 +111,7 @@ func TestListKeys(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -124,7 +140,7 @@ func TestListKeys(t *testing.T) {
 func TestImportKeystore(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name        string
 		req         ImportKeystoreRequest
 		statusCode  int
@@ -165,7 +181,7 @@ func TestImportKeystore(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -200,7 +216,7 @@ func TestImportKeystore(t *testing.T) {
 func TestDeleteKeystore(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name                 string
 		req                  DeleteKeystoreRequest
 		statusCode           int
@@ -240,7 +256,7 @@ func TestDeleteKeystore(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -273,8 +289,6 @@ func TestDeleteKeystore(t *testing.T) {
 }
 
 func TestSign(t *testing.T) {
-	t.Parallel()
-
 	testPubKey := mustBLSFromString("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
 	testPayload := SignRequest{
 		Type: TypeAggregationSlot,
@@ -291,7 +305,7 @@ func TestSign(t *testing.T) {
 		},
 	}
 
-	tests := []struct {
+	testCases := []struct {
 		name            string
 		pubKey          phase0.BLSPubKey
 		payload         SignRequest
@@ -364,7 +378,7 @@ func TestSign(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -392,15 +406,40 @@ func TestSign(t *testing.T) {
 	}
 }
 
-func mustBLSFromString(s string) phase0.BLSPubKey {
-	pk, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
+func TestTLSConfig(t *testing.T) {
+	t.Parallel()
+
+	cert := []byte(`-----BEGIN CERTIFICATE-----
+MIIBhTCCASugAwIBAgIQIRi6zePL6mKjOipn+dNuaTAKBggqhkjOPQQDAjASMRAw
+DgYDVQQKEwdBY21lIENvMB4XDTE3MTAyMDE5NDMwNloXDTE4MTAyMDE5NDMwNlow
+EjEQMA4GA1UEChMHQWNtZSBDbzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABD0d
+7VNhbWvZLWPuj/RtHFjvtJBEwOkhbN/BnnE8rnZR8+sbwnc/KhCk3FhnpHZnQz7B
+5aETbbIgmuvewdjvSBSjYzBhMA4GA1UdDwEB/wQEAwICpDATBgNVHSUEDDAKBggr
+BgEFBQcDATAPBgNVHRMBAf8EBTADAQH/MCkGA1UdEQQiMCCCDmxvY2FsaG9zdDo1
+NDUzgg4xMjcuMC4wLjE6NTQ1MzAKBggqhkjOPQQDAgNIADBFAiEA2zpJEPQyz6/l
+Wf86aX6PepsntZv2GYlA5UpabfT2EZICICpJ5h/iI+i341gBmLiAFQOyTDT+/wQc
+6MF9+Yw1Yy0t
+-----END CERTIFICATE-----`)
+
+	key := []byte(`-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIIrYSSNQFaA2Hwf1duRSxKtLYX5CB04fSeQ6tF1aY/PuoAoGCCqGSM49
+AwEHoUQDQgAEPR3tU2Fta9ktY+6P9G0cWO+0kETA6SFs38GecTyudlHz6xvCdz8q
+EKTcWGekdmdDPsHloRNtsiCa697B2O9IFA==
+-----END EC PRIVATE KEY-----`)
+
+	tlsCert, err := tls.X509KeyPair(cert, key)
+	require.NoError(t, err)
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
 	}
 
-	if len(pk) != len(phase0.BLSPubKey{}) {
-		panic("invalid public key length")
-	}
+	client := New("https://example.com", WithTLS(tlsConfig))
 
-	return phase0.BLSPubKey(pk)
+	transport, ok := client.httpClient.Transport.(*http.Transport)
+	require.True(t, ok)
+
+	cfg := transport.TLSClientConfig
+	require.NotNil(t, cfg)
+	require.Len(t, cfg.Certificates, 1)
 }
