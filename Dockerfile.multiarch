@@ -3,8 +3,8 @@
 #
 # Global build arguments
 #
-# Note BUILDPLATFORM and TARGETARCH are crucial variables:
-#   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
+## Note BUILDPLATFORM and TARGETARCH are crucial variables:
+##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 ARG TARGETARCH
