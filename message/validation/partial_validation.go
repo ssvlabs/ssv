@@ -236,7 +236,7 @@ func (mv *messageValidator) updatePartialSignatureState(
 	signerState := stateBySlot.Get(messageSlot)
 	if signerState == nil || signerState.Slot != messageSlot {
 		signerState = NewSignerState(messageSlot, specqbft.FirstRound)
-		stateBySlot.Set(messageSlot, messageEpoch, signerState, true)
+		stateBySlot.Set(messageSlot, messageEpoch, signerState)
 	}
 
 	return signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)

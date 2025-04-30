@@ -301,7 +301,7 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 		signerState := stateBySlot.Get(msgSlot)
 		if signerState == nil {
 			signerState = NewSignerState(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
-			stateBySlot.Set(msgSlot, msgEpoch, signerState, false)
+			stateBySlot.Set(msgSlot, msgEpoch, signerState)
 		} else {
 			if consensusMessage.Round > signerState.Round {
 				signerState.Reset(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
