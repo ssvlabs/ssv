@@ -148,19 +148,22 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	return
 }
 
-// Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
+// Calls FilterLogs multiple times and batches results to avoid fetching an enormous number of events.
 func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan BlockLogs, <-chan error) {
-	logs := make(chan BlockLogs, defaultLogBuf)
-	errors := make(chan error, 1)
+	if startBlock > endBlock {
+		errCh := make(chan error, 1)
+		errCh <- ErrBadInput
+		close(errCh)
+
+		return nil, errCh
+	}
+
+	logCh := make(chan BlockLogs, defaultLogBuf)
+	errCh := make(chan error, 1)
 
 	go func() {
-		defer close(logs)
-		defer close(errors)
-
-		if startBlock > endBlock {
-			errors <- ErrBadInput
-			return
-		}
+		defer close(logCh)
+		defer close(errCh)
 
 		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += ec.logBatchSize {
 			toBlock := fromBlock + ec.logBatchSize - 1
@@ -178,7 +181,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				ec.logger.Error(elResponseErrMsg,
 					zap.String("method", "eth_getLogs"),
 					zap.Error(err))
-				errors <- err
+				errCh <- err
 				return
 			}
 
@@ -193,11 +196,11 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			select {
 			case <-ctx.Done():
-				errors <- ctx.Err()
+				errCh <- ctx.Err()
 				return
 
 			case <-ec.closed:
-				errors <- ErrClosed
+				errCh <- ErrClosed
 				return
 
 			default:
@@ -215,20 +218,20 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				}
 				var highestBlock uint64
 				for _, blockLogs := range PackLogs(validLogs) {
-					logs <- blockLogs
+					logCh <- blockLogs
 					if blockLogs.BlockNumber > highestBlock {
 						highestBlock = blockLogs.BlockNumber
 					}
 				}
-				// Emit empty block logs to indicate that we have advanced to this block.
+				// Emit an empty BlockLogs to indicate progression to the next block.
 				if highestBlock < toBlock {
-					logs <- BlockLogs{BlockNumber: toBlock}
+					logCh <- BlockLogs{BlockNumber: toBlock}
 				}
 			}
 		}
 	}()
 
-	return logs, errors
+	return logCh, errCh
 }
 
 // StreamLogs subscribes to events emitted by the contract.
