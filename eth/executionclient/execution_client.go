@@ -98,6 +98,9 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	for _, opt := range opts {
 		opt(client)
 	}
+
+	client.logger.Info("execution client: connecting", fields.Address(nodeAddr))
+
 	err := client.connect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
