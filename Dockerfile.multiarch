@@ -2,6 +2,7 @@
 # Supports cross-compilation for amd64/arm64/arm targets with proper CGO settings
 #
 # Global build arguments
+#
 # Note BUILDPLATFORM and TARGETARCH are crucial variables:
 #   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
 ARG BUILDPLATFORM
@@ -34,19 +35,21 @@ RUN apt-get update && \
       bzip2 && \
     rm -rf /var/lib/apt/lists/*
 
-# Set working directory and cache Go modules
+# Set working directory for the build
 WORKDIR /go/src/github.com/ssvlabs/ssv/
+
+# Cache dependencies
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,mode=0755,target=/go/pkg \
     go mod download && go mod verify
 
 #
-# STEP 2: Builder image
+# STEP 2: Build executable binary with cross-compilation
 #
 FROM base AS builder
+
 ARG TARGETARCH
-ENV GOPATH=/go
 WORKDIR /go/src/github.com/ssvlabs/ssv/
 
 # Copy source code
@@ -68,7 +71,7 @@ RUN set -eux; \
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,mode=0755,target=/go/pkg \
     COMMIT=$(git rev-parse HEAD) && \
-    VERSION=$(git describe --tags --always) && \
+    VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
     CC=$(case "$TARGETARCH" in \
       amd64) echo x86_64-linux-gnu-gcc ;; \
       arm64) echo aarch64-linux-gnu-gcc ;; \
