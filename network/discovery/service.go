@@ -42,7 +42,7 @@ type Options struct {
 	SubnetsIdx          peers.SubnetsIndex
 	HostAddress         string
 	HostDNS             string
-	NetworkConfig       networkconfig.NetworkConfig
+	SSVConfig           networkconfig.SSVConfig
 	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
 	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
 }
