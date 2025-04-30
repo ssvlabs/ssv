@@ -28,7 +28,6 @@ func TestSpec(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
 		)
 		require.NoError(t, err)
 
