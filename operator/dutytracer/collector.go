@@ -48,6 +48,12 @@ type Collector struct {
 
 	currentSlot     atomic.Uint64
 	lastEvictedSlot atomic.Uint64
+
+	lateMu               sync.Mutex
+	lateCommitteeTraces  []*committeeDutyTrace
+	lateValidatorTraces  []*validatorDutyTrace
+	lateLinks            []validatorCommitteeLink
+	lateArrivalThreshold phase0.Slot // number of slots to wait before saving late traces
 }
 
 type DomainDataProvider interface {
@@ -74,6 +80,7 @@ func New(ctx context.Context,
 		validatorTraces:                hashmap.New[spectypes.ValidatorPK, *hashmap.Map[phase0.Slot, *validatorDutyTrace]](),
 		validatorIndexToCommitteeLinks: hashmap.New[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, spectypes.CommitteeID]](),
 		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttl)),
+		lateArrivalThreshold:           phase0.Slot(8),
 	}
 
 	return tracer
@@ -114,6 +121,10 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 			// remove old SC roots
 			c.syncCommitteeRootsCache.DeleteExpired()
 
+			// save late traces
+			c.evictLateTraces(currentSlot)
+
+			// update last evicted slot
 			c.lastEvictedSlot.Store(uint64(validatorThreshold))
 		}
 	}
@@ -127,8 +138,22 @@ so when we request a certain trace we return both of them:
 .LoadOrStore is being used to take care of the case when two goroutines try to create the same trace at the same time
 */
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace, error) {
+	// check late arrival
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		return nil, nil, fmt.Errorf("validator trace late arrival")
+		trace := &model.ValidatorDutyTrace{
+			Slot: slot,
+			Role: role,
+		}
+		lateValidatorTrace := &validatorDutyTrace{
+			Roles: []*model.ValidatorDutyTrace{trace},
+		}
+
+		c.lateMu.Lock()
+		defer c.lateMu.Unlock()
+
+		c.lateValidatorTraces = append(c.lateValidatorTraces, lateValidatorTrace)
+
+		return lateValidatorTrace, trace, nil
 	}
 
 	validatorSlots, found := c.validatorTraces.Get(vPubKey)
@@ -170,9 +195,22 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 	return traces, roleDutyTrace, nil
 }
 
-func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, error) {
+func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, bool, error) {
+	// check late arrival
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		return nil, fmt.Errorf("committee trace late arrival")
+		lateCommitteeTrace := &committeeDutyTrace{
+			CommitteeDutyTrace: model.CommitteeDutyTrace{
+				CommitteeID: committeeID,
+				Slot:        slot,
+			},
+		}
+
+		c.lateMu.Lock()
+		defer c.lateMu.Unlock()
+
+		c.lateCommitteeTraces = append(c.lateCommitteeTraces, lateCommitteeTrace)
+
+		return lateCommitteeTrace, true, nil
 	}
 
 	committeeSlots, found := c.committeeTraces.Get(committeeID)
@@ -193,7 +231,7 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 		committeeTrace, _ = committeeSlots.GetOrSet(slot, trace)
 	}
 
-	return committeeTrace, nil
+	return committeeTrace, false, nil
 }
 
 func (c *Collector) decodeJustificationWithPrepares(justifications [][]byte) []*model.QBFTTrace {
@@ -360,10 +398,11 @@ func (c *Collector) processPartialSigValidator(receivedAt uint64, msg *spectypes
 func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) error {
 	slot := msg.Slot
 
-	trace, err := c.getOrCreateCommitteeTrace(slot, committeeID)
+	trace, late, err := c.getOrCreateCommitteeTrace(slot, committeeID)
 	if err != nil {
 		return err
 	}
+
 	trace.Lock()
 	defer trace.Unlock()
 
@@ -377,8 +416,12 @@ func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes
 		return fmt.Errorf("no partial sig messages")
 	}
 
-	// store the link between validator index and committee id
-	c.saveValidatorToCommitteeLink(slot, msg, committeeID)
+	if late {
+		c.saveLateValidatorToCommiteeLinks(slot, msg, committeeID)
+	} else {
+		// store the link between validator index and committee id
+		c.saveValidatorToCommitteeLink(slot, msg, committeeID)
+	}
 
 	var isSyncCommittee bool
 
@@ -423,6 +466,16 @@ func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectype
 		}
 
 		slotToCommittee.Set(slot, committeeID)
+	}
+}
+
+func (c *Collector) saveLateValidatorToCommiteeLinks(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
+	for _, msg := range msg.Messages {
+		c.lateLinks = append(c.lateLinks, validatorCommitteeLink{
+			slot:           slot,
+			validatorIndex: msg.ValidatorIndex,
+			committeeID:    committeeID,
+		})
 	}
 }
 
@@ -504,7 +557,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			var committeeID spectypes.CommitteeID
 			copy(committeeID[:], executorID[16:])
 
-			trace, err := c.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, _, err := c.getOrCreateCommitteeTrace(slot, committeeID)
 			if err != nil {
 				return err
 			}
@@ -515,7 +568,6 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			if len(msg.SignedSSVMessage.FullData) > 0 {
 				// save proposal data
 				if subMsg.MsgType == specqbft.ProposalMsgType {
-					// c.logger.Info("proposal data", fields.Slot(slot), fields.CommitteeID(committeeID), zap.Int("size", len(msg.SignedSSVMessage.FullData))) // TODO(me): remove this
 					// committee duty will contain the BeaconVote data
 					trace.ProposalData = msg.SignedSSVMessage.FullData
 				}
@@ -659,6 +711,12 @@ type committeeDutyTrace struct {
 	sync.Mutex
 	syncCommitteeRoot phase0.Root
 	model.CommitteeDutyTrace
+}
+
+type validatorCommitteeLink struct {
+	slot           phase0.Slot
+	validatorIndex phase0.ValidatorIndex
+	committeeID    spectypes.CommitteeID
 }
 
 // must be called under parent trace lock

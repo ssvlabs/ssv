@@ -199,40 +199,40 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// three slots X two committees
 	slot3 := phase0.Slot(3)
 
-	dutyTrace1, err := tracer.getOrCreateCommitteeTrace(slot3, committeeID1)
+	dutyTrace1, _, err := tracer.getOrCreateCommitteeTrace(slot3, committeeID1)
 	require.NoError(t, err)
 	dutyTrace1.Decideds = append(dutyTrace1.Decideds, &model.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace1)
 
-	dutyTrace2, err := tracer.getOrCreateCommitteeTrace(slot3, committeeID2)
+	dutyTrace2, _, err := tracer.getOrCreateCommitteeTrace(slot3, committeeID2)
 	require.NoError(t, err)
 	require.NotNil(t, dutyTrace2)
 
 	slot4 := phase0.Slot(4)
 
-	dutyTrace3, err := tracer.getOrCreateCommitteeTrace(slot4, committeeID1)
+	dutyTrace3, _, err := tracer.getOrCreateCommitteeTrace(slot4, committeeID1)
 	require.NoError(t, err)
 	dutyTrace3.Decideds = append(dutyTrace3.Decideds, &model.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace3)
 
-	dutyTrace4, err := tracer.getOrCreateCommitteeTrace(slot4, committeeID2)
+	dutyTrace4, _, err := tracer.getOrCreateCommitteeTrace(slot4, committeeID2)
 	require.NoError(t, err)
 	require.NotNil(t, dutyTrace4)
 
 	slot7 := phase0.Slot(7)
 
-	dutyTrace5, err := tracer.getOrCreateCommitteeTrace(slot7, committeeID1)
+	dutyTrace5, _, err := tracer.getOrCreateCommitteeTrace(slot7, committeeID1)
 	require.NoError(t, err)
 	dutyTrace5.Decideds = append(dutyTrace5.Decideds, &model.DecidedTrace{
 		Signers: []spectypes.OperatorID{1},
 	})
 	require.NotNil(t, dutyTrace5)
 
-	dutyTrace6, err := tracer.getOrCreateCommitteeTrace(slot7, committeeID2)
+	dutyTrace6, _, err := tracer.getOrCreateCommitteeTrace(slot7, committeeID2)
 	require.NoError(t, err)
 	require.NotNil(t, dutyTrace6)
 
