@@ -206,7 +206,7 @@ func TestFieldPreservation(t *testing.T) {
 // TestExistingNetworkConfigs validates that all predefined network configs
 // can be marshaled and unmarshaled correctly
 func TestExistingNetworkConfigs(t *testing.T) {
-	for networkName, config := range SupportedSSVConfigs {
+	for networkName, config := range supportedSSVConfigs {
 		t.Run(networkName, func(t *testing.T) {
 			// JSON test
 			jsonBytes, err := json.Marshal(config)
