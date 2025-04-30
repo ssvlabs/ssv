@@ -36,7 +36,7 @@ type OperatorState struct {
 	state           []*SignerState // the slice index is slot % storedSlotCount
 	maxSlot         phase0.Slot
 	maxEpoch        phase0.Epoch
-	lastEpochDuties uint64
+	currEpochDuties uint64
 	prevEpochDuties uint64
 
 	dutiesDebugPrev []debugDuty
@@ -77,8 +77,8 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 	}
 	if epoch > os.maxEpoch {
 		os.maxEpoch = epoch
-		os.prevEpochDuties = os.lastEpochDuties
-		os.lastEpochDuties = 1
+		os.prevEpochDuties = os.currEpochDuties
+		os.currEpochDuties = 1
 
 		os.dutiesDebugPrev = os.dutiesDebugCurr
 		os.dutiesDebugCurr = []debugDuty{
@@ -88,10 +88,18 @@ func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *Signer
 				partial: partial,
 			},
 		}
-	} else {
-		os.lastEpochDuties++
+	} else if epoch == os.maxEpoch {
+		os.currEpochDuties++
 
 		os.dutiesDebugCurr = append(os.dutiesDebugCurr, debugDuty{
+			slot:    slot,
+			epoch:   epoch,
+			partial: partial,
+		})
+	} else {
+		os.prevEpochDuties++
+
+		os.dutiesDebugPrev = append(os.dutiesDebugPrev, debugDuty{
 			slot:    slot,
 			epoch:   epoch,
 			partial: partial,
@@ -111,7 +119,7 @@ func (os *OperatorState) DutyCount(epoch phase0.Epoch) uint64 {
 	defer os.mu.RUnlock()
 
 	if epoch == os.maxEpoch {
-		return os.lastEpochDuties
+		return os.currEpochDuties
 	}
 	if epoch == os.maxEpoch-1 {
 		return os.prevEpochDuties
