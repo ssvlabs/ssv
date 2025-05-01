@@ -347,7 +347,7 @@ func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.F
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "EthSubscribe"),
+			zap.String("method", "eth_subscribe(logs)"),
 			zap.Error(err))
 		return nil, err
 	}
@@ -400,7 +400,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logsCh chan<- B
 	sub, err := ec.client.SubscribeNewHead(ctx, headersCh)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("operation", "SubscribeNewHead"),
+			zap.String("method", "eth_subscribe(newHeads)"),
 			zap.Error(err))
 		return fromBlock, fmt.Errorf("subscribe headersCh: %w", err)
 	}
@@ -431,7 +431,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logsCh chan<- B
 			finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 			if err != nil {
 				ec.logger.Error(elResponseErrMsg,
-					zap.String("operation", "HeaderByNumber"),
+					zap.String("method", "eth_getBlockByNumber"),
 					zap.Error(err))
 				return fromBlock, fmt.Errorf("get finalized block: %w", err)
 			}
