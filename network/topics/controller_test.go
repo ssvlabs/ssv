@@ -82,10 +82,16 @@ func TestTopicManager(t *testing.T) {
 
 		dutyStore := dutystore.New()
 		validatorStore := mocks.NewMockValidatorStore(ctrl)
+		operators := mocks.NewMockOperators(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
-		validator := validation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier, phase0.Epoch(0))
-
+		validator := validation.New(
+			networkconfig.TestNetwork,
+			validatorStore,
+			operators,
+			dutyStore,
+			signatureVerifier,
+			phase0.Epoch(0))
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
 
@@ -403,7 +409,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}

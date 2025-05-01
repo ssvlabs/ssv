@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
@@ -54,7 +53,7 @@ func TestCheckForkValues(t *testing.T) {
 		initialAltair, initialBellatrix, initialCapella,
 		initialDeneb, initialElectra phase0.Epoch
 		// input response and expected outcomes
-		response    *api.Response[map[string]any]
+		response    map[string]any
 		expectedErr string
 		expectedAltair, expectedBellatrix, expectedCapella,
 		expectedDeneb, expectedElectra phase0.Epoch
@@ -65,25 +64,16 @@ func TestCheckForkValues(t *testing.T) {
 			expectedErr: "spec response is nil",
 		},
 		{
-			name: "nil data",
-			response: &api.Response[map[string]any]{
-				Data: nil,
-			},
-			expectedErr: "spec response data is nil",
-		},
-		{
 			name:             "missing ALTAIR",
 			initialAltair:    FarFutureEpoch,
 			initialBellatrix: FarFutureEpoch,
 			initialCapella:   FarFutureEpoch,
 			initialDeneb:     FarFutureEpoch,
 			initialElectra:   FarFutureEpoch,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-				},
+			response: map[string]any{
+				"BELLATRIX_FORK_EPOCH": uint64(20),
+				"CAPELLA_FORK_EPOCH":   uint64(30),
+				"DENEB_FORK_EPOCH":     uint64(40),
 			},
 			expectedErr: "ALTAIR fork epoch not known by chain",
 		},
@@ -94,13 +84,11 @@ func TestCheckForkValues(t *testing.T) {
 			initialCapella:   FarFutureEpoch,
 			initialDeneb:     FarFutureEpoch,
 			initialElectra:   FarFutureEpoch,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    "not a uint",
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-				},
+			response: map[string]any{
+				"ALTAIR_FORK_EPOCH":    "not a uint",
+				"BELLATRIX_FORK_EPOCH": uint64(20),
+				"CAPELLA_FORK_EPOCH":   uint64(30),
+				"DENEB_FORK_EPOCH":     uint64(40),
 			},
 			expectedErr: "failed to decode ALTAIR fork epoch",
 		},
@@ -111,14 +99,12 @@ func TestCheckForkValues(t *testing.T) {
 			initialCapella:   FarFutureEpoch,
 			initialDeneb:     FarFutureEpoch,
 			initialElectra:   FarFutureEpoch,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    uint64(10),
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-					"ELECTRA_FORK_EPOCH":   uint64(50),
-				},
+			response: map[string]any{
+				"ALTAIR_FORK_EPOCH":    uint64(10),
+				"BELLATRIX_FORK_EPOCH": uint64(20),
+				"CAPELLA_FORK_EPOCH":   uint64(30),
+				"DENEB_FORK_EPOCH":     uint64(40),
+				"ELECTRA_FORK_EPOCH":   uint64(50),
 			},
 			expectedAltair:    phase0.Epoch(10),
 			expectedBellatrix: phase0.Epoch(20),
@@ -133,13 +119,11 @@ func TestCheckForkValues(t *testing.T) {
 			initialCapella:   FarFutureEpoch,
 			initialDeneb:     FarFutureEpoch,
 			initialElectra:   FarFutureEpoch,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    uint64(10),
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-				},
+			response: map[string]any{
+				"ALTAIR_FORK_EPOCH":    uint64(10),
+				"BELLATRIX_FORK_EPOCH": uint64(20),
+				"CAPELLA_FORK_EPOCH":   uint64(30),
+				"DENEB_FORK_EPOCH":     uint64(40),
 			},
 			expectedAltair:    phase0.Epoch(10),
 			expectedBellatrix: phase0.Epoch(20),
@@ -154,14 +138,12 @@ func TestCheckForkValues(t *testing.T) {
 			initialCapella:   30,
 			initialDeneb:     40,
 			initialElectra:   99,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    uint64(10),
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-					"ELECTRA_FORK_EPOCH":   uint64(50),
-				},
+			response: map[string]any{
+				"ALTAIR_FORK_EPOCH":    uint64(10),
+				"BELLATRIX_FORK_EPOCH": uint64(20),
+				"CAPELLA_FORK_EPOCH":   uint64(30),
+				"DENEB_FORK_EPOCH":     uint64(40),
+				"ELECTRA_FORK_EPOCH":   uint64(50),
 			},
 			expectedAltair:    phase0.Epoch(10),
 			expectedBellatrix: phase0.Epoch(20),
@@ -177,14 +159,12 @@ func TestCheckForkValues(t *testing.T) {
 			initialCapella:   30,
 			initialDeneb:     40,
 			initialElectra:   50,
-			response: &api.Response[map[string]any]{
-				Data: map[string]any{
-					"ALTAIR_FORK_EPOCH":    uint64(10),
-					"BELLATRIX_FORK_EPOCH": uint64(20),
-					"CAPELLA_FORK_EPOCH":   uint64(30),
-					"DENEB_FORK_EPOCH":     uint64(40),
-					"ELECTRA_FORK_EPOCH":   uint64(60),
-				},
+			response: map[string]any{
+				"ALTAIR_FORK_EPOCH":    uint64(10),
+				"BELLATRIX_FORK_EPOCH": uint64(20),
+				"CAPELLA_FORK_EPOCH":   uint64(30),
+				"DENEB_FORK_EPOCH":     uint64(40),
+				"ELECTRA_FORK_EPOCH":   uint64(60),
 			},
 			expectedErr: "new ELECTRA fork epoch (60) doesn't match current value (50)",
 		},
