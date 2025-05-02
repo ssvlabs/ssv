@@ -400,10 +400,6 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
 	}
 
-	if !c.validatorOptions.Exporter {
-		return nil
-	}
-
 	if err := c.handleNonCommitteeMessages(ssvMsg, ncv); err != nil {
 		return err
 	}

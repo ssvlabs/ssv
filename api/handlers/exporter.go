@@ -29,7 +29,9 @@ type DutyTraceStore interface {
 	GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetAllCommitteeDecideds(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
 }
 
 type ParticipantResponse struct {
@@ -123,11 +125,8 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		return api.BadRequestError(fmt.Errorf("at least one role is required"))
 	}
 
-	if len(request.PubKeys) == 0 {
-		return api.BadRequestError(fmt.Errorf("at least one pubkey is required"))
-	}
-
-	response.Data = []*ParticipantResponse{}
+	// Initialize with empty slice to ensure we always return [] instead of null
+	response.Data = make([]*ParticipantResponse, 0)
 
 	var pubkeys []spectypes.ValidatorPK
 	for _, req := range request.PubKeys {
@@ -147,6 +146,19 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		case spectypes.BNRoleSyncCommittee:
 			for s := request.From; s <= request.To; s++ {
 				slot := phase0.Slot(s)
+				if len(pubkeys) == 0 {
+					participantsByPK, err := e.TraceStore.GetAllCommitteeDecideds(slot)
+					if err != nil {
+						continue
+					}
+					for _, pr := range participantsByPK {
+						if len(pr.Signers) == 0 {
+							continue
+						}
+						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
+					}
+				}
+				// otherwise iterate over the pubkeys
 				for _, pubkey := range pubkeys {
 					participantsByPK, err := e.TraceStore.GetCommitteeDecideds(slot, pubkey)
 					if err != nil {
@@ -161,6 +173,24 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 		default:
+			if len(pubkeys) == 0 {
+				for s := request.From; s <= request.To; s++ {
+					slot := phase0.Slot(s)
+					participantsByPK, err := e.TraceStore.GetAllValidatorDecideds(role, slot)
+					if err != nil {
+						return api.Error(fmt.Errorf("error getting all validator duties: %w", err))
+					}
+					for _, pr := range participantsByPK {
+						if len(pr.Signers) == 0 {
+							continue
+						}
+						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
+					}
+				}
+
+				continue
+			}
+
 			for s := request.From; s <= request.To; s++ {
 				slot := phase0.Slot(s)
 				participantsByPK, err := e.TraceStore.GetValidatorDecideds(role, slot, pubkeys)
@@ -247,6 +277,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 
 func toCommitteeTraceResponse(duties []*model.CommitteeDutyTrace) *committeeTraceResponse {
 	r := new(committeeTraceResponse)
+	r.Data = make([]committeeTrace, 0)
 	for _, t := range duties {
 		r.Data = append(r.Data, toCommitteeTrace(t))
 	}
@@ -351,6 +382,7 @@ var zeroCommitteeID spectypes.CommitteeID
 
 func toValidatorTraceResponse(duties []*dutytracer.ValidatorDutyTrace) *validatorTraceResponse {
 	r := new(validatorTraceResponse)
+	r.Data = make([]validatorTrace, 0)
 	for _, t := range duties {
 		trace := toValidatorTrace(&t.ValidatorDutyTrace)
 		if t.CommitteeID != zeroCommitteeID {
