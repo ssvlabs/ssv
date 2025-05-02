@@ -24,12 +24,21 @@ func TestSaveCommitteeDutyLink(t *testing.T) {
 	store := store.New(db)
 
 	cmdID := spectypes.CommitteeID{1, 2, 3}
-
 	require.NoError(t, store.SaveCommitteeDutyLink(phase0.Slot(1), phase0.ValidatorIndex(39393), cmdID))
 
 	gotID, err := store.GetCommitteeDutyLink(phase0.Slot(1), phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
 	assert.Equal(t, cmdID, gotID)
+
+	cmdID2 := spectypes.CommitteeID{4, 5, 6}
+	require.NoError(t, store.SaveCommitteeDutyLink(phase0.Slot(1), phase0.ValidatorIndex(39394), cmdID2))
+
+	gotLinks, err := store.GetCommitteeDutyLinks(phase0.Slot(1))
+	require.NoError(t, err)
+	assert.Equal(t, cmdID, gotLinks[0].CommitteeID)
+	assert.Equal(t, phase0.ValidatorIndex(39393), gotLinks[0].ValidatorIndex)
+	assert.Equal(t, cmdID2, gotLinks[1].CommitteeID)
+	assert.Equal(t, phase0.ValidatorIndex(39394), gotLinks[1].ValidatorIndex)
 }
 
 func TestSaveCommitteeDutyTrace(t *testing.T) {
@@ -104,12 +113,12 @@ func TestSaveValidatorDutyTrace(t *testing.T) {
 	_, err = store.GetValidatorDuty(phase0.Slot(3), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.Error(t, err)
 
-	traces, err := store.GetAllValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
+	traces, err := store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace1, traces[0]))
 
-	traces, err = store.GetAllValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
+	traces, err = store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace2, traces[0]))
@@ -138,12 +147,12 @@ func TestSaveValidatorDuties(t *testing.T) {
 	_, err = store.GetValidatorDuty(phase0.Slot(3), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.Error(t, err)
 
-	traces, err := store.GetAllValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
+	traces, err := store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(1))
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace1, traces[0]))
 
-	traces, err = store.GetAllValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
+	traces, err = store.GetValidatorDuties(spectypes.BNRoleAttester, phase0.Slot(2))
 	require.NoError(t, err)
 	require.Len(t, traces, 1)
 	assert.True(t, validatorDutiesAreEqual(trace2, traces[0]))

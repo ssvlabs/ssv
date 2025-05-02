@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -86,7 +87,7 @@ func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.Beaco
 	return duty, nil
 }
 
-func (s *DutyTraceStore) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) (duties []*model.ValidatorDutyTrace, err error) {
+func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) (duties []*model.ValidatorDutyTrace, err error) {
 	prefix := s.makeValidatorPrefix(slot, role)
 	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
 		duty := new(model.ValidatorDutyTrace)
@@ -105,8 +106,9 @@ func (s *DutyTraceStore) GetAllValidatorDuties(role spectypes.BeaconRole, slot p
 
 // TODO(Moshe): in the same slot we can have a validator in multiple roles?
 func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (id spectypes.CommitteeID, err error) {
-	prefix := s.makeValidatorCommitteePrefix(slot, index)
-	obj, found, err := s.db.Get(prefix, nil)
+	prefix := s.makeValidatorCommitteePrefix(slot)
+	key := uInt64ToByteSlice(uint64(index))
+	obj, found, err := s.db.Get(prefix, key)
 	if err != nil {
 		return spectypes.CommitteeID{}, fmt.Errorf("get committee duty link: %w", err)
 	}
@@ -117,9 +119,30 @@ func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.Val
 	return spectypes.CommitteeID(obj.Value), nil
 }
 
+// TODO(Moshe): in the same slot we can have a validator in multiple roles?
+func (s *DutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) (links []*model.CommitteeDutyLink, err error) {
+	prefix := s.makeValidatorCommitteePrefix(slot)
+	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
+		var committeeID spectypes.CommitteeID
+		copy(committeeID[:], obj.Value)
+		index := binary.LittleEndian.Uint64(obj.Key)
+		links = append(links, &model.CommitteeDutyLink{
+			ValidatorIndex: phase0.ValidatorIndex(index),
+			CommitteeID:    committeeID,
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return links, nil
+}
+
 func (s *DutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
-	prefix := s.makeValidatorCommitteePrefix(slot, index)
-	if err := s.db.Set(prefix, nil, id[:]); err != nil {
+	prefix := s.makeValidatorCommitteePrefix(slot)
+	key := uInt64ToByteSlice(uint64(index))
+	if err := s.db.Set(prefix, key, id[:]); err != nil {
 		return fmt.Errorf("save committee duty link: %w", err)
 	}
 
@@ -233,12 +256,10 @@ func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.Comm
 }
 
 // slot + index
-func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot, index phase0.ValidatorIndex) []byte {
-	prefix := make([]byte, 0, len(validatorCommitteeIndexKey)+4+8)
+func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot) []byte {
+	prefix := make([]byte, 0, len(validatorCommitteeIndexKey)+4)
 	prefix = append(prefix, []byte(validatorCommitteeIndexKey)...)
-	prefix = append(prefix, slotToByteSlice(slot)...)
-	prefix = append(prefix, uInt64ToByteSlice(uint64(index))...)
-	return prefix
+	return append(prefix, slotToByteSlice(slot)...)
 }
 
 // helpers

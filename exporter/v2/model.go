@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -95,4 +96,9 @@ type DiskMsg struct {
 	Kind   uint8 // 0 - qbft, 1 - sig
 	Qbft   specqbft.Message
 	Sig    spectypes.PartialSignatureMessages
+}
+
+type CommitteeDutyLink struct {
+	ValidatorIndex phase0.ValidatorIndex
+	CommitteeID    spectypes.CommitteeID
 }

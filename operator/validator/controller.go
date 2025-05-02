@@ -392,8 +392,10 @@ func (c *controller) handleWorkerMessages(netmsg network.DecodedSSVMessage) erro
 			return fmt.Errorf("failed to decode partial signature messages: %w", err)
 		}
 
-		if err := observer.VerifySig(pSigMessages); err != nil {
-			return fmt.Errorf("failed to verify partial signature messages: %w", err)
+		if !c.validatorOptions.ExporterFull {
+			if err := observer.ProcessMessage(msg); err != nil {
+				return fmt.Errorf("failed to verify partial signature messages: %w", err)
+			}
 		}
 	}
 

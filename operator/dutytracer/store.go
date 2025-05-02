@@ -10,10 +10,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
+	"github.com/ssvlabs/ssv/logging/fields"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
+// ValidatorDutyTrace is a wrapper around the model.ValidatorDutyTrace that adds a CommitteeID and pubkey field
+// to avoid extra lookups
 type ValidatorDutyTrace struct {
 	model.ValidatorDutyTrace
 	CommitteeID spectypes.CommitteeID
@@ -28,7 +31,9 @@ type DutyTraceStore interface {
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)
+	GetCommitteeDutyLinks(slot phase0.Slot) ([]*model.CommitteeDutyLink, error)
 	GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error)
+	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
 }
 
 func (a *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
@@ -149,6 +154,54 @@ func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spect
 	return trace, nil
 }
 
+func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+	duties, err := c.GetCommitteeDuties(slot)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duties: %w", err)
+	}
+
+	links, err := c.store.GetCommitteeDutyLinks(slot)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duty links: %w", err)
+	}
+
+	mapping := make(map[spectypes.CommitteeID]spectypes.ValidatorPK)
+	for _, link := range links {
+		share, found := c.validators.ValidatorByIndex(link.ValidatorIndex)
+		if !found {
+			c.logger.Error("validator not found", fields.ValidatorIndex(link.ValidatorIndex))
+			continue
+		}
+		mapping[link.CommitteeID] = share.ValidatorPubKey
+	}
+
+	for _, duty := range duties {
+		var signers []spectypes.OperatorID
+		for _, d := range duty.Decideds {
+			signers = append(signers, d.Signers...)
+		}
+
+		for _, round := range duty.SyncCommittee {
+			signers = append(signers, round.Signer)
+		}
+
+		for _, round := range duty.Attester {
+			signers = append(signers, round.Signer)
+		}
+
+		slices.Sort(signers)
+		signers = slices.Compact(signers)
+
+		out = append(out, qbftstorage.ParticipantsRangeEntry{
+			Slot:    slot,
+			PubKey:  mapping[duty.CommitteeID],
+			Signers: signers,
+		})
+	}
+
+	return out, nil
+}
+
 func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
 	index, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
@@ -219,6 +272,42 @@ func (c *Collector) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.
 	}
 
 	return
+}
+
+func (c *Collector) GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+	duties, err := c.store.GetValidatorDuties(role, slot)
+	if err != nil {
+		return nil, fmt.Errorf("get all validator duties: %w", err)
+	}
+
+	for _, duty := range duties {
+		var signers []spectypes.OperatorID
+
+		for _, d := range duty.Decideds {
+			signers = append(signers, d.Signers...)
+		}
+
+		for _, post := range duty.Post {
+			signers = append(signers, post.Signer)
+		}
+
+		slices.Sort(signers)
+		signers = slices.Compact(signers)
+
+		share, found := c.validators.ValidatorByIndex(duty.Validator)
+		if !found {
+			c.logger.Error("validator not found", fields.ValidatorIndex(duty.Validator))
+			continue
+		}
+
+		out = append(out, qbftstorage.ParticipantsRangeEntry{
+			Slot:    slot,
+			PubKey:  share.ValidatorPubKey,
+			Signers: signers,
+		})
+	}
+
+	return out, nil
 }
 
 func (c *Collector) getCommitteeIDBySlotAndIndex(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
