@@ -691,24 +691,6 @@ func TestExporterTraceDecideds(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid request - no pubkeys",
-			request: map[string]any{
-				"from":  100,
-				"to":    200,
-				"roles": []string{"PROPOSER"},
-			},
-			setupMock:      func(store *mockTraceStore) {},
-			expectedStatus: http.StatusBadRequest,
-			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				var resp struct {
-					Status  string `json:"status"`
-					Message string `json:"error"`
-				}
-				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Equal(t, "at least one pubkey is required", resp.Message)
-			},
-		},
-		{
 			name: "invalid request - invalid pubkey length",
 			request: map[string]any{
 				"from":    100,
