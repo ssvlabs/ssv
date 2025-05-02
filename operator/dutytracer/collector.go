@@ -18,6 +18,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
+	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -49,11 +50,10 @@ type Collector struct {
 	currentSlot     atomic.Uint64
 	lastEvictedSlot atomic.Uint64
 
-	lateMu               sync.Mutex
-	lateCommitteeTraces  []*committeeDutyTrace
-	lateValidatorTraces  []*validatorDutyTrace
-	lateLinks            []validatorCommitteeLink
 	lateArrivalThreshold phase0.Slot // number of slots to wait before saving late traces
+
+	inFlightCommittee hashmap.Map[spectypes.CommitteeID, struct{}]
+	inFlightValidator hashmap.Map[spectypes.ValidatorPK, struct{}]
 }
 
 type DomainDataProvider interface {
@@ -81,6 +81,8 @@ func New(ctx context.Context,
 		validatorIndexToCommitteeLinks: hashmap.New[phase0.ValidatorIndex, *hashmap.Map[phase0.Slot, spectypes.CommitteeID]](),
 		syncCommitteeRootsCache:        ttlcache.New(ttlcache.WithTTL[scRootKey, phase0.Root](ttl)),
 		lateArrivalThreshold:           phase0.Slot(8),
+		inFlightCommittee:              hashmap.Map[spectypes.CommitteeID, struct{}]{},
+		inFlightValidator:              hashmap.Map[spectypes.ValidatorPK, struct{}]{},
 	}
 
 	return tracer
@@ -121,9 +123,6 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 			// remove old SC roots
 			c.syncCommitteeRootsCache.DeleteExpired()
 
-			// save late traces
-			c.evictLateTraces(currentSlot)
-
 			// update last evicted slot
 			c.lastEvictedSlot.Store(uint64(validatorThreshold))
 		}
@@ -137,23 +136,35 @@ so when we request a certain trace we return both of them:
 - the model.* ValidatorDutyTrace that has the data that we enrich subsequently
 .LoadOrStore is being used to take care of the case when two goroutines try to create the same trace at the same time
 */
-func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace, error) {
+func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, *model.ValidatorDutyTrace, bool, error) {
 	// check late arrival
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		trace := &model.ValidatorDutyTrace{
-			Slot: slot,
-			Role: role,
-		}
-		lateValidatorTrace := &validatorDutyTrace{
-			Roles: []*model.ValidatorDutyTrace{trace},
+		if _, found := c.inFlightValidator.GetOrSet(vPubKey, struct{}{}); found {
+			return nil, nil, false, errInFlight
 		}
 
-		c.lateMu.Lock()
-		defer c.lateMu.Unlock()
+		trace, err := c.getValidatorDutiesFromDisk(role, slot, vPubKey)
+		if errors.Is(err, store.ErrNotFound) {
+			roleDutyTrace := &model.ValidatorDutyTrace{
+				Slot: slot,
+				Role: role,
+			}
+			wrappedTrace := &validatorDutyTrace{
+				Roles: []*model.ValidatorDutyTrace{roleDutyTrace},
+			}
+			return wrappedTrace, roleDutyTrace, true, nil
+		} else if err != nil {
+			_ = c.inFlightValidator.Delete(vPubKey)
+			return nil, nil, false, err
+		}
 
-		c.lateValidatorTraces = append(c.lateValidatorTraces, lateValidatorTrace)
+		role := &trace.ValidatorDutyTrace
 
-		return lateValidatorTrace, trace, nil
+		wrappedTrace := &validatorDutyTrace{
+			Roles: []*model.ValidatorDutyTrace{role},
+		}
+
+		return wrappedTrace, role, true, nil
 	}
 
 	validatorSlots, found := c.validatorTraces.Get(vPubKey)
@@ -172,7 +183,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 			Roles: []*model.ValidatorDutyTrace{roleDutyTrace},
 		}
 		traces, _ = validatorSlots.GetOrSet(slot, newTrace)
-		return traces, roleDutyTrace, nil
+		return traces, roleDutyTrace, false, nil
 	}
 
 	traces.Lock()
@@ -181,7 +192,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 	// find the trace for the role
 	for _, t := range traces.Roles {
 		if t.Role == role {
-			return traces, t, nil
+			return traces, t, false, nil
 		}
 	}
 
@@ -192,25 +203,38 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 	}
 	traces.Roles = append(traces.Roles, roleDutyTrace)
 
-	return traces, roleDutyTrace, nil
+	return traces, roleDutyTrace, false, nil
 }
+
+var errInFlight = errors.New("in flight")
 
 func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, bool, error) {
 	// check late arrival
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		lateCommitteeTrace := &committeeDutyTrace{
-			CommitteeDutyTrace: model.CommitteeDutyTrace{
-				CommitteeID: committeeID,
-				Slot:        slot,
-			},
+		_, found := c.inFlightCommittee.GetOrSet(committeeID, struct{}{})
+		if found {
+			return nil, false, errInFlight
 		}
 
-		c.lateMu.Lock()
-		defer c.lateMu.Unlock()
+		diskTrace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
+		if errors.Is(err, store.ErrNotFound) {
+			trace := &committeeDutyTrace{
+				CommitteeDutyTrace: model.CommitteeDutyTrace{
+					CommitteeID: committeeID,
+					Slot:        slot,
+				},
+			}
+			return trace, true, nil
+		} else if err != nil {
+			_ = c.inFlightCommittee.Delete(committeeID)
+			return nil, false, fmt.Errorf("get late committee duty data: %w", err)
+		}
 
-		c.lateCommitteeTraces = append(c.lateCommitteeTraces, lateCommitteeTrace)
+		trace := &committeeDutyTrace{
+			CommitteeDutyTrace: *diskTrace,
+		}
 
-		return lateCommitteeTrace, true, nil
+		return trace, true, nil
 	}
 
 	committeeSlots, found := c.committeeTraces.Get(committeeID)
@@ -313,7 +337,7 @@ func (c *Collector) createProposalTrace(receivedAt uint64, msg *specqbft.Message
 	}
 }
 
-func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) (*model.DecidedTrace, error) {
+func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, signedMsg *spectypes.SignedSSVMessage, round *model.RoundTrace) *model.DecidedTrace {
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		round.ProposalTrace = c.createProposalTrace(receivedAt, msg, signedMsg)
@@ -329,17 +353,13 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 		round.Prepares = append(round.Prepares, prepare)
 
 	case specqbft.CommitMsgType:
-		if len(signedMsg.OperatorIDs) == 0 {
-			return nil, errors.New("no operator IDs")
-		}
-
 		if len(signedMsg.OperatorIDs) > 1 {
 			return &model.DecidedTrace{
 				Round:        uint64(msg.Round),
 				BeaconRoot:   msg.Root,
 				Signers:      signedMsg.OperatorIDs,
 				ReceivedTime: receivedAt,
-			}, nil
+			}
 		}
 
 		commit := &model.QBFTTrace{
@@ -357,105 +377,50 @@ func (c *Collector) processConsensus(receivedAt uint64, msg *specqbft.Message, s
 		round.RoundChanges = append(round.RoundChanges, roundChangeTrace)
 	}
 
-	return nil, nil // we're exhausting all cases in the switch
+	return nil // we're exhausting all cases in the switch
 }
 
-func (c *Collector) processPartialSigValidator(receivedAt uint64, msg *spectypes.PartialSignatureMessages, ssvMsg *queue.SSVMessage, pubkey spectypes.ValidatorPK) error {
-	role, err := toBNRole(ssvMsg.MsgID.GetRoleType())
-	if err != nil {
-		return err
-	}
-
-	trace, roleDutyTrace, err := c.getOrCreateValidatorTrace(msg.Slot, role, pubkey)
-	if err != nil {
-		return err
-	}
-
-	trace.Lock()
-	defer trace.Unlock()
-
-	if roleDutyTrace.Validator == 0 {
-		roleDutyTrace.Validator = msg.Messages[0].ValidatorIndex
-	}
-
-	tr := &model.PartialSigTrace{
-		Type:         msg.Type,
-		BeaconRoot:   msg.Messages[0].SigningRoot,
-		Signer:       msg.Messages[0].Signer,
-		ReceivedTime: receivedAt,
-	}
-
-	if msg.Type == spectypes.PostConsensusPartialSig {
-		roleDutyTrace.Post = append(roleDutyTrace.Post, tr)
-		return nil
-	}
-
-	roleDutyTrace.Pre = append(roleDutyTrace.Pre, tr)
-
-	return nil
-}
-
-func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) error {
-	slot := msg.Slot
-
-	trace, late, err := c.getOrCreateCommitteeTrace(slot, committeeID)
-	if err != nil {
-		return err
-	}
-
-	trace.Lock()
-	defer trace.Unlock()
-
+func (c *Collector) processPartialSigCommittee(receivedAt uint64, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID, trace *committeeDutyTrace) {
 	// add operator ids to the trace
 	cmt, found := c.validators.Committee(committeeID)
 	if found && len(cmt.Operators) > 0 {
 		trace.OperatorIDs = cmt.Operators
 	}
 
-	if len(msg.Messages) == 0 {
-		return fmt.Errorf("no partial sig messages")
-	}
-
-	if late {
-		c.saveLateValidatorToCommiteeLinks(slot, msg, committeeID)
-	} else {
-		// store the link between validator index and committee id
-		c.saveValidatorToCommitteeLink(slot, msg, committeeID)
-	}
-
-	var isSyncCommittee bool
-
-	if bytes.Equal(trace.syncCommitteeRoot[:], msg.Messages[0].SigningRoot[:]) {
-		isSyncCommittee = true
-	}
-
-	signer := msg.Messages[0].Signer
-
+	// collect signers
 	indices := make([]phase0.ValidatorIndex, 0, len(msg.Messages))
+	scIndices := make([]phase0.ValidatorIndex, 0, len(msg.Messages))
+
 	for _, partialSigMsg := range msg.Messages {
+		if bytes.Equal(trace.syncCommitteeRoot[:], partialSigMsg.SigningRoot[:]) {
+			scIndices = append(scIndices, partialSigMsg.ValidatorIndex)
+			continue
+		}
+
 		indices = append(indices, partialSigMsg.ValidatorIndex)
 	}
 
 	slices.Sort(indices)
 	indices = slices.Compact(indices)
 
-	if isSyncCommittee {
+	slices.Sort(scIndices)
+	scIndices = slices.Compact(scIndices)
+
+	if len(scIndices) > 0 {
 		trace.SyncCommittee = append(trace.SyncCommittee, &model.SignerData{
-			Signer:       signer,
+			Signer:       msg.Messages[0].Signer,
+			ValidatorIdx: scIndices,
+			ReceivedTime: receivedAt,
+		})
+	}
+
+	if len(indices) > 0 {
+		trace.Attester = append(trace.Attester, &model.SignerData{
+			Signer:       msg.Messages[0].Signer,
 			ValidatorIdx: indices,
 			ReceivedTime: receivedAt,
 		})
-
-		return nil
 	}
-
-	trace.Attester = append(trace.Attester, &model.SignerData{
-		Signer:       signer,
-		ValidatorIdx: indices,
-		ReceivedTime: receivedAt,
-	})
-
-	return nil
 }
 
 func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
@@ -471,11 +436,10 @@ func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectype
 
 func (c *Collector) saveLateValidatorToCommiteeLinks(slot phase0.Slot, msg *spectypes.PartialSignatureMessages, committeeID spectypes.CommitteeID) {
 	for _, msg := range msg.Messages {
-		c.lateLinks = append(c.lateLinks, validatorCommitteeLink{
-			slot:           slot,
-			validatorIndex: msg.ValidatorIndex,
-			committeeID:    committeeID,
-		})
+		if err := c.store.SaveCommitteeDutyLink(slot, msg.ValidatorIndex, committeeID); err != nil {
+			// for late messages we can log with warn
+			c.logger.Warn("save late validator to committee links", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(msg.ValidatorIndex), fields.CommitteeID(committeeID))
+		}
 	}
 }
 
@@ -531,6 +495,30 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 }
 
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
+	var (
+		err   error
+		tries int
+	)
+
+	// if another late message is in flight (for the same ID) - try 3 times before giving up
+	for tries < 3 {
+		err = c.collect(ctx, msg, verifySig)
+
+		if !errors.Is(err, errInFlight) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+		tries++
+	}
+
+	if tries >= 3 {
+		c.logger.Warn("exhausted retries for late message", fields.MessageID(msg.MsgID))
+	}
+
+	return err
+}
+
+func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
 	start := time.Now()
 
 	tracerInFlightMessageCounter.Add(ctx, 1)
@@ -557,7 +545,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			var committeeID spectypes.CommitteeID
 			copy(committeeID[:], executorID[16:])
 
-			trace, _, err := c.getOrCreateCommitteeTrace(slot, committeeID)
+			trace, late, err := c.getOrCreateCommitteeTrace(slot, committeeID)
 			if err != nil {
 				return err
 			}
@@ -565,30 +553,26 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			trace.Lock()
 			defer trace.Unlock()
 
-			if len(msg.SignedSSVMessage.FullData) > 0 {
+			if len(msg.SignedSSVMessage.FullData) > 0 && subMsg.MsgType == specqbft.ProposalMsgType {
 				// save proposal data
-				if subMsg.MsgType == specqbft.ProposalMsgType {
-					// committee duty will contain the BeaconVote data
-					trace.ProposalData = msg.SignedSSVMessage.FullData
-				}
-				// for future: check if it's a proposal message
-				// if not, skip this step
+				trace.ProposalData = msg.SignedSSVMessage.FullData
+
 				root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
-				if err != nil {
-					return fmt.Errorf("get sync committee root: %w", err)
+				if err == nil {
+					trace.syncCommitteeRoot = root
 				}
-				// save sync committee root
-				trace.syncCommitteeRoot = root
 			}
 
 			round := getOrCreateRound(&trace.ConsensusTrace, uint64(subMsg.Round))
 
-			decided, err := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
-			if err != nil {
-				return err
-			}
+			decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
 			if decided != nil {
 				trace.Decideds = append(trace.Decideds, decided)
+			}
+
+			if late {
+				_ = c.inFlightCommittee.Delete(committeeID)
+				return c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
 			}
 		default:
 			var validatorPK spectypes.ValidatorPK
@@ -599,7 +583,7 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				return err
 			}
 
-			trace, roleDutyTrace, err := c.getOrCreateValidatorTrace(slot, bnRole, validatorPK)
+			trace, roleDutyTrace, late, err := c.getOrCreateValidatorTrace(slot, bnRole, validatorPK)
 			if err != nil {
 				return err
 			}
@@ -627,8 +611,6 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 						roleDutyTrace.Validator = data.Duty.ValidatorIndex
 					}
 
-					c.logger.Info("proposal data", fields.Slot(slot), fields.Validator(validatorPK[:]), fields.ValidatorIndex(data.Duty.ValidatorIndex), zap.Int("size", len(data.DataSSZ))) // TODO(me): remove this
-
 					// non-committee duty will contain the proposal data
 					roleDutyTrace.ProposalData = data.DataSSZ
 				}
@@ -639,20 +621,25 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 			round := getOrCreateRound(&roleDutyTrace.ConsensusTrace, uint64(subMsg.Round))
 
-			decided, err := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
-			if err != nil {
-				return err
-			}
+			decided := c.processConsensus(startTime, subMsg, msg.SignedSSVMessage, round)
 			if decided != nil {
 				roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, decided)
 			}
-		}
 
+			if late {
+				_ = c.inFlightValidator.Delete(validatorPK)
+				return c.store.SaveValidatorDuty(roleDutyTrace)
+			}
+		}
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := new(spectypes.PartialSignatureMessages)
 		err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData())
 		if err != nil {
 			return fmt.Errorf("decode partial signature messages: %w", err)
+		}
+
+		if len(pSigMessages.Messages) == 0 {
+			return fmt.Errorf("no partial sig messages")
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
@@ -667,17 +654,74 @@ func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 
 		executorID := msg.MsgID.GetDutyExecutorID()
 
+		// process partial sig for committee
 		if msg.MsgID.GetRoleType() == spectypes.RoleCommittee {
 			var committeeID spectypes.CommitteeID
 			copy(committeeID[:], executorID[16:])
 
-			return c.processPartialSigCommittee(startTime, pSigMessages, committeeID)
+			slot := pSigMessages.Slot
+
+			trace, late, err := c.getOrCreateCommitteeTrace(slot, committeeID)
+			if err != nil {
+				return err
+			}
+
+			trace.Lock()
+			defer trace.Unlock()
+
+			c.processPartialSigCommittee(startTime, pSigMessages, committeeID, trace)
+
+			if late {
+				_ = c.inFlightCommittee.Delete(committeeID)
+				c.saveLateValidatorToCommiteeLinks(slot, pSigMessages, committeeID)
+				return c.store.SaveCommitteeDuty(&trace.CommitteeDutyTrace)
+			}
+
+			// cache the link between validator index and committee id
+			c.saveValidatorToCommitteeLink(slot, pSigMessages, committeeID)
+			return nil
 		}
 
+		// process partial sig for validator
 		var validatorPK spectypes.ValidatorPK
 		copy(validatorPK[:], executorID)
 
-		return c.processPartialSigValidator(startTime, pSigMessages, msg, validatorPK)
+		role, err := toBNRole(msg.MsgID.GetRoleType())
+		if err != nil {
+			return err
+		}
+
+		trace, roleDutyTrace, late, err := c.getOrCreateValidatorTrace(pSigMessages.Slot, role, validatorPK)
+		if err != nil {
+			return err
+		}
+
+		trace.Lock()
+		defer trace.Unlock()
+
+		if roleDutyTrace.Validator == 0 {
+			roleDutyTrace.Validator = pSigMessages.Messages[0].ValidatorIndex
+		}
+
+		tr := &model.PartialSigTrace{
+			Type:         pSigMessages.Type,
+			BeaconRoot:   pSigMessages.Messages[0].SigningRoot,
+			Signer:       pSigMessages.Messages[0].Signer,
+			ReceivedTime: startTime,
+		}
+
+		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
+			roleDutyTrace.Post = append(roleDutyTrace.Post, tr)
+		} else {
+			roleDutyTrace.Pre = append(roleDutyTrace.Pre, tr)
+		}
+
+		if late {
+			_ = c.inFlightValidator.Delete(validatorPK)
+			return c.store.SaveValidatorDuty(roleDutyTrace)
+		}
+
+		return nil
 	}
 
 	return nil
@@ -711,12 +755,6 @@ type committeeDutyTrace struct {
 	sync.Mutex
 	syncCommitteeRoot phase0.Root
 	model.CommitteeDutyTrace
-}
-
-type validatorCommitteeLink struct {
-	slot           phase0.Slot
-	validatorIndex phase0.ValidatorIndex
-	committeeID    spectypes.CommitteeID
 }
 
 // must be called under parent trace lock

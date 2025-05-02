@@ -392,19 +392,19 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	slot3 := phase0.Slot(3)
 
-	dutyTrace, mod, err := tracer.getOrCreateValidatorTrace(slot3, spectypes.BNRoleProposer, validatorPK1)
+	dutyTrace, mod, _, err := tracer.getOrCreateValidatorTrace(slot3, spectypes.BNRoleProposer, validatorPK1)
 	require.NoError(t, err)
 	mod.Validator = index
 	require.NotNil(t, dutyTrace)
 
-	dutyTrace, mod, err = tracer.getOrCreateValidatorTrace(slot3, spectypes.BNRoleProposer, validatorPK2)
+	dutyTrace, mod, _, err = tracer.getOrCreateValidatorTrace(slot3, spectypes.BNRoleProposer, validatorPK2)
 	require.NoError(t, err)
 	mod.Validator = phase0.ValidatorIndex(2)
 	require.NotNil(t, dutyTrace)
 
 	slot4 := phase0.Slot(4)
 
-	dutyTrace, mod, err = tracer.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK1)
+	dutyTrace, mod, _, err = tracer.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK1)
 	require.NoError(t, err)
 	mod.Validator = index
 	mod.Decideds = append(mod.Decideds, &model.DecidedTrace{
@@ -412,14 +412,14 @@ func TestValidatorDutyStore(t *testing.T) {
 	})
 	require.NotNil(t, dutyTrace)
 
-	dutyTrace, mod, err = tracer.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK2)
+	dutyTrace, mod, _, err = tracer.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK2)
 	require.NoError(t, err)
 	mod.Validator = phase0.ValidatorIndex(2)
 	require.NotNil(t, dutyTrace)
 
 	slot7 := phase0.Slot(7)
 
-	dutyTrace, mod, err = tracer.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK1)
+	dutyTrace, mod, _, err = tracer.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK1)
 	require.NoError(t, err)
 	mod.Validator = index
 	mod.Decideds = append(mod.Decideds, &model.DecidedTrace{
@@ -427,7 +427,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	})
 	require.NotNil(t, dutyTrace)
 
-	dutyTrace, mod, err = tracer.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK2)
+	dutyTrace, mod, _, err = tracer.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK2)
 	require.NoError(t, err)
 	mod.Validator = phase0.ValidatorIndex(2)
 	require.NotNil(t, dutyTrace)
