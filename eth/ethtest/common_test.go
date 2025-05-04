@@ -64,7 +64,7 @@ type TestEnv struct {
 	httpSrv        *httptest.Server
 	validatorCtrl  *mocks.MockController
 	mockCtrl       *gomock.Controller
-	followDistance *uint64
+	finalityBlocks uint64
 }
 
 func (e *TestEnv) shutdown() {
@@ -89,8 +89,8 @@ func (e *TestEnv) setup(
 	validatorsCount uint64,
 	operatorsCount uint64,
 ) error {
-	if e.followDistance == nil {
-		e.SetDefaultFollowDistance()
+	if e.finalityBlocks == 0 {
+		e.SetDefaultFinalityBlocks()
 	}
 	logger := zaptest.NewLogger(t)
 
@@ -205,14 +205,14 @@ func (e *TestEnv) setup(
 	return nil
 }
 
-func (e *TestEnv) SetDefaultFollowDistance() {
-	// 8 is current production offset
-	value := uint64(8)
-	e.followDistance = &value
+func (e *TestEnv) SetDefaultFinalityBlocks() {
+	// 32 is the number of blocks for Ethereum finality
+	e.finalityBlocks = 32
 }
 
-func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
-	for i := uint64(0); i < *e.followDistance; i++ {
+// MineAndFinalize mines enough blocks to ensure finality
+func (e *TestEnv) MineAndFinalize(blockNum *uint64) {
+	for i := uint64(0); i < e.finalityBlocks; i++ {
 		commitBlock(e.sim, blockNum)
 	}
 }
