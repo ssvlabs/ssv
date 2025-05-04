@@ -183,7 +183,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createBlocksWithLogs(contract, blocksWithLogsLength, 0)
 		require.NoError(t, err)
 
-		// Commit one extra empty block so that the previous blocks become “finalized”
+		// Commit one extra empty block so that the previous blocks become "finalized"
 		env.sim.Commit()
 
 		// Fetch all logs history starting from block 0
@@ -421,105 +421,105 @@ func TestFetchLogsInBatches(t *testing.T) {
 	})
 }
 
-// TestChainReorganizationLogs check that the client receives removed logs correctly.
+// TestChainReorganizationLogs check that the client receives logs only after blocks are finalized
+// and that reorgs before finalization don't affect the final result.
 // Steps:
 //  1. Deploy the Callable contract.
-//  2. Set up an event subscription.
-//  3. Save the current block which will serve as parent for the fork.
-//  4. Send a transaction.
-//  5. Check that the event was included.
-//  6. Fork by using the parent block as ancestor.
-//  7. Mine two blocks to trigger a reorg.
-//  8. Check that the event was removed.
+//  2. Set up an event subscription via StreamLogs.
+//  3. Create a transaction and mine a block but don't finalize it.
+//  4. Verify no logs are received (since block isn't finalized).
+//  5. Create a fork from the parent block and add a different transaction.
+//  6. Finalize the fork blocks.
+//  7. Verify we receive logs only after finalization.
 
 func TestChainReorganizationLogs(t *testing.T) {
-	// TODO: fix reorg test
-	// logger := zaptest.NewLogger(t)
-	// const testTimeout = 2 * time.Second
-	// ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	// defer cancel()
+	logger := zaptest.NewLogger(t)
+	env := setupTestEnv(t, 2*time.Second)
 
-	// sim := simTestBackend(testAddr)
+	// 1. Deploy the contract
+	contract, err := env.deployCallableContract()
+	require.NoError(t, err)
 
-	// rpcServer, _ := sim.Node.RPCHandler()
-	// httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	// defer rpcServer.Stop()
-	// defer httpsrv.Close()
+	// 2. Create a client and set up subscription
+	err = env.createClient(WithLogger(logger))
+	require.NoError(t, err)
 
-	// addr := httpToWebSocketURL(httpsrv.URL)
+	logsCh := env.client.StreamLogs(env.ctx, 0)
 
-	// // 1.
-	// parsed, _ := abi.JSON(strings.NewReader(callableAbi))
-	// auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	// contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
-	// if err != nil {
-	// 	t.Errorf("deploying contract: %v", err)
-	// }
-	// sim.Commit()
+	// Save parent block for forking later
+	parentBlock, err := env.sim.Client().BlockByNumber(env.ctx, nil)
+	require.NoError(t, err)
 
-	// // Connect the client
-	// const followDistance = 8
-	// client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
-	// require.NoError(t, err)
+	// Create a map to track transaction hashes and their corresponding blocks
+	txHashes := make(map[ethcommon.Hash]uint64)
 
-	// isReady, err := client.IsReady(ctx)
-	// require.NoError(t, err)
-	// require.True(t, isReady)
-	// // 2.
-	// logs := client.StreamLogs(ctx, 0)
-	// // 3.
-	// var parent *ethtypes.Header
-	// var goodTransactions []ethcommon.Hash
-	// // 4. Send some transactions
-	// for i := 0; i < followDistance/2; i++ {
-	// 	// Call contract to trigger event emit
-	// 	tx, err := contract.Transact(auth, "Call")
-	// 	if err != nil {
-	// 		t.Errorf("transacting: %v", err)
-	// 	}
-	// 	sim.Commit()
-	// 	if i == 0 {
-	// 		goodTransactions = append(goodTransactions, tx.Hash())
-	// 		parent = sim.Blockchain.CurrentBlock()
-	// 	}
-	// }
-	// // 5. Fork off the chain after the first transaction
-	// if err := sim.Fork(context.Background(), parent.Hash()); err != nil {
-	// 	t.Errorf("forking: %v", err)
-	// }
-	// // 6. Add more blocks and 1 transaction after the fork
-	// for i := 0; i < followDistance; i++ {
-	// 	if i == 1 {
-	// 		tx, err := contract.Transact(auth, "Call")
-	// 		if err != nil {
-	// 			t.Errorf("transacting: %v", err)
-	// 		}
-	// 		goodTransactions = append(goodTransactions, tx.Hash())
-	// 	}
-	// 	sim.Commit()
-	// 	t.Log("committed block")
-	// }
-	// // 5.
-	// for i, hash := range goodTransactions {
-	// 	select {
-	// 	case log := <-logs:
-	// 		require.NotEmpty(t, log)
-	// 		require.Equal(t, hash, log.TxHash)
-	// 		t.Logf("got log from good transaction %d", i)
-	// 	case <-ctx.Done():
-	// 		t.Fatal("context canceled")
-	// 	}
-	// }
-	// select {
-	// case <-logs:
-	// 	t.Fatal("should not receive log")
-	// case <-ctx.Done():
-	// }
-	// if sim.Blockchain.CurrentBlock().Number.Uint64() != uint64(13) {
-	// 	t.Error("wrong chain length")
-	// }
-	// require.NoError(t, client.Close())
-	// require.NoError(t, sim.Close())
+	// 3. Create a transaction on the original chain
+	originalTx, err := contract.Transact(env.auth, "Call")
+	require.NoError(t, err)
+
+	env.sim.Commit()
+
+	// Record the original transaction and its block number
+	latestBlock, err := env.sim.Client().BlockByNumber(env.ctx, nil)
+	require.NoError(t, err)
+
+	originalBlockNum := latestBlock.NumberU64()
+	txHashes[originalTx.Hash()] = originalBlockNum
+	t.Logf("original chain block number: %d, tx hash: %s", originalBlockNum, originalTx.Hash().Hex())
+
+	// 4. No logs should be received since the block isn't finalized
+	select {
+	case log := <-logsCh:
+		require.Fail(t, "received logs from unfinalized block", "log", log)
+	case <-time.After(100 * time.Millisecond):
+		// no logs
+	}
+
+	// 5. Create a fork from the parent block
+	require.NoError(t, env.sim.Fork(parentBlock.Hash()))
+
+	// Create a different transaction on the fork
+	forkTx, err := contract.Transact(env.auth, "Call")
+	require.NoError(t, err)
+
+	env.sim.Commit()
+
+	// Record the fork transaction and its block number
+	latestBlock, err = env.sim.Client().BlockByNumber(env.ctx, nil)
+	require.NoError(t, err)
+
+	forkBlockNum := latestBlock.NumberU64()
+	txHashes[forkTx.Hash()] = forkBlockNum
+	t.Logf("fork chain block number: %d, tx hash: %s", forkBlockNum, forkTx.Hash().Hex())
+
+	// Still no logs should be received since the fork isn't finalized
+	select {
+	case log := <-logsCh:
+		require.Fail(t, "received logs from unfinalized fork", "log", log)
+	case <-time.After(100 * time.Millisecond):
+		// no logs
+	}
+
+	// 6. Finalize the fork
+	env.finalize()
+
+	// 7. Verify we receive logs only after finalization
+	var receivedLog BlockLogs
+	select {
+	case receivedLog = <-logsCh:
+		// received logs
+	case <-time.After(1 * time.Second):
+		require.Fail(t, "did not receive logs after finalization")
+	}
+
+	require.NotEmpty(t, receivedLog.Logs)
+
+	// Verify we received the transaction hash that's in our map and log is from the expected block
+	txHash := receivedLog.Logs[0].TxHash
+	blockNum, found := txHashes[txHash]
+
+	require.True(t, found, txHash.Hex())
+	require.Equal(t, blockNum, receivedLog.BlockNumber)
 }
 
 // deploySimContract deploys the SSV simulator contract.
