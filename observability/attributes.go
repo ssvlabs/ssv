@@ -11,17 +11,14 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-const (
-	RunnerRoleAttrKey = "ssv.runner.role"
-)
+func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
+	const runnerRoleAttrKey = "ssv.runner.role"
+	return attribute.String(runnerRoleAttrKey, role.String())
+}
 
 func BeaconRoleAttribute(role types.BeaconRole) attribute.KeyValue {
 	const eventNameAttrName = "ssv.beacon.role"
 	return attribute.String(eventNameAttrName, role.String())
-}
-
-func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
-	return attribute.String(RunnerRoleAttrKey, role.String())
 }
 
 func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
