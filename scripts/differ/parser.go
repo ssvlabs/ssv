@@ -149,7 +149,7 @@ func (p *Parser) transformFuncDecl(funcDecl *ast.FuncDecl) {
 			if len(field.Names) == 0 {
 				continue
 			}
-			if !slices.Contains(p.RemoveIdentifiers, field.Names[0].Name) {
+			if len(field.Names) > 0 && !slices.Contains(p.RemoveIdentifiers, field.Names[0].Name) {
 				newList = append(newList, field)
 			}
 		}
@@ -164,7 +164,7 @@ func (p *Parser) transformTypeSpec(typeSpec *ast.TypeSpec) {
 			if funcType, ok := field.Type.(*ast.FuncType); ok {
 				newList := []*ast.Field{}
 				for _, param := range funcType.Params.List {
-					if !slices.Contains(p.RemoveIdentifiers, param.Names[0].Name) {
+					if len(param.Names) > 0 && !slices.Contains(p.RemoveIdentifiers, param.Names[0].Name) {
 						newList = append(newList, param)
 					}
 				}

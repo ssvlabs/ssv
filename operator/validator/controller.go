@@ -179,7 +179,7 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// nonCommittees is a cache of initialized committeeObserver instances
+	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
 
@@ -194,7 +194,7 @@ type controller struct {
 }
 
 // NewController creates a new validator controller instance
-func NewController(logger *zap.Logger, options ControllerOptions) Controller {
+func NewController(logger *zap.Logger, options ControllerOptions) *controller {
 	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
@@ -236,7 +236,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	beaconNetwork := options.NetworkConfig.Beacon
 	cacheTTL := beaconNetwork.SlotDurationSec() * time.Duration(beaconNetwork.SlotsPerEpoch()*2) // #nosec G115
 
-	ctrl := controller{
+	ctrl := &controller{
 		logger:            logger.Named(logging.NameController),
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
@@ -291,7 +291,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.domainCache.Start()
 	go ctrl.beaconVoteRoots.Start()
 
-	return &ctrl
+	return ctrl
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
@@ -603,6 +603,16 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
+// ListValidatorPubKeys returns a list of validator pubkeys for all validators controller manages
+func (c *controller) ListValidatorPubKeys() []phase0.BLSPubKey {
+	result := make([]phase0.BLSPubKey, 0, c.validatorsMap.SizeValidators())
+	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
+		result = append(result, phase0.BLSPubKey(v.Share.ValidatorPubKey))
+		return true
+	})
+	return result
+}
+
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
@@ -620,7 +630,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+		if pushed := v.Queues[duty.RunnerRole()].TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
@@ -1092,7 +1102,6 @@ func SetupRunners(
 	logger *zap.Logger,
 	options validator.Options,
 ) (runner.ValidatorDutyRunners, error) {
-
 	if options.SSVShare == nil || !options.SSVShare.HasBeaconMetadata() {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it
@@ -1128,7 +1137,7 @@ func SetupRunners(
 		return qbftCtrl
 	}
 
-	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share) // TODO: fill the map
+	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[options.SSVShare.ValidatorIndex] = &options.SSVShare.Share
 
 	runners := runner.ValidatorDutyRunners{}
