@@ -206,8 +206,7 @@ func (e *TestEnv) setup(
 }
 
 func (e *TestEnv) SetDefaultFinalityBlocks() {
-	// 32 is the number of blocks for Ethereum finality
-	e.finalityBlocks = 32
+	e.finalityBlocks = executionclient.DefaultFinalityDistance
 }
 
 // MineAndFinalize mines enough blocks to ensure finality
@@ -217,6 +216,7 @@ func (e *TestEnv) MineAndFinalize(blockNum *uint64) {
 	}
 }
 
+// commitBlock creates a new block and increments block counter
 func commitBlock(sim *simulator.Backend, blockNum *uint64) {
 	sim.Commit()
 	*blockNum++

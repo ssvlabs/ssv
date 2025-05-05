@@ -104,6 +104,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	if err != nil {
 		t.Errorf("deploying contract: %v", err)
 	}
+
 	sim.Commit()
 
 	// Check contract code at the simulated blockchain
@@ -143,7 +144,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	sharesData3, err := generateSharesData(validatorData3, ops, testAddr, 3)
 	require.NoError(t, err)
 
-	blockNum := uint64(0x1)
 	currentSlot.SetSlot(100)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
@@ -156,11 +156,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
-
 		}
-		sim.Commit()
 
-		block := <-logs
+		sim.Commit()
+		for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+			sim.Commit()
+		}
+
+		// Get a block with logs (skipping any empty blocks)
+		block := getBlockWithLogs(logs)
 		require.NotEmpty(t, block.Logs)
 		require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
@@ -177,9 +181,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// Handle the event
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
+
+		// The block number should match the block where the events were emitted
+		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum++
 
 		// Check storage for the new operators
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -280,9 +285,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				Balance:         big.NewInt(100_000_000),
 			})
 		require.NoError(t, err)
-		sim.Commit()
 
-		block := <-logs
+		sim.Commit()
+		for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+			sim.Commit()
+		}
+
+		block := getBlockWithLogs(logs)
 		require.NotEmpty(t, block.Logs)
 		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
@@ -293,9 +302,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+
+		// The block number should match the block where the events were emitted
+		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
-		blockNum++
 
 		requireKeyManagerDataToExist(t, eh, 1, validatorData1)
 
@@ -331,22 +341,27 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-			sim.Commit()
 
-			block = <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
-			eventsCh = make(chan executionclient.BlockLogs)
+			eventsCh := make(chan executionclient.BlockLogs)
 			go func() {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
 
 			requireKeyManagerDataToNotExist(t, eh, 1, validatorData2)
 
@@ -381,22 +396,27 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-			sim.Commit()
 
-			block = <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
-			eventsCh = make(chan executionclient.BlockLogs)
+			eventsCh := make(chan executionclient.BlockLogs)
 			go func() {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
 
 			requireKeyManagerDataToExist(t, eh, 2, validatorData2)
 
@@ -436,22 +456,27 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-			sim.Commit()
 
-			block = <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
-			eventsCh = make(chan executionclient.BlockLogs)
+			eventsCh := make(chan executionclient.BlockLogs)
 			go func() {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
 
 			requireKeyManagerDataToNotExist(t, eh, 2, validatorData3)
 
@@ -485,22 +510,27 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-			sim.Commit()
 
-			block = <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
-			eventsCh = make(chan executionclient.BlockLogs)
+			eventsCh := make(chan executionclient.BlockLogs)
 			go func() {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
 
 			requireKeyManagerDataToExist(t, eh, 3, validatorData3)
 
@@ -535,22 +565,27 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-			sim.Commit()
 
-			block = <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
-			eventsCh = make(chan executionclient.BlockLogs)
+			eventsCh := make(chan executionclient.BlockLogs)
 			go func() {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
 
 			requireKeyManagerDataToExist(t, eh, 4, validatorData4)
 
@@ -579,9 +614,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				[]uint64{1, 2, 3, 4},
 			)
 			require.NoError(t, err)
-			sim.Commit()
 
-			block := <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
@@ -590,11 +629,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
-
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 		})
 
 		t.Run("ValidatorExited incorrect owner address", func(t *testing.T) {
@@ -606,9 +644,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				[]uint64{1, 2, 3, 4},
 			)
 			require.NoError(t, err)
-			sim.Commit()
 
-			block := <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
@@ -619,9 +661,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 		})
 
 		// Receive event, unmarshall, parse, check parse event is not nil or with an error,
@@ -646,9 +688,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				[]uint64{1, 2, 3, 4},
 			)
 			require.NoError(t, err)
-			sim.Commit()
 
-			block := <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
 
@@ -657,11 +703,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				defer close(eventsCh)
 				eventsCh <- block
 			}()
-
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			// Check the validator is in the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
@@ -669,6 +714,38 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			valShare, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.True(t, exists)
 			require.NotNil(t, valShare)
+		})
+
+		t.Run("ValidatorExited incorrect event public key", func(t *testing.T) {
+			pk := validatorData1.masterPubKey.Serialize()
+			// Corrupt the public key
+			pk[len(pk)-1] ^= 1
+
+			_, err = boundContract.ExitValidator(
+				auth,
+				pk,
+				[]uint64{1, 2, 3, 4},
+			)
+			require.NoError(t, err)
+
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
+			require.NoError(t, err)
 		})
 	})
 
@@ -691,9 +768,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-			sim.Commit()
 
-			block := <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
@@ -704,9 +785,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
 			valShare, exists := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
@@ -729,9 +810,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-			sim.Commit()
 
-			block := <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
@@ -742,9 +827,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
 			valShare, exists := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
@@ -775,9 +860,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					Balance:         big.NewInt(100_000_000),
 				})
 			require.NoError(t, err)
-			sim.Commit()
 
-			block := <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
@@ -788,9 +877,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			// Use the block's actual blockNumber
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			// Check the validator was removed from the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
@@ -817,9 +906,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				Balance:         big.NewInt(100_000_000),
 			})
 		require.NoError(t, err)
+
 		sim.Commit()
 
-		block := <-logs
+		for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+			sim.Commit()
+		}
+
+		block := getBlockWithLogs(logs)
 		require.NotEmpty(t, block.Logs)
 		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
@@ -838,9 +932,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.False(t, share.Liquidated)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum++
 
 		share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 		require.True(t, exists)
@@ -878,9 +971,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				Balance:         big.NewInt(100_000_000),
 			})
 		require.NoError(t, err)
+
 		sim.Commit()
 
-		block := <-logs
+		for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+			sim.Commit()
+		}
+
+		block := getBlockWithLogs(logs)
 		require.NotEmpty(t, block.Logs)
 		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
@@ -893,7 +991,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		currentSlot.SetSlot(1000)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
 
 		// check that slashing data was bumped
@@ -910,7 +1008,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.Equal(t, highestProposal, currentSlot.GetSlot())
 
-		blockNum++
 	})
 
 	// Liquidated event is far in the future
@@ -928,9 +1025,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				Balance:         big.NewInt(100_000_000),
 			})
 		require.NoError(t, err)
+
 		sim.Commit()
 
-		block := <-logs
+		for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+			sim.Commit()
+		}
+
+		block := getBlockWithLogs(logs)
 		require.NotEmpty(t, block.Logs)
 		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
@@ -941,9 +1043,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum++
 	})
 
 	// Reactivate event
@@ -962,9 +1063,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				Balance:         big.NewInt(100_000_000),
 			})
 		require.NoError(t, err)
+
 		sim.Commit()
 
-		block := <-logs
+		for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+			sim.Commit()
+		}
+
+		block := getBlockWithLogs(logs)
 		require.NotEmpty(t, block.Logs)
 		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
@@ -984,7 +1090,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		currentSlot.SetSlot(100)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
 
 		// check that slashing data is greater than current epoch
@@ -1001,8 +1107,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.Greater(t, highestProposal, currentSlot.GetSlot())
 
-		blockNum++
-
 		share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 		require.True(t, exists)
 		require.NotNil(t, share)
@@ -1016,9 +1120,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			testAddr2,
 		)
 		require.NoError(t, err)
+
 		sim.Commit()
 
-		block := <-logs
+		for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+			sim.Commit()
+		}
+
+		block := getBlockWithLogs(logs)
 		require.NotEmpty(t, block.Logs)
 		require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), block.Logs[0].Topics[0])
 
@@ -1029,9 +1138,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
-		blockNum++
+
 		// Check if the fee recipient was updated
 		recipientData, _, err := eh.nodeStorage.GetRecipientData(nil, testAddr)
 		require.NoError(t, err)
@@ -1066,8 +1175,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
 
-			block := <-logs
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[1].Topics[0])
@@ -1080,9 +1192,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Handle the event
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			// #TODO: Fails until we fix the OperatorAdded: handlers.go #108
 			// Check storage for the new operators
@@ -1144,8 +1255,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
 
-			block := <-logs
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[1].Topics[0])
@@ -1157,9 +1271,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			valShare, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.False(t, exists)
@@ -1208,8 +1321,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
 
-			block := <-logs
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 			require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[1].Topics[0])
@@ -1221,9 +1337,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			share, exists = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.True(t, exists)
@@ -1239,12 +1354,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Call the contract method
 			_, err = boundContract.RemoveOperator(auth, 100500)
 			require.NoError(t, err)
-			sim.Commit()
 
-			block := <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
-
 			eventsCh := make(chan executionclient.BlockLogs)
 			go func() {
 				defer close(eventsCh)
@@ -1258,9 +1376,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Handle the event
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			// Check if the operator wasn't removed successfully
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -1285,8 +1402,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
 
-			block := <-logs
+			block := getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
@@ -1303,9 +1423,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Handle OperatorAdded event
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
+
 			// Check storage for the new operator
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
@@ -1315,9 +1435,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Call the contract method
 			_, err = boundContract.RemoveOperator(auth, 4)
 			require.NoError(t, err)
-			sim.Commit()
 
-			block = <-logs
+			sim.Commit()
+			for i := 0; i < executionclient.DefaultFinalityDistance; i++ {
+				sim.Commit()
+			}
+
+			block = getBlockWithLogs(logs)
 			require.NotEmpty(t, block.Logs)
 			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
@@ -1333,9 +1457,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Handle OperatorRemoved event
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
-			blockNum++
 
 			// List operators and check that the operator was removed
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
@@ -1688,4 +1811,15 @@ func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAcc
 	_, found, err = eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.False(t, found)
+}
+
+// getBlockWithLogs is a helper function to get a block with logs from the channel.
+func getBlockWithLogs(logs <-chan executionclient.BlockLogs) executionclient.BlockLogs {
+	for {
+		block := <-logs
+		if len(block.Logs) > 0 {
+			return block
+		}
+		// Skip empty blocks
+	}
 }
