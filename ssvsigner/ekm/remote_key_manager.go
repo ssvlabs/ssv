@@ -40,7 +40,7 @@ import (
 // RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
 	logger          *zap.Logger
-	netCfg          networkconfig.NetworkConfig
+	beaconConfig    networkconfig.Beacon
 	signerClient    signerClient
 	consensusClient consensusClient
 	getOperatorId   func() spectypes.OperatorID
@@ -68,14 +68,13 @@ type consensusClient interface {
 // the provided consensusClient to get the current fork/genesis for sign requests.
 func NewRemoteKeyManager(
 	logger *zap.Logger,
-	netCfg networkconfig.NetworkConfig,
+	beaconConfig networkconfig.Beacon,
 	signerClient signerClient,
 	consensusClient consensusClient,
 	db basedb.Database,
-	networkConfig networkconfig.NetworkConfig,
 	getOperatorId func() spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
-	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
+	signerStore := NewSignerStorage(db, beaconConfig, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
 	operatorPubKeyString, err := signerClient.OperatorIdentity(context.Background()) // TODO: use context
@@ -90,10 +89,10 @@ func NewRemoteKeyManager(
 
 	return &RemoteKeyManager{
 		logger:            logger,
-		netCfg:            netCfg,
+		beaconConfig:      beaconConfig,
 		signerClient:      signerClient,
 		consensusClient:   consensusClient,
-		slashingProtector: NewSlashingProtector(logger, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
 		getOperatorId:     getOperatorId,
 		operatorPubKey:    operatorPubKey,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -154,7 +153,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, phase0.Root, error) {
-	epoch := km.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+	epoch := km.beaconConfig.EstimatedEpochAtSlot(slot)
 
 	forkInfo, err := km.getForkInfo(ctx, epoch)
 	if err != nil {
@@ -316,7 +315,7 @@ func (km *RemoteKeyManager) handleDomainAttester(
 		return nil, errors.New("could not cast obj to AttestationData")
 	}
 
-	network := core.Network(km.netCfg.Beacon.GetBeaconNetwork())
+	network := core.Network(km.beaconConfig.GetBeaconName())
 	if !signer.IsValidFarFutureEpoch(network, data.Target.Epoch) {
 		return nil, fmt.Errorf("target epoch too far into the future")
 	}
@@ -449,7 +448,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 
 	blockSlot := ret.BlockHeader.Slot
 
-	network := core.Network(km.netCfg.Beacon.GetBeaconNetwork())
+	network := core.Network(km.beaconConfig.GetBeaconName())
 	if !signer.IsValidFarFutureSlot(network, blockSlot) {
 		return nil, fmt.Errorf("proposed block slot too far into the future")
 	}

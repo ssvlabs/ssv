@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ssvlabs/ssv/utils/casts"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -50,7 +48,7 @@ type validatorStore interface {
 
 type messageValidator struct {
 	logger          *zap.Logger
-	netCfg          networkconfig.NetworkConfig
+	netCfg          networkconfig.Network
 	pectraForkEpoch phase0.Epoch
 
 	consensusStateIndex   map[consensusID]*consensusState
@@ -78,7 +76,7 @@ type messageValidator struct {
 
 // New returns a new MessageValidator with the given network configuration and options.
 func New(
-	netCfg networkconfig.NetworkConfig,
+	netCfg networkconfig.Network,
 	validatorStore validatorStore,
 	operators operators,
 	dutyStore *dutystore.Store,
@@ -229,7 +227,7 @@ func (mv *messageValidator) getValidationLock(messageID spectypes.MessageID) *sy
 
 		lock := &sync.Mutex{}
 
-		epochDuration := casts.DurationFromUint64(mv.netCfg.Beacon.SlotsPerEpoch()) * mv.netCfg.Beacon.SlotDurationSec()
+		epochDuration := time.Duration(mv.netCfg.GetSlotsPerEpoch()) * mv.netCfg.GetSlotDuration() // #nosec G115 - slots per epoch never exceeds math.MaxInt64
 		// validationLockTTL specifies how much time a particular validation lock is meant to
 		// live. It must be large enough for validation lock to never expire while we still are
 		// expecting to process messages targeting that same validation lock. For a message
@@ -293,7 +291,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is not active
-	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = share.Status.String()
 		return CommitteeInfo{}, e
@@ -323,7 +321,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
 			state:           make(map[spectypes.OperatorID]*OperatorState),
-			storedSlotCount: phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) * 2, // store last two epochs to calculate duty count
+			storedSlotCount: mv.netCfg.GetSlotsPerEpoch() * 2, // store last two epochs to calculate duty count
 		}
 		mv.consensusStateIndex[id] = cs
 	}
