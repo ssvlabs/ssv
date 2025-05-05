@@ -438,7 +438,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logsCh chan<- B
 			toBlock := finalizedBlock.Number.Uint64()
 
 			if toBlock != lastFinalized {
-				finalizedEpoch := toBlock / 32
+				finalizedEpoch := toBlock / DefaultFinalityDistance
 				ec.logger.Info("⏱ finalized block changed",
 					zap.Uint64("new_finalized", toBlock),
 					zap.Uint64("epoch", finalizedEpoch),
