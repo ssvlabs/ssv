@@ -255,7 +255,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				}
 
 				if lastBlock > fromBlock {
-					// Successfully streamed some logsCh, reset tries.
+					// Successfully streamed some logs, reset tries.
 					tries = 0
 				}
 
