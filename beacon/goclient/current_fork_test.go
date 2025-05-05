@@ -52,9 +52,9 @@ func TestCurrentFork(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -83,9 +83,9 @@ func TestCurrentFork(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -123,9 +123,9 @@ func TestCurrentFork(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
