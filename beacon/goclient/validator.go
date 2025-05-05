@@ -84,7 +84,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 			return
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
-			currentEpoch := gc.network.EstimatedCurrentEpoch()
+			currentEpoch := gc.network.EstimatedEpochAtSlot(currentSlot)
 			slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
 
 			// Select registrations to submit.
