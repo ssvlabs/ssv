@@ -15,41 +15,33 @@ import (
 func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey[:]))
 
-	justStarted := v.started.CompareAndSwap(false, true)
-	if !justStarted {
+	started = v.started.Load()
+	if started {
 		return false, nil
 	}
+
+	v.startedMtx.Lock()
+	defer v.startedMtx.Unlock()
 
 	n, ok := v.Network.(p2p.Subscriber)
 	if !ok {
 		return false, errors.New("network does not support subscription")
 	}
-	for role, dutyRunner := range v.DutyRunners {
+	for role := range v.DutyRunners {
 		logger := logger.With(fields.Role(role))
-		var share *spectypes.Share
 
-		for _, s := range dutyRunner.GetShares() {
-			if s.ValidatorPubKey == v.Share.ValidatorPubKey {
-				share = s
-				break
-			}
-		}
-
-		if share == nil { // TODO: handle missing share?
-			logger.Warn("❗ share is missing", fields.Role(role))
-			continue
-		}
-
-		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, share.ValidatorPubKey[:], role)
-
-		// TODO: P2P
 		var valpk spectypes.ValidatorPK
-		copy(valpk[:], share.ValidatorPubKey[:])
+		copy(valpk[:], v.Share.ValidatorPubKey[:])
 		if err := n.Subscribe(valpk); err != nil {
 			return false, err
 		}
+
+		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)
 	}
+
+	v.started.Store(true)
+
 	return true, nil
 }
 

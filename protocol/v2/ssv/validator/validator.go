@@ -48,7 +48,10 @@ type Validator struct {
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
 
+	// started reflects whether this validator has already been started
 	started atomic.Bool
+	// startedMtx makes sure validator will be started only once
+	startedMtx sync.Mutex
 
 	messageValidator validation.MessageValidator
 }
