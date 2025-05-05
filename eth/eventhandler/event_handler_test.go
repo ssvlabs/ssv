@@ -182,7 +182,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Handle the event
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 
-		// The block number should match the block where the events were emitted
 		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -303,7 +302,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 
-		// The block number should match the block where the events were emitted
 		require.Equal(t, block.BlockNumber, lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -359,7 +357,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 
-			// Use the block's actual blockNumber
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
@@ -414,7 +411,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 
-			// Use the block's actual blockNumber
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
@@ -474,7 +470,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 
-			// Use the block's actual blockNumber
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
@@ -528,7 +523,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 
-			// Use the block's actual blockNumber
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
@@ -583,7 +577,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 
-			// Use the block's actual blockNumber
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
@@ -630,7 +623,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			// Use the block's actual blockNumber
+
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 		})
@@ -661,7 +654,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			// Use the block's actual blockNumber
+
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 		})
@@ -704,7 +697,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			// Use the block's actual blockNumber
+
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
@@ -743,7 +736,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			// Use the block's actual blockNumber
+
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 		})
@@ -785,7 +778,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			// Use the block's actual blockNumber
+
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
@@ -827,7 +820,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			// Use the block's actual blockNumber
+
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
@@ -877,7 +870,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			// Use the block's actual blockNumber
+
 			require.Equal(t, block.BlockNumber, lastProcessedBlock)
 			require.NoError(t, err)
 
