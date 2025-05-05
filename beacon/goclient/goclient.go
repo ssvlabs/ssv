@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -182,6 +183,10 @@ type GoClient struct {
 	ForkEpochCapella   phase0.Epoch
 	ForkEpochBellatrix phase0.Epoch
 	ForkEpochAltair    phase0.Epoch
+
+	// voluntaryExitDomainCached is voluntary exit domain value calculated lazily and re-used
+	// since it doesn't change over time
+	voluntaryExitDomainCached atomic.Pointer[phase0.Domain]
 }
 
 // New init new client and go-client instance
