@@ -8,12 +8,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -25,7 +24,7 @@ func TestCurrentFork(t *testing.T) {
 	network := beacon.NewNetwork(types.MainNetwork)
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{
 					"data": [
@@ -60,7 +59,8 @@ func TestCurrentFork(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
+			mocks.NewValidatorStore(),
+			mocks.NewSlotTickerProvider,
 		)
 		require.NoError(t, err)
 
@@ -74,7 +74,7 @@ func TestCurrentFork(t *testing.T) {
 	})
 
 	t.Run("nil_data", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{"data": null}`), nil
 			}
@@ -91,7 +91,8 @@ func TestCurrentFork(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
+			mocks.NewValidatorStore(),
+			mocks.NewSlotTickerProvider,
 		)
 		require.NoError(t, err)
 
@@ -101,7 +102,7 @@ func TestCurrentFork(t *testing.T) {
 	})
 
 	t.Run("no_current_fork", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == forkSchedulePath {
 				return json.RawMessage(`{
 					"data": [
@@ -131,7 +132,8 @@ func TestCurrentFork(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
+			mocks.NewValidatorStore(),
+			mocks.NewSlotTickerProvider,
 		)
 		require.NoError(t, err)
 

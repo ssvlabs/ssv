@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -113,6 +114,10 @@ type MultiClient interface {
 	eth2client.ForkScheduleProvider
 }
 
+type validatorStore interface {
+	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+}
+
 type EventTopic string
 
 const (
@@ -131,6 +136,8 @@ type GoClient struct {
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
+
+	validatorStore validatorStore
 
 	// registrationMu synchronises access to registrations
 	registrationMu sync.Mutex
@@ -186,6 +193,7 @@ type GoClient struct {
 func New(
 	logger *zap.Logger,
 	opt Options,
+	validatorStore validatorStore,
 	slotTickerProvider slotticker.Provider,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
@@ -204,6 +212,7 @@ func New(
 		ctx:                   opt.Context,
 		network:               opt.Network,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
+		validatorStore:        validatorStore,
 		registrations:         map[phase0.BLSPubKey]*validatorRegistration{},
 		attestationDataCache: ttlcache.New(
 			// we only fetch attestation data during the slot of the relevant duty (and never later),
@@ -253,6 +262,7 @@ func New(
 	client.nodeSyncingFn = client.nodeSyncing
 
 	go client.registrationSubmitter(slotTickerProvider)
+
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 

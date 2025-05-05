@@ -451,6 +451,7 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 		fields.Owner(event.Owner),
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),
 	)
+
 	logger.Debug("processing event")
 
 	recipientData, found, err := eh.nodeStorage.GetRecipientData(txn, event.Owner)
@@ -463,15 +464,14 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 			Owner: event.Owner,
 		}
 	}
-
 	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
-
 	r, err := eh.nodeStorage.SaveRecipientData(txn, recipientData)
 	if err != nil {
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}
 
 	logger.Debug("processed event")
+
 	return r != nil, nil
 }
 

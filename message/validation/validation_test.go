@@ -80,7 +80,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			return &registrystorage.Committee{
 				ID:        id,
 				Operators: committee,
-				Validators: []*ssvtypes.SSVShare{
+				Shares: []*ssvtypes.SSVShare{
 					share1,
 					share2,
 					share3,

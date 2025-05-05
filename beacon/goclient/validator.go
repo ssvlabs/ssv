@@ -2,7 +2,6 @@ package goclient
 
 import (
 	"fmt"
-	"maps"
 	"net/http"
 	"slices"
 	"time"
@@ -70,12 +69,13 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 	return nil
 }
 
-// registrationSubmitter periodically submits validator registrations in batches, 1 batch per slot
-// making sure
-//   - every new(fresh) validator registration is submitted at the earliest slot possible once
-//     GoClient is aware of it
-//   - every validator registration GoClient is aware of is submitted at least once during 1 epoch
-//     period
+// registrationSubmitter periodically submits validator registrations of 2 types (in batches,
+// 1 batch per slot):
+// - new validator registrations
+// - validator registrations that are relevant for the near future (targeting 10th epoch from now)
+// This allows us to keep the amount of registration submissions small and not having to worry
+// about pruning gc.registrations "cache" (since it might contain registrations for validators that
+// are no longer operating) while still submitting all validator-registrations that matter asap.
 func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
 	ticker := slotTickerProvider()
 	for {
@@ -84,14 +84,35 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 			return
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
+			currentEpoch := gc.network.EstimatedEpochAtSlot(currentSlot)
+			slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
 
 			// Select registrations to submit.
+			targetRegs := make(map[phase0.BLSPubKey]*validatorRegistration, 0)
 			gc.registrationMu.Lock()
-			allRegistrations := slices.Collect(maps.Values(gc.registrations))
+			// 1. find & add validators participating in 10th epoch from now
+			shares := gc.validatorStore.SelfParticipatingValidators(currentEpoch + 10)
+			for _, share := range shares {
+				pk := phase0.BLSPubKey{}
+				copy(pk[:], share.ValidatorPubKey[:])
+				r, ok := gc.registrations[pk]
+				if !ok {
+					// we haven't constructed corresponding validator registration for submission yet,
+					// so just skip it for now
+					continue
+				}
+				targetRegs[pk] = r
+			}
+			// 2. find & add newly created validator registrations
+			for pk, r := range gc.registrations {
+				if r.new {
+					targetRegs[pk] = r
+				}
+			}
 			gc.registrationMu.Unlock()
 
 			registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
-			for _, r := range allRegistrations {
+			for _, r := range targetRegs {
 				validatorPk, err := r.PubKey()
 				if err != nil {
 					gc.log.Error("Failed to get validator pubkey", zap.Error(err), fields.Slot(currentSlot))
@@ -99,7 +120,6 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 				}
 
 				// Distribute the registrations evenly across the epoch based on the pubkeys.
-				slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
 				validatorDescriptor := xxhash.Sum64(validatorPk[:])
 				shouldSubmit := validatorDescriptor%gc.network.SlotsPerEpoch() == slotInEpoch
 
@@ -110,12 +130,7 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 			}
 
 			// Submit validator registrations in chunks.
-			// TODO: replace with slices.Chunk after we've upgraded to Go 1.23
-			const chunkSize = 500
-			for start := 0; start < len(registrations); start += chunkSize {
-				end := min(start+chunkSize, len(registrations))
-				chunk := registrations[start:end]
-
+			for chunk := range slices.Chunk(registrations, 500) {
 				reqStart := time.Now()
 				err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, chunk)
 				recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)

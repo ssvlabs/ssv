@@ -7,12 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -22,7 +21,7 @@ func TestGenesis(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{
 					"data": {
@@ -45,7 +44,8 @@ func TestGenesis(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
+			mocks.NewValidatorStore(),
+			mocks.NewSlotTickerProvider,
 		)
 		require.NoError(t, err)
 
@@ -58,7 +58,7 @@ func TestGenesis(t *testing.T) {
 	})
 
 	t.Run("nil_data", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{"data": null}`), nil
 			}
@@ -75,7 +75,8 @@ func TestGenesis(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
+			mocks.NewValidatorStore(),
+			mocks.NewSlotTickerProvider,
 		)
 		require.NoError(t, err)
 
@@ -85,7 +86,7 @@ func TestGenesis(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`malformed`), nil
 			}
@@ -102,7 +103,8 @@ func TestGenesis(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
+			mocks.NewValidatorStore(),
+			mocks.NewSlotTickerProvider,
 		)
 		require.NoError(t, err)
 
