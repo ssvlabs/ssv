@@ -8,7 +8,6 @@ import (
 	"github.com/ssvlabs/ssv-spec/p2p"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
 )
 
 var (
@@ -20,7 +19,7 @@ var (
 type Subscriber interface {
 	p2p.Subscriber
 	// Unsubscribe unsubscribes from the validator subnet
-	Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error
+	Unsubscribe(pk spectypes.ValidatorPK) error
 	// Peers returns the peers that are connected to the given validator
 }
 
@@ -95,7 +94,7 @@ const (
 // ValidationReporting is the interface for reporting on message validation results
 type ValidationReporting interface {
 	// ReportValidation reports the result for the given message
-	ReportValidation(logger *zap.Logger, message *spectypes.SSVMessage, res MsgValidationResult)
+	ReportValidation(message *spectypes.SSVMessage, res MsgValidationResult)
 }
 
 // Network holds the networking layer used to complement the underlying protocols

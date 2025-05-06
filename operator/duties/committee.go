@@ -79,7 +79,7 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 	}
 
 	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
-	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, h.logger, committeeMap)
+	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {

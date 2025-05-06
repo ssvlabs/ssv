@@ -176,7 +176,7 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
 }
 
 // Period can be current or future.

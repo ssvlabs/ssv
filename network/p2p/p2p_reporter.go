@@ -13,20 +13,20 @@ import (
 
 // ReportValidation reports the result for the given message
 // the result will be converted to a score and reported to peers.ScoreIndex
-func (n *p2pNetwork) ReportValidation(logger *zap.Logger, msg *spectypes.SSVMessage, res protocolp2p.MsgValidationResult) {
+func (n *p2pNetwork) ReportValidation(msg *spectypes.SSVMessage, res protocolp2p.MsgValidationResult) {
 	if !n.isReady() {
 		return
 	}
 	data, err := msg.Encode()
 	if err != nil {
-		logger.Warn("could not encode message", zap.Error(err))
+		n.logger.Warn("could not encode message", zap.Error(err))
 		return
 	}
 	peers := n.msgResolver.GetPeers(data)
 	for _, pi := range peers {
 		err := n.idx.Score(pi, &ssvpeers.NodeScore{Name: "validation", Value: msgValidationScore(res)})
 		if err != nil {
-			logger.Warn("could not score peer", fields.PeerID(pi), zap.Error(err))
+			n.logger.Warn("could not score peer", fields.PeerID(pi), zap.Error(err))
 			continue
 		}
 	}

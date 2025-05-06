@@ -295,7 +295,7 @@ func (mc *MockConnection) AtLimit(dir network.Direction) bool {
 	return mc.atLimit
 }
 
-func (mc *MockConnection) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (mc *MockConnection) IsBad(id peer.ID) bool {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 	if bad, ok := mc.isBad[id]; ok {

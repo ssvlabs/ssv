@@ -104,7 +104,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 		},
 	}
 
-	s := NewScheduler(opts)
+	s := NewScheduler(logger, opts)
 	s.blockPropagateDelay = 1 * time.Millisecond
 	s.indicesChg = make(chan struct{})
 	s.handlers = handlers
@@ -143,7 +143,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)
 
 	startFunction := func() {
-		err := s.Start(ctx, logger)
+		err := s.Start(ctx)
 		require.NoError(t, err)
 
 		schedulerPool.Go(func(ctx context.Context) error {
@@ -358,7 +358,7 @@ func TestScheduler_Run(t *testing.T) {
 		},
 	}
 
-	s := NewScheduler(opts)
+	s := NewScheduler(logger, opts)
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
@@ -376,7 +376,7 @@ func TestScheduler_Run(t *testing.T) {
 		mockDutyHandler.(*MockdutyHandler).EXPECT().Name().Times(1)
 	}
 
-	require.NoError(t, s.Start(ctx, logger))
+	require.NoError(t, s.Start(ctx))
 
 	// Cancel the context and test that the scheduler stops.
 	cancel()
@@ -407,13 +407,13 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 		IndicesChg: make(chan struct{}),
 	}
 
-	s := NewScheduler(opts)
+	s := NewScheduler(logger, opts)
 
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
-	err := s.Start(ctx, logger)
+	err := s.Start(ctx)
 	require.NoError(t, err)
 
 	s.indicesChg <- struct{}{} // first time make fanout stuck
