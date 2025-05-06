@@ -12,3 +12,10 @@ type Options struct {
 	ConnectionTimeout     time.Duration `yaml:"ETH1ConnectionTimeout" env:"ETH_1_CONNECTION_TIMEOUT" env-default:"10s" env-description:"Timeout for execution client connections"`
 	SyncDistanceTolerance uint64        `yaml:"ETH1SyncDistanceTolerance" env:"ETH_1_SYNC_DISTANCE_TOLERANCE" env-default:"5" env-description:"Maximum number of blocks behind head considered in-sync"`
 }
+
+type Fork string
+
+// IsFinalityActive returns true if the finality fork is active at the given epoch.
+func IsFinalityActive(epoch uint64, finalityForkEpoch uint64) bool {
+	return finalityForkEpoch > 0 && epoch >= finalityForkEpoch
+}

@@ -65,6 +65,8 @@ type ExecutionClient struct {
 	connectionTimeout          time.Duration
 	healthInvalidationInterval time.Duration
 	logBatchSize               uint64
+	followDistance             uint64 // Follow distance for pre-finality fork
+	finalityForkEpoch          uint64 // Epoch at which finality fork occurs
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
@@ -84,6 +86,8 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		connectionTimeout:          DefaultConnectionTimeout,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		logBatchSize:               DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		followDistance:             DefaultFollowDistance,
+		finalityForkEpoch:          DefaultFinalityForkEpoch,
 		closed:                     make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -120,15 +124,44 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+	// Get current block to determine which finality method to use
+	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_getBlockByNumber"),
+			zap.String("method", "eth_blockNumber"),
 			zap.Error(err))
-		return nil, nil, fmt.Errorf("failed to get finalized block: %w", err)
+		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
 
-	toBlock := finalizedBlock.Number.Uint64()
+	// Calculate current epoch
+	currentEpoch := currentBlock / SlotsPerEpoch
+
+	var toBlock uint64
+
+	// Choose between finality and follow distance based on fork status
+	if IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+		// Post-fork: Use finalized block from execution client
+		finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+		if err != nil {
+			ec.logger.Error(elResponseErrMsg,
+				zap.String("method", "eth_getBlockByNumber"),
+				zap.String("tag", "finalized"),
+				zap.Error(err))
+			return nil, nil, fmt.Errorf("get finalized block: %w", err)
+		}
+		toBlock = finalizedBlock.Number.Uint64()
+	} else {
+		// Pre-fork: Use follow distance like the original implementation
+		if currentBlock < ec.followDistance {
+			return nil, nil, ErrNothingToSync
+		}
+		toBlock = currentBlock - ec.followDistance
+	}
+
+	// Wait until the finalized block number (toBlock) catches up to the block we want to start syncing from (fromBlock).
+	// For example, if we last processed block 123456, fromBlock = 123457.
+	// If Ethereum finality is only at 123454, we must wait until it reaches 123457 to continue.
+	// This prevents fetching logs from unfinalized (and potentially reorged) blocks.
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}
@@ -367,22 +400,13 @@ func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuer
 	return logs, nil
 }
 
-func (ec *ExecutionClient) isClosed() bool {
-	select {
-	case <-ec.closed:
-		return true
-	default:
-		return false
-	}
-}
-
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
 // streamLogsToChan *always* returns the last block it fetched, even if it errored.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
-func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logsCh chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	headersCh := make(chan *ethtypes.Header)
 
-	// Generally, execution client can stream logsCh using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
+	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
 	//
 	// We must receive all events as they determine the state of the ssv network, so a discrepancy can result in slashing.
 	// Therefore, we must be sure that we don't miss any log while streaming.
@@ -400,13 +424,11 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logsCh chan<- B
 	sub, err := ec.client.SubscribeNewHead(ctx, headersCh)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_subscribe(newHeads)"),
+			zap.String("operation", "SubscribeNewHead"),
 			zap.Error(err))
-		return fromBlock, fmt.Errorf("subscribe headersCh: %w", err)
+		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
 	defer sub.Unsubscribe()
-
-	var lastFinalized uint64
 
 	for {
 		select {
@@ -416,60 +438,67 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logsCh chan<- B
 		case <-ec.closed:
 			return fromBlock, ErrClosed
 
-		case subErr := <-sub.Err():
-			if subErr == nil {
+		case err := <-sub.Err():
+			if err == nil {
 				return fromBlock, ErrClosed
 			}
-			return fromBlock, fmt.Errorf("subscription: %w", subErr)
+			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-headersCh:
-			ec.logger.Debug("new head received",
-				zap.Uint64("head_number", header.Number.Uint64()),
-				zap.String("head_hash", header.Hash().Hex()),
-				zap.String("head_parent_hash", header.ParentHash.Hex()))
+			// Calculate current epoch
+			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
 
-			finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
-			if err != nil {
-				ec.logger.Error(elResponseErrMsg,
-					zap.String("method", "eth_getBlockByNumber"),
-					zap.Error(err))
-				return fromBlock, fmt.Errorf("get finalized block: %w", err)
-			}
-			toBlock := finalizedBlock.Number.Uint64()
+			var toBlock uint64
 
-			if toBlock != lastFinalized {
-				finalizedEpoch := toBlock / SlotsPerEpoch
-				ec.logger.Info("⏱ finalized block changed",
-					zap.Uint64("new_finalized", toBlock),
-					zap.Uint64("epoch", finalizedEpoch),
-					zap.Uint64("previous_finalized", lastFinalized))
-				lastFinalized = toBlock
+			// Choose between finality and follow distance based on fork status
+			if IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+				// Post-fork: Use finalized block from execution client
+				finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+				if err != nil {
+					ec.logger.Error(elResponseErrMsg,
+						zap.String("method", "eth_getBlockByNumber"),
+						zap.String("tag", "finalized"),
+						zap.Error(err))
+					return fromBlock, fmt.Errorf("get finalized block: %w", err)
+				}
+				toBlock = finalizedBlock.Number.Uint64()
+			} else {
+				// Pre-fork: Use follow distance like the original implementation
+				if header.Number.Uint64() < ec.followDistance {
+					continue
+				}
+				toBlock = header.Number.Uint64() - ec.followDistance
 			}
 
 			// Wait until the finalized block number (toBlock) catches up to the block we want to start syncing from (fromBlock).
 			// For example, if we last processed block 123456, fromBlock = 123457.
 			// If Ethereum finality is only at 123454, we must wait until it reaches 123457 to continue.
-			// This prevents fetching logsCh from unfinalized (and potentially reorged) blocks.
+			// This prevents fetching logs from unfinalized (and potentially reorged) blocks.
 			if toBlock < fromBlock {
-				ec.logger.Info("waiting for finalized block to reach fromBlock",
-					zap.Uint64("from_block", fromBlock),
-					zap.Uint64("finalized_block", toBlock))
 				continue
 			}
 
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
-				logsCh <- block
+				logs <- block
 				lastBlock = block.BlockNumber
 			}
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
-				return lastBlock, fmt.Errorf("fetch logsCh: %w", err)
+				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 			fromBlock = toBlock + 1
 			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 		}
 	}
+}
+
+func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
+	return contract.NewContractFilterer(ec.contractAddress, ec.client)
+}
+
+func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
+	return ec.client.ChainID(ctx)
 }
 
 // connect connects to Ethereum execution client.
@@ -494,10 +523,11 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	return nil
 }
 
-func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
-	return contract.NewContractFilterer(ec.contractAddress, ec.client)
-}
-
-func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
-	return ec.client.ChainID(ctx)
+func (ec *ExecutionClient) isClosed() bool {
+	select {
+	case <-ec.closed:
+		return true
+	default:
+		return false
+	}
 }

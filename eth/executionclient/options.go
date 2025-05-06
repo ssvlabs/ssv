@@ -81,3 +81,33 @@ func WithSyncDistanceToleranceMulti(count uint64) OptionMulti {
 		s.syncDistanceTolerance = count
 	}
 }
+
+// WithFollowDistance sets finalization offset (a block at this offset into the past
+// from the head block will be considered as very likely finalized).
+func WithFollowDistance(offset uint64) Option {
+	return func(s *ExecutionClient) {
+		s.followDistance = offset
+	}
+}
+
+// WithFollowDistanceMulti sets finalization offset (a block at this offset into the past
+// from the head block will be considered as very likely finalized).
+func WithFollowDistanceMulti(offset uint64) OptionMulti {
+	return func(s *MultiClient) {
+		s.followDistance = offset
+	}
+}
+
+// WithFinalityForkEpoch sets the epoch at which to switch from follow distance to finality signals.
+func WithFinalityForkEpoch(epoch uint64) Option {
+	return func(s *ExecutionClient) {
+		s.finalityForkEpoch = epoch
+	}
+}
+
+// WithFinalityForkEpochMulti sets the epoch at which to switch from follow distance to finality signals.
+func WithFinalityForkEpochMulti(epoch uint64) OptionMulti {
+	return func(s *MultiClient) {
+		s.finalityForkEpoch = epoch
+	}
+}

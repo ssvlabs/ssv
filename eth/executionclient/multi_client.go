@@ -58,6 +58,8 @@ type MultiClient struct {
 	healthInvalidationInterval time.Duration
 	logBatchSize               uint64
 	syncDistanceTolerance      uint64
+	followDistance             uint64 // Follow distance for pre-finality fork
+	finalityForkEpoch          uint64 // Epoch at which finality fork occurred TODO: use a proper name
 
 	contractAddress ethcommon.Address
 	chainID         atomic.Pointer[big.Int]
@@ -89,6 +91,8 @@ func NewMulti(
 		logger:            zap.NewNop(),
 		connectionTimeout: DefaultConnectionTimeout,
 		logBatchSize:      DefaultHistoricalLogsBatchSize,
+		followDistance:    DefaultFollowDistance,
+		finalityForkEpoch: DefaultFinalityForkEpoch,
 	}
 
 	for _, opt := range opts {
@@ -150,6 +154,8 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		WithConnectionTimeout(mc.connectionTimeout),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
+		WithFollowDistance(mc.followDistance),
+		WithFinalityForkEpoch(mc.finalityForkEpoch),
 	)
 	if err != nil {
 		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
@@ -501,4 +507,20 @@ func methodFromContext(ctx context.Context) string {
 		return ""
 	}
 	return v
+}
+
+// DescribeForkConfig returns a human-readable description of the fork configuration.
+func (mc *MultiClient) DescribeForkConfig() string {
+	var banner string
+	banner += "SSV Multi-Client Configuration:\n"
+	banner += "--------------------------------\n"
+	banner += "Finality determination:\n"
+	banner += fmt.Sprintf(" - Follow distance: %d blocks\n", mc.followDistance)
+	if mc.finalityForkEpoch > 0 {
+		banner += fmt.Sprintf(" - Finality fork active at epoch: %d\n", mc.finalityForkEpoch)
+	} else {
+		banner += " - Finality fork: disabled\n"
+	}
+	banner += "--------------------------------\n"
+	return banner
 }
