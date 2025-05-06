@@ -61,7 +61,7 @@ func NewLocalTestNetwork(network spectypes.BeaconNetwork) Network {
 // MinGenesisTime returns min genesis time value
 func (n Network) MinGenesisTime() int64 {
 	if n.LocalTestNet {
-		return 1689072978
+		return 1746539606
 	}
 	return int64(n.BeaconNetwork.MinGenesisTime()) // #nosec G115
 }
