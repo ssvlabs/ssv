@@ -110,9 +110,9 @@ func (c *Controller) ProcessMsg(ctx context.Context, logger *zap.Logger, signedM
 		return c.UponDecided(logger, msg)
 	}
 
-	err = c.validateMsgHeight(msg)
-	if err != nil {
-		return nil, fmt.Errorf("validate message height: %w", err)
+	isFutureMsg := c.isFutureMessage(msg)
+	if isFutureMsg {
+		return nil, fmt.Errorf("future msg from height, could not process")
 	}
 
 	return c.UponExistingInstanceMsg(ctx, logger, msg)
@@ -164,17 +164,17 @@ func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier
 }
 
-// validateMsgHeight returns error if provided message height is from a future instance.
+// isFutureMessage tells whether the provided message height is from a future instance.
 // It takes into consideration a special case where FirstHeight instance didn't start yet
 // but c.Height == FirstHeight.
-func (c *Controller) validateMsgHeight(msg *specqbft.ProcessingMessage) error {
+func (c *Controller) isFutureMessage(msg *specqbft.ProcessingMessage) bool {
 	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
-		return fmt.Errorf("qbft instance at height: %d hasn't started yet", specqbft.FirstHeight)
+		return true
 	}
 	if msg.QBFTMessage.Height > c.Height {
-		return fmt.Errorf("message height: %d > current qbft height: %d", msg.QBFTMessage.Height, c.Height)
+		return true
 	}
-	return nil
+	return false
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
