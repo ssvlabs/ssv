@@ -203,6 +203,6 @@ func (n *Node) reportOperators(logger *zap.Logger) {
 	for i := range operators {
 		logger.Debug("report operator public key",
 			fields.OperatorID(operators[i].ID),
-			fields.PubKey(operators[i].PublicKey))
+			fields.OperatorPubKey(operators[i].PublicKey))
 	}
 }
