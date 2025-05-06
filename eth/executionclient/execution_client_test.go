@@ -182,8 +182,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		err = env.createBlocksWithLogs(contract, blocksWithLogsLength, 0)
 		require.NoError(t, err)
 
-		// Commit one extra empty block so that the previous blocks become "finalized"
-		env.sim.Commit()
+		// Finalize the blocks
+		env.finalize()
 
 		// Fetch all logs history starting from block 0
 		var fetchedLogs []ethtypes.Log
@@ -258,8 +258,8 @@ func TestStreamLogs(t *testing.T) {
 		err = env.createBlocksWithLogs(contract, blocksWithLogsLength, delay)
 		require.NoError(t, err)
 
-		// Commit one empty block to allow previous block to become finalized
-		env.sim.Commit()
+		// Finalize the blocks to ensure they're processed
+		env.finalize()
 		time.Sleep(delay)
 
 		// Wait until we've received all events
@@ -360,6 +360,9 @@ func TestFetchLogsInBatches(t *testing.T) {
 	// Create blocks with transactions
 	err = env.createBlocksWithLogs(contract, blocksWithLogsLength, 0)
 	require.NoError(t, err)
+
+	// Finalize the blocks
+	env.finalize()
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
 		logChan, errChan := env.client.fetchLogsInBatches(env.ctx, 10, 5)
@@ -466,11 +469,14 @@ func TestChainReorganizationLogs(t *testing.T) {
 	txHashes[originalTx.Hash()] = originalBlockNum
 	t.Logf("original chain block number: %d, tx hash: %s", originalBlockNum, originalTx.Hash().Hex())
 
+	checkCtx, cancel := context.WithTimeout(env.ctx, 150*time.Millisecond)
+	defer cancel()
+
 	// 4. No logs should be received since the block isn't finalized
 	select {
 	case log := <-logsCh:
-		require.Fail(t, "received logs from unfinalized block", "log", log)
-	case <-time.After(100 * time.Millisecond):
+		require.Fail(t, "received logs from unfinalized fork", "log", log)
+	case <-checkCtx.Done():
 		// no logs
 	}
 
@@ -491,11 +497,14 @@ func TestChainReorganizationLogs(t *testing.T) {
 	txHashes[forkTx.Hash()] = forkBlockNum
 	t.Logf("fork chain block number: %d, tx hash: %s", forkBlockNum, forkTx.Hash().Hex())
 
+	checkCtx2, cancel2 := context.WithTimeout(env.ctx, 150*time.Millisecond)
+	defer cancel2()
+
 	// Still no logs should be received since the fork isn't finalized
 	select {
 	case log := <-logsCh:
 		require.Fail(t, "received logs from unfinalized fork", "log", log)
-	case <-time.After(100 * time.Millisecond):
+	case <-checkCtx2.Done():
 		// no logs
 	}
 
@@ -776,11 +785,14 @@ func TestFilterLogs(t *testing.T) {
 		err = env.createBlocksWithLogs(contract, 5, 0)
 		require.NoError(t, err)
 
+		// Finalize blocks to make them available for filtering
+		env.finalize()
+
 		// Test the FilterLogs method
 		logs, err := env.client.FilterLogs(env.ctx, ethereum.FilterQuery{
 			Addresses: []ethcommon.Address{env.contractAddr},
 			FromBlock: big.NewInt(0),
-			ToBlock:   big.NewInt(6),
+			ToBlock:   big.NewInt(70), // 0 genesis + 1 deployed + 5 created + 64 finalized
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, logs)
@@ -869,6 +881,9 @@ func TestSubscribeFilterLogs(t *testing.T) {
 		err = env.createBlocksWithLogs(contract, 3, 10*time.Millisecond)
 		require.NoError(t, err)
 
+		// Finalize the blocks
+		env.finalize()
+
 		// Wait for logs to be received
 		wg.Wait()
 
@@ -927,10 +942,8 @@ func TestBlockByNumber(t *testing.T) {
 		err = env.createClient(WithLogger(logger))
 		require.NoError(t, err)
 
-		// Create some blocks
-		for i := 0; i < 5; i++ {
-			env.sim.Commit()
-		}
+		// Finalize the blocks
+		env.finalize()
 
 		// Test the BlockByNumber method with specific block number
 		block, err := env.client.BlockByNumber(env.ctx, big.NewInt(2))
@@ -938,11 +951,15 @@ func TestBlockByNumber(t *testing.T) {
 		require.NotNil(t, block)
 		require.Equal(t, uint64(2), block.NumberU64())
 
-		// Test the BlockByNumber method with nil (latest block)
+		// Calculate the expected latest block number based on:
+		// - Genesis block = 0
+		// - Contract deployment = +1 block
+		// - finalize() adds DefaultFinalityDistance blocks = +64 blocks
+		expectedLatestBlock := uint64(65) // 0 + 1 + 64
 		latestBlock, err := env.client.BlockByNumber(env.ctx, nil)
 		require.NoError(t, err)
 		require.NotNil(t, latestBlock)
-		require.Equal(t, uint64(6), latestBlock.NumberU64()) // Genesis + 1 from deploy + 5 from loop
+		require.Equal(t, expectedLatestBlock, latestBlock.NumberU64())
 	})
 
 	t.Run("error when BlockByNumber fails", func(t *testing.T) {
@@ -983,10 +1000,8 @@ func TestHeaderByNumber(t *testing.T) {
 		err = env.createClient(WithLogger(logger))
 		require.NoError(t, err)
 
-		// Create some blocks
-		for i := 0; i < 5; i++ {
-			env.sim.Commit()
-		}
+		// Finalize the blocks
+		env.finalize()
 
 		// Test the HeaderByNumber method with specific block number
 		header, err := env.client.HeaderByNumber(env.ctx, big.NewInt(2))
@@ -994,11 +1009,15 @@ func TestHeaderByNumber(t *testing.T) {
 		require.NotNil(t, header)
 		require.Equal(t, uint64(2), header.Number.Uint64())
 
-		// Test the HeaderByNumber method with nil (latest block)
+		// Calculate the expected latest header number based on:
+		// - Genesis block = 0
+		// - Contract deployment = +1 block
+		// - finalize() adds DefaultFinalityDistance blocks = +64 blocks
+		expectedLatestHeader := uint64(65) // 0 + 1 + 64
 		latestHeader, err := env.client.HeaderByNumber(env.ctx, nil)
 		require.NoError(t, err)
 		require.NotNil(t, latestHeader)
-		require.Equal(t, uint64(6), latestHeader.Number.Uint64()) // Genesis + 1 from deploy + 5 from loop
+		require.Equal(t, expectedLatestHeader, latestHeader.Number.Uint64())
 	})
 
 	t.Run("error when HeaderByNumber fails", func(t *testing.T) {
