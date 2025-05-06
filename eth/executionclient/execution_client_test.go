@@ -155,7 +155,7 @@ func (env *testEnv) createBlocksWithLogs(contract *bind.BoundContract, count int
 	return nil
 }
 
-// finalize mines 32 blocks (DefaultFinalityDistance ) so that HeaderByNumber("finalized") advances
+// finalize mines 64 blocks (DefaultFinalityDistance) to simulate proper finalization (2 epochs).
 func (env *testEnv) finalize() {
 	for i := 0; i < DefaultFinalityDistance; i++ {
 		env.sim.Commit()
