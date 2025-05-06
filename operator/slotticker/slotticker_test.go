@@ -277,11 +277,11 @@ func TestDoubleTickWarning(t *testing.T) {
 	// Extracting and checking the log message
 	loggedEntry := recorded.All()[0]
 	require.Equal(t, "double tick", loggedEntry.Message)
-	require.Equal(t, zap.DebugLevel, loggedEntry.Level)
+	require.Equal(t, zap.WarnLevel, loggedEntry.Level)
 
 	// Extracting and checking the slot number from the log fields
 	slotField := loggedEntry.Context[0]
-	require.Equal(t, "slot", slotField.Key)
+	require.Equal(t, "nextSlot", slotField.Key)
 	require.Equal(t, int64(firstSlot), slotField.Integer)
 }
 
@@ -326,10 +326,10 @@ func TestDoubleTickRealTimer(t *testing.T) {
 	// Extracting and checking the log message
 	loggedEntry := recorded.All()[0]
 	require.Equal(t, "double tick", loggedEntry.Message)
-	require.Equal(t, zap.DebugLevel, loggedEntry.Level)
+	require.Equal(t, zap.WarnLevel, loggedEntry.Level)
 
 	// Extracting and checking the slot number from the log fields
 	slotField := loggedEntry.Context[0]
-	require.Equal(t, "slot", slotField.Key)
+	require.Equal(t, "nextSlot", slotField.Key)
 	require.Equal(t, int64(secondSlot), slotField.Integer)
 }
