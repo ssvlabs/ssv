@@ -176,14 +176,15 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// committeeObservers is a cache of initialized committeeObserver instances
-	committeeObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
-	committeeObserversMutex sync.Mutex
+	// nonCommittees is a cache of initialized committeeObserver instances
+	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
+	committeesObserversMutex sync.Mutex
 
 	attesterRoots   *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots   *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache     *validator.DomainCache
 	beaconVoteRoots *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
+
+	domainCache *validator.DomainCache
 
 	indicesChange   chan struct{}
 	validatorExitCh chan duties.ExitDescriptor
@@ -262,7 +263,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
-		committeeObservers: ttlcache.New(
+		committeesObservers: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *validator.CommitteeObserver](cacheTTL),
 		),
 		attesterRoots: ttlcache.New(
@@ -284,7 +285,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
-	go ctrl.committeeObservers.Start()
+	go ctrl.committeesObservers.Start()
 	// Delete old root and domain entries.
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
@@ -372,7 +373,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 
 	var ncv *validator.CommitteeObserver
 
-	item := c.committeeObservers.Get(ssvMsg.GetID())
+	item := c.committeesObservers.Get(ssvMsg.GetID())
 	if item == nil || item.Value() == nil {
 		committeeObserverOptions := validator.CommitteeObserverOptions{
 			Logger:            c.logger,
@@ -395,7 +396,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
 		ttl := time.Duration(ttlSlots) * c.beacon.GetBeaconNetwork().SlotDurationSec()
 
-		c.committeeObservers.Set(ssvMsg.GetID(), ncv, ttl)
+		c.committeesObservers.Set(ssvMsg.GetID(), ncv, ttl)
 	} else {
 		ncv = item.Value()
 	}
@@ -412,6 +413,9 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 }
 
 func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *validator.CommitteeObserver) error {
+	c.committeesObserversMutex.Lock()
+	defer c.committeesObserversMutex.Unlock()
+
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		// Process proposal messages for committee consensus only to get the roots
