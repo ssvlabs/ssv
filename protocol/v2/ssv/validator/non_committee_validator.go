@@ -89,6 +89,8 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		syncCommRoots:     opts.SyncCommRoots,
 		domainCache:       opts.DomainCache,
 		beaconVoteRoots:   opts.BeaconVoteRoots,
+		pccMtx:            &sync.Mutex{},
+		rootsMtx:          &sync.RWMutex{},
 	}
 
 	co.postConsensusContainer = make(map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer, co.postConsensusContainerCapacity())
