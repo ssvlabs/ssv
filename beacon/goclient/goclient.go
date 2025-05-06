@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -115,7 +116,8 @@ type MultiClient interface {
 type EventTopic string
 
 const (
-	EventTopicHead EventTopic = "head"
+	EventTopicHead  EventTopic = "head"
+	EventTopicBlock EventTopic = "block"
 )
 
 // GoClient implementing Beacon struct
@@ -147,9 +149,6 @@ type GoClient struct {
 	weightedAttestationDataSoftTimeout time.Duration
 	weightedAttestationDataHardTimeout time.Duration
 
-	// blockRootToSlotReqInflight helps prevent duplicate BeaconBlockHeader requests
-	// from running in parallel.
-	blockRootToSlotReqInflight singleflight.Group[phase0.Root, phase0.Slot]
 	// blockRootToSlotCache is used for attestation data scoring. When multiple Consensus clients are used,
 	// the cache helps reduce the number of Consensus Client calls by `n-1`, where `n` is the number of Consensus clients
 	// that successfully fetched attestation data and proceeded to the scoring phase. Capacity is rather an arbitrary number,
@@ -161,12 +160,14 @@ type GoClient struct {
 
 	withWeightedAttestationData bool
 
+	withParallelSubmissions bool
+
 	subscribersLock      sync.RWMutex
 	headEventSubscribers []subscriber[*apiv1.HeadEvent]
 	supportedTopics      []EventTopic
 
-	lastProcessedHeadEventSlotLock sync.Mutex
-	lastProcessedHeadEventSlot     phase0.Slot
+	lastProcessedEventSlotLock sync.Mutex
+	lastProcessedEventSlot     phase0.Slot
 
 	genesisForkVersion phase0.Version
 	ForkLock           sync.RWMutex
@@ -175,6 +176,10 @@ type GoClient struct {
 	ForkEpochCapella   phase0.Epoch
 	ForkEpochBellatrix phase0.Epoch
 	ForkEpochAltair    phase0.Epoch
+
+	// voluntaryExitDomainCached is voluntary exit domain value calculated lazily and re-used
+	// since it doesn't change over time
+	voluntaryExitDomainCached atomic.Pointer[phase0.Domain]
 }
 
 // New init new client and go-client instance
@@ -211,9 +216,10 @@ func New(
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
-		weightedAttestationDataSoftTimeout: commonTimeout / 2,
+		withParallelSubmissions:            opt.WithParallelSubmissions,
+		weightedAttestationDataSoftTimeout: time.Duration(float64(commonTimeout) / 2.5),
 		weightedAttestationDataHardTimeout: commonTimeout,
-		supportedTopics:                    []EventTopic{EventTopicHead},
+		supportedTopics:                    []EventTopic{EventTopicHead, EventTopicBlock},
 		genesisForkVersion:                 phase0.Version(opt.Network.ForkVersion()),
 		// Initialize forks with FAR_FUTURE_EPOCH.
 		ForkEpochAltair:    math.MaxUint64,

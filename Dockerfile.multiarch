@@ -6,20 +6,32 @@
 ## Note BUILDPLATFORM and TARGETARCH are crucial variables:
 ##   see https://docs.docker.com/reference/dockerfile/#automatic-platform-args-in-the-global-scope
 ARG BUILDPLATFORM
-ARG TARGETPLATFORM
 ARG TARGETARCH
 
 #
 # STEP 1: Base image with common dependencies
 #
-FROM --platform=$BUILDPLATFORM golang:1.24 AS base
+FROM --platform=$BUILDPLATFORM golang:1.24@sha256:30baaea08c5d1e858329c50f29fe381e9b7d7bced11a0f5f1f69a1504cdfbf5e AS base
 
 # Install essential build tools
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-      curl git ca-certificates make gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
-      gcc-arm-linux-gnueabihf libc6-dev-armhf-cross gcc-x86-64-linux-gnu libc6-dev-amd64-cross \
-      zip unzip bzip2 && \
+      curl \
+      git \
+      ca-certificates \
+      make \
+      gcc-aarch64-linux-gnu \
+      g++-aarch64-linux-gnu \
+      libc6-dev-arm64-cross \
+      gcc-arm-linux-gnueabihf \
+      g++-arm-linux-gnueabihf \
+      libc6-dev-armhf-cross \
+      gcc-x86-64-linux-gnu \
+      g++-x86-64-linux-gnu \
+      libc6-dev-amd64-cross \
+      zip \
+      unzip \
+      bzip2 && \
     rm -rf /var/lib/apt/lists/*
 
 # Set working directory for the build
@@ -36,47 +48,64 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 FROM base AS builder
 
+ARG TARGETARCH
+WORKDIR /go/src/github.com/ssvlabs/ssv/
+
 # Copy source code
 COPY . .
 
-# Set up compiler based on target architecture
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-      export CC=x86_64-linux-gnu-gcc; \
-    elif [ "$TARGETARCH" = "arm64" ]; then \
-      export CC=aarch64-linux-gnu-gcc; \
-    elif [ "$TARGETARCH" = "arm" ]; then \
-      export CC=arm-linux-gnueabihf-gcc; \
-    fi && \
+# Pull in target glibc static libs for -static to find libm.a and libmvec.a
+RUN set -eux; \
+    TARGET_DEB_ARCH=$(case "$TARGETARCH" in \
+      amd64) echo amd64 ;; \
+      arm64) echo arm64 ;; \
+      *)    echo armhf ;; \
+    esac); \
+    dpkg --add-architecture "$TARGET_DEB_ARCH"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends libc6-dev:"$TARGET_DEB_ARCH"; \
+    rm -rf /var/lib/apt/lists/*
+
+# Build the static binary
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,mode=0755,target=/go/pkg \
     COMMIT=$(git rev-parse HEAD) && \
     VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
-    echo "Building version: $VERSION (commit: $COMMIT)" && \
-    CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH \
-    go install \
-      -tags="blst_enabled" \
-      -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags '-static -lm'" \
-      ./cmd/ssvnode
+    CC=$(case "$TARGETARCH" in \
+      amd64) echo x86_64-linux-gnu-gcc ;; \
+      arm64) echo aarch64-linux-gnu-gcc ;; \
+      *)    echo arm-linux-gnueabihf-gcc ;; \
+    esac) && \
+    echo "Building version $VERSION (commit $COMMIT) for $TARGETARCH" && \
+    CGO_ENABLED=1 GOOS=linux GOARCH=$TARGETARCH CC=$CC \
+      go build -tags="blst_enabled" \
+        -ldflags "\
+          -X main.Commit=$COMMIT \
+          -X main.Version=$VERSION \
+          -s -w \
+          -linkmode external \
+          -extldflags '-static -lm'" \
+        -o /go/bin/ssvnode ./cmd/ssvnode
 
 #
-# STEP 3: Prepare image to run the binary
+# STEP 3: Runner image
 #
-FROM golang:1.24 AS runner
+FROM golang:1.24@sha256:30baaea08c5d1e858329c50f29fe381e9b7d7bced11a0f5f1f69a1504cdfbf5e AS runner
 
 # Install minimal runtime dependencies
 RUN apt-get update && \
-  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  dnsutils && \
-  rm -rf /var/lib/apt/lists/*
+    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+      dnsutils && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy binary and configuration
 WORKDIR /
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
-COPY ./Makefile .env* ./
+COPY Makefile .env* ./
 COPY config/* ./config/
 
-# Expose port for load balancing
+# Expose ports and set DNS resolver
 EXPOSE 5678 5000 4000/udp
-
-# Force using Go's DNS resolver because Alpine's DNS resolver (when netdns=cgo) may cause issues.
 ENV GODEBUG="netdns=go"
 
 #ENTRYPOINT ["/go/bin/ssvnode"]

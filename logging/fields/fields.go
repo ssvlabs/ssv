@@ -32,6 +32,7 @@ const (
 	FieldABI                 = "abi"
 	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
+	FieldAddresses           = "addresses"
 	FieldBeaconRole          = "beacon_role"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
@@ -144,6 +145,10 @@ func AddressURL(val url.URL) zapcore.Field {
 
 func Address(val string) zapcore.Field {
 	return zap.String(FieldAddress, val)
+}
+
+func Addresses(vals []string) zapcore.Field {
+	return zap.Strings(FieldAddresses, vals)
 }
 
 func ENR(val *enode.Node) zapcore.Field {

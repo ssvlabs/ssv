@@ -177,15 +177,16 @@ type controller struct {
 	messageValidator     validation.MessageValidator
 
 	// committeeObservers is a cache of initialized committeeObserver instances
-	committeeObservers *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
+	committeeObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
+	committeeObserversMutex sync.Mutex
 
-	attesterRoots *ttlcache.Cache[phase0.Root, struct{}]
-	syncCommRoots *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache   *validator.DomainCache
+	attesterRoots   *ttlcache.Cache[phase0.Root, struct{}]
+	syncCommRoots   *ttlcache.Cache[phase0.Root, struct{}]
+	domainCache     *validator.DomainCache
+	beaconVoteRoots *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
 
-	recentlyStartedValidators uint64
-	indicesChange             chan struct{}
-	validatorExitCh           chan duties.ExitDescriptor
+	indicesChange   chan struct{}
+	validatorExitCh chan duties.ExitDescriptor
 
 	traceCollector *dutytracer.Collector
 }
@@ -271,7 +272,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
 		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
-
+		beaconVoteRoots: ttlcache.New(
+			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
+		),
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
@@ -384,6 +387,7 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 			AttesterRoots:     c.attesterRoots,
 			SyncCommRoots:     c.syncCommRoots,
 			DomainCache:       c.domainCache,
+			BeaconVoteRoots:   c.beaconVoteRoots,
 		}
 
 		ncv = validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions)
@@ -914,11 +918,8 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 		validatorErrorsCounter.Add(c.ctx, 1)
 		return false, errors.Wrap(err, "could not start validator")
 	}
-	if started {
-		c.recentlyStartedValidators++
-	}
 
-	return true, nil // TODO: what should be returned if c.validatorStart(v) returns false?
+	return started, nil
 }
 
 func (c *controller) HandleMetadataUpdates(ctx context.Context) {
