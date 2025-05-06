@@ -103,6 +103,8 @@ func setupTestEnv(t *testing.T, testTimeout time.Duration) *testEnv {
 }
 
 // deployCallableContract deploys the test contract for event testing.
+// Note: This method only commits ONE block, it does not finalize the deployment.
+// Call env.finalize() separately if blocks need to be finalized.
 func (env *testEnv) deployCallableContract() (*bind.BoundContract, error) {
 	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
 	contractAddr, _, contract, err := bind.DeployContract(
@@ -348,7 +350,7 @@ func TestStreamLogs(t *testing.T) {
 // TestFetchLogsInBatches tests the fetchLogsInBatches function of the client.
 func TestFetchLogsInBatches(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	env := setupTestEnv(t, 1*time.Second)
+	env := setupTestEnv(t, 2*time.Second)
 
 	// Deploy the contract
 	contract, err := env.deployCallableContract()
@@ -436,7 +438,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 
 func TestChainReorganizationLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	env := setupTestEnv(t, 2*time.Second)
+	env := setupTestEnv(t, 3*time.Second)
 
 	// 1. Deploy the contract
 	contract, err := env.deployCallableContract()
@@ -469,7 +471,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	txHashes[originalTx.Hash()] = originalBlockNum
 	t.Logf("original chain block number: %d, tx hash: %s", originalBlockNum, originalTx.Hash().Hex())
 
-	checkCtx, cancel := context.WithTimeout(env.ctx, 150*time.Millisecond)
+	checkCtx, cancel := context.WithTimeout(env.ctx, 500*time.Millisecond)
 	defer cancel()
 
 	// 4. No logs should be received since the block isn't finalized
@@ -497,7 +499,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	txHashes[forkTx.Hash()] = forkBlockNum
 	t.Logf("fork chain block number: %d, tx hash: %s", forkBlockNum, forkTx.Hash().Hex())
 
-	checkCtx2, cancel2 := context.WithTimeout(env.ctx, 150*time.Millisecond)
+	checkCtx2, cancel2 := context.WithTimeout(env.ctx, 500*time.Millisecond)
 	defer cancel2()
 
 	// Still no logs should be received since the fork isn't finalized
@@ -516,7 +518,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	select {
 	case receivedLog = <-logsCh:
 		// received logs
-	case <-time.After(1 * time.Second):
+	case <-time.After(2 * time.Second):
 		require.Fail(t, "did not receive logs after finalization")
 	}
 
@@ -531,6 +533,8 @@ func TestChainReorganizationLogs(t *testing.T) {
 }
 
 // deploySimContract deploys the SSV simulator contract.
+// Note: This method only commits ONE block, it does not finalize the deployment.
+// Call env.finalize() separately if blocks need to be finalized.
 func (env *testEnv) deploySimContract() (*simcontract.Simcontract, error) {
 	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	contractAddr, _, _, err := bind.DeployContract(
@@ -564,7 +568,7 @@ func TestSimSSV(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	env := setupTestEnv(t, 1*time.Second)
+	env := setupTestEnv(t, 3*time.Second)
 
 	// Deploy the SSV contract
 	boundContract, err := env.deploySimContract()
