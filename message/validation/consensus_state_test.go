@@ -12,7 +12,7 @@ func TestOperatorState(t *testing.T) {
 		size := phase0.Slot(10)
 		os := newOperatorState(size)
 		require.NotNil(t, os)
-		require.Equal(t, len(os.state), int(size))
+		require.Equal(t, len(os.signers), int(size))
 	})
 
 	t.Run("TestGetAndSet", func(t *testing.T) {
@@ -58,9 +58,9 @@ func TestOperatorState(t *testing.T) {
 
 		slot := phase0.Slot(5)
 		epoch := phase0.Epoch(1)
-		signerState := &SignerState{Slot: slot}
+		signerState1 := &SignerState{Slot: slot}
 
-		os.Set(slot, epoch, signerState)
+		os.Set(slot, epoch, signerState1)
 
 		require.Equal(t, os.DutyCount(epoch), uint64(1))
 		require.Equal(t, os.DutyCount(epoch-1), uint64(0))
@@ -82,9 +82,9 @@ func TestOperatorState(t *testing.T) {
 
 		slot := phase0.Slot(5)
 		epoch := phase0.Epoch(1)
-		signerState := &SignerState{Slot: slot}
+		signerState1 := &SignerState{Slot: slot}
 
-		os.Set(slot, epoch, signerState)
+		os.Set(slot, epoch, signerState1)
 		require.Equal(t, os.DutyCount(epoch), uint64(1))
 
 		slot2 := phase0.Slot(6)
