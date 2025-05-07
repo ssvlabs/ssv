@@ -180,7 +180,7 @@ func (e *TestEnv) setup(
 	}
 
 	// Apply finality fork settings if configured
-	if e.finalityForkEpoch > 0 {
+	if e.finalityForkEpoch < executionclient.FinalityForkEpoch {
 		execClientOpts = append(execClientOpts, executionclient.WithFinalityForkEpoch(e.finalityForkEpoch))
 	}
 
@@ -223,7 +223,7 @@ func (e *TestEnv) setup(
 
 // SetDefaultFinalityBlocks sets the default finality blocks.
 func (e *TestEnv) SetDefaultFinalityBlocks() {
-	e.finalityBlocks = executionclient.DefaultFinalityDistance
+	e.finalityBlocks = executionclient.FinalityDistance
 }
 
 // SetDefaultFollowDistance sets the default follow distance.
@@ -232,13 +232,14 @@ func (e *TestEnv) SetDefaultFollowDistance() {
 }
 
 // EnableFinalityFork enables the finality fork at the specified epoch.
+// Using a small epoch value enables finality, while the default high value effectively disables it.
 func (e *TestEnv) EnableFinalityFork(epoch uint64) {
 	e.finalityForkEpoch = epoch
 }
 
 // DisableFinalityFork disables the finality fork.
 func (e *TestEnv) DisableFinalityFork() {
-	e.finalityForkEpoch = 0
+	e.finalityForkEpoch = executionclient.FinalityForkEpoch
 }
 
 // MineAndFinalize mines enough blocks to ensure finality.

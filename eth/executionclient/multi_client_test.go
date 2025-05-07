@@ -85,7 +85,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
 		require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
 		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
-		require.EqualValues(t, 0, mc.finalityForkEpoch) // Default - not using finality fork
+		require.EqualValues(t, FinalityForkEpoch, mc.finalityForkEpoch) // Default - high epoch effectively disables finality
 	})
 
 	t.Run("post-fork (finality)", func(t *testing.T) {

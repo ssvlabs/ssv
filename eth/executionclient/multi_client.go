@@ -92,7 +92,7 @@ func NewMulti(
 		connectionTimeout: DefaultConnectionTimeout,
 		logBatchSize:      DefaultHistoricalLogsBatchSize,
 		followDistance:    DefaultFollowDistance,
-		finalityForkEpoch: DefaultFinalityForkEpoch,
+		finalityForkEpoch: FinalityForkEpoch,
 	}
 
 	for _, opt := range opts {
@@ -516,10 +516,10 @@ func (mc *MultiClient) DescribeForkConfig() string {
 	banner += "--------------------------------\n"
 	banner += "Finality determination:\n"
 	banner += fmt.Sprintf(" - Follow distance: %d blocks\n", mc.followDistance)
-	if mc.finalityForkEpoch > 0 {
+	if mc.finalityForkEpoch < 10000 { // Consider it enabled if below some reasonable value
 		banner += fmt.Sprintf(" - Finality fork active at epoch: %d\n", mc.finalityForkEpoch)
 	} else {
-		banner += " - Finality fork: disabled\n"
+		banner += " - Finality fork: disabled (very high activation epoch)\n"
 	}
 	banner += "--------------------------------\n"
 	return banner

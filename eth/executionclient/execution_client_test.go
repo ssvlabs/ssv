@@ -157,9 +157,9 @@ func (env *testEnv) createBlocksWithLogs(contract *bind.BoundContract, count int
 	return nil
 }
 
-// finalize mines 64 blocks (DefaultFinalityDistance) to simulate proper finalization (2 epochs).
+// finalize mines 64 blocks (FinalityDistance) to simulate proper finalization (2 epochs).
 func (env *testEnv) finalize() {
-	for i := 0; i < DefaultFinalityDistance; i++ {
+	for i := 0; i < FinalityDistance; i++ {
 		env.sim.Commit()
 	}
 }
@@ -217,7 +217,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 			WithLogger(logger),
 			WithConnectionTimeout(2*time.Second),
 			WithFollowDistance(followDistance),
-			WithFinalityForkEpoch(0), // Explicitly disable finality fork
+			WithFinalityForkEpoch(FinalityForkEpoch),
 		)
 		require.NoError(t, err)
 
@@ -257,7 +257,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 			WithLogger(logger),
 			WithConnectionTimeout(2*time.Second),
 			WithFollowDistance(followDistance),
-			WithFinalityForkEpoch(0), // Explicitly disable finality fork
+			WithFinalityForkEpoch(FinalityForkEpoch),
 		)
 		require.NoError(t, err)
 
@@ -279,7 +279,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 			WithLogger(logger),
 			WithConnectionTimeout(2*time.Second),
 			WithFollowDistance(followDistance),
-			WithFinalityForkEpoch(0), // Explicitly disable finality fork
+			WithFinalityForkEpoch(FinalityForkEpoch),
 		)
 		require.NoError(t, err)
 
@@ -387,7 +387,7 @@ func TestStreamLogs(t *testing.T) {
 
 		// Create a client with explicit follow distance and disabled finality fork
 		const followDistance = 2
-		err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance), WithFinalityForkEpoch(0))
+		err = env.createClient(WithLogger(logger), WithFollowDistance(followDistance), WithFinalityForkEpoch(FinalityForkEpoch))
 		require.NoError(t, err)
 
 		logsCh := env.client.StreamLogs(env.ctx, 0)
@@ -707,7 +707,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(followDistance),
-			WithFinalityForkEpoch(0), // Explicitly disable finality fork
+			WithFinalityForkEpoch(FinalityForkEpoch),
 		)
 		require.NoError(t, err)
 
@@ -908,7 +908,7 @@ func TestSimSSV(t *testing.T) {
 		err = env.createClient(
 			WithLogger(logger),
 			WithFollowDistance(followDistance),
-			WithFinalityForkEpoch(0), // Explicitly disable finality fork
+			WithFinalityForkEpoch(FinalityForkEpoch),
 		)
 		require.NoError(t, err)
 
@@ -1165,7 +1165,7 @@ func TestBlockByNumber(t *testing.T) {
 		// Calculate the expected latest block number based on:
 		// - Genesis block = 0
 		// - Contract deployment = +1 block
-		// - finalize() adds DefaultFinalityDistance blocks = +64 blocks
+		// - finalize() adds FinalityDistance blocks = +64 blocks
 		expectedLatestBlock := uint64(65) // 0 + 1 + 64
 		latestBlock, err := env.client.BlockByNumber(env.ctx, nil)
 		require.NoError(t, err)
@@ -1223,7 +1223,7 @@ func TestHeaderByNumber(t *testing.T) {
 		// Calculate the expected latest header number based on:
 		// - Genesis block = 0
 		// - Contract deployment = +1 block
-		// - finalize() adds DefaultFinalityDistance blocks = +64 blocks
+		// - finalize() adds FinalityDistance blocks = +64 blocks
 		expectedLatestHeader := uint64(65) // 0 + 1 + 64
 		latestHeader, err := env.client.HeaderByNumber(env.ctx, nil)
 		require.NoError(t, err)

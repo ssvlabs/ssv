@@ -87,7 +87,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		logBatchSize:               DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		followDistance:             DefaultFollowDistance,
-		finalityForkEpoch:          DefaultFinalityForkEpoch,
+		finalityForkEpoch:          FinalityForkEpoch,
 		closed:                     make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -136,7 +136,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 
 	var toBlock uint64
 
-	if !IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+	if currentEpoch <= ec.finalityForkEpoch {
 		// Pre-fork: follow distance approach
 		if currentBlock < ec.followDistance {
 			return nil, nil, ErrNothingToSync
@@ -374,7 +374,7 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	currentEpoch := currentBlock / SlotsPerEpoch
 
 	// 3. Check if finalized block is available (post-fork only)
-	if IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+	if currentEpoch <= ec.finalityForkEpoch {
 		_, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
 			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
@@ -498,7 +498,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
 			var toBlock uint64
 
-			if !IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+			if currentEpoch <= ec.finalityForkEpoch {
 				// Pre-fork: follow distance approach
 				if header.Number.Uint64() < ec.followDistance {
 					continue

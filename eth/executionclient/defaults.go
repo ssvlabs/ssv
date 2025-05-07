@@ -5,10 +5,9 @@ import (
 )
 
 const (
-	SlotsPerEpoch            = 32
-	DefaultFinalityDistance  = SlotsPerEpoch * 2
-	DefaultFollowDistance    = 8 // Default follow distance for pre-finality fork
-	DefaultFinalityForkEpoch = 0 // Epoch at which to enable finalized blocks from execution client (0 means disabled)
+	// DefaultFollowDistance is the default follow distance for the pre-finality fork.
+	// This is the number of blocks that the execution client will follow behind the head of the chain.
+	DefaultFollowDistance = 8
 
 	DefaultConnectionTimeout          = 10 * time.Second
 	DefaultHealthInvalidationInterval = 24 * time.Second // TODO: decide on this value, for now choosing the node prober interval but it should probably be a bit less than block interval
