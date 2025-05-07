@@ -88,7 +88,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		require.EqualValues(t, 0, mc.finalityForkEpoch) // Default - not using finality fork
 	})
 
-	t.Run("post-fork (finality(", func(t *testing.T) {
+	t.Run("post-fork (finality)", func(t *testing.T) {
 		const customFinalityForkEpoch = uint64(5)
 
 		mc, err := NewMulti(
