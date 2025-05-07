@@ -30,8 +30,6 @@ import (
 )
 
 type CommitteeObserver struct {
-	sync.Mutex
-
 	msgID             spectypes.MessageID
 	logger            *zap.Logger
 	Storage           *storage.ParticipantStores
@@ -237,8 +235,8 @@ type validatorIndexAndRoot struct {
 }
 
 func (o *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureMessages) error {
-	o.Lock()
-	defer o.Unlock()
+	o.pccMtx.Lock()
+	defer o.pccMtx.Unlock()
 
 	currentSlot := partialMsgs.Slot
 	slotValidators, exist := o.postConsensusContainer[currentSlot]
