@@ -313,11 +313,30 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	return ec.healthy(ctx)
 }
 
+// healthy checks if the execution client is currently in a healthy state.
+// It performs different checks based on whether the finality fork is active:
+//
+// Pre-fork (follow distance approach):
+// - Verifies the client responds to requests
+// - Checks if the sync distance is within the acceptable tolerance
+//
+// Post-fork (finality approach):
+// - Verifies the client responds to requests
+// - Checks if the sync distance is within the acceptable tolerance
+// - Checks if finalized blocks are available
+//
+// The method returns nil if the client is healthy, or an error explaining why it's not.
+// Error types include:
+// - errSyncing: when the client is still synchronizing blocks
+// - network errors: when the client doesn't respond
+// TODO: update for related stuff (names, etc)
 func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
 	start := time.Now()
+
+	// 1. Check if client is reachable
 	sp, err := ec.SyncProgress(ctx)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
@@ -328,17 +347,43 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	}
 	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
 
+	// 2. Check sync distance
 	if sp != nil {
 		syncDistance := max(sp.HighestBlock, sp.CurrentBlock) - sp.CurrentBlock
-		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+		observability.RecordUint64Value(ctx, syncDistance, syncDistanceGauge.Record,
+			metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 
-		// block out of sync distance tolerance
 		if syncDistance > ec.syncDistanceTolerance {
 			recordExecutionClientStatus(ctx, statusSyncing, ec.nodeAddr)
 			return fmt.Errorf("sync distance exceeds tolerance (%d): %w", syncDistance, errSyncing)
 		}
 	} else {
 		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+	}
+
+	//  Get current block to determine epoch for fork status
+	currentBlock, err := ec.client.BlockNumber(ctx)
+	if err != nil {
+		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_blockNumber"),
+			zap.Error(err))
+		return err
+	}
+
+	currentEpoch := currentBlock / SlotsPerEpoch
+
+	// 3. Check if finalized block is available (post-fork only)
+	if IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+		_, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+		if err != nil {
+			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+			ec.logger.Error(elResponseErrMsg,
+				zap.String("method", "eth_getBlockByNumber"),
+				zap.String("tag", "finalized"),
+				zap.Error(err))
+			return fmt.Errorf("get finalized block: %w", err)
+		}
 	}
 
 	recordExecutionClientStatus(ctx, statusReady, ec.nodeAddr)
