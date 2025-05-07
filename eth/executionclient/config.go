@@ -13,8 +13,6 @@ type Options struct {
 	SyncDistanceTolerance uint64        `yaml:"ETH1SyncDistanceTolerance" env:"ETH_1_SYNC_DISTANCE_TOLERANCE" env-default:"5" env-description:"Maximum number of blocks behind head considered in-sync"`
 }
 
-type Fork string
-
 // IsFinalityActive returns true if the finality fork is active at the given epoch.
 func IsFinalityActive(epoch uint64, finalityForkEpoch uint64) bool {
 	return finalityForkEpoch > 0 && epoch >= finalityForkEpoch

@@ -401,7 +401,7 @@ func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuer
 }
 
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
-// streamLogsToChan *always* returns the last block it fetched, even if it errored.
+// *Always* returns the last block it fetched, even if it errored.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	headersCh := make(chan *ethtypes.Header)
@@ -424,11 +424,13 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	sub, err := ec.client.SubscribeNewHead(ctx, headersCh)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("operation", "SubscribeNewHead"),
+			zap.String("method", "eth_subscribe(newHeads)"),
 			zap.Error(err))
 		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
 	defer sub.Unsubscribe()
+
+	var lastFinalized uint64
 
 	for {
 		select {
@@ -438,43 +440,67 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 		case <-ec.closed:
 			return fromBlock, ErrClosed
 
-		case err := <-sub.Err():
-			if err == nil {
+		case subErr := <-sub.Err():
+			if subErr == nil {
 				return fromBlock, ErrClosed
 			}
-			return fromBlock, fmt.Errorf("subscription: %w", err)
+			return fromBlock, fmt.Errorf("subscription: %w", subErr)
 
 		case header := <-headersCh:
-			// Calculate current epoch
-			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
+			ec.logger.Debug("new head received",
+				zap.Uint64("head_number", header.Number.Uint64()),
+				zap.String("head_hash", header.Hash().Hex()),
+				zap.String("head_parent_hash", header.ParentHash.Hex()))
 
+			// Calculate current epoch to determine which finality approach to use
+			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
 			var toBlock uint64
 
-			// Choose between finality and follow distance based on fork status
 			if IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
-				// Post-fork: Use finalized block from execution client
+				// Post-fork: finalized block approach
 				finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 				if err != nil {
 					ec.logger.Error(elResponseErrMsg,
 						zap.String("method", "eth_getBlockByNumber"),
-						zap.String("tag", "finalized"),
 						zap.Error(err))
 					return fromBlock, fmt.Errorf("get finalized block: %w", err)
 				}
 				toBlock = finalizedBlock.Number.Uint64()
+
+				ec.logger.Debug("using finalized block approach",
+					zap.Uint64("epoch", currentEpoch),
+					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
+					zap.Uint64("finalized_block", toBlock))
+
+				if toBlock != lastFinalized {
+					finalizedEpoch := toBlock / SlotsPerEpoch
+					ec.logger.Info("⏱ finalized block changed",
+						zap.Uint64("new_finalized", toBlock),
+						zap.Uint64("epoch", finalizedEpoch),
+						zap.Uint64("previous_finalized", lastFinalized))
+					lastFinalized = toBlock
+				}
 			} else {
-				// Pre-fork: Use follow distance like the original implementation
+				// Pre-fork: follow distance approach
 				if header.Number.Uint64() < ec.followDistance {
 					continue
 				}
 				toBlock = header.Number.Uint64() - ec.followDistance
+
+				ec.logger.Debug("using follow distance approach",
+					zap.Uint64("epoch", currentEpoch),
+					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
+					zap.Uint64("head", header.Number.Uint64()),
+					zap.Uint64("follow_distance", ec.followDistance),
+					zap.Uint64("target_block", toBlock))
 			}
 
-			// Wait until the finalized block number (toBlock) catches up to the block we want to start syncing from (fromBlock).
-			// For example, if we last processed block 123456, fromBlock = 123457.
-			// If Ethereum finality is only at 123454, we must wait until it reaches 123457 to continue.
-			// This prevents fetching logs from unfinalized (and potentially reorged) blocks.
+			// Wait until the target block number catches up to where we need to start processing
+			// This prevents fetching logs from unfinalized (and potentially reorged) blocks
 			if toBlock < fromBlock {
+				ec.logger.Info("waiting for finalized block to reach fromBlock",
+					zap.Uint64("from_block", fromBlock),
+					zap.Uint64("finalized_block", toBlock))
 				continue
 			}
 
