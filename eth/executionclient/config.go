@@ -14,6 +14,7 @@ type Options struct {
 }
 
 // IsFinalityActive returns true if the finality fork is active at the given epoch.
+// TODO: use the correct name when we know the name of the fork.
 func IsFinalityActive(epoch uint64, finalityForkEpoch uint64) bool {
 	return finalityForkEpoch > 0 && epoch >= finalityForkEpoch
 }

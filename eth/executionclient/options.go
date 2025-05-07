@@ -98,14 +98,16 @@ func WithFollowDistanceMulti(offset uint64) OptionMulti {
 	}
 }
 
-// WithFinalityForkEpoch sets the epoch at which to switch from follow distance to finality signals.
+// WithFinalityForkEpoch sets the epoch at which to switch from follow distance to finality.
+// TODO: use the correct name when we know the name of the fork.
 func WithFinalityForkEpoch(epoch uint64) Option {
 	return func(s *ExecutionClient) {
 		s.finalityForkEpoch = epoch
 	}
 }
 
-// WithFinalityForkEpochMulti sets the epoch at which to switch from follow distance to finality signals.
+// WithFinalityForkEpochMulti sets the epoch at which to switch from follow distance to finality.
+// TODO: use the correct name when we know the name of the fork.
 func WithFinalityForkEpochMulti(epoch uint64) OptionMulti {
 	return func(s *MultiClient) {
 		s.finalityForkEpoch = epoch

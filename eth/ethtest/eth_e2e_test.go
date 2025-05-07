@@ -25,8 +25,20 @@ var (
 	testAddrBob   = crypto.PubkeyToAddress(testKeyBob.PublicKey)
 )
 
-// E2E tests for ETH package
-func TestEthExecLayer(t *testing.T) {
+// TestEthExecLayer_PreFork tests ETH package with follow distance approach (pre-fork).
+// TODO: use the correct name when we know the name of the fork.
+func TestEthExecLayer_PreFork(t *testing.T) {
+	runTestEthExecLayer(t, false)
+}
+
+// TestEthExecLayer_PostFork tests ETH package with finality approach (post-fork)
+// TODO: use the correct name when we know the name of the fork.
+func TestEthExecLayer_PostFork(t *testing.T) {
+	runTestEthExecLayer(t, true)
+}
+
+// E2E tests for ETH package with configurable finality approach
+func runTestEthExecLayer(t *testing.T, useFinalityFork bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -46,6 +58,17 @@ func TestEthExecLayer(t *testing.T) {
 
 	testEnv := TestEnv{}
 	testEnv.SetDefaultFinalityBlocks()
+	testEnv.SetDefaultFollowDistance()
+
+	if useFinalityFork {
+		// Enable finality fork at epoch 1
+		testEnv.EnableFinalityFork(1)
+		t.Log("Running test with finality (post-fork)") // TODO: use the correct name when we know the name of the fork.
+	} else {
+		// Disable finality fork to use follow distance approach
+		testEnv.DisableFinalityFork()
+		t.Log("Running test with follow distance (pre-fork)") // TODO: use the correct name when we know the name of the fork.
+	}
 
 	defer testEnv.shutdown()
 	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
@@ -98,19 +121,27 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput.produce()
 			testEnv.MineAndFinalize(&blockNum)
 
-			// Check the finalized block number (EventSyncer uses it to determine the range of blocks to process)
-			finalizedBlock, err := testEnv.sim.Client().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
-			require.NoError(t, err)
+			// Check how the EventSyncer determines which blocks to process
+			var expectedLastHandledBlock uint64
 
-			finalizedBlockNum := finalizedBlock.Number.Uint64()
+			if useFinalityFork {
+				// When using finality fork, check the finalized block number
+				finalizedBlock, err := testEnv.sim.Client().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+				require.NoError(t, err)
+				expectedLastHandledBlock = finalizedBlock.Number.Uint64()
+			} else {
+				// When using follow distance, the last handled block is the current block minus follow distance
+				currentBlock, err := testEnv.sim.Client().BlockNumber(ctx)
+				require.NoError(t, err)
+				expectedLastHandledBlock = currentBlock - testEnv.followDistance
+			}
 
 			// Run SyncHistory
 			lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
 			require.NoError(t, err)
 
-			// EventSyncer.SyncHistory processes blocks only up to the finalized block number
-			// Check that the last handled block number is equal to the finalized block number
-			require.Equal(t, finalizedBlockNum, lastHandledBlockNum)
+			// Check that the last handled block number matches our expectation
+			require.Equal(t, expectedLastHandledBlock, lastHandledBlockNum)
 
 			// Check that operators were successfully registered
 			operators, err := nodeStorage.ListOperators(nil, 0, 10)

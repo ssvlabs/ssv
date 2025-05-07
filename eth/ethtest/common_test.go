@@ -51,20 +51,22 @@ func NewCommonTestInput(
 }
 
 type TestEnv struct {
-	eventSyncer    *eventsyncer.EventSyncer
-	validators     []*testValidatorData
-	ops            []*testOperator
-	nodeStorage    storage.Storage
-	sim            *simulator.Backend
-	boundContract  *simcontract.Simcontract
-	auth           *bind.TransactOpts
-	shares         [][]byte
-	execClient     *executionclient.ExecutionClient
-	rpcServer      *rpc.Server
-	httpSrv        *httptest.Server
-	validatorCtrl  *mocks.MockController
-	mockCtrl       *gomock.Controller
-	finalityBlocks uint64
+	eventSyncer       *eventsyncer.EventSyncer
+	validators        []*testValidatorData
+	ops               []*testOperator
+	nodeStorage       storage.Storage
+	sim               *simulator.Backend
+	boundContract     *simcontract.Simcontract
+	auth              *bind.TransactOpts
+	shares            [][]byte
+	execClient        *executionclient.ExecutionClient
+	rpcServer         *rpc.Server
+	httpSrv           *httptest.Server
+	validatorCtrl     *mocks.MockController
+	mockCtrl          *gomock.Controller
+	finalityBlocks    uint64
+	followDistance    uint64
+	finalityForkEpoch uint64
 }
 
 func (e *TestEnv) shutdown() {
@@ -89,8 +91,12 @@ func (e *TestEnv) setup(
 	validatorsCount uint64,
 	operatorsCount uint64,
 ) error {
+	// Initialize defaults if not set
 	if e.finalityBlocks == 0 {
 		e.SetDefaultFinalityBlocks()
+	}
+	if e.followDistance == 0 {
+		e.SetDefaultFollowDistance()
 	}
 	logger := zaptest.NewLogger(t)
 
@@ -168,11 +174,21 @@ func (e *TestEnv) setup(
 	}
 
 	// Create a client and connect to the simulator
+	execClientOpts := []executionclient.Option{
+		executionclient.WithLogger(logger),
+		executionclient.WithFollowDistance(e.followDistance),
+	}
+
+	// Apply finality fork settings if configured
+	if e.finalityForkEpoch > 0 {
+		execClientOpts = append(execClientOpts, executionclient.WithFinalityForkEpoch(e.finalityForkEpoch))
+	}
+
 	e.execClient, err = executionclient.New(
 		ctx,
 		addr,
 		contractAddr,
-		executionclient.WithLogger(logger),
+		execClientOpts...,
 	)
 	if err != nil {
 		return err
@@ -205,18 +221,34 @@ func (e *TestEnv) setup(
 	return nil
 }
 
+// SetDefaultFinalityBlocks sets the default finality blocks.
 func (e *TestEnv) SetDefaultFinalityBlocks() {
 	e.finalityBlocks = executionclient.DefaultFinalityDistance
 }
 
-// MineAndFinalize mines enough blocks to ensure finality
+// SetDefaultFollowDistance sets the default follow distance.
+func (e *TestEnv) SetDefaultFollowDistance() {
+	e.followDistance = executionclient.DefaultFollowDistance
+}
+
+// EnableFinalityFork enables the finality fork at the specified epoch.
+func (e *TestEnv) EnableFinalityFork(epoch uint64) {
+	e.finalityForkEpoch = epoch
+}
+
+// DisableFinalityFork disables the finality fork.
+func (e *TestEnv) DisableFinalityFork() {
+	e.finalityForkEpoch = 0
+}
+
+// MineAndFinalize mines enough blocks to ensure finality.
 func (e *TestEnv) MineAndFinalize(blockNum *uint64) {
 	for i := uint64(0); i < e.finalityBlocks; i++ {
 		commitBlock(e.sim, blockNum)
 	}
 }
 
-// commitBlock creates a new block and increments block counter
+// commitBlock creates a new block and increments block counter.
 func commitBlock(sim *simulator.Backend, blockNum *uint64) {
 	sim.Commit()
 	*blockNum++
