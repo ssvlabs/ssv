@@ -124,7 +124,6 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	// Get current block to determine which finality method to use
 	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
@@ -133,14 +132,19 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
 
-	// Calculate current epoch
 	currentEpoch := currentBlock / SlotsPerEpoch
 
 	var toBlock uint64
 
-	// Choose between finality and follow distance based on fork status
-	if IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
-		// Post-fork: Use finalized block from execution client
+	if !IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+		// Pre-fork: follow distance approach
+		if currentBlock < ec.followDistance {
+			return nil, nil, ErrNothingToSync
+		}
+
+		toBlock = currentBlock - ec.followDistance
+	} else {
+		// Post-fork: finalized block approach
 		finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
 			ec.logger.Error(elResponseErrMsg,
@@ -150,23 +154,14 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 			return nil, nil, fmt.Errorf("get finalized block: %w", err)
 		}
 		toBlock = finalizedBlock.Number.Uint64()
-	} else {
-		// Pre-fork: Use follow distance like the original implementation
-		if currentBlock < ec.followDistance {
-			return nil, nil, ErrNothingToSync
-		}
-		toBlock = currentBlock - ec.followDistance
 	}
 
-	// Wait until the finalized block number (toBlock) catches up to the block we want to start syncing from (fromBlock).
-	// For example, if we last processed block 123456, fromBlock = 123457.
-	// If Ethereum finality is only at 123454, we must wait until it reaches 123457 to continue.
-	// This prevents fetching logs from unfinalized (and potentially reorged) blocks.
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}
 
 	logs, errors = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+
 	return
 }
 
@@ -380,7 +375,8 @@ func (ec *ExecutionClient) SubscribeFilterLogs(ctx context.Context, q ethereum.F
 	logs, err := ec.client.SubscribeFilterLogs(ctx, q, ch)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_subscribe(logs)"),
+			zap.String("method", "eth_subscribe"),
+			zap.String("tag", "logs"),
 			zap.Error(err))
 		return nil, err
 	}
@@ -424,7 +420,8 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	sub, err := ec.client.SubscribeNewHead(ctx, headersCh)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_subscribe(newHeads)"),
+			zap.String("method", "eth_subscribe"),
+			zap.String("tag", "newHeads"),
 			zap.Error(err))
 		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
@@ -456,7 +453,20 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
 			var toBlock uint64
 
-			if IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+			if !IsFinalityActive(currentEpoch, ec.finalityForkEpoch) {
+				// Pre-fork: follow distance approach
+				if header.Number.Uint64() < ec.followDistance {
+					continue
+				}
+				toBlock = header.Number.Uint64() - ec.followDistance
+
+				ec.logger.Debug("processing blocks using safety distance",
+					zap.Uint64("epoch", currentEpoch),
+					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
+					zap.Uint64("head", header.Number.Uint64()),
+					zap.Uint64("follow_distance", ec.followDistance),
+					zap.Uint64("target_block", toBlock))
+			} else {
 				// Post-fork: finalized block approach
 				finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 				if err != nil {
@@ -467,7 +477,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				}
 				toBlock = finalizedBlock.Number.Uint64()
 
-				ec.logger.Debug("using finalized block approach",
+				ec.logger.Debug("processing blocks using finality",
 					zap.Uint64("epoch", currentEpoch),
 					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
 					zap.Uint64("finalized_block", toBlock))
@@ -480,19 +490,6 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 						zap.Uint64("previous_finalized", lastFinalized))
 					lastFinalized = toBlock
 				}
-			} else {
-				// Pre-fork: follow distance approach
-				if header.Number.Uint64() < ec.followDistance {
-					continue
-				}
-				toBlock = header.Number.Uint64() - ec.followDistance
-
-				ec.logger.Debug("using follow distance approach",
-					zap.Uint64("epoch", currentEpoch),
-					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
-					zap.Uint64("head", header.Number.Uint64()),
-					zap.Uint64("follow_distance", ec.followDistance),
-					zap.Uint64("target_block", toBlock))
 			}
 
 			// Wait until the target block number catches up to where we need to start processing
