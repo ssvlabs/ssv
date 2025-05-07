@@ -115,7 +115,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
+	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger), executionclient.WithFinalityForkEpoch(1))
 	require.NoError(t, err)
 
 	contractFilterer, err := client.Filterer()
