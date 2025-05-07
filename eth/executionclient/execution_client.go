@@ -136,7 +136,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 
 	var toBlock uint64
 
-	if currentEpoch <= ec.finalityForkEpoch {
+	if ec.IsPreFinalityFork(currentEpoch) {
 		// Pre-fork: follow distance approach
 		if currentBlock < ec.followDistance {
 			return nil, nil, ErrNothingToSync
@@ -374,7 +374,7 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	currentEpoch := currentBlock / SlotsPerEpoch
 
 	// 3. Check if finalized block is available (post-fork only)
-	if currentEpoch <= ec.finalityForkEpoch {
+	if ec.IsPreFinalityFork(currentEpoch) {
 		_, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
 			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
@@ -498,7 +498,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
 			var toBlock uint64
 
-			if currentEpoch <= ec.finalityForkEpoch {
+			if ec.IsPreFinalityFork(currentEpoch) {
 				// Pre-fork: follow distance approach
 				if header.Number.Uint64() < ec.followDistance {
 					continue
@@ -567,6 +567,14 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 
 func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	return ec.client.ChainID(ctx)
+}
+
+// IsPreFinalityFork returns whether the given epoch is before or equal to the finality fork epoch.
+// This determines if the client should use the follow distance approach (pre-fork)
+// or the finalized block approach (post-fork).
+// TODO: use a correct name for this function
+func (ec *ExecutionClient) IsPreFinalityFork(epoch uint64) bool {
+	return epoch <= ec.finalityForkEpoch
 }
 
 // connect connects to Ethereum execution client.
