@@ -29,6 +29,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -66,7 +68,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -95,7 +96,8 @@ type config struct {
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
 	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
-	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
+	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
+	MEVDelay                     time.Duration           `yaml:"MEVDelay" env:"MEV_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader."`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
 	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
@@ -428,6 +430,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
+		cfg.SSVOptions.ValidatorOptions.MEVDelay = cfg.MEVDelay
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
 		fixedSubnets, err := networkcommons.FromString(cfg.P2pNetworkConfig.Subnets)
