@@ -59,28 +59,59 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	contractAddr := ethcommon.HexToAddress("0x1234")
 
 	customLogger := zap.NewExample()
+	const customFollowDistance = uint64(10)
 	const customTimeout = 100 * time.Millisecond
 	const customHealthInvalidationInterval = 50 * time.Millisecond
 	const customLogBatchSize = 11
 	const customSyncDistanceTolerance = 12
 
-	mc, err := NewMulti(
-		ctx,
-		addresses,
-		contractAddr,
-		WithLoggerMulti(customLogger),
-		WithConnectionTimeoutMulti(customTimeout),
-		WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
-		WithLogBatchSizeMulti(customLogBatchSize),
-		WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, mc)
-	require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
-	require.EqualValues(t, customTimeout, mc.connectionTimeout)
-	require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
-	require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
-	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
+	t.Run("pre-fork (follow distance)", func(t *testing.T) {
+		mc, err := NewMulti(
+			ctx,
+			addresses,
+			contractAddr,
+			WithLoggerMulti(customLogger),
+			WithFollowDistanceMulti(customFollowDistance),
+			WithConnectionTimeoutMulti(customTimeout),
+			WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
+			WithLogBatchSizeMulti(customLogBatchSize),
+			WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, mc)
+		require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
+		require.EqualValues(t, customFollowDistance, mc.followDistance)
+		require.EqualValues(t, customTimeout, mc.connectionTimeout)
+		require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
+		require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
+		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
+		require.EqualValues(t, 0, mc.finalityForkEpoch) // Default - not using finality fork
+	})
+
+	t.Run("post-fork (finality(", func(t *testing.T) {
+		const customFinalityForkEpoch = uint64(5)
+
+		mc, err := NewMulti(
+			ctx,
+			addresses,
+			contractAddr,
+			WithLoggerMulti(customLogger),
+			WithConnectionTimeoutMulti(customTimeout),
+			WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
+			WithLogBatchSizeMulti(customLogBatchSize),
+			WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
+			WithFinalityForkEpochMulti(customFinalityForkEpoch),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, mc)
+		require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
+		require.EqualValues(t, customTimeout, mc.connectionTimeout)
+		require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
+		require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
+		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
+		require.EqualValues(t, customFinalityForkEpoch, mc.finalityForkEpoch)
+		require.EqualValues(t, DefaultFollowDistance, mc.followDistance)
+	})
 }
 
 func TestMultiClient_assertSameChainIDs(t *testing.T) {

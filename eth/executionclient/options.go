@@ -14,102 +14,102 @@ type OptionMulti func(client *MultiClient)
 
 // WithLogger enables logging.
 func WithLogger(logger *zap.Logger) Option {
-	return func(s *ExecutionClient) {
-		s.logger = logger.Named("execution_client")
+	return func(c *ExecutionClient) {
+		c.logger = logger.Named("execution_client")
 	}
 }
 
 // WithLoggerMulti enables logging.
 func WithLoggerMulti(logger *zap.Logger) OptionMulti {
-	return func(s *MultiClient) {
-		s.logger = logger.Named("execution_client_multi")
+	return func(c *MultiClient) {
+		c.logger = logger.Named("execution_client_multi")
 	}
 }
 
 // WithConnectionTimeout sets timeout for network connection to eth1 node.
 func WithConnectionTimeout(timeout time.Duration) Option {
-	return func(s *ExecutionClient) {
-		s.connectionTimeout = timeout
+	return func(c *ExecutionClient) {
+		c.connectionTimeout = timeout
 	}
 }
 
 // WithConnectionTimeoutMulti sets timeout for network connection to eth1 node.
 func WithConnectionTimeoutMulti(timeout time.Duration) OptionMulti {
-	return func(s *MultiClient) {
-		s.connectionTimeout = timeout
+	return func(c *MultiClient) {
+		c.connectionTimeout = timeout
 	}
 }
 
 // WithHealthInvalidationInterval sets health invalidation interval. 0 disables caching.
 func WithHealthInvalidationInterval(interval time.Duration) Option {
-	return func(s *ExecutionClient) {
-		s.healthInvalidationInterval = interval
+	return func(c *ExecutionClient) {
+		c.healthInvalidationInterval = interval
 	}
 }
 
 // WithHealthInvalidationIntervalMulti sets health invalidation interval.
 func WithHealthInvalidationIntervalMulti(interval time.Duration) OptionMulti {
-	return func(s *MultiClient) {
-		s.healthInvalidationInterval = interval
+	return func(c *MultiClient) {
+		c.healthInvalidationInterval = interval
 	}
 }
 
 // WithLogBatchSize sets log batch size.
 func WithLogBatchSize(size uint64) Option {
-	return func(s *ExecutionClient) {
-		s.logBatchSize = size
+	return func(c *ExecutionClient) {
+		c.logBatchSize = size
 	}
 }
 
 // WithLogBatchSizeMulti sets log batch size.
 func WithLogBatchSizeMulti(size uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.logBatchSize = size
+	return func(c *MultiClient) {
+		c.logBatchSize = size
 	}
 }
 
 // WithSyncDistanceTolerance sets the number of blocks that is acceptable to lag behind.
 func WithSyncDistanceTolerance(count uint64) Option {
-	return func(s *ExecutionClient) {
-		s.syncDistanceTolerance = count
+	return func(c *ExecutionClient) {
+		c.syncDistanceTolerance = count
 	}
 }
 
 // WithSyncDistanceToleranceMulti sets the number of blocks that is acceptable to lag behind.
 func WithSyncDistanceToleranceMulti(count uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.syncDistanceTolerance = count
+	return func(c *MultiClient) {
+		c.syncDistanceTolerance = count
 	}
 }
 
 // WithFollowDistance sets finalization offset (a block at this offset into the past
 // from the head block will be considered as very likely finalized).
 func WithFollowDistance(offset uint64) Option {
-	return func(s *ExecutionClient) {
-		s.followDistance = offset
+	return func(c *ExecutionClient) {
+		c.followDistance = offset
 	}
 }
 
 // WithFollowDistanceMulti sets finalization offset (a block at this offset into the past
 // from the head block will be considered as very likely finalized).
 func WithFollowDistanceMulti(offset uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.followDistance = offset
+	return func(c *MultiClient) {
+		c.followDistance = offset
 	}
 }
 
 // WithFinalityForkEpoch sets the epoch at which to switch from follow distance to finality.
 // TODO: use the correct name when we know the name of the fork.
 func WithFinalityForkEpoch(epoch uint64) Option {
-	return func(s *ExecutionClient) {
-		s.finalityForkEpoch = epoch
+	return func(c *ExecutionClient) {
+		c.finalityForkEpoch = epoch
 	}
 }
 
 // WithFinalityForkEpochMulti sets the epoch at which to switch from follow distance to finality.
 // TODO: use the correct name when we know the name of the fork.
 func WithFinalityForkEpochMulti(epoch uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.finalityForkEpoch = epoch
+	return func(c *MultiClient) {
+		c.finalityForkEpoch = epoch
 	}
 }
