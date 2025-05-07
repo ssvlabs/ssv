@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -28,7 +29,7 @@ func BenchmarkTracer(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	traces, err := readByteSlices(f)
+	traces, err := readByteSlices(f) // len(traces) = 8992
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -43,25 +44,31 @@ func BenchmarkTracer(b *testing.B) {
 	dutyStore := store.New(db)
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
-	b.ResetTimer()
+	// Define different message counts to test
+	messageCounts := []int{10, 20, 50, 100, 200, 500, 1000, 2000, 4000, 8000}
 
-	var until, i int
-	for i = 1; i < b.N; i++ {
-		ctx, cancel := context.WithCancel(context.Background())
-		collector := New(ctx, zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, "BN")
+	for _, count := range messageCounts {
+		b.Run(fmt.Sprintf("Messages_%d", count), func(b *testing.B) {
+			// Ensure we don't exceed available traces
+			actualCount := min(count, len(traces))
 
-		until = min(i*100, len(traces))
+			b.ResetTimer()
+			for b.Loop() {
+				ctx, cancel := context.WithCancel(context.Background())
+				collector := New(ctx, zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, "BN")
 
-		var wg sync.WaitGroup
-		for _, msg := range traces[:until] {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_ = collector.Collect(context.Background(), msg, dummyVerify)
-			}()
-		}
-		wg.Wait()
-		cancel()
+				var wg sync.WaitGroup
+				for _, msg := range traces[:actualCount] {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						_ = collector.Collect(context.Background(), msg, dummyVerify)
+					}()
+				}
+				wg.Wait()
+				cancel()
+			}
+		})
 	}
 }
 
