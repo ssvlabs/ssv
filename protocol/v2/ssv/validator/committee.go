@@ -29,7 +29,7 @@ var (
 	runnerExpirySlots = phase0.Slot(34)
 )
 
-type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []spectypes.ShareValidatorPK, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error)
+type CommitteeRunnerFunc func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share, attestingValidators []phase0.BLSPubKey, dutyGuard runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error)
 
 type Committee struct {
 	logger *zap.Logger
@@ -188,7 +188,7 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 // prepareDuty filters out unrunnable validator duties and returns the shares and attesters.
 func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) (
 	shares map[phase0.ValidatorIndex]*spectypes.Share,
-	attesters []spectypes.ShareValidatorPK,
+	attesters []phase0.BLSPubKey,
 	runnableDuty *spectypes.CommitteeDuty,
 	err error,
 ) {
@@ -201,7 +201,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 		ValidatorDuties: make([]*spectypes.ValidatorDuty, 0, len(duty.ValidatorDuties)),
 	}
 	shares = make(map[phase0.ValidatorIndex]*spectypes.Share, len(duty.ValidatorDuties))
-	attesters = make([]spectypes.ShareValidatorPK, 0, len(duty.ValidatorDuties))
+	attesters = make([]phase0.BLSPubKey, 0, len(duty.ValidatorDuties))
 	for _, beaconDuty := range duty.ValidatorDuties {
 		share, exists := c.Shares[beaconDuty.ValidatorIndex]
 		if !exists {
@@ -215,7 +215,7 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 		runnableDuty.ValidatorDuties = append(runnableDuty.ValidatorDuties, beaconDuty)
 
 		if beaconDuty.Type == spectypes.BNRoleAttester {
-			attesters = append(attesters, share.SharePubKey)
+			attesters = append(attesters, phase0.BLSPubKey(share.SharePubKey))
 		}
 	}
 

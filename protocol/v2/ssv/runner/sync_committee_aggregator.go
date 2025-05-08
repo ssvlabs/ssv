@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type SyncCommitteeAggregatorRunner struct {
@@ -30,7 +31,7 @@ type SyncCommitteeAggregatorRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         spectypes.BeaconSigner
+	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
@@ -43,7 +44,7 @@ func NewSyncCommitteeAggregatorRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
@@ -248,7 +249,14 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 			return err
 		}
 
-		signed, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), contribAndProof, cd.Duty.Slot, spectypes.DomainContributionAndProof)
+		signed, err := r.BaseRunner.signBeaconObject(
+			ctx,
+			r,
+			r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+			contribAndProof,
+			cd.Duty.Slot,
+			spectypes.DomainContributionAndProof,
+		)
 		if err != nil {
 			err := errors.Wrap(err, "failed to sign aggregate and proof")
 			span.SetStatus(codes.Error, err.Error())
@@ -398,7 +406,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 
 			const eventMsg = "✅ successfully submitted sync committee aggregator"
 			span.AddEvent(eventMsg)
-			logger.Debug(eventMsg, fields.SubmissionTime(time.Since(start)))
+			logger.Debug(eventMsg, fields.SubmissionTime(time.Since(start)), fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
 			break
 		}
 	}
@@ -511,7 +519,14 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 			SubcommitteeIndex: subnet,
 		}
 		span.AddEvent("signing beacon object")
-		msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), data, duty.DutySlot(), spectypes.DomainSyncCommitteeSelectionProof)
+		msg, err := r.BaseRunner.signBeaconObject(
+			ctx,
+			r,
+			duty.(*spectypes.ValidatorDuty),
+			data,
+			duty.DutySlot(),
+			spectypes.DomainSyncCommitteeSelectionProof,
+		)
 		if err != nil {
 			err := errors.Wrap(err, "could not sign sync committee selection proof")
 			span.SetStatus(codes.Error, err.Error())
@@ -587,7 +602,7 @@ func (r *SyncCommitteeAggregatorRunner) GetValCheckF() specqbft.ProposedValueChe
 	return r.valCheck
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetSigner() spectypes.BeaconSigner {
+func (r *SyncCommitteeAggregatorRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

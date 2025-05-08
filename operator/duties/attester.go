@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type AttesterHandler struct {
@@ -227,9 +228,16 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	defer span.End()
 
 	start := time.Now()
-	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
 
-	if len(indices) == 0 {
+	var eligibleShares []*types.SSVShare
+	for _, share := range h.validatorProvider.SelfValidators() {
+		if share.IsParticipatingAndAttesting(epoch) {
+			eligibleShares = append(eligibleShares, share)
+		}
+	}
+
+	eligibleIndices := indicesFromShares(eligibleShares)
+	if len(eligibleIndices) == 0 {
 		const eventMsg = "no active validators for epoch"
 		h.logger.Debug(eventMsg, fields.Epoch(epoch))
 		span.AddEvent(eventMsg)
@@ -237,8 +245,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return nil
 	}
 
-	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(indices))))
-	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, indices)
+	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
+	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
 		err := fmt.Errorf("failed to fetch attester duties: %w", err)
 		span.SetStatus(codes.Error, err.Error())

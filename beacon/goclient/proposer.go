@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -19,7 +18,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 )
 
@@ -222,74 +220,9 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 		Proposal: signedBlock,
 	}
 
-	// As gc.multiClient doesn't have a method for blinded block submission
-	// (because it must be submitted to the same node that returned that block),
-	// we need to submit it to client(s) directly.
-	if len(gc.clients) == 1 {
-		clientAddress := gc.clients[0].Address()
-		logger := gc.log.With(
-			zap.String("api", "SubmitBlindedProposal"),
-			zap.String("client_addr", clientAddress))
-
-		start := time.Now()
-		err := gc.clients[0].SubmitBlindedProposal(gc.ctx, opts)
-		recordRequestDuration(gc.ctx, "SubmitBlindedProposal", clientAddress, http.MethodPost, time.Since(start), err)
-		if err != nil {
-			logger.Error(clResponseErrMsg,
-				zap.Error(err),
-			)
-			return err
-		}
-
-		logger.Debug("consensus client submitted blinded beacon block")
-
-		return nil
-	}
-
-	// Although we got a blinded block from one node and that node has to submit it,
-	// other nodes might know this payload too and have a chance to submit it successfully.
-	//
-	// So we do the following:
-	//
-	// Submit the blinded proposal to all clients concurrently.
-	// If any client succeeds, cancel the remaining submissions.
-	// Wait for all submissions to finish or timeout after 1 minute.
-	//
-	// TODO: Make sure this the above is correct. Should we submit only to the node that returned the block?
-
-	logger := gc.log.With(zap.String("api", "SubmitBlindedProposal"))
-
-	submissions := atomic.Int32{}
-	p := pool.New().WithErrors().WithContext(gc.ctx)
-	for _, client := range gc.clients {
-		client := client
-		p.Go(func(ctx context.Context) error {
-			clientAddress := client.Address()
-			logger := logger.With(zap.String("client_addr", clientAddress))
-
-			if err := client.SubmitBlindedProposal(ctx, opts); err == nil {
-				logger.Debug("consensus client returned an error while submitting blinded proposal. As at least one node must submit successfully, it's expected that some nodes may fail to submit.",
-					zap.Error(err))
-				return err
-			}
-
-			logger.Debug("consensus client submitted blinded beacon block")
-
-			submissions.Add(1)
-			return nil
-		})
-	}
-	err := p.Wait()
-	if submissions.Load() > 0 {
-		// At least one client has submitted the proposal successfully,
-		// so we can return without error.
-		return nil
-	}
-	if err != nil {
-		logger.Error("no consensus clients have been able to submit blinded proposal. See adjacent logs for error details.")
-		return fmt.Errorf("no consensus clients have been able to submit blinded proposal")
-	}
-	return nil
+	return gc.multiClientSubmit("SubmitBlindedProposal", func(ctx context.Context, client Client) error {
+		return client.SubmitBlindedProposal(ctx, opts)
+	})
 }
 
 // SubmitBeaconBlock submit the block to the node
@@ -356,21 +289,9 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitProposal"),
-		zap.String("client_addr", clientAddress))
-
-	start := time.Now()
-	err := gc.multiClient.SubmitProposal(gc.ctx, opts)
-	recordRequestDuration(gc.ctx, "SubmitProposal", clientAddress, http.MethodPost, time.Since(start), err)
-	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
-	}
-
-	logger.Debug("consensus client submitted beacon block")
-	return nil
+	return gc.multiClientSubmit("SubmitProposal", func(ctx context.Context, client Client) error {
+		return client.SubmitProposal(gc.ctx, opts)
+	})
 }
 
 func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
@@ -382,19 +303,7 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 		})
 	}
 
-	clientAddress := gc.multiClient.Address()
-	logger := gc.log.With(
-		zap.String("api", "SubmitProposalPreparations"),
-		zap.String("client_addr", clientAddress))
-
-	start := time.Now()
-	err := gc.multiClient.SubmitProposalPreparations(gc.ctx, preparations)
-	recordRequestDuration(gc.ctx, "SubmitProposalPreparations", clientAddress, http.MethodPost, time.Since(start), err)
-	if err != nil {
-		logger.Error(clResponseErrMsg, zap.Error(err))
-		return err
-	}
-
-	logger.Debug("consensus client submitted proposal preparation")
-	return nil
+	return gc.multiClientSubmit("SubmitProposalPreparations", func(ctx context.Context, client Client) error {
+		return client.SubmitProposalPreparations(ctx, preparations)
+	})
 }

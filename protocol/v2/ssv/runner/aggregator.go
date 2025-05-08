@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type AggregatorRunner struct {
@@ -30,7 +31,7 @@ type AggregatorRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         spectypes.BeaconSigner
+	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
@@ -45,7 +46,7 @@ func NewAggregatorRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
@@ -213,9 +214,16 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	span.AddEvent("signing post consensus")
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), aggregateAndProofHashRoot, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+		aggregateAndProofHashRoot,
+		decidedValue.Duty.Slot,
+		spectypes.DomainAggregateAndProof,
+	)
 	if err != nil {
-		err := errors.Wrap(err, "failed signing attestation data")
+		err := errors.Wrap(err, "failed signing aggregate and proof")
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
@@ -346,7 +354,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		const eventMsg = "✅ successful submitted aggregate"
 		span.AddEvent(eventMsg)
-		logger.Debug(eventMsg, fields.SubmissionTime(time.Since(start)))
+		logger.Debug(eventMsg, fields.SubmissionTime(time.Since(start)), fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
 	}
 
 	r.GetState().Finished = true
@@ -401,7 +409,14 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 
 	// sign selection proof
 	span.AddEvent("signing beacon object")
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(duty.DutySlot()), duty.DutySlot(), spectypes.DomainSelectionProof)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		spectypes.SSZUint64(duty.DutySlot()),
+		duty.DutySlot(),
+		spectypes.DomainSelectionProof,
+	)
 	if err != nil {
 		err := errors.Wrap(err, "could not sign randao")
 		span.SetStatus(codes.Error, err.Error())
@@ -481,7 +496,7 @@ func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *AggregatorRunner) GetSigner() spectypes.BeaconSigner {
+func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *AggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

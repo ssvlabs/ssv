@@ -178,6 +178,10 @@ func ValidatorEventTypeAttribute(t protocolTypes.EventType) attribute.KeyValue {
 	return attribute.String("ssv.validator.event.type", t.String())
 }
 
+func RoundChangeReasonAttribute(reason string) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.round.change_reason", reason)
+}
+
 func NetworkDirectionAttribute(direction network.Direction) attribute.KeyValue {
 	return attribute.String("ssv.p2p.connection.direction", strings.ToLower(direction.String()))
 }

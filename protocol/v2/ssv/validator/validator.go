@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -39,7 +40,7 @@ type Validator struct {
 
 	Operator       *spectypes.CommitteeMember
 	Share          *ssvtypes.SSVShare
-	Signer         spectypes.BeaconSigner
+	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
 	Queues map[spectypes.RunnerRole]queueContainer
@@ -121,7 +122,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
 	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
-	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(vDuty.Type))
+	logger = v.withDutyID(logger, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.
 	if baseRunner.QBFTController != nil {
@@ -192,14 +193,13 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			err := errors.New("could not decode consensus message from network message")
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
+
 		if err := qbftMsg.Validate(); err != nil {
 			err := errors.Wrap(err, "invalid qbft Message")
 			span.SetStatus(codes.Error, err.Error())
@@ -222,8 +222,6 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case spectypes.SSVPartialSignatureMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
 			err := errors.New("could not decode post consensus message from network message")
@@ -292,9 +290,11 @@ func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 	return nil
 }
 
-func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.RunnerRole, string], role spectypes.RunnerRole) *zap.Logger {
-	if dutyID, ok := dutyIDs.Get(role); ok {
+// withDutyID returns a logger with the duty ID for the given role.
+func (v *Validator) withDutyID(logger *zap.Logger, role spectypes.RunnerRole) *zap.Logger {
+	if dutyID, ok := v.dutyIDs.Get(role); ok {
 		return logger.With(fields.DutyID(dutyID))
 	}
+
 	return logger
 }
