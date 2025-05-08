@@ -47,7 +47,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-    
+
 	i.metrics.RecordRoundChange(ctx, newRound, reasonTimeout)
 
 	const eventMsg = "📢 broadcasting round change message"

@@ -44,7 +44,7 @@ var (
 
 	roundsChangedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("duty.rounds_changed"),
+			observability.InstrumentName(observabilityNamespace, "duty.rounds_changed"),
 			metric.WithUnit("{change}"),
 			metric.WithDescription("number of round changes with their reasons")))
 )

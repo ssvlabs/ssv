@@ -307,8 +307,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 			span.AddEvent("constructing attestation data", attr)
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
-			
-            span.AddEvent("signing attestation data", attr)
+
+			span.AddEvent("signing attestation data", attr)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(
 				ctx,
 				cr,
