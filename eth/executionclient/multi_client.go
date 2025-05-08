@@ -508,19 +508,3 @@ func methodFromContext(ctx context.Context) string {
 	}
 	return v
 }
-
-// DescribeForkConfig returns a human-readable description of the fork configuration.
-func (mc *MultiClient) DescribeForkConfig() string {
-	var banner string
-	banner += "SSV Multi-Client Configuration:\n"
-	banner += "--------------------------------\n"
-	banner += "Finality determination:\n"
-	banner += fmt.Sprintf(" - Follow distance: %d blocks\n", mc.followDistance)
-	if mc.finalityForkEpoch < 10000 { // Consider it enabled if below some reasonable value
-		banner += fmt.Sprintf(" - Finality fork active at epoch: %d\n", mc.finalityForkEpoch)
-	} else {
-		banner += " - Finality fork: disabled (very high activation epoch)\n"
-	}
-	banner += "--------------------------------\n"
-	return banner
-}
