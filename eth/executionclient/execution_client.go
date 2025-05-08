@@ -35,6 +35,7 @@ type Provider interface {
 	Healthy(ctx context.Context) error
 	SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- ethtypes.Log) (ethereum.Subscription, error)
 	FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error)
+	IsFinalizedFork(ctx context.Context) bool
 	Close() error
 }
 
@@ -137,7 +138,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 
 	var toBlock uint64
 
-	if !ec.IsFinalityFork(currentEpoch) {
+	if !ec.isFinalityFork(currentEpoch) {
 		// Pre-fork: follow distance approach
 		if currentBlock < ec.followDistance {
 			return nil, nil, ErrNothingToSync
@@ -374,7 +375,7 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	currentEpoch := currentBlock / SlotsPerEpoch
 
 	// 3. Check if finalized block is available (post-fork only)
-	if ec.IsFinalityFork(currentEpoch) {
+	if ec.isFinalityFork(currentEpoch) {
 		// We're post-fork, so check for finalized blocks
 		_, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
@@ -498,7 +499,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
 			var toBlock uint64
 
-			if !ec.IsFinalityFork(currentEpoch) {
+			if !ec.isFinalityFork(currentEpoch) {
 				// Pre-fork: follow distance approach
 				if header.Number.Uint64() < ec.followDistance {
 					continue
@@ -571,9 +572,29 @@ func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	return ec.client.ChainID(ctx)
 }
 
+// IsFinalizedFork returns whether finalized blocks should be used instead of follow distance.
+// Returns true if we've passed the finality fork epoch threshold.
+func (ec *ExecutionClient) IsFinalizedFork(ctx context.Context) bool {
+	if ec.isPostForkState.Load() {
+		return true
+	}
+
+	currentBlock, err := ec.client.BlockNumber(ctx)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_blockNumber"),
+			zap.Error(err))
+		return false
+	}
+
+	currentEpoch := currentBlock / SlotsPerEpoch
+
+	return ec.isFinalityFork(currentEpoch)
+}
+
 // IsFinalityFork determines if we should use finalized blocks or follow distance
 // It also sets the permanent flag once we've confirmed passing the fork threshold.
-func (ec *ExecutionClient) IsFinalityFork(epoch uint64) bool {
+func (ec *ExecutionClient) isFinalityFork(epoch uint64) bool {
 	if ec.isPostForkState.Load() {
 		return true
 	}

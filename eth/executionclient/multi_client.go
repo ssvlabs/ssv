@@ -508,3 +508,19 @@ func methodFromContext(ctx context.Context) string {
 	}
 	return v
 }
+
+// IsFinalizedFork returns whether the client is currently using finalized blocks.
+func (mc *MultiClient) IsFinalizedFork(ctx context.Context) bool {
+	f := func(client SingleClientProvider) (any, error) {
+		return client.IsFinalizedFork(ctx), nil
+	}
+
+	res, err := mc.call(contextWithMethod(ctx, "IsFinalizedFork"), f, len(mc.clients))
+	if err != nil {
+		mc.logger.Warn("failed to check if using finalized fork, assuming not using it",
+			zap.Error(err))
+		return false
+	}
+
+	return res.(bool)
+}

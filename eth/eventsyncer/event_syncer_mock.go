@@ -23,6 +23,7 @@ import (
 type MockExecutionClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutionClientMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutionClientMockRecorder is the mock recorder for MockExecutionClient.
@@ -73,6 +74,20 @@ func (mr *MockExecutionClientMockRecorder) HeaderByNumber(ctx, blockNumber any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HeaderByNumber", reflect.TypeOf((*MockExecutionClient)(nil).HeaderByNumber), ctx, blockNumber)
 }
 
+// IsFinalizedFork mocks base method.
+func (m *MockExecutionClient) IsFinalizedFork(ctx context.Context) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsFinalizedFork", ctx)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsFinalizedFork indicates an expected call of IsFinalizedFork.
+func (mr *MockExecutionClientMockRecorder) IsFinalizedFork(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsFinalizedFork", reflect.TypeOf((*MockExecutionClient)(nil).IsFinalizedFork), ctx)
+}
+
 // StreamLogs mocks base method.
 func (m *MockExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs {
 	m.ctrl.T.Helper()
@@ -91,6 +106,7 @@ func (mr *MockExecutionClientMockRecorder) StreamLogs(ctx, fromBlock any) *gomoc
 type MockEventHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockEventHandlerMockRecorder
+	isgomock struct{}
 }
 
 // MockEventHandlerMockRecorder is the mock recorder for MockEventHandler.
