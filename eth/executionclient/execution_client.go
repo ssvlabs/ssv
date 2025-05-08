@@ -72,9 +72,10 @@ type ExecutionClient struct {
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
-	client         *ethclient.Client
-	closed         chan struct{}
-	lastSyncedTime atomic.Int64
+	client          *ethclient.Client
+	closed          chan struct{}
+	lastSyncedTime  atomic.Int64
+	isPostForkState atomic.Bool // TODO: use a fork name
 }
 
 // New creates a new instance of ExecutionClient.
@@ -136,12 +137,11 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 
 	var toBlock uint64
 
-	if ec.IsPreFinalityFork(currentEpoch) {
+	if !ec.IsFinalityFork(currentEpoch) {
 		// Pre-fork: follow distance approach
 		if currentBlock < ec.followDistance {
 			return nil, nil, ErrNothingToSync
 		}
-
 		toBlock = currentBlock - ec.followDistance
 	} else {
 		// Post-fork: finalized block approach
@@ -374,7 +374,8 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	currentEpoch := currentBlock / SlotsPerEpoch
 
 	// 3. Check if finalized block is available (post-fork only)
-	if ec.IsPreFinalityFork(currentEpoch) {
+	if ec.IsFinalityFork(currentEpoch) {
+		// We're post-fork, so check for finalized blocks
 		_, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
 			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
@@ -443,7 +444,6 @@ func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuer
 
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
 // *Always* returns the last block it fetched, even if it errored.
-// TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	headersCh := make(chan *ethtypes.Header)
 
@@ -498,7 +498,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
 			var toBlock uint64
 
-			if ec.IsPreFinalityFork(currentEpoch) {
+			if !ec.IsFinalityFork(currentEpoch) {
 				// Pre-fork: follow distance approach
 				if header.Number.Uint64() < ec.followDistance {
 					continue
@@ -506,7 +506,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				toBlock = header.Number.Uint64() - ec.followDistance
 
 				ec.logger.Debug("processing blocks using safety distance",
-					zap.Uint64("epoch", currentEpoch),
+					zap.Uint64("estimated_epoch", currentEpoch),
 					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
 					zap.Uint64("head", header.Number.Uint64()),
 					zap.Uint64("follow_distance", ec.followDistance),
@@ -523,7 +523,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				toBlock = finalizedBlock.Number.Uint64()
 
 				ec.logger.Debug("processing blocks using finality",
-					zap.Uint64("epoch", currentEpoch),
+					zap.Uint64("estimated_epoch", currentEpoch),
 					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
 					zap.Uint64("finalized_block", toBlock))
 
@@ -531,7 +531,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 					finalizedEpoch := toBlock / SlotsPerEpoch
 					ec.logger.Info("⏱ finalized block changed",
 						zap.Uint64("new_finalized", toBlock),
-						zap.Uint64("epoch", finalizedEpoch),
+						zap.Uint64("estimated_epoch", finalizedEpoch),
 						zap.Uint64("previous_finalized", lastFinalized))
 					lastFinalized = toBlock
 				}
@@ -569,12 +569,22 @@ func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 	return ec.client.ChainID(ctx)
 }
 
-// IsPreFinalityFork returns whether the given epoch is before or equal to the finality fork epoch.
-// This determines if the client should use the follow distance approach (pre-fork)
-// or the finalized block approach (post-fork).
-// TODO: use a correct name for this function
-func (ec *ExecutionClient) IsPreFinalityFork(epoch uint64) bool {
-	return epoch <= ec.finalityForkEpoch
+// IsFinalityFork determines if we should use finalized blocks or follow distance
+// It also sets the permanent flag once we've confirmed passing the fork threshold.
+func (ec *ExecutionClient) IsFinalityFork(epoch uint64) bool {
+	if ec.isPostForkState.Load() {
+		return true
+	}
+
+	if epoch > ec.finalityForkEpoch {
+		ec.isPostForkState.Store(true)
+		ec.logger.Info("finality fork threshold passed, using finalized blocks",
+			zap.Uint64("current_estimated_epoch", epoch),
+			zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch))
+		return true
+	}
+
+	return false
 }
 
 // connect connects to Ethereum execution client.
