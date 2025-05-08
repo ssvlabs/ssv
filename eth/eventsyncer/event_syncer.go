@@ -26,11 +26,6 @@ const (
 	defaultStalenessThreshold = 300 * time.Second
 )
 
-var (
-	// ErrNodeNotReady is returned when node is not ready.
-	ErrNodeNotReady = fmt.Errorf("node not ready")
-)
-
 type ExecutionClient interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan executionclient.BlockLogs, errors <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs

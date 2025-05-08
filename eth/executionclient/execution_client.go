@@ -551,11 +551,13 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				logs <- block
 				lastBlock = block.BlockNumber
 			}
+
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 			fromBlock = toBlock + 1
+
 			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 		}
 	}
