@@ -39,7 +39,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.2
 	github.com/ssvlabs/ssv-spec v1.1.3
-	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250424103603-719a5867d010
+	github.com/ssvlabs/ssv/ssvsigner v0.0.0-00010101000000-000000000000
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.9.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -269,3 +269,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250417062221-9cd9b891d4d6
+
+replace github.com/ssvlabs/ssv/ssvsigner => ./ssvsigner
