@@ -607,7 +607,9 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
-	ctx, span := tracer.Start(ctx,
+	dutyID := fields.FormatDutyID(c.networkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), duty.ValidatorIndex)
+	ctx, span := tracer.Start(
+		observability.TraceContext(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
@@ -616,9 +618,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.ValidatorPublicKeyAttribute(duty.PubKey),
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
-			observability.DutyIDAttribute(
-				fields.FormatDutyID(
-					c.networkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type.String(), duty.ValidatorIndex)),
+			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
 
