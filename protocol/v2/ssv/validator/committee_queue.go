@@ -46,6 +46,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.GetType()),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
 

@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -32,19 +33,32 @@ type queueContainer struct {
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	ctx, span := tracer.Start(ctx,
+	slot, err := msg.Slot()
+	if err != nil {
+		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
+	}
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(v.Operator.Committee), v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot)
+	logger.Info("generated duty id. Constructing trace ID", fields.DutyID(dutyID))
+	traceID, err := trace.TraceIDFromHex(hex.EncodeToString([]byte(dutyID)))
+	if err != nil {
+		logger.Error("could not construct trace ID", zap.Error(err))
+	}
+	ctx, span := tracer.Start(
+		trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID: traceID,
+		})),
 		observability.InstrumentName(observabilityNamespace, "handle_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.GetType()),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
 
+	msg.TraceContext = ctx
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
-
-	msg.TraceContext = ctx
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		span.AddEvent("pushing message to queue")
 		if pushed := q.Q.TryPush(msg); !pushed {
