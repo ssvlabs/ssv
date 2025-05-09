@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -229,25 +230,26 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
-	ctx, span := tracer.Start(ctx,
+	slot, _ := msg.Slot()
+
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)
+	logger.Info("generated duty id. Constructing trace ID", fields.DutyID(dutyID))
+
+	traceID, err := trace.TraceIDFromHex(hex.EncodeToString([]byte(dutyID)))
+	if err != nil {
+		logger.Error("could not construct trace ID", zap.Error(err))
+	}
+	ctx, span := tracer.Start(trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+	})),
 		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msgType),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
-		),
-		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
+			observability.DutyIDAttribute(dutyID),
+		))
 	defer span.End()
-
-	slot, err := msg.Slot()
-	if err == nil {
-		span.SetAttributes(observability.BeaconSlotAttribute(slot))
-		if msg.SignedSSVMessage != nil {
-			span.SetAttributes(observability.DutyIDAttribute(
-				fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot),
-			))
-		}
-	}
 
 	// Validate message
 	if msgType != message.SSVEventMsgType {

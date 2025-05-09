@@ -657,44 +657,52 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 }
 
 func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
-	ctx, span := tracer.Start(ctx,
+	cm, ok := c.validatorsMap.GetCommittee(committeeID)
+	if !ok {
+		const eventMsg = "could not find committee"
+		logger.Warn(eventMsg, fields.CommitteeID(committeeID))
+		return
+	}
+
+	var committee []spectypes.OperatorID
+	for _, operator := range cm.CommitteeMember.Committee {
+		committee = append(committee, operator.OperatorID)
+	}
+
+	dutyID := fields.FormatCommitteeDutyID(committee, c.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot), duty.Slot)
+	logger.Info("generated duty id. Constructing trace ID", fields.DutyID(dutyID))
+
+	traceID, err := trace.TraceIDFromHex(hex.EncodeToString([]byte(dutyID)))
+	if err != nil {
+		logger.Error("could not construct trace ID", zap.Error(err))
+	}
+	ctx, span := tracer.Start(trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+	})),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(duty.Slot),
 			observability.CommitteeIDAttribute(committeeID),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
 
-	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
-		var committee []spectypes.OperatorID
-		for _, operator := range cm.CommitteeMember.Committee {
-			committee = append(committee, operator.OperatorID)
-		}
-		span.SetAttributes(
-			observability.DutyIDAttribute(fields.FormatCommitteeDutyID(committee, c.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot), duty.Slot)),
-		)
-
-		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
-		if err != nil {
-			logger.Error("could not create duty execute msg", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
-		}
-		dec, err := queue.DecodeSSVMessage(ssvMsg)
-		if err != nil {
-			logger.Error("could not decode duty execute msg", zap.Error(err))
-			span.SetStatus(codes.Error, err.Error())
-			return
-		}
-		if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
-			logger.Error("could not execute committee duty", zap.Error(err))
-			span.RecordError(err)
-		}
-	} else {
-		const eventMsg = "could not find committee"
-		logger.Warn(eventMsg, fields.CommitteeID(committeeID))
-		span.AddEvent(eventMsg)
+	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
+	if err != nil {
+		logger.Error("could not create duty execute msg", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	dec, err := queue.DecodeSSVMessage(ssvMsg)
+	if err != nil {
+		logger.Error("could not decode duty execute msg", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
+		logger.Error("could not execute committee duty", zap.Error(err))
+		span.RecordError(err)
 	}
 
 	span.SetStatus(codes.Ok, "")
