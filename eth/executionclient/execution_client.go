@@ -51,6 +51,7 @@ var (
 	ErrClosed        = fmt.Errorf("closed")
 	ErrBadInput      = fmt.Errorf("bad input")
 	ErrNothingToSync = errors.New("nothing to sync")
+	errSyncing       = fmt.Errorf("syncing")
 )
 
 const elResponseErrMsg = "Execution client returned an error"
@@ -126,35 +127,47 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	currentBlock, err := ec.client.BlockNumber(ctx)
-	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_blockNumber"),
-			zap.Error(err))
-		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
-	}
-
-	currentEpoch := currentBlock / SlotsPerEpoch
-
 	var toBlock uint64
 
-	if !ec.isFinalityFork(currentEpoch) {
-		// Pre-fork: follow distance approach
-		if currentBlock < ec.followDistance {
-			return nil, nil, ErrNothingToSync
-		}
-		toBlock = currentBlock - ec.followDistance
-	} else {
-		// Post-fork: finalized block approach
-		finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+	if ec.isPostForkState.Load() {
+		toBlock, err = ec.getFinalizedBlock(ctx)
 		if err != nil {
 			ec.logger.Error(elResponseErrMsg,
 				zap.String("method", "eth_getBlockByNumber"),
 				zap.String("tag", "finalized"),
 				zap.Error(err))
-			return nil, nil, fmt.Errorf("get finalized block: %w", err)
+			return nil, nil, err
 		}
-		toBlock = finalizedBlock.Number.Uint64()
+	} else {
+		currentBlock, err := ec.client.BlockNumber(ctx)
+		if err != nil {
+			ec.logger.Error(elResponseErrMsg,
+				zap.String("method", "eth_blockNumber"),
+				zap.Error(err))
+			return nil, nil, fmt.Errorf("failed to get current block: %w", err)
+		}
+
+		// Check if we're past the fork
+		currentEpoch := currentBlock / SlotsPerEpoch
+
+		if currentEpoch > ec.finalityForkEpoch {
+			// Just passed the fork threshold
+			ec.isPostForkState.Store(true)
+			toBlock, err = ec.getFinalizedBlock(ctx)
+			if err != nil {
+				ec.logger.Error(elResponseErrMsg,
+					zap.String("method", "eth_getBlockByNumber"),
+					zap.String("tag", "finalized"),
+					zap.Error(err))
+				return nil, nil, err
+			}
+		} else {
+			// Pre-fork: use follow distance
+			if currentBlock < ec.followDistance {
+				return nil, nil, ErrNothingToSync
+			}
+			toBlock = currentBlock - ec.followDistance
+		}
 	}
 
 	if toBlock < fromBlock {
@@ -297,8 +310,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 	return logsCh
 }
 
-var errSyncing = fmt.Errorf("syncing")
-
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if ec.isClosed() {
@@ -332,18 +343,24 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 // - network errors: when the client doesn't respond
 // TODO: update for related stuff (names, etc)
 func (ec *ExecutionClient) healthy(ctx context.Context) error {
+	if ec.isClosed() {
+		return ErrClosed
+	}
+
+	// Check if we recently validated health
+	lastHealthyTime := time.Unix(ec.lastSyncedTime.Load(), 0)
+	if ec.healthInvalidationInterval != 0 && time.Since(lastHealthyTime) <= ec.healthInvalidationInterval {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	start := time.Now()
-
 	// 1. Check if client is reachable
+	start := time.Now()
 	sp, err := ec.SyncProgress(ctx)
 	if err != nil {
 		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_syncing"),
-			zap.Error(err))
 		return err
 	}
 	recordRequestDuration(ctx, ec.nodeAddr, time.Since(start))
@@ -362,29 +379,28 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 		syncDistanceGauge.Record(ctx, 0, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 	}
 
-	//  Get current block to determine epoch for fork status
-	currentBlock, err := ec.client.BlockNumber(ctx)
-	if err != nil {
-		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_blockNumber"),
-			zap.Error(err))
-		return err
-	}
-
-	currentEpoch := currentBlock / SlotsPerEpoch
-
-	// 3. Check if finalized block is available (post-fork only)
-	if ec.isFinalityFork(currentEpoch) {
-		// We're post-fork, so check for finalized blocks
-		_, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+	// 3. Check finalized block availability (post-fork only)
+	if ec.isPostForkState.Load() {
+		_, err := ec.getFinalizedBlock(ctx)
 		if err != nil {
 			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
-			ec.logger.Error(elResponseErrMsg,
-				zap.String("method", "eth_getBlockByNumber"),
-				zap.String("tag", "finalized"),
-				zap.Error(err))
-			return fmt.Errorf("get finalized block: %w", err)
+			return err
+		}
+	} else {
+		// Check if we've just passed the fork point
+		currentBlock, err := ec.client.BlockNumber(ctx)
+		if err != nil {
+			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+			return err
+		}
+
+		if currentBlock/SlotsPerEpoch > ec.finalityForkEpoch {
+			ec.isPostForkState.Store(true)
+			_, err := ec.getFinalizedBlock(ctx)
+			if err != nil {
+				recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+				return err
+			}
 		}
 	}
 
@@ -479,54 +495,30 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 		select {
 		case <-ctx.Done():
 			return fromBlock, context.Canceled
-
 		case <-ec.closed:
 			return fromBlock, ErrClosed
-
 		case subErr := <-sub.Err():
 			if subErr == nil {
 				return fromBlock, ErrClosed
 			}
 			return fromBlock, fmt.Errorf("subscription: %w", subErr)
-
 		case header := <-headersCh:
+			headerNum := header.Number.Uint64()
 			ec.logger.Debug("new head received",
-				zap.Uint64("head_number", header.Number.Uint64()),
+				zap.Uint64("head_number", headerNum),
 				zap.String("head_hash", header.Hash().Hex()),
 				zap.String("head_parent_hash", header.ParentHash.Hex()))
 
-			// Calculate current epoch to determine which finality approach to use
-			currentEpoch := header.Number.Uint64() / SlotsPerEpoch
 			var toBlock uint64
 
-			if !ec.isFinalityFork(currentEpoch) {
-				// Pre-fork: follow distance approach
-				if header.Number.Uint64() < ec.followDistance {
-					continue
-				}
-				toBlock = header.Number.Uint64() - ec.followDistance
-
-				ec.logger.Debug("processing blocks using safety distance",
-					zap.Uint64("estimated_epoch", currentEpoch),
-					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
-					zap.Uint64("head", header.Number.Uint64()),
-					zap.Uint64("follow_distance", ec.followDistance),
-					zap.Uint64("target_block", toBlock))
-			} else {
-				// Post-fork: finalized block approach
-				finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+			// Determine target block based on fork state
+			if ec.isPostForkState.Load() {
+				// Post-fork: use finalized block
+				finalizedBlock, err := ec.getFinalizedBlock(ctx)
 				if err != nil {
-					ec.logger.Error(elResponseErrMsg,
-						zap.String("method", "eth_getBlockByNumber"),
-						zap.Error(err))
-					return fromBlock, fmt.Errorf("get finalized block: %w", err)
+					return fromBlock, err
 				}
-				toBlock = finalizedBlock.Number.Uint64()
-
-				ec.logger.Debug("processing blocks using finality",
-					zap.Uint64("estimated_epoch", currentEpoch),
-					zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch),
-					zap.Uint64("finalized_block", toBlock))
+				toBlock = finalizedBlock
 
 				if toBlock != lastFinalized {
 					finalizedEpoch := toBlock / SlotsPerEpoch
@@ -536,17 +528,37 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 						zap.Uint64("previous_finalized", lastFinalized))
 					lastFinalized = toBlock
 				}
+			} else {
+				// Check if we need to transition to post-fork
+				currentEpoch := headerNum / SlotsPerEpoch
+
+				if currentEpoch > ec.finalityForkEpoch {
+					ec.isPostForkState.Store(true)
+					finalizedBlock, err := ec.getFinalizedBlock(ctx)
+					if err != nil {
+						return fromBlock, err
+					}
+
+					toBlock = finalizedBlock
+				} else {
+					// Pre-fork: follow distance approach
+					if headerNum < ec.followDistance {
+						continue
+					}
+					toBlock = headerNum - ec.followDistance
+				}
 			}
 
-			// Wait until the target block number catches up to where we need to start processing
-			// This prevents fetching logs from unfinalized (and potentially reorged) blocks
+			// Skip if toBlock is less than fromBlock
 			if toBlock < fromBlock {
-				ec.logger.Info("waiting for finalized block to reach fromBlock",
-					zap.Uint64("from_block", fromBlock),
-					zap.Uint64("finalized_block", toBlock))
+				ec.logger.Info("waiting for target block to reach fromBlock",
+					fields.FromBlock(fromBlock),
+					fields.ToBlock(toBlock),
+					zap.Bool("finalized_fork", ec.isPostForkState.Load()))
 				continue
 			}
 
+			// Process logs for this block range
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
 				logs <- block
@@ -554,12 +566,13 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			}
 
 			if err := <-fetchErrors; err != nil {
-				// If we get an error while fetching, we return the last block we fetched.
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
+
 			fromBlock = toBlock + 1
 
-			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
+			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record,
+				metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 		}
 	}
 }
@@ -579,6 +592,7 @@ func (ec *ExecutionClient) IsFinalizedFork(ctx context.Context) bool {
 		return true
 	}
 
+	// Only make this RPC call if we don't know our fork state yet
 	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
@@ -589,25 +603,24 @@ func (ec *ExecutionClient) IsFinalizedFork(ctx context.Context) bool {
 
 	currentEpoch := currentBlock / SlotsPerEpoch
 
-	return ec.isFinalityFork(currentEpoch)
-}
-
-// IsFinalityFork determines if we should use finalized blocks or follow distance
-// It also sets the permanent flag once we've confirmed passing the fork threshold.
-func (ec *ExecutionClient) isFinalityFork(epoch uint64) bool {
-	if ec.isPostForkState.Load() {
-		return true
-	}
-
-	if epoch > ec.finalityForkEpoch {
+	// Check if we've passed the fork point
+	if currentEpoch > ec.finalityForkEpoch {
 		ec.isPostForkState.Store(true)
 		ec.logger.Info("finality fork threshold passed, using finalized blocks",
-			zap.Uint64("current_estimated_epoch", epoch),
+			zap.Uint64("current_epoch", currentEpoch),
 			zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch))
 		return true
 	}
 
 	return false
+}
+
+func (ec *ExecutionClient) getFinalizedBlock(ctx context.Context) (uint64, error) {
+	finalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+	if err != nil {
+		return 0, fmt.Errorf("get finalized block: %w", err)
+	}
+	return finalizedBlock.Number.Uint64(), nil
 }
 
 // connect connects to Ethereum execution client.
