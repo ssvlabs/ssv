@@ -1,9 +1,7 @@
 name: Spec Alignment
 
 on:
-  push:
-    branches:
-      - "**"
+  workflow_dispatch:
 
 jobs:
   align:
