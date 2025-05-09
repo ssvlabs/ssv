@@ -232,13 +232,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	slot, _ := msg.Slot() // TODO: handle error
 
 	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)
-	traceID, err := observability.TraceID(dutyID)
-	if err != nil {
-		logger.Error("could not construct trace ID", zap.Error(err))
-	}
-	ctx, span := tracer.Start(trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: traceID,
-	})),
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),

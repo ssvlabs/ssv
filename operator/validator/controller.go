@@ -670,13 +670,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	dutyID := fields.FormatCommitteeDutyID(committee, c.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot), duty.Slot)
-	traceID, err := observability.TraceID(dutyID)
-	if err != nil {
-		logger.Error("could not construct trace ID", zap.Error(err))
-	}
-	ctx, span := tracer.Start(trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: traceID,
-	})),
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(duty.Slot),

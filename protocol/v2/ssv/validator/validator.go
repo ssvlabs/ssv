@@ -21,7 +21,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -148,14 +147,8 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	msgType := msg.GetType()
 	slot, _ := msg.Slot() // TODO: handle error
 
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(v.Operator.Committee), v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot)
-	traceID, err := observability.TraceID(dutyID)
-	if err != nil {
-		logger.Error("could not construct trace ID", zap.Error(err))
-	}
-	ctx, span := tracer.Start(trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: traceID,
-	})),
+	dutyID := fields.FormatCommitteeDutyID(ssvtypes.OperatorIDsFromOperators(v.Operator.Committee), v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot)
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "process_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),

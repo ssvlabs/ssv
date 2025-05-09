@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 
 	"github.com/pkg/errors"
@@ -38,15 +37,7 @@ func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
 	}
 	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(v.Operator.Committee), v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot)
-	logger.Info("generated duty id. Constructing trace ID", fields.DutyID(dutyID))
-	traceID, err := trace.TraceIDFromHex(hex.EncodeToString([]byte(dutyID)))
-	if err != nil {
-		logger.Error("could not construct trace ID", zap.Error(err))
-	}
-	ctx, span := tracer.Start(
-		trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
-			TraceID: traceID,
-		})),
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "handle_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
