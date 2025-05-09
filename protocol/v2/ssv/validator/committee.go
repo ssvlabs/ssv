@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -233,9 +232,7 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	slot, _ := msg.Slot()
 
 	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)
-	logger.Info("generated duty id. Constructing trace ID", fields.DutyID(dutyID))
-
-	traceID, err := trace.TraceIDFromHex(hex.EncodeToString([]byte(dutyID)))
+	traceID, err := observability.TraceID(dutyID)
 	if err != nil {
 		logger.Error("could not construct trace ID", zap.Error(err))
 	}

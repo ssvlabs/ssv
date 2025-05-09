@@ -670,9 +670,7 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 	}
 
 	dutyID := fields.FormatCommitteeDutyID(committee, c.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot), duty.Slot)
-	logger.Info("generated duty id. Constructing trace ID", fields.DutyID(dutyID))
-
-	traceID, err := trace.TraceIDFromHex(hex.EncodeToString([]byte(dutyID)))
+	traceID, err := observability.TraceID(dutyID)
 	if err != nil {
 		logger.Error("could not construct trace ID", zap.Error(err))
 	}
