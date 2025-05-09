@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -18,13 +19,28 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	ctx, span := tracer.Start(ctx,
+	slot, err := msg.Slot()
+	if err != nil {
+		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
+		return
+	}
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)
+	logger.Info("generated duty id. Constructing trace ID", fields.DutyID(dutyID))
+	traceID, err := trace.TraceIDFromHex(hex.EncodeToString([]byte(dutyID)))
+	if err != nil {
+		logger.Error("could not construct trace ID", zap.Error(err))
+	}
+	ctx, span := tracer.Start(
+		trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID: traceID,
+		})),
 		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
@@ -34,13 +50,6 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 	defer span.End()
 
 	msg.TraceContext = ctx
-	slot, err := msg.Slot()
-	if err != nil {
-		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
-		span.SetStatus(codes.Error, err.Error())
-		return
-	}
-
 	span.SetAttributes(observability.BeaconSlotAttribute(slot))
 	// Retrieve or create the queue for the given slot.
 	c.mtx.Lock()
@@ -62,8 +71,7 @@ func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *
 	}
 	c.mtx.Unlock()
 
-	span.AddEvent("pushing message to queue")
-
+	span.AddEvent("pushing message to the queue")
 	if pushed := q.Q.TryPush(msg); !pushed {
 		const errMsg = "❗ dropping message because the queue is full"
 		logger.Warn(errMsg,
