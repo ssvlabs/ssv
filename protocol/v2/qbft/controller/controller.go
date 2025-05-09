@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -61,7 +62,7 @@ func NewController(
 func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, height specqbft.Height, value []byte) error {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "controller.start_new_instance"),
-		trace.WithAttributes(observability.BeaconSlotAttribute(height)))
+		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 	defer span.End()
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {

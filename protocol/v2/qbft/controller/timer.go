@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
@@ -26,7 +27,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg type
 
 	span.SetAttributes(
 		observability.DutyRoundAttribute(timeoutData.Round),
-		observability.BeaconSlotAttribute(timeoutData.Height),
+		observability.BeaconSlotAttribute(phase0.Slot(timeoutData.Height)),
 	)
 
 	instance := c.StoredInstances.FindInstance(timeoutData.Height)

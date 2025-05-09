@@ -22,10 +22,6 @@ const (
 	RunnerRoleAttrKey = "ssv.runner.role"
 )
 
-type Slot interface {
-	qbft.Height | phase0.Slot
-}
-
 func BeaconRoleAttribute(role types.BeaconRole) attribute.KeyValue {
 	return attribute.String("ssv.beacon.role", role.String())
 }
@@ -45,7 +41,7 @@ func RunnerRoleAttribute(role types.RunnerRole) attribute.KeyValue {
 	return attribute.String(RunnerRoleAttrKey, role.String())
 }
 
-func BeaconSlotAttribute[T Slot](slot T) attribute.KeyValue {
+func BeaconSlotAttribute(slot phase0.Slot) attribute.KeyValue {
 	return attribute.KeyValue{
 		Key:   "ssv.beacon.slot",
 		Value: Uint64AttributeValue(uint64(slot)),

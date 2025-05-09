@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -79,7 +80,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 	i.startOnce.Do(func() {
 		ctx, span := tracer.Start(ctx,
 			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
-			trace.WithAttributes(observability.BeaconSlotAttribute(height)))
+			trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 		defer span.End()
 
 		i.StartValue = value
