@@ -82,13 +82,23 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	if !found || lastProcessedBlock == nil || lastProcessedBlock.Uint64() == 0 {
 		return fmt.Errorf("last processed block is not set")
 	}
-	if es.lastProcessedBlock != lastProcessedBlock.Uint64() {
-		es.lastProcessedBlock = lastProcessedBlock.Uint64()
+
+	lastBlockNum := lastProcessedBlock.Uint64()
+	if es.lastProcessedBlock != lastBlockNum {
+		es.lastProcessedBlock = lastBlockNum
 		es.lastProcessedBlockChange = time.Now()
 		return nil
 	}
-	if time.Since(es.lastProcessedBlockChange) > es.stalenessThreshold {
-		return fmt.Errorf("syncing is stuck at block %d", lastProcessedBlock.Uint64())
+
+	staleness := time.Since(es.lastProcessedBlockChange)
+	threshold := es.stalenessThreshold
+
+	if es.executionClient.IsFinalizedFork(ctx) {
+		threshold = es.finalizedStalenessThreshold
+	}
+
+	if staleness > threshold {
+		return fmt.Errorf("syncing is stuck at block %d", lastBlockNum)
 	}
 
 	return es.blockBelowThreshold(ctx, lastProcessedBlock)
