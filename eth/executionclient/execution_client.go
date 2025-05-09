@@ -505,7 +505,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 		case header := <-headersCh:
 			headerNum := header.Number.Uint64()
 			ec.logger.Debug("new head received",
-				zap.Uint64("head_number", headerNum),
+				fields.BlockNumber(headerNum),
 				zap.String("head_hash", header.Hash().Hex()),
 				zap.String("head_parent_hash", header.ParentHash.Hex()))
 
@@ -641,7 +641,7 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	}
 	ec.client = client
 
-	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
+	logger.Info("connected to execution client", fields.Took(time.Since(start)))
 	return nil
 }
 
