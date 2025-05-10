@@ -77,7 +77,6 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			msgRate := calculateMessageRateForTopic(tt.args.committees)
 			require.InDelta(t, tt.want, msgRate, tt.want*0.001)

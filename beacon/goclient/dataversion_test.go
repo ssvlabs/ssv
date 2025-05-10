@@ -171,7 +171,6 @@ func TestCheckForkValues(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc // capture range variable
 		t.Run(tc.name, func(t *testing.T) {
 			// Create a client with initial fork values.
 			client := &GoClient{
