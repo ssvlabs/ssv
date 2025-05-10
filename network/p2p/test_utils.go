@@ -79,8 +79,6 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 
 		eg, ctx := errgroup.WithContext(pCtx)
 		for i, node := range ln.Nodes {
-			i, node := i, node //hack to avoid closures. price of using error groups
-
 			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
 				if err := node.Start(logger); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
