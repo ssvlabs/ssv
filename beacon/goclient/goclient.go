@@ -362,8 +362,8 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 					zap.Error(err),
 					zap.Any("current_forks", currentConfig.Forks),
 					zap.Any("got_forks", beaconConfig.Forks),
-					//zap.Stringer("client_config", beaconConfig),
-					//zap.Stringer("expected_config", currentConfig),
+					zap.Stringer("client_config", beaconConfig),
+					zap.Stringer("expected_config", currentConfig),
 				)
 				return // Tests may override Fatal's behavior
 			}
