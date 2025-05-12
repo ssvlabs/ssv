@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -89,32 +88,6 @@ func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.Net
 // Testing discovery service
 func testingDiscovery(t *testing.T) *DiscV5Service {
 	return testingDiscoveryWithNetworkConfig(t, testNetConfig)
-}
-
-// NetworkConfig with fork epoch
-func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
-	n := networkconfig.HoleskyStage
-	return networkconfig.NetworkConfig{
-		Name:                 n.Name,
-		Beacon:               n.Beacon,
-		DomainType:           n.DomainType,
-		GenesisEpoch:         n.GenesisEpoch,
-		RegistrySyncOffset:   n.RegistrySyncOffset,
-		RegistryContractAddr: n.RegistryContractAddr,
-		Bootnodes:            n.Bootnodes,
-	}
-}
-
-// NetworkConfig for staying in pre-fork
-func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
-}
-
-// NetworkConfig for staying in post-fork
-func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 
 // Testing LocalNode

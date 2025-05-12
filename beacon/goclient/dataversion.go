@@ -3,7 +3,6 @@ package goclient
 import (
 	"fmt"
 
-	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
@@ -25,13 +24,10 @@ func (gc *GoClient) DataVersion(epoch phase0.Epoch) spec.DataVersion {
 	return spec.DataVersionElectra
 }
 
-func (gc *GoClient) checkForkValues(specResponse *api.Response[map[string]any]) error {
+func (gc *GoClient) checkForkValues(specResponse map[string]any) error {
 	// Validate the response.
 	if specResponse == nil {
 		return fmt.Errorf("spec response is nil")
-	}
-	if specResponse.Data == nil {
-		return fmt.Errorf("spec response data is nil")
 	}
 
 	// Lock the fork values to ensure atomic read and update.
@@ -47,7 +43,7 @@ func (gc *GoClient) checkForkValues(specResponse *api.Response[map[string]any]) 
 	// If the candidate is greater than the current value, that's an error.
 	// Otherwise, it returns the lower value (or the candidate if the current value is zero).
 	processFork := func(forkName, key string, current phase0.Epoch, required bool) (phase0.Epoch, error) {
-		raw, ok := specResponse.Data[key]
+		raw, ok := specResponse[key]
 		if !ok {
 			if required {
 				return 0, fmt.Errorf("%s fork epoch not known by chain", forkName)
