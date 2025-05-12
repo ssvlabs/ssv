@@ -39,7 +39,7 @@ func TestStream(t *testing.T) {
 
 	t.Run("with timeout", func(t *testing.T) {
 		wg.Add(1)
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		s, err := hosts[0].NewStream(ctx, hosts[1].ID(), prot)
 		require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestStream(t *testing.T) {
 
 	t.Run("no timeout", func(t *testing.T) {
 		wg.Add(1)
-		ctx, cancel := context.WithTimeout(context.Background(), timeout*2)
+		ctx, cancel := context.WithTimeout(t.Context(), timeout*2)
 		defer cancel()
 		s, err := hosts[0].NewStream(ctx, hosts[2].ID(), prot)
 		require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestStream(t *testing.T) {
 }
 
 func testHosts(t *testing.T, n int) []host.Host {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	hosts := make([]host.Host, n)
 

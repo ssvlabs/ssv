@@ -2,7 +2,6 @@ package migrations
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -19,7 +18,7 @@ import (
 )
 
 func TestMigration6ExitEpochField(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	newStorageGetSharesKey := storage.SharesDBPrefix(opstorage.OperatorStoragePrefix)
 	storageSetSharesKey := opstorage.OperatorStoragePrefix
 

@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"context"
 	"reflect"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 
 func TestWithFromContext(t *testing.T) {
 	t.Run("NamedCheck", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		expected := TestLogger(t)
 		expected = expected.Named("test")
 		ctx = WithContext(ctx, expected)
@@ -22,7 +21,7 @@ func TestWithFromContext(t *testing.T) {
 	})
 
 	t.Run("EmptyCtx", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		expected := zap.L()
 
 		actual := FromContext(ctx)

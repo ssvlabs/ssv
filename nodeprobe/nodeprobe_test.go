@@ -12,7 +12,7 @@ import (
 )
 
 func TestProber(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	node := &node{}
 	node.healthy.Store(nil)
@@ -41,7 +41,7 @@ func TestProber(t *testing.T) {
 }
 
 func TestProber_UnhealthyHandler(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	node := &node{}
 	node.healthy.Store(nil)

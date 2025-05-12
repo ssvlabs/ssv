@@ -2,7 +2,6 @@ package ssvsigner
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -176,7 +175,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			err := s.client.AddValidators(context.Background(), tc.shares...)
+			err := s.client.AddValidators(t.Context(), tc.shares...)
 
 			s.assertErrorResult(err, tc.expectError, t)
 
@@ -258,7 +257,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			err := s.client.RemoveValidators(context.Background(), tc.pubKeys...)
+			err := s.client.RemoveValidators(t.Context(), tc.pubKeys...)
 
 			s.assertErrorResult(err, tc.expectError, t)
 		})
@@ -312,7 +311,7 @@ func (s *SSVSignerClientSuite) TestListValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			result, err := s.client.ListValidators(context.Background())
+			result, err := s.client.ListValidators(t.Context())
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -409,7 +408,7 @@ func (s *SSVSignerClientSuite) TestSign() {
 				w.Write([]byte(tc.responseBody))
 			})
 
-			result, err := s.client.Sign(context.Background(), tc.pubKey, tc.payload)
+			result, err := s.client.Sign(t.Context(), tc.pubKey, tc.payload)
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -460,7 +459,7 @@ func (s *SSVSignerClientSuite) TestOperatorIdentity() {
 				}
 			})
 
-			result, err := s.client.OperatorIdentity(context.Background())
+			result, err := s.client.OperatorIdentity(t.Context())
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -521,7 +520,7 @@ func (s *SSVSignerClientSuite) TestOperatorSign() {
 				}
 			})
 
-			result, err := s.client.OperatorSign(context.Background(), tc.payload)
+			result, err := s.client.OperatorSign(t.Context(), tc.payload)
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -649,7 +648,7 @@ func (s *SSVSignerClientSuite) TestMissingKeys() {
 				w.Write(respBytes)
 			})
 
-			result, err := s.client.MissingKeys(context.Background(), tc.localKeys)
+			result, err := s.client.MissingKeys(t.Context(), tc.localKeys)
 
 			if tc.expectError {
 				require.Error(t, err, "Expected an error")
@@ -760,22 +759,22 @@ func TestRequestErrors(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	client := NewClient(server.URL, WithLogger(logger))
 
-	err := client.AddValidators(context.Background(), ShareKeys{
+	err := client.AddValidators(t.Context(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
+	err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 
-	_, err = client.Sign(context.Background(), phase0.BLSPubKey{1, 1, 1}, web3signer.SignRequest{})
+	_, err = client.Sign(t.Context(), phase0.BLSPubKey{1, 1, 1}, web3signer.SignRequest{})
 	assert.Error(t, err)
 
-	_, err = client.OperatorIdentity(context.Background())
+	_, err = client.OperatorIdentity(t.Context())
 	assert.Error(t, err)
 
-	_, err = client.OperatorSign(context.Background(), []byte{1, 1, 1})
+	_, err = client.OperatorSign(t.Context(), []byte{1, 1, 1})
 	assert.Error(t, err)
 }
 
@@ -792,13 +791,13 @@ func TestResponseHandlingErrors(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	client := NewClient(server.URL, WithLogger(logger))
 
-	err := client.AddValidators(context.Background(), ShareKeys{
+	err := client.AddValidators(t.Context(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	err = client.RemoveValidators(context.Background(), phase0.BLSPubKey{1, 1, 1})
+	err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 }
 

@@ -174,7 +174,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	}
 
 	// test
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	ctrl := gomock.NewController(t)
 	ticker := mockslotticker.NewMockSlotTicker(ctrl)

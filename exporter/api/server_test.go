@@ -19,7 +19,7 @@ import (
 
 func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancelServerCtx := context.WithCancel(context.Background())
+	ctx, cancelServerCtx := context.WithCancel(t.Context())
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, func(logger *zap.Logger, nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
@@ -73,7 +73,7 @@ func TestHandleQuery(t *testing.T) {
 
 func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))

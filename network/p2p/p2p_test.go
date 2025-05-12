@@ -35,7 +35,7 @@ func TestGetMaxPeers(t *testing.T) {
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	n := 4
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	shares := []*ssvtypes.SSVShare{

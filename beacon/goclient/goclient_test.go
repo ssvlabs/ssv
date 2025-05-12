@@ -25,7 +25,7 @@ func TestHealthy(t *testing.T) {
 		longTimeout   = 500 * time.Millisecond
 	)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	undialableServer := tests.MockServer(nil)
 	c, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestHealthy(t *testing.T) {
 }
 
 func TestTimeouts(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const (
 		commonTimeout = 100 * time.Millisecond
@@ -162,7 +162,7 @@ func TestAssertSameGenesisVersionWhenSame(t *testing.T) {
 	for _, network := range networks {
 		forkVersion := phase0.Version(beacon.NewNetwork(network).ForkVersion())
 
-		ctx := context.Background()
+		ctx := t.Context()
 		callback := func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == "/eth/v1/beacon/genesis" {
 				resp2 := json.RawMessage(fmt.Sprintf(`{"data": {
@@ -194,7 +194,7 @@ func TestAssertSameGenesisVersionWhenDifferent(t *testing.T) {
 	networkVersion := phase0.Version(beacon.NewNetwork(network).ForkVersion())
 
 	t.Run("When genesis versions are different", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		server := tests.MockServer(nil)
 		defer server.Close()
 		c, err := mockClientWithNetwork(ctx, server.URL, 100*time.Millisecond, 500*time.Millisecond, network)
