@@ -142,7 +142,7 @@ func (gc *GoClient) SubmitSignedContributionAndProof(contribution *altair.Signed
 	return nil
 }
 
-// waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
+// waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after slot start time)
 func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
 	config := gc.getBeaconConfig()
 	delay := config.SlotDuration / 3 /* a third of the slot duration */

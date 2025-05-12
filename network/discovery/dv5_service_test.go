@@ -23,13 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
-var TestNetwork = networkconfig.NetworkConfig{
-	BeaconConfig: networkconfig.TestNetwork.BeaconConfig,
-	SSVConfig: networkconfig.SSVConfig{
-		DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-	},
-}
-
 func TestCheckPeer(t *testing.T) {
 	var (
 		ctx          = context.Background()
@@ -88,6 +81,13 @@ func TestCheckPeer(t *testing.T) {
 		}
 	)
 
+	var checkPeerTestNetwork = networkconfig.NetworkConfig{
+		BeaconConfig: networkconfig.TestNetwork.BeaconConfig,
+		SSVConfig: networkconfig.SSVConfig{
+			DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		},
+	}
+
 	// Create the LocalNode instances for the tests.
 	for _, test := range tests {
 		test := test
@@ -122,7 +122,7 @@ func TestCheckPeer(t *testing.T) {
 		ctx:                 ctx,
 		conns:               &mock.MockConnectionIndex{LimitValue: false},
 		subnetsIdx:          subnetIndex,
-		networkConfig:       TestNetwork,
+		networkConfig:       checkPeerTestNetwork,
 		subnets:             mySubnets,
 		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
 		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),

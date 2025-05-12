@@ -95,10 +95,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			)
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
 	}
 }

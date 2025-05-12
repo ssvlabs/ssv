@@ -153,9 +153,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		msgID := committeeIdentifier
-		state := validator.consensusState(msgID)
-		for i := spectypes.OperatorID(1); i <= 4; i++ {
-			signerState := state.GetOrCreate(i)
+		state := validator.validatorState(msgID, committee)
+		for i := range committee {
+			signerState := state.Signer(i)
 			require.NotNil(t, signerState)
 		}
 
@@ -170,16 +170,16 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		stateBySlot := state.GetOrCreate(1)
+		stateBySlot := state.Signer(0)
 		require.NotNil(t, stateBySlot)
 
 		storedState := stateBySlot.Get(slot)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, MessageCounts{Proposal: 1}, storedState.MessageCounts)
-		for i := spectypes.OperatorID(2); i <= 4; i++ {
-			require.NotNil(t, state.GetOrCreate(i))
+		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.SeenMsgTypes)
+		for i := 1; i < len(committee); i++ {
+			require.NotNil(t, state.Signer(i))
 		}
 
 		signedSSVMessage = generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
@@ -195,7 +195,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 2, storedState.Round)
-		require.EqualValues(t, MessageCounts{Prepare: 1}, storedState.MessageCounts)
+		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
@@ -210,7 +210,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		storedState = stateBySlot.Get(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, MessageCounts{Commit: 1}, storedState.MessageCounts)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.SlotDuration))
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
@@ -220,7 +220,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, stateBySlot)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, MessageCounts{Commit: 1}, storedState.MessageCounts)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
 	})
 
 	// Send a pubsub message with no data should cause an error
@@ -535,7 +535,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			PrepareJustification:     [][]byte{},
 		}
 
-		leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, []spectypes.OperatorID{1, 2, 3, 4})
+		leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee)
 		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
 		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
@@ -1149,7 +1149,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.FirstSlotAtEpoch(1)
 		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
-		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2, 3, 4}
+		signedSSVMessage.OperatorIDs = committee
 
 		receivedAt := netCfg.GetSlotStartTime(slot)
 		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
@@ -1402,7 +1402,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
-		expectedErr.got = "prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, round change: 0, post-consensus: 0"
+		expectedErr.got = "prepare, having prepare"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1424,7 +1424,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
-		expectedErr.got = "commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 1, round change: 0, post-consensus: 0"
+		expectedErr.got = "commit, having commit"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -1446,7 +1446,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrDuplicatedMessage
-		expectedErr.got = "round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, round change: 1, post-consensus: 0"
+		expectedErr.got = "round change, having round change"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
