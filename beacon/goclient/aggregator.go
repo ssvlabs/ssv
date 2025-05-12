@@ -194,7 +194,7 @@ func (gc *GoClient) isAggregator(committeeCount uint64, slotSig []byte) (bool, e
 // waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)
 func (gc *GoClient) waitToSlotTwoThirds(slot phase0.Slot) {
 	config := gc.getBeaconConfig()
-	oneInterval := config.IntervalDuration() /* one third of slot duration */
+	oneInterval := config.IntervalDuration()
 	finalTime := config.GetSlotStartTime(slot).Add(2 * oneInterval)
 	wait := time.Until(finalTime)
 	if wait <= 0 {

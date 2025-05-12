@@ -286,7 +286,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.beaconConfig.IntervalDuration() /* a third of the slot duration */
+			delay := s.beaconConfig.IntervalDuration()
 			finalTime := s.beaconConfig.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 
@@ -365,7 +365,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.beaconConfig.IntervalDuration() /* a third of the slot duration */
+		delay := s.beaconConfig.IntervalDuration()
 		slotStartTimeWithDelay := s.beaconConfig.GetSlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
