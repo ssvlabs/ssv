@@ -58,7 +58,7 @@ func NewConnHandler(
 
 // Handle configures a network notifications handler that handshakes and tracks all p2p connections
 func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
-	disconnect := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
+	disconnect := func(_ *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
 		if errClose == nil {
@@ -220,7 +220,10 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
 
 			logger := connLogger(conn)
-			logger.Debug("peer disconnected")
+
+			// exta logging
+			subnetSize := ch.subnetsIndex.GetPeerSubnets(conn.RemotePeer())
+			logger.Debug("peer disconnected", zap.String("peerIDshort", conn.RemotePeer().ShortString()), zap.String("peerID", conn.RemotePeer().String()), zap.Int("subnet_size", len(subnetSize)), zap.String("peerAddress", conn.RemoteMultiaddr().String()))
 		},
 	}
 }
