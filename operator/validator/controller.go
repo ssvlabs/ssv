@@ -1095,7 +1095,6 @@ func SetupRunners(
 	logger *zap.Logger,
 	options validator.Options,
 ) (runner.ValidatorDutyRunners, error) {
-
 	if options.SSVShare == nil || !options.SSVShare.HasBeaconMetadata() {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it
