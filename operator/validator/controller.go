@@ -676,7 +676,8 @@ func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logge
 			observability.CommitteeIDAttribute(committeeID),
 			observability.RunnerRoleAttribute(duty.RunnerRole()),
 			observability.DutyIDAttribute(dutyID),
-		))
+		),
+		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
 	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.DomainType)
