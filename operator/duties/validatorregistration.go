@@ -50,10 +50,14 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(frequencyEpochs))
+			shares := h.validatorProvider.SelfValidators()
 
 			var vrs []ValidatorRegistration
 			for _, share := range shares {
+				if !share.IsParticipatingAndAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
+					// Only attesting validators are eligible for registration duties.
+					continue
+				}
 				if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
 					continue
 				}
@@ -78,10 +82,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				zap.Any("validator_registrations", vrs))
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
 	}
 }

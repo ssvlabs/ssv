@@ -62,14 +62,15 @@ type ExecutionClient interface {
 
 // ValidatorProvider represents the component that controls validators via the scheduler
 type ValidatorProvider interface {
-	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	Validators() []*types.SSVShare
+	SelfValidators() []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	Validator(pubKey []byte) (*types.SSVShare, bool)
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
-	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
+	FilterIndices(afterInit bool, filter func(*types.SSVShare) bool) []phase0.ValidatorIndex
 }
 
 type SchedulerOptions struct {
@@ -102,10 +103,12 @@ type Scheduler struct {
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
-	waitCond   *sync.Cond
 	pool       *pool.ContextPool
 
-	headSlot                  phase0.Slot
+	// waitCond coordinates access to headSlot for different go-routines
+	waitCond *sync.Cond
+	headSlot phase0.Slot
+
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
@@ -278,7 +281,10 @@ func (f *EventFeed[T]) FanOut(ctx context.Context, in <-chan T) {
 	}
 }
 
-// SlotTicker handles the "head" events from the beacon node.
+// SlotTicker advances "head" slot every slot-tick once we are 1/3 of slot-time past slot start
+// and only if necessary. Normally Beacon node events would trigger "head" slot updates, but in
+// case event is delayed or didn't arrive for some reason we still need to advance "head" slot
+// for duties to keep executing normally - so SlotTicker is a secondary mechanism for that.
 func (s *Scheduler) SlotTicker(ctx context.Context) {
 	for {
 		select {
@@ -287,19 +293,14 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
-			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
+			delayThirdOfSlot := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot)
+			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delayThirdOfSlot)
 			waitDuration := time.Until(finalTime)
-
 			if waitDuration > 0 {
 				time.Sleep(waitDuration)
-
-				// Lock the mutex before broadcasting
-				s.waitCond.L.Lock()
-				s.headSlot = slot
-				s.waitCond.Broadcast()
-				s.waitCond.L.Unlock()
 			}
+
+			s.advanceHeadSlot(slot)
 		}
 	}
 }
@@ -308,7 +309,9 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.HeadEvent) {
 	return func(event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
+
 		if event.Slot != s.network.Beacon.EstimatedCurrentSlot() {
+			// No need to process outdated events here.
 			return
 		}
 
@@ -375,10 +378,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 			// nodes before kicking off duties for the block's slot.
 			time.Sleep(s.blockPropagateDelay)
 
-			s.waitCond.L.Lock()
-			s.headSlot = event.Slot
-			s.waitCond.Broadcast()
-			s.waitCond.L.Unlock()
+			s.advanceHeadSlot(event.Slot)
 		}
 	}
 }
@@ -452,9 +452,20 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committee
 		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
-// waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
+// advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,
+// meaning s.headSlot value can never decrease) and notify the go-routines waiting for it to happen.
+func (s *Scheduler) advanceHeadSlot(slot phase0.Slot) {
+	s.waitCond.L.Lock()
+	if slot > s.headSlot {
+		s.headSlot = slot
+		s.waitCond.Broadcast()
+	}
+	s.waitCond.L.Unlock()
+}
+
+// waitOneThirdOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
+// slot start time), or for head block event that might come in even sooner than one-third of the slot passes.
 func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
-	// Wait for the event or signal
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {
 		s.waitCond.Wait()

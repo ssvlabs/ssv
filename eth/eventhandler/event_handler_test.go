@@ -27,7 +27,6 @@ import (
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/doppelganger"
-	"github.com/ssvlabs/ssv/ekm"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -36,13 +35,13 @@ import (
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
@@ -71,9 +70,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	currentSlot := &utils.SlotValue{}
 	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
-	mockNetworkConfig := &networkconfig.NetworkConfig{
-		Beacon: mockBeaconNetwork,
-	}
+	mockNetworkConfig := &networkconfig.NetworkConfig{}
+	mockNetworkConfig.Beacon = mockBeaconNetwork
 
 	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
 	if err != nil {
@@ -154,7 +152,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -201,7 +199,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			encodedPubKey, err := ops[i].privateKey.Public().Base64()
 			require.NoError(t, err)
 
-			require.Equal(t, encodedPubKey, data.PublicKey)
+			require.Equal(t, encodedPubKey, string(data.PublicKey))
 		}
 	})
 
@@ -221,7 +219,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
 				OperatorId: op.id,
 				Owner:      testAddr,
-				PublicKey:  encodedPubKey,
+				PublicKey:  []byte(encodedPubKey),
 			})
 			require.ErrorContains(t, err, "operator public key already exists")
 
@@ -248,7 +246,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			err = eh.handleOperatorAdded(nil, &contract.ContractOperatorAdded{
 				OperatorId: op.id,
 				Owner:      testAddr,
-				PublicKey:  encodedPubKey,
+				PublicKey:  []byte(encodedPubKey),
 			})
 			require.ErrorContains(t, err, "operator ID already exists")
 
@@ -256,119 +254,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, len(ops), len(operators))
-		})
-	})
-	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
-
-		// Should return MalformedEventError and no changes to the state
-		t.Run("test OperatorRemoved incorrect operator ID", func(t *testing.T) {
-			// Call the contract method
-			_, err = boundContract.RemoveOperator(auth, 100500)
-			require.NoError(t, err)
-			sim.Commit()
-
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
-			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
-
-			eventsCh := make(chan executionclient.BlockLogs)
-			go func() {
-				defer close(eventsCh)
-				eventsCh <- block
-			}()
-
-			// Check that there is 1 registered operator
-			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
-			require.NoError(t, err)
-			require.Equal(t, len(ops), len(operators))
-
-			// Handle the event
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			require.NoError(t, err)
-			blockNum++
-
-			// Check if the operator wasn't removed successfully
-			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
-			require.NoError(t, err)
-			require.Equal(t, len(ops), len(operators))
-		})
-
-		// Receive event, unmarshall, parse, check parse event is not nil or with error, operator id is correct
-		// TODO: fix this test. It checks nothing, due the handleOperatorRemoved method is no-op currently
-		t.Run("test OperatorRemoved happy flow", func(t *testing.T) {
-			// Prepare a new operator to remove it later in this test
-			op, err := createOperators(1, operatorsCount)
-			require.NoError(t, err)
-			operatorsCount++
-
-			encodedPubKey, err := op[0].privateKey.Public().Base64()
-			require.NoError(t, err)
-
-			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
-			require.NoError(t, err)
-			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
-			require.NoError(t, err)
-
-			sim.Commit()
-
-			block := <-logs
-			require.NotEmpty(t, block.Logs)
-			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
-
-			eventsCh := make(chan executionclient.BlockLogs)
-			go func() {
-				defer close(eventsCh)
-				eventsCh <- block
-			}()
-
-			// Check that there is no registered operators
-			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
-			require.NoError(t, err)
-			require.Equal(t, len(ops), len(operators))
-
-			// Handle OperatorAdded event
-			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			require.NoError(t, err)
-			blockNum++
-			// Check storage for the new operator
-			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
-			require.NoError(t, err)
-			require.Equal(t, len(ops)+1, len(operators))
-
-			// Now start the OperatorRemoved event handling
-			// Call the contract method
-			_, err = boundContract.RemoveOperator(auth, 4)
-			require.NoError(t, err)
-			sim.Commit()
-
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
-			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
-
-			eventsCh = make(chan executionclient.BlockLogs)
-			go func() {
-				defer close(eventsCh)
-				eventsCh <- block
-			}()
-
-			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
-			require.NoError(t, err)
-			require.Equal(t, len(ops)+1, len(operators))
-
-			// Handle OperatorRemoved event
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			require.NoError(t, err)
-			blockNum++
-
-			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
-			// Check if the operator was removed successfully
-			//operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
-			//require.NoError(t, err)
-			//require.Equal(t, len(ops), len(operators))
 		})
 	})
 
@@ -963,7 +848,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, share.Liquidated)
 		// check that slashing data was not deleted
 		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
-		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+		highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
@@ -971,7 +856,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
 		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
-		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, highestProposal, currentSlot.GetSlot())
@@ -1013,14 +898,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// check that slashing data was bumped
 		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
-		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+		highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
 		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
-		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, highestProposal, currentSlot.GetSlot())
@@ -1104,14 +989,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// check that slashing data is greater than current epoch
 		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
-		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+		highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 		require.Greater(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
 		require.Greater(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
-		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Greater(t, highestProposal, currentSlot.GetSlot())
@@ -1171,7 +1056,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			// Call the RegisterOperator contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -1346,6 +1231,123 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.False(t, share.Liquidated)
 		})
 	})
+
+	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
+
+		// Should return MalformedEventError and no changes to the state
+		t.Run("test OperatorRemoved incorrect operator ID", func(t *testing.T) {
+			// Call the contract method
+			_, err = boundContract.RemoveOperator(auth, 100500)
+			require.NoError(t, err)
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			// Check that there is 1 registered operator
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			// Handle the event
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// Check if the operator wasn't removed successfully
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+		})
+
+		// Receive event, unmarshall, parse, check parse event is not nil or with error, operator id is correct
+		t.Run("test OperatorRemoved happy flow", func(t *testing.T) {
+			// Prepare a new operator to remove it later in this test
+			op, err := createOperators(1, operatorsCount)
+			require.NoError(t, err)
+			operatorsCount++
+
+			encodedPubKey, err := op[0].privateKey.Public().Base64()
+			require.NoError(t, err)
+
+			// Call the contract method
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
+			require.NoError(t, err)
+			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			require.NoError(t, err)
+
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			// Check that there is no registered operators
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			// Handle OperatorAdded event
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			// Check storage for the new operator
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops)+1, len(operators))
+
+			// Now start the OperatorRemoved event handling
+			// Call the contract method
+			_, err = boundContract.RemoveOperator(auth, 4)
+			require.NoError(t, err)
+			sim.Commit()
+
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
+
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops)+1, len(operators))
+
+			// Handle OperatorRemoved event
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// List operators and check that the operator was removed
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			// Check that the operator was removed
+			_, found, err := eh.nodeStorage.GetOperatorData(nil, 4)
+			require.NoError(t, err)
+			require.False(t, found)
+		})
+	})
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network *networkconfig.NetworkConfig, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
@@ -1360,12 +1362,11 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	operatorDataStore := operatordatastore.New(operatorData)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{
-			Beacon: utils.SetupMockBeaconNetwork(t, &utils.SlotValue{}),
-		}
+		network = &networkconfig.NetworkConfig{}
+		network.Beacon = utils.SetupMockBeaconNetwork(t, &utils.SlotValue{})
 	}
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, *network, "")
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, *network, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1376,7 +1377,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		bc := beacon.NewMockBeaconNode(ctrl)
 		validatorCtrl := mocks.NewMockController(ctrl)
 
 		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -1392,7 +1392,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
-			bc,
 			dgHandler,
 			WithFullNode(),
 			WithLogger(logger),
@@ -1403,10 +1402,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 		return eh, validatorCtrl, nil
 	}
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
-	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
 		NetworkConfig:     *network,
@@ -1431,7 +1427,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
-		bc,
 		dgHandler,
 		WithFullNode(),
 		WithLogger(logger))
@@ -1446,15 +1441,9 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
-	}
-
-	privKey := operator.privateKey
-	encodedPrivKey, err := privKey.StorageHash()
-	if err != nil {
-		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
 
 	encodedPubKey, err := operator.privateKey.Public().Base64()
@@ -1462,7 +1451,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	if err := nodeStorage.SavePrivateKeyHash(encodedPrivKey); err != nil {
+	if err := nodeStorage.SavePrivateKeyHash(operator.privateKey.StorageHash()); err != nil {
 		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 
@@ -1471,14 +1460,14 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(encodedPubKey))
 	if err != nil {
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey:    encodedPubKey,
+			PublicKey:    []byte(encodedPubKey),
 			ID:           operator.id,
 			OwnerAddress: testAddr,
 		}
@@ -1669,34 +1658,34 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 
 func requireKeyManagerDataToExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
 	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
-	accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+	accounts, err := eh.keyManager.ListAccounts()
 	require.NoError(t, err)
 	require.Equal(t, expectedAccounts, len(accounts))
 	require.True(t, shareExist(accounts, sharePubKey))
 
-	highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+	highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.True(t, found)
 	require.NotNil(t, highestAttestation)
 
-	_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+	_, found, err = eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.True(t, found)
 }
 
 func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
 	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
-	accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+	accounts, err := eh.keyManager.ListAccounts()
 	require.NoError(t, err)
 	require.Equal(t, expectedAccounts, len(accounts))
 	require.False(t, shareExist(accounts, sharePubKey))
 
-	highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+	highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.False(t, found)
 	require.Nil(t, highestAttestation)
 
-	_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+	_, found, err = eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.False(t, found)
 }
