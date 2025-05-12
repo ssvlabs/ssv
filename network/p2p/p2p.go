@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
@@ -114,6 +115,8 @@ type p2pNetwork struct {
 	// shortly after we've trimmed these (we still might consider connecting to these once they
 	// are removed from this map after some time passes)
 	trimmedRecently *ttl.Map[peer.ID, struct{}]
+
+	slot func() phase0.Slot
 }
 
 // New creates a new p2p network
@@ -142,6 +145,7 @@ func New(
 		operatorDataStore:       cfg.OperatorDataStore,
 		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
 		trimmedRecently:         ttl.New[peer.ID, struct{}](30*time.Minute, 3*time.Minute),
+		slot:                    cfg.Network.Beacon.EstimatedCurrentSlot,
 	}
 	if err := n.parseTrustedPeers(); err != nil {
 		return nil, err

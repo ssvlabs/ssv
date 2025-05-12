@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -33,6 +34,7 @@ type connHandler struct {
 	connIdx             peers.ConnectionIndex
 	peerInfos           peers.PeerInfoIndex
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
+	slot                func() phase0.Slot
 }
 
 // NewConnHandler creates a new connection handler
@@ -44,6 +46,7 @@ func NewConnHandler(
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
+	slot func() phase0.Slot,
 ) ConnHandler {
 	return &connHandler{
 		ctx:                 ctx,
@@ -53,6 +56,7 @@ func NewConnHandler(
 		connIdx:             connIdx,
 		peerInfos:           peerInfos,
 		discoveredPeersPool: discoveredPeersPool,
+		slot:                slot,
 	}
 }
 
@@ -223,7 +227,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 			// exta logging
 			subnetSize := ch.subnetsIndex.GetPeerSubnets(conn.RemotePeer())
-			logger.Debug("peer disconnected", zap.String("peerIDshort", conn.RemotePeer().ShortString()), zap.String("peerID", conn.RemotePeer().String()), zap.Int("subnet_size", len(subnetSize)), zap.String("peerAddress", conn.RemoteMultiaddr().String()))
+			logger.Debug("peer disconnected", fields.Slot(ch.slot()), zap.String("peerID", conn.RemotePeer().String()), zap.Int("subnet_size", len(subnetSize)))
 		},
 	}
 }
