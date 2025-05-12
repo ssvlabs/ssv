@@ -97,7 +97,7 @@ type config struct {
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
 	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
-	MEVDelay                     time.Duration           `yaml:"MEVDelay" env:"MEV_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader."`
+	MEVDelay                     time.Duration           `yaml:"MEVDelay" env:"MEV_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#how-to-choose-mevdelay-value for detailed instructions on how to use it."`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
 	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
