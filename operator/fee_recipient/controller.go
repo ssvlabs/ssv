@@ -5,19 +5,19 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 // RecipientController submit proposal preparation to beacon node for all committee validators
 type RecipientController interface {
@@ -32,7 +32,7 @@ type ControllerOptions struct {
 	ShareStorage       storage.Shares
 	RecipientStorage   storage.Recipients
 	SlotTickerProvider slotticker.Provider
-	GetOperatorID      func() spectypes.OperatorID
+	OperatorDataStore  operatordatastore.OperatorDataStore
 }
 
 // recipientController implementation of RecipientController
@@ -43,7 +43,7 @@ type recipientController struct {
 	shareStorage       storage.Shares
 	recipientStorage   storage.Recipients
 	slotTickerProvider slotticker.Provider
-	getOperatorID      func() spectypes.OperatorID
+	operatorDataStore  operatordatastore.OperatorDataStore
 }
 
 func NewController(opts *ControllerOptions) *recipientController {
@@ -54,7 +54,7 @@ func NewController(opts *ControllerOptions) *recipientController {
 		shareStorage:       opts.ShareStorage,
 		recipientStorage:   opts.RecipientStorage,
 		slotTickerProvider: opts.SlotTickerProvider,
-		getOperatorID:      opts.GetOperatorID,
+		operatorDataStore:  opts.OperatorDataStore,
 	}
 }
 
@@ -87,7 +87,11 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger) {
 }
 
 func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.Slot) error {
-	shares := rc.shareStorage.List(nil, storage.ByOperatorID(rc.getOperatorID()), storage.ByActiveValidator())
+	shares := rc.shareStorage.List(
+		nil,
+		storage.ByOperatorID(rc.operatorDataStore.GetOperatorID()),
+		storage.ByActiveValidator(),
+	)
 
 	const batchSize = 500
 	var submitted int
@@ -152,7 +156,7 @@ func (rc *recipientController) toProposalPreparation(shares []*types.SSVShare) (
 		if !found {
 			copy(feeRecipient[:], share.OwnerAddress.Bytes())
 		}
-		m[share.BeaconMetadata.Index] = feeRecipient
+		m[share.ValidatorIndex] = feeRecipient
 	}
 
 	return m, nil

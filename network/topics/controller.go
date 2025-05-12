@@ -2,17 +2,18 @@ package topics
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
-	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 var (
@@ -26,12 +27,15 @@ type Controller interface {
 	Subscribe(logger *zap.Logger, name string) error
 	// Unsubscribe unsubscribes from the given topic
 	Unsubscribe(logger *zap.Logger, topicName string, hard bool) error
-	// Peers returns the peers subscribed to the given topic
+	// Peers returns a list of peers we are connected to in the given topic, if topicName
+	// param is an empty string it returns a list of all peers we are connected to.
 	Peers(topicName string) ([]peer.ID, error)
-	// Topics lists all the available topics
+	// Topics lists all topics this node is subscribed to
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
+	// UpdateScoreParams refreshes the score params for every subscribed topic
+	UpdateScoreParams(logger *zap.Logger) error
 
 	io.Closer
 }
@@ -104,6 +108,31 @@ func (ctrl *topicsCtrl) onNewTopic(logger *zap.Logger) onTopicJoined {
 	}
 }
 
+func (ctrl *topicsCtrl) UpdateScoreParams(logger *zap.Logger) error {
+	if ctrl.scoreParamsFactory == nil {
+		return fmt.Errorf("scoreParamsFactory is not set")
+	}
+	var errs error
+	topics := ctrl.ps.GetTopics()
+	for _, topicName := range topics {
+		topic := ctrl.container.Get(topicName)
+		if topic == nil {
+			errs = errors.Join(errs, fmt.Errorf("topic %s is not ready; ", topicName))
+			continue
+		}
+		p := ctrl.scoreParamsFactory(topicName)
+		if p == nil {
+			errs = errors.Join(errs, fmt.Errorf("score params for topic %s is nil; ", topicName))
+			continue
+		}
+		if err := topic.SetScoreParams(p); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("could not set score params for topic %s: %w; ", topicName, err))
+			continue
+		}
+	}
+	return errs
+}
+
 // Close implements io.Closer
 func (ctrl *topicsCtrl) Close() error {
 	topics := ctrl.ps.GetTopics()
@@ -114,7 +143,7 @@ func (ctrl *topicsCtrl) Close() error {
 	return nil
 }
 
-// Peers returns the peers subscribed to the given topic
+// Peers returns a list of peers we are connected to in the given topic.
 func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	if name == "" {
 		return ctrl.ps.ListPeers(""), nil
@@ -127,7 +156,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	return topic.ListPeers(), nil
 }
 
-// Topics lists all the available topics
+// Topics lists all topics this node is subscribed to
 func (ctrl *topicsCtrl) Topics() []string {
 	topics := ctrl.ps.GetTopics()
 	for i, tp := range topics {
@@ -169,7 +198,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 		err := topic.Publish(ctx, data)
 		if err == nil {
-			metricPubsubOutbound.WithLabelValues(name).Inc()
+			outboundMessageCounter.Add(ctrl.ctx, 1)
 		}
 	}()
 
@@ -179,7 +208,11 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
 // if hard is true, we will unsubscribe the topic even if there are more subscribers.
 func (ctrl *topicsCtrl) Unsubscribe(logger *zap.Logger, name string, hard bool) error {
-	ctrl.container.Unsubscribe(name)
+	name = commons.GetTopicFullName(name)
+
+	if !ctrl.container.Unsubscribe(name) {
+		return fmt.Errorf("failed to unsubscribe from topic %s: not subscribed", name)
+	}
 
 	if ctrl.msgValidator != nil {
 		err := ctrl.ps.UnregisterTopicValidator(name)
@@ -240,11 +273,12 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			continue
 		}
 
-		if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
-			).Inc()
+		switch m := msg.ValidatorData.(type) {
+		case *queue.SSVMessage:
+			inboundMessageCounter.Add(ctrl.ctx, 1,
+				metric.WithAttributes(messageTypeAttribute(uint64(m.MsgType))))
+		default:
+			logger.Warn("unknown message type", zap.Any("message", m))
 		}
 
 		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
@@ -258,15 +292,18 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 	if ctrl.msgValidator != nil {
 		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
-		_ = ctrl.ps.UnregisterTopicValidator(name)
+		err := ctrl.ps.UnregisterTopicValidator(name)
+		if err != nil {
+			ctrl.logger.Debug("failed to unregister topic validator", zap.String("topic", name), zap.Error(err))
+		}
 
 		var opts []pubsub.ValidatorOpt
 		// Optional: set a timeout for message validation
 		// opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
 
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
+		err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
 		if err != nil {
-			return errors.Wrap(err, "could not register topic validator")
+			return fmt.Errorf("could not register topic validator: %w", err)
 		}
 	}
 	return nil

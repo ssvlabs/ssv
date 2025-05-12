@@ -5,15 +5,17 @@ import (
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 
 type ExitDescriptor struct {
+	OwnValidator   bool
 	PubKey         phase0.BLSPubKey
 	ValidatorIndex phase0.ValidatorIndex
 	BlockNumber    uint64
@@ -21,15 +23,17 @@ type ExitDescriptor struct {
 
 type VoluntaryExitHandler struct {
 	baseHandler
+	duties          *dutystore.VoluntaryExitDuties
 	validatorExitCh <-chan ExitDescriptor
-	dutyQueue       []*spectypes.Duty
+	dutyQueue       []*spectypes.ValidatorDuty
 	blockSlots      map[uint64]phase0.Slot
 }
 
-func NewVoluntaryExitHandler(validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
+func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
 	return &VoluntaryExitHandler{
+		duties:          duties,
 		validatorExitCh: validatorExitCh,
-		dutyQueue:       make([]*spectypes.Duty, 0),
+		dutyQueue:       make([]*spectypes.ValidatorDuty, 0),
 		blockSlots:      map[uint64]phase0.Slot{},
 	}
 }
@@ -40,35 +44,20 @@ func (h *VoluntaryExitHandler) Name() string {
 
 func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			currentSlot := h.ticker.Slot()
+			next = h.ticker.Next()
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
-
-			var dutiesForExecution, pendingDuties []*spectypes.Duty
-
-			for _, duty := range h.dutyQueue {
-				if duty.Slot <= currentSlot {
-					dutiesForExecution = append(dutiesForExecution, duty)
-				} else {
-					pendingDuties = append(pendingDuties, duty)
-				}
-			}
-
-			h.dutyQueue = pendingDuties
-
-			if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-				h.executeDuties(h.logger, dutiesForExecution)
-				h.logger.Debug("executed voluntary exit duties",
-					fields.Slot(currentSlot),
-					fields.Count(dutyCount))
-			}
+			h.processExecution(ctx, currentSlot)
 
 		case exitDescriptor, ok := <-h.validatorExitCh:
 			if !ok {
@@ -84,11 +73,16 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
-			duty := &spectypes.Duty{
+			duty := &spectypes.ValidatorDuty{
 				Type:           spectypes.BNRoleVoluntaryExit,
 				PubKey:         exitDescriptor.PubKey,
 				Slot:           dutySlot,
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
+			}
+
+			h.duties.AddDuty(dutySlot, exitDescriptor.PubKey)
+			if !exitDescriptor.OwnValidator {
+				continue
 			}
 
 			h.dutyQueue = append(h.dutyQueue, duty)
@@ -100,11 +94,33 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			)
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
+	}
+}
+
+func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0.Slot) {
+	var dutiesForExecution, pendingDuties []*spectypes.ValidatorDuty
+
+	for _, duty := range h.dutyQueue {
+		if duty.Slot <= slot {
+			dutiesForExecution = append(dutiesForExecution, duty)
+		} else {
+			pendingDuties = append(pendingDuties, duty)
+		}
+	}
+
+	h.dutyQueue = pendingDuties
+	h.duties.RemoveSlot(slot - phase0.Slot(h.network.SlotsPerEpoch()))
+
+	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
+		h.dutiesExecutor.ExecuteDuties(ctx, h.logger, dutiesForExecution)
+		h.logger.Debug("executed voluntary exit duties",
+			fields.Slot(slot),
+			fields.Count(dutyCount))
 	}
 }
 
@@ -121,7 +137,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 		return 0, err
 	}
 
-	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 	for k, v := range h.blockSlots {

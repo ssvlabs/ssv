@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/e2e/logs_catcher"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
 )
 
 type LogsCatcherCmd struct {
@@ -73,7 +74,7 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 
 // UnmarshalBlsVerificationJSON reads the JSON file and unmarshals it into []*CorruptedShare.
 func UnmarshalBlsVerificationJSON(filePath string) ([]*logs_catcher.CorruptedShare, error) {
-	contents, err := os.ReadFile(filePath)
+	contents, err := os.ReadFile(filepath.Clean(filePath))
 	if err != nil {
 		return nil, fmt.Errorf("error reading json file for BLS verification: %s, %w", filePath, err)
 	}

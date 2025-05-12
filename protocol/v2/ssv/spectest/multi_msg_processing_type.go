@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
 )
 
 type MultiMsgProcessingSpecTest struct {
@@ -27,6 +28,7 @@ func (tests *MultiMsgProcessingSpecTest) Run(t *testing.T) {
 
 	for _, test := range tests.Tests {
 		t.Run(test.TestName(), func(t *testing.T) {
+			test.ParentName = tests.Name
 			test.RunAsPartOfMultiTest(t, tests.logger)
 		})
 	}

@@ -1,16 +1,18 @@
 package qbft
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
+var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
+
 type signing interface {
-	// GetSigner returns a Signer instance
-	GetSigner() spectypes.SSVSigner
+	// GetShareSigner returns a BeaconSigner instance
+	GetShareSigner() ekm.BeaconSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() spectypes.DomainType
 }
@@ -23,34 +25,25 @@ type IConfig interface {
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() specqbft.Network
-	// GetStorage returns a storage instance
-	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
-	// VerifySignatures returns if signature is checked
-	VerifySignatures() bool
+	// GetRoundCutOff returns the round cut off
+	GetCutOffRound() specqbft.Round
 }
 
 type Config struct {
-	Signer                spectypes.SSVSigner
-	SigningPK             []byte
-	Domain                spectypes.DomainType
-	ValueCheckF           specqbft.ProposedValueCheckF
-	ProposerF             specqbft.ProposerF
-	Storage               qbftstorage.QBFTStore
-	Network               specqbft.Network
-	Timer                 roundtimer.Timer
-	SignatureVerification bool
+	BeaconSigner ekm.BeaconSigner
+	Domain       spectypes.DomainType
+	ValueCheckF  specqbft.ProposedValueCheckF
+	ProposerF    specqbft.ProposerF
+	Network      specqbft.Network
+	Timer        roundtimer.Timer
+	CutOffRound  specqbft.Round
 }
 
-// GetSigner returns a Signer instance
-func (c *Config) GetSigner() spectypes.SSVSigner {
-	return c.Signer
-}
-
-// GetSigningPubKey returns the public key used to sign all QBFT messages
-func (c *Config) GetSigningPubKey() []byte {
-	return c.SigningPK
+// GetShareSigner returns a BeaconSigner instance
+func (c *Config) GetShareSigner() ekm.BeaconSigner {
+	return c.BeaconSigner
 }
 
 // GetSignatureDomainType returns the Domain type used for signatures
@@ -73,16 +66,11 @@ func (c *Config) GetNetwork() specqbft.Network {
 	return c.Network
 }
 
-// GetStorage returns a storage instance
-func (c *Config) GetStorage() qbftstorage.QBFTStore {
-	return c.Storage
-}
-
 // GetTimer returns round timer
 func (c *Config) GetTimer() roundtimer.Timer {
 	return c.Timer
 }
 
-func (c *Config) VerifySignatures() bool {
-	return c.SignatureVerification
+func (c *Config) GetCutOffRound() specqbft.Round {
+	return c.CutOffRound
 }

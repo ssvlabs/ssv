@@ -3,24 +3,21 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"time"
-
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
 	Holesky.Name:      Holesky,
 	HoleskyStage.Name: HoleskyStage,
-	JatoV2Stage.Name:  JatoV2Stage,
-	JatoV2.Name:       JatoV2,
 	LocalTestnet.Name: LocalTestnet,
 	HoleskyE2E.Name:   HoleskyE2E,
+	Hoodi.Name:        Hoodi,
+	HoodiStage.Name:   HoodiStage,
+	Sepolia.Name:      Sepolia,
 }
+
+const forkName = "alan"
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
@@ -31,15 +28,9 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                          string
-	Beacon                        beacon.BeaconNetwork
-	Domain                        spectypes.DomainType
-	GenesisEpoch                  spec.Epoch
-	RegistrySyncOffset            *big.Int
-	RegistryContractAddr          string // TODO: ethcommon.Address
-	Bootnodes                     []string
-	WhitelistedOperatorKeys       []string
-	PermissionlessActivationEpoch spec.Epoch
+	Name string
+	BeaconConfig
+	SSVConfig
 }
 
 func (n NetworkConfig) String() string {
@@ -49,6 +40,10 @@ func (n NetworkConfig) String() string {
 	}
 
 	return string(b)
+}
+
+func (n NetworkConfig) NetworkName() string {
+	return fmt.Sprintf("%s:%s", n.Name, forkName)
 }
 
 // ForkVersion returns the fork version of the network.
@@ -68,5 +63,5 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
-	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+	return time.Unix(n.Beacon.MinGenesisTime(), 0)
 }

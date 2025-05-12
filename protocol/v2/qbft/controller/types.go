@@ -1,12 +1,13 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 const (
@@ -64,11 +65,6 @@ func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
 	}
 }
 
-// reset will remove all instances from the container, perserving the underlying slice's capacity.
-func (i *InstanceContainer) reset() {
-	*i = (*i)[:0]
-}
-
 // String returns a human-readable representation of the instances. Useful for debugging.
 func (i *InstanceContainer) String() string {
 	heights := make([]string, len(*i))
@@ -76,4 +72,24 @@ func (i *InstanceContainer) String() string {
 		heights[index] = fmt.Sprint(inst.GetHeight())
 	}
 	return fmt.Sprintf("Instances(len=%d, cap=%d, heights=(%s))", len(*i), cap(*i), strings.Join(heights, ", "))
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface for InstanceContainer
+func (c *InstanceContainer) UnmarshalJSON(data []byte) error {
+	// InstanceContainer must always have correct capacity on initialization
+	// because addition to instance container doesn't grow beyond cap removing values that don't fit.
+	// Therefore, we need to initialize it properly on unmarshalling
+	// to allow spec tests grow StoredInstances as much as they need to.
+	instances := make([]*instance.Instance, 0, InstanceContainerTestCapacity)
+	if cap(*c) != 0 {
+		instances = *c
+	}
+
+	if err := json.Unmarshal(data, &instances); err != nil {
+		return err
+	}
+
+	*c = instances
+
+	return nil
 }

@@ -2,29 +2,31 @@ package fee_recipient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/golang/mock/gomock"
-	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	gomock "go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	"github.com/bloxapp/ssv/operator/slotticker/mocks"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/operator/slotticker/mocks"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestSubmitProposal(t *testing.T) {
@@ -36,19 +38,19 @@ func TestSubmitProposal(t *testing.T) {
 		ID: 123456789,
 	}
 
+	operatorDataStore := operatordatastore.New(operatorData)
+
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
 	network := networkconfig.TestNetwork
 	populateStorage(t, logger, shareStorage, operatorData)
 
 	frCtrl := NewController(&ControllerOptions{
-		Ctx:              context.TODO(),
-		Network:          network,
-		ShareStorage:     shareStorage,
-		RecipientStorage: recipientStorage,
-		GetOperatorID: func() spectypes.OperatorID {
-			return operatorData.ID
-		},
+		Ctx:               context.TODO(),
+		Network:           network,
+		ShareStorage:      shareStorage,
+		RecipientStorage:  recipientStorage,
+		OperatorDataStore: operatorDataStore,
 	})
 
 	t.Run("submit first time or halfway through epoch", func(t *testing.T) {
@@ -128,7 +130,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, regis
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	shareStorage, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,14 +144,14 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 		copy(ownerAddrByte[:], ownerAddr)
 
 		return &types.SSVShare{
-			Share: spectypes.Share{ValidatorPubKey: []byte(fmt.Sprintf("pk%d", index)), OperatorID: operatorID},
-			Metadata: types.Metadata{
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Index: phase0.ValidatorIndex(index),
-				},
-				OwnerAddress: common.BytesToAddress(ownerAddrByte[:]),
-				Liquidated:   false,
+			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", index))),
+				SharePubKey:    []byte(fmt.Sprintf("pk%046d", index)),
+				ValidatorIndex: phase0.ValidatorIndex(index),
+				Committee:      []*spectypes.ShareMember{{Signer: operatorID}},
 			},
+			Status:       eth2apiv1.ValidatorStateActiveOngoing,
+			OwnerAddress: common.BytesToAddress(ownerAddrByte[:]),
+			Liquidated:   false,
 		}
 	}
 

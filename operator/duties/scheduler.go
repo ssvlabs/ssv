@@ -8,96 +8,94 @@ import (
 	"sync"
 	"time"
 
-	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/casts"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
-
-var slotDelayHistogram = promauto.NewHistogram(prometheus.HistogramOpts{
-	Name:    "slot_ticker_delay_milliseconds",
-	Help:    "The delay in milliseconds of the slot ticker",
-	Buckets: []float64{5, 10, 20, 100, 500, 5000}, // Buckets in milliseconds. Adjust as per your needs.
-})
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(slotDelayHistogram); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
+//go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./scheduler_mock.go -source=./scheduler.go
 
 const (
 	// blockPropagationDelay time to propagate around the nodes
 	// before kicking off duties for the block's slot.
-	blockPropagationDelay = 200 * time.Millisecond
+	blockPropagationDelay = 300 * time.Millisecond
 )
 
-type SlotTicker interface {
-	Next() <-chan time.Time
-	Slot() phase0.Slot
+// DutiesExecutor is an interface for executing duties.
+type DutiesExecutor interface {
+	ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty)
+	ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap)
+}
+
+// DutyExecutor is an interface for executing duty.
+type DutyExecutor interface {
+	ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty)
+	ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 }
 
 type BeaconNode interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
 	ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error)
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
-	Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error
 	SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error
 	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
+	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error
 }
 
 type ExecutionClient interface {
 	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error)
 }
 
-// ValidatorController represents the component that controls validators via the scheduler
-type ValidatorController interface {
-	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
-	GetOperatorShares() []*types.SSVShare
+// ValidatorProvider represents the component that controls validators via the scheduler
+type ValidatorProvider interface {
+	Validators() []*types.SSVShare
+	SelfValidators() []*types.SSVShare
+	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	Validator(pubKey []byte) (*types.SSVShare, bool)
 }
 
-type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
+// ValidatorController represents the component that controls validators via the scheduler
+type ValidatorController interface {
+	FilterIndices(afterInit bool, filter func(*types.SSVShare) bool) []phase0.ValidatorIndex
+}
 
 type SchedulerOptions struct {
 	Ctx                 context.Context
 	BeaconNode          BeaconNode
 	ExecutionClient     ExecutionClient
 	Network             networkconfig.NetworkConfig
+	ValidatorProvider   ValidatorProvider
 	ValidatorController ValidatorController
-	ExecuteDuty         ExecuteDutyFunc
+	DutyExecutor        DutyExecutor
 	IndicesChg          chan struct{}
 	ValidatorExitCh     <-chan ExitDescriptor
 	SlotTickerProvider  slotticker.Provider
-	BuilderProposals    bool
 	DutyStore           *dutystore.Store
+	P2PNetwork          network.P2PNetwork
 }
 
 type Scheduler struct {
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
+	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
-	executeDuty         ExecuteDutyFunc
-	builderProposals    bool
+	dutyExecutor        DutyExecutor
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -105,10 +103,12 @@ type Scheduler struct {
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
 	ticker     slotticker.SlotTicker
-	waitCond   *sync.Cond
 	pool       *pool.ContextPool
 
-	headSlot                  phase0.Slot
+	// waitCond coordinates access to headSlot for different go-routines
+	waitCond *sync.Cond
+	headSlot phase0.Slot
+
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
@@ -125,9 +125,9 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		executionClient:     opts.ExecutionClient,
 		network:             opts.Network,
 		slotTickerProvider:  opts.SlotTickerProvider,
-		executeDuty:         opts.ExecuteDuty,
+		dutyExecutor:        opts.DutyExecutor,
+		validatorProvider:   opts.ValidatorProvider,
 		validatorController: opts.ValidatorController,
-		builderProposals:    opts.BuilderProposals,
 		indicesChg:          opts.IndicesChg,
 		blockPropagateDelay: blockPropagationDelay,
 
@@ -135,16 +135,16 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
-			NewVoluntaryExitHandler(opts.ValidatorExitCh),
+			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
+			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
+			NewValidatorRegistrationHandler(),
 		},
 
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
-	if s.builderProposals {
-		s.handlers = append(s.handlers, NewValidatorRegistrationHandler())
-	}
+
 	return s
 }
 
@@ -161,10 +161,9 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	logger = logger.Named(logging.NameDutyScheduler)
 	logger.Info("duty scheduler started")
 
-	// Subscribe to head events. This allows us to go early for attestations & sync committees if a block arrives,
-	// as well as re-request duties if there is a change in beacon block.
-	if err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger)); err != nil {
-		return fmt.Errorf("failed to subscribe to head events: %w", err)
+	logger.Info("subscribing to head events")
+	if err := s.listenToHeadEvents(ctx, logger); err != nil {
+		return fmt.Errorf("failed to listen to head events: %w", err)
 	}
 
 	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
@@ -184,8 +183,9 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.beaconNode,
 			s.executionClient,
 			s.network,
+			s.validatorProvider,
 			s.validatorController,
-			s.ExecuteDuties,
+			s,
 			s.slotTickerProvider,
 			reorgCh,
 			indicesChangeCh,
@@ -206,6 +206,40 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
 	go reorgFeed.FanOut(ctx, s.reorg)
+
+	return nil
+}
+
+func (s *Scheduler) listenToHeadEvents(ctx context.Context, logger *zap.Logger) error {
+	headEventHandler := s.HandleHeadEvent(logger)
+
+	// Subscribe to head events. This allows us to go early for attestations & sync committees if a block arrives,
+	// as well as re-request duties if there is a change in beacon block.
+	ch := make(chan *eth2apiv1.HeadEvent, 32)
+	err := s.beaconNode.SubscribeToHeadEvents(ctx, "duty_scheduler", ch)
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to head events: %w", err)
+	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case headEvent := <-ch:
+				if headEvent == nil {
+					logger.Warn("head event was nil, skipping")
+					continue
+				}
+				logger.
+					With(fields.Slot(headEvent.Slot)).
+					With(fields.BlockRoot(headEvent.Block)).
+					Info("received head event. Processing...")
+
+				headEventHandler(headEvent)
+			}
+		}
+	}()
 
 	return nil
 }
@@ -247,7 +281,10 @@ func (f *EventFeed[T]) FanOut(ctx context.Context, in <-chan T) {
 	}
 }
 
-// SlotTicker handles the "head" events from the beacon node.
+// SlotTicker advances "head" slot every slot-tick once we are 1/3 of slot-time past slot start
+// and only if necessary. Normally Beacon node events would trigger "head" slot updates, but in
+// case event is delayed or didn't arrive for some reason we still need to advance "head" slot
+// for duties to keep executing normally - so SlotTicker is a secondary mechanism for that.
 func (s *Scheduler) SlotTicker(ctx context.Context) {
 	for {
 		select {
@@ -256,53 +293,44 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-s.ticker.Next():
 			slot := s.ticker.Slot()
 
-			delay := s.network.SlotDurationSec() / time.Duration(goclient.IntervalsPerSlot) /* a third of the slot duration */
-			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
+			delayThirdOfSlot := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot)
+			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delayThirdOfSlot)
 			waitDuration := time.Until(finalTime)
-
 			if waitDuration > 0 {
 				time.Sleep(waitDuration)
-
-				// Lock the mutex before broadcasting
-				s.waitCond.L.Lock()
-				s.headSlot = slot
-				s.waitCond.Broadcast()
-				s.waitCond.L.Unlock()
 			}
+
+			s.advanceHeadSlot(slot)
 		}
 	}
 }
 
 // HandleHeadEvent handles the "head" events from the beacon node.
-func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Event) {
-	return func(event *eth2apiv1.Event) {
-		if event.Data == nil {
-			return
-		}
-
+func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.HeadEvent) {
+	return func(event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
 
-		data := event.Data.(*eth2apiv1.HeadEvent)
-		if data.Slot != s.network.Beacon.EstimatedCurrentSlot() {
+		if event.Slot != s.network.Beacon.EstimatedCurrentSlot() {
+			// No need to process outdated events here.
 			return
 		}
 
 		// check for reorg
-		epoch := s.network.Beacon.EstimatedEpochAtSlot(data.Slot)
-		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, data.Slot, data.Slot%32+1)
-		logger := logger.With(zap.String("epoch_slot_seq", buildStr))
+		epoch := s.network.Beacon.EstimatedEpochAtSlot(event.Slot)
+		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, event.Slot, event.Slot%32+1)
+		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
 			if epoch > s.lastBlockEpoch {
 				// Change of epoch.
 				// Ensure that the new previous dependent root is the same as the old current root.
 				if !bytes.Equal(s.previousDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.currentDutyDependentRoot[:], data.PreviousDutyDependentRoot[:]) {
+					!bytes.Equal(s.currentDutyDependentRoot[:], event.PreviousDutyDependentRoot[:]) {
 					logger.Debug("🔀 Previous duty dependent root has changed on epoch transition",
 						zap.String("old_current_dependent_root", fmt.Sprintf("%#x", s.currentDutyDependentRoot[:])),
-						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", data.PreviousDutyDependentRoot[:])))
+						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:     data.Slot,
+						Slot:     event.Slot,
 						Previous: true,
 					}
 				}
@@ -310,26 +338,26 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 				// Same epoch
 				// Ensure that the previous dependent roots are the same.
 				if !bytes.Equal(s.previousDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.previousDutyDependentRoot[:], data.PreviousDutyDependentRoot[:]) {
+					!bytes.Equal(s.previousDutyDependentRoot[:], event.PreviousDutyDependentRoot[:]) {
 					logger.Debug("🔀 Previous duty dependent root has changed",
 						zap.String("old_previous_dependent_root", fmt.Sprintf("%#x", s.previousDutyDependentRoot[:])),
-						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", data.PreviousDutyDependentRoot[:])))
+						zap.String("new_previous_dependent_root", fmt.Sprintf("%#x", event.PreviousDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:     data.Slot,
+						Slot:     event.Slot,
 						Previous: true,
 					}
 				}
 
 				// Ensure that the current dependent roots are the same.
 				if !bytes.Equal(s.currentDutyDependentRoot[:], zeroRoot[:]) &&
-					!bytes.Equal(s.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
+					!bytes.Equal(s.currentDutyDependentRoot[:], event.CurrentDutyDependentRoot[:]) {
 					logger.Debug("🔀 Current duty dependent root has changed",
 						zap.String("old_current_dependent_root", fmt.Sprintf("%#x", s.currentDutyDependentRoot[:])),
-						zap.String("new_current_dependent_root", fmt.Sprintf("%#x", data.CurrentDutyDependentRoot[:])))
+						zap.String("new_current_dependent_root", fmt.Sprintf("%#x", event.CurrentDutyDependentRoot[:])))
 
 					s.reorg <- ReorgEvent{
-						Slot:    data.Slot,
+						Slot:    event.Slot,
 						Current: true,
 					}
 				}
@@ -337,12 +365,12 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		}
 
 		s.lastBlockEpoch = epoch
-		s.previousDutyDependentRoot = data.PreviousDutyDependentRoot
-		s.currentDutyDependentRoot = data.CurrentDutyDependentRoot
+		s.previousDutyDependentRoot = event.PreviousDutyDependentRoot
+		s.currentDutyDependentRoot = event.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.network.SlotDurationSec() / time.Duration(goclient.IntervalsPerSlot) /* a third of the slot duration */
-		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(data.Slot).Add(delay)
+		delay := s.network.SlotDurationSec() / casts.DurationFromUint64(goclient.IntervalsPerSlot) /* a third of the slot duration */
+		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(event.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
 
@@ -350,16 +378,13 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 			// nodes before kicking off duties for the block's slot.
 			time.Sleep(s.blockPropagateDelay)
 
-			s.waitCond.L.Lock()
-			s.headSlot = data.Slot
-			s.waitCond.Broadcast()
-			s.waitCond.L.Unlock()
+			s.advanceHeadSlot(event.Slot)
 		}
 	}
 }
 
 // ExecuteDuties tries to execute the given duties
-func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) {
+func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
@@ -367,20 +392,42 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			s.executeDuty(logger, duty)
+			recordDutyExecuted(ctx, duty.RunnerRole())
+			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
+		}()
+	}
+}
+
+// ExecuteCommitteeDuties tries to execute the given committee duties
+func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
+	for _, committee := range duties {
+		duty := committee.duty
+		logger := s.loggerWithCommitteeDutyContext(logger, committee)
+		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
+
+		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+		if slotDelay >= 100*time.Millisecond {
+			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+		}
+		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
+		go func() {
+			s.waitOneThirdOrValidBlock(duty.Slot)
+			recordDutyExecuted(ctx, duty.RunnerRole())
+			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}()
 	}
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
+func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.ValidatorDuty) *zap.Logger {
 	return logger.
-		With(fields.Role(duty.Type)).
+		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
@@ -389,12 +436,47 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Du
 		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
-// waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
+// loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
+func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeDuty *committeeDuty) *zap.Logger {
+	duty := committeeDuty.duty
+	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
+
+	return logger.
+		With(fields.CommitteeID(committeeDuty.id)).
+		With(fields.DutyID(committeeDutyID)).
+		With(fields.Role(duty.RunnerRole())).
+		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
+		With(fields.Slot(duty.Slot)).
+		With(fields.Epoch(dutyEpoch)).
+		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
+}
+
+// advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,
+// meaning s.headSlot value can never decrease) and notify the go-routines waiting for it to happen.
+func (s *Scheduler) advanceHeadSlot(slot phase0.Slot) {
+	s.waitCond.L.Lock()
+	if slot > s.headSlot {
+		s.headSlot = slot
+		s.waitCond.Broadcast()
+	}
+	s.waitCond.L.Unlock()
+}
+
+// waitOneThirdOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
+// slot start time), or for head block event that might come in even sooner than one-third of the slot passes.
 func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
-	// Wait for the event or signal
 	s.waitCond.L.Lock()
 	for s.headSlot < slot {
 		s.waitCond.Wait()
 	}
 	s.waitCond.L.Unlock()
+}
+
+func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {
+	indices := make([]phase0.ValidatorIndex, len(shares))
+	for i, share := range shares {
+		indices[i] = share.ValidatorIndex
+	}
+	return indices
 }

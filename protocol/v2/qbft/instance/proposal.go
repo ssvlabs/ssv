@@ -2,21 +2,22 @@ package instance
 
 import (
 	"bytes"
+	"context"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponProposal process proposal message
 // Assumes proposal message is valid!
-func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.SignedMessage, proposeMsgContainer *specqbft.MsgContainer) error {
-	addedMsg, err := proposeMsgContainer.AddFirstMsgForSignerAndRound(signedProposal)
+func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage, proposeMsgContainer *specqbft.MsgContainer) error {
+	addedMsg, err := proposeMsgContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not add proposal msg to container")
 	}
@@ -26,34 +27,34 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 
 	logger.Debug("📬 got proposal message",
 		fields.Round(i.State.Round),
-		zap.Any("proposal-signers", signedProposal.Signers))
+		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs))
 
-	newRound := signedProposal.Message.Round
-	i.State.ProposalAcceptedForCurrentRound = signedProposal
+	newRound := msg.QBFTMessage.Round
+	i.State.ProposalAcceptedForCurrentRound = msg
 
 	// A future justified proposal should bump us into future round and reset timer
-	if signedProposal.Message.Round > i.State.Round {
-		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Height, signedProposal.Message.Round)
+	if msg.QBFTMessage.Round > i.State.Round {
+		i.config.GetTimer().TimeoutForRound(msg.QBFTMessage.Height, msg.QBFTMessage.Round)
 	}
-	i.bumpToRound(newRound)
+	i.bumpToRound(ctx, newRound)
 
-	i.metrics.EndStageProposal()
+	i.metrics.EndStage(ctx, newRound, stageProposal)
 
 	// value root
-	r, err := specqbft.HashDataRoot(signedProposal.FullData)
+	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
 	if err != nil {
 		return errors.Wrap(err, "could not hash input data")
 	}
 
-	prepare, err := CreatePrepare(i.State, i.config, newRound, r)
+	prepare, err := CreatePrepare(i.State, i.signer, newRound, r)
 	if err != nil {
 		return errors.Wrap(err, "could not create prepare msg")
 	}
 
 	logger.Debug("📢 got proposal, broadcasting prepare message",
 		fields.Round(i.State.Round),
-		zap.Any("proposal-signers", signedProposal.Signers),
-		zap.Any("prepare-signers", prepare.Signers))
+		zap.Any("proposal_signers", msg.SignedMessage.OperatorIDs),
+		zap.Any("prepare_signers", prepare.OperatorIDs))
 
 	if err := i.Broadcast(logger, prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
@@ -64,44 +65,60 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 func isValidProposal(
 	state *specqbft.State,
 	config qbft.IConfig,
-	signedProposal *specqbft.SignedMessage,
+	msg *specqbft.ProcessingMessage,
 	valCheck specqbft.ProposedValueCheckF,
-	operators []*spectypes.Operator,
 ) error {
-	if signedProposal.Message.MsgType != specqbft.ProposalMsgType {
+	if msg.QBFTMessage.MsgType != specqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
 	}
-	if signedProposal.Message.Height != state.Height {
+	if msg.QBFTMessage.Height != state.Height {
 		return errors.New("wrong msg height")
 	}
-	if len(signedProposal.GetSigners()) != 1 {
+	if len(msg.SignedMessage.OperatorIDs) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
-	if config.VerifySignatures() {
-		if err := ssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+
+	if !msg.SignedMessage.CheckSignersInCommittee(state.CommitteeMember.Committee) {
+		return errors.New("signer not in committee")
 	}
-	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
+
+	if !msg.SignedMessage.MatchedSigners([]spectypes.OperatorID{proposer(state, config, msg.QBFTMessage.Round)}) {
 		return errors.New("proposal leader invalid")
 	}
 
-	if err := signedProposal.Validate(); err != nil {
+	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "proposal invalid")
 	}
 
 	// verify full data integrity
-	r, err := specqbft.HashDataRoot(signedProposal.FullData)
+	r, err := specqbft.HashDataRoot(msg.SignedMessage.FullData)
 	if err != nil {
 		return errors.Wrap(err, "could not hash input data")
 	}
-	if !bytes.Equal(signedProposal.Message.Root[:], r[:]) {
+	if !bytes.Equal(msg.QBFTMessage.Root[:], r[:]) {
 		return errors.New("H(data) != root")
 	}
 
 	// get justifications
-	roundChangeJustification, _ := signedProposal.Message.GetRoundChangeJustifications() // no need to check error, checked on signedProposal.Validate()
-	prepareJustification, _ := signedProposal.Message.GetPrepareJustifications()         // no need to check error, checked on signedProposal.Validate()
+	roundChangeJustificationSignedMessages, _ := msg.QBFTMessage.GetRoundChangeJustifications() // no need to check error, checked on msg.SignedMessage.Validate()
+	prepareJustificationSignedMessages, _ := msg.QBFTMessage.GetPrepareJustifications()         // no need to check error, checked on msg.SignedMessage.Validate()
+
+	roundChangeJustification := make([]*specqbft.ProcessingMessage, 0)
+	for _, rcSignedMessage := range roundChangeJustificationSignedMessages {
+		rc, err := specqbft.NewProcessingMessage(rcSignedMessage)
+		if err != nil {
+			return errors.Wrap(err, "could not create ProcessingMessage from round change justification")
+		}
+		roundChangeJustification = append(roundChangeJustification, rc)
+	}
+	prepareJustification := make([]*specqbft.ProcessingMessage, 0)
+	for _, prepareSignedMessage := range prepareJustificationSignedMessages {
+		procMsg, err := specqbft.NewProcessingMessage(prepareSignedMessage)
+		if err != nil {
+			return errors.Wrap(err, "could not create ProcessingMessage from prepare justification")
+		}
+		prepareJustification = append(prepareJustification, procMsg)
+	}
 
 	if err := isProposalJustification(
 		state,
@@ -109,15 +126,15 @@ func isValidProposal(
 		roundChangeJustification,
 		prepareJustification,
 		state.Height,
-		signedProposal.Message.Round,
-		signedProposal.FullData,
+		msg.QBFTMessage.Round,
+		msg.SignedMessage.FullData,
 		valCheck,
 	); err != nil {
 		return errors.Wrap(err, "proposal not justified")
 	}
 
-	if (state.ProposalAcceptedForCurrentRound == nil && signedProposal.Message.Round == state.Round) ||
-		signedProposal.Message.Round > state.Round {
+	if (state.ProposalAcceptedForCurrentRound == nil && msg.QBFTMessage.Round == state.Round) ||
+		msg.QBFTMessage.Round > state.Round {
 		return nil
 	}
 	return errors.New("proposal is not valid with current state")
@@ -125,17 +142,17 @@ func isValidProposal(
 
 func IsProposalJustification(
 	config qbft.IConfig,
-	share *ssvtypes.SSVShare,
-	roundChangeMsgs []*specqbft.SignedMessage,
-	prepareMsgs []*specqbft.SignedMessage,
+	committeeMember *spectypes.CommitteeMember,
+	roundChangeMsgs []*specqbft.ProcessingMessage,
+	prepareMsgs []*specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
 	fullData []byte,
 ) error {
 	return isProposalJustification(
 		&specqbft.State{
-			Share:  &share.Share,
-			Height: height,
+			CommitteeMember: committeeMember,
+			Height:          height,
 		},
 		config,
 		roundChangeMsgs,
@@ -151,8 +168,8 @@ func IsProposalJustification(
 func isProposalJustification(
 	state *specqbft.State,
 	config qbft.IConfig,
-	roundChangeMsgs []*specqbft.SignedMessage,
-	prepareMsgs []*specqbft.SignedMessage,
+	roundChangeMsgs []*specqbft.ProcessingMessage,
+	prepareMsgs []*specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
 	fullData []byte,
@@ -169,20 +186,20 @@ func isProposalJustification(
 		// no quorum, duplicate signers,  invalid still has quorum, invalid no quorum
 		// prepared
 		for _, rc := range roundChangeMsgs {
-			if err := validRoundChangeForData(state, config, rc, height, round, fullData); err != nil {
+			if err := validRoundChangeForDataVerifySignature(state, config, rc, height, round, fullData); err != nil {
 				return errors.Wrap(err, "change round msg not valid")
 			}
 		}
 
 		// check there is a quorum
-		if !specqbft.HasQuorum(state.Share, roundChangeMsgs) {
+		if !specqbft.HasQuorum(state.CommitteeMember, roundChangeMsgs) {
 			return errors.New("change round has no quorum")
 		}
 
 		// previouslyPreparedF returns true if any on the round change messages have a prepared round and fullData
-		previouslyPrepared, err := func(rcMsgs []*specqbft.SignedMessage) (bool, error) {
+		previouslyPrepared, err := func(rcMsgs []*specqbft.ProcessingMessage) (bool, error) {
 			for _, rc := range rcMsgs {
-				if rc.Message.RoundChangePrepared() {
+				if rc.QBFTMessage.RoundChangePrepared() {
 					return true, nil
 				}
 			}
@@ -197,16 +214,16 @@ func isProposalJustification(
 		} else {
 
 			// check prepare quorum
-			if !specqbft.HasQuorum(state.Share, prepareMsgs) {
+			if !specqbft.HasQuorum(state.CommitteeMember, prepareMsgs) {
 				return errors.New("prepares has no quorum")
 			}
 
 			// get a round change data for which there is a justification for the highest previously prepared round
-			rcm, err := highestPrepared(roundChangeMsgs)
+			rcMsg, err := highestPrepared(roundChangeMsgs)
 			if err != nil {
 				return errors.Wrap(err, "could not get highest prepared")
 			}
-			if rcm == nil {
+			if rcMsg == nil {
 				return errors.New("no highest prepared")
 			}
 
@@ -215,19 +232,19 @@ func isProposalJustification(
 			if err != nil {
 				return errors.Wrap(err, "could not hash input data")
 			}
-			if !bytes.Equal(r[:], rcm.Message.Root[:]) {
+			if !bytes.Equal(r[:], rcMsg.QBFTMessage.Root[:]) {
 				return errors.New("proposed data doesn't match highest prepared")
 			}
 
 			// validate each prepare message against the highest previously prepared fullData and round
 			for _, pm := range prepareMsgs {
-				if err := validSignedPrepareForHeightRoundAndRoot(
+				if err := validSignedPrepareForHeightRoundAndRootVerifySignature(
 					config,
 					pm,
 					height,
-					rcm.Message.DataRound,
-					rcm.Message.Root,
-					state.Share.Committee,
+					rcMsg.QBFTMessage.DataRound,
+					rcMsg.QBFTMessage.Root,
+					state.CommitteeMember.Committee,
 				); err != nil {
 					return errors.New("signed prepare not valid")
 				}
@@ -255,17 +272,26 @@ func proposer(state *specqbft.State, config qbft.IConfig, round specqbft.Round) 
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *specqbft.State, config qbft.IConfig, fullData []byte, roundChanges, prepares []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func CreateProposal(state *specqbft.State, signer ssvtypes.OperatorSigner, fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	r, err := specqbft.HashDataRoot(fullData)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not hash input data")
 	}
 
-	roundChangesData, err := specqbft.MarshalJustifications(roundChanges)
+	roundChangeSignedMessages := make([]*spectypes.SignedSSVMessage, 0)
+	for _, msg := range roundChanges {
+		roundChangeSignedMessages = append(roundChangeSignedMessages, msg.SignedMessage)
+	}
+	prepareSignedMessages := make([]*spectypes.SignedSSVMessage, 0)
+	for _, msg := range prepares {
+		prepareSignedMessages = append(prepareSignedMessages, msg.SignedMessage)
+	}
+
+	roundChangesData, err := specqbft.MarshalJustifications(roundChangeSignedMessages)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not marshal justifications")
 	}
-	preparesData, err := specqbft.MarshalJustifications(prepares)
+	preparesData, err := specqbft.MarshalJustifications(prepareSignedMessages)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not marshal justifications")
 	}
@@ -280,17 +306,11 @@ func CreateProposal(state *specqbft.State, config qbft.IConfig, fullData []byte,
 		RoundChangeJustification: roundChangesData,
 		PrepareJustification:     preparesData,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
+
+	signedMsg, err := ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed signing proposal msg")
+		return nil, errors.Wrap(err, "could not wrap proposal message")
 	}
-
-	signedMsg := &specqbft.SignedMessage{
-		Signature: sig,
-		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
-		Message:   *msg,
-
-		FullData: fullData,
-	}
+	signedMsg.FullData = fullData
 	return signedMsg, nil
 }

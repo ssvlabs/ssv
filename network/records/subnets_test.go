@@ -2,13 +2,12 @@ package records
 
 import (
 	crand "crypto/rand"
-	"strings"
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 func Test_SubnetsEntry(t *testing.T) {
@@ -43,72 +42,4 @@ func Test_SubnetsEntry(t *testing.T) {
 			require.Equal(t, byte(0), subnetsFromEnr[i])
 		}
 	}
-}
-
-func TestSubnetsParsing(t *testing.T) {
-	subtests := []struct {
-		name        string
-		str         string
-		shouldError bool
-	}{
-		{
-			"all subnets",
-			"0xffffffffffffffffffffffffffffffff",
-			false,
-		},
-		{
-			"partial subnets",
-			"0x57b080fffd743d9878dc41a184ab160a",
-			false,
-		},
-		{
-			"wrong size",
-			"57b080fffd743d9878dc41a184ab1600",
-			false,
-		},
-		{
-			"invalid",
-			"xxx",
-			true,
-		},
-	}
-
-	for _, subtest := range subtests {
-		subtest := subtest
-		t.Run(subtest.name, func(t *testing.T) {
-			s, err := Subnets{}.FromString(subtest.str)
-			if subtest.shouldError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, strings.Replace(subtest.str, "0x", "", 1), s.String())
-			}
-		})
-	}
-}
-
-func TestSharedSubnets(t *testing.T) {
-	s1, err := Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
-	require.NoError(t, err)
-	s2, err := Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
-	require.NoError(t, err)
-
-	var expectedShared []int
-	for subnet, val := range s2 {
-		if val > 0 {
-			expectedShared = append(expectedShared, subnet)
-		}
-	}
-	shared := SharedSubnets(s1, s2, 0)
-	require.Equal(t, expectedShared, shared)
-}
-
-func TestDiffSubnets(t *testing.T) {
-	s1, err := Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
-	require.NoError(t, err)
-	s2, err := Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
-	require.NoError(t, err)
-
-	diff := DiffSubnets(s1, s2)
-	require.Len(t, diff, 128-62)
 }

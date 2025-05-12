@@ -3,11 +3,12 @@ package runner
 import (
 	"encoding/hex"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	sigs := state.PreConsensusContainer.Signatures[hex.EncodeToString(root[:])]
+	sigs := state.PreConsensusContainer.Signatures[state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 	var signers []spectypes.OperatorID
 	for op := range sigs {
 		signers = append(signers, op)
@@ -15,11 +16,35 @@ func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID 
 	return signers
 }
 
-func getPostConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {
-	sigs := state.PostConsensusContainer.Signatures[hex.EncodeToString(root[:])]
+func getPostConsensusCommitteeSigners(state *State, root [32]byte) []spectypes.OperatorID {
 	var signers []spectypes.OperatorID
+
+	for _, bd := range state.StartingDuty.(*spectypes.CommitteeDuty).ValidatorDuties {
+		sigs := state.PostConsensusContainer.Signatures[bd.ValidatorIndex][ssv.SigningRoot(hex.EncodeToString(root[:]))]
+		for op := range sigs {
+			signers = append(signers, op)
+		}
+	}
+
+	have := make(map[spectypes.OperatorID]struct{})
+	var signersUnique []spectypes.OperatorID
+	for _, opId := range signers {
+		if _, ok := have[opId]; !ok {
+			have[opId] = struct{}{}
+			signersUnique = append(signersUnique, opId)
+		}
+	}
+
+	return signersUnique
+}
+
+func getPostConsensusProposerSigners(state *State, root [32]byte) []spectypes.OperatorID {
+	var signers []spectypes.OperatorID
+	valIdx := state.StartingDuty.(*spectypes.ValidatorDuty).ValidatorIndex
+	sigs := state.PostConsensusContainer.Signatures[valIdx][ssv.SigningRoot(hex.EncodeToString(root[:]))]
 	for op := range sigs {
 		signers = append(signers, op)
 	}
+
 	return signers
 }

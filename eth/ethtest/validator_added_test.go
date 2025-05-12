@@ -7,8 +7,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type testValidatorRegisteredInput struct {
@@ -82,7 +82,8 @@ func (input *testValidatorRegisteredInput) prepare(
 	for i, validatorId := range validatorsIds {
 		// Check there are no shares in the state for the current validator
 		valPubKey := validators[validatorId].masterPubKey.Serialize()
-		share := input.nodeStorage.Shares().Get(nil, valPubKey)
+		share, exists := input.nodeStorage.Shares().Get(nil, valPubKey)
+		require.False(input.t, exists)
 		require.Nil(input.t, share)
 
 		// Create event input
@@ -105,11 +106,12 @@ func (input *testValidatorRegisteredInput) produce() {
 	for _, event := range input.events {
 		val := event.validator
 		valPubKey := val.masterPubKey.Serialize()
-		shares := input.nodeStorage.Shares().Get(nil, valPubKey)
+		shares, exists := input.nodeStorage.Shares().Get(nil, valPubKey)
+		require.False(input.t, exists)
 		require.Nil(input.t, shares)
 
 		// Call the contract method
-		_, err := input.boundContract.SimcontractTransactor.RegisterValidator(
+		_, err := input.boundContract.RegisterValidator(
 			event.auth,
 			val.masterPubKey.Serialize(),
 			event.opsIds,

@@ -2,10 +2,10 @@ package queue
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/qbft"
 )
 
-// State represents a portion of the the current state
+// State represents a portion of the current state
 // that is relevant to the prioritization of messages.
 type State struct {
 	HasRunningInstance bool
@@ -18,7 +18,7 @@ type State struct {
 // MessagePrioritizer is an interface for prioritizing messages.
 type MessagePrioritizer interface {
 	// Prior returns true if message A should be prioritized over B.
-	Prior(a, b *DecodedSSVMessage) bool
+	Prior(a, b *SSVMessage) bool
 }
 
 type standardPrioritizer struct {
@@ -31,7 +31,7 @@ func NewMessagePrioritizer(state *State) MessagePrioritizer {
 	return &standardPrioritizer{state: state}
 }
 
-func (p *standardPrioritizer) Prior(a, b *DecodedSSVMessage) bool {
+func (p *standardPrioritizer) Prior(a, b *SSVMessage) bool {
 	msgScoreA, msgScoreB := scoreMessageType(a), scoreMessageType(b)
 	if msgScoreA != msgScoreB {
 		return msgScoreA > msgScoreB
@@ -52,7 +52,7 @@ func (p *standardPrioritizer) Prior(a, b *DecodedSSVMessage) bool {
 		return scoreA > scoreB
 	}
 
-	scoreA, scoreB = scoreConsensusType(p.state, a), scoreConsensusType(p.state, b)
+	scoreA, scoreB = scoreConsensusType(a), scoreConsensusType(b)
 	if scoreA != scoreB {
 		return scoreA > scoreB
 	}
@@ -70,4 +70,36 @@ func scoreHeight(relativeHeight int) int {
 		return 0
 	}
 	return 0
+}
+
+func NewCommitteeQueuePrioritizer(state *State) MessagePrioritizer {
+	return &committeePrioritizer{state: state}
+}
+
+type committeePrioritizer struct {
+	state *State
+}
+
+func (p *committeePrioritizer) Prior(a, b *SSVMessage) bool {
+	msgScoreA, msgScoreB := scoreMessageType(a), scoreMessageType(b)
+	if msgScoreA != msgScoreB {
+		return msgScoreA > msgScoreB
+	}
+
+	relativeHeightA, relativeHeightB := compareHeightOrSlot(p.state, a), compareHeightOrSlot(p.state, b)
+	if relativeHeightA != relativeHeightB {
+		return scoreHeight(relativeHeightA) > scoreHeight(relativeHeightB)
+	}
+
+	scoreA, scoreB := scoreCommitteeMessageSubtype(p.state, a, relativeHeightA), scoreCommitteeMessageSubtype(p.state, b, relativeHeightB)
+	if scoreA != scoreB {
+		return scoreA > scoreB
+	}
+
+	scoreA, scoreB = scoreConsensusType(a), scoreConsensusType(b)
+	if scoreA != scoreB {
+		return scoreA > scoreB
+	}
+
+	return true
 }

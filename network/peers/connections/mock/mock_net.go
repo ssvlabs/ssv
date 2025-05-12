@@ -63,6 +63,11 @@ func (m Net) StopNotify(notifiee libp2pnetwork.Notifiee) {
 	panic("implement me")
 }
 
+func (m Net) CanDial(p peer.ID, addr ma.Multiaddr) bool {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m Net) Close() error {
 	//TODO implement me
 	panic("implement me")

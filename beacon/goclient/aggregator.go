@@ -3,16 +3,19 @@ package goclient
 import (
 	"encoding/binary"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"go.uber.org/zap"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
-func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *GoClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	// As specified in spec, an aggregator should wait until two thirds of the way through slot
 	// to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
@@ -27,16 +30,12 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, fmt.Errorf("validator is not an aggregator")
 	}
 
-	attDataSSZMarshal, _, err := gc.GetAttestationData(slot, committeeIndex)
+	attData, _, err := gc.GetAttestationData(slot)
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
-	if attDataSSZMarshal == nil {
-		return nil, DataVersionNil, fmt.Errorf("attestation data is nil")
-	}
-	attData, ok := attDataSSZMarshal.(*phase0.AttestationData)
-	if !ok {
-		return nil, DataVersionNil, fmt.Errorf("failed to cast attestation data")
+	if gc.DataVersion(gc.network.EstimatedEpochAtSlot(attData.Slot)) < spec.DataVersionElectra {
+		attData.Index = committeeIndex
 	}
 
 	// Get aggregate attestation data.
@@ -46,35 +45,129 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	}
 
 	aggDataReqStart := time.Now()
-	aggDataResp, err := gc.client.AggregateAttestation(gc.ctx, &api.AggregateAttestationOpts{
+	aggDataResp, err := gc.multiClient.AggregateAttestation(gc.ctx, &api.AggregateAttestationOpts{
 		Slot:                slot,
 		AttestationDataRoot: root,
+		CommitteeIndex:      committeeIndex,
 	})
+	recordRequestDuration(gc.ctx, "AggregateAttestation", gc.multiClient.Address(), http.MethodGet, time.Since(aggDataReqStart), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "AggregateAttestation"),
+			zap.Error(err),
+		)
 		return nil, DataVersionNil, fmt.Errorf("failed to get aggregate attestation: %w", err)
 	}
 	if aggDataResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "AggregateAttestation"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation response is nil")
 	}
 	if aggDataResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "AggregateAttestation"),
+		)
 		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
-
-	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)
 
-	return &phase0.AggregateAndProof{
-		AggregatorIndex: index,
-		Aggregate:       aggDataResp.Data,
-		SelectionProof:  selectionProof,
-	}, spec.DataVersionPhase0, nil
+	switch aggDataResp.Data.Version {
+	case spec.DataVersionElectra:
+		if aggDataResp.Data.Electra == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg,
+				zap.String("api", "AggregateAttestation"),
+			)
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation electra data is nil")
+		}
+		return &electra.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Electra,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	case spec.DataVersionDeneb:
+		if aggDataResp.Data.Deneb == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg,
+				zap.String("api", "AggregateAttestation"),
+			)
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation deneb data is nil")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Deneb,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	case spec.DataVersionCapella:
+		if aggDataResp.Data.Capella == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg,
+				zap.String("api", "AggregateAttestation"),
+			)
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation capella data is nil")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Capella,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	case spec.DataVersionBellatrix:
+		if aggDataResp.Data.Bellatrix == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg,
+				zap.String("api", "AggregateAttestation"),
+			)
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation bellatrix data is nil")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Bellatrix,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	case spec.DataVersionAltair:
+		if aggDataResp.Data.Altair == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg,
+				zap.String("api", "AggregateAttestation"),
+			)
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation altair data is nil")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Altair,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	default:
+		if aggDataResp.Data.Phase0 == nil {
+			gc.log.Error(clNilResponseForkDataErrMsg,
+				zap.String("api", "AggregateAttestation"),
+			)
+			return nil, DataVersionNil, fmt.Errorf("aggregate attestation phase0 data is nil")
+		}
+		return &phase0.AggregateAndProof{
+			AggregatorIndex: index,
+			Aggregate:       aggDataResp.Data.Phase0,
+			SelectionProof:  selectionProof,
+		}, aggDataResp.Data.Version, nil
+	}
 }
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
-func (gc *goClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
-	return gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
+func (gc *GoClient) SubmitSignedAggregateSelectionProof(msg *spec.VersionedSignedAggregateAndProof) error {
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitAggregateAttestations"),
+		zap.String("client_addr", clientAddress))
+
+	start := time.Now()
+
+	err := gc.multiClient.SubmitAggregateAttestations(gc.ctx, &api.SubmitAggregateAttestationsOpts{SignedAggregateAndProofs: []*spec.VersionedSignedAggregateAndProof{msg}})
+	recordRequestDuration(gc.ctx, "SubmitAggregateAttestations", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	if err != nil {
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
+	}
+
+	logger.Debug("consensus client submitted signed aggregate attestations")
+	return nil
 }
 
 // IsAggregator returns true if the signature is from the input validator. The committee
@@ -98,8 +191,8 @@ func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 	return binary.LittleEndian.Uint64(b[:8])%modulo == 0, nil
 }
 
-// waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)
-func (gc *goClient) waitToSlotTwoThirds(slot phase0.Slot) {
+// waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after slot start time)
+func (gc *GoClient) waitToSlotTwoThirds(slot phase0.Slot) {
 	oneThird := gc.network.SlotDurationSec() / 3 /* one third of slot duration */
 
 	finalTime := gc.slotStartTime(slot).Add(2 * oneThird)

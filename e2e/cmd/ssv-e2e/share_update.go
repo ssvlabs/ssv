@@ -6,20 +6,21 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
-	"github.com/bloxapp/ssv/e2e/logs_catcher"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher"
+	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/blskeygen"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 type ShareUpdateCmd struct {
@@ -117,7 +118,7 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 		if validatorShare == nil {
 			return fmt.Errorf(fmt.Sprintf("validator share not found for %s", corruptedShare.ValidatorPubKey))
 		}
-		if validatorShare.Metadata.BeaconMetadata.Index != phase0.ValidatorIndex(corruptedShare.ValidatorIndex) {
+		if validatorShare.ValidatorIndex != phase0.ValidatorIndex(corruptedShare.ValidatorIndex) {
 			return fmt.Errorf("validator index mismatch for validator %s", corruptedShare.ValidatorPubKey)
 		}
 
@@ -164,7 +165,7 @@ func openDB(logger *zap.Logger, dbPath string) (*kv.BadgerDB, error) {
 func readOperatorPrivateKeyFromFile(filePath string) (string, error) {
 	var config ShareUpdateCmd
 
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filepath.Clean(filePath))
 	if err != nil {
 		return "", fmt.Errorf("failed to read file: %s, error: %w", filePath, err)
 	}

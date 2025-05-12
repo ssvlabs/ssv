@@ -3,14 +3,12 @@ package p2pv1
 import (
 	"math"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	ssvpeers "github.com/bloxapp/ssv/network/peers"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/logging/fields"
+	ssvpeers "github.com/ssvlabs/ssv/network/peers"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 // ReportValidation reports the result for the given message
@@ -19,7 +17,7 @@ func (n *p2pNetwork) ReportValidation(logger *zap.Logger, msg *spectypes.SSVMess
 	if !n.isReady() {
 		return
 	}
-	data, err := commons.EncodeNetworkMsg(msg)
+	data, err := msg.Encode()
 	if err != nil {
 		logger.Warn("could not encode message", zap.Error(err))
 		return

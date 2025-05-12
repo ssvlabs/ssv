@@ -6,7 +6,7 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/logging"
 )
 
 // badgerLogger is a wrapper for badger.Logger

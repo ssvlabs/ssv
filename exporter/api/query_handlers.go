@@ -4,78 +4,19 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 const (
 	unknownError = "unknown error"
 )
-
-// HandleDecidedQuery handles TypeDecided queries.
-func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage) {
-	logger.Debug("handles decided request",
-		zap.Uint64("from", nm.Msg.Filter.From),
-		zap.Uint64("to", nm.Msg.Filter.To),
-		zap.String("pk", nm.Msg.Filter.PublicKey),
-		zap.String("role", nm.Msg.Filter.Role))
-	res := Message{
-		Type:   nm.Msg.Type,
-		Filter: nm.Msg.Filter,
-	}
-
-	pkRaw, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
-	if err != nil {
-		logger.Warn("failed to decode validator public key", zap.Error(err))
-		res.Data = []string{"internal error - could not read validator key"}
-		nm.Msg = res
-		return
-	}
-
-	beaconRole, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
-	if err != nil {
-		logger.Warn("failed to parse role", zap.Error(err))
-		res.Data = []string{"role doesn't exist"}
-		nm.Msg = res
-		return
-	}
-
-	roleStorage := qbftStorage.Get(beaconRole)
-	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.Role(beaconRole))
-		res.Data = []string{"internal error - role storage doesn't exist"}
-		nm.Msg = res
-		return
-	}
-
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, beaconRole)
-	from := specqbft.Height(nm.Msg.Filter.From)
-	to := specqbft.Height(nm.Msg.Filter.To)
-	instances, err := roleStorage.GetInstancesInRange(msgID[:], from, to)
-	if err != nil {
-		logger.Warn("failed to get instances", zap.Error(err))
-		res.Data = []string{"internal error - could not get decided messages"}
-	} else {
-		msgs := make([]*specqbft.SignedMessage, 0, len(instances))
-		for _, instance := range instances {
-			msgs = append(msgs, instance.DecidedMessage)
-		}
-		data, err := DecidedAPIData(msgs...)
-		if err != nil {
-			res.Data = []string{err.Error()}
-		} else {
-			res.Data = data
-		}
-	}
-
-	nm.Msg = res
-}
 
 // HandleErrorQuery handles TypeError queries.
 func HandleErrorQuery(logger *zap.Logger, nm *NetworkMessage) {
@@ -103,4 +44,76 @@ func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 		Type: TypeError,
 		Data: []string{fmt.Sprintf("bad request - unknown message type '%s'", nm.Msg.Type)},
 	}
+}
+
+// HandleParticipantsQuery handles TypeParticipants queries.
+func HandleParticipantsQuery(logger *zap.Logger, store *storage.ParticipantStores, nm *NetworkMessage, domain spectypes.DomainType) {
+	logger.Debug("handles query request",
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
+		zap.String("publicKey", nm.Msg.Filter.PublicKey),
+		zap.String("role", nm.Msg.Filter.Role))
+	res := Message{
+		Type:   nm.Msg.Type,
+		Filter: nm.Msg.Filter,
+	}
+	pkRaw, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
+	if err != nil {
+		logger.Warn("failed to decode validator public key", zap.Error(err))
+		res.Data = []string{"internal error - could not read validator key"}
+		nm.Msg = res
+		return
+	}
+	if len(pkRaw) != pubKeySize {
+		logger.Warn("bad size for the provided public key", zap.Int("length", len(pkRaw)))
+		res.Data = []string{"bad size for the provided public key"}
+		nm.Msg = res
+		return
+	}
+
+	role, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
+	if err != nil {
+		logger.Warn("failed to parse role", zap.Error(err))
+		res.Data = []string{"role doesn't exist"}
+		nm.Msg = res
+		return
+	}
+	roleStorage := store.Get(role)
+	if roleStorage == nil {
+		logger.Warn("role storage doesn't exist", fields.ExporterRole(role))
+		res.Data = []string{"internal error - role storage doesn't exist", role.String()}
+		nm.Msg = res
+		return
+	}
+
+	from := phase0.Slot(nm.Msg.Filter.From)
+	to := phase0.Slot(nm.Msg.Filter.To)
+	participantsList, err := roleStorage.GetParticipantsInRange(spectypes.ValidatorPK(pkRaw), from, to)
+	if err != nil {
+		logger.Warn("failed to get participants", zap.Error(err))
+		res.Data = []string{"internal error - could not get participants messages"}
+	} else {
+		participations := toParticipations(role, spectypes.ValidatorPK(pkRaw), participantsList)
+		data, err := ParticipantsAPIData(domain, participations...)
+		if err != nil {
+			res.Data = []string{err.Error()}
+		} else {
+			res.Data = data
+		}
+	}
+	nm.Msg = res
+}
+
+func toParticipations(role spectypes.BeaconRole, pk spectypes.ValidatorPK, ee []qbftstorage.ParticipantsRangeEntry) []qbftstorage.Participation {
+	out := make([]qbftstorage.Participation, 0, len(ee))
+	for _, e := range ee {
+		p := qbftstorage.Participation{
+			ParticipantsRangeEntry: e,
+			Role:                   role,
+			PubKey:                 pk,
+		}
+		out = append(out, p)
+	}
+
+	return out
 }

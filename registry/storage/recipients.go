@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var (
@@ -86,7 +86,7 @@ func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte)
 	}
 }
 
-// GetRecipientsPrefix returns the prefix
+// GetRecipientsPrefix returns DB prefix
 func (s *recipientsStorage) GetRecipientsPrefix() []byte {
 	return recipientsPrefix
 }
@@ -157,7 +157,10 @@ func (s *recipientsStorage) GetNextNonce(r basedb.Reader, owner common.Address) 
 }
 
 func (s *recipientsStorage) BumpNonce(rw basedb.ReadWriter, owner common.Address) error {
-	rData, found, err := s.GetRecipientData(rw, owner)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	rData, found, err := s.getRecipientData(rw, owner)
 	if err != nil {
 		return errors.Wrap(err, "could not get recipient data")
 	}

@@ -1,13 +1,10 @@
 name: E2E Test
 
 on:
-  workflow_run:
-    workflows: [Lint, Unit tests]
-    types: [completed]
-    branches: [stage, main]
-  #  pull_request:
-  #    branches:
-  #      - "**"
+  # workflow_run:
+  #   workflows: [Lint, Unit tests]
+  #   types: [completed]
+  #   branches: [stage, main]
 
   workflow_dispatch:
 
@@ -21,7 +18,7 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run e2e.sh
         env:

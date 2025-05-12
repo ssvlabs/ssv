@@ -3,10 +3,10 @@ package migrations
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // This migration is an Example of atomic

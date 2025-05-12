@@ -6,12 +6,12 @@ import (
 	"sync"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestRouter(t *testing.T) {
@@ -41,10 +41,10 @@ func TestRouter(t *testing.T) {
 	}()
 
 	for i := 0; i < expectedCount; i++ {
-		msg := &queue.DecodedSSVMessage{
+		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.MsgType(i % 3),
-				MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte{1, 1, 1, 1, 1}, spectypes.BNRoleAttester),
+				MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
 				Data:    []byte(fmt.Sprintf("data-%d", i)),
 			},
 		}

@@ -21,7 +21,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept"
+	"github.com/ssvlabs/ssv/e2e/beacon_proxy/intercept"
 )
 
 type (

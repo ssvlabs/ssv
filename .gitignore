@@ -24,27 +24,7 @@ vendor/
 /config/config.yaml
 /config/config*/
 
-# User-specific stuff:
-.idea/**/workspace.xml
-.idea/**/tasks.xml
-.idea/watcherTasks.xml
-.idea/misc.xml
-.idea/dictionaries
-.idea/codeStyles
-.idea/shelf
-
-# Sensitive or high-churn files:
-.idea/**/dataSources/
-.idea/**/dataSources.ids
-.idea/**/dataSources.xml
-.idea/**/dataSources.local.xml
-.idea/**/sqlDataSources.xml
-.idea/**/dynamic.xml
-.idea/**/uiDesigner.xml
-
-# Gradle:
-.idea/**/gradle.xml
-.idea/**/libraries
+.idea/
 
 docker-compose-local.yaml
 
@@ -60,4 +40,5 @@ bin/
 .vscode/
 patches/
 
-differ
+go.work
+go.work.sum

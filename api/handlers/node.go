@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/bloxapp/ssv/api"
-	networkpeers "github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/ssvlabs/ssv/api"
+	networkpeers "github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
 const (
@@ -20,7 +21,7 @@ const (
 )
 
 type TopicIndex interface {
-	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
+	PeersByTopic() map[string][]peer.ID
 }
 
 type AllPeersAndTopicsJSON struct {
@@ -114,10 +115,11 @@ func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
-	peers, byTopic := h.TopicIndex.PeersByTopic()
-
+	byTopic := h.TopicIndex.PeersByTopic()
+	peers := h.Network.Peers()
 	resp := AllPeersAndTopicsJSON{
-		AllPeers: peers,
+		AllPeers:     peers,
+		PeersByTopic: make([]topicIndexJSON, 0, len(byTopic)),
 	}
 	for topic, peers := range byTopic {
 		resp.PeersByTopic = append(resp.PeersByTopic, topicIndexJSON{TopicName: topic, Peers: peers})
@@ -160,7 +162,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	// Check the health of Ethereum nodes and EventSyncer.
 	resp.BeaconNode = healthStatus{h.NodeProber.CheckBeaconNodeHealth(ctx)}
 	resp.ExecutionNode = healthStatus{h.NodeProber.CheckExecutionNodeHealth(ctx)}
-	resp.EventSyncer = healthStatus{(h.NodeProber.CheckEventSyncerHealth(ctx))}
+	resp.EventSyncer = healthStatus{h.NodeProber.CheckEventSyncerHealth(ctx)}
 
 	return api.Render(w, r, resp)
 }

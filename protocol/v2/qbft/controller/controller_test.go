@@ -1,18 +1,20 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 func TestController_Marshaling(t *testing.T) {
@@ -37,18 +39,27 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	// Initialize logger
 	logger := logging.TestLogger(t)
 
+	keySet := spectestingutils.Testing4SharesSet()
 	testConfig := &qbft.Config{
-		Signer:  spectestingutils.NewTestingKeyManager(),
-		Network: spectestingutils.NewTestingNetwork(),
-		Timer:   roundtimer.NewTestingTimer(),
+		BeaconSigner: ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager()),
+		Network:      spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
+		Timer:        roundtimer.NewTestingTimer(),
+		CutOffRound:  spectestingutils.TestingCutOffRound,
 	}
 
-	share := spectestingutils.TestingShare(spectestingutils.Testing4SharesSet())
+	identifier := make([]byte, 56)
+	identifier[0] = 1
+	identifier[1] = 2
+	identifier[2] = 3
+	identifier[3] = 4
+
+	share := spectestingutils.TestingCommitteeMember(keySet)
 	inst := instance.NewInstance(
 		testConfig,
 		share,
-		[]byte{1, 2, 3, 4},
+		identifier,
 		specqbft.FirstHeight,
+		spectestingutils.TestingOperatorSigner(keySet),
 	)
 
 	// Initialize Controller
@@ -73,7 +84,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	contr.StoredInstances.addNewInstance(inst)
 
 	// Call OnTimeout and capture the error
-	err = contr.OnTimeout(logger, *msg)
+	err = contr.OnTimeout(context.TODO(), logger, *msg)
 
 	// Assert that the error is nil and the round did not bump
 	require.NoError(t, err)
@@ -83,7 +94,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	inst.State.Round = specqbft.FirstRound
 
 	// Call OnTimeout and capture the error
-	err = contr.OnTimeout(logger, *msg)
+	err = contr.OnTimeout(context.TODO(), logger, *msg)
 
 	// Assert that the error is nil and the round did bump
 	require.NoError(t, err)

@@ -2,13 +2,12 @@ package beacon
 
 import (
 	"context"
-	"time"
 
-	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
+
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 )
 
 // TODO: add missing tests
@@ -20,7 +19,7 @@ type beaconDuties interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
 	ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error)
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
-	eth2client.EventsProvider
+	SubscribeToHeadEvents(ctx context.Context, subscriberIdentifier string, ch chan<- *eth2apiv1.HeadEvent) error
 }
 
 // beaconSubscriber interface serves all committee subscribe to subnet (p2p topic)
@@ -46,6 +45,8 @@ type signer interface {
 	ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error)
 }
 
+// TODO: remove temp spec intefaces once spec is settled
+
 // BeaconNode interface for all beacon duty calls
 type BeaconNode interface {
 	specssv.BeaconNode // spec beacon interface
@@ -54,15 +55,4 @@ type BeaconNode interface {
 	beaconValidator
 	signer // TODO need to handle differently
 	proposer
-}
-
-// Options for controller struct creation
-type Options struct {
-	Context        context.Context
-	Network        Network
-	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	Graffiti       []byte
-	GasLimit       uint64
-	CommonTimeout  time.Duration // Optional.
-	LongTimeout    time.Duration // Optional.
 }

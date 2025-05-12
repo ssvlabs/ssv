@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 )
 
 type testValidatorRemovedInput struct {
@@ -83,10 +83,11 @@ func (input *TestValidatorRemovedEventsInput) produce() {
 	for _, event := range input.events {
 		valPubKey := event.validator.masterPubKey.Serialize()
 		// Check the validator's shares are present in the state before removing
-		valShare := input.nodeStorage.Shares().Get(nil, valPubKey)
+		valShare, exists := input.nodeStorage.Shares().Get(nil, valPubKey)
+		require.True(input.t, exists)
 		require.NotNil(input.t, valShare)
 
-		_, err = input.boundContract.SimcontractTransactor.RemoveValidator(
+		_, err = input.boundContract.RemoveValidator(
 			event.auth,
 			valPubKey,
 			event.opsIds,

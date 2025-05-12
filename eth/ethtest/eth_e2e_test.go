@@ -9,12 +9,12 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 var (
@@ -146,8 +146,6 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 1: Add more validators
 		{
-			validatorCtrl.EXPECT().StartValidator(gomock.Any()).AnyTimes()
-
 			// Check current nonce before start
 			nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
 			require.NoError(t, err)
@@ -165,13 +163,15 @@ func TestEthExecLayer(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, expectedNonce, nonce)
 
+			lastBlockNum, err := testEnv.sim.Client().BlockByNumber(ctx, nil)
+			require.NoError(t, err)
 			// Not sure does this make sense
-			require.Equal(t, uint64(testEnv.sim.Blockchain.CurrentBlock().Number.Int64()), *common.blockNum)
+			require.Equal(t, lastBlockNum.Number().Uint64(), *common.blockNum)
 		}
 
 		// Step 2: Exit validator
 		{
-			validatorCtrl.EXPECT().ExitValidator(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			validatorCtrl.EXPECT().ExitValidator(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 			shares := nodeStorage.Shares().List(nil)
 			require.Equal(t, 7, len(shares))
@@ -220,7 +220,8 @@ func TestEthExecLayer(t *testing.T) {
 
 			for _, event := range valRemove.events {
 				valPubKey := event.validator.masterPubKey.Serialize()
-				valShare := nodeStorage.Shares().Get(nil, valPubKey)
+				valShare, exists := nodeStorage.Shares().Get(nil, valPubKey)
+				require.False(t, exists)
 				require.Nil(t, valShare)
 			}
 		}
@@ -246,7 +247,7 @@ func TestEthExecLayer(t *testing.T) {
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
-			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 
@@ -261,7 +262,7 @@ func TestEthExecLayer(t *testing.T) {
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
-			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 
@@ -284,7 +285,7 @@ func TestEthExecLayer(t *testing.T) {
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
 
-			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 

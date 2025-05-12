@@ -1,12 +1,15 @@
 package api
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // Message represents an exporter message
@@ -19,64 +22,67 @@ type Message struct {
 	Data interface{} `json:"data,omitempty"`
 }
 
-type SignedMessageAPI struct {
-	Signature types.Signature
-	Signers   []types.OperatorID
-	Message   specqbft.Message
-
-	FullData *types.ConsensusData
+type ParticipantsAPI struct {
+	Signers     []spectypes.OperatorID
+	Slot        phase0.Slot
+	Identifier  []byte
+	ValidatorPK string
+	Role        string
+	Message     specqbft.Message
+	FullData    *spectypes.ValidatorConsensusData
 }
 
-// NewDecidedAPIMsg creates a new message from the given message
-// TODO: avoid converting to v0 once explorer is upgraded
-func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
-	data, err := DecidedAPIData(msgs...)
+// NewParticipantsAPIMsg creates a new message in a new format from the given message.
+func NewParticipantsAPIMsg(domainType spectypes.DomainType, msg qbftstorage.Participation) Message {
+	data, err := ParticipantsAPIData(domainType, msg)
 	if err != nil {
 		return Message{
-			Type: TypeDecided,
+			Type: TypeParticipants,
 			Data: []string{},
 		}
 	}
 
-	identifier := specqbft.ControllerIdToMessageID(msgs[0].Message.Identifier)
-	pkv := identifier.GetPubKey()
-	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
-			PublicKey: hex.EncodeToString(pkv),
-			From:      uint64(msgs[0].Message.Height),
-			To:        uint64(msgs[len(msgs)-1].Message.Height),
-			Role:      role.String(),
+			PublicKey: hex.EncodeToString(msg.PubKey[:]),
+			From:      uint64(msg.Slot),
+			To:        uint64(msg.Slot),
+			Role:      msg.Role.String(),
 		},
 		Data: data,
 	}
 }
 
-// DecidedAPIData creates a new message from the given message
-func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
+// ParticipantsAPIData creates a new message from the given message in a new format.
+func ParticipantsAPIData(domainType spectypes.DomainType, msgs ...qbftstorage.Participation) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
 
-	apiMsgs := make([]*SignedMessageAPI, 0)
+	apiMsgs := make([]*ParticipantsAPI, 0)
 	for _, msg := range msgs {
-		if msg == nil {
-			return nil, errors.New("nil message")
-		}
-
-		apiMsg := &SignedMessageAPI{
-			Signature: msg.Signature,
-			Signers:   msg.Signers,
-			Message:   msg.Message,
-		}
-
-		if msg.FullData != nil {
-			var cd types.ConsensusData
-			if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal consensus data")
-			}
-			apiMsg.FullData = &cd
+		var msgID = legacyNewMsgID(domainType, msg.PubKey[:], msg.Role)
+		blsPubKey := phase0.BLSPubKey{}
+		copy(blsPubKey[:], msg.PubKey[:])
+		apiMsg := &ParticipantsAPI{
+			Signers:     msg.Signers,
+			Slot:        msg.Slot,
+			Identifier:  msgID[:],
+			ValidatorPK: hex.EncodeToString(msg.PubKey[:]),
+			Role:        msg.Role.String(),
+			Message: specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.Height(msg.Slot),
+				Identifier: msgID[:],
+				Round:      specqbft.FirstRound,
+			},
+			FullData: &spectypes.ValidatorConsensusData{
+				Duty: spectypes.ValidatorDuty{
+					PubKey: blsPubKey,
+					Slot:   msg.Slot,
+				},
+			},
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)
@@ -109,4 +115,25 @@ const (
 	TypeDecided MessageType = "decided"
 	// TypeError is an enum for error type messages
 	TypeError MessageType = "error"
+	// TypeParticipants is an enum for participants type messages
+	TypeParticipants MessageType = "participants"
 )
+
+const (
+	domainSize       = 4
+	domainStartPos   = 0
+	pubKeySize       = 48
+	pubKeyStartPos   = domainStartPos + domainSize
+	roleTypeSize     = 4
+	roleTypeStartPos = pubKeyStartPos + pubKeySize
+)
+
+// legacyNewMsgID is needed only for API backwards-compatibility.
+func legacyNewMsgID(domain spectypes.DomainType, pk []byte, role spectypes.BeaconRole) (mid spectypes.MessageID) {
+	roleByts := make([]byte, 4)
+	binary.LittleEndian.PutUint32(roleByts, uint32(role)) // #nosec G115
+	copy(mid[domainStartPos:domainStartPos+domainSize], domain[:])
+	copy(mid[pubKeyStartPos:pubKeyStartPos+pubKeySize], pk)
+	copy(mid[roleTypeStartPos:roleTypeStartPos+roleTypeSize], roleByts)
+	return mid
+}

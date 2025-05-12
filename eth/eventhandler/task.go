@@ -2,34 +2,14 @@ package eventhandler
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type Task interface {
 	Execute() error
-}
-
-type startValidatorExecutor interface {
-	StartValidator(share *types.SSVShare) error
-}
-
-type StartValidatorTask struct {
-	executor startValidatorExecutor
-	share    *types.SSVShare
-}
-
-func NewStartValidatorTask(executor startValidatorExecutor, share *types.SSVShare) *StartValidatorTask {
-	return &StartValidatorTask{
-		executor: executor,
-		share:    share,
-	}
-}
-
-func (t StartValidatorTask) Execute() error {
-	return t.executor.StartValidator(t.share)
 }
 
 type stopValidatorExecutor interface {
@@ -133,7 +113,7 @@ func (t UpdateFeeRecipientTask) Execute() error {
 }
 
 type exitValidatorExecutor interface {
-	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
+	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 }
 
 type ExitValidatorTask struct {
@@ -141,17 +121,25 @@ type ExitValidatorTask struct {
 	pubKey         phase0.BLSPubKey
 	blockNumber    uint64
 	validatorIndex phase0.ValidatorIndex
+	ownValidator   bool
 }
 
-func NewExitValidatorTask(executor exitValidatorExecutor, pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) *ExitValidatorTask {
+func NewExitValidatorTask(
+	executor exitValidatorExecutor,
+	pubKey phase0.BLSPubKey,
+	blockNumber uint64,
+	validatorIndex phase0.ValidatorIndex,
+	ownValidator bool,
+) *ExitValidatorTask {
 	return &ExitValidatorTask{
 		executor:       executor,
 		pubKey:         pubKey,
 		blockNumber:    blockNumber,
 		validatorIndex: validatorIndex,
+		ownValidator:   ownValidator,
 	}
 }
 
 func (t ExitValidatorTask) Execute() error {
-	return t.executor.ExitValidator(t.pubKey, t.blockNumber, t.validatorIndex)
+	return t.executor.ExitValidator(t.pubKey, t.blockNumber, t.validatorIndex, t.ownValidator)
 }

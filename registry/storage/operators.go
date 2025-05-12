@@ -6,14 +6,16 @@ import (
 	"strconv"
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
+
+//go:generate mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go
 
 var (
 	operatorsPrefix = []byte("operators")
@@ -57,7 +59,7 @@ func NewOperatorsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) 
 	}
 }
 
-// GetOperatorsPrefix returns the prefix
+// GetOperatorsPrefix returns DB prefix
 func (s *operatorsStorage) GetOperatorsPrefix() []byte {
 	return operatorsPrefix
 }

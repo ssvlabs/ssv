@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,6 +69,12 @@ func Bind(r *http.Request, dest interface{}) error {
 				return err
 			}
 			fieldValue.SetInt(v)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			v, err := strconv.ParseUint(formValue, 10, 64)
+			if err != nil {
+				return err
+			}
+			fieldValue.SetUint(v)
 		case reflect.Float32, reflect.Float64:
 			v, err := strconv.ParseFloat(formValue, 64)
 			if err != nil {
@@ -86,7 +93,8 @@ func Bind(r *http.Request, dest interface{}) error {
 	}
 
 	if r.Header.Get("Content-Type") == "application/json" {
-		decoder := json.NewDecoder(r.Body)
+		reader := bufio.NewReader(r.Body)
+		decoder := json.NewDecoder(reader)
 		if err := decoder.Decode(dest); err != nil {
 			return err
 		}

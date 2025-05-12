@@ -5,31 +5,39 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"net/http"
 	"sync"
+	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 )
 
-func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
-	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+func (gc *GoClient) voluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+	value := gc.voluntaryExitDomainCached.Load()
+	if value != nil {
+		return *value, nil
+	}
+
+	v, err := gc.computeVoluntaryExitDomain(ctx)
 	if err != nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain spec response: %w", err)
+		return phase0.Domain{}, fmt.Errorf("compute voluntary exit domain: %w", err)
 	}
-	if specResponse == nil {
-		return phase0.Domain{}, fmt.Errorf("spec response is nil")
-	}
-	if specResponse.Data == nil {
-		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
+	gc.voluntaryExitDomainCached.Store(&v)
+	return v, nil
+}
+
+func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+	specResponse, err := gc.Spec(ctx)
+	if err != nil {
+		return phase0.Domain{}, fmt.Errorf("fetch spec: %w", err)
 	}
 
-	// TODO: consider storing fork version and genesis validators root in goClient
-	//		instead of fetching it every time
-
-	forkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
+	// EIP-7044 requires using CAPELLA_FORK_VERSION for DomainVoluntaryExit: https://eips.ethereum.org/EIPS/eip-7044
+	forkVersionRaw, ok := specResponse["CAPELLA_FORK_VERSION"]
 	if !ok {
 		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
 	}
@@ -42,17 +50,12 @@ func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		CurrentVersion: forkVersion,
 	}
 
-	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
+	genesis, err := gc.Genesis(ctx)
 	if err != nil {
 		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
-	if genesisResponse == nil {
-		return phase0.Domain{}, fmt.Errorf("genesis response is nil")
-	}
-	if genesisResponse.Data == nil {
-		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
-	}
-	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
+
+	forkData.GenesisValidatorsRoot = genesis.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
 	if err != nil {
@@ -66,8 +69,11 @@ func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	return domain, nil
 }
 
-func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
-	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
+func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+	switch domain {
+	case spectypes.DomainApplicationBuilder:
+		// DomainApplicationBuilder is constructed based on what Ethereum network we are connected
+		// to (Mainnet, Hoodi, etc.)
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
 			CurrentVersion:        gc.network.ForkVersion(),
@@ -80,14 +86,23 @@ func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[:], domain[:])
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
-	} else if domain == spectypes.DomainVoluntaryExit {
-		return gc.computeVoluntaryExitDomain(gc.ctx)
+	case spectypes.DomainVoluntaryExit:
+		// Deneb upgrade introduced https://eips.ethereum.org/EIPS/eip-7044 that requires special
+		// handling for DomainVoluntaryExit
+		return gc.voluntaryExitDomain(gc.ctx)
 	}
 
-	data, err := gc.client.Domain(gc.ctx, domain, epoch)
+	start := time.Now()
+	data, err := gc.multiClient.Domain(gc.ctx, domain, epoch)
+	recordRequestDuration(gc.ctx, "Domain", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "Domain"),
+			zap.Error(err),
+		)
 		return phase0.Domain{}, err
 	}
+
 	return data, nil
 }
 
@@ -102,7 +117,7 @@ func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 //	       object_root=hash_tree_root(ssz_object),
 //	       domain=domain,
 //	   ))
-func (gc *goClient) ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error) {
+func (gc *GoClient) ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error) {
 	if object == nil {
 		return [32]byte{}, errors.New("cannot compute signing root of nil")
 	}
@@ -116,7 +131,7 @@ func (gc *goClient) ComputeSigningRoot(object interface{}, domain phase0.Domain)
 
 // signingData Computes the signing data by utilising the provided root function and then
 // returning the signing data of the container object.
-func (gc *goClient) signingData(rootFunc func() ([32]byte, error), domain []byte) ([32]byte, error) {
+func (gc *GoClient) signingData(rootFunc func() ([32]byte, error), domain []byte) ([32]byte, error) {
 	objRoot, err := rootFunc()
 	if err != nil {
 		return [32]byte{}, err

@@ -4,27 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/http"
-
 	eth2client "github.com/attestantio/go-eth2-client"
-	"github.com/attestantio/go-eth2-client/auto"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"golang.org/x/exp/maps"
-
-	"github.com/bloxapp/ssv/networkconfig"
-
-	//eth2client "github.com/attestantio/go-eth2-client/http"
+	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/http"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/rs/zerolog"
-
 	"go.uber.org/zap"
 
-	beaconproxy "github.com/bloxapp/ssv/e2e/beacon_proxy"
-	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept/slashinginterceptor"
+	beaconproxy "github.com/ssvlabs/ssv/e2e/beacon_proxy"
+	"github.com/ssvlabs/ssv/e2e/beacon_proxy/intercept/slashinginterceptor"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 type BeaconProxyCmd struct {
@@ -39,11 +34,12 @@ type BeaconProxyJSON struct {
 
 func GetValidators(ctx context.Context, beaconURL string, idxs []phase0.ValidatorIndex) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 	// todo: maybe create the client on top and pass down to all components
-	client, err := auto.New(
+	client, err := http.New(
 		ctx,
-		auto.WithAddress(beaconURL),
-		auto.WithTimeout(30*time.Second),
-		auto.WithLogLevel(zerolog.ErrorLevel),
+		http.WithAddress(beaconURL),
+		http.WithTimeout(30*time.Second),
+		http.WithLogLevel(zerolog.ErrorLevel),
+		http.WithReducedMemoryUsage(true),
 	)
 
 	if err != nil {
@@ -51,9 +47,8 @@ func GetValidators(ctx context.Context, beaconURL string, idxs []phase0.Validato
 	}
 
 	validatorsResp, err := client.(eth2client.ValidatorsProvider).Validators(ctx, &api.ValidatorsOpts{
-		State:              "head",
-		Indices:            idxs,
-		WithoutBeaconState: true,
+		State:   "head",
+		Indices: idxs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get validators: %w", err)
@@ -103,7 +98,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 		return fmt.Errorf("error parsing json file: %s, %w", globals.ValidatorsFile, err)
 	}
 
-	validatorsData, err := GetValidators(ctx, cmd.BeaconNodeUrl, maps.Keys(beaconProxyJSON.Validators))
+	validatorsData, err := GetValidators(ctx, cmd.BeaconNodeUrl, slices.Collect(maps.Keys(beaconProxyJSON.Validators)))
 	if err != nil {
 		return fmt.Errorf("failed to get validators data from beacon node err:%v", err)
 	}
@@ -119,7 +114,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	gateways := make([]beaconproxy.Gateway, len(cmd.Gateways))
 
 	// TODO: implement ability to select what test to run
-	//interceptor := intercept.NewHappyInterceptor(maps.Values(validatorsData))
+	//interceptor := intercept.NewHappyInterceptor(slices.Collect(maps.Values(validatorsData)))
 	//var validatorsRunningSlashing []*v1.Validator
 	//for _, valData := range validatorsData {
 	//	if validators[valData.Index] == "slashing" {
@@ -132,7 +127,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	const startEpochDelay = 1 // TODO: change to 2 after debugging is done
 	startEpoch := networkCfg.Beacon.EstimatedCurrentEpoch() + startEpochDelay
 
-	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, true, maps.Values(validatorsData))
+	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, true, slices.Collect(maps.Values(validatorsData)))
 	go interceptor.WatchSubmissions()
 
 	for i, gw := range cmd.Gateways {

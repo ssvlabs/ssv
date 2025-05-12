@@ -4,18 +4,18 @@ import (
 	"context"
 	"time"
 
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-
-	"github.com/bloxapp/ssv/logging"
-
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
 )
 
 const (
@@ -66,7 +66,7 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 	return func(e PeerEvent) {
 		ctns := host.Network().Connectedness(e.AddrInfo.ID)
 		switch ctns {
-		case libp2pnetwork.CannotConnect, libp2pnetwork.Connected:
+		case libp2pnetwork.Connected:
 		default:
 			go handler(e)
 		}
@@ -93,15 +93,19 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...int) error {
+func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	// TODO
-	return nil
+	return false, nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...int) error {
+func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error) {
 	// TODO
-	return nil
+	return false, nil
+}
+
+func (md *localDiscovery) PublishENR(logger *zap.Logger) {
+	// TODO
 }
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -120,5 +124,10 @@ func (md *localDiscovery) Close() error {
 	if err := md.svc.Close(); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (dvs *localDiscovery) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
+	// TODO
 	return nil
 }
