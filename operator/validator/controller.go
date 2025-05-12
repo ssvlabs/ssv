@@ -608,7 +608,7 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	dutyID := fields.FormatDutyID(c.networkConfig.Beacon.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type, duty.ValidatorIndex)
-	ctx, span := tracer.Start(ctx,
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
 		observability.InstrumentName(observabilityNamespace, "execute_duty"),
 		trace.WithAttributes(
 			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
@@ -618,7 +618,8 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 			observability.ValidatorPublicKeyAttribute(duty.PubKey),
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
 			observability.DutyIDAttribute(dutyID),
-		))
+		),
+		trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
 
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.

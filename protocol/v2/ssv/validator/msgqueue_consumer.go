@@ -32,7 +32,7 @@ type queueContainer struct {
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	ctx, span := tracer.Start(ctx,
+	ctx, span := tracer.Start(v.fetchTraceContext(ctx, msg.GetID()),
 		observability.InstrumentName(observabilityNamespace, "handle_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),

@@ -9,6 +9,4 @@ const (
 	observabilityNamespace = "ssv.validator"
 )
 
-var (
-	tracer = otel.Tracer(observabilityName)
-)
+var tracer = otel.Tracer(observabilityName)
