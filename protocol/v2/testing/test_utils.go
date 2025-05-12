@@ -18,7 +18,7 @@ import (
 	"golang.org/x/mod/module"
 
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 )
 
 var (
@@ -33,11 +33,11 @@ func GenerateOperatorSigner(oids ...spectypes.OperatorID) ([]*rsa.PrivateKey, []
 	sks := make([]*rsa.PrivateKey, 0, len(oids))
 
 	for i := range oids {
-		pubKey, privKey, err := rsaencryption.GenerateKeys()
+		pubKey, privKey, err := rsaencryption.GenerateKeyPairPEM()
 		if err != nil {
 			panic(err)
 		}
-		opKey, err := rsaencryption.PemToPrivateKey(privKey)
+		opKey, err := rsaencryption.PEMToPrivateKey(privKey)
 		if err != nil {
 			panic(err)
 		}
