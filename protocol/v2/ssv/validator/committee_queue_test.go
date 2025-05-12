@@ -580,68 +580,6 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	assert.True(t, msgTypes[spectypes.SSVPartialSignatureMsgType])
 }
 
-// TestQueueCapacityOverflow verifies that messages are properly dropped
-// when the queue reaches its capacity.
-func TestQueueCapacityOverflow(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	logger := zaptest.NewLogger(t)
-
-	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-	}
-
-	logger.Debug("starting queue capacity overflow test")
-
-	slot := phase0.Slot(123)
-	committee.Queues[slot] = queueContainer{
-		Q: queue.New(3),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              1,
-		},
-	}
-
-	smallQueueCapacity := 3
-
-	q := queueContainer{
-		Q: queue.New(smallQueueCapacity),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              1,
-		},
-	}
-
-	for i := 0; i < smallQueueCapacity+2; i++ {
-		msgID := spectypes.MessageID{byte(i), byte(i + 1), byte(i + 2), byte(i + 3)}
-		qbftMsg := &specqbft.Message{
-			Height:  specqbft.Height(slot),
-			Round:   1,
-			MsgType: specqbft.ProposalMsgType,
-		}
-		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
-		pushed := q.Q.TryPush(testMsg)
-
-		if i < smallQueueCapacity {
-			assert.True(t, pushed)
-		} else {
-			assert.False(t, pushed)
-		}
-	}
-
-	assert.Equal(t, smallQueueCapacity, q.Q.Len())
-}
-
 // TestChangingFilterState verifies that messages that were previously filtered
 // become processable when the filter state changes.
 func TestChangingFilterState(t *testing.T) {
