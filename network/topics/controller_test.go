@@ -32,7 +32,6 @@ import (
 	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/operator/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -86,17 +85,10 @@ func TestTopicManager(t *testing.T) {
 		operators := mocks.NewMockOperators(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
-		db, err := kv.NewInMemory(logger, basedb.Options{})
-		require.NoError(t, err)
-
-		nodeStorage, err := storage.NewNodeStorage(logger, db)
-		require.NoError(t, err)
-
 		validator := validation.New(
 			networkconfig.TestNetwork,
 			validatorStore,
 			operators,
-			nodeStorage,
 			dutyStore,
 			signatureVerifier,
 			phase0.Epoch(0))

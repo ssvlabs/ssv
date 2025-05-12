@@ -69,7 +69,6 @@ var (
 	ErrWrongDomain                             = Error{text: "wrong domain"}
 	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
 	ErrUnknownValidator                        = Error{text: "unknown validator"}
-	ErrUnknownOperator                         = Error{text: "unknown operator"} // TODO: reject?
 	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
 	ErrEarlySlotMessage                        = Error{text: "message was sent before slot starts"}

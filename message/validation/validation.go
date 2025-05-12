@@ -55,7 +55,6 @@ type messageValidator struct {
 	state           *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 	validatorStore  validatorStore
 	operators       operators
-	operatorStore         storage.Operators
 	dutyStore       *dutystore.Store
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
@@ -80,7 +79,6 @@ func New(
 	netCfg networkconfig.NetworkConfig,
 	validatorStore validatorStore,
 	operators operators,
-	operatorStore storage.Operators,
 	dutyStore *dutystore.Store,
 	signatureVerifier signatureverifier.SignatureVerifier,
 	pectraForkEpoch phase0.Epoch,
@@ -97,7 +95,6 @@ func New(
 		validationLockCache: ttlcache.New[spectypes.MessageID, *sync.Mutex](),
 		validatorStore:      validatorStore,
 		operators:           operators,
-		operatorStore:       operatorStore,
 		dutyStore:           dutyStore,
 		signatureVerifier:   signatureVerifier,
 		pectraForkEpoch:     pectraForkEpoch,
@@ -183,7 +180,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
-	exist, err := mv.operatorStore.OperatorsExist(nil, signedSSVMessage.OperatorIDs)
+	exist, err := mv.operators.OperatorsExist(nil, signedSSVMessage.OperatorIDs)
 	if err != nil {
 		return decodedMessage, fmt.Errorf("check operators existance: %w", err)
 	}
