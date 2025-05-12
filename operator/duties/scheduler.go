@@ -308,10 +308,9 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.HeadEvent) {
 	return func(event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
-		// we are interested only in events for the current slot, but to account for wall-clock
-		// differences the next slot after "what we think is the current one" can also be valid
-		if event.Slot != s.network.Beacon.EstimatedCurrentSlot() &&
-			event.Slot != s.network.Beacon.EstimatedCurrentSlot()+1 {
+
+		if event.Slot != s.network.Beacon.EstimatedCurrentSlot() {
+			// No need to process outdated events here.
 			return
 		}
 
