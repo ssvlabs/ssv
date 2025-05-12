@@ -20,7 +20,7 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	NetworkConfig       networkconfig.NetworkConfig
+	NetworkConfig       networkconfig.Network
 	Network             specqbft.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores

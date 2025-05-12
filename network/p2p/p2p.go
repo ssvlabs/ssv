@@ -589,9 +589,9 @@ func (n *p2pNetwork) UpdateScoreParams(logger *zap.Logger) {
 
 	// function to get the starting time of the next epoch
 	nextEpochStartingTime := func() time.Time {
-		currEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+		currEpoch := n.cfg.Network.EstimatedCurrentEpoch()
 		nextEpoch := currEpoch + 1
-		return n.cfg.Network.Beacon.EpochStartTime(nextEpoch)
+		return n.cfg.Network.EpochStartTime(nextEpoch)
 	}
 
 	// Create timer that triggers on the beginning of the next epoch

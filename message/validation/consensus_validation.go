@@ -300,7 +300,7 @@ func (mv *messageValidator) updateConsensusState(
 	consensusState *ValidatorState,
 ) error {
 	msgSlot := phase0.Slot(consensusMessage.Height)
-	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
+	msgEpoch := mv.netCfg.EstimatedEpochAtSlot(msgSlot)
 
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		stateBySlot := consensusState.Signer(committeeInfo.signerIndex(signer))
@@ -424,7 +424,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	consensusMessage *specqbft.Message,
 	receivedAt time.Time,
 ) error {
-	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(phase0.Slot(consensusMessage.Height)) /*.
+	slotStartTime := mv.netCfg.GetSlotStartTime(phase0.Slot(consensusMessage.Height)) /*.
 	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
 
 	sinceSlotStart := time.Duration(0)

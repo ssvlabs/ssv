@@ -76,7 +76,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		// to (Mainnet, Hoodi, etc.)
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
-			CurrentVersion:        gc.network.ForkVersion(),
+			CurrentVersion:        gc.beaconConfig.ForkVersion,
 			GenesisValidatorsRoot: phase0.Root{},
 		}
 		root, err := forkData.HashTreeRoot()

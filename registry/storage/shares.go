@@ -121,7 +121,7 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(networkConfig networkconfig.NetworkConfig, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(beaconCfg networkconfig.Beacon, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
 		shares:        make(map[string]*types.SSVShare),
 		db:            db,
@@ -134,7 +134,7 @@ func NewSharesStorage(networkConfig networkconfig.NetworkConfig, db basedb.Datab
 	storage.validatorStore = newValidatorStore(
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
-		networkConfig,
+		beaconCfg,
 	)
 	if err := storage.validatorStore.handleSharesAdded(slices.Collect(maps.Values(storage.shares))...); err != nil {
 		return nil, nil, err

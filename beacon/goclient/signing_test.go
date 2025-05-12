@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func Test_computeVoluntaryExitDomain(t *testing.T) {
@@ -26,7 +26,7 @@ func Test_computeVoluntaryExitDomain(t *testing.T) {
 			zap.NewNop(),
 			Options{
 				Context:        ctx,
-				Network:        beacon.NewNetwork(spectypes.MainNetwork),
+				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
