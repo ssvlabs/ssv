@@ -154,6 +154,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msgType),
 			observability.BeaconSlotAttribute(slot),
+			observability.DutyIDAttribute(dutyID),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType())),
 		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
 	defer span.End()

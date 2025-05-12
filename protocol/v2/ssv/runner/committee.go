@@ -433,7 +433,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus"),
+		observability.InstrumentName(observabilityNamespace, "runner.process_committee_post_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
