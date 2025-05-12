@@ -35,10 +35,6 @@ func (gc *GoClient) BeaconConfig() networkconfig.BeaconConfig {
 	return *config
 }
 
-func (gc *GoClient) Spec(ctx context.Context) (map[string]any, error) {
-	return specForClient(ctx, gc.log, gc.multiClient)
-}
-
 func specForClient(ctx context.Context, log *zap.Logger, provider client.Service) (map[string]any, error) {
 	start := time.Now()
 	specResponse, err := provider.(client.SpecProvider).Spec(ctx, &api.SpecOpts{})
