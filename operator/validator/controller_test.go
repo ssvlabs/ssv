@@ -93,7 +93,7 @@ func TestNewController(t *testing.T) {
 		OperatorSigner:    types.NewSsvOperatorSigner(operatorSigner, operatorDataStore.GetOperatorID),
 		RegistryStorage:   registryStorage,
 		RecipientsStorage: recipientStorage,
-		Context:           context.Background(),
+		Context:           t.Context(),
 	}
 	control := NewController(logger, controllerOptions)
 	require.IsType(t, &controller{}, control)
@@ -230,7 +230,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 					Exporter: true,
 				},
 			}
-			ctr := setupController(logger, controllerOptions)
+			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
 			ctr.StartValidators(context.TODO())
 		})
@@ -243,7 +243,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
 	}
-	ctr := setupController(logger, controllerOptions) // none committee
+	ctr := setupController(t, logger, controllerOptions) // none committee
 
 	// Only exporter handles non committee messages
 	ctr.validatorOptions.Exporter = true
@@ -544,7 +544,7 @@ func TestSetupValidators(t *testing.T) {
 			}
 
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
-			ctr := setupController(logger, controllerOptions)
+			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
 			inited, _ := ctr.setupValidators(tc.shares)
 			require.Len(t, inited, tc.inited)
@@ -574,7 +574,7 @@ func TestGetValidator(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
 	}
-	ctr := setupController(logger, controllerOptions)
+	ctr := setupController(t, logger, controllerOptions)
 
 	// Execute the function under test and validate results
 	_, found := ctr.GetValidator(createPubKey(byte('0')))
@@ -628,7 +628,7 @@ func TestGetValidatorStats(t *testing.T) {
 			beacon:            bc,
 		}
 
-		ctr := setupController(logger, controllerOptions)
+		ctr := setupController(t, logger, controllerOptions)
 
 		// Set mock expectations for this subtest
 		sharesStorage.EXPECT().List(nil).Return(sharesSlice).Times(1)
@@ -669,7 +669,7 @@ func TestGetValidatorStats(t *testing.T) {
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
-		ctr := setupController(logger, controllerOptions)
+		ctr := setupController(t, logger, controllerOptions)
 
 		// Execute the function under test and validate results for this subtest
 		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
@@ -700,7 +700,7 @@ func TestGetValidatorStats(t *testing.T) {
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
-		ctr := setupController(logger, controllerOptions)
+		ctr := setupController(t, logger, controllerOptions)
 
 		// Execute the function under test and validate results for this subtest
 		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
@@ -744,7 +744,7 @@ func TestGetValidatorStats(t *testing.T) {
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
-		ctr := setupController(logger, controllerOptions)
+		ctr := setupController(t, logger, controllerOptions)
 
 		// Execute the function under test and validate results for this subtest
 		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
@@ -773,7 +773,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
-		ctr := setupController(logger, controllerOptions)
+		ctr := setupController(t, logger, controllerOptions)
 
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
@@ -789,7 +789,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
-		ctr := setupController(logger, controllerOptions)
+		ctr := setupController(t, logger, controllerOptions)
 
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
@@ -799,7 +799,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	})
 }
 
-func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
+func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOptions) controller {
 	// Default to test network config if not provided.
 	if opts.networkConfig.Name == "" {
 		opts.networkConfig = networkconfig.TestNetwork
@@ -815,7 +815,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		operatorsStorage:        opts.operatorStorage,
 		validatorsMap:           opts.validatorsMap,
 		validatorStore:          opts.validatorStore,
-		ctx:                     context.Background(),
+		ctx:                     t.Context(),
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,
 		networkConfig:           opts.networkConfig,
@@ -823,7 +823,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		committeeValidatorSetup: make(chan struct{}),
 		indicesChange:           make(chan struct{}, 32),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
-			Ctx:          context.Background(),
+			Ctx:          t.Context(),
 			WorkersCount: 1,
 			Buffer:       100,
 		}),

@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -20,7 +19,7 @@ import (
 const forkSchedulePath = "/eth/v1/config/fork_schedule"
 
 func TestCurrentFork(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	network := beacon.NewNetwork(types.MainNetwork)
 

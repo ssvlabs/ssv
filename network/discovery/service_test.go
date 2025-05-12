@@ -142,7 +142,7 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
 	logger := zap.NewNop()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	opts := testingDiscoveryOptions(t, testNetConfig)
@@ -169,12 +169,12 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {
 	logger := zap.NewNop()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	opts := testingDiscoveryOptions(t, testNetConfig)
 
-	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 
 	// Replace listener
@@ -363,7 +363,7 @@ func TestServiceAddressConfiguration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
 			// create options with unique ports for parallel testing

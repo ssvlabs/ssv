@@ -91,7 +91,7 @@ var (
 )
 
 func TestGoClient_GetAttestationData_Simple(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	const withWeightedAttestationData = false
 
 	t.Run("requests must be cached (per slot)", func(t *testing.T) {
@@ -264,7 +264,7 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 }
 
 func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	const withWeightedAttestationData = true
 
 	t.Run("single beacon client: returns response provided by server", func(t *testing.T) {
