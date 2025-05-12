@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -15,16 +16,15 @@ import (
 	"testing"
 	"time"
 
-	"math/rand"
-
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -155,6 +155,43 @@ func TestSharesStorage(t *testing.T) {
 		}
 	})
 
+	t.Run("UpdateValidatorMetadata_does_not_save_if_no_changes", func(t *testing.T) {
+		// get share[0] which is already persisted
+		share := persistedActiveValidatorShares[0]
+
+		db := &countingSetDB{BadgerDB: storage.db}
+
+		shares, _, _ := NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
+
+		err = shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+			share.ValidatorPubKey: {
+				Index:           share.ValidatorIndex,
+				Status:          share.Status,
+				ActivationEpoch: share.ActivationEpoch,
+				ExitEpoch:       share.ExitEpoch,
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 0, db.saveCount)
+
+		// change status to pending queued and test that it's saved
+		err = shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+			share.ValidatorPubKey: {
+				Index:           share.ValidatorIndex,
+				Status:          v1.ValidatorStatePendingQueued,
+				ActivationEpoch: share.ActivationEpoch,
+				ExitEpoch:       share.ExitEpoch,
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 1, db.saveCount)
+
+		fetchedShare, exists := shares.Get(nil, share.ValidatorPubKey[:])
+		require.True(t, exists)
+		require.NotNil(t, fetchedShare)
+		require.Equal(t, v1.ValidatorStatePendingQueued, fetchedShare.Status)
+	})
+
 	t.Run("List_NoFilter", func(t *testing.T) {
 		shares := storage.Shares.List(nil)
 
@@ -209,6 +246,21 @@ func TestSharesStorage(t *testing.T) {
 
 		require.Equal(t, 2, len(existingValidators))
 	})
+}
+
+// countingSetDB is a wrapper around BadgerDB that counts the number of times SetMany is called.
+type countingSetDB struct {
+	*kv.BadgerDB
+	saveCount int
+}
+
+func (m *countingSetDB) Using(rw basedb.ReadWriter) basedb.ReadWriter {
+	return m
+}
+
+func (m *countingSetDB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+	m.saveCount++
+	return m.BadgerDB.SetMany(prefix, n, next)
 }
 
 func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
