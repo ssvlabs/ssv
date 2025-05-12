@@ -54,7 +54,7 @@ type messageValidator struct {
 	pectraForkEpoch phase0.Epoch
 	state           *ttlcache.Cache[spectypes.MessageID, *ValidatorState]
 	validatorStore  validatorStore
-	operators      operators
+	operators       operators
 	dutyStore       *dutystore.Store
 
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
