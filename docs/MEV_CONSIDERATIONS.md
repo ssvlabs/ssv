@@ -1,4 +1,6 @@
-In order to understand how MEV fits with SSV cluster here is some **background on SSV proposer-duty flow**:
+## SSV proposer-duty flow background
+
+In order to understand how MEV fits with SSV cluster here is some background on SSV proposer-duty flow:
 - SSV node (all nodes in the cluster really to handle round-changes, but current round Leader 
   specifically) requests blinded block header from Beacon node which in turn "proxies" this request 
   to MEV-boost that runs with some pre-configured timeout (call it `MEVBoostRelayTimeout`)
@@ -26,9 +28,11 @@ high as possible to be able to wait for as many Relays as possible to provide ca
 to choose the best one
 
 and so the most straightforward approach to extract highest MEV (and it probably works out-of-the box 
-with SSV nodes already, but with caveats mentioned below) would be to
+with SSV nodes already, but with caveats mentioned below) would be
 
-**approach 1):** set `MEVBoostRelayTimeout` as high as possible, and have plenty of Relays 
+### approach 1
+
+To set `MEVBoostRelayTimeout` as high as possible, and have plenty of Relays 
 (MEV-boost is configured with) so that Relays themselves decide "how much time they want to wait 
 since Slot start before replying with a block/bid" - some Relays would be fast to reply but not 
 as profitable as those that withhold for longer
@@ -39,7 +43,9 @@ delay for the sake of higher MEV)
 
 thus an alternative approach would be:
 
-**approach 2):** to introduce an additional configurable delay `MEVDelay` SSV Operator can set so 
+### approach 2
+
+To introduce an additional configurable delay `MEVDelay` SSV Operator can set so 
 that it will work nicely even with Relays that "reply as fast as possible", there are downsides 
 though:
 - the condition from above that must hold true to avoid undesirable round-changes becomes a bit more 
@@ -50,14 +56,14 @@ MEVDelay + MEVBoostRelayTimeout + QBFTMaxExpectedTime + MiscellaneousTime < Roun
 - namely, Operator must know whether MEV-boost Relays he configured "reply as fast as possible" 
   (or "have delays of their own") because this will indirectly affect the decision for how large `MEVDelay` value should be
 
-**How to choose `MEVDelay` value**:
+## How to choose `MEVDelay` value
 
 As per the notes from above `MEVDelay` depends on a number of things, to find the best value Operator 
 might want to start with lower values like 300ms gradually increasing it up (the higher `MEVDelay` 
 value is the higher the chance of missing Ethereum block proposal will be).
 
-It's probably best to keep `MEVDelay` under ~500ms to satisfy the equation from above (or adjust 
-`MEVBoostRelayTimeout` accordingly):
+It's probably best to keep `MEVDelay` under ~500ms to satisfy the equation from above (or lower 
+`MEVBoostRelayTimeout` accordingly to push `MEVDelay` value higher):
 
 ```
 MEVDelay + ~1000ms + ~350ms + ~150ms < 2000ms
