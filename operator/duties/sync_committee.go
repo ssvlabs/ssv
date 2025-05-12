@@ -9,6 +9,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
@@ -145,24 +146,38 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconPeriodAttribute(period),
+		))
+	defer span.End()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if h.fetchCurrentPeriod {
+		span.AddEvent("fetching current period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		h.fetchCurrentPeriod = false
 	}
 
 	if h.fetchNextPeriod {
+		span.AddEvent("fetching next period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period+1, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		h.fetchNextPeriod = false
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
@@ -202,10 +217,18 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 // The epoch passed is always the current epoch.
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) error {
 	start := time.Now()
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch_and_store"),
+		trace.WithAttributes(
+			observability.BeaconPeriodAttribute(period),
+		))
+	defer span.End()
 
 	if period > h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
 		epoch = h.network.Beacon.FirstEpochOfSyncPeriod(period)
 	}
+
+	span.SetAttributes(observability.BeaconEpochAttribute(epoch))
 
 	eligibleIndices := h.validatorController.FilterIndices(waitForInitial, func(s *types.SSVShare) bool {
 		return s.IsParticipating(h.network, epoch)
@@ -213,12 +236,16 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 
 	if len(eligibleIndices) == 0 {
 		h.logger.Debug("no eligible validators for period", fields.Epoch(epoch), zap.Uint64("period", period))
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
+	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
+		err := fmt.Errorf("failed to fetch sync committee duties: %w", err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)
@@ -236,6 +263,8 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 			InCommittee:    inCommittee,
 		})
 	}
+
+	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(period, storeDuties)
 
 	h.prepareDutiesResultLog(period, duties, start)
@@ -243,21 +272,36 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
-	if len(subscriptions) > 0 {
-		if deadline, ok := ctx.Deadline(); ok {
-			go func(h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
-				// Create a new subscription context with a deadline from parent context.
-				subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
-				defer cancel()
-				if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
-					h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
-				}
-			}(h, subscriptions)
-		} else {
-			h.logger.Warn("failed to get context deadline")
-		}
+
+	if len(subscriptions) == 0 {
+		span.AddEvent("no subscriptions available")
+		span.SetStatus(codes.Ok, "")
+		return nil
 	}
 
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		const eventMsg = "failed to get context deadline"
+		span.AddEvent(eventMsg)
+		h.logger.Warn(eventMsg)
+		span.SetStatus(codes.Ok, "")
+		return nil
+	}
+
+	span.AddEvent("submitting beacon sync committee subscriptions", trace.WithAttributes(
+		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
+	))
+	go func(h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
+		// Create a new subscription context with a deadline from parent context.
+		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
+		defer cancel()
+
+		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
+			h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+		}
+	}(h, subscriptions)
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
