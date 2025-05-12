@@ -299,14 +299,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 				time.Sleep(waitDuration)
 			}
 
-			s.waitCond.L.Lock()
-			// we only want to increase s.headSlot (and never decrease it) and notify the go-routines
-			// waiting for it to happen
-			if slot > s.headSlot {
-				s.headSlot = slot
-				s.waitCond.Broadcast()
-			}
-			s.waitCond.L.Unlock()
+			s.advanceHeadSlot(slot)
 		}
 	}
 }
@@ -385,14 +378,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 			// nodes before kicking off duties for the block's slot.
 			time.Sleep(s.blockPropagateDelay)
 
-			s.waitCond.L.Lock()
-			// we only want to increase s.headSlot (and never decrease it) and notify the go-routines
-			// waiting for it to happen
-			if event.Slot > s.headSlot {
-				s.headSlot = event.Slot
-				s.waitCond.Broadcast()
-			}
-			s.waitCond.L.Unlock()
+			s.advanceHeadSlot(event.Slot)
 		}
 	}
 }
@@ -464,6 +450,17 @@ func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committee
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(dutyEpoch)).
 		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
+}
+
+// advanceHeadSlot will set s.headSlot to the provided slot (but only if the provided slot is higher,
+// meaning s.headSlot value can never decrease) and notify the go-routines waiting for it to happen.
+func (s *Scheduler) advanceHeadSlot(slot phase0.Slot) {
+	s.waitCond.L.Lock()
+	if slot > s.headSlot {
+		s.headSlot = slot
+		s.waitCond.Broadcast()
+	}
+	s.waitCond.L.Unlock()
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has passed (SECONDS_PER_SLOT / 3 seconds after
