@@ -76,7 +76,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(context.Background(), logger)
+		go frCtrl.Start(t.Context(), logger)
 
 		slots := []phase0.Slot{
 			1,                                        // first time
@@ -116,7 +116,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(context.Background(), logger)
+		go frCtrl.Start(t.Context(), logger)
 		mockTimeChan <- time.Now()
 		wg.Add(2)
 		wg.Wait()
