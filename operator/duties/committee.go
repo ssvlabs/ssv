@@ -63,10 +63,10 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			h.processExecution(ctx, period, epoch, slot)
 
 		case <-h.reorg:
-			// do nothing
+			h.logger.Debug("🛠 reorg event")
 
 		case <-h.indicesChange:
-			// do nothing
+			h.logger.Debug("🛠 indicesChange event")
 		}
 	}
 }
@@ -75,14 +75,24 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 	attDuties := h.attDuties.CommitteeSlotDuties(epoch, slot)
 	syncDuties := h.syncDuties.CommitteePeriodDuties(period)
 	if attDuties == nil && syncDuties == nil {
+		h.logger.Debug("no attester or sync-committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
 		return
 	}
 
 	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
+	if len(committeeMap) == 0 {
+		h.logger.Debug("no committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
+	}
+
 	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
 }
 
-func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
+func (h *CommitteeHandler) buildCommitteeDuties(
+	attDuties []*eth2apiv1.AttesterDuty,
+	syncDuties []*eth2apiv1.SyncCommitteeDuty,
+	epoch phase0.Epoch,
+	slot phase0.Slot,
+) committeeDutiesMap {
 	// NOTE: Instead of getting validators using duties one by one, we are getting all validators for the slot at once.
 	// This approach reduces contention and improves performance, as multiple individual calls would be slower.
 	selfValidators := h.validatorProvider.SelfParticipatingValidators(epoch)
