@@ -71,7 +71,7 @@ func (mv *messageValidator) validateDutyCount(
 	if dutyCount >= dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v, epoch %v)", dutyCount, msgID.GetRoleType(), epoch)
-		err.want = fmt.Sprintf("<=%v", dutyLimit)
+		err.want = fmt.Sprintf("<%v", dutyLimit)
 		return err
 	}
 
