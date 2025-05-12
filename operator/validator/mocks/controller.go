@@ -240,17 +240,17 @@ func (mr *MockControllerMockRecorder) StopValidator(pubKey any) *gomock.Call {
 }
 
 // UpdateFeeRecipient mocks base method.
-func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address) error {
+func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address, slot phase0.Slot) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateFeeRecipient", owner, recipient)
+	ret := m.ctrl.Call(m, "UpdateFeeRecipient", owner, recipient, slot)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateFeeRecipient indicates an expected call of UpdateFeeRecipient.
-func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient any) *gomock.Call {
+func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient, slot any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient, slot)
 }
 
 // ValidatorExitChan mocks base method.

@@ -24,6 +24,7 @@ import (
 type MockshareStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockshareStorageMockRecorder
+	isgomock struct{}
 }
 
 // MockshareStorageMockRecorder is the mock recorder for MockshareStorage.
@@ -92,6 +93,7 @@ func (mr *MockshareStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gomo
 type MockselfValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockselfValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockselfValidatorStoreMockRecorder is the mock recorder for MockselfValidatorStore.

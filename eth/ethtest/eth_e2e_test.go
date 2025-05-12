@@ -310,7 +310,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 7 Update Fee Recipient
 		{
-			validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Times(1)
+			validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 
 			setFeeRecipient := NewSetFeeRecipientAddressInput(common)
 			setFeeRecipient.prepare([]*SetFeeRecipientAddressEventInput{

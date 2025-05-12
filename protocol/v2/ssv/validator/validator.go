@@ -11,6 +11,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -18,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -39,7 +40,7 @@ type Validator struct {
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Queues map[spectypes.RunnerRole]queueContainer
+	Queues map[spectypes.RunnerRole]QueueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
@@ -64,7 +65,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
 		OperatorSigner:   options.OperatorSigner,
-		Queues:           make(map[spectypes.RunnerRole]queueContainer),
+		Queues:           make(map[spectypes.RunnerRole]QueueContainer),
 		state:            uint32(NotStarted),
 		dutyIDs:          hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
 		messageValidator: options.MessageValidator,
@@ -77,7 +78,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		//Setup the queue.
 		role := dutyRunner.GetBaseRunner().RunnerRoleType
 
-		v.Queues[role] = queueContainer{
+		v.Queues[role] = QueueContainer{
 			Q: queue.New(options.QueueSize),
 			queueState: &queue.State{
 				HasRunningInstance: false,

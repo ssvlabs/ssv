@@ -75,7 +75,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	return errs
 }
 
-func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
+func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, slot phase0.Slot) error {
 	logger := c.taskLogger("UpdateFeeRecipient",
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
@@ -87,7 +87,6 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 
 			// Kick off validator registration duty to notify various Ethereum actors (e.g. Relays)
 			// about fee recipient change as soon as possible.
-			slot := c.networkConfig.Beacon.EstimatedCurrentSlot()
 			pk := phase0.BLSPubKey{}
 			copy(pk[:], v.Share.ValidatorPubKey[:])
 			c.ExecuteDuty(context.Background(), logger, &spectypes.ValidatorDuty{

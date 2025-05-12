@@ -23,6 +23,7 @@ import (
 type MockExecutionClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecutionClientMockRecorder
+	isgomock struct{}
 }
 
 // MockExecutionClientMockRecorder is the mock recorder for MockExecutionClient.
@@ -91,6 +92,7 @@ func (mr *MockExecutionClientMockRecorder) StreamLogs(ctx, fromBlock any) *gomoc
 type MockEventHandler struct {
 	ctrl     *gomock.Controller
 	recorder *MockEventHandlerMockRecorder
+	isgomock struct{}
 }
 
 // MockEventHandlerMockRecorder is the mock recorder for MockEventHandler.

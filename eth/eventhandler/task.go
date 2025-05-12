@@ -91,25 +91,27 @@ func (t ReactivateClusterTask) Execute() error {
 }
 
 type updateFeeRecipientExecutor interface {
-	UpdateFeeRecipient(owner, feeRecipient ethcommon.Address) error
+	UpdateFeeRecipient(owner, feeRecipient ethcommon.Address, slot phase0.Slot) error
 }
 
 type UpdateFeeRecipientTask struct {
 	executor  updateFeeRecipientExecutor
 	owner     ethcommon.Address
 	recipient ethcommon.Address
+	slot      phase0.Slot
 }
 
-func NewUpdateFeeRecipientTask(executor updateFeeRecipientExecutor, owner, recipient ethcommon.Address) *UpdateFeeRecipientTask {
+func NewUpdateFeeRecipientTask(executor updateFeeRecipientExecutor, owner, recipient ethcommon.Address, slot phase0.Slot) *UpdateFeeRecipientTask {
 	return &UpdateFeeRecipientTask{
 		executor:  executor,
 		owner:     owner,
 		recipient: recipient,
+		slot:      slot,
 	}
 }
 
 func (t UpdateFeeRecipientTask) Execute() error {
-	return t.executor.UpdateFeeRecipient(t.owner, t.recipient)
+	return t.executor.UpdateFeeRecipient(t.owner, t.recipient, t.slot)
 }
 
 type exitValidatorExecutor interface {
