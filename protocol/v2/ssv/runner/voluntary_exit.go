@@ -121,12 +121,12 @@ func (r *VoluntaryExitRunner) ProcessPostConsensus(ctx context.Context, logger *
 	return errors.New("no post consensus phase for voluntary exit")
 }
 
-func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType) {
 	vr, err := r.calculateVoluntaryExit()
 	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate voluntary exit")
+		return nil, spectypes.DomainError
 	}
-	return []ssz.HashRoot{vr}, spectypes.DomainVoluntaryExit, nil
+	return []ssz.HashRoot{vr}, spectypes.DomainVoluntaryExit
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
