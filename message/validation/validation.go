@@ -82,14 +82,10 @@ func New(
 	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
-	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec() // #nosec G115 -- amount of slots cannot exceed int64
-
 	mv := &messageValidator{
 		logger: zap.NewNop(),
 		netCfg: netCfg,
-		state: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
-		),
+
 		validationLockCache: ttlcache.New[spectypes.MessageID, *sync.Mutex](),
 		validatorStore:      validatorStore,
 		operators:           operators,
@@ -97,6 +93,11 @@ func New(
 		signatureVerifier:   signatureVerifier,
 		pectraForkEpoch:     pectraForkEpoch,
 	}
+
+	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.GetSlotDuration() // #nosec G115 -- amount of slots cannot exceed int64
+	mv.state = ttlcache.New(
+		ttlcache.WithTTL[spectypes.MessageID, *ValidatorState](ttl),
+	)
 
 	for _, opt := range opts {
 		opt(mv)
@@ -307,14 +308,14 @@ func (mv *messageValidator) validatorState(messageID spectypes.MessageID, commit
 
 	cs := &ValidatorState{
 		operators:       make([]*OperatorState, len(committee)),
-		storedSlotCount: MaxStoredSlots(mv.netCfg),
+		storedSlotCount: mv.maxStoredSlots(),
 	}
 	mv.state.Set(messageID, cs, ttlcache.DefaultTTL)
 	return cs
 }
 
-// MaxStoredSlots stores max amount of slots message validation stores.
+// maxStoredSlots stores max amount of slots message validation stores.
 // It's exported to allow usage outside of message validation
-func MaxStoredSlots(netCfg networkconfig.NetworkConfig) phase0.Slot {
-	return phase0.Slot(netCfg.GetSlotsPerEpoch()) + LateSlotAllowance
+func (mv *messageValidator) maxStoredSlots() phase0.Slot {
+	return mv.netCfg.GetSlotsPerEpoch() + LateSlotAllowance
 }
