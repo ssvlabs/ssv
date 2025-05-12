@@ -5,8 +5,10 @@ import (
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -19,12 +21,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
-
-var TestNetwork = networkconfig.NetworkConfig{
-	Beacon:     beacon.NewNetwork(spectypes.BeaconTestNetwork),
-	DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-}
 
 func TestCheckPeer(t *testing.T) {
 	var (
@@ -84,6 +82,15 @@ func TestCheckPeer(t *testing.T) {
 		}
 	)
 
+	var checkPeerTestNetwork = networkconfig.NetworkConfig{
+		BeaconConfig: networkconfig.BeaconConfig{
+			Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
+		},
+		SSVConfig: networkconfig.SSVConfig{
+			DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		},
+	}
+
 	// Create the LocalNode instances for the tests.
 	for _, test := range tests {
 		test := test
@@ -113,13 +120,15 @@ func TestCheckPeer(t *testing.T) {
 	}
 
 	// Run the tests.
-	subnetIndex := peers.NewSubnetsIndex(commons.Subnets())
+	subnetIndex := peers.NewSubnetsIndex(commons.SubnetsCount)
 	dvs := &DiscV5Service{
-		ctx:           ctx,
-		conns:         &mock.MockConnectionIndex{LimitValue: false},
-		subnetsIdx:    subnetIndex,
-		networkConfig: TestNetwork,
-		subnets:       mySubnets,
+		ctx:                 ctx,
+		conns:               &mock.MockConnectionIndex{LimitValue: false},
+		subnetsIdx:          subnetIndex,
+		networkConfig:       checkPeerTestNetwork,
+		subnets:             mySubnets,
+		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
+		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 
 	for _, test := range tests {
@@ -146,7 +155,7 @@ type checkPeerTest struct {
 }
 
 func mockSubnets(active ...int) []byte {
-	subnets := make([]byte, commons.Subnets())
+	subnets := make([]byte, commons.SubnetsCount)
 	for _, subnet := range active {
 		subnets[subnet] = 1
 	}

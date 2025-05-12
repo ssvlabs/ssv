@@ -15,6 +15,8 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go
+
 var (
 	operatorsPrefix = []byte("operators")
 )
@@ -58,7 +60,7 @@ func NewOperatorsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) 
 	}
 }
 
-// GetOperatorsPrefix returns the prefix
+// GetOperatorsPrefix returns DB prefix
 func (s *operatorsStorage) GetOperatorsPrefix() []byte {
 	return operatorsPrefix
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
+type PeerScore float64
+
 // scoresIndex implements ScoreIndex
 type scoresIndex struct {
 	scores map[peer.ID][]*NodeScore

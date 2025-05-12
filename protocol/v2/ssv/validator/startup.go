@@ -4,10 +4,10 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 )
@@ -47,7 +47,8 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 		copy(valpk[:], share.ValidatorPubKey[:])
 
 		if err := n.Subscribe(valpk); err != nil {
-			return true, err
+			atomic.StoreUint32(&v.state, uint32(NotStarted))
+			return false, err
 		}
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)
 	}

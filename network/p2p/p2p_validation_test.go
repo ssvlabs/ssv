@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -23,10 +24,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 
 	"github.com/ssvlabs/ssv/message/validation"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -409,23 +408,18 @@ func generateShares(t *testing.T, count int) []*ssvtypes.SSVShare {
 
 	for i := 0; i < count; i++ {
 		validatorIndex := phase0.ValidatorIndex(i)
-		specShare := *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), validatorIndex)
+		domainShare := *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), validatorIndex)
 
 		var pk spectypes.ValidatorPK
 		_, err := cryptorand.Read(pk[:])
 		require.NoError(t, err)
 
-		specShare.ValidatorPubKey = pk
+		domainShare.ValidatorPubKey = pk
 
 		share := &ssvtypes.SSVShare{
-			Share: specShare,
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-					Index:  validatorIndex,
-				},
-				Liquidated: false,
-			},
+			Share:      domainShare,
+			Status:     eth2apiv1.ValidatorStateActiveOngoing,
+			Liquidated: false,
 		}
 
 		shares = append(shares, share)

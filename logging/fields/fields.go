@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ssvlabs/ssv/exporter/convert"
-
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dgraph-io/ristretto"
@@ -24,7 +22,7 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields/stringer"
-	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/utils/format"
@@ -34,6 +32,7 @@ const (
 	FieldABI                 = "abi"
 	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
+	FieldAddresses           = "addresses"
 	FieldBeaconRole          = "beacon_role"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
@@ -42,6 +41,7 @@ const (
 	FieldBlockVersion        = "block_version"
 	FieldClusterIndex        = "cluster_index"
 	FieldCommitteeID         = "committee_id"
+	FieldCommitteeIndex      = "committee_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldPreConsensusTime    = "pre_consensus_time"
@@ -96,6 +96,7 @@ const (
 	FieldType                = "type"
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
+	FieldValidatorIndex      = "validator_index"
 )
 
 func FromBlock(val uint64) zapcore.Field {
@@ -130,6 +131,10 @@ func Validator(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, stringer.HexStringer{Val: pubKey})
 }
 
+func ValidatorIndex(index phase0.ValidatorIndex) zapcore.Field {
+	return zap.Uint64(FieldValidatorIndex, uint64(index))
+}
+
 func DutyExecutorID(senderID []byte) zapcore.Field {
 	return zap.Stringer(FieldDutyExecutorID, stringer.HexStringer{Val: senderID})
 }
@@ -140,6 +145,10 @@ func AddressURL(val url.URL) zapcore.Field {
 
 func Address(val string) zapcore.Field {
 	return zap.String(FieldAddress, val)
+}
+
+func Addresses(vals []string) zapcore.Field {
+	return zap.Strings(FieldAddresses, vals)
 }
 
 func ENR(val *enode.Node) zapcore.Field {
@@ -162,7 +171,7 @@ func UpdatedENRLocalNode(val *enode.LocalNode) zapcore.Field {
 	return zap.Stringer(FieldUpdatedENRLocalNode, val.Node())
 }
 
-func Subnets(val records.Subnets) zapcore.Field {
+func Subnets(val commons.Subnets) zapcore.Field {
 	return zap.Stringer(FieldSubnets, val)
 }
 
@@ -233,7 +242,7 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 func Role(val spectypes.RunnerRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
-func ExporterRole(val convert.RunnerRole) zap.Field {
+func ExporterRole(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 

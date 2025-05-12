@@ -74,10 +74,10 @@ func (input *ProduceOperatorAddedEventsInput) produce() {
 		encodedPubKey, err := op.privateKey.Public().Base64()
 		require.NoError(input.t, err)
 
-		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
+		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
 		require.NoError(input.t, err)
 
-		_, err = input.boundContract.SimcontractTransactor.RegisterOperator(event.auth, packedOperatorPubKey, big.NewInt(100_000_000))
+		_, err = input.boundContract.RegisterOperator(event.auth, packedOperatorPubKey, big.NewInt(100_000_000))
 		require.NoError(input.t, err)
 
 		if !input.doInOneBlock {

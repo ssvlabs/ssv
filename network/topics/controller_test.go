@@ -1,4 +1,4 @@
-package topics
+package topics_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -28,6 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/storage"
@@ -81,6 +83,7 @@ func TestTopicManager(t *testing.T) {
 
 		dutyStore := dutystore.New()
 		validatorStore := mocks.NewMockValidatorStore(ctrl)
+		operators := mocks.NewMockOperators(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
 		db, err := kv.NewInMemory(logger, basedb.Options{})
@@ -89,8 +92,14 @@ func TestTopicManager(t *testing.T) {
 		nodeStorage, err := storage.NewNodeStorage(logger, db)
 		require.NoError(t, err)
 
-		validator := validation.New(networkconfig.TestNetwork, validatorStore, nodeStorage, dutyStore, signatureVerifier)
-
+		validator := validation.New(
+			networkconfig.TestNetwork,
+			validatorStore,
+			operators,
+			nodeStorage,
+			dutyStore,
+			signatureVerifier,
+			phase0.Epoch(0))
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
 
@@ -120,10 +129,10 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 		for _, p := range peers {
 			require.NoError(t, p.tm.Subscribe(logger, committeeTopic(cid)))
 			// simulate concurrency, by trying to subscribe multiple times
-			go func(tm Controller, cid string) {
+			go func(tm topics.Controller, cid string) {
 				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
 			}(p.tm, cid)
-			go func(tm Controller, cid string) {
+			go func(tm topics.Controller, cid string) {
 				<-time.After(100 * time.Millisecond)
 				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
 			}(p.tm, cid)
@@ -321,7 +330,7 @@ func committeeTopic(cidHex string) string {
 type P struct {
 	host host.Host
 	ps   *pubsub.PubSub
-	tm   *topicsCtrl
+	tm   topics.Controller
 
 	connsCount uint64
 
@@ -382,12 +391,12 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	require.NoError(t, err)
 
 	var p *P
-	var midHandler MsgIDHandler
+	var midHandler topics.MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
+		midHandler = topics.NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
 		go midHandler.Start()
 	}
-	cfg := &PubSubConfig{
+	cfg := &topics.PubSubConfig{
 		Host:         h,
 		TraceLog:     false,
 		MsgIDHandler: midHandler,
@@ -395,7 +404,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			p.saveMsg(topic, msg)
 			return nil
 		},
-		Scoring: &ScoringConfig{
+		Scoring: &topics.ScoringConfig{
 			IPWhitelist:        nil,
 			IPColocationWeight: 0,
 			OneEpochDuration:   time.Minute,
@@ -408,18 +417,18 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, validatorStore, nil)
+	ps, tm, err := topics.NewPubSub(ctx, logger, cfg, validatorStore, nil)
 	require.NoError(t, err)
 
 	p = &P{
 		host:     h,
 		ps:       ps,
-		tm:       tm.(*topicsCtrl),
+		tm:       tm,
 		msgs:     make(map[string][]*pubsub.Message),
 		msgsLock: &sync.Mutex{},
 	}

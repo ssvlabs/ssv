@@ -8,20 +8,19 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/exporter/convert"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
-	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
@@ -87,12 +86,11 @@ func TestHandleDecidedQuery(t *testing.T) {
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()
 
-	roles := []convert.RunnerRole{
-		convert.RoleAttester,
-		convert.RoleCommittee,
-		convert.RoleProposer,
-		convert.RoleAggregator,
-		convert.RoleSyncCommittee,
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
 		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
 	}
 	_, ibftStorage := newStorageForTest(db, l, roles...)
@@ -109,12 +107,11 @@ func TestHandleDecidedQuery(t *testing.T) {
 		networkConfig, err := networkconfig.GetNetworkConfigByName(networkconfig.HoleskyStage.Name)
 		require.NoError(t, err)
 		decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-			id := convert.NewMsgID(networkConfig.DomainType, pk.Serialize(), role)
 			return oids, &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     height,
 				Round:      1,
-				Identifier: id[:],
+				Identifier: pk.Serialize(),
 				Root:       [32]byte{0x1, 0x2, 0x3},
 			}
 		})
@@ -122,8 +119,8 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		// save participants
 		for _, d := range decided250Seq {
-			_, err := ibftStorage.Get(role).UpdateParticipants(
-				convert.MessageID(d.DecidedMessage.SSVMessage.MsgID),
+			_, err := ibftStorage.Get(role).SaveParticipants(
+				spectypes.ValidatorPK(pk.Serialize()),
 				phase0.Slot(d.State.Height),
 				d.DecidedMessage.OperatorIDs,
 			)
@@ -204,15 +201,15 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, fu
 	}
 }
 
-func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...convert.RunnerRole) (storage.Storage, *qbftstorage.QBFTStores) {
-	sExporter, err := storage.NewNodeStorage(logger, db)
+func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.ParticipantStores) {
+	sExporter, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		panic(err)
 	}
 
 	storageMap := qbftstorage.NewStores()
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(db, role.String()))
+		storageMap.Add(role, qbftstorage.New(db, role))
 	}
 
 	return sExporter, storageMap
@@ -228,11 +225,11 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectyp
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		opPubKey, privateKey, err := rsaencryption.GenerateKeys()
+		opPubKey, privateKey, err := rsaencryption.GenerateKeyPairPEM()
 		if err != nil {
 			panic(err)
 		}
-		pk, err := rsaencryption.PemToPrivateKey(privateKey)
+		pk, err := rsaencryption.PEMToPrivateKey(privateKey)
 		if err != nil {
 			panic(err)
 		}

@@ -6,11 +6,12 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -19,11 +20,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 var (
@@ -58,60 +62,32 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	}
 
 	// Discovery options
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	allSubs, _ := commons.FromString(commons.AllSubnets)
 	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
 	connectionIndex := NewMockConnection()
 
 	return &Options{
-		DiscV5Opts:    discV5Opts,
-		ConnIndex:     connectionIndex,
-		SubnetsIdx:    subnetsIndex,
-		NetworkConfig: networkConfig,
+		DiscV5Opts:          discV5Opts,
+		ConnIndex:           connectionIndex,
+		SubnetsIdx:          subnetsIndex,
+		NetworkConfig:       networkConfig,
+		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
+		TrimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 }
 
 // Testing discovery with a given NetworkConfig
 func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, netConfig)
-	service, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
 	require.NoError(t, err)
-	require.NotNil(t, service)
-
-	dvs, ok := service.(*DiscV5Service)
-	require.True(t, ok)
-
+	require.NotNil(t, dvs)
 	return dvs
 }
 
 // Testing discovery service
 func testingDiscovery(t *testing.T) *DiscV5Service {
 	return testingDiscoveryWithNetworkConfig(t, testNetConfig)
-}
-
-// NetworkConfig with fork epoch
-func testingNetConfigWithForkEpoch(forkEpoch phase0.Epoch) networkconfig.NetworkConfig {
-	n := networkconfig.HoleskyStage
-	return networkconfig.NetworkConfig{
-		Name:                 n.Name,
-		Beacon:               n.Beacon,
-		DomainType:           n.DomainType,
-		GenesisEpoch:         n.GenesisEpoch,
-		RegistrySyncOffset:   n.RegistrySyncOffset,
-		RegistryContractAddr: n.RegistryContractAddr,
-		Bootnodes:            n.Bootnodes,
-	}
-}
-
-// NetworkConfig for staying in pre-fork
-func PreForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() + 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
-}
-
-// NetworkConfig for staying in post-fork
-func PostForkNetworkConfig() networkconfig.NetworkConfig {
-	forkEpoch := networkconfig.HoleskyStage.Beacon.EstimatedCurrentEpoch() - 1000
-	return testingNetConfigWithForkEpoch(forkEpoch)
 }
 
 // Testing LocalNode
@@ -190,6 +166,7 @@ func CustomNode(t *testing.T,
 	record := enr.Record{}
 
 	// Set entries
+	record.Set(enr.WithEntry("ssv", true)) // marks node as SSV-related (we filter out SSV-unrelated ones)
 	record.Set(enr.IP(net.IPv4(127, 0, 0, 1)))
 	record.Set(enr.UDP(12000))
 	record.Set(enr.TCP(13000))
@@ -303,13 +280,13 @@ func (mc *MockConnection) Connectedness(id peer.ID) network.Connectedness {
 	return network.NotConnected
 }
 
-func (mc *MockConnection) CanConnect(id peer.ID) bool {
+func (mc *MockConnection) CanConnect(id peer.ID) error {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	if can, ok := mc.canConnect[id]; ok {
-		return can
+	if can, ok := mc.canConnect[id]; ok && can {
+		return nil
 	}
-	return false
+	return fmt.Errorf("cannot connect")
 }
 
 func (mc *MockConnection) AtLimit(dir network.Direction) bool {

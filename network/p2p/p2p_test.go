@@ -21,7 +21,6 @@ import (
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -41,14 +40,9 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	shares := []*ssvtypes.SSVShare{
 		{
-			Share: *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-					Index:  spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex).ValidatorIndex,
-				},
-				Liquidated: false,
-			},
+			Share:      *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
+			Status:     eth2apiv1.ValidatorStateActiveOngoing,
+			Liquidated: false,
 		},
 	}
 
@@ -176,14 +170,9 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
 
 	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
-			},
-			Liquidated: false,
-		},
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateActiveOngoing,
+		Liquidated: false,
 	}
 	committeeID := share.CommitteeID()
 
@@ -305,7 +294,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	for {
 		noPeers := false
 		for _, node := range ln.Nodes {
-			peers, _ := node.PeersByTopic()
+			peers := node.PeersByTopic()
 			if len(peers) < 2 {
 				noPeers = true
 			}
@@ -319,4 +308,23 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalN
 	}
 
 	return ln, routers, nil
+}
+
+func Test_score(t *testing.T) {
+	const desiredScore = 3
+
+	score0 := score(desiredScore, 0)
+	score1 := score(desiredScore, 1)
+	score2 := score(desiredScore, 2)
+	score3 := score(desiredScore, 3)
+	score4 := score(desiredScore, 4)
+	score5 := score(desiredScore, 5)
+	score6 := score(desiredScore, 6)
+
+	assert.GreaterOrEqual(t, score0, 5*score1)
+	assert.GreaterOrEqual(t, score1, 4*score2)
+	assert.GreaterOrEqual(t, score2, 3*score3)
+	assert.GreaterOrEqual(t, score3, 2*score4)
+	assert.GreaterOrEqual(t, score4, score5)
+	assert.GreaterOrEqual(t, score5, score6)
 }

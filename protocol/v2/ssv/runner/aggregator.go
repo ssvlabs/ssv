@@ -6,17 +6,20 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type AggregatorRunner struct {
@@ -24,7 +27,7 @@ type AggregatorRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         spectypes.BeaconSigner
+	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
@@ -39,7 +42,7 @@ func NewAggregatorRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
@@ -99,16 +102,13 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-
 	logger.Debug("🧩 got partial signature quorum",
-		zap.Any("signer", signedMsg.Messages[0].Signer), // TODO: always 1?
-		fields.Slot(duty.Slot),
+		zap.Any("signer", signedMsg.Messages[0].Signer),
 	)
 
 	r.measurements.PauseDutyFlow()
 	// get block data
-	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
@@ -150,15 +150,22 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	decidedValue := encDecidedValue.(*spectypes.ValidatorConsensusData)
 
-	aggregateAndProof, err := decidedValue.GetAggregateAndProof()
+	_, aggregateAndProofHashRoot, err := decidedValue.GetAggregateAndProof()
 	if err != nil {
 		return errors.Wrap(err, "could not get aggregate and proof")
 	}
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty), aggregateAndProof, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty),
+		aggregateAndProofHashRoot,
+		decidedValue.Duty.Slot,
+		spectypes.DomainAggregateAndProof,
+	)
 	if err != nil {
-		return errors.Wrap(err, "failed signing attestation data")
+		return errors.Wrap(err, "failed signing aggregate and proof")
 	}
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
@@ -228,14 +235,14 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if err != nil {
 			return errors.Wrap(err, "could not create consensus data")
 		}
-		aggregateAndProof, err := cd.GetAggregateAndProof()
+		aggregateAndProof, _, err := cd.GetAggregateAndProof()
 		if err != nil {
 			return errors.Wrap(err, "could not get aggregate and proof")
 		}
 
-		msg := &phase0.SignedAggregateAndProof{
-			Message:   aggregateAndProof,
-			Signature: specSig,
+		msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
+		if err != nil {
+			return errors.Wrap(err, "could not construct versioned aggregate and proof")
 		}
 
 		start := time.Now()
@@ -250,7 +257,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		successfullySubmittedAggregates++
 		logger.Debug("✅ successful submitted aggregate",
 			fields.SubmissionTime(time.Since(start)),
-		)
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
 	}
 
 	r.GetState().Finished = true
@@ -277,12 +284,12 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 	if err != nil {
 		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
 	}
-	aggregateAndProof, err := cd.GetAggregateAndProof()
+	_, hashRoot, err := cd.GetAggregateAndProof()
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get aggregate and proof")
 	}
 
-	return []ssz.HashRoot{aggregateAndProof}, spectypes.DomainAggregateAndProof, nil
+	return []ssz.HashRoot{hashRoot}, spectypes.DomainAggregateAndProof, nil
 }
 
 // executeDuty steps:
@@ -296,7 +303,14 @@ func (r *AggregatorRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	r.measurements.StartPreConsensus()
 
 	// sign selection proof
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), spectypes.SSZUint64(duty.DutySlot()), duty.DutySlot(), spectypes.DomainSelectionProof)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		spectypes.SSZUint64(duty.DutySlot()),
+		duty.DutySlot(),
+		spectypes.DomainSelectionProof,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
@@ -365,7 +379,7 @@ func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *AggregatorRunner) GetSigner() spectypes.BeaconSigner {
+func (r *AggregatorRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *AggregatorRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
@@ -390,5 +404,49 @@ func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 		return [32]byte{}, errors.Wrap(err, "could not encode AggregatorRunner")
 	}
 	ret := sha256.Sum256(marshaledRoot)
+	return ret, nil
+}
+
+// Constructs a VersionedSignedAggregateAndProof from a VersionedAggregateAndProof and a signature
+func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedAggregateAndProof, signature phase0.BLSSignature) (*spec.VersionedSignedAggregateAndProof, error) {
+	ret := &spec.VersionedSignedAggregateAndProof{
+		Version: aggregateAndProof.Version,
+	}
+
+	switch ret.Version {
+	case spec.DataVersionPhase0:
+		ret.Phase0 = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Phase0,
+			Signature: signature,
+		}
+	case spec.DataVersionAltair:
+		ret.Altair = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Altair,
+			Signature: signature,
+		}
+	case spec.DataVersionBellatrix:
+		ret.Bellatrix = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Bellatrix,
+			Signature: signature,
+		}
+	case spec.DataVersionCapella:
+		ret.Capella = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Capella,
+			Signature: signature,
+		}
+	case spec.DataVersionDeneb:
+		ret.Deneb = &phase0.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Deneb,
+			Signature: signature,
+		}
+	case spec.DataVersionElectra:
+		ret.Electra = &electra.SignedAggregateAndProof{
+			Message:   aggregateAndProof.Electra,
+			Signature: signature,
+		}
+	default:
+		return nil, errors.New("unknown version for signed aggregate and proof")
+	}
+
 	return ret, nil
 }

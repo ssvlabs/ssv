@@ -3,13 +3,7 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"time"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
@@ -18,6 +12,9 @@ var SupportedConfigs = map[string]NetworkConfig{
 	HoleskyStage.Name: HoleskyStage,
 	LocalTestnet.Name: LocalTestnet,
 	HoleskyE2E.Name:   HoleskyE2E,
+	Hoodi.Name:        Hoodi,
+	HoodiStage.Name:   HoodiStage,
+	Sepolia.Name:      Sepolia,
 }
 
 const forkName = "alan"
@@ -31,14 +28,9 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                 string
-	Beacon               beacon.BeaconNetwork
-	DomainType           spectypes.DomainType
-	GenesisEpoch         phase0.Epoch
-	RegistrySyncOffset   *big.Int
-	RegistryContractAddr string // TODO: ethcommon.Address
-	Bootnodes            []string
-	DiscoveryProtocolID  [6]byte
+	Name string
+	BeaconConfig
+	SSVConfig
 }
 
 func (n NetworkConfig) String() string {

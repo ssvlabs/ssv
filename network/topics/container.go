@@ -6,6 +6,9 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
+// Increased from the default (32) to reduce message drops caused by slow subscribers.
+const subscriptionBufferSize = 256
+
 type onTopicJoined func(ps *pubsub.PubSub, topic *pubsub.Topic)
 
 type topicsContainer struct {
@@ -93,6 +96,8 @@ func (tc *topicsContainer) Subscribe(name string, opts ...pubsub.SubOpt) (*pubsu
 	if err != nil {
 		return nil, err
 	}
+
+	opts = append(opts, pubsub.WithBufferSize(subscriptionBufferSize))
 
 	s, err := topic.Subscribe(opts...)
 	if err != nil {

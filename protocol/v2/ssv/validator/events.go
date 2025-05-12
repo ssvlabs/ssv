@@ -44,12 +44,12 @@ func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 		if err != nil {
 			return err
 		}
-		c.mtx.Lock()
+		c.mtx.RLock()
 		dutyRunner, found := c.Runners[slot]
-		c.mtx.Unlock()
+		c.mtx.RUnlock()
 
 		if !found {
-			logger.Error("no committee runner or queue found for slot", fields.Slot(slot), fields.MessageID(msg.MsgID))
+			logger.Error("timeout event: no committee runner found for slot", fields.Slot(slot), fields.MessageID(msg.MsgID))
 			return nil
 		}
 
