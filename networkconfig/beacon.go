@@ -53,7 +53,7 @@ type BeaconConfig struct {
 	GenesisForkVersion                   phase0.Version
 	GenesisTime                          time.Time
 	GenesisValidatorsRoot                phase0.Root
-	Forks                                map[spec.DataVersion]phase0.Fork // TODO: 1) support updating electra; 2) lock
+	Forks                                map[spec.DataVersion]phase0.Fork
 }
 
 func (b BeaconConfig) String() string {
