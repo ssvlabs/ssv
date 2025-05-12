@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"hash"
@@ -9,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -16,27 +16,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
-	// TODO: pull from beacon node
-	specResponse, err := gc.Spec(ctx)
-	if err != nil {
-		return phase0.Domain{}, fmt.Errorf("fetch spec: %w", err)
-	}
-	// TODO: consider storing fork version and genesis validators root in goClient
-	//		instead of fetching it every time
-
-	forkVersionRaw, ok := specResponse["CAPELLA_FORK_VERSION"]
-	if !ok {
-		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
-	}
-	forkVersion, ok := forkVersionRaw.(phase0.Version)
-	if !ok {
-		return phase0.Domain{}, fmt.Errorf("failed to decode capella fork version")
-	}
+func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
+	beaconConfig := gc.getBeaconConfig()
 
 	forkData := &phase0.ForkData{
-		CurrentVersion:        forkVersion,
-		GenesisValidatorsRoot: gc.getBeaconConfig().GenesisValidatorsRoot,
+		CurrentVersion:        beaconConfig.Forks[spec.DataVersionCapella].CurrentVersion,
+		GenesisValidatorsRoot: beaconConfig.GenesisValidatorsRoot,
 	}
 
 	root, err := forkData.HashTreeRoot()
@@ -56,7 +41,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 	case spectypes.DomainApplicationBuilder: // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
-			CurrentVersion:        gc.getBeaconConfig().ForkVersion,
+			CurrentVersion:        gc.getBeaconConfig().GenesisForkVersion,
 			GenesisValidatorsRoot: phase0.Root{},
 		}
 		root, err := forkData.HashTreeRoot()
@@ -67,7 +52,7 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
 	case spectypes.DomainVoluntaryExit:
-		return gc.computeVoluntaryExitDomain(gc.ctx)
+		return gc.computeVoluntaryExitDomain()
 	}
 
 	start := time.Now()
