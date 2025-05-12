@@ -65,9 +65,10 @@ func (mv *messageValidator) validateDutyCount(
 		return nil
 	}
 
-	// Check if the duty count exceeds or equals the duty limit.
-	// This validation occurs before the state is updated, which is why
-	// the first count starts at 0 and we use an inclusive comparison (>=).
+	// Error if this validator has already been assigned at least as many duties
+	// as allowed for the target epoch. We perform this check *before* incrementing
+	// the in-memory count (so the very first duty will see count==0), hence the
+	// inclusive “>=” comparison.
 	if dutyCount >= dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v, epoch %v)", dutyCount, msgID.GetRoleType(), epoch)
