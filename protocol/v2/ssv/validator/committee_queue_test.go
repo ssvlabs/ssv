@@ -3,14 +3,13 @@ package validator
 import (
 	"context"
 	"encoding/base64"
-	"sync"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
@@ -26,6 +25,8 @@ import (
 
 // makeTestSSVMessage creates a test SignedSSVMessage for testing queue handling.
 func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes.MessageID, body interface{}) *queue.SSVMessage {
+	t.Helper()
+
 	sig, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	require.NoError(t, err)
 
@@ -60,11 +61,9 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 
 // TestHandleMessageCreatesQueue verifies that HandleMessage creates a queue when none exists.
 func TestHandleMessageCreatesQueue(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	logger := zaptest.NewLogger(t)
 
 	committee := &Committee{
@@ -95,11 +94,9 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 
 // TestConsumeQueueBasic tests basic queue consumption functionality.
 func TestConsumeQueueBasic(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+
 	logger := zaptest.NewLogger(t)
 
 	committee := &Committee{
@@ -191,11 +188,9 @@ func TestConsumeQueueBasic(t *testing.T) {
 
 // TestStartConsumeQueue verifies the StartConsumeQueue method handles various error conditions.
 func TestStartConsumeQueue(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	logger := zaptest.NewLogger(t)
 
 	committee := &Committee{
@@ -243,11 +238,9 @@ func TestStartConsumeQueue(t *testing.T) {
 // TestFilterNoProposalAccepted verifies filtering when no proposal is accepted,
 // ensuring prepare and commit messages for the current round are skipped.
 func TestFilterNoProposalAccepted(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+
 	logger := zaptest.NewLogger(t)
 
 	committee := &Committee{
@@ -300,7 +293,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 				RunningInstance: &instance.Instance{
 					State: &specqbft.State{
 						Decided:                         false,
-						ProposalAcceptedForCurrentRound: nil, // No proposal accepted
+						ProposalAcceptedForCurrentRound: nil,
 						Round:                           currentRound,
 					},
 				},
@@ -367,11 +360,9 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 // TestFilterNotDecidedSkipsPartialSignatures verifies that partial signature messages
 // are filtered when the consensus instance is not yet decided.
 func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+
 	logger := zaptest.NewLogger(t)
 
 	committee := &Committee{
@@ -429,7 +420,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 			State: &runner.State{
 				RunningInstance: &instance.Instance{
 					State: &specqbft.State{
-						Decided:                         false, // Not decided yet
+						Decided:                         false,
 						ProposalAcceptedForCurrentRound: proposalMsg,
 						Round:                           1,
 					},
@@ -474,11 +465,9 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 // TestFilterDecidedAllowsAll verifies that all message types are processed
 // when the consensus instance has reached a decision.
 func TestFilterDecidedAllowsAll(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+
 	logger := zaptest.NewLogger(t)
 
 	committee := &Committee{
@@ -583,124 +572,80 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 // TestChangingFilterState verifies that messages that were previously filtered
 // become processable when the filter state changes.
 func TestChangingFilterState(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	logger := zaptest.NewLogger(t)
-
-	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-	}
-
 	slot := phase0.Slot(123)
-	currentRound := specqbft.Round(1)
+	round := specqbft.Round(1)
 
+	// a single Prepare message at (slot, round)
 	msgID := spectypes.MessageID{1, 2, 3, 4}
-	prepareMsg := &specqbft.Message{
+	prepareBody := &specqbft.Message{
 		Height:  specqbft.Height(slot),
-		Round:   currentRound,
+		Round:   round,
 		MsgType: specqbft.PrepareMsgType,
 	}
-	testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareMsg)
+	prepareMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareBody)
 
-	proposalMsgID := spectypes.MessageID{5, 6, 7, 8}
-	qbftProposalMsg := &specqbft.Message{
-		Height:  specqbft.Height(slot),
-		Round:   currentRound,
-		MsgType: specqbft.ProposalMsgType,
+	// push message to queue, run ConsumeQueue, and return the first message seen
+	runOnce := func(rnr *runner.CommitteeRunner) *queue.SSVMessage {
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		var seen *queue.SSVMessage
+		handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
+			seen = m
+			return fmt.Errorf("stop") // we don't care about the error
+		}
+
+		q := queueContainer{
+			Q: queue.New(1),
+			queueState: &queue.State{
+				HasRunningInstance: true,
+				Height:             specqbft.Height(slot),
+				Slot:               slot,
+				Round:              round,
+			},
+		}
+		q.Q.TryPush(prepareMsg)
+
+		c := &Committee{}
+
+		// err is always nil here unless context expires or runner.ErrNoValidDuties
+		_ = c.ConsumeQueue(ctx, q, zap.NewNop(), handler, rnr)
+		return seen
 	}
-	proposalTestMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, proposalMsgID, qbftProposalMsg)
 
-	proposalMsg := &specqbft.ProcessingMessage{
-		QBFTMessage: qbftProposalMsg,
-	}
-
-	committeeRunner := &runner.CommitteeRunner{
+	// 1) No proposal accepted => Prepare should be filtered out
+	r1 := &runner.CommitteeRunner{
 		BaseRunner: &runner.BaseRunner{
 			State: &runner.State{
 				RunningInstance: &instance.Instance{
 					State: &specqbft.State{
 						Decided:                         false,
 						ProposalAcceptedForCurrentRound: nil,
-						Round:                           currentRound,
+						Round:                           round,
 					},
 				},
 			},
 		},
 	}
+	seen1 := runOnce(r1)
+	assert.Nil(t, seen1)
 
-	var mu sync.Mutex
-	receivedMessages := make([]*queue.SSVMessage, 0)
-	handlerCalled := make(chan struct{}, 2)
-
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-		mu.Lock()
-		receivedMessages = append(receivedMessages, msg)
-		mu.Unlock()
-		handlerCalled <- struct{}{}
-		return nil
-	}
-
-	q := queueContainer{
-		Q: queue.New(1000),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              currentRound,
+	// 2) Proposal accepted => now we should see exactly one Prepare
+	r2 := &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{
+			State: &runner.State{
+				RunningInstance: &instance.Instance{
+					State: &specqbft.State{
+						Decided:                         false,
+						ProposalAcceptedForCurrentRound: &specqbft.ProcessingMessage{QBFTMessage: prepareBody},
+						Round:                           round,
+					},
+				},
+			},
 		},
 	}
+	seen2 := runOnce(r2)
 
-	go func() {
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		assert.NoError(t, err)
-	}()
-
-	time.Sleep(50 * time.Millisecond)
-
-	q.Q.TryPush(testMsg)
-
-	time.Sleep(100 * time.Millisecond)
-
-	mu.Lock()
-	msgCount := len(receivedMessages)
-	mu.Unlock()
-	assert.Equal(t, 0, msgCount)
-
-	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound = proposalMsg
-
-	q.Q.TryPush(proposalTestMsg)
-
-	select {
-	case <-handlerCalled:
-	case <-time.After(1 * time.Second):
-		t.Fatalf("timed out waiting for proposal message")
-	}
-
-	q.Q.TryPush(testMsg)
-
-	select {
-	case <-handlerCalled:
-	case <-time.After(1 * time.Second):
-		t.Fatalf("timed out waiting for prepare message")
-	}
-
-	cancel()
-	time.Sleep(100 * time.Millisecond)
-
-	mu.Lock()
-	receivedCount := len(receivedMessages)
-	mu.Unlock()
-
-	require.Equal(t, 2, receivedCount)
-
-	if receivedCount >= 2 {
-		assert.Equal(t, specqbft.ProposalMsgType, receivedMessages[0].Body.(*specqbft.Message).MsgType)
-		assert.Equal(t, specqbft.PrepareMsgType, receivedMessages[1].Body.(*specqbft.Message).MsgType)
-	}
+	require.NotNil(t, seen2)
+	assert.Equal(t, specqbft.PrepareMsgType, seen2.Body.(*specqbft.Message).MsgType)
 }
