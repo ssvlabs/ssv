@@ -32,18 +32,12 @@ type queueContainer struct {
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
 func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
-	slot, err := msg.Slot()
-	if err != nil {
-		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
-	}
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(v.Operator.Committee), v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot)
-	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "handle_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msg.GetType()),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
-			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
 

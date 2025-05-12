@@ -121,7 +121,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type, vDuty.ValidatorIndex))
 	logger = v.withDutyID(logger, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.
@@ -145,16 +145,11 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 	msgType := msg.GetType()
-	slot, _ := msg.Slot() // TODO: handle error
-
-	dutyID := fields.FormatCommitteeDutyID(ssvtypes.OperatorIDsFromOperators(v.Operator.Committee), v.NetworkConfig.Beacon.EstimatedEpochAtSlot(slot), slot)
-	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "process_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
 			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.BeaconSlotAttribute(slot),
-			observability.DutyIDAttribute(dutyID),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType())),
 		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
 	defer span.End()
