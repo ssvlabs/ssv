@@ -219,9 +219,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	start := time.Now()
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch_and_store"),
-		trace.WithAttributes(
-			observability.BeaconPeriodAttribute(period),
-		))
+		trace.WithAttributes(observability.BeaconPeriodAttribute(period)))
 	defer span.End()
 
 	if period > h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
@@ -235,7 +233,9 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	})
 
 	if len(eligibleIndices) == 0 {
-		h.logger.Debug("no eligible validators for period", fields.Epoch(epoch), zap.Uint64("period", period))
+		const eventMsg = "no eligible validators for period"
+		h.logger.Debug(eventMsg, fields.Epoch(epoch), zap.Uint64("period", period))
+		span.AddEvent(eventMsg)
 		span.SetStatus(codes.Ok, "")
 		return nil
 	}
