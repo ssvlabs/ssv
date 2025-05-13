@@ -2,7 +2,6 @@ package instance
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"sync"
 
@@ -39,11 +38,11 @@ func NewInstance(
 	height specqbft.Height,
 	signer ssvtypes.OperatorSigner,
 ) *Instance {
-	var name string
+	var name spectypes.RunnerRole
 	if len(identifier) == 56 {
-		name = spectypes.MessageID(identifier).GetRoleType().String()
+		name = spectypes.MessageID(identifier).GetRoleType()
 	} else {
-		name = base64.StdEncoding.EncodeToString(identifier)
+		name = spectypes.RoleUnknown
 	}
 
 	return &Instance{

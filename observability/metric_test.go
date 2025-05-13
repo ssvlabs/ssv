@@ -2,33 +2,86 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"math"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 )
 
-func Test_GivenValueThatDoesNotExceedMaxInt64_WhenRecordUint64Value_ThenRecords(t *testing.T) {
-	var recordedValue int64
-	recordF := func(ctx context.Context, value int64, options ...metric.RecordOption) {
-		recordedValue = value
+// TestNewMetric verifies NewMetric always returns the metric regardless of error.
+func TestNewMetric(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		value interface{}
+		err   error
+	}{
+		{
+			name:  "no error",
+			value: "test-metric",
+			err:   nil,
+		},
+		{
+			name:  "with error",
+			value: 123,
+			err:   errors.New("test error"),
+		},
 	}
 
-	var val uint64 = 100
-	RecordUint64Value(context.TODO(), val, recordF)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	assert.Equal(t, val, uint64(recordedValue))
+			result := NewMetric(tc.value, tc.err)
+
+			require.Equal(t, tc.value, result)
+		})
+	}
 }
 
-func Test_GivenValueThatExceedsMaxInt64_WhenRecordUint64Value_ThenDoesNotRecord(t *testing.T) {
-	var recordedValue int64
-	recordF := func(ctx context.Context, value int64, options ...metric.RecordOption) {
-		recordedValue = value
+// TestRecordUint64Value_RangeHandling verifies RecordUint64Value correctly handles values within int64 range.
+func TestRecordUint64Value_RangeHandling(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name          string
+		value         uint64
+		shouldRecord  bool
+		expectedValue int64
+	}{
+		{
+			name:          "value within int64 range",
+			value:         100,
+			shouldRecord:  true,
+			expectedValue: 100,
+		},
+		{
+			name:          "value exceeds int64 range",
+			value:         math.MaxInt64 + 1,
+			shouldRecord:  false,
+			expectedValue: 0,
+		},
 	}
 
-	var val uint64 = math.MaxInt64 + 1
-	RecordUint64Value(context.TODO(), val, recordF)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	assert.Equal(t, int64(0), recordedValue)
+			var recordedValue int64
+			recordF := func(ctx context.Context, value int64, options ...metric.RecordOption) {
+				recordedValue = value
+			}
+
+			RecordUint64Value(context.TODO(), tc.value, recordF)
+
+			if tc.shouldRecord {
+				require.Equal(t, tc.value, uint64(recordedValue))
+			} else {
+				require.Equal(t, tc.expectedValue, recordedValue)
+			}
+		})
+	}
 }
