@@ -176,6 +176,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 			zap.String("signature", hex.EncodeToString(signature)),
 			zap.String("owner", event.Owner.String()),
 			zap.String("validator_public_key", hex.EncodeToString(event.PublicKey)),
+			zap.Uint16("expected_nonce", uint16(nonce)),
 			zap.Error(err))
 
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
