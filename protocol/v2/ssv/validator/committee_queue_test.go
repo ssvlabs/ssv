@@ -3,8 +3,10 @@ package validator
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,9 +21,11 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // makeTestSSVMessage creates a test SignedSSVMessage for testing queue handling.
@@ -44,6 +48,10 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 		data, err = v.Encode()
 		require.NoError(t, err)
 	case *spectypes.PartialSignatureMessages:
+		var err error
+		data, err = v.Encode()
+		require.NoError(t, err)
+	case *types.EventMsg:
 		var err error
 		data, err = v.Encode()
 		require.NoError(t, err)
@@ -713,12 +721,12 @@ func TestChangingFilterState(t *testing.T) {
 //
 // Flow:
 // 1. Set up a small queue (capacity 5) and a runner that filters prepare messages
-// 2. Fill the queue with prepare messages that will be filtered (not processed)
-// 3. Push a critical message (proposal) that should be processed despite filtering
-// 4. Try to push another critical message (round change) which may be rejected if queue is full
+// 2. Fill the queue completely with filtered prepare messages (not processed)
+// 3. Test if critical ExecuteDuty messages are still accepted and processed despite full queue
+// 4. Test if proposal messages are also accepted and processed despite full queue
 // 5. Change the runner state to accept prepare messages by setting ProposalAcceptedForCurrentRound
 // 6. Verify if previously filtered messages are now processed or remain in the queue
-// 7. Confirm the issue: filtered messages accumulate and aren't reprocessed when filter state changes // FIXME:??
+// 7. Confirm the issue: filtered messages accumulate and aren't reprocessed when filter state changes
 func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -759,11 +767,14 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		},
 	}
 
-	processedMsgs := make(chan *queue.SSVMessage, queueCapacity*2)
-	handlerCalled := make(chan struct{}, queueCapacity*2)
+	processedMsgs := make([]*queue.SSVMessage, 0)
+	var processMsgsMutex sync.Mutex
+	handlerCalled := make(chan struct{}, queueCapacity*3)
 
 	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-		processedMsgs <- msg
+		processMsgsMutex.Lock()
+		processedMsgs = append(processedMsgs, msg)
+		processMsgsMutex.Unlock()
 		handlerCalled <- struct{}{}
 		return nil
 	}
@@ -777,9 +788,9 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Fill the queue with messages that will be filtered out (Prepare for current round)
-	logger.Debug("pushing filtered messages")
-	for i := 0; i < queueCapacity-1; i++ {
+	// Fill the queue COMPLETELY with prepare messages that will be filtered
+	logger.Debug("pushing filtered messages to fill queue completely")
+	for i := 0; i < queueCapacity; i++ {
 		msgID := spectypes.MessageID{byte(i + 1)}
 		qbftMsg := &specqbft.Message{
 			Height:  specqbft.Height(slot),
@@ -788,19 +799,50 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		}
 		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
 		pushed := q.Q.TryPush(testMsg)
-		require.True(t, pushed, "Failed to push message to queue")
+		require.True(t, pushed, "should be able to push filtered message")
 	}
 
 	time.Sleep(100 * time.Millisecond)
 
+	// No messages should have been processed due to filtering
 	select {
 	case <-handlerCalled:
-		t.Fatalf("A filtered message was processed, which shouldn't happen")
+		t.Fatalf("a filtered message was processed, which shouldn't happen")
 	default:
 		// no messages should be processed yet
 	}
+	assert.Equal(t, queueCapacity, q.Q.Len(), "queue should be full")
 
-	// Try to push a critical message (Proposal) - this should be accepted
+	executedutyMsgID := spectypes.MessageID{0xEE}
+	executeDutyData := &types.ExecuteCommitteeDutyData{
+		Duty: &spectypes.CommitteeDuty{
+			Slot: slot,
+		},
+	}
+
+	dutyDataJSON, err := json.Marshal(executeDutyData)
+	require.NoError(t, err)
+
+	eventMsg := &types.EventMsg{
+		Type: types.ExecuteDuty,
+		Data: dutyDataJSON,
+	}
+	executeDutyMsg := makeTestSSVMessage(t, message.SSVEventMsgType, executedutyMsgID, eventMsg)
+
+	logger.Debug("pushing executeDuty message to full queue")
+	var pushed bool
+	pushed = q.Q.TryPush(executeDutyMsg)
+
+	assert.True(t, pushed)
+
+	select {
+	case <-handlerCalled:
+		logger.Debug("executeDuty message processed despite full queue")
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("timed out waiting for executeDuty message to be processed")
+	}
+
+	// Try to push a proposal message - should also succeed due to prioritization
 	proposalMsgID := spectypes.MessageID{0xFF}
 	qbftProposalMsg := &specqbft.Message{
 		Height:  specqbft.Height(slot),
@@ -809,100 +851,88 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	}
 	proposalMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, proposalMsgID, qbftProposalMsg)
 
-	logger.Debug("pushing proposal message")
-
-	var pushed bool
+	logger.Debug("pushing proposal message to full queue")
 	pushed = q.Q.TryPush(proposalMsg)
-	require.True(t, pushed)
+	assert.True(t, pushed, "proposal message should be accepted even when queue is full of filtered messages")
 
-	// The proposal should be processed
 	select {
 	case <-handlerCalled:
-		logger.Debug("proposal message processed")
+		logger.Debug("proposal message processed despite full queue")
 	case <-time.After(500 * time.Millisecond):
 		t.Fatalf("timed out waiting for proposal message to be processed")
 	}
 
-	// Now try to push another message (RoundChange) - this should be accepted
-	extraMsgID := spectypes.MessageID{0xEE}
-	qbftExtraMsg := &specqbft.Message{
-		Height:  specqbft.Height(slot),
-		Round:   1,
-		MsgType: specqbft.RoundChangeMsgType,
-	}
-	extraMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, extraMsgID, qbftExtraMsg)
-	logger.Debug("pushing roundchange message")
+	queueLenAfterPriority := q.Q.Len()
+	assert.True(t, queueLenAfterPriority >= queueCapacity,
+		"queue should still be full with filtered messages")
+	logger.Debug("queue still contains filtered messages", zap.Int("queue_len", queueLenAfterPriority))
 
-	pushed = q.Q.TryPush(extraMsg)
-	if !pushed {
-		t.Log("Queue is full - important message was rejected")
-	} else {
-		t.Log("Extra message was accepted")
-		// If we could push it, it should get processed!!
-		select {
-		case <-handlerCalled:
-			logger.Debug("roundchange message processed")
-		case <-time.After(500 * time.Millisecond):
-			t.Fatalf("Timed out waiting for roundchange message to be processed")
-		}
-	}
-
-	// Now update the runner state to process the filtered messages
 	logger.Debug("updating runner state to process filtered messages")
-	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound = &specqbft.ProcessingMessage{
+	processedProposal := &specqbft.ProcessingMessage{
 		QBFTMessage: qbftProposalMsg,
 	}
+	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound = processedProposal
 
-	// We should see the filtered messages being processed now
-	processedCount := 1 // Already processed the proposal
-	if pushed {
-		processedCount++ // And the extra message if it was pushed
-	}
-
-	// Wait for remaining messages to be processed - with proper timeout handling
 	timeoutReached := false
 	deadline := time.After(1 * time.Second)
+	additionalProcessedCount := 0
 
 	for q.Q.Len() > 0 && !timeoutReached {
 		select {
 		case <-handlerCalled:
-			processedCount++
-			logger.Debug("filtered message now processed", zap.Int("count", processedCount))
+			additionalProcessedCount++
+			logger.Debug("filtered message now processed", zap.Int("count", additionalProcessedCount))
 		case <-deadline:
 			timeoutReached = true
-			t.Logf("Timeout reached: Only processed %d messages, queue still has %d messages",
-				processedCount, q.Q.Len())
+			t.Logf("timeout reached: only processed %d additional messages, queue still has %d messages",
+				additionalProcessedCount, q.Q.Len())
 		}
 	}
 
 	// If we hit this point with messages still in the queue, it confirms
-	// that filtered messages are not reprocessed when the state changes
+	// that filtered messages are not dropped and accumulate
 	if q.Q.Len() > 0 {
-		t.Logf("ISSUE: %d messages remain in the queue and were not reprocessed after state change",
+		t.Logf("ISSUE CONFIRMED: %d messages remain in the queue and were not reprocessed after state change",
 			q.Q.Len())
-		t.Log("CHECK ME: filtered messages accumulate and aren't reprocessed")
+		t.Log("CHECK ME: filtered messages accumulate and aren't reprocessed when filter state changes")
 	} else {
 		t.Log("all messages were processed after state change")
 	}
 
+	// Wait for any in-flight handler processing
+	time.Sleep(200 * time.Millisecond)
+
 	// Check which messages were processed
-	close(processedMsgs)
-	var proposalProcessed, roundChangeProcessed bool
-	for msg := range processedMsgs {
-		if qbftMsg, ok := msg.Body.(*specqbft.Message); ok {
-			switch qbftMsg.MsgType {
-			case specqbft.ProposalMsgType:
-				proposalProcessed = true
-			case specqbft.RoundChangeMsgType:
-				roundChangeProcessed = true
+	processMsgsMutex.Lock()
+	defer processMsgsMutex.Unlock()
+
+	processedTypes := make(map[spectypes.MsgType]int)
+	processedQbftTypes := make(map[specqbft.MessageType]int)
+
+	var executeDutyProcessed, proposalProcessed bool
+
+	for _, msg := range processedMsgs {
+		processedTypes[msg.MsgType]++
+
+		switch msg.MsgType {
+		case message.SSVEventMsgType:
+			if event, ok := msg.Body.(*types.EventMsg); ok && event.Type == types.ExecuteDuty {
+				executeDutyProcessed = true
 			}
+		case spectypes.SSVConsensusMsgType:
+			if qbftMsg, ok := msg.Body.(*specqbft.Message); ok {
+				processedQbftTypes[qbftMsg.MsgType]++
+				if qbftMsg.MsgType == specqbft.ProposalMsgType {
+					proposalProcessed = true
+				}
+			}
+		default:
+			// we are chilling
 		}
 	}
 
+	assert.True(t, executeDutyProcessed)
 	assert.True(t, proposalProcessed)
-	if pushed {
-		assert.True(t, roundChangeProcessed)
-	}
 }
 
 // TestCommitteeQueueFilteringScenarios tests different filtering scenarios and their impact on queue processing
