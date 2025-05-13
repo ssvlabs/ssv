@@ -86,7 +86,7 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 // 5. Confirm the queue has the correct properties (non-nil and proper slot)
 func TestHandleMessageCreatesQueue(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	committee := &Committee{
@@ -131,7 +131,7 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 // 8. Confirm messages were processed in the expected order
 func TestConsumeQueueBasic(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
@@ -234,7 +234,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 // 4. Test scenario 3: Restore runner and call StartConsumeQueue for the valid slot (should succeed)
 func TestStartConsumeQueue(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	committee := &Committee{
@@ -296,7 +296,7 @@ func TestStartConsumeQueue(t *testing.T) {
 // 7. Confirm messages from future rounds are processed regardless of type
 func TestFilterNoProposalAccepted(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
@@ -426,7 +426,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 // 6. Confirm the partial signature message was filtered out
 func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
@@ -530,7 +530,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 // when the consensus instance has reached a decision.
 func TestFilterDecidedAllowsAll(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
@@ -653,7 +653,7 @@ func TestChangingFilterState(t *testing.T) {
 	prepareMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareBody)
 
 	runOnce := func(rnr *runner.CommitteeRunner) *queue.SSVMessage {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 		defer cancel()
 
 		var seen *queue.SSVMessage
@@ -989,7 +989,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := zaptest.NewLogger(t)
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 			defer cancel()
 
 			committee := &Committee{
@@ -1160,7 +1160,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			logger := zaptest.NewLogger(t)
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 			defer cancel()
 
 			committee := &Committee{
