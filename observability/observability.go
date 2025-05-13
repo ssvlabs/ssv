@@ -40,19 +40,8 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 		option(&config)
 	}
 
-	hostName, err := os.Hostname()
+	resources, err := buildResources(appName, appVersion)
 	if err != nil {
-		hostName = "unknown"
-	}
-
-	resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceName(appName),
-		semconv.ServiceVersion(appVersion),
-		semconv.HostName(hostName),
-	))
-	if err != nil {
-		err = errors.Join(errors.New("failed to instantiate observability resources"), err)
 		return shutdown, err
 	}
 
@@ -90,4 +79,32 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 	}
 
 	return shutdown, err
+}
+
+func buildResources(appName, appVersion string) (*resource.Resource, error) {
+	const errMsg = "failed to instantiate observability resources"
+	hostName, err := os.Hostname()
+	if err != nil {
+		hostName = "unknown"
+	}
+
+	resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceName(appName),
+		semconv.ServiceVersion(appVersion),
+		semconv.HostName(hostName),
+	))
+	if err != nil {
+		err = errors.Join(errors.New(errMsg), err)
+		return nil, err
+	}
+
+	envRes := resource.Environment()
+	resources, err = resource.Merge(resources, envRes)
+	if err != nil {
+		err = errors.Join(errors.New(errMsg), err)
+		return nil, err
+	}
+
+	return resources, nil
 }
