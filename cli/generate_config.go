@@ -26,7 +26,7 @@ const (
 )
 
 var (
-	defaultNetwork = networkconfig.LocalTestnet
+	defaultNetwork = networkconfig.LocalTestnetSSV
 )
 
 var (
