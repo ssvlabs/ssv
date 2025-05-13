@@ -17,6 +17,8 @@ import (
 	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
+const voluntaryExitSlotsToPostpone = phase0.Slot(4)
+
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh := make(chan ExitDescriptor)
 	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)

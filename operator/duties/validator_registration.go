@@ -24,11 +24,13 @@ type RegistrationDescriptor struct {
 type ValidatorRegistrationHandler struct {
 	baseHandler
 	validatorRegCh <-chan RegistrationDescriptor
+	blockSlots     map[uint64]phase0.Slot
 }
 
 func NewValidatorRegistrationHandler(validatorRegistrationCh <-chan RegistrationDescriptor) *ValidatorRegistrationHandler {
 	return &ValidatorRegistrationHandler{
 		validatorRegCh: validatorRegistrationCh,
+		blockSlots:     map[uint64]phase0.Slot{},
 	}
 }
 
@@ -128,12 +130,26 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 // blockSlot gets slots happened at the same time as block.
 func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
+	blockSlot, ok := h.blockSlots[blockNumber]
+	if ok {
+		return blockSlot, nil
+	}
+
 	block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
 	if err != nil {
 		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
-	blockSlot := h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
+	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
+
+	h.blockSlots[blockNumber] = blockSlot
+
+	// Clean up older cached values since they are not relevant anymore.
+	for k, v := range h.blockSlots {
+		if blockSlot >= v+10 {
+			delete(h.blockSlots, k)
+		}
+	}
 
 	return blockSlot, nil
 }
