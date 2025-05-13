@@ -1,13 +1,13 @@
 ## SSV proposer-duty flow background
 
-In order to understand how MEV fits with SSV cluster here is some background on SSV proposer-duty flow:
+In order to understand how MEV fits with the SSV cluster, here is some background on the SSV proposer-duty flow:
 - SSV node (all nodes in the cluster really to handle round-changes, but current round Leader 
   specifically) requests blinded block header from Beacon node which in turn "proxies" this request 
   to MEV-boost that runs with some pre-configured timeout (call it `MEVBoostRelayTimeout`)
 - MEV-boost sends multiple requests to Relays it knows about and waits until that 
   `MEVBoostRelayTimeout` time to choose the best block (based on the corresponding bid)
 - SSV node receives the response with the chosen block header and goes through QBFT consensus phase 
-  to sign it as Validator (lets say it takes `QBFTMaxExpectedTime` at most - we can estimate it 
+  to sign it as Validator (let's say it takes `QBFTMaxExpectedTime` at most - we can estimate it 
   statistically with some probability/confidence)
 - QBFT consensus phase might require several rounds to complete in case there is a fault with the
   chosen round leader, each round can take up to `RoundTimeout` (currently set to 2s on SSV-protocol 
@@ -15,15 +15,16 @@ In order to understand how MEV fits with SSV cluster here is some background on 
   within 4s since slot start) meaning if round 1 doesn't complete in under `RoundTimeout` another 
   leader will be chosen to try and complete QBFT in round 2, etc.
 - there is some time spend on executing various code to "glue" this whole thing together 
-  that's small but still matters (call it `MiscellaneousTime`)
+  that's small but still matters (call it `MiscellaneousTime`), for example, signing RANDAO would be
+  in this category
 
-and so this means for best SSV cluster operations we want the following condition to always hold true:
+and so this means for the best SSV cluster operations we want the following condition to always hold true:
 ```
 MEVBoostRelayTimeout + QBFTMaxExpectedTime + MiscellaneousTime < RoundTimeout
 ```
 if it doesn't hold ^ round-change happens occasionally - which is fine if that's some SSV node fault 
 (as in `QBFTMaxExpectedTime` is exceeded), but we wouldn't want round-change to happen due to 
-`MEVBoostRelayTimeout` being set too high for example, yet we want `MEVBoostRelayTimeout` to be as 
+`MEVBoostRelayTimeout` being set too high, for example, yet we want `MEVBoostRelayTimeout` to be as 
 high as possible to be able to wait for as many Relays as possible to provide candidate-block bids 
 to choose the best one
 
