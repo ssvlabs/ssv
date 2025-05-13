@@ -864,11 +864,26 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		t.Fatalf("timed out waiting for proposal message to be processed")
 	}
 
+	cancel()
+	wg.Wait()
+
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	defer cancel2()
+
 	logger.Debug("updating runner state to process filtered messages")
 	processedProposal := &specqbft.ProcessingMessage{
 		QBFTMessage: qbftProposalMsg,
 	}
 	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound = processedProposal
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := committee.ConsumeQueue(ctx2, q, logger, handler, committeeRunner)
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("ConsumeQueue returned error: %v", err)
+		}
+	}()
 
 	// Observe if previously filtered messages are processed after state change.
 	// Rely on handlerCalled and a timeout for this observation phase.
@@ -884,13 +899,13 @@ observeReprocessingLoop:
 		case <-timeoutForReprocessing:
 			logger.Debug("timeout reached while observing reprocessing", zap.Int("additional_processed_count", additionalProcessedCount))
 			break observeReprocessingLoop
-		case <-ctx.Done(): // If the main test context is cancelled earlier
+		case <-ctx2.Done(): // If the main test context is cancelled earlier
 			logger.Debug("context done while observing reprocessing", zap.Int("additional_processed_count", additionalProcessedCount))
 			break observeReprocessingLoop
 		}
 	}
 
-	cancel()
+	cancel2()
 	wg.Wait()
 
 	finalQueueLen := q.Q.Len()
@@ -926,7 +941,7 @@ observeReprocessingLoop:
 				}
 			}
 		default:
-			// we are chilling
+			// skip
 		}
 	}
 
