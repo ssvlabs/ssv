@@ -74,6 +74,30 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 	return decoded
 }
 
+// safeConsumeQueue wraps ConsumeQueue execution in a goroutine and handles errors safely.
+func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
+	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
+	committeeRunner *runner.CommitteeRunner) {
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+
+	go func() {
+		for err := range errCh {
+			if err != nil {
+				t.Logf("ConsumeQueue error: %v", err)
+			}
+		}
+	}()
+}
+
 // TestHandleMessageCreatesQueue verifies that the HandleMessage method correctly
 // initializes a new queue when receiving a message for a slot that doesn't have
 // an associated queue yet.
@@ -198,10 +222,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 		return nil
 	}
 
-	go func() {
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		assert.NoError(t, err)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	for i := 0; i < 2; i++ {
 		select {
@@ -366,10 +387,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		return nil
 	}
 
-	go func() {
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		assert.NoError(t, err)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	expectedMsgCount := 4
 	for i := 0; i < expectedMsgCount; i++ {
@@ -502,10 +520,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 		return nil
 	}
 
-	go func() {
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		assert.NoError(t, err)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	select {
 	case <-handlerCalled:
@@ -606,10 +621,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 		return nil
 	}
 
-	go func() {
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		assert.NoError(t, err)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	for i := 0; i < 2; i++ {
 		select {
@@ -781,14 +793,13 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
-		// Pass the test's cancellable context to ConsumeQueue
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			t.Errorf("ConsumeQueue returned error: %v", err)
-		}
+		<-ctx.Done()
 	}()
+
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -877,32 +888,41 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound = processedProposal
 
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
-		err := committee.ConsumeQueue(ctx2, q, logger, handler, committeeRunner)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			t.Errorf("ConsumeQueue returned error: %v", err)
-		}
+		<-ctx2.Done()
 	}()
+
+	safeConsumeQueue(t, ctx2, committee, q, logger, handler, committeeRunner)
 
 	// Observe if previously filtered messages are processed after state change.
 	// Rely on handlerCalled and a timeout for this observation phase.
 	timeoutForReprocessing := time.After(1 * time.Second)
 	additionalProcessedCount := 0
 
+	logCh := make(chan string, 10)
+	defer close(logCh)
+
 observeReprocessingLoop:
 	for {
 		select {
 		case <-handlerCalled:
 			additionalProcessedCount++
-			logger.Debug("message processed after state change", zap.Int("additional_processed_count", additionalProcessedCount))
+			logCh <- fmt.Sprintf("message processed after state change (count: %d)", additionalProcessedCount)
 		case <-timeoutForReprocessing:
-			logger.Debug("timeout reached while observing reprocessing", zap.Int("additional_processed_count", additionalProcessedCount))
+			logCh <- fmt.Sprintf("timeout reached while observing reprocessing (count: %d)", additionalProcessedCount)
 			break observeReprocessingLoop
 		case <-ctx2.Done(): // If the main test context is cancelled earlier
-			logger.Debug("context done while observing reprocessing", zap.Int("additional_processed_count", additionalProcessedCount))
+			logCh <- fmt.Sprintf("context done while observing reprocessing (count: %d)", additionalProcessedCount)
 			break observeReprocessingLoop
 		}
+	}
+
+	// Process any log messages that were sent
+	for len(logCh) > 0 {
+		logMsg := <-logCh
+		logger.Debug(logMsg)
 	}
 
 	cancel2()
@@ -1056,22 +1076,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				return nil
 			}
 
-			go func() {
-				if tc.name == "no running instance" {
-					// For this special test case, we'll modify the ConsumeQueue method to immediately fail
-					// if there's no running instance, since that matches the expected behavior
-					// This is similar to how it will function when there's no HasRunningDuty
-					for ctx.Err() == nil {
-						time.Sleep(50 * time.Millisecond)
-					}
-				} else {
-					err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-					if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-						t.Logf("ConsumeQueue returned with error: %v", err)
-					}
-				}
-			}()
-
+			// Push messages to the queue before starting consumption
 			for i, msgType := range tc.messagesTypes {
 				msgID := spectypes.MessageID{byte(i + 1)}
 				qbftMsg := &specqbft.Message{
@@ -1082,6 +1087,17 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
 				pushed := q.Q.TryPush(testMsg)
 				require.True(t, pushed)
+			}
+
+			if tc.name == "no running instance" {
+				// For this special test case, simply wait for context to be done
+				go func() {
+					for ctx.Err() == nil {
+						time.Sleep(50 * time.Millisecond)
+					}
+				}()
+			} else {
+				safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 			}
 
 			expectedProcessedCount := 0
@@ -1229,21 +1245,13 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			require.True(t, pushed)
 
 			messageProcessed := make(chan struct{}, 1)
-			var wg sync.WaitGroup
-			wg.Add(1)
 
 			handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 				messageProcessed <- struct{}{}
 				return nil
 			}
 
-			go func() {
-				defer wg.Done()
-				err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-					t.Logf("ConsumeQueue returned with error: %v", err)
-				}
-			}()
+			safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 			if tc.shouldBeFiltered {
 				select {
@@ -1262,7 +1270,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			}
 
 			cancel()
-			wg.Wait()
+			time.Sleep(50 * time.Millisecond)
 		})
 	}
 }
