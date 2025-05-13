@@ -1229,6 +1229,8 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			require.True(t, pushed)
 
 			messageProcessed := make(chan struct{}, 1)
+			var wg sync.WaitGroup
+			wg.Add(1)
 
 			handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
 				messageProcessed <- struct{}{}
@@ -1236,6 +1238,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			}
 
 			go func() {
+				defer wg.Done()
 				err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
 				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 					t.Logf("ConsumeQueue returned with error: %v", err)
@@ -1259,7 +1262,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			}
 
 			cancel()
-			time.Sleep(50 * time.Millisecond)
+			wg.Wait()
 		})
 	}
 }
