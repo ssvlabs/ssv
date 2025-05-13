@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"encoding/hex"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -75,7 +74,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	return errs
 }
 
-func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, slot phase0.Slot) error {
+func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
 	logger := c.taskLogger("UpdateFeeRecipient",
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
@@ -85,21 +84,23 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, slot ph
 			v.Share.FeeRecipientAddress = recipient
 			logger.Debug("updated recipient address")
 
-			// Kick off validator registration duty to notify various Ethereum actors (e.g. Relays)
-			// about fee recipient change as soon as possible.
 			pk := phase0.BLSPubKey{}
 			copy(pk[:], v.Share.ValidatorPubKey[:])
-			c.ExecuteDuty(context.Background(), logger, &spectypes.ValidatorDuty{
-				Type:           spectypes.BNRoleValidatorRegistration,
-				ValidatorIndex: v.Share.ValidatorIndex,
-				PubKey:         pk,
-				Slot:           slot,
-			})
-			logger.Debug("validator registration duty sent",
-				zap.Uint64("slot", uint64(slot)),
-				zap.Uint64("validator_index", uint64(v.Share.ValidatorIndex)),
-				zap.String("validator_pubkey", pk.String()),
-				zap.String("validator_fee_recipient", hex.EncodeToString(recipient[:])))
+			regDesc := duties.RegistrationDescriptor{
+				ValidatorIndex:  v.Share.ValidatorIndex,
+				ValidatorPubkey: pk,
+				FeeRecipient:    v.Share.FeeRecipientAddress[:],
+				BlockNumber:     blockNumber,
+			}
+
+			go func() {
+				select {
+				case c.validatorRegistrationCh <- regDesc:
+					logger.Debug("added validator registration task to pipeline")
+				case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+					logger.Error("failed to schedule validator registration duty!")
+				}
+			}()
 		}
 		return true
 	})

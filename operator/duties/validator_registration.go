@@ -2,6 +2,9 @@ package duties
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
+	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -11,12 +14,22 @@ import (
 // frequencyEpochs defines how frequently we want to submit validator-registrations.
 const frequencyEpochs = uint64(10)
 
-type ValidatorRegistrationHandler struct {
-	baseHandler
+type RegistrationDescriptor struct {
+	ValidatorIndex  phase0.ValidatorIndex
+	ValidatorPubkey phase0.BLSPubKey
+	FeeRecipient    []byte
+	BlockNumber     uint64
 }
 
-func NewValidatorRegistrationHandler() *ValidatorRegistrationHandler {
-	return &ValidatorRegistrationHandler{}
+type ValidatorRegistrationHandler struct {
+	baseHandler
+	validatorRegCh <-chan RegistrationDescriptor
+}
+
+func NewValidatorRegistrationHandler(validatorRegistrationCh <-chan RegistrationDescriptor) *ValidatorRegistrationHandler {
+	return &ValidatorRegistrationHandler{
+		validatorRegCh: validatorRegistrationCh,
+	}
 }
 
 func (h *ValidatorRegistrationHandler) Name() string {
@@ -70,6 +83,34 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 					zap.String("validator_pubkey", pk.String()))
 			}
 
+		case regDescriptor, ok := <-h.validatorRegCh:
+			if !ok {
+				return
+			}
+
+			blockSlot, err := h.blockSlot(ctx, regDescriptor.BlockNumber)
+			if err != nil {
+				h.logger.Warn(
+					"failed to convert block number to slot number, skipping validator registration duty",
+					zap.Error(err),
+				)
+				continue
+			}
+
+			// Kick off validator registration duty to notify various Ethereum actors (e.g. Relays)
+			// about fee recipient change as soon as possible.
+			h.dutiesExecutor.ExecuteDuties(context.Background(), h.logger, []*spectypes.ValidatorDuty{{
+				Type:           spectypes.BNRoleValidatorRegistration,
+				ValidatorIndex: regDescriptor.ValidatorIndex,
+				PubKey:         regDescriptor.ValidatorPubkey,
+				Slot:           blockSlot,
+			}})
+			h.logger.Debug("validator registration duty sent",
+				zap.Uint64("slot", uint64(blockSlot)),
+				zap.Uint64("validator_index", uint64(regDescriptor.ValidatorIndex)),
+				zap.String("validator_pubkey", regDescriptor.ValidatorPubkey.String()),
+				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient[:])))
+
 		case <-h.indicesChange:
 			continue
 
@@ -77,4 +118,16 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			continue
 		}
 	}
+}
+
+// blockSlot gets slots happened at the same time as block.
+func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
+	block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+	if err != nil {
+		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
+	}
+
+	blockSlot := h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
+
+	return blockSlot, nil
 }

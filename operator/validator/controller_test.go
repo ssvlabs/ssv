@@ -33,6 +33,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -765,7 +766,12 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	firstFeeRecipientBytes := decodeHex(t, "41E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode first fee recipient address")
 	secondFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
 
+	const blockNumber = uint64(2)
+
 	t.Run("Test with right owner address", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
 		testValidator := setupTestValidator(createPubKey(byte('0')), ownerAddressBytes, firstFeeRecipientBytes)
 
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
@@ -773,19 +779,29 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 
-		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
+		beaconClient := beacon.NewMockBeaconNode(ctrl)
+		beaconClient.EXPECT().GetBeaconNetwork().Return(spectypes.MainNetwork).Times(1)
+		controllerOptions := MockControllerOptions{
+			validatorsMap: mockValidatorsMap,
+			beacon:        beaconClient,
+		}
 		ctr := setupController(logger, controllerOptions)
+		validatorRegistrationCh := make(chan duties.RegistrationDescriptor, 1)
+		ctr.validatorRegistrationCh = validatorRegistrationCh
 
-		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes), 2)
+		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes), blockNumber)
 		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
 
 		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
 		require.Equal(t, secondFeeRecipientBytes, actualFeeRecipient, "Fee recipient address did not update correctly")
 
-		q := testValidator.Queues[spectypes.RoleValidatorRegistration].Q
-		require.Equal(t, 1, q.Len())
-		dutyMsg := q.Pop(context.Background(), queue.NewMessagePrioritizer(&queue.State{}), queue.FilterAny)
-		require.NotNil(t, dutyMsg, "no validator-registration duty created")
+		regDescriptor := <-validatorRegistrationCh
+		require.Equal(t, testValidator.Share.ValidatorIndex, regDescriptor.ValidatorIndex)
+		pkWant := phase0.BLSPubKey{}
+		copy(pkWant[:], testValidator.Share.ValidatorPubKey[:])
+		require.Equal(t, pkWant, regDescriptor.ValidatorPubkey)
+		require.Equal(t, secondFeeRecipientBytes, regDescriptor.FeeRecipient)
+		require.Equal(t, blockNumber, regDescriptor.BlockNumber)
 	})
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
@@ -795,7 +811,10 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		}
 		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
+
 		ctr := setupController(logger, controllerOptions)
+		validatorRegistrationCh := make(chan duties.RegistrationDescriptor, 1)
+		ctr.validatorRegistrationCh = validatorRegistrationCh
 
 		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes), 1)
 		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
@@ -803,8 +822,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
 		require.Equal(t, firstFeeRecipientBytes, actualFeeRecipient, "Fee recipient address should not have changed")
 
-		q := testValidator.Queues[spectypes.RoleValidatorRegistration].Q
-		require.Equal(t, 0, q.Len())
+		require.Len(t, validatorRegistrationCh, 0, "Validator registration channel should be empty")
 	})
 }
 

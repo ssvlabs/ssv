@@ -240,17 +240,17 @@ func (mr *MockControllerMockRecorder) StopValidator(pubKey any) *gomock.Call {
 }
 
 // UpdateFeeRecipient mocks base method.
-func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address, slot phase0.Slot) error {
+func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateFeeRecipient", owner, recipient, slot)
+	ret := m.ctrl.Call(m, "UpdateFeeRecipient", owner, recipient, blockNumber)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateFeeRecipient indicates an expected call of UpdateFeeRecipient.
-func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient, slot any) *gomock.Call {
+func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient, blockNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient, slot)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient, blockNumber)
 }
 
 // ValidatorExitChan mocks base method.
@@ -265,6 +265,20 @@ func (m *MockController) ValidatorExitChan() <-chan duties.ExitDescriptor {
 func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorExitChan", reflect.TypeOf((*MockController)(nil).ValidatorExitChan))
+}
+
+// ValidatorRegistrationChan mocks base method.
+func (m *MockController) ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorRegistrationChan")
+	ret0, _ := ret[0].(<-chan duties.RegistrationDescriptor)
+	return ret0
+}
+
+// ValidatorRegistrationChan indicates an expected call of ValidatorRegistrationChan.
+func (mr *MockControllerMockRecorder) ValidatorRegistrationChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorRegistrationChan", reflect.TypeOf((*MockController)(nil).ValidatorRegistrationChan))
 }
 
 // MockRecipients is a mock of Recipients interface.

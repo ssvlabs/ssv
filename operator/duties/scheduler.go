@@ -74,18 +74,19 @@ type ValidatorController interface {
 }
 
 type SchedulerOptions struct {
-	Ctx                 context.Context
-	BeaconNode          BeaconNode
-	ExecutionClient     ExecutionClient
-	Network             networkconfig.NetworkConfig
-	ValidatorProvider   ValidatorProvider
-	ValidatorController ValidatorController
-	DutyExecutor        DutyExecutor
-	IndicesChg          chan struct{}
-	ValidatorExitCh     <-chan ExitDescriptor
-	SlotTickerProvider  slotticker.Provider
-	DutyStore           *dutystore.Store
-	P2PNetwork          network.P2PNetwork
+	Ctx                     context.Context
+	BeaconNode              BeaconNode
+	ExecutionClient         ExecutionClient
+	Network                 networkconfig.NetworkConfig
+	ValidatorProvider       ValidatorProvider
+	ValidatorController     ValidatorController
+	DutyExecutor            DutyExecutor
+	IndicesChg              chan struct{}
+	ValidatorRegistrationCh <-chan RegistrationDescriptor
+	ValidatorExitCh         <-chan ExitDescriptor
+	SlotTickerProvider      slotticker.Provider
+	DutyStore               *dutystore.Store
+	P2PNetwork              network.P2PNetwork
 }
 
 type Scheduler struct {
@@ -133,9 +134,9 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
+			NewValidatorRegistrationHandler(opts.ValidatorRegistrationCh),
 			NewVoluntaryExitHandler(dutyStore.VoluntaryExit, opts.ValidatorExitCh),
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
-			NewValidatorRegistrationHandler(),
 		},
 
 		ticker:   opts.SlotTickerProvider(),

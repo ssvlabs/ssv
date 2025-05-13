@@ -109,12 +109,13 @@ type Controller interface {
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	IndicesChangeChan() chan struct{}
+	ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient common.Address, slot phase0.Slot) error
+	UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
@@ -189,8 +190,9 @@ type controller struct {
 
 	domainCache *validator.DomainCache
 
-	indicesChange   chan struct{}
-	validatorExitCh chan duties.ExitDescriptor
+	indicesChange           chan struct{}
+	validatorRegistrationCh chan duties.RegistrationDescriptor
+	validatorExitCh         chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -276,6 +278,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
 		),
 		indicesChange:           make(chan struct{}),
+		validatorRegistrationCh: make(chan duties.RegistrationDescriptor),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
@@ -296,6 +299,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChange
+}
+
+func (c *controller) ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor {
+	return c.validatorRegistrationCh
 }
 
 func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {

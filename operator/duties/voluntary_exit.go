@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -66,8 +67,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
-				h.logger.Warn("failed to get block time from execution client, skipping voluntary exit duty",
-					zap.Error(err))
+				h.logger.Warn(
+					"failed to convert block number to slot number, skipping voluntary exit duty",
+					zap.Error(err),
+				)
 				continue
 			}
 
@@ -134,7 +137,7 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 
 	block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
 	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115

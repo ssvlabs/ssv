@@ -54,7 +54,7 @@ type taskExecutor interface {
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient ethcommon.Address, slot phase0.Slot) error
+	UpdateFeeRecipient(owner, recipient ethcommon.Address, blockNumber uint64) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 }
 
@@ -403,7 +403,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.taskExecutor,
 			feeRecipientAddressUpdatedEvent.Owner,
 			feeRecipientAddressUpdatedEvent.RecipientAddress,
-			phase0.Slot(feeRecipientAddressUpdatedEvent.Raw.BlockNumber),
+			feeRecipientAddressUpdatedEvent.Raw.BlockNumber,
 		)
 		return task, nil
 
