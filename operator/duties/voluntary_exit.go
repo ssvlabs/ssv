@@ -13,6 +13,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
+// voluntaryExitSlotsToPostpone defines the number of slots to delay a voluntary exit duty after the
+// associated block slot.
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 
 type ExitDescriptor struct {
@@ -65,6 +67,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
+			// Calculate duty slot in a deterministic manner to ensure every Operator will have the same
+			// slot value for this duty. Additionally, add validatorRegistrationSlotsToPostpone slots on
+			// top to ensure the duty is scheduled with a slot number never in the past since several slots
+			// might have passed by the time we are processing this event here.
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
@@ -73,7 +79,6 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				)
 				continue
 			}
-
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
 			duty := &spectypes.ValidatorDuty{

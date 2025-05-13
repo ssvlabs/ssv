@@ -88,6 +88,11 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
+			// Calculate duty slot in a deterministic manner to ensure every Operator will have the same
+			// slot value for this duty. Additionally, add validatorRegistrationSlotsToPostpone slots on
+			// top to ensure the duty is scheduled with a slot number never in the past since several slots
+			// might have passed by the time we are processing this event here.
+			const validatorRegistrationSlotsToPostpone = phase0.Slot(4)
 			blockSlot, err := h.blockSlot(ctx, regDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
@@ -96,6 +101,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				)
 				continue
 			}
+			dutySlot := blockSlot + validatorRegistrationSlotsToPostpone
 
 			// Kick off validator registration duty to notify various Ethereum actors (e.g. Relays)
 			// about fee recipient change as soon as possible.
@@ -103,10 +109,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				Type:           spectypes.BNRoleValidatorRegistration,
 				ValidatorIndex: regDescriptor.ValidatorIndex,
 				PubKey:         regDescriptor.ValidatorPubkey,
-				Slot:           blockSlot,
+				Slot:           dutySlot,
 			}})
 			h.logger.Debug("validator registration duty sent",
-				zap.Uint64("slot", uint64(blockSlot)),
+				zap.Uint64("slot", uint64(dutySlot)),
 				zap.Uint64("validator_index", uint64(regDescriptor.ValidatorIndex)),
 				zap.String("validator_pubkey", regDescriptor.ValidatorPubkey.String()),
 				zap.String("validator_fee_recipient", hex.EncodeToString(regDescriptor.FeeRecipient[:])))
