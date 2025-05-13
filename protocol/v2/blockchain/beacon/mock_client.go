@@ -295,11 +295,12 @@ func (mr *MockSyncCommitteeContributionCallsMockRecorder) GetSyncCommitteeContri
 }
 
 // IsSyncCommitteeAggregator mocks base method.
-func (m *MockSyncCommitteeContributionCalls) IsSyncCommitteeAggregator(proof []byte) bool {
+func (m *MockSyncCommitteeContributionCalls) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsSyncCommitteeAggregator", proof)
 	ret0, _ := ret[0].(bool)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // IsSyncCommitteeAggregator indicates an expected call of IsSyncCommitteeAggregator.
@@ -323,11 +324,12 @@ func (mr *MockSyncCommitteeContributionCallsMockRecorder) SubmitSignedContributi
 }
 
 // SyncCommitteeSubnetID mocks base method.
-func (m *MockSyncCommitteeContributionCalls) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
+func (m *MockSyncCommitteeContributionCalls) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncCommitteeSubnetID", index)
 	ret0, _ := ret[0].(uint64)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SyncCommitteeSubnetID indicates an expected call of SyncCommitteeSubnetID.
@@ -917,11 +919,12 @@ func (mr *MockBeaconNodeMockRecorder) GetValidatorData(ctx, validatorPubKeys any
 }
 
 // IsSyncCommitteeAggregator mocks base method.
-func (m *MockBeaconNode) IsSyncCommitteeAggregator(proof []byte) bool {
+func (m *MockBeaconNode) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsSyncCommitteeAggregator", proof)
 	ret0, _ := ret[0].(bool)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // IsSyncCommitteeAggregator indicates an expected call of IsSyncCommitteeAggregator.
@@ -1145,11 +1148,12 @@ func (mr *MockBeaconNodeMockRecorder) SyncCommitteeDuties(ctx, epoch, indices an
 }
 
 // SyncCommitteeSubnetID mocks base method.
-func (m *MockBeaconNode) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
+func (m *MockBeaconNode) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncCommitteeSubnetID", index)
 	ret0, _ := ret[0].(uint64)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SyncCommitteeSubnetID indicates an expected call of SyncCommitteeSubnetID.

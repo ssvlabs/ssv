@@ -26,7 +26,10 @@ func (b *BaseRunner) ValidatePreConsensusMsg(
 		return err
 	}
 
-	roots, domain := runner.expectedPreConsensusRootsAndDomain()
+	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
+	if err != nil {
+		return err
+	}
 
 	return b.verifyExpectedRoot(ctx, runner, signedMsg, roots, domain)
 }

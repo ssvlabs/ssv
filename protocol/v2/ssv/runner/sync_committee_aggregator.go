@@ -110,13 +110,19 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 		blsSigSelectionProof := phase0.BLSSignature{}
 		copy(blsSigSelectionProof[:], sig)
 
-		aggregator := r.GetBeaconNode().IsSyncCommitteeAggregator(sig)
+		aggregator, err := r.GetBeaconNode().IsSyncCommitteeAggregator(sig)
+		if err != nil {
+			return errors.Wrap(err, "could not check if sync committee aggregator")
+		}
 		if !aggregator {
 			continue
 		}
 
 		// fetch sync committee contribution
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices[i]))
+		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices[i]))
+		if err != nil {
+			return errors.Wrap(err, "could not get sync committee subnet ID")
+		}
 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
 		subnets = append(subnets, subnet)
@@ -347,17 +353,20 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 	return contribAndProof, contribAndProofRoot, nil
 }
 
-func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType) {
+func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	sszIndexes := make([]ssz.HashRoot, 0)
 	for _, index := range r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+		if err != nil {
+			return nil, spectypes.DomainError, errors.Wrap(err, "could not get sync committee subnet ID")
+		}
 		data := &altair.SyncAggregatorSelectionData{
 			Slot:              r.GetState().StartingDuty.DutySlot(),
 			SubcommitteeIndex: subnet,
 		}
 		sszIndexes = append(sszIndexes, data)
 	}
-	return sszIndexes, spectypes.DomainSyncCommitteeSelectionProof
+	return sszIndexes, spectypes.DomainSyncCommitteeSelectionProof, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
@@ -400,8 +409,10 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 	for _, index := range r.GetState().StartingDuty.(*spectypes.ValidatorDuty).ValidatorSyncCommitteeIndices {
-		subnet := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
-
+		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+		if err != nil {
+			return errors.Wrap(err, "could not get sync committee subnet ID")
+		}
 		data := &altair.SyncAggregatorSelectionData{
 			Slot:              duty.DutySlot(),
 			SubcommitteeIndex: subnet,

@@ -44,7 +44,7 @@ type Runner interface {
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
-	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType)
+	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 	expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.

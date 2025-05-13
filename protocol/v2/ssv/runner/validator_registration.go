@@ -140,15 +140,15 @@ func (r *ValidatorRegistrationRunner) ProcessPostConsensus(ctx context.Context, 
 	return errors.New("no post consensus phase for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType) {
+func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	if r.BaseRunner.State == nil || r.BaseRunner.State.StartingDuty == nil {
-		return nil, spectypes.DomainError
+		return nil, spectypes.DomainError, errors.New("no running duty to compute preconsensus roots and domain")
 	}
 	vr, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {
-		return nil, spectypes.DomainError
+		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate validator registration")
 	}
-	return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder
+	return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign

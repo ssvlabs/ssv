@@ -40,19 +40,11 @@ func (bn *TestingBeaconNodeWrapped) DataVersion(epoch phase0.Epoch) spec.DataVer
 func (bn *TestingBeaconNodeWrapped) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return bn.Bn.DomainData(epoch, domain)
 }
-func (bn *TestingBeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
-	v, err := bn.Bn.SyncCommitteeSubnetID(index)
-	if err != nil {
-		panic("unexpected error from SyncCommitteeSubnetID")
-	}
-	return v
+func (bn *TestingBeaconNodeWrapped) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
+	return bn.Bn.SyncCommitteeSubnetID(index)
 }
-func (bn *TestingBeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) bool {
-	v, err := bn.Bn.IsSyncCommitteeAggregator(proof)
-	if err != nil {
-		panic("unexpected error from IsSyncCommitteeAggregator")
-	}
-	return v
+func (bn *TestingBeaconNodeWrapped) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
+	return bn.Bn.IsSyncCommitteeAggregator(proof)
 }
 func (bn *TestingBeaconNodeWrapped) GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs)

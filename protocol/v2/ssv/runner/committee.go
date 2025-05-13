@@ -660,8 +660,8 @@ func findValidators(
 }
 
 // Unneeded since no preconsensus phase
-func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType) {
-	return nil, spectypes.DomainError
+func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return nil, spectypes.DomainError, errors.New("no pre consensus root for committee runner")
 }
 
 // This function signature returns only one domain type... but we can have mixed domains

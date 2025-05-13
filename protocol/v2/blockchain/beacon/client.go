@@ -21,7 +21,7 @@ import (
 type AttesterCalls interface {
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error)
-	// SubmitAttestations submits the attestation to the node
+	// SubmitAttestation submit the attestation to the node
 	SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error
 }
 
@@ -47,16 +47,16 @@ type AggregatorCalls interface {
 type SyncCommitteeCalls interface {
 	// GetSyncMessageBlockRoot returns beacon block root for sync committee
 	GetSyncMessageBlockRoot(ctx context.Context) (phase0.Root, spec.DataVersion, error)
-	// SubmitSyncMessages submits signed sync committee messages
+	// SubmitSyncMessage submits a signed sync committee msg
 	SubmitSyncMessages(ctx context.Context, msgs []*altair.SyncCommitteeMessage) error
 }
 
 // SyncCommitteeContributionCalls interface has all sync committee contribution duty specific calls
 type SyncCommitteeContributionCalls interface {
 	// IsSyncCommitteeAggregator returns true if aggregator
-	IsSyncCommitteeAggregator(proof []byte) bool
+	IsSyncCommitteeAggregator(proof []byte) (bool, error)
 	// SyncCommitteeSubnetID returns sync committee subnet ID from subcommittee index
-	SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64
+	SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error)
 	// GetSyncCommitteeContribution returns a types.Contributions object
 	GetSyncCommitteeContribution(ctx context.Context, slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error)
 	// SubmitSignedContributionAndProof broadcasts to the network

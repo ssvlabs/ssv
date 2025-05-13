@@ -19,7 +19,7 @@ import (
 )
 
 // IsSyncCommitteeAggregator returns tru if aggregator
-func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) bool {
+func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 	// Hash the signature.
 	hash := sha256.Sum256(proof)
 
@@ -29,12 +29,12 @@ func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) bool {
 		// Modulo must be at least 1.
 		modulo = 1
 	}
-	return binary.LittleEndian.Uint64(hash[:8])%modulo == 0
+	return binary.LittleEndian.Uint64(hash[:8])%modulo == 0, nil
 }
 
 // SyncCommitteeSubnetID returns sync committee subnet ID from subcommittee index
-func (gc *GoClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
-	return uint64(index) / (SyncCommitteeSize / SyncCommitteeSubnetCount)
+func (gc *GoClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
+	return uint64(index) / (SyncCommitteeSize / SyncCommitteeSubnetCount), nil
 }
 
 // GetSyncCommitteeContribution returns
