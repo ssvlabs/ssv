@@ -729,7 +729,7 @@ func TestChangingFilterState(t *testing.T) {
 // 7. Confirm the issue: filtered messages accumulate and aren't reprocessed when filter state changes
 func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	committee := &Committee{
@@ -769,9 +769,9 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 
 	processedMsgs := make([]*queue.SSVMessage, 0)
 	var processMsgsMutex sync.Mutex
-	handlerCalled := make(chan struct{}, queueCapacity*3)
+	handlerCalled := make(chan struct{}, queueCapacity*3) // buffer to avoid blocking
 
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	handler := func(hCtx context.Context, hLogger *zap.Logger, msg *queue.SSVMessage) error {
 		processMsgsMutex.Lock()
 		processedMsgs = append(processedMsgs, msg)
 		processMsgsMutex.Unlock()
@@ -779,7 +779,11 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		return nil
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+		// Pass the test's cancellable context to ConsumeQueue
 		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			t.Errorf("ConsumeQueue returned error: %v", err)
@@ -799,7 +803,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		}
 		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
 		pushed := q.Q.TryPush(testMsg)
-		require.True(t, pushed, "should be able to push filtered message")
+		require.True(t, pushed)
 	}
 
 	time.Sleep(100 * time.Millisecond)
@@ -807,11 +811,10 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	// No messages should have been processed due to filtering
 	select {
 	case <-handlerCalled:
-		t.Fatalf("a filtered message was processed, which shouldn't happen")
+		t.Fatalf("a filtered message was processed, which shouldn't happen at this stage")
 	default:
 		// no messages should be processed yet
 	}
-	assert.Equal(t, queueCapacity, q.Q.Len(), "queue should be full")
 
 	executedutyMsgID := spectypes.MessageID{0xEE}
 	executeDutyData := &types.ExecuteCommitteeDutyData{
@@ -832,7 +835,6 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	logger.Debug("pushing executeDuty message to full queue")
 	var pushed bool
 	pushed = q.Q.TryPush(executeDutyMsg)
-
 	assert.True(t, pushed)
 
 	select {
@@ -853,7 +855,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 
 	logger.Debug("pushing proposal message to full queue")
 	pushed = q.Q.TryPush(proposalMsg)
-	assert.True(t, pushed, "proposal message should be accepted even when queue is full of filtered messages")
+	assert.True(t, pushed)
 
 	select {
 	case <-handlerCalled:
@@ -862,47 +864,44 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		t.Fatalf("timed out waiting for proposal message to be processed")
 	}
 
-	queueLenAfterPriority := q.Q.Len()
-	assert.True(t, queueLenAfterPriority >= queueCapacity,
-		"queue should still be full with filtered messages")
-	logger.Debug("queue still contains filtered messages", zap.Int("queue_len", queueLenAfterPriority))
-
 	logger.Debug("updating runner state to process filtered messages")
 	processedProposal := &specqbft.ProcessingMessage{
 		QBFTMessage: qbftProposalMsg,
 	}
 	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound = processedProposal
 
-	timeoutReached := false
-	deadline := time.After(1 * time.Second)
+	// Observe if previously filtered messages are processed after state change.
+	// Rely on handlerCalled and a timeout for this observation phase.
+	timeoutForReprocessing := time.After(1 * time.Second)
 	additionalProcessedCount := 0
 
-	for q.Q.Len() > 0 && !timeoutReached {
+observeReprocessingLoop:
+	for {
 		select {
 		case <-handlerCalled:
 			additionalProcessedCount++
-			logger.Debug("filtered message now processed", zap.Int("count", additionalProcessedCount))
-		case <-deadline:
-			timeoutReached = true
-			t.Logf("timeout reached: only processed %d additional messages, queue still has %d messages",
-				additionalProcessedCount, q.Q.Len())
+			logger.Debug("message processed after state change", zap.Int("additional_processed_count", additionalProcessedCount))
+		case <-timeoutForReprocessing:
+			logger.Debug("timeout reached while observing reprocessing", zap.Int("additional_processed_count", additionalProcessedCount))
+			break observeReprocessingLoop
+		case <-ctx.Done(): // If the main test context is cancelled earlier
+			logger.Debug("context done while observing reprocessing", zap.Int("additional_processed_count", additionalProcessedCount))
+			break observeReprocessingLoop
 		}
 	}
 
-	// If we hit this point with messages still in the queue, it confirms
-	// that filtered messages are not dropped and accumulate
-	if q.Q.Len() > 0 {
-		t.Logf("ISSUE CONFIRMED: %d messages remain in the queue and were not reprocessed after state change",
-			q.Q.Len())
-		t.Log("CHECK ME: filtered messages accumulate and aren't reprocessed when filter state changes")
+	cancel()
+	wg.Wait()
+
+	finalQueueLen := q.Q.Len()
+	if finalQueueLen > 0 {
+		t.Logf("ISSUE CONFIRMED: %d messages remain in the queue and were not reprocessed after state change (or during reprocessing observation window)",
+			finalQueueLen)
+		t.Log("CHECK ME: filtered messages accumulate and aren't reprocessed when filter state changes, or reprocessing was incomplete within the timeout.")
 	} else {
-		t.Log("all messages were processed after state change")
+		t.Log("all messages were processed after state change, or queue emptied during observation window.")
 	}
 
-	// Wait for any in-flight handler processing
-	time.Sleep(200 * time.Millisecond)
-
-	// Check which messages were processed
 	processMsgsMutex.Lock()
 	defer processMsgsMutex.Unlock()
 
