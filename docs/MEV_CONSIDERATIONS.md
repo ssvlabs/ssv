@@ -1,32 +1,31 @@
 ## SSV proposer-duty flow background
 
-In order to understand how MEV fits with the SSV cluster, here is some background on the SSV proposer-duty flow:
+To understand how MEV fits with the SSV cluster, here is some background on the SSV proposer-duty flow:
+- SSV node participates in the pre-consensus phase to build RANDAO signature that will be used when 
+  requesting block from Beacon node (let's say it takes `RANDAOTime`)
 - SSV node (all nodes in the cluster really to handle round-changes, but current round Leader 
   specifically) requests blinded block header from Beacon node which in turn "proxies" this request 
   to MEV-boost that runs with some pre-configured timeout (call it `MEVBoostRelayTimeout`)
 - MEV-boost sends multiple requests to Relays it knows about and waits until that 
   `MEVBoostRelayTimeout` time to choose the best block (based on the corresponding bid)
 - SSV node receives the response with the chosen block header and goes through QBFT consensus phase 
-  to sign it as Validator (let's say it takes `QBFTMaxExpectedTime` at most - we can estimate it 
+  to sign it as Validator (let's say it takes `QBFTTime` at most - we can estimate it 
   statistically with some probability/confidence)
 - QBFT consensus phase might require several rounds to complete in case there is a fault with the
   chosen round leader, each round can take up to `RoundTimeout` (currently set to 2s on SSV-protocol 
   level, which also means there will be 2 rounds at most because Ethereum block must be proposed 
-  within 4s since slot start) meaning if round 1 doesn't complete in under `RoundTimeout` another 
+  within 4s from slot start) meaning if round 1 doesn't complete in under `RoundTimeout` another 
   leader will be chosen to try and complete QBFT in round 2, etc.
+- once QBFT completes successfully, Operator needs to submit the signed block to Beacon node to 
+  propagate it throughout Etehreum network (call it `BlockSubmissionTime`)
 - there is some time spend on executing various code to "glue" this whole thing together 
-  that's small but still matters (call it `MiscellaneousTime`), for example, signing RANDAO would be
-  in this category
+  that's small but still matters (call it `MiscellaneousTime`)
 
 and so this means for the best SSV cluster operations we want the following condition to always hold true:
 ```
-MEVBoostRelayTimeout + QBFTMaxExpectedTime + MiscellaneousTime < RoundTimeout
+RANDAOTime + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
 ```
-if it doesn't hold ^ round-change happens occasionally - which is fine if that's some SSV node fault 
-(as in `QBFTMaxExpectedTime` is exceeded), but we wouldn't want round-change to happen due to 
-`MEVBoostRelayTimeout` being set too high, for example, yet we want `MEVBoostRelayTimeout` to be as 
-high as possible to be able to wait for as many Relays as possible to provide candidate-block bids 
-to choose the best one
+if this equation doesn't hold, Validator will miss his opportunity to propose block (slot will be missed)
 
 and so the most straightforward approach to extract highest MEV (and it probably works out-of-the box 
 with SSV nodes already, but with caveats mentioned below) would be
@@ -47,15 +46,11 @@ thus an alternative approach would be:
 ### approach 2
 
 To introduce an additional configurable delay `MEVDelay` SSV Operator can set so 
-that it will work nicely even with Relays that "reply as fast as possible", there are downsides 
-though:
-- the condition from above that must hold true to avoid undesirable round-changes becomes a bit more 
-  complex for Operator to properly configure his settings:
+that it will work nicely even with Relays that "reply as fast as possible", the equation from above
+becomes:
 ```
-MEVDelay + MEVBoostRelayTimeout + QBFTMaxExpectedTime + MiscellaneousTime < RoundTimeout
+RANDAOTime + MEVDelay + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
 ```
-- namely, Operator must know whether MEV-boost Relays he configured "reply as fast as possible" 
-  (or "have delays of their own") because this will indirectly affect the decision for how large `MEVDelay` value should be
 
 ## How to choose `MEVDelay` value
 
@@ -63,9 +58,16 @@ As per the notes from above `MEVDelay` depends on a number of things, to find th
 might want to start with lower values like 300ms gradually increasing it up (the higher `MEVDelay` 
 value is the higher the chance of missing Ethereum block proposal will be).
 
-It's probably best to keep `MEVDelay` under ~500ms to satisfy the equation from above (or lower 
-`MEVBoostRelayTimeout` accordingly to push `MEVDelay` value higher):
+To estimate the max reasonable value of `MEVDelay` we can put in the average numbers in the equation and
+get something like ~1400ms:
 
 ```
-MEVDelay + ~1000ms + ~350ms + ~150ms < 2000ms
+~100ms + MEVDelay + ~1000ms + ~350ms + ~1000ms + ~150ms < ~4000ms
 ```
+Note:
+- these numbers from above are just rough estimates observed during our testing, use these "estimates" 
+  at your own risk
+- `MEVBoostRelayTimeout` value is set by Operator and can be adjusted in conjunction with `MEVDelay`,
+  for example, 2s can be allocated between `MEVBoostRelayTimeout` and `MEVDelay` as 1s & 1s or 0.5s & 1.5s
+  which would result in different MEV outcomes depending on the exact Relays Operator has configured his
+  MEV-boost with

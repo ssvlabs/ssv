@@ -27,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -69,10 +68,12 @@ func NewProposerRunner(
 	}
 
 	// Validate MEVDelay value, for details on how this value should be chosen see https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#how-to-choose-mevdelay-value
+	const randaoTime = 100 * time.Millisecond
 	const mevBoostRelayTimeout = 200 * time.Millisecond
-	const qbftMaxExpectedTime = 350 * time.Millisecond
+	const qbftTime = 350 * time.Millisecond
 	const miscellaneousTime = 150 * time.Millisecond
-	const maxReasonableMEVDelay = roundtimer.QuickTimeout - mevBoostRelayTimeout - qbftMaxExpectedTime - miscellaneousTime
+	const blockSubmissionTime = 1000 * time.Millisecond
+	const maxReasonableMEVDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
 	if mevDelay > maxReasonableMEVDelay {
 		return nil, fmt.Errorf("chosen MEVDelay value is too high: %s, max reasonable allowed value: %s", mevDelay, maxReasonableMEVDelay)
 	}
