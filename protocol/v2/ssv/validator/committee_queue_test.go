@@ -75,14 +75,26 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 }
 
 // safeConsumeQueue wraps ConsumeQueue execution in a goroutine and handles errors safely.
+// If runnerMutex is provided, it's used to synchronize access to the committee runner's state.
 func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
 	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
-	committeeRunner *runner.CommitteeRunner) {
+	committeeRunner *runner.CommitteeRunner, runnerMutex ...*sync.RWMutex) {
 
 	errCh := make(chan error, 1)
 
 	go func() {
-		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+		var err error
+		if len(runnerMutex) > 0 && runnerMutex[0] != nil {
+			// Use mutex if provided
+			mutex := runnerMutex[0]
+			mutex.RLock()
+			err = committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+			mutex.RUnlock()
+		} else {
+			// No mutex, just call directly
+			err = committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+		}
+
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			errCh <- err
 		}
@@ -769,6 +781,8 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		},
 	}
 
+	runnerMutex := &sync.RWMutex{}
+
 	q := queueContainer{
 		Q: queue.New(queueCapacity),
 		queueState: &queue.State{
@@ -799,7 +813,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		<-ctx.Done()
 	}()
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, runnerMutex)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -885,7 +899,10 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	processedProposal := &specqbft.ProcessingMessage{
 		QBFTMessage: qbftProposalMsg,
 	}
+
+	runnerMutex.Lock()
 	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound = processedProposal
+	runnerMutex.Unlock()
 
 	wg.Add(1)
 
@@ -894,7 +911,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		<-ctx2.Done()
 	}()
 
-	safeConsumeQueue(t, ctx2, committee, q, logger, handler, committeeRunner)
+	safeConsumeQueue(t, ctx2, committee, q, logger, handler, committeeRunner, runnerMutex)
 
 	// Observe if previously filtered messages are processed after state change.
 	// Rely on handlerCalled and a timeout for this observation phase.
