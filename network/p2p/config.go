@@ -73,7 +73,7 @@ type Config struct {
 	UserAgent string
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
-	// Network defines a network configuration.
+	// NetworkConfig defines a network configuration.
 	NetworkConfig networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
