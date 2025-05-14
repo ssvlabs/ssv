@@ -144,17 +144,17 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	msgType := msg.GetType()
-	messageID := msg.GetID()
-
-	ctx, span := tracer.Start(v.fetchTraceContext(ctx, messageID),
+	traceCtx, dutyID := v.fetchTraceContext(ctx, msg.GetID())
+	ctx, span := tracer.Start(traceCtx,
 		observability.InstrumentName(observabilityNamespace, "process_message"),
 		trace.WithAttributes(
-			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msgType),
-			observability.RunnerRoleAttribute(msg.GetID().GetRoleType())),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.DutyIDAttribute(dutyID)),
 		trace.WithLinks(trace.LinkFromContext(msg.TraceContext)))
 	defer span.End()
+
+	msgType := msg.GetType()
+	span.SetAttributes(observability.ValidatorMsgTypeAttribute(msgType))
 
 	if msgType != message.SSVEventMsgType {
 		span.AddEvent("validating message and signature")
@@ -172,6 +172,8 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		}
 	}
 
+	messageID := msg.GetID()
+	span.SetAttributes(observability.ValidatorMsgIDAttribute(messageID))
 	// Get runner
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
@@ -294,9 +296,9 @@ func (v *Validator) withDutyID(logger *zap.Logger, role spectypes.RunnerRole) *z
 	return logger
 }
 
-func (v *Validator) fetchTraceContext(ctx context.Context, msgID spectypes.MessageID) context.Context {
+func (v *Validator) fetchTraceContext(ctx context.Context, msgID spectypes.MessageID) (traceCtx context.Context, dutyID string) {
 	if dutyID, ok := v.dutyIDs.Get(msgID.GetRoleType()); ok {
-		return observability.TraceContext(ctx, dutyID)
+		return observability.TraceContext(ctx, dutyID), dutyID
 	}
-	return ctx
+	return ctx, ""
 }
