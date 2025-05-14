@@ -244,7 +244,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		return logs, nil
 	}
 
-	if !IsRPCRateLimitError(err) || q.FromBlock == nil || q.ToBlock == nil {
+	if !isRPCRateLimitError(err) || q.FromBlock == nil || q.ToBlock == nil {
 		return nil, err
 	}
 

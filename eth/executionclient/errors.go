@@ -26,11 +26,12 @@ const (
 	errCodeRateLimit = -32005
 )
 
-// IsRPCRateLimitError checks if the provided error is a rate limit error.
-func IsRPCRateLimitError(err error) bool {
+// isRPCRateLimitError checks if the provided error is a rate limit error.
+func isRPCRateLimitError(err error) bool {
 	var rpcErr rpc.Error
 	if errors.As(err, &rpcErr) {
 		return rpcErr.ErrorCode() == errCodeRateLimit
 	}
+
 	return false
 }
