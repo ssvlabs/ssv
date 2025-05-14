@@ -192,7 +192,7 @@ func (s *operatorsStorage) quorumExists(
 		return false, err
 	}
 
-	return seen > quorum, nil
+	return seen >= quorum, nil
 }
 
 func (s *operatorsStorage) listOperators(r basedb.Reader, from, to uint64) ([]OperatorData, error) {

@@ -182,7 +182,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 
 	exist, err := mv.operators.OperatorsExist(nil, signedSSVMessage.OperatorIDs)
 	if err != nil {
-		return decodedMessage, fmt.Errorf("check operators existance: %w", err)
+		return decodedMessage, fmt.Errorf("check operators existence: %w", err)
 	}
 	if !exist {
 		e := ErrUnknownOperator
