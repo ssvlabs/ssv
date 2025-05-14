@@ -23,6 +23,7 @@ import (
 type MockBeaconNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNetworkMockRecorder
+	isgomock struct{}
 }
 
 // MockBeaconNetworkMockRecorder is the mock recorder for MockBeaconNetwork.
@@ -113,17 +114,17 @@ func (mr *MockBeaconNetworkMockRecorder) EstimatedEpochAtSlot(slot any) *gomock.
 }
 
 // EstimatedSlotAtTime mocks base method.
-func (m *MockBeaconNetwork) EstimatedSlotAtTime(time int64) phase0.Slot {
+func (m *MockBeaconNetwork) EstimatedSlotAtTime(arg0 int64) phase0.Slot {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EstimatedSlotAtTime", time)
+	ret := m.ctrl.Call(m, "EstimatedSlotAtTime", arg0)
 	ret0, _ := ret[0].(phase0.Slot)
 	return ret0
 }
 
 // EstimatedSlotAtTime indicates an expected call of EstimatedSlotAtTime.
-func (mr *MockBeaconNetworkMockRecorder) EstimatedSlotAtTime(time any) *gomock.Call {
+func (mr *MockBeaconNetworkMockRecorder) EstimatedSlotAtTime(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EstimatedSlotAtTime", reflect.TypeOf((*MockBeaconNetwork)(nil).EstimatedSlotAtTime), time)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EstimatedSlotAtTime", reflect.TypeOf((*MockBeaconNetwork)(nil).EstimatedSlotAtTime), arg0)
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch mocks base method.

@@ -74,7 +74,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	return errs
 }
 
-func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
+func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error {
 	logger := c.taskLogger("UpdateFeeRecipient",
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
@@ -82,8 +82,25 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
 			v.Share.FeeRecipientAddress = recipient
-
 			logger.Debug("updated recipient address")
+
+			pk := phase0.BLSPubKey{}
+			copy(pk[:], v.Share.ValidatorPubKey[:])
+			regDesc := duties.RegistrationDescriptor{
+				ValidatorIndex:  v.Share.ValidatorIndex,
+				ValidatorPubkey: pk,
+				FeeRecipient:    v.Share.FeeRecipientAddress[:],
+				BlockNumber:     blockNumber,
+			}
+
+			go func() {
+				select {
+				case c.validatorRegistrationCh <- regDesc:
+					logger.Debug("added validator registration task to pipeline")
+				case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+					logger.Error("failed to schedule validator registration duty!")
+				}
+			}()
 		}
 		return true
 	})

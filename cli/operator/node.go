@@ -29,6 +29,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -66,7 +68,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -271,7 +272,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.Context = cmd.Context()
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
-		consensusClient := setupConsensusClient(logger, slotTickerProvider)
+		validatorProvider := nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID)
+		consensusClient := setupConsensusClient(logger, validatorProvider, slotTickerProvider)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -444,7 +446,7 @@ var StartNodeCmd = &cobra.Command{
 		metadataSyncer := metadata.NewSyncer(
 			logger,
 			nodeStorage.Shares(),
-			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+			validatorProvider,
 			networkConfig,
 			consensusClient,
 			fixedSubnets,
@@ -457,7 +459,7 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
 				Network:            networkConfig,
 				BeaconNode:         consensusClient,
-				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+				ValidatorProvider:  validatorProvider,
 				SlotTickerProvider: slotTickerProvider,
 				Logger:             logger,
 			})
@@ -953,8 +955,12 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	return n
 }
 
-func setupConsensusClient(logger *zap.Logger, slotTickerProvider slotticker.Provider) *goclient.GoClient {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, slotTickerProvider)
+func setupConsensusClient(
+	logger *zap.Logger,
+	validatorStore registrystorage.SelfValidatorStore,
+	slotTickerProvider slotticker.Provider,
+) *goclient.GoClient {
+	cl, err := goclient.New(logger, cfg.ConsensusClient, validatorStore, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))

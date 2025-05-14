@@ -31,7 +31,7 @@ func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 	c.mtx.Lock()
 	q, ok := c.Queues[slot]
 	if !ok {
-		q = queueContainer{
+		q = QueueContainer{
 			Q: queue.New(1000), // TODO alan: get queue opts from options
 			queueState: &queue.State{
 				HasRunningInstance: false,
@@ -85,7 +85,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 // it checks for current state
 func (c *Committee) ConsumeQueue(
 	ctx context.Context,
-	q queueContainer,
+	q QueueContainer,
 	logger *zap.Logger,
 	handler MessageHandler,
 	rnr *runner.CommitteeRunner,

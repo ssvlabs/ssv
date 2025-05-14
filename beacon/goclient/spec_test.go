@@ -5,12 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -18,7 +17,7 @@ func TestSpec(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(nil)
+		mockServer := mocks.MockServer(nil)
 		defer mockServer.Close()
 
 		client, err := New(
@@ -30,7 +29,8 @@ func TestSpec(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			tests.MockSlotTickerProvider,
+			mocks.NewValidatorStore(),
+			mocks.NewSlotTickerProvider,
 		)
 		require.NoError(t, err)
 

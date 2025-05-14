@@ -22,6 +22,7 @@ import (
 type MockTimer struct {
 	ctrl     *gomock.Controller
 	recorder *MockTimerMockRecorder
+	isgomock struct{}
 }
 
 // MockTimerMockRecorder is the mock recorder for MockTimer.
@@ -57,6 +58,7 @@ func (mr *MockTimerMockRecorder) TimeoutForRound(height, round any) *gomock.Call
 type MockBeaconNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNetworkMockRecorder
+	isgomock struct{}
 }
 
 // MockBeaconNetworkMockRecorder is the mock recorder for MockBeaconNetwork.

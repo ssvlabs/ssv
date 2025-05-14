@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -11,8 +12,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
-
-const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 
 type ExitDescriptor struct {
 	OwnValidator   bool
@@ -64,13 +63,19 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
+			// Calculate duty slot in a deterministic manner to ensure every Operator will have the same
+			// slot value for this duty. Additionally, add validatorRegistrationSlotsToPostpone slots on
+			// top to ensure the duty is scheduled with a slot number never in the past since several slots
+			// might have passed by the time we are processing this event here.
+			const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
-				h.logger.Warn("failed to get block time from execution client, skipping voluntary exit duty",
-					zap.Error(err))
+				h.logger.Warn(
+					"failed to convert block number to slot number, skipping voluntary exit duty",
+					zap.Error(err),
+				)
 				continue
 			}
-
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
 			duty := &spectypes.ValidatorDuty{
@@ -134,14 +139,17 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 
 	block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
 	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
+
+	// Clean up older cached values since they are not relevant anymore.
 	for k, v := range h.blockSlots {
-		if v < blockSlot && blockSlot-v >= voluntaryExitSlotsToPostpone {
+		const recentlyQueriedBlocks = 10
+		if blockSlot >= v+recentlyQueriedBlocks {
 			delete(h.blockSlots, k)
 		}
 	}
