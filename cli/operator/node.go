@@ -20,15 +20,9 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -41,6 +35,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	dutytracestore "github.com/ssvlabs/ssv/exporter/v2/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -58,6 +53,7 @@ import (
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -66,6 +62,11 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -420,7 +421,7 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, s)
 		}
 
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
+		if cfg.SSVOptions.ValidatorOptions.Exporter && !cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
@@ -434,7 +435,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
+		if cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			fixedSubnets, err = networkcommons.FromString(networkcommons.AllSubnets)
 			if err != nil {
 				logger.Fatal("failed to parse all fixed subnets", zap.Error(err))
@@ -451,6 +452,24 @@ var StartNodeCmd = &cobra.Command{
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
+
+		// Validator duty tracing
+		var collector *dutytracer.Collector
+		if cfg.SSVOptions.ValidatorOptions.ExporterFull {
+			cfg.SSVOptions.ValidatorOptions.Exporter = false // disable old decideds
+
+			logger.Info("exporter mode: full")
+			dstore := &dutytracer.DutyTraceStoreMetrics{
+				Store: dutytracestore.New(db),
+			}
+			collector = dutytracer.New(cmd.Context(), logger,
+				nodeStorage.ValidatorStore(), consensusClient,
+				dstore, networkConfig.Beacon.GetBeaconNetwork())
+
+			go collector.StartEvictionJob(cmd.Context(), slotTickerProvider, 0)
+		}
+
+		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
 
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
@@ -579,7 +598,10 @@ var StartNodeCmd = &cobra.Command{
 				},
 				&handlers.Exporter{
 					ParticipantStores: storageMap,
+					TraceStore:        collector,
+					Validators:        nodeStorage.ValidatorStore(),
 				},
+				cfg.SSVOptions.ValidatorOptions.ExporterFull,
 			)
 			go func() {
 				err := apiServer.Run()
