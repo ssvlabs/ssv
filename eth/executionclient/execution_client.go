@@ -46,15 +46,6 @@ type SingleClientProvider interface {
 
 var _ Provider = &ExecutionClient{}
 
-var (
-	ErrClosed        = fmt.Errorf("closed")
-	ErrNotConnected  = fmt.Errorf("not connected")
-	ErrBadInput      = fmt.Errorf("bad input")
-	ErrNothingToSync = errors.New("nothing to sync")
-)
-
-const elResponseErrMsg = "Execution client returned an error"
-
 // ExecutionClient represents a client for interacting with Ethereum execution client.
 type ExecutionClient struct {
 	// mandatory
@@ -172,11 +163,13 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 
 			start := time.Now()
-			results, err := ec.client.FilterLogs(ctx, ethereum.FilterQuery{
+			query := ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   new(big.Int).SetUint64(toBlock),
-			})
+			}
+
+			results, err := ec.subdivideLogFetch(ctx, query)
 			if err != nil {
 				ec.logger.Error(elResponseErrMsg,
 					zap.String("method", "eth_getLogs"),
@@ -234,6 +227,80 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 	return logCh, errCh
 }
 
+// subdivideLogFetch handles log fetching with automatic subdivision on rate limit errors.
+// It first attempts a direct fetch, and if that fails with a rate limit error, it subdivides
+// the block range and tries again with smaller chunks.
+func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-ec.closed:
+		return nil, ErrClosed
+	default:
+	}
+
+	logs, err := ec.client.FilterLogs(ctx, q)
+	if err == nil {
+		return logs, nil
+	}
+
+	if !IsRPCRateLimitError(err) || q.FromBlock == nil || q.ToBlock == nil {
+		return nil, err
+	}
+
+	fromBlock := q.FromBlock.Uint64()
+	toBlock := q.ToBlock.Uint64()
+
+	// check if we have at least 2 blocks
+	if fromBlock >= toBlock {
+		return nil, err
+	}
+
+	ec.logger.Info("subdividing log fetch due to rate limit",
+		fields.FromBlock(fromBlock),
+		fields.ToBlock(toBlock))
+
+	midBlock := fromBlock + (toBlock-fromBlock)/2
+
+	firstHalfQuery := q
+	firstHalfQuery.FromBlock = new(big.Int).SetUint64(fromBlock)
+	firstHalfQuery.ToBlock = new(big.Int).SetUint64(midBlock)
+
+	secondHalfQuery := q
+	secondHalfQuery.FromBlock = new(big.Int).SetUint64(midBlock + 1)
+	secondHalfQuery.ToBlock = new(big.Int).SetUint64(toBlock)
+
+	firstHalfLogs, firstErr := ec.subdivideLogFetch(ctx, firstHalfQuery)
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	secondHalfLogs, secondErr := ec.subdivideLogFetch(ctx, secondHalfQuery)
+	if secondErr != nil {
+		return nil, secondErr
+	}
+
+	if len(firstHalfLogs) == 0 {
+		return secondHalfLogs, nil
+	}
+
+	if len(secondHalfLogs) == 0 {
+		return firstHalfLogs, nil
+	}
+
+	totalLogs := len(firstHalfLogs) + len(secondHalfLogs)
+	combinedLogs := make([]ethtypes.Log, 0, totalLogs)
+	combinedLogs = append(combinedLogs, firstHalfLogs...)
+	combinedLogs = append(combinedLogs, secondHalfLogs...)
+
+	ec.logger.Info("successfully fetched logs after subdivision",
+		fields.FromBlock(fromBlock),
+		fields.ToBlock(toBlock),
+		zap.Int("total_logs", totalLogs))
+
+	return combinedLogs, nil
+}
+
 // StreamLogs subscribes to events emitted by the contract.
 func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
 	logs := make(chan BlockLogs)
@@ -278,8 +345,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 
 	return logs
 }
-
-var errSyncing = fmt.Errorf("syncing")
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
 func (ec *ExecutionClient) Healthy(ctx context.Context) error {
