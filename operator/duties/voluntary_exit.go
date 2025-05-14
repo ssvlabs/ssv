@@ -148,7 +148,8 @@ func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64
 
 	// Clean up older cached values since they are not relevant anymore.
 	for k, v := range h.blockSlots {
-		if blockSlot >= v+10 {
+		const recentlyQueriedBlocks = 10
+		if blockSlot >= v+recentlyQueriedBlocks {
 			delete(h.blockSlots, k)
 		}
 	}
