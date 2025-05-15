@@ -270,20 +270,38 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	secondHalfQuery.FromBlock = new(big.Int).SetUint64(midBlock + 1)
 	secondHalfQuery.ToBlock = new(big.Int).SetUint64(toBlock)
 
-	firstHalfLogs, firstErr := ec.subdivideLogFetch(ctx, firstHalfQuery)
-	if firstErr != nil {
-		return nil, firstErr
+	type fetchResult struct {
+		logs []ethtypes.Log
+		err  error
 	}
 
-	secondHalfLogs, secondErr := ec.subdivideLogFetch(ctx, secondHalfQuery)
-	if secondErr != nil {
-		return nil, secondErr
+	firstHalfCh := make(chan fetchResult, 1)
+	secondHalfCh := make(chan fetchResult, 1)
+
+	go func() {
+		fetchedLogs, fetchErr := ec.subdivideLogFetch(ctx, firstHalfQuery)
+		firstHalfCh <- fetchResult{fetchedLogs, fetchErr}
+	}()
+
+	go func() {
+		fetchedLogs, fetchErr := ec.subdivideLogFetch(ctx, secondHalfQuery)
+		secondHalfCh <- fetchResult{fetchedLogs, fetchErr}
+	}()
+
+	firstResult := <-firstHalfCh
+	if firstResult.err != nil {
+		return nil, firstResult.err
 	}
 
-	totalLogs := len(firstHalfLogs) + len(secondHalfLogs)
+	secondResult := <-secondHalfCh
+	if secondResult.err != nil {
+		return nil, secondResult.err
+	}
+
+	totalLogs := len(firstResult.logs) + len(secondResult.logs)
 	combinedLogs := make([]ethtypes.Log, 0, totalLogs)
-	combinedLogs = append(combinedLogs, firstHalfLogs...)
-	combinedLogs = append(combinedLogs, secondHalfLogs...)
+	combinedLogs = append(combinedLogs, firstResult.logs...)
+	combinedLogs = append(combinedLogs, secondResult.logs...)
 
 	ec.logger.Info("successfully fetched logs after subdivision",
 		fields.FromBlock(fromBlock),
