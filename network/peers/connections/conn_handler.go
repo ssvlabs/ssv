@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
@@ -35,6 +37,7 @@ type connHandler struct {
 	peerInfos           peers.PeerInfoIndex
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
 	slot                func() phase0.Slot
+	topicsCtrl          topics.Controller
 }
 
 // NewConnHandler creates a new connection handler
@@ -47,6 +50,7 @@ func NewConnHandler(
 	peerInfos peers.PeerInfoIndex,
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
 	slot func() phase0.Slot,
+	topicsCtrl topics.Controller,
 ) ConnHandler {
 	return &connHandler{
 		ctx:                 ctx,
@@ -226,8 +230,21 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			logger := connLogger(conn)
 
 			// exta logging
-			subnetSize := ch.subnetsIndex.GetPeerSubnets(conn.RemotePeer())
-			logger.Debug("peer disconnected", fields.Slot(ch.slot()), zap.String("peerID", conn.RemotePeer().String()), zap.Int("subnet_size", len(subnetSize)))
+			topics := make([]string, 0)
+			dead_topics := make([]string, 0)
+			for _, topicName := range ch.topicsCtrl.Topics() {
+				peers, err := ch.topicsCtrl.Peers(topicName)
+				if err != nil {
+					continue
+				}
+				if slices.Contains(peers, conn.RemotePeer()) {
+					topics = append(topics, topicName)
+					if len(peers) <= 1 {
+						dead_topics = append(dead_topics, topicName)
+					}
+				}
+			}
+			logger.Debug("peer disconnected", fields.Slot(ch.slot()), zap.String("peerID", conn.RemotePeer().String()), zap.Strings("topics", topics), zap.Strings("dead_topics", dead_topics))
 		},
 	}
 }
