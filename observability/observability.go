@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 
 	"go.opentelemetry.io/contrib/exporters/autoexport"
@@ -14,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	trace_noop "go.opentelemetry.io/otel/trace/noop"
+	"go.uber.org/zap"
 )
 
 var (
@@ -48,8 +50,7 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 	if config.metrics.enabled {
 		promExporter, err := prometheus.New()
 		if err != nil {
-			err = errors.Join(errors.New("failed to instantiate metric Prometheus exporter"), err)
-			return shutdown, err
+			return shutdown, fmt.Errorf("failed to instantiate Metric Prometheus exporter: %w", err)
 		}
 		meterProvider := metric.NewMeterProvider(
 			metric.WithResource(resources),
@@ -64,7 +65,7 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 	if config.traces.enabled {
 		autoExporter, err := autoexport.NewSpanExporter(ctx)
 		if err != nil {
-			return shutdown, errors.Join(errors.New("failed to instantiate OTEL exporter"), err)
+			return shutdown, fmt.Errorf("failed to instantiate Trace auto exporter: %w", err)
 		}
 
 		traceProvider := trace.NewTracerProvider(
@@ -82,12 +83,16 @@ func Initialize(ctx context.Context, appName, appVersion string, options ...Opti
 }
 
 func buildResources(appName, appVersion string) (*resource.Resource, error) {
-	const errMsg = "failed to instantiate observability resources"
 	hostName, err := os.Hostname()
 	if err != nil {
-		hostName = "unknown"
+		const defaultHostname = "unknown"
+		logger.Warn("hostname fetching returned an error, setting host name to default",
+			zap.Error(err),
+			zap.String("default_hostname", defaultHostname))
+		hostName = defaultHostname
 	}
 
+	const errMsg = "failed to merge OTeL Resources"
 	resources, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName(appName),
@@ -95,15 +100,12 @@ func buildResources(appName, appVersion string) (*resource.Resource, error) {
 		semconv.HostName(hostName),
 	))
 	if err != nil {
-		err = errors.Join(errors.New(errMsg), err)
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", errMsg, err)
 	}
 
-	envRes := resource.Environment()
-	resources, err = resource.Merge(resources, envRes)
+	resources, err = resource.Merge(resources, resource.Environment())
 	if err != nil {
-		err = errors.Join(errors.New(errMsg), err)
-		return nil, err
+		return nil, fmt.Errorf("%s: %w", errMsg, err)
 	}
 
 	return resources, nil
