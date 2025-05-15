@@ -290,39 +290,36 @@ func TestFetchHistoricalLogs(t *testing.T) {
 // in a single call.
 func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 	testCases := []struct {
-		name          string
-		totalBlocks   int
-		threshold     uint64
-		wantLogs      int
-		wantCalls     int32
-		overrideBatch bool
+		name        string
+		totalBlocks int
+		threshold   uint64 // block range that won't be rate-limited
+		wantLogs    int
+		wantCalls   int32
 	}{
+		// 1. Call for blocks 0-1 (succeeds) [count: 1]
 		// eth_getLogs calls: 1
-		{"single_log", 1, 5, 1, 1, false},
+		{"single log", 1, 5, 1, 1},
 
-		// Below threshold, so no subdivision needed
+		// 1. Call for blocks 0-2 (succeeds) [count: 1]
 		// eth_getLogs calls: 1
-		{"multiple_logs", 2, 5, 2, 1, false},
+		{"multiple logs", 2, 5, 2, 1},
 
-		// Initial call for range 0-3 gets rate limited
-		// Subdivides to 0-1, rate limited again
-		// -> Subdivides to block 0 (call #1)
-		// -> Subdivides to block 1 (call #2)
-		// Subdivides to 2-3, rate limited again
-		// -> Subdivides to block 2 (call #3)
-		// -> Subdivides to block 3 (call #4)
-		// eth_getLogs calls: 4
-		{"full subdivision", 4, 2, 4, 4, true},
+		// 1. Call for blocks 0-4 (rate limited) [count: 1]
+		// 2. Subdivide into 0-2 and 3-4
+		// 3. Call for blocks 3-4 (succeeds) [count: 2]
+		// 4. Call for blocks 0-2 (succeeds) [count: 3]
+		// eth_getLogs calls: 3
+		{"full subdivision", 4, 2, 4, 3},
 
-		// Initial call for range 0-5 gets rate limited
-		// Subdivides to 0-2, gets rate limited again (since 3 blocks > threshold/2)
-		// -> Subdivides to 0-1 (call #1)
-		// -> Subdivides to block 2 (call #2)
-		// Subdivides to 3-5, gets rate limited again (since 3 blocks > threshold/2)
-		// -> Subdivides to 3-4 (call #3)
-		// -> Subdivides to block 5 (call #4)
-		// eth_getLogs calls: 4
-		{"partial subdivision", 6, 4, 6, 4, true},
+		// 1. Call for blocks 0-9 (rate limited) [count: 1]
+		// 2. Subdivide into 0-4 and 5-9
+		// 3. Call for blocks 5-9 (succeeds) [count: 2] - Range of 5 blocks, threshold is 4
+		// 4. Call for blocks 0-4 (rate limited) [count: 3] - Range of 5 blocks, threshold is 3
+		// 5. Subdivide 0-4 into 0-2 and 3-4
+		// 6. Call for blocks 0-2 (succeeds) [count: 4] - Range of 3 blocks
+		// 7. Call for blocks 3-4 (succeeds) [count: 5] - Range of 2 blocks
+		// eth_getLogs calls: 5
+		{"partial subdivision", 9, 4, 9, 5},
 	}
 
 	for _, tc := range testCases {
@@ -374,11 +371,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			srv := httptest.NewServer(wrapped)
 			t.Cleanup(srv.Close)
 
-			opts := []Option{WithFollowDistance(0)}
-
-			if tc.overrideBatch {
-				opts = append(opts, WithLogBatchSize(uint64(tc.totalBlocks+1)))
-			}
+			opts := []Option{WithFollowDistance(0), WithLogBatchSize(100000)}
 
 			client, err := New(context.Background(),
 				srv.URL,
@@ -399,6 +392,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 
 			require.NoError(t, <-errCh)
 			require.Len(t, all, tc.wantLogs)
+
 			require.Equal(t, tc.wantCalls, callCount.Load())
 		})
 	}
