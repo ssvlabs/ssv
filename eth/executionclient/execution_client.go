@@ -280,14 +280,6 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		return nil, secondErr
 	}
 
-	if len(firstHalfLogs) == 0 {
-		return secondHalfLogs, nil
-	}
-
-	if len(secondHalfLogs) == 0 {
-		return firstHalfLogs, nil
-	}
-
 	totalLogs := len(firstHalfLogs) + len(secondHalfLogs)
 	combinedLogs := make([]ethtypes.Log, 0, totalLogs)
 	combinedLogs = append(combinedLogs, firstHalfLogs...)

@@ -1,11 +1,16 @@
 package executionclient
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -276,6 +281,127 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.Nil(t, fetchErrCh)
 		require.ErrorContains(t, err, "failed to get current block")
 	})
+}
+
+// TestFetchHistoricalLogs_Subdivide tests the automatic subdivision logic for handling
+// RPC rate limit errors during log fetching.
+// The test specifically targets rate limit error handling for error code `-32005`, which
+// is returned by execution clients like Nethermind when too many logs are requested
+// in a single call.
+func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
+	testCases := []struct {
+		name          string
+		totalBlocks   int
+		threshold     uint64
+		wantLogs      int
+		wantCalls     int32
+		overrideBatch bool
+	}{
+		// eth_getLogs calls: 1
+		{"single_log", 1, 5, 1, 1, false},
+
+		// Below threshold, so no subdivision needed
+		// eth_getLogs calls: 1
+		{"multiple_logs", 2, 5, 2, 1, false},
+
+		// Initial call for range 0-3 gets rate limited
+		// Subdivides to 0-1, rate limited again
+		// -> Subdivides to block 0 (call #1)
+		// -> Subdivides to block 1 (call #2)
+		// Subdivides to 2-3, rate limited again
+		// -> Subdivides to block 2 (call #3)
+		// -> Subdivides to block 3 (call #4)
+		// eth_getLogs calls: 4
+		{"full subdivision", 4, 2, 4, 4, true},
+
+		// Initial call for range 0-5 gets rate limited
+		// Subdivides to 0-2, gets rate limited again (since 3 blocks > threshold/2)
+		// -> Subdivides to 0-1 (call #1)
+		// -> Subdivides to block 2 (call #2)
+		// Subdivides to 3-5, gets rate limited again (since 3 blocks > threshold/2)
+		// -> Subdivides to 3-4 (call #3)
+		// -> Subdivides to block 5 (call #4)
+		// eth_getLogs calls: 4
+		{"partial subdivision", 6, 4, 6, 4, true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := setupTestEnv(t, 5*time.Second)
+			contract, err := env.deployCallableContract()
+			require.NoError(t, err)
+
+			// mine some blocks
+			for i := 0; i < tc.totalBlocks; i++ {
+				_, err := contract.Transact(env.auth, "Call")
+				require.NoError(t, err)
+				env.sim.Commit()
+			}
+
+			// custom eth_getLogs with call count
+			rpcSrv, _ := env.sim.Node().RPCHandler()
+			base := http.Handler(rpcSrv)
+			var callCount atomic.Int32
+
+			wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				raw, _ := io.ReadAll(r.Body)
+				var req map[string]interface{}
+				_ = json.Unmarshal(raw, &req)
+
+				if req["method"] == "eth_getLogs" {
+					callCount.Add(1)
+					flt := req["params"].([]interface{})[0].(map[string]interface{})
+					from, _ := strconv.ParseInt(strings.TrimPrefix(flt["fromBlock"].(string), "0x"), 16, 64)
+					to, _ := strconv.ParseInt(strings.TrimPrefix(flt["toBlock"].(string), "0x"), 16, 64)
+					if uint64(to-from) > tc.threshold {
+						w.Header().Set("Content-Type", "application/json")
+						_ = json.NewEncoder(w).Encode(map[string]interface{}{
+							"jsonrpc": "2.0",
+							"id":      req["id"],
+							"error": map[string]interface{}{
+								"code":    -32005,
+								"message": "rate limit exceeded",
+							},
+						})
+						return
+					}
+				}
+				r.Body = io.NopCloser(bytes.NewReader(raw))
+				base.ServeHTTP(w, r)
+			})
+			srv := httptest.NewServer(wrapped)
+			t.Cleanup(srv.Close)
+
+			opts := []Option{WithFollowDistance(0)}
+
+			if tc.overrideBatch {
+				opts = append(opts, WithLogBatchSize(uint64(tc.totalBlocks+1)))
+			}
+
+			client, err := New(context.Background(),
+				srv.URL,
+				env.contractAddr,
+				opts...,
+			)
+			require.NoError(t, err)
+
+			t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+			logsCh, errCh, err := client.FetchHistoricalLogs(context.Background(), 0)
+			require.NoError(t, err)
+
+			var all []ethtypes.Log
+			for blk := range logsCh {
+				all = append(all, blk.Logs...)
+			}
+
+			require.NoError(t, <-errCh)
+			require.Len(t, all, tc.wantLogs)
+			require.Equal(t, tc.wantCalls, callCount.Load())
+		})
+	}
 }
 
 func TestStreamLogs(t *testing.T) {
