@@ -21,7 +21,7 @@ import (
 
 // RecipientController submit proposal preparation to beacon node for all committee validators
 type RecipientController interface {
-	Start()
+	Start(ctx context.Context)
 }
 
 // ControllerOptions holds the needed dependencies
@@ -60,8 +60,8 @@ func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientContro
 	}
 }
 
-func (rc *recipientController) Start() {
-	rc.listenToTicker()
+func (rc *recipientController) Start(ctx context.Context) {
+	rc.listenToTicker(ctx)
 }
 
 // listenToTicker loop over the given slot channel
@@ -69,7 +69,7 @@ func (rc *recipientController) Start() {
 // in addition, submitting "same data" every slot is not efficient and can overload beacon node
 // instead we can subscribe to beacon node events and submit only when there is
 // a new fee recipient event (or new validator) was handled or when there is a syncing issue with beacon node
-func (rc *recipientController) listenToTicker() {
+func (rc *recipientController) listenToTicker(ctx context.Context) {
 	firstTimeSubmitted := false
 	ticker := rc.slotTickerProvider()
 	for {
@@ -81,13 +81,13 @@ func (rc *recipientController) listenToTicker() {
 		}
 		firstTimeSubmitted = true
 
-		if err := rc.prepareAndSubmit(); err != nil {
+		if err := rc.prepareAndSubmit(ctx); err != nil {
 			rc.logger.Warn("could not submit proposal preparations", zap.Error(err))
 		}
 	}
 }
 
-func (rc *recipientController) prepareAndSubmit() error {
+func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
 	shares := rc.shareStorage.List(
 		nil,
 		storage.ByOperatorID(rc.operatorDataStore.GetOperatorID()),
@@ -103,7 +103,7 @@ func (rc *recipientController) prepareAndSubmit() error {
 		}
 		batch := shares[start:end]
 
-		count, err := rc.submit(batch)
+		count, err := rc.submit(ctx, batch)
 		if err != nil {
 			rc.logger.Warn("could not submit proposal preparation batch",
 				zap.Int("start_index", start),
@@ -121,12 +121,12 @@ func (rc *recipientController) prepareAndSubmit() error {
 	return nil
 }
 
-func (rc *recipientController) submit(shares []*types.SSVShare) (int, error) {
+func (rc *recipientController) submit(ctx context.Context, shares []*types.SSVShare) (int, error) {
 	m, err := rc.toProposalPreparation(shares)
 	if err != nil {
 		return 0, errors.Wrap(err, "could not build proposal preparation batch")
 	}
-	err = rc.beaconClient.SubmitProposalPreparation(m)
+	err = rc.beaconClient.SubmitProposalPreparation(ctx, m)
 	if err != nil {
 		return 0, errors.Wrap(err, "could not submit proposal preparation batch")
 	}

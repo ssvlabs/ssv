@@ -107,6 +107,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 
 // Start starts to stream duties and run IBFT instances
 func (n *Node) Start() error {
+	ctx := n.context // TODO: pass it to Start
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
@@ -119,7 +120,7 @@ func (n *Node) Start() error {
 
 	// Start the duty scheduler, and a background goroutine to crash the node
 	// in case there were any errors.
-	if err := n.dutyScheduler.Start(n.context); err != nil {
+	if err := n.dutyScheduler.Start(ctx); err != nil {
 		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
 
@@ -134,15 +135,15 @@ func (n *Node) Start() error {
 	}
 	go n.net.UpdateSubnets()
 	go n.net.UpdateScoreParams()
-	n.validatorsCtrl.StartValidators(n.context)
+	n.validatorsCtrl.StartValidators(ctx)
 	go n.reportOperators()
 
-	go n.feeRecipientCtrl.Start()
-	go n.validatorsCtrl.HandleMetadataUpdates(n.context)
-	go n.validatorsCtrl.ReportValidatorStatuses(n.context)
+	go n.feeRecipientCtrl.Start(ctx)
+	go n.validatorsCtrl.HandleMetadataUpdates(ctx)
+	go n.validatorsCtrl.ReportValidatorStatuses(ctx)
 
 	go func() {
-		if err := n.validatorOptions.DoppelgangerHandler.Start(n.context); err != nil {
+		if err := n.validatorOptions.DoppelgangerHandler.Start(ctx); err != nil {
 			n.logger.Error("Doppelganger monitoring exited with error", zap.Error(err))
 		}
 	}()

@@ -10,6 +10,7 @@
 package mocks
 
 import (
+	"context"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
@@ -40,7 +41,7 @@ func (m *MockRecipientController) EXPECT() *MockRecipientControllerMockRecorder 
 }
 
 // Start mocks base method.
-func (m *MockRecipientController) Start() {
+func (m *MockRecipientController) Start(ctx context.Context) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Start")
 }

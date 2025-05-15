@@ -368,7 +368,7 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 	spectypes.RoleSyncCommitteeContribution: 4,
 }
 
-func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
+func (c *controller) handleWorkerMessages(ctx context.Context, msg network.DecodedSSVMessage) error {
 	var ncv *committeeObserver
 	ssvMsg := msg.(*queue.SSVMessage)
 
@@ -401,13 +401,17 @@ func (c *controller) handleWorkerMessages(msg network.DecodedSSVMessage) error {
 	} else {
 		ncv = item
 	}
-	if err := c.handleNonCommitteeMessages(ssvMsg, ncv); err != nil {
+	if err := c.handleNonCommitteeMessages(ctx, ssvMsg, ncv); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *committeeObserver) error {
+func (c *controller) handleNonCommitteeMessages(
+	ctx context.Context,
+	msg *queue.SSVMessage,
+	ncv *committeeObserver,
+) error {
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
 
@@ -423,7 +427,7 @@ func (c *controller) handleNonCommitteeMessages(msg *queue.SSVMessage, ncv *comm
 			return nil
 		}
 
-		return ncv.OnProposalMsg(msg)
+		return ncv.OnProposalMsg(ctx, msg)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
