@@ -140,7 +140,7 @@ type SharesStorage interface {
 type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
-	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	SubscribeRandoms(numSubnets int) error
 	ActiveSubnets() commons.Subnets
 	FixedSubnets() commons.Subnets
 }
@@ -475,7 +475,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		if len(inited) == 0 {
 			// If no validators were started and therefore we're not subscribed to any subnets,
 			// then subscribe to a random subnet to participate in the network.
-			if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
+			if err := c.network.SubscribeRandoms(1); err != nil {
 				c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
 			}
 		}

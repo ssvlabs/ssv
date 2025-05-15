@@ -44,7 +44,7 @@ func TestSubmitProposal(t *testing.T) {
 	network := networkconfig.TestNetwork
 	populateStorage(t, shareStorage, operatorData)
 
-	frCtrl := NewController(&ControllerOptions{
+	frCtrl := NewController(logger, &ControllerOptions{
 		Ctx:               context.TODO(),
 		Network:           network,
 		ShareStorage:      shareStorage,
@@ -76,7 +76,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(t.Context(), logger)
+		go frCtrl.Start(t.Context())
 
 		slots := []phase0.Slot{
 			1,                                        // first time
@@ -116,7 +116,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(t.Context(), logger)
+		go frCtrl.Start(t.Context())
 		mockTimeChan <- time.Now()
 		wg.Add(2)
 		wg.Wait()
