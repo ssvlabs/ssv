@@ -180,6 +180,16 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return decodedMessage, err
 	}
 
+	exist, err := mv.operators.OperatorsExist(nil, signedSSVMessage.OperatorIDs)
+	if err != nil {
+		return decodedMessage, fmt.Errorf("check operators existence: %w", err)
+	}
+	if !exist {
+		e := ErrUnknownOperator
+		e.got = signedSSVMessage.OperatorIDs
+		return decodedMessage, e
+	}
+
 	validationMu := mv.getValidationLock(signedSSVMessage.SSVMessage.GetID())
 	validationMu.Lock()
 	defer validationMu.Unlock()

@@ -68,6 +68,11 @@ func (m NodeStorage) OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID)
 	panic("unexpected OperatorsExist call")
 }
 
+func (m NodeStorage) QuorumExists(r basedb.Reader, ids []spectypes.OperatorID, quorum uint64) (bool, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m NodeStorage) SaveOperatorData(txn basedb.ReadWriter, operatorData *registrystorage.OperatorData) (bool, error) {
 	panic("unexpected SaveOperatorData call")
 }

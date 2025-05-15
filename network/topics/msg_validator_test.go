@@ -52,13 +52,10 @@ func TestMsgValidator(t *testing.T) {
 	mv := validation.New(
 		networkconfig.TestNetwork,
 		ns.ValidatorStore(),
-		ns,
-		dutystore.New(),
-		signatureVerifier,
+		ns, dutystore.New(), signatureVerifier,
 		phase0.Epoch(0),
 		validation.WithLogger(logger),
 	)
-
 	require.NotNil(t, mv)
 
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()

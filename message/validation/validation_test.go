@@ -112,6 +112,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		return nil, false
 	}).AnyTimes()
 
+	for _, id := range shares.active.OperatorIDs() {
+		_, err = ns.SaveOperatorData(nil, &registrystorage.OperatorData{ID: id})
+		require.NoError(t, err)
+	}
+
 	for _, id := range []spectypes.OperatorID{1, 2, 3, 4, 5} {
 		operators.EXPECT().
 			OperatorsExist(gomock.Any(), []spectypes.OperatorID{id}).
@@ -147,6 +152,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Make sure messages are incremented and throw an ignore message if more than 1 for a commit
 	t.Run("message counts", func(t *testing.T) {
+		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{1, 2, 3}).Return(true, nil)
+
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -1162,6 +1169,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving message from less than quorum size amount of signers
 	t.Run("decided too few signers", func(t *testing.T) {
+		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{1, 2}).Return(true, nil)
+
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -1178,6 +1187,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving a non decided message with multiple signers
 	t.Run("non decided with multiple signers", func(t *testing.T) {
+		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{1, 2, 3}).Return(true, nil)
+
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -1454,6 +1465,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Decided with same signers should receive an error
 	t.Run("decided with same signers", func(t *testing.T) {
+		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{1, 2, 3}).Return(true, nil).AnyTimes()
+
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -1755,6 +1768,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive a partial signature message with multiple signers
 	t.Run("partial signature with multiple signers", func(t *testing.T) {
+		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{1, 2}).Return(true, nil)
+
 		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
