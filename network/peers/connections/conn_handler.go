@@ -61,6 +61,7 @@ func NewConnHandler(
 		peerInfos:           peerInfos,
 		discoveredPeersPool: discoveredPeersPool,
 		slot:                slot,
+		topicsCtrl:          topicsCtrl,
 	}
 }
 
