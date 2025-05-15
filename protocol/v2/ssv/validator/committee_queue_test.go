@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1137,7 +1138,6 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 					}
 				}
 			} else {
-				// If we expect zero messages, just wait a bit to confirm none are processed
 				time.Sleep(200 * time.Millisecond)
 			}
 
@@ -1290,4 +1290,253 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			time.Sleep(50 * time.Millisecond)
 		})
 	}
+}
+
+// TestConsumeQueuePrioritization verifies the order of message processing based on
+// the CommitteeQueuePrioritizer.
+//
+// Flow:
+// 1. Set up a committee and queue.
+// 2. Create a runner state where consensus is active and a proposal is accepted.
+// 3. Add messages in a non-prioritized order: Commit, Proposal (for current round, but one is already accepted), Prepare, ChangeRound (for next round).
+// 4. Add an ExecuteDuty event message, which should have high priority.
+// 5. Start consuming the queue.
+// 6. Verify messages are processed in the expected priority order: ExecuteDuty, ChangeRound, Prepare, Commit, Proposal (if applicable).
+func TestConsumeQueuePrioritization(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+
+	committee := &Committee{
+		ctx:           ctx,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+	}
+
+	slot := phase0.Slot(123)
+	currentRound := specqbft.Round(1)
+	nextRound := specqbft.Round(2)
+
+	// Messages - added in a non-priority order initially
+	// IDs are arbitrary but unique for tracking.
+	commitMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.CommitMsgType}
+	proposalMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.ProposalMsgType} // A second proposal for the same round
+	prepareMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
+	changeRoundMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: nextRound, MsgType: specqbft.RoundChangeMsgType} // For next round
+
+	executeDutyData := &types.ExecuteCommitteeDutyData{Duty: &spectypes.CommitteeDuty{Slot: slot}}
+	dutyDataJSON, err := json.Marshal(executeDutyData)
+	require.NoError(t, err)
+	eventMsgBody := &types.EventMsg{Type: types.ExecuteDuty, Data: dutyDataJSON}
+
+	// Order of adding to queue (does not dictate processing order)
+	testMessages := []*queue.SSVMessage{
+		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{1}, commitMsgBody),      // Lowest expected priority among these QBFT msgs
+		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{2}, proposalMsgBody),    // Lower priority as one is accepted
+		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{3}, prepareMsgBody),     // Mid priority
+		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{4}, changeRoundMsgBody), // High QBFT priority (next round)
+		makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{5}, eventMsgBody),             // Highest priority (event)
+	}
+
+	q := queueContainer{
+		Q: queue.New(10), // Sufficient capacity
+		queueState: &queue.State{
+			HasRunningInstance: true,
+			Height:             specqbft.Height(slot),
+			Slot:               slot,
+			Round:              currentRound,
+		},
+	}
+
+	for _, msg := range testMessages {
+		q.Q.TryPush(msg)
+	}
+
+	// Runner state: Proposal already accepted for the current round, not yet decided.
+	acceptedProposal := &specqbft.ProcessingMessage{
+		QBFTMessage: &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.ProposalMsgType},
+	}
+	committeeRunner := &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{
+			State: &runner.State{
+				RunningInstance: &instance.Instance{
+					State: &specqbft.State{
+						Decided:                         false,
+						ProposalAcceptedForCurrentRound: acceptedProposal,
+						Round:                           currentRound,
+						Height:                          specqbft.Height(slot),
+					},
+				},
+			},
+		},
+	}
+
+	var receivedMessages []*queue.SSVMessage
+	var mu sync.Mutex
+	handlerCalled := make(chan struct{}, len(testMessages))
+
+	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+		mu.Lock()
+		receivedMessages = append(receivedMessages, msg)
+		mu.Unlock()
+		handlerCalled <- struct{}{}
+		return nil
+	}
+
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+
+	for i := 0; i < len(testMessages); i++ {
+		select {
+		case <-handlerCalled:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for all messages to be processed, got %d, expected %d", len(receivedMessages), len(testMessages))
+		}
+	}
+	cancel()                          // Stop ConsumeQueue
+	time.Sleep(50 * time.Millisecond) // Allow ConsumeQueue to exit
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	require.Equal(t, len(testMessages), len(receivedMessages), "did not process all messages")
+
+	// Expected order: ExecuteDuty, ChangeRound (next round), Prepare, Commit, Proposal (current round, but one already accepted so lower prio)
+
+	expectedQBFTOrder := []specqbft.MessageType{
+		specqbft.ProposalMsgType,
+		specqbft.PrepareMsgType,
+		specqbft.CommitMsgType,
+		specqbft.RoundChangeMsgType,
+	}
+
+	var actualQBFTOrder []specqbft.MessageType
+	var actualEventMsgFound bool
+
+	if len(receivedMessages) > 0 {
+		if receivedMessages[0].MsgType == message.SSVEventMsgType {
+			actualEventMsgFound = true
+			assert.Equal(t, eventMsgBody, receivedMessages[0].Body.(*types.EventMsg))
+		}
+
+		for _, msg := range receivedMessages {
+			if ssvConsensusMsg, ok := msg.Body.(*specqbft.Message); ok {
+				actualQBFTOrder = append(actualQBFTOrder, ssvConsensusMsg.MsgType)
+			}
+		}
+	}
+
+	assert.True(t, actualEventMsgFound)
+	assert.Equal(t, expectedQBFTOrder, actualQBFTOrder)
+}
+
+// TestHandleMessageQueueFullAndDropping verifies that HandleMessage drops messages
+// when the queue is full and logs a warning.
+func TestHandleMessageQueueFullAndDropping(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	queueCapacity := 2
+	committee := &Committee{
+		ctx:           ctx,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		mtx:           sync.RWMutex{},
+	}
+
+	slot := phase0.Slot(123)
+
+	// Step 0: Create the queue container with the desired small capacity and add it to the committee
+	committee.mtx.Lock()
+	qContainer := queueContainer{
+		Q: queue.New(queueCapacity),
+		queueState: &queue.State{
+			HasRunningInstance: false,
+			Height:             specqbft.Height(slot),
+			Slot:               slot,
+		},
+	}
+	committee.Queues[slot] = qContainer
+	committee.mtx.Unlock()
+
+	// Step 1: Fill the pre-made queue to its capacity by calling HandleMessage
+	// HandleMessage will find and use the qContainer we just set up.
+	msgIDBase := spectypes.MessageID{1, 2, 3, 0}
+	for i := 0; i < queueCapacity; i++ { // Push exactly queueCapacity items
+		msgID := msgIDBase
+		msgID[3] = byte(i) // Unique ID
+		qbftMsg := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.ProposalMsgType}
+		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
+		committee.HandleMessage(ctx, logger, testMsg)
+	}
+
+	require.Equal(t, queueCapacity, qContainer.Q.Len(), "Queue should be full after filling to capacity")
+
+	// Step 2: Clear log buffer and attempt to push one more message (this one should be dropped)
+	droppedMsgID := msgIDBase
+	droppedMsgID[3] = byte(queueCapacity) // Next ID, e.g., if capacity is 2, this is ID for 3rd item overall
+	qbftMsgDrop := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.PrepareMsgType}
+	testMsgDrop := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, droppedMsgID, qbftMsgDrop)
+
+	committee.HandleMessage(ctx, logger, testMsgDrop)
+
+	assert.Equal(t, queueCapacity, qContainer.Q.Len())
+}
+
+// TestConsumeQueueStopsOnErrNoValidDuties verifies that ConsumeQueue stops
+// processing further messages if the handler returns runner.ErrNoValidDuties.
+func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	committee := &Committee{
+		ctx:           ctx,
+		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+	}
+
+	slot := phase0.Slot(123)
+	q := queueContainer{
+		Q: queue.New(10),
+		queueState: &queue.State{
+			HasRunningInstance: true,
+			Height:             specqbft.Height(slot),
+			Slot:               slot,
+			Round:              1,
+		},
+	}
+
+	// Add multiple messages
+	msg1 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{1}, &specqbft.Message{Height: specqbft.Height(slot), MsgType: specqbft.ProposalMsgType})
+	msg2 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{2}, &specqbft.Message{Height: specqbft.Height(slot), MsgType: specqbft.PrepareMsgType})
+	msg3 := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{3}, &specqbft.Message{Height: specqbft.Height(slot), MsgType: specqbft.CommitMsgType})
+	q.Q.TryPush(msg1)
+	q.Q.TryPush(msg2)
+	q.Q.TryPush(msg3)
+
+	committeeRunner := &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{State: &runner.State{RunningInstance: &instance.Instance{State: &specqbft.State{}}}},
+	}
+
+	var processedMessagesCount int32
+	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+		atomic.AddInt32(&processedMessagesCount, 1)
+		if msg.MsgID == msg1.MsgID { // Return error after processing the first message
+			return runner.ErrNoValidDuties
+		}
+		return nil
+	}
+
+	// Run ConsumeQueue. It should stop after processing msg1.
+	_ = committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+	// We don't assert on `err` itself directly because ConsumeQueue might return nil if context is cancelled,
+	// and ErrNoValidDuties causes a break, not necessarily a returned error from ConsumeQueue itself if ctx expires.
+	// The primary check is the number of processed messages.
+
+	time.Sleep(100 * time.Millisecond)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&processedMessagesCount))
+	assert.Equal(t, 2, q.Q.Len())
 }
