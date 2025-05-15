@@ -87,7 +87,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		err := errors.Wrap(err, "failed processing validator registration message")
 		span.SetStatus(codes.Error, err.Error())
@@ -179,7 +179,7 @@ func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ss
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, [4]byte{}, errors.New("no post consensus roots for validator registration")
 }
 

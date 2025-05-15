@@ -102,7 +102,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		err := errors.Wrap(err, "failed processing randao message")
 		span.SetStatus(codes.Error, err.Error())
@@ -143,7 +143,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.graffiti, fullSig)
+	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
 	if err != nil {
 		logger.Error("❌ failed to get beacon block",
 			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
@@ -314,7 +314,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		err := errors.Wrap(err, "failed processing post consensus message")
 		span.SetStatus(codes.Error, err.Error())
@@ -388,7 +388,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 				zap.NamedError("summarize_err", summarizeErr),
 			)
 
-			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
+			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(ctx, vBlindedBlk, specSig); err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 				logger.Error("❌ could not submit blinded Beacon block",
 					fields.SubmissionTime(time.Since(start)),
@@ -410,7 +410,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 				zap.NamedError("summarize_err", summarizeErr),
 			)
 
-			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
+			if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
 				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 				logger.Error("❌ could not submit Beacon block",
 					fields.SubmissionTime(time.Since(start)),
@@ -472,7 +472,7 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	validatorConsensusData := &spectypes.ValidatorConsensusData{}
 	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
 	if err != nil {

@@ -50,7 +50,7 @@ type Runner interface {
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPostConsensusRootsAndDomain(ctx context.Context) ([]ssz.HashRoot, phase0.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error
 }
@@ -186,8 +186,12 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(ctx context.Context, logger *zap.
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
-func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
-	if err := b.ValidatePreConsensusMsg(runner, signedMsg); err != nil {
+func (b *BaseRunner) basePreConsensusMsgProcessing(
+	ctx context.Context,
+	runner Runner,
+	signedMsg *spectypes.PartialSignatureMessages,
+) (bool, [][32]byte, error) {
+	if err := b.ValidatePreConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
@@ -241,8 +245,8 @@ func (b *BaseRunner) baseConsensusMsgProcessing(ctx context.Context, logger *zap
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
-	if err := b.ValidatePostConsensusMsg(runner, signedMsg); err != nil {
+func (b *BaseRunner) basePostConsensusMsgProcessing(ctx context.Context, runner Runner, signedMsg *spectypes.PartialSignatureMessages) (bool, [][32]byte, error) {
+	if err := b.ValidatePostConsensusMsg(ctx, runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 

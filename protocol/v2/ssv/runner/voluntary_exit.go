@@ -86,7 +86,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		))
 	defer span.End()
 
-	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		err := errors.Wrap(err, "failed processing voluntary exit message")
 		span.SetStatus(codes.Error, err.Error())
@@ -121,7 +121,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	}
 
 	span.AddEvent("submitting voluntary exit")
-	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
+	if err := r.beacon.SubmitVoluntaryExit(ctx, signedVoluntaryExit); err != nil {
 		err := errors.Wrap(err, "could not submit voluntary exit")
 		span.SetStatus(codes.Error, err.Error())
 		return err
@@ -158,7 +158,7 @@ func (r *VoluntaryExitRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRo
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, [4]byte{}, errors.New("no post consensus roots for voluntary exit")
 }
 
