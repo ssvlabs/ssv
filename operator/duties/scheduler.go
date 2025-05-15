@@ -452,11 +452,11 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
 
-		go func() {
+		go func(ctx context.Context) {
 			s.waitOneThirdOrValidBlock(duty.Slot)
 			recordDutyExecuted(ctx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
-		}()
+		}(ctx)
 	}
 
 	span.SetStatus(codes.Ok, "")

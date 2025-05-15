@@ -186,6 +186,7 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(slot),
 			observability.BeaconPeriodAttribute(period),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommitteeContribution),
 		))
 	defer span.End()
 
@@ -291,15 +292,14 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	span.AddEvent("submitting beacon sync committee subscriptions", trace.WithAttributes(
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
-	go func(h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
-		// Create a new subscription context with a deadline from parent context.
+	go func(ctx context.Context, h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
 		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
 		defer cancel()
 
 		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
 			h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
 		}
-	}(h, subscriptions)
+	}(ctx, h, subscriptions)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

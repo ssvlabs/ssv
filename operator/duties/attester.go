@@ -208,10 +208,7 @@ func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epo
 		}
 	}
 
-	span.AddEvent("executing duties",
-		trace.WithAttributes(
-			observability.DutyCountAttribute(len(toExecute)),
-		))
+	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
 
 	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
 
