@@ -1301,7 +1301,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 // 3. Add messages in a non-prioritized order: Commit, Proposal (for current round, but one is already accepted), Prepare, ChangeRound (for next round).
 // 4. Add an ExecuteDuty event message, which should have high priority.
 // 5. Start consuming the queue.
-// 6. Verify messages are processed in the expected priority order: ExecuteDuty, ChangeRound, Prepare, Commit, Proposal (if applicable).
+// 6. Verify messages are processed in the expected priority order: ExecuteDuty, Proposal, Prepare, Commit, RoundChange.
 func TestConsumeQueuePrioritization(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
@@ -1393,15 +1393,18 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 			t.Fatalf("timed out waiting for all messages to be processed, got %d, expected %d", len(receivedMessages), len(testMessages))
 		}
 	}
-	cancel()                          // Stop ConsumeQueue
-	time.Sleep(50 * time.Millisecond) // Allow ConsumeQueue to exit
+
+	cancel()
+	time.Sleep(50 * time.Millisecond)
 
 	mu.Lock()
 	defer mu.Unlock()
 
-	require.Equal(t, len(testMessages), len(receivedMessages), "did not process all messages")
+	require.Equal(t, len(testMessages), len(receivedMessages))
 
-	// Expected order: ExecuteDuty, ChangeRound (next round), Prepare, Commit, Proposal (current round, but one already accepted so lower prio)
+	// Expected priority order based on actual implementation:
+	// ExecuteDuty first (checked separately),
+	// Then QBFT messages in order: Proposal, Prepare, Commit, RoundChange
 
 	expectedQBFTOrder := []specqbft.MessageType{
 		specqbft.ProposalMsgType,
@@ -1472,7 +1475,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 		committee.HandleMessage(ctx, logger, testMsg)
 	}
 
-	require.Equal(t, queueCapacity, qContainer.Q.Len(), "Queue should be full after filling to capacity")
+	require.Equal(t, queueCapacity, qContainer.Q.Len())
 
 	// Step 2: Clear log buffer and attempt to push one more message (this one should be dropped)
 	droppedMsgID := msgIDBase
