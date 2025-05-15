@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"hash"
 	"sync"
 	"time"
@@ -85,7 +84,7 @@ func (r *AggregatorRunner) HasRunningDuty() bool {
 }
 
 func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing selection proof message")
 	}
@@ -118,10 +117,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	// this is the earliest in aggregator runner flow where we get to know whether we are meant
 	// to perform this aggregation duty or not
-	ok, err := isAggregator(duty.CommitteeLength, fullSig)
-	if err != nil {
-		return fmt.Errorf("check if validator is an aggregator: %w", err)
-	}
+	ok := isAggregator(duty.CommitteeLength, fullSig)
 	if !ok {
 		logger.Debug("aggregation duty won't be needed from this validator for this slot",
 			zap.Any("signer", signer),
@@ -132,7 +128,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	r.measurements.PauseDutyFlow()
 	// get block data
-	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
+	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
@@ -228,7 +224,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 }
 
 func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -270,7 +266,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		start := time.Now()
 
-		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
+		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(ctx, msg); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
 			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 				fields.SubmissionTime(time.Since(start)),
@@ -301,7 +297,7 @@ func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot,
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	cd := &spectypes.ValidatorConsensusData{}
 	err := cd.Decode(r.GetState().DecidedValue)
 	if err != nil {
@@ -483,7 +479,7 @@ func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedA
 //	 committee = get_beacon_committee(state, slot, index)
 //	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
 //	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
-func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
+func isAggregator(committeeCount uint64, slotSig []byte) bool {
 	const targetAggregatorsPerCommittee uint64 = 16
 
 	modulo := committeeCount / targetAggregatorsPerCommittee
@@ -493,7 +489,7 @@ func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 	}
 
 	b := hashSha256(slotSig)
-	return binary.LittleEndian.Uint64(b[:8])%modulo == 0, nil
+	return binary.LittleEndian.Uint64(b[:8])%modulo == 0
 }
 
 var sha256Pool = sync.Pool{New: func() interface{} {
