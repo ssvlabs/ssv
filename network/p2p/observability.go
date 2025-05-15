@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -28,32 +27,28 @@ var (
 
 	peersConnectedGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("peers.connected"),
+			observability.InstrumentName(observabilityNamespace, "peers.connected"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers")))
 
 	connectionsGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("connections.active"),
+			observability.InstrumentName(observabilityNamespace, "connections.active"),
 			metric.WithUnit("{connection}"),
 			metric.WithDescription("number of active connections")))
 
 	peersPerTopicGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("peers.per_topic"),
+			observability.InstrumentName(observabilityNamespace, "peers.per_topic"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers per topic")))
 
 	peerIdentityGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("peers.per_version"),
+			observability.InstrumentName(observabilityNamespace, "peers.per_version"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("number of connected peers per node version")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordPeerCount(ctx context.Context, logger *zap.Logger, h host.Host) func() {
 	return func() {

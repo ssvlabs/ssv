@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"context"
-	"fmt"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -30,32 +29,28 @@ var (
 
 	peerDiscoveryIterationsCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("iterations"),
+			observability.InstrumentName(observabilityNamespace, "iterations"),
 			metric.WithUnit("{iteration}"),
 			metric.WithDescription("total number of iterations through discovered nodes")))
 
 	peerDiscoveriesCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("peers"),
+			observability.InstrumentName(observabilityNamespace, "peers"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("total number of peers discovered")))
 
 	peerRejectionsCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("peers.skipped"),
+			observability.InstrumentName(observabilityNamespace, "peers.skipped"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("total number of peers skipped during discovery")))
 
 	peerAcceptedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("peers.accepted"),
+			observability.InstrumentName(observabilityNamespace, "peers.accepted"),
 			metric.WithUnit("{peer}"),
 			metric.WithDescription("total number of peers accepted during discovery")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordPeerSkipped(ctx context.Context, reason skipReason) {
 	peerRejectionsCounter.Add(ctx, 1, metric.WithAttributes(peerSkipReasonAttribute(reason)))

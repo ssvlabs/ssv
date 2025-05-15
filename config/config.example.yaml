@@ -39,6 +39,9 @@ OperatorPrivateKey:
 # This enables monitoring at the specified port, see https://github.com/ssvlabs/ssv/tree/main/monitoring
 MetricsAPIPort: 15000
 
+# This enables Open Telemetry traces
+EnableTraces: false
+
 # This enables the SSV API at the specified port. Refer to the documentation at https://bloxapp.github.io/ssv/
 # It's recommended to keep this port private to prevent potential resource-intensive attacks.
 # SSVAPIPort: 16000

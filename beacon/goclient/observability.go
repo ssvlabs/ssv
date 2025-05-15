@@ -32,26 +32,22 @@ var (
 
 	requestDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("request.duration"),
+			observability.InstrumentName(observabilityNamespace, "request.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("consensus client request duration in seconds"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 
 	beaconNodeStatusGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("sync.status"),
+			observability.InstrumentName(observabilityNamespace, "sync.status"),
 			metric.WithDescription("beacon node status")))
 
 	syncDistanceGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("sync.distance"),
+			observability.InstrumentName(observabilityNamespace, "sync.distance"),
 			metric.WithUnit("{block}"),
 			metric.WithDescription("consensus client syncing distance which is a delta between highest and current blocks")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordRequestDuration(ctx context.Context, routeName, serverAddr, requestMethod string, duration time.Duration, err error) {
 	attr := []attribute.KeyValue{

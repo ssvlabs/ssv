@@ -2,7 +2,6 @@ package eventhandler
 
 import (
 	"context"
-	"fmt"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,26 +20,22 @@ var (
 
 	eventsProcessSuccessCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("events_processed"),
+			observability.InstrumentName(observabilityNamespace, "events_processed"),
 			metric.WithUnit("{event}"),
 			metric.WithDescription("total number of successfully processed events(logs)")))
 
 	eventsProcessFailureCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("events_failed"),
+			observability.InstrumentName(observabilityNamespace, "events_failed"),
 			metric.WithUnit("{event}"),
 			metric.WithDescription("total number of failures during event(log) processing")))
 
 	lastProcessedBlockGauge = observability.NewMetric(
 		meter.Int64Gauge(
-			metricName("last_processed_block"),
+			observability.InstrumentName(observabilityNamespace, "last_processed_block"),
 			metric.WithUnit("{block_number}"),
 			metric.WithDescription("last processed block by event handler")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func eventNameAttribute(eventName string) attribute.KeyValue {
 	const eventNameAttrName = "ssv.event_syncer.event_name"

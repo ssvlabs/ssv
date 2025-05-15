@@ -2,7 +2,6 @@ package validation
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel"
@@ -28,33 +27,29 @@ var (
 
 	messageValidationsAcceptedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("accepted"),
+			observability.InstrumentName(observabilityNamespace, "accepted"),
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages successfully validated and accepted")))
 
 	messageValidationsIgnoredCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("ignored"),
+			observability.InstrumentName(observabilityNamespace, "ignored"),
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages that failed validation and were ignored")))
 
 	messageValidationsRejectedCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("rejected"),
+			observability.InstrumentName(observabilityNamespace, "rejected"),
 			metric.WithUnit("{message_validation}"),
 			metric.WithDescription("total number of messages that failed validation and were rejected")))
 
 	messageValidationDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("duration"),
+			observability.InstrumentName(observabilityNamespace, "duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("message validation duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func reasonAttribute(reason string) attribute.KeyValue {
 	return attribute.String("ssv.p2p.message.validation.discard_reason", reason)
