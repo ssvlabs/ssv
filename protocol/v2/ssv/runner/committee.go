@@ -286,7 +286,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		span.AddEvent("validating duty", attr)
 		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
 			const eventMsg = "duty is no longer valid"
-			span.AddEvent(eventMsg)
+			span.AddEvent(eventMsg, attr)
 			logger.Warn(eventMsg, fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
 			continue
 		}
