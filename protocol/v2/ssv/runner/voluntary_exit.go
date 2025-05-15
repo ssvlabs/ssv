@@ -77,7 +77,7 @@ func (r *VoluntaryExitRunner) HasRunningDuty() bool {
 // ProcessPreConsensus Check for quorum of partial signatures over VoluntaryExit and,
 // if has quorum, constructs SignedVoluntaryExit and submits to BeaconNode
 func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	_, span := tracer.Start(ctx,
+	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),

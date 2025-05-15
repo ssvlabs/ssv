@@ -78,7 +78,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	_, span := tracer.Start(ctx,
+	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
