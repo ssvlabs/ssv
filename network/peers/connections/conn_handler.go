@@ -2,9 +2,11 @@ package connections
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -15,6 +17,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/topics"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
@@ -33,6 +36,8 @@ type connHandler struct {
 	connIdx             peers.ConnectionIndex
 	peerInfos           peers.PeerInfoIndex
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer]
+	slot                func() phase0.Slot
+	topicsCtrl          topics.Controller
 }
 
 // NewConnHandler creates a new connection handler
@@ -44,6 +49,8 @@ func NewConnHandler(
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
 	discoveredPeersPool *ttl.Map[peer.ID, discovery.DiscoveredPeer],
+	slot func() phase0.Slot,
+	topicsCtrl topics.Controller,
 ) ConnHandler {
 	return &connHandler{
 		ctx:                 ctx,
@@ -53,12 +60,13 @@ func NewConnHandler(
 		connIdx:             connIdx,
 		peerInfos:           peerInfos,
 		discoveredPeersPool: discoveredPeersPool,
+		slot:                slot,
 	}
 }
 
 // Handle configures a network notifications handler that handshakes and tracks all p2p connections
 func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
-	disconnect := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
+	disconnect := func(_ *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
 		if errClose == nil {
@@ -220,7 +228,23 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
 
 			logger := connLogger(conn)
-			logger.Debug("peer disconnected")
+
+			// exta logging
+			topics := make([]string, 0)
+			dead_topics := make([]string, 0)
+			for _, topicName := range ch.topicsCtrl.Topics() {
+				peers, err := ch.topicsCtrl.Peers(topicName)
+				if err != nil {
+					continue
+				}
+				if slices.Contains(peers, conn.RemotePeer()) {
+					topics = append(topics, topicName)
+					if len(peers) <= 1 {
+						dead_topics = append(dead_topics, topicName)
+					}
+				}
+			}
+			logger.Debug("peer disconnected", fields.Slot(ch.slot()), zap.String("peerID", conn.RemotePeer().String()), zap.Strings("topics", topics), zap.Strings("dead_topics", dead_topics))
 		},
 	}
 }
