@@ -86,7 +86,7 @@ func buildResources(appName, appVersion string) (*resource.Resource, error) {
 	hostName, err := os.Hostname()
 	if err != nil {
 		const defaultHostname = "unknown"
-		logger.Warn("hostname fetching returned an error, setting host name to default",
+		logger.Warn("fetching hostname returned an error. Setting hostname to default",
 			zap.Error(err),
 			zap.String("default_hostname", defaultHostname))
 		hostName = defaultHostname

@@ -224,6 +224,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconSlotAttribute(slot),
+			observability.BeaconRoleAttribute(spectypes.BNRoleAttester),
 		))
 	defer span.End()
 
@@ -263,10 +264,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 			Duty:           d,
 			InCommittee:    true,
 		})
-		span.AddEvent("will store duty", trace.WithAttributes(
-			observability.ValidatorIndexAttribute(d.ValidatorIndex),
-			observability.BeaconRoleAttribute(spectypes.BNRoleAttester),
-		))
+		span.AddEvent("will store duty", trace.WithAttributes(observability.ValidatorIndexAttribute(d.ValidatorIndex)))
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
 	}
 
@@ -300,7 +298,6 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
 	))
 	go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
-		// Create a new subscription context with a deadline from parent context.
 		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
 		defer cancel()
 
