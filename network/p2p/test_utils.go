@@ -80,7 +80,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 		eg, ctx := errgroup.WithContext(pCtx)
 		for i, node := range ln.Nodes {
 			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
-				if err := node.Start(logger); err != nil {
+				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
 				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -228,7 +228,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	if err != nil {
 		return nil, err
 	}
-	err = p.Setup(logger)
+	err = p.Setup()
 	if err != nil {
 		return nil, err
 	}

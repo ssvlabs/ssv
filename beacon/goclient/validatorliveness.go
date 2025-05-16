@@ -18,7 +18,7 @@ func (gc *GoClient) ValidatorLiveness(ctx context.Context, epoch phase0.Epoch, v
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(gc.ctx, "ValidatorLiveness", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordRequestDuration(ctx, "ValidatorLiveness", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 
 	logger := gc.log.With(zap.String("api", "ValidatorLiveness"))
 

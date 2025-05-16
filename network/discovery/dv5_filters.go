@@ -16,29 +16,29 @@ func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 }
 
 //// forkVersionFilter checks if the node has the same fork version
-// func (dvs *DiscV5Service) forkVersionFilter(logger *zap.Logger, node *enode.Node) bool {
+// func (dvs *DiscV5Service) forkVersionFilter(node *enode.Node) bool {
 //	forkv, err := records.GetForkVersionEntry(node.Record())
 //	if err != nil {
-//		logger.Warn("could not read fork version from node record", zap.Error(err))
+//		dvs.logger.Warn("could not read fork version from node record", zap.Error(err))
 //		return false
 //	}
 //	return dvs.forkv == forkv
 //}
 
 // badNodeFilter checks if the node was pruned or have a bad score
-func (dvs *DiscV5Service) badNodeFilter(logger *zap.Logger) func(node *enode.Node) bool {
+func (dvs *DiscV5Service) badNodeFilter() func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		pid, err := PeerID(node)
 		if err != nil {
-			logger.Warn("could not get peer ID from node record", zap.Error(err))
+			dvs.logger.Warn("could not get peer ID from node record", zap.Error(err))
 			return false
 		}
-		return !dvs.conns.IsBad(logger, pid)
+		return !dvs.conns.IsBad(pid)
 	}
 }
 
 // badNodeFilter checks if the node was pruned or have a bad score
-func (dvs *DiscV5Service) ssvNodeFilter(logger *zap.Logger) func(node *enode.Node) bool {
+func (dvs *DiscV5Service) ssvNodeFilter() func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		var isSSV = new(bool)
 		if err := node.Record().Load(enr.WithEntry("ssv", isSSV)); err != nil {
@@ -110,11 +110,11 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 
 // subnetFilter checks if the node has already been discovered recently and filters it out
 // if so
-func (dvs *DiscV5Service) alreadyDiscoveredFilter(logger *zap.Logger) func(node *enode.Node) bool {
+func (dvs *DiscV5Service) alreadyDiscoveredFilter() func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		pID, err := PeerID(node)
 		if err != nil {
-			logger.Warn("could not get peer ID from node record", zap.Error(err))
+			dvs.logger.Warn("could not get peer ID from node record", zap.Error(err))
 			return false
 		}
 		if dvs.discoveredPeersPool.Has(pID) {
