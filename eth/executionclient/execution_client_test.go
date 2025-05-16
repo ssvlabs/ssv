@@ -292,24 +292,25 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 	testCases := []struct {
 		name        string
 		totalBlocks int
-		threshold   uint64 // block range that won't be rate-limited
+		threshold   uint64 // block range that won't be subdivided
 		wantLogs    int
 		wantCalls   int32
+		httpError   bool // if true, simulate an HTTP error
 	}{
 		// 1. Call for blocks 0-1 (succeeds) [count: 1]
 		// eth_getLogs calls: 1
-		{"single log", 1, 5, 1, 1},
+		{"single log", 1, 5, 1, 1, false},
 
 		// 1. Call for blocks 0-2 (succeeds) [count: 1]
 		// eth_getLogs calls: 1
-		{"multiple logs", 2, 5, 2, 1},
+		{"multiple logs", 2, 5, 2, 1, false},
 
 		// 1. Call for blocks 0-4 (query limited) [count: 1]
 		// 2. Subdivide into 0-2 and 3-4
 		// 3. Call for blocks 3-4 (succeeds) [count: 2]
 		// 4. Call for blocks 0-2 (succeeds) [count: 3]
 		// eth_getLogs calls: 3
-		{"full subdivision", 4, 2, 4, 3},
+		{"full subdivision", 4, 2, 4, 3, false},
 
 		// 1. Call for blocks 0-9 (query limited) [count: 1]
 		// 2. Subdivide into 0-4 and 5-9
@@ -319,7 +320,13 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 		// 6. Call for blocks 0-2 (succeeds) [count: 4] - Range of 3 blocks
 		// 7. Call for blocks 3-4 (succeeds) [count: 5] - Range of 2 blocks
 		// eth_getLogs calls: 5
-		{"partial subdivision", 9, 4, 9, 5},
+		{"partial subdivision", 9, 4, 9, 5, false},
+
+		// Test for non-RPC error (HTTP 500)
+		// 1. Call for blocks 0-4 (returns HTTP 500) [count: 1]
+		// function should exit with the error, not try to subdivide
+		// eth_getLogs calls: 1
+		{"http error", 4, 1, 0, 1, true},
 	}
 
 	for _, tc := range testCases {
@@ -349,6 +356,12 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 
 				if req["method"] == "eth_getLogs" {
 					callCount.Add(1)
+
+					if tc.httpError {
+						http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+						return
+					}
+
 					flt := req["params"].([]interface{})[0].(map[string]interface{})
 					from, _ := strconv.ParseInt(strings.TrimPrefix(flt["fromBlock"].(string), "0x"), 16, 64)
 					to, _ := strconv.ParseInt(strings.TrimPrefix(flt["toBlock"].(string), "0x"), 16, 64)
@@ -390,9 +403,16 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 				all = append(all, blk.Logs...)
 			}
 
-			require.NoError(t, <-errCh)
-			require.Len(t, all, tc.wantLogs)
+			err = <-errCh
+			if tc.httpError {
+				require.Error(t, err)
+				require.Equal(t, tc.wantCalls, callCount.Load())
 
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, all, tc.wantLogs)
 			require.Equal(t, tc.wantCalls, callCount.Load())
 		})
 	}
