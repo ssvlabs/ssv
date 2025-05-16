@@ -183,6 +183,7 @@ func (eh *EventHandler) handleValidatorAdded(
 			zap.String("signature", hex.EncodeToString(signature)),
 			zap.String("owner", event.Owner.String()),
 			zap.String("validator_public_key", hex.EncodeToString(event.PublicKey)),
+			zap.Uint16("expected_nonce", uint16(nonce)),
 			zap.Error(err))
 
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
@@ -221,7 +222,10 @@ func (eh *EventHandler) handleValidatorAdded(
 		logger = logger.With(zap.Bool("own_validator", true))
 	}
 
-	logger.Debug("processed event")
+	logger.Info("processed event",
+		zap.Uint16("nonce", uint16(nonce)),
+		zap.String("signature", hex.EncodeToString(signature)),
+	)
 	return
 }
 

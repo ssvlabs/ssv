@@ -588,6 +588,14 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
+
+		nonce, err := nodeStorage.GetNextNonce(nil, ethcommon.HexToAddress("0xB8cD60A8152ECF2030c425Cb3463efdB9810416C"))
+		if err != nil {
+			logger.Error("[GetNextNonce 0xB8cD60A8152ECF2030c425Cb3463efdB9810416C] error", zap.Error(err))
+		} else {
+			logger.Info("[GetNextNonce 0xB8cD60A8152ECF2030c425Cb3463efdB9810416C] nonce", zap.Uint16("nonce", uint16(nonce)))
+		}
+
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
