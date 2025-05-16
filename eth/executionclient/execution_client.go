@@ -251,9 +251,9 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	fromBlock := q.FromBlock.Uint64()
 	toBlock := q.ToBlock.Uint64()
 
-	// check if we have at least 2 blocks
+	// require at least 2 blocks to subdivide (fromBlock must be less than toBlock)
 	if fromBlock >= toBlock {
-		return nil, err
+		return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
 	}
 
 	ec.logger.Info("subdividing log fetch due to rate limit",
@@ -262,28 +262,28 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 
 	midBlock := fromBlock + (toBlock-fromBlock)/2
 
-	firstHalfQuery := q
-	firstHalfQuery.FromBlock = new(big.Int).SetUint64(fromBlock)
-	firstHalfQuery.ToBlock = new(big.Int).SetUint64(midBlock)
+	leftQuery := q
+	leftQuery.FromBlock = new(big.Int).SetUint64(fromBlock)
+	leftQuery.ToBlock = new(big.Int).SetUint64(midBlock)
 
-	secondHalfQuery := q
-	secondHalfQuery.FromBlock = new(big.Int).SetUint64(midBlock + 1)
-	secondHalfQuery.ToBlock = new(big.Int).SetUint64(toBlock)
+	rightQuery := q
+	rightQuery.FromBlock = new(big.Int).SetUint64(midBlock + 1)
+	rightQuery.ToBlock = new(big.Int).SetUint64(toBlock)
 
-	firstHalfLogs, firstErr := ec.subdivideLogFetch(ctx, firstHalfQuery)
-	if firstErr != nil {
-		return nil, firstErr
+	leftLogs, leftErr := ec.subdivideLogFetch(ctx, leftQuery)
+	if leftErr != nil {
+		return nil, leftErr
 	}
 
-	secondHalfLogs, secondErr := ec.subdivideLogFetch(ctx, secondHalfQuery)
-	if secondErr != nil {
-		return nil, secondErr
+	rightLogs, rightErr := ec.subdivideLogFetch(ctx, rightQuery)
+	if rightErr != nil {
+		return nil, rightErr
 	}
 
-	totalLogs := len(firstHalfLogs) + len(secondHalfLogs)
+	totalLogs := len(leftLogs) + len(rightLogs)
 	combinedLogs := make([]ethtypes.Log, 0, totalLogs)
-	combinedLogs = append(combinedLogs, firstHalfLogs...)
-	combinedLogs = append(combinedLogs, secondHalfLogs...)
+	combinedLogs = append(combinedLogs, leftLogs...)
+	combinedLogs = append(combinedLogs, rightLogs...)
 
 	ec.logger.Info("successfully fetched logs after subdivision",
 		fields.FromBlock(fromBlock),
