@@ -832,7 +832,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
-					role, msgType := role, msgType
 					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), message.PartialMsgTypeToString(msgType))
 					t.Run(subtestName, func(t *testing.T) {
 						ds := dutystore.New()
@@ -912,7 +911,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
-					role, msgType := role, msgType
 					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), message.PartialMsgTypeToString(msgType))
 					t.Run(subtestName, func(t *testing.T) {
 						ds := dutystore.New()
@@ -1224,7 +1222,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		for role, receivedAt := range tests {
-			role, receivedAt := role, receivedAt
 			t.Run(message.RunnerRoleToString(role), func(t *testing.T) {
 				dutyExecutorID := shares.active.ValidatorPubKey[:]
 				if validator.committeeRole(role) {
@@ -1549,7 +1546,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		for role, round := range tests {
-			role, round := role, round
 			t.Run(message.RunnerRoleToString(role), func(t *testing.T) {
 				dutyExecutorID := shares.active.ValidatorPubKey[:]
 				if validator.committeeRole(role) {

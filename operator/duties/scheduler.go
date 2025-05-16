@@ -194,8 +194,6 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 		// This call is blocking.
 		handler.HandleInitialDuties(ctx)
-
-		handler := handler
 		s.pool.Go(func(ctx context.Context) error {
 			// Wait for the head event subscription to complete before starting the handler.
 			handler.HandleDuties(ctx)
@@ -387,8 +385,7 @@ func (s *Scheduler) HandleHeadEvent() func(event *eth2apiv1.HeadEvent) {
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
 	for _, duty := range duties {
-		duty := duty
-		logger := s.loggerWithDutyContext(duty)
+		logger := s.loggerWithDutyContext(logger, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
