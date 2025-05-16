@@ -284,8 +284,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 }
 
 // TestFetchHistoricalLogs_Subdivide tests the automatic subdivision logic for handling
-// RPC rate limit errors during log fetching.
-// The test specifically targets rate limit error handling for error code `-32005`, which
+// RPC query limit errors during log fetching.
+// The test specifically targets query limit error handling for error code `-32005`, which
 // is returned by execution clients like Nethermind when too many logs are requested
 // in a single call.
 func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
@@ -304,17 +304,17 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 		// eth_getLogs calls: 1
 		{"multiple logs", 2, 5, 2, 1},
 
-		// 1. Call for blocks 0-4 (rate limited) [count: 1]
+		// 1. Call for blocks 0-4 (query limited) [count: 1]
 		// 2. Subdivide into 0-2 and 3-4
 		// 3. Call for blocks 3-4 (succeeds) [count: 2]
 		// 4. Call for blocks 0-2 (succeeds) [count: 3]
 		// eth_getLogs calls: 3
 		{"full subdivision", 4, 2, 4, 3},
 
-		// 1. Call for blocks 0-9 (rate limited) [count: 1]
+		// 1. Call for blocks 0-9 (query limited) [count: 1]
 		// 2. Subdivide into 0-4 and 5-9
 		// 3. Call for blocks 5-9 (succeeds) [count: 2] - Range of 5 blocks, threshold is 4
-		// 4. Call for blocks 0-4 (rate limited) [count: 3] - Range of 5 blocks, threshold is 3
+		// 4. Call for blocks 0-4 (query limited) [count: 3] - Range of 5 blocks, threshold is 3
 		// 5. Subdivide 0-4 into 0-2 and 3-4
 		// 6. Call for blocks 0-2 (succeeds) [count: 4] - Range of 3 blocks
 		// 7. Call for blocks 3-4 (succeeds) [count: 5] - Range of 2 blocks
@@ -359,7 +359,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 							"id":      req["id"],
 							"error": map[string]interface{}{
 								"code":    -32005,
-								"message": "rate limit exceeded",
+								"message": "query limit exceeded",
 							},
 						})
 						return
