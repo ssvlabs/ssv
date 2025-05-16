@@ -385,7 +385,7 @@ func (s *Scheduler) HandleHeadEvent() func(event *eth2apiv1.HeadEvent) {
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
 	for _, duty := range duties {
-		logger := s.loggerWithDutyContext(logger, duty)
+		logger := s.loggerWithDutyContext(duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
