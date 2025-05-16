@@ -227,8 +227,8 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 	return logCh, errCh
 }
 
-// subdivideLogFetch handles log fetching with automatic subdivision on rate limit errors.
-// It first attempts a direct fetch, and if that fails with a rate limit error, it subdivides
+// subdivideLogFetch handles log fetching with automatic subdivision on query limit errors.
+// It first attempts a direct fetch, and if that fails with a query limit error, it subdivides
 // the block range and tries again with smaller chunks.
 func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
 	select {
@@ -244,7 +244,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		return logs, nil
 	}
 
-	if !isRPCRateLimitError(err) || q.FromBlock == nil || q.ToBlock == nil {
+	if !isRPCQueryLimitError(err) || q.FromBlock == nil || q.ToBlock == nil {
 		return nil, err
 	}
 
@@ -256,7 +256,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
 	}
 
-	ec.logger.Info("subdividing log fetch due to rate limit",
+	ec.logger.Info("subdividing log fetch due to query limit",
 		fields.FromBlock(fromBlock),
 		fields.ToBlock(toBlock))
 
