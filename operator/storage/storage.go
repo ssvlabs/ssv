@@ -98,7 +98,7 @@ func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
 	return s.validatorStore
 }
 
-func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
+func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
 	return s.operatorStore.GetOperatorDataByPubKey(r, operatorPubKey)
 }
 

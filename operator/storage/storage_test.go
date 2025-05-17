@@ -2,6 +2,7 @@ package storage
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"math/big"
 	"testing"
@@ -80,7 +81,7 @@ func TestDropRegistryData(t *testing.T) {
 	for _, id := range operatorIDs {
 		found, err := storage.SaveOperatorData(nil, &registrystorage.OperatorData{
 			ID:           id,
-			PublicKey:    []byte("publicKey"),
+			PublicKey:    base64.StdEncoding.EncodeToString([]byte("publicKey")),
 			OwnerAddress: common.Address{byte(id)},
 		})
 		require.NoError(t, err)
@@ -287,7 +288,7 @@ func Test_OperatorData(t *testing.T) {
 	operatorIDs := []uint64{1, 2, 3}
 
 	for _, id := range operatorIDs {
-		pubkey := []byte(fmt.Sprintf("publicKey%d", id))
+		pubkey := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("publicKey%d", id)))
 		operatorData := &registrystorage.OperatorData{
 			ID:           id,
 			PublicKey:    pubkey,

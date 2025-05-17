@@ -51,7 +51,7 @@ func (sv *signatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 			return fmt.Errorf("operator not found")
 		}
 
-		operatorPubKey, err = keys.PublicKeyFromString(string(operator.PublicKey))
+		operatorPubKey, err = keys.PublicKeyFromString(operator.PublicKey)
 		if err != nil {
 			return err
 		}

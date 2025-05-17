@@ -15,6 +15,9 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
@@ -27,8 +30,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
@@ -262,13 +263,13 @@ func setupOperatorStorage(
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(encodedPubKey))
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey:    []byte(encodedPubKey),
+			PublicKey:    encodedPubKey,
 			ID:           operator.id,
 			OwnerAddress: *ownerAddress,
 		}
