@@ -307,7 +307,7 @@ func TestMultiClient_StreamLogs(t *testing.T) {
 		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 			out <- BlockLogs{BlockNumber: 200}
 			out <- BlockLogs{BlockNumber: 201}
-			return 201, nil // Success
+			return 202, nil // Success
 		}).
 		Times(1)
 
@@ -388,7 +388,7 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 		DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 			out <- BlockLogs{BlockNumber: 200}
 			out <- BlockLogs{BlockNumber: 201}
-			return 201, nil
+			return 202, nil
 		}).
 		Times(1)
 
@@ -474,7 +474,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 				out <- BlockLogs{BlockNumber: 200}
 				out <- BlockLogs{BlockNumber: 201}
-				return 201, errors.New("network error") // Triggers failover
+				return 202, errors.New("network error") // Triggers failover
 			}).
 			Times(1),
 
@@ -484,7 +484,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
 			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 				out <- BlockLogs{BlockNumber: 202}
-				return 202, ErrClosed // Reference exported ErrClosed
+				return 203, ErrClosed // Reference exported ErrClosed
 			}).
 			Times(1),
 	)
@@ -622,14 +622,14 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 		mockClient1.
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-			Return(uint64(0), errors.New("network error")).
+			Return(uint64(200), errors.New("network error")).
 			Times(1),
 
 		// Setup mockClient2 to fail with fromBlock=200
 		mockClient2.
 			EXPECT().
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
-			Return(uint64(0), errors.New("network error")).
+			Return(uint64(200), errors.New("network error")).
 			Times(1),
 
 		// Setup mockClient3 to handle fromBlock=200
@@ -638,7 +638,7 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
 			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 				out <- BlockLogs{BlockNumber: 200}
-				return 200, nil
+				return 201, nil
 			}).
 			Times(1),
 	)
