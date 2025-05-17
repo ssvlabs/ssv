@@ -321,6 +321,7 @@ func TestExporterDecideds(t *testing.T) {
 			stores.Add(spectypes.BNRoleProposer, proposerStore)
 
 			exporter := &Exporter{
+				Logger:            zap.NewNop(),
 				ParticipantStores: stores,
 			}
 
@@ -355,6 +356,7 @@ func TestExporterDecideds_InvalidJSON(t *testing.T) {
 	stores.Add(spectypes.BNRoleAttester, store)
 
 	exporter := &Exporter{
+		Logger:            zap.NewNop(),
 		ParticipantStores: stores,
 	}
 	req := httptest.NewRequest(http.MethodPost, "/decideds", strings.NewReader("{invalid"))
@@ -389,6 +391,7 @@ func TestExporterDecideds_ErrorGetAllParticipantsInRange(t *testing.T) {
 	stores.Add(spectypes.BNRoleAttester, store)
 
 	exporter := &Exporter{
+		Logger:            zap.NewNop(),
 		ParticipantStores: stores,
 	}
 	reqData := map[string]interface{}{
@@ -434,6 +437,7 @@ func TestExporterDecideds_ErrorGetParticipantsInRange(t *testing.T) {
 	stores.Add(spectypes.BNRoleAttester, store)
 
 	exporter := &Exporter{
+		Logger:            zap.NewNop(),
 		ParticipantStores: stores,
 	}
 
@@ -717,6 +721,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			tt.setupMock(store)
 
 			exporter := &Exporter{
+				Logger:     zap.NewNop(),
 				TraceStore: store,
 			}
 
@@ -876,6 +881,7 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			}
 
 			exporter := &Exporter{
+				Logger:     zap.NewNop(),
 				TraceStore: store,
 				Validators: validatorStore,
 			}
@@ -1034,6 +1040,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			tt.setupMock(store, validatorStore)
 
 			exporter := &Exporter{
+				Logger:     zap.NewNop(),
 				TraceStore: store,
 				Validators: validatorStore,
 			}
