@@ -475,7 +475,6 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 // Runs the given function as a test with and without storage reopen.
 func testWithStorageReopen(t *testing.T, f func(t *testing.T, storage *testStorage, reopen func(t *testing.T))) {
 	for _, withReopen := range []bool{false, true} {
-		withReopen := withReopen
 		t.Run(fmt.Sprintf("withReopen=%t", withReopen), func(t *testing.T) {
 			logger := logging.TestLogger(t)
 			storage, err := newTestStorage(logger)

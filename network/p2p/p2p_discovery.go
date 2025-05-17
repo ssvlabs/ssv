@@ -62,7 +62,7 @@ func (a SubnetPeers) String() string {
 	return b.String()
 }
 
-func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
+func (n *p2pNetwork) startDiscovery() error {
 	startTime := time.Now()
 
 	connector, err := n.getConnector()
@@ -72,7 +72,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 	// Spawn a goroutine to deduplicate discovered peers by peer ID.
 	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
-	go n.bootstrapDiscovery(logger, connectorProposals)
+	go n.bootstrapDiscovery(connectorProposals)
 	go func() {
 		for proposal := range connectorProposals {
 			discoveredPeer := discovery.DiscoveredPeer{

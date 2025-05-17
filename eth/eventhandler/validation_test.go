@@ -117,7 +117,6 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.saved {
 				for _, operator := range tc.operators {
