@@ -122,11 +122,6 @@ type Controller interface {
 	duties.DutyExecutor
 }
 
-type committeeObserver struct {
-	*validator.CommitteeObserver
-	sync.Mutex
-}
-
 type Nonce uint16
 
 type Recipients interface {
@@ -142,7 +137,7 @@ type SharesStorage interface {
 type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
-	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	SubscribeRandoms(numSubnets int) error
 	ActiveSubnets() commons.Subnets
 	FixedSubnets() commons.Subnets
 }
@@ -182,7 +177,7 @@ type controller struct {
 	messageValidator     validation.MessageValidator
 
 	// committeeObservers is a cache of initialized committeeObserver instances
-	committeesObservers      *hashmap.Map[spectypes.MessageID, *committeeObserver]
+	committeesObservers      *hashmap.Map[spectypes.MessageID, *validator.CommitteeObserver]
 	committeesObserversMutex sync.Mutex
 
 	attesterRoots   *ttlcache.Cache[phase0.Root, struct{}]
@@ -264,7 +259,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
-		committeesObservers: hashmap.New[spectypes.MessageID, *committeeObserver](),
+		committeesObservers: hashmap.New[spectypes.MessageID, *validator.CommitteeObserver](),
 		attesterRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
@@ -366,10 +361,46 @@ func (c *controller) handleRouterMessages() {
 //	spectypes.RoleSyncCommitteeContribution: 4,
 //}
 
-func (c *controller) handleWorkerMessages(netmsg network.DecodedSSVMessage) error {
-	msg := netmsg.(*queue.SSVMessage)
-	// Validate message should be processed
-	switch msg.GetType() {
+func (c *controller) handleWorkerMessages(ctx context.Context, msg network.DecodedSSVMessage) error {
+	ssvMsg := msg.(*queue.SSVMessage)
+
+	ncv, found := c.committeesObservers.Get(ssvMsg.GetID())
+	if !found {
+		committeeObserverOptions := validator.CommitteeObserverOptions{
+			Logger:            c.logger,
+			NetworkConfig:     c.networkConfig,
+			ValidatorStore:    c.validatorStore,
+			Network:           c.validatorOptions.Network,
+			Storage:           c.validatorOptions.Storage,
+			FullNode:          c.validatorOptions.FullNode,
+			Operator:          c.validatorOptions.Operator,
+			OperatorSigner:    c.validatorOptions.OperatorSigner,
+			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+			AttesterRoots:     c.attesterRoots,
+			SyncCommRoots:     c.syncCommRoots,
+			DomainCache:       c.domainCache,
+			BeaconVoteRoots:   c.beaconVoteRoots,
+		}
+		ncv = validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions)
+		c.committeesObservers.Set(ssvMsg.GetID(), ncv)
+	}
+
+	if err := c.handleNonCommitteeMessages(ctx, ssvMsg, ncv); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *controller) handleNonCommitteeMessages(
+	ctx context.Context,
+	msg *queue.SSVMessage,
+	ncv *validator.CommitteeObserver,
+) error {
+	c.committeesObserversMutex.Lock()
+	defer c.committeesObserversMutex.Unlock()
+
+	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		// Process proposal messages for committee consensus only to get the roots
 		if msg.MsgID.GetRoleType() != spectypes.RoleCommittee {
@@ -380,54 +411,17 @@ func (c *controller) handleWorkerMessages(netmsg network.DecodedSSVMessage) erro
 		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
 			return nil
 		}
-		return c.getCommitteeObserver(msg.GetID()).OnProposalMsg(msg)
+
+		return ncv.OnProposalMsg(ctx, msg)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			return fmt.Errorf("failed to decode partial signature messages: %w", err)
+			return err
 		}
 
-		return c.getCommitteeObserver(msg.GetID()).ProcessMessage(msg)
+		return ncv.ProcessMessage(msg)
 	}
 	return nil
-}
-
-func (c *controller) getCommitteeObserver(msgID spectypes.MessageID) *committeeObserver {
-	c.committeesObserversMutex.Lock()
-	defer c.committeesObserversMutex.Unlock()
-
-	// Check if the observer already exists
-	existingObserver, ok := c.committeesObservers.Get(msgID)
-	if ok {
-		return existingObserver
-	}
-
-	// Create a new committee observer if it doesn't exist
-	committeeObserverOptions := validator.CommitteeObserverOptions{
-		Logger:            c.logger,
-		NetworkConfig:     c.networkConfig,
-		ValidatorStore:    c.validatorStore,
-		Network:           c.validatorOptions.Network,
-		Storage:           c.validatorOptions.Storage,
-		FullNode:          c.validatorOptions.FullNode,
-		Operator:          c.validatorOptions.Operator,
-		OperatorSigner:    c.validatorOptions.OperatorSigner,
-		NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
-		AttesterRoots:     c.attesterRoots,
-		SyncCommRoots:     c.syncCommRoots,
-		DomainCache:       c.domainCache,
-		BeaconVoteRoots:   c.beaconVoteRoots,
-	}
-	newObserver := &committeeObserver{
-		CommitteeObserver: validator.NewCommitteeObserver(msgID, committeeObserverOptions),
-	}
-
-	c.committeesObservers.Set(
-		msgID,
-		newObserver,
-	)
-
-	return newObserver
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
@@ -458,7 +452,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		if len(inited) == 0 {
 			// If no validators were started and therefore we're not subscribed to any subnets,
 			// then subscribe to a random subnet to participate in the network.
-			if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
+			if err := c.network.SubscribeRandoms(1); err != nil {
 				c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
 			}
 		}

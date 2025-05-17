@@ -28,7 +28,7 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(gc.ctx, "ProposerDuties", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	recordRequestDuration(ctx, "ProposerDuties", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
@@ -48,7 +48,12 @@ func (gc *GoClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 }
 
 // GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
-func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *GoClient) GetBeaconBlock(
+	ctx context.Context,
+	slot phase0.Slot,
+	graffitiBytes []byte,
+	randao []byte,
+) (ssz.Marshaler, spec.DataVersion, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
@@ -56,13 +61,13 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	copy(graffiti[:], graffitiBytes[:])
 
 	reqStart := time.Now()
-	proposalResp, err := gc.multiClient.Proposal(gc.ctx, &api.ProposalOpts{
+	proposalResp, err := gc.multiClient.Proposal(ctx, &api.ProposalOpts{
 		Slot:                   slot,
 		RandaoReveal:           sig,
 		Graffiti:               graffiti,
 		SkipRandaoVerification: false,
 	})
-	recordRequestDuration(gc.ctx, "Proposal", gc.multiClient.Address(), http.MethodGet, time.Since(reqStart), err)
+	recordRequestDuration(ctx, "Proposal", gc.multiClient.Address(), http.MethodGet, time.Since(reqStart), err)
 
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
@@ -171,7 +176,11 @@ func (gc *GoClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	}
 }
 
-func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
+func (gc *GoClient) SubmitBlindedBeaconBlock(
+	ctx context.Context,
+	block *api.VersionedBlindedProposal,
+	sig phase0.BLSSignature,
+) error {
 	signedBlock := &api.VersionedSignedBlindedProposal{
 		Version: block.Version,
 	}
@@ -220,13 +229,17 @@ func (gc *GoClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal
 		Proposal: signedBlock,
 	}
 
-	return gc.multiClientSubmit("SubmitBlindedProposal", func(ctx context.Context, client Client) error {
+	return gc.multiClientSubmit(ctx, "SubmitBlindedProposal", func(ctx context.Context, client Client) error {
 		return client.SubmitBlindedProposal(ctx, opts)
 	})
 }
 
 // SubmitBeaconBlock submit the block to the node
-func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
+func (gc *GoClient) SubmitBeaconBlock(
+	ctx context.Context,
+	block *api.VersionedProposal,
+	sig phase0.BLSSignature,
+) error {
 	signedBlock := &api.VersionedSignedProposal{
 		Version: block.Version,
 	}
@@ -289,12 +302,15 @@ func (gc *GoClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.B
 		Proposal: signedBlock,
 	}
 
-	return gc.multiClientSubmit("SubmitProposal", func(ctx context.Context, client Client) error {
-		return client.SubmitProposal(gc.ctx, opts)
+	return gc.multiClientSubmit(ctx, "SubmitProposal", func(ctx context.Context, client Client) error {
+		return client.SubmitProposal(ctx, opts)
 	})
 }
 
-func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+func (gc *GoClient) SubmitProposalPreparation(
+	ctx context.Context,
+	feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress,
+) error {
 	var preparations []*eth2apiv1.ProposalPreparation
 	for index, recipient := range feeRecipients {
 		preparations = append(preparations, &eth2apiv1.ProposalPreparation{
@@ -303,7 +319,7 @@ func (gc *GoClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 		})
 	}
 
-	return gc.multiClientSubmit("SubmitProposalPreparations", func(ctx context.Context, client Client) error {
+	return gc.multiClientSubmit(ctx, "SubmitProposalPreparations", func(ctx context.Context, client Client) error {
 		return client.SubmitProposalPreparations(ctx, preparations)
 	})
 }

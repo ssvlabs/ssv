@@ -42,11 +42,9 @@ var allRoles = []spectypes.BeaconRole{
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
-	slotTickerProvider := func() slotticker.SlotTicker {
-		return slotticker.New(logger, slotticker.Config{
-			SlotDuration: 5 * time.Second,
-			GenesisTime:  time.Now(),
-		})
-	}
-	return qbftstorage.NewStoresFromRoles(logger, networkconfig.HoleskyStage, getDB(logger), slotTickerProvider, allRoles...)
+	ticker := slotticker.New(logger, slotticker.Config{
+		SlotDuration: 5 * time.Second,
+		GenesisTime:  time.Now(),
+	})
+	return qbftstorage.NewStoresFromRoles(logger, networkconfig.HoleskyStage, getDB(logger), func() slotticker.SlotTicker { return ticker }, allRoles...)
 }

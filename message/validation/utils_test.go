@@ -49,7 +49,6 @@ func TestMessageValidator_maxRound(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			mv := &messageValidator{}
 			got, err := mv.maxRound(tc.role)

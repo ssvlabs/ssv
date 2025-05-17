@@ -491,7 +491,6 @@ func TestIssue1682(t *testing.T) {
 			m := New[string, validatorStatus]()
 			var wg sync.WaitGroup
 			for _, cmtID := range cmtIDs {
-				cmtID := cmtID
 				n := 50 + randSeed().Intn(200)
 				for j := 0; j < n; j++ {
 					wg.Add(1)

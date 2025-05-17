@@ -178,7 +178,7 @@ func (h *AttesterHandler) processExecution(ctx context.Context, epoch phase0.Epo
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) error {
