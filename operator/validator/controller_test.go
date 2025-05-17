@@ -22,6 +22,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -251,7 +252,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(msg network.DecodedSSVMessage) error {
+	ctr.messageWorker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
 		wg.Done()
 		return nil
 	})

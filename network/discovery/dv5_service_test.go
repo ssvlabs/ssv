@@ -24,15 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
-var TestNetwork = networkconfig.NetworkConfig{
-	BeaconConfig: networkconfig.BeaconConfig{
-		Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
-	},
-	SSVConfig: networkconfig.SSVConfig{
-		DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-	},
-}
-
 func TestCheckPeer(t *testing.T) {
 	var (
 		ctx          = context.Background()
@@ -91,9 +82,17 @@ func TestCheckPeer(t *testing.T) {
 		}
 	)
 
+	var checkPeerTestNetwork = networkconfig.NetworkConfig{
+		BeaconConfig: networkconfig.BeaconConfig{
+			Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
+		},
+		SSVConfig: networkconfig.SSVConfig{
+			DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
+		},
+	}
+
 	// Create the LocalNode instances for the tests.
 	for _, test := range tests {
-		test := test
 		t.Run(test.name+":setup", func(t *testing.T) {
 			// Create a random network key.
 			priv, err := utils.ECDSAPrivateKey(logger, "")
@@ -125,16 +124,15 @@ func TestCheckPeer(t *testing.T) {
 		ctx:                 ctx,
 		conns:               &mock.MockConnectionIndex{LimitValue: false},
 		subnetsIdx:          subnetIndex,
-		networkConfig:       TestNetwork,
+		networkConfig:       checkPeerTestNetwork,
 		subnets:             mySubnets,
 		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
 		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name+":run", func(t *testing.T) {
-			err := dvs.checkPeer(context.TODO(), logger, PeerEvent{
+			err := dvs.checkPeer(context.TODO(), PeerEvent{
 				Node: test.localNode.Node(),
 			})
 			if test.expectedError != nil {

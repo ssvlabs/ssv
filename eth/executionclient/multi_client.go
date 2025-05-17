@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 var _ Provider = &MultiClient{}
@@ -101,6 +102,8 @@ func NewMulti(
 	for _, opt := range opts {
 		opt(multiClient)
 	}
+
+	multiClient.logger.Info("execution client: connecting (multi client)", fields.Addresses(nodeAddrs))
 
 	var connected bool
 
@@ -293,7 +296,6 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 	p := pool.New().WithErrors().WithContext(ctx)
 
 	for i := range mc.clients {
-		i := i
 		p.Go(func(ctx context.Context) error {
 			client, err := mc.getClient(ctx, i)
 			if err != nil {
