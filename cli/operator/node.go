@@ -610,6 +610,7 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				&handlers.Exporter{
+					Logger:            logger,
 					ParticipantStores: storageMap,
 					TraceStore:        collector,
 					Validators:        nodeStorage.ValidatorStore(),

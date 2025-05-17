@@ -431,6 +431,7 @@ func (c *Collector) saveValidatorToCommitteeLink(slot phase0.Slot, msg *spectype
 		}
 
 		slotToCommittee.Set(slot, committeeID)
+		c.logger.Debug("###debug saved validator to committee links", fields.Slot(slot), fields.ValidatorIndex(msg.ValidatorIndex), fields.CommitteeID(committeeID))
 	}
 }
 
@@ -439,7 +440,9 @@ func (c *Collector) saveLateValidatorToCommiteeLinks(slot phase0.Slot, msg *spec
 		if err := c.store.SaveCommitteeDutyLink(slot, msg.ValidatorIndex, committeeID); err != nil {
 			// for late messages we can log with warn
 			c.logger.Warn("save late validator to committee links", zap.Error(err), fields.Slot(slot), fields.ValidatorIndex(msg.ValidatorIndex), fields.CommitteeID(committeeID))
+			continue
 		}
+		c.logger.Debug("###debug saved late validator to committee links", fields.Slot(slot), fields.ValidatorIndex(msg.ValidatorIndex), fields.CommitteeID(committeeID))
 	}
 }
 

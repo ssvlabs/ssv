@@ -7,17 +7,20 @@ import (
 	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging/fields"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type Exporter struct {
+	Logger            *zap.Logger
 	ParticipantStores *ibftstorage.ParticipantStores
 	TraceStore        DutyTraceStore
 	Validators        registrystorage.ValidatorStore
@@ -149,10 +152,12 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				if len(pubkeys) == 0 {
 					participantsByPK, err := e.TraceStore.GetAllCommitteeDecideds(slot)
 					if err != nil {
+						e.Logger.Error("##handler get all committee decideds", zap.Error(err), fields.Slot(slot))
 						continue
 					}
 					for _, pr := range participantsByPK {
 						if len(pr.Signers) == 0 {
+							e.Logger.Warn("##handler no signers for committee decided", fields.Validator(pr.PubKey[:]), fields.Slot(slot))
 							continue
 						}
 						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
@@ -162,10 +167,12 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				for _, pubkey := range pubkeys {
 					participantsByPK, err := e.TraceStore.GetCommitteeDecideds(slot, pubkey)
 					if err != nil {
+						e.Logger.Error("##handler get committee decideds", zap.Error(err), fields.Slot(slot))
 						continue
 					}
 					for _, pr := range participantsByPK {
 						if len(pr.Signers) == 0 {
+							e.Logger.Warn("##handler no signers for committee decided", fields.Validator(pr.PubKey[:]), fields.Slot(slot))
 							continue
 						}
 						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
@@ -182,6 +189,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					}
 					for _, pr := range participantsByPK {
 						if len(pr.Signers) == 0 {
+							e.Logger.Warn("##handler no signers for committee decided", fields.Validator(pr.PubKey[:]), fields.Slot(slot))
 							continue
 						}
 						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
@@ -195,10 +203,12 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				slot := phase0.Slot(s)
 				participantsByPK, err := e.TraceStore.GetValidatorDecideds(role, slot, pubkeys)
 				if err != nil {
+					e.Logger.Error("##handler get validator decideds", zap.Error(err), fields.Slot(slot))
 					continue
 				}
 				for _, pr := range participantsByPK {
 					if len(pr.Signers) == 0 {
+						e.Logger.Warn("##handler no signers for validator decided", fields.Validator(pr.PubKey[:]), fields.Slot(slot))
 						continue
 					}
 					response.Data = append(response.Data, transformToParticipantResponse(role, pr))
