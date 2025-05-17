@@ -119,14 +119,14 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 	// listen to topics
 	for _, cid := range cids {
 		for _, p := range peers {
-			require.NoError(t, p.tm.Subscribe(logger, committeeTopic(cid)))
+			require.NoError(t, p.tm.Subscribe(committeeTopic(cid)))
 			// simulate concurrency, by trying to subscribe multiple times
 			go func(tm topics.Controller, cid string) {
-				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
+				require.NoError(t, tm.Subscribe(committeeTopic(cid)))
 			}(p.tm, cid)
 			go func(tm topics.Controller, cid string) {
 				<-time.After(100 * time.Millisecond)
-				require.NoError(t, tm.Subscribe(logger, committeeTopic(cid)))
+				require.NoError(t, tm.Subscribe(committeeTopic(cid)))
 			}(p.tm, cid)
 		}
 	}
@@ -191,13 +191,13 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				topic := committeeTopic(cid)
 				topicFullName := commons.GetTopicFullName(topic)
 
-				err := p.tm.Unsubscribe(logger, topic, false)
+				err := p.tm.Unsubscribe(topic, false)
 				require.NoError(t, err)
 
 				go func(p *P) {
 					<-time.After(time.Millisecond)
 
-					err := p.tm.Unsubscribe(logger, topic, false)
+					err := p.tm.Unsubscribe(topic, false)
 					require.ErrorContains(t, err, fmt.Sprintf("failed to unsubscribe from topic %s: not subscribed", topicFullName))
 				}(p)
 
@@ -206,7 +206,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 					defer wg.Done()
 					<-time.After(time.Millisecond * 50)
 
-					err := p.tm.Unsubscribe(logger, topic, false)
+					err := p.tm.Unsubscribe(topic, false)
 					require.ErrorContains(t, err, fmt.Sprintf("failed to unsubscribe from topic %s: not subscribed", topicFullName))
 				}(p)
 			}(p, cids[i])
@@ -220,7 +220,7 @@ func banningTest(t *testing.T, logger *zap.Logger, peers []*P, cids []string, sc
 
 	for _, cid := range cids {
 		for _, p := range peers {
-			require.NoError(t, p.tm.Subscribe(logger, committeeTopic(cid)))
+			require.NoError(t, p.tm.Subscribe(committeeTopic(cid)))
 		}
 	}
 
@@ -429,7 +429,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			atomic.AddUint64(&p.connsCount, 1)
 		},
 	})
-	require.NoError(t, ds.Bootstrap(logger, func(e discovery.PeerEvent) {
+	require.NoError(t, ds.Bootstrap(func(e discovery.PeerEvent) {
 		_ = h.Connect(ctx, e.AddrInfo)
 	}))
 

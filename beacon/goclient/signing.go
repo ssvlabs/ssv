@@ -69,7 +69,11 @@ func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	return domain, nil
 }
 
-func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+func (gc *GoClient) DomainData(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	domain phase0.DomainType,
+) (phase0.Domain, error) {
 	switch domain {
 	case spectypes.DomainApplicationBuilder:
 		// DomainApplicationBuilder is constructed based on what Ethereum network we are connected
@@ -89,12 +93,12 @@ func (gc *GoClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 	case spectypes.DomainVoluntaryExit:
 		// Deneb upgrade introduced https://eips.ethereum.org/EIPS/eip-7044 that requires special
 		// handling for DomainVoluntaryExit
-		return gc.voluntaryExitDomain(gc.ctx)
+		return gc.voluntaryExitDomain(ctx)
 	}
 
 	start := time.Now()
-	data, err := gc.multiClient.Domain(gc.ctx, domain, epoch)
-	recordRequestDuration(gc.ctx, "Domain", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
+	data, err := gc.multiClient.Domain(ctx, domain, epoch)
+	recordRequestDuration(ctx, "Domain", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Domain"),

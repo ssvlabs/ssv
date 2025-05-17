@@ -351,7 +351,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
+	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, cr, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -378,7 +378,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	}
 
 	// Get validator-root maps for attestations and sync committees, and the root-beacon object map
-	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects(logger)
+	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects(ctx, logger)
 	if err != nil {
 		return errors.Wrap(err, "could not get expected post consensus roots and beacon objects")
 	}
@@ -506,7 +506,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	if len(attestations) > 0 {
 		submissionStart := time.Now()
-		if err := cr.beacon.SubmitAttestations(attestations); err != nil {
+		if err := cr.beacon.SubmitAttestations(ctx, attestations); err != nil {
 			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			recordFailedSubmission(ctx, spectypes.BNRoleAttester)
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
@@ -551,7 +551,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	if len(syncCommitteeMessages) > 0 {
 		submissionStart := time.Now()
-		if err := cr.beacon.SubmitSyncMessages(syncCommitteeMessages); err != nil {
+		if err := cr.beacon.SubmitSyncMessages(ctx, syncCommitteeMessages); err != nil {
 			logger.Error("❌ failed to submit sync committee", zap.Error(err))
 			recordFailedSubmission(ctx, spectypes.BNRoleSyncCommittee)
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
@@ -666,11 +666,11 @@ func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, 
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("expected post consensus roots function is unused")
 }
 
-func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *zap.Logger) (
+func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
 	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, error error,
@@ -713,7 +713,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			}
 
 			// Root
-			domain, err := cr.GetBeaconNode().DomainData(epoch, spectypes.DomainAttester)
+			domain, err := cr.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainAttester)
 			if err != nil {
 				logger.Debug("failed to get attester domain", zap.Error(err))
 				continue
@@ -740,7 +740,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *za
 			}
 
 			// Root
-			domain, err := cr.GetBeaconNode().DomainData(epoch, spectypes.DomainSyncCommittee)
+			domain, err := cr.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainSyncCommittee)
 			if err != nil {
 				logger.Debug("failed to get sync committee domain", zap.Error(err))
 				continue
@@ -772,7 +772,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	start := time.Now()
 	slot := duty.DutySlot()
 
-	attData, _, err := cr.GetBeaconNode().GetAttestationData(slot)
+	attData, _, err := cr.GetBeaconNode().GetAttestationData(ctx, slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api"
@@ -81,11 +80,11 @@ func (m *mockParticipantStore) GetParticipants(spectypes.ValidatorPK, phase0.Slo
 	return nil, nil
 }
 
-func (m *mockParticipantStore) Prune(context.Context, *zap.Logger, phase0.Slot) {
+func (m *mockParticipantStore) Prune(context.Context, phase0.Slot) {
 	// no-op.
 }
 
-func (m *mockParticipantStore) PruneContinously(context.Context, *zap.Logger, slotticker.Provider, phase0.Slot) {
+func (m *mockParticipantStore) PruneContinously(context.Context, slotticker.Provider, phase0.Slot) {
 	// no-op.
 }
 

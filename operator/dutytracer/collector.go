@@ -57,7 +57,7 @@ type Collector struct {
 }
 
 type DomainDataProvider interface {
-	DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error)
+	DomainData(context.Context, phase0.Epoch, phase0.DomainType) (phase0.Domain, error)
 }
 
 func New(ctx context.Context,
@@ -443,7 +443,7 @@ func (c *Collector) saveLateValidatorToCommiteeLinks(slot phase0.Slot, msg *spec
 	}
 }
 
-func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Root, error) {
+func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, in []byte) (phase0.Root, error) {
 	var beaconVote = new(spectypes.BeaconVote)
 	if err := beaconVote.Decode(in); err != nil {
 		return phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
@@ -469,7 +469,7 @@ func (c *Collector) getSyncCommitteeRoot(slot phase0.Slot, in []byte) (phase0.Ro
 
 		epoch := c.beacon.EstimatedEpochAtSlot(slot)
 
-		domain, err := c.client.DomainData(epoch, spectypes.DomainSyncCommittee)
+		domain, err := c.client.DomainData(ctx, epoch, spectypes.DomainSyncCommittee)
 		if err != nil {
 			return phase0.Root{}, fmt.Errorf("get sync committee domain data: %w", err)
 		}
@@ -557,7 +557,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 				// save proposal data
 				trace.ProposalData = msg.SignedSSVMessage.FullData
 
-				root, err := c.getSyncCommitteeRoot(slot, msg.SignedSSVMessage.FullData)
+				root, err := c.getSyncCommitteeRoot(ctx, slot, msg.SignedSSVMessage.FullData)
 				if err == nil {
 					trace.syncCommitteeRoot = root
 				}

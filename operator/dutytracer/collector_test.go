@@ -706,7 +706,7 @@ func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 	bnVote := &spectypes.BeaconVote{BlockRoot: [32]byte{1, 2, 3}}
 
 	data, _ := bnVote.Encode()
-	root, err := collector.getSyncCommitteeRoot(1, data)
+	root, err := collector.getSyncCommitteeRoot(context.TODO(), 1, data)
 	require.NoError(t, err)
 
 	wantRoot := [32]byte{3, 73, 222, 196, 134, 206, 159, 128,
@@ -717,7 +717,7 @@ func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
 
 type mockclient struct{}
 
-func (m mockclient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+func (m mockclient) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return phase0.Domain{}, nil
 }
 

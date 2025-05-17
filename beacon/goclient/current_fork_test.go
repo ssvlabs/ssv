@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -20,8 +19,6 @@ import (
 const forkSchedulePath = "/eth/v1/config/fork_schedule"
 
 func TestCurrentFork(t *testing.T) {
-	ctx := context.Background()
-
 	network := beacon.NewNetwork(types.MainNetwork)
 
 	t.Run("success", func(t *testing.T) {
@@ -52,9 +49,9 @@ func TestCurrentFork(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			t.Context(),
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -64,7 +61,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		currentFork, err := client.ForkAtEpoch(ctx, 200)
+		currentFork, err := client.ForkAtEpoch(t.Context(), 200)
 		require.NoError(t, err)
 		require.NotNil(t, currentFork)
 
@@ -83,9 +80,9 @@ func TestCurrentFork(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			t.Context(),
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -95,7 +92,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.ForkAtEpoch(ctx, 1)
+		_, err = client.ForkAtEpoch(t.Context(), 1)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "fork schedule response data is nil")
 	})
@@ -123,9 +120,9 @@ func TestCurrentFork(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			t.Context(),
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        network,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -135,7 +132,7 @@ func TestCurrentFork(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.ForkAtEpoch(ctx, 100)
+		_, err = client.ForkAtEpoch(t.Context(), 100)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "could not find fork at epoch 100")
 	})

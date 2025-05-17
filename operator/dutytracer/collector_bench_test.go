@@ -119,6 +119,6 @@ func readByteSlices(file *os.File) (result []*queue.SSVMessage, err error) {
 
 type mockDomainDataProvider struct{}
 
-func (m mockDomainDataProvider) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+func (m mockDomainDataProvider) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	return phase0.Domain{}, errors.New("not implemented")
 }

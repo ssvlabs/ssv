@@ -49,7 +49,6 @@ func TestMessageValidator_maxRound(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			mv := &messageValidator{}
 			got, err := mv.maxRound(tc.role)
@@ -68,57 +67,57 @@ func TestRecordConsensusMessage(t *testing.T) {
 		name             string
 		signedSSVMessage *spectypes.SignedSSVMessage
 		msg              *specqbft.Message
-		expectedCounts   MessageCounts
+		expectedSeen     SeenMsgTypes
 		expectedError    error
 	}{
 		{
 			name:             "ProposalMessage_IncrementsProposalCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
-			expectedCounts:   MessageCounts{Proposal: 1},
+			expectedSeen:     SeenMsgTypes{v: 0b10},
 			expectedError:    nil,
 		},
 		{
 			name:             "PrepareMessage_IncrementsPrepareCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.PrepareMsgType},
-			expectedCounts:   MessageCounts{Prepare: 1},
+			expectedSeen:     SeenMsgTypes{v: 0b100},
 			expectedError:    nil,
 		},
 		{
 			name:             "CommitMessageWithSingleOperator_IncrementsCommitCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{OperatorIDs: []spectypes.OperatorID{1}},
 			msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
-			expectedCounts:   MessageCounts{Commit: 1},
+			expectedSeen:     SeenMsgTypes{v: 0b1000},
 			expectedError:    nil,
 		},
 		{
 			name:             "CommitMessageWithMultipleOperators_DoesNotIncrementCommitCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{OperatorIDs: []spectypes.OperatorID{1, 2}},
 			msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
-			expectedCounts:   MessageCounts{},
+			expectedSeen:     SeenMsgTypes{},
 			expectedError:    nil,
 		},
 		{
 			name:             "RoundChangeMessage_IncrementsRoundChangeCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.RoundChangeMsgType},
-			expectedCounts:   MessageCounts{RoundChange: 1},
+			expectedSeen:     SeenMsgTypes{v: 0b10000},
 			expectedError:    nil,
 		},
 		{
 			name:             "UnexpectedMessageType_ReturnsError",
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.MessageType(12345)},
-			expectedCounts:   MessageCounts{},
+			expectedSeen:     SeenMsgTypes{},
 			expectedError:    fmt.Errorf("unexpected signed message type"),
 		},
 	}
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			counts := &MessageCounts{}
-			err := counts.RecordConsensusMessage(tc.signedSSVMessage, tc.msg)
+			seen := &SeenMsgTypes{}
+			err := seen.RecordConsensusMessage(tc.signedSSVMessage, tc.msg)
 
 			if tc.expectedError != nil {
 				require.EqualError(t, err, tc.expectedError.Error())
@@ -126,17 +125,16 @@ func TestRecordConsensusMessage(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			require.Equal(t, tc.expectedCounts, *counts)
+			require.Equal(t, tc.expectedSeen, *seen)
 		})
 	}
 }
 
 func TestValidateConsensusMessage(t *testing.T) {
 	type input struct {
-		counts           *MessageCounts
+		seenMsgTypes     *SeenMsgTypes
 		signedSSVMessage *spectypes.SignedSSVMessage
 		msg              *specqbft.Message
-		limits           MessageCounts
 	}
 
 	tt := []struct {
@@ -147,60 +145,54 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "ProposalMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				counts:           &MessageCounts{Proposal: 2},
+				seenMsgTypes:     &SeenMsgTypes{v: 0b10},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
-				limits:           MessageCounts{Proposal: 0},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got proposal, having pre-consensus: 0, proposal: 2, prepare: 0, commit: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got proposal, having proposal"),
 		},
 		{
 			name: "PrepareMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				counts:           &MessageCounts{Prepare: 2},
+				seenMsgTypes:     &SeenMsgTypes{v: 0b100},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.PrepareMsgType},
-				limits:           MessageCounts{Prepare: 0},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got prepare, having pre-consensus: 0, proposal: 0, prepare: 2, commit: 0, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got prepare, having prepare"),
 		},
 		{
 			name: "CommitMessageWithSingleOperator_ExceedsLimit_ReturnsError",
 			input: input{
-				counts:           &MessageCounts{Commit: 2},
+				seenMsgTypes:     &SeenMsgTypes{v: 0b1000},
 				signedSSVMessage: &spectypes.SignedSSVMessage{OperatorIDs: []spectypes.OperatorID{1}},
 				msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
-				limits:           MessageCounts{Commit: 0},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 2, round change: 0, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got commit, having commit"),
 		},
 		{
 			name: "RoundChangeMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				counts:           &MessageCounts{RoundChange: 2},
+				seenMsgTypes:     &SeenMsgTypes{v: 0b10000},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.RoundChangeMsgType},
-				limits:           MessageCounts{RoundChange: 0},
 			},
-			expectedError: fmt.Errorf("message is duplicated, got round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, round change: 2, post-consensus: 0"),
+			expectedError: fmt.Errorf("message is duplicated, got round change, having round change"),
 		},
 		{
 			name: "UnexpectedMessageType_ReturnsError",
 			input: input{
-				counts:           &MessageCounts{},
+				seenMsgTypes:     &SeenMsgTypes{},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.MessageType(12345)},
-				limits:           MessageCounts{},
 			},
 			expectedError: fmt.Errorf("unexpected signed message type"),
 		},
 		{
 			name: "ValidProposalMessage_HappyFlow",
 			input: input{
-				counts:           &MessageCounts{Proposal: 2},
+				seenMsgTypes:     &SeenMsgTypes{v: 0b0},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
-				limits:           MessageCounts{Proposal: 100},
 			},
 			expectedError: nil,
 		},
@@ -208,14 +200,13 @@ func TestValidateConsensusMessage(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.input.counts.ValidateConsensusMessage(tc.input.signedSSVMessage, tc.input.msg, tc.input.limits)
+			err := tc.input.seenMsgTypes.ValidateConsensusMessage(tc.input.signedSSVMessage, tc.input.msg)
 
 			if tc.expectedError != nil {
 				require.EqualError(t, err, tc.expectedError.Error())
 			} else {
 				require.NoError(t, err)
 			}
-
 		})
 	}
 }
