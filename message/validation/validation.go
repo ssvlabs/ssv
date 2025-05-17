@@ -109,7 +109,7 @@ func New(
 		opt(mv)
 	}
 
-	// Start automatic expired item deletion for validationLockCache.
+	// Start automatic expired item deletion for validationLockCache and state.
 	go mv.validationLockCache.Start()
 	// Start automatic expired item deletion for state.
 	go mv.state.Start()
