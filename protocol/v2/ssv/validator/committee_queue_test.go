@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1528,4 +1529,181 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&processedMessagesCount))
 	assert.Equal(t, 2, q.Q.Len())
+}
+
+// TestConsumeQueueBurstTraffic verifies that under a burst of interleaved messages,
+// the queue still pops messages in non-decreasing priority order (ExecuteDuty → PartialSignature → Proposal → Prepare → Commit → RoundChange)
+// and that we pop exactly the same number of messages of each type as we enqueued.
+func TestConsumeQueueBurstTraffic(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// --- Setup a single-slot committee and its queue ---
+	slot := phase0.Slot(42)
+	committee := &Committee{
+		ctx:           ctx,
+		Queues:        make(map[phase0.Slot]queueContainer),
+		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+	}
+	qc := queueContainer{
+		Q: queue.New(1000),
+		queueState: &queue.State{
+			HasRunningInstance: true,
+			Height:             specqbft.Height(slot),
+			Slot:               slot,
+			Round:              1,
+		},
+	}
+	committee.Queues[slot] = qc
+
+	// Mark that consensus is already decided & proposal accepted → partial-sigs allowed
+	acceptedProposal := &specqbft.ProcessingMessage{
+		QBFTMessage: &specqbft.Message{
+			Height:  specqbft.Height(slot),
+			Round:   1,
+			MsgType: specqbft.ProposalMsgType,
+		},
+	}
+	committee.Runners[slot] = &runner.CommitteeRunner{
+		BaseRunner: &runner.BaseRunner{
+			State: &runner.State{
+				RunningInstance: &instance.Instance{
+					State: &specqbft.State{
+						Decided:                         true,
+						ProposalAcceptedForCurrentRound: acceptedProposal,
+						Round:                           1,
+					},
+				},
+			},
+		},
+	}
+
+	// --- Build 200 randomized messages and count expected per priority bucket ---
+	var (
+		allMsgs        []*queue.SSVMessage
+		expectedCounts = make(map[int]int)
+	)
+	rnd := rand.New(rand.NewSource(1234))
+	for i := 0; i < 200; i++ {
+		id := spectypes.MessageID{byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)}
+		var m *queue.SSVMessage
+
+		switch rnd.Intn(6) {
+		case 0: // ExecuteDuty event
+			data, err := json.Marshal(&types.ExecuteCommitteeDutyData{Duty: &spectypes.CommitteeDuty{Slot: slot}})
+			require.NoError(t, err)
+			m = makeTestSSVMessage(t, message.SSVEventMsgType, id, &types.EventMsg{Type: types.ExecuteDuty, Data: data})
+
+		case 1: // Partial signature
+			ps := &spectypes.PartialSignatureMessages{
+				Slot: slot,
+				Messages: []*spectypes.PartialSignatureMessage{{
+					Signer:           1,
+					SigningRoot:      [32]byte{},
+					ValidatorIndex:   0,
+					PartialSignature: make([]byte, 96),
+				}},
+			}
+			m = makeTestSSVMessage(t, spectypes.SSVPartialSignatureMsgType, id, ps)
+
+		case 2: // Proposal
+			m = makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, id,
+				&specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.ProposalMsgType},
+			)
+
+		case 3: // Prepare
+			m = makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, id,
+				&specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.PrepareMsgType},
+			)
+
+		case 4: // Commit
+			m = makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, id,
+				&specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.CommitMsgType},
+			)
+
+		case 5: // RoundChange
+			m = makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, id,
+				&specqbft.Message{Height: specqbft.Height(slot), Round: 2, MsgType: specqbft.RoundChangeMsgType},
+			)
+		}
+
+		allMsgs = append(allMsgs, m)
+	}
+
+	priority := func(m *queue.SSVMessage) int {
+		switch m.MsgType {
+		case message.SSVEventMsgType:
+			return 0
+		case spectypes.SSVPartialSignatureMsgType:
+			return 1
+		case spectypes.SSVConsensusMsgType:
+			switch m.Body.(*specqbft.Message).MsgType {
+			case specqbft.ProposalMsgType:
+				return 2
+			case specqbft.PrepareMsgType:
+				return 3
+			case specqbft.CommitMsgType:
+				return 4
+			case specqbft.RoundChangeMsgType:
+				return 5
+			}
+		default:
+		}
+		return 6
+	}
+
+	// Count how many we expect in each bucket
+	for _, m := range allMsgs {
+		expectedCounts[priority(m)]++
+	}
+
+	// --- Shuffle and enqueue all messages ---
+	rnd.Shuffle(len(allMsgs), func(i, j int) {
+		allMsgs[i], allMsgs[j] = allMsgs[j], allMsgs[i]
+	})
+	for _, m := range allMsgs {
+		require.True(t, qc.Q.TryPush(m))
+	}
+
+	// --- Drain the queue, capturing the priority bucket of each popped message ---
+	var buckets []int
+	handlerC := make(chan struct{}, len(allMsgs))
+	handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
+		buckets = append(buckets, priority(m))
+		handlerC <- struct{}{}
+		return nil
+	}
+	go func() {
+		_ = committee.ConsumeQueue(ctx, qc, logger, handler, committee.Runners[slot])
+	}()
+
+	// Wait for exactly len(allMsgs) messages (or fail on timeout)
+	for i := 0; i < len(allMsgs); i++ {
+		select {
+		case <-handlerC:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for message %d/%d", i+1, len(allMsgs))
+		}
+	}
+	cancel()
+
+	// --- 1) Assert monotonic (non-decreasing) priorities ---
+	for i := 1; i < len(buckets); i++ {
+		require.LessOrEqualf(
+			t,
+			buckets[i-1],
+			buckets[i],
+			"priority dropped at index %d: %d → %d",
+			i-1, buckets[i-1], buckets[i],
+		)
+	}
+
+	// --- 2) Assert we popped exactly the same counts per bucket ---
+	actualCounts := make(map[int]int)
+	for _, b := range buckets {
+		actualCounts[b]++
+	}
+	require.Equal(t, expectedCounts, actualCounts)
 }
