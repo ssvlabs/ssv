@@ -15,11 +15,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type AggregatorRunner struct {
@@ -257,14 +258,15 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		successfullySubmittedAggregates++
 		logger.Debug("✅ successful submitted aggregate",
 			fields.SubmissionTime(time.Since(start)),
-			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(r.measurements.TotalDutyTime()))
 	}
 
 	r.GetState().Finished = true
 
 	r.measurements.EndDutyFlow()
 
-	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
+	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
 	recordSuccessfulSubmission(ctx,
 		successfullySubmittedAggregates,
 		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),

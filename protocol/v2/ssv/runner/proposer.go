@@ -372,14 +372,15 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),
 			zap.NamedError("summarize_err", summarizeErr),
-			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(r.measurements.TotalDutyTime()))
 	}
 
 	r.GetState().Finished = true
 
 	r.measurements.EndDutyFlow()
 
-	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
+	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
 	recordSuccessfulSubmission(ctx,
 		uint32(successfullySubmittedProposals),
 		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),

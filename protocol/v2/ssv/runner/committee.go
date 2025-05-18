@@ -19,12 +19,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var (
@@ -512,7 +513,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		recordDutyDuration(ctx, cr.measurements.DutyDurationTime(), spectypes.BNRoleAttester, cr.BaseRunner.State.RunningInstance.State.Round)
+		recordDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.BNRoleAttester, cr.BaseRunner.State.RunningInstance.State.Round)
 
 		attestationsCount := len(attestations)
 		if attestationsCount <= math.MaxUint32 {
@@ -534,6 +535,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.BlockRoot(attData.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(cr.measurements.TotalDutyTime()),
 			fields.Count(attestationsCount),
 		)
 
@@ -557,7 +559,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
 
-		recordDutyDuration(ctx, cr.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
+		recordDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
 
 		syncMsgsCount := len(syncCommitteeMessages)
 		if syncMsgsCount <= math.MaxUint32 {
@@ -573,6 +575,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(cr.measurements.TotalDutyTime()),
 			fields.Count(syncMsgsCount),
 		)
 
