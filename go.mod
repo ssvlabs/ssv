@@ -269,3 +269,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 replace github.com/attestantio/go-eth2-client => github.com/ssvlabs/go-eth2-client v0.6.31-0.20250417062221-9cd9b891d4d6
+
+replace github.com/ssvlabs/eth2-key-manager => github.com/ssvlabs/eth2-key-manager v1.5.5-0.20250508122635-d42891dd0240
