@@ -1301,7 +1301,12 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 // 3. Add messages in a non-prioritized order: Commit, Proposal (for current round, but one is already accepted), Prepare, ChangeRound (for next round).
 // 4. Add an ExecuteDuty event message, which should have high priority.
 // 5. Start consuming the queue.
-// 6. Verify messages are processed in the expected priority order: ExecuteDuty, Proposal, Prepare, Commit, RoundChange.
+// 6. Assert the processing order:
+//  1. ExecuteDuty (highest event priority)
+//  2. Proposal (highest among consensus types)
+//  3. Prepare
+//  4. Commit
+//  5. RoundChange (lowest among consensus types)
 func TestConsumeQueuePrioritization(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
@@ -1318,29 +1323,28 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	currentRound := specqbft.Round(1)
 	nextRound := specqbft.Round(2)
 
-	// Messages - added in a non-priority order initially
-	// IDs are arbitrary but unique for tracking.
+	// Build message bodies out of strict priority context
 	commitMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.CommitMsgType}
-	proposalMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.ProposalMsgType} // A second proposal for the same round
+	proposalMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.ProposalMsgType}
 	prepareMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
-	changeRoundMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: nextRound, MsgType: specqbft.RoundChangeMsgType} // For next round
+	changeRoundMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: nextRound, MsgType: specqbft.RoundChangeMsgType}
 
 	executeDutyData := &types.ExecuteCommitteeDutyData{Duty: &spectypes.CommitteeDuty{Slot: slot}}
 	dutyDataJSON, err := json.Marshal(executeDutyData)
 	require.NoError(t, err)
 	eventMsgBody := &types.EventMsg{Type: types.ExecuteDuty, Data: dutyDataJSON}
 
-	// Order of adding to queue (does not dictate processing order)
+	// Enqueue out-of-order messages; processing order is determined by prioritizer
 	testMessages := []*queue.SSVMessage{
-		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{1}, commitMsgBody),      // Lowest expected priority among these QBFT msgs
-		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{2}, proposalMsgBody),    // Lower priority as one is accepted
-		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{3}, prepareMsgBody),     // Mid priority
-		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{4}, changeRoundMsgBody), // High QBFT priority (next round)
-		makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{5}, eventMsgBody),             // Highest priority (event)
+		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{1}, commitMsgBody),
+		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{2}, proposalMsgBody),
+		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{3}, prepareMsgBody),
+		makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{4}, changeRoundMsgBody),
+		makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{5}, eventMsgBody),
 	}
 
 	q := queueContainer{
-		Q: queue.New(10), // Sufficient capacity
+		Q: queue.New(10),
 		queueState: &queue.State{
 			HasRunningInstance: true,
 			Height:             specqbft.Height(slot),
@@ -1348,37 +1352,30 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 			Round:              currentRound,
 		},
 	}
-
 	for _, msg := range testMessages {
 		q.Q.TryPush(msg)
 	}
 
-	// Runner state: Proposal already accepted for the current round, not yet decided.
-	acceptedProposal := &specqbft.ProcessingMessage{
-		QBFTMessage: &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.ProposalMsgType},
-	}
+	// Runner with a proposal already accepted, not yet decided
+	acceptedProposal := &specqbft.ProcessingMessage{QBFTMessage: proposalMsgBody}
 	committeeRunner := &runner.CommitteeRunner{
 		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: acceptedProposal,
-						Round:                           currentRound,
-						Height:                          specqbft.Height(slot),
-					},
-				},
-			},
+			State: &runner.State{RunningInstance: &instance.Instance{State: &specqbft.State{
+				Decided:                         false,
+				ProposalAcceptedForCurrentRound: acceptedProposal,
+				Round:                           currentRound,
+				Height:                          specqbft.Height(slot),
+			}}},
 		},
 	}
 
-	var receivedMessages []*queue.SSVMessage
+	var received []*queue.SSVMessage
 	var mu sync.Mutex
 	handlerCalled := make(chan struct{}, len(testMessages))
 
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 		mu.Lock()
-		receivedMessages = append(receivedMessages, msg)
+		received = append(received, msg)
 		mu.Unlock()
 		handlerCalled <- struct{}{}
 		return nil
@@ -1386,11 +1383,12 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 
 	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
+	// Wait for all messages
 	for i := 0; i < len(testMessages); i++ {
 		select {
 		case <-handlerCalled:
 		case <-time.After(2 * time.Second):
-			t.Fatalf("timed out waiting for all messages to be processed, got %d, expected %d", len(receivedMessages), len(testMessages))
+			t.Fatalf("timed out waiting for all messages processed, got %d", len(received))
 		}
 	}
 
@@ -1399,38 +1397,26 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
+	require.Len(t, received, len(testMessages))
 
-	require.Equal(t, len(testMessages), len(receivedMessages))
-
-	// Expected priority order based on actual implementation:
-	// ExecuteDuty first (checked separately),
-	// Then QBFT messages in order: Proposal, Prepare, Commit, RoundChange
-
-	expectedQBFTOrder := []specqbft.MessageType{
+	// Check ordering: Event first, then QBFT by type score
+	expected := []specqbft.MessageType{
 		specqbft.ProposalMsgType,
 		specqbft.PrepareMsgType,
 		specqbft.CommitMsgType,
 		specqbft.RoundChangeMsgType,
 	}
 
-	var actualQBFTOrder []specqbft.MessageType
-	var actualEventMsgFound bool
+	// Confirm event processed first
+	assert.Equal(t, message.SSVEventMsgType, received[0].MsgType)
+	assert.Equal(t, eventMsgBody, received[0].Body.(*types.EventMsg))
 
-	if len(receivedMessages) > 0 {
-		if receivedMessages[0].MsgType == message.SSVEventMsgType {
-			actualEventMsgFound = true
-			assert.Equal(t, eventMsgBody, receivedMessages[0].Body.(*types.EventMsg))
-		}
-
-		for _, msg := range receivedMessages {
-			if ssvConsensusMsg, ok := msg.Body.(*specqbft.Message); ok {
-				actualQBFTOrder = append(actualQBFTOrder, ssvConsensusMsg.MsgType)
-			}
-		}
+	var actual []specqbft.MessageType
+	for _, m := range received[1:] {
+		actual = append(actual, m.Body.(*specqbft.Message).MsgType)
 	}
 
-	assert.True(t, actualEventMsgFound)
-	assert.Equal(t, expectedQBFTOrder, actualQBFTOrder)
+	assert.Equal(t, expected, actual)
 }
 
 // TestHandleMessageQueueFullAndDropping verifies that HandleMessage drops messages
