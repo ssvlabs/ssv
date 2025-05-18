@@ -49,9 +49,9 @@ type P2PNetwork interface {
 	ActiveSubnets() commons.Subnets
 	// FixedSubnets returns fixed subnets
 	FixedSubnets() commons.Subnets
-
-	// used for tests and api
+	// PeersByTopic returns topic->peers mapping for all peers we are connected to
 	PeersByTopic() map[string][]peer.ID
+	// Peers returns all peers we are connected to
 	Peers() []peer.ID
 }
 
