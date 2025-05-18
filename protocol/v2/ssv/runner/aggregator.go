@@ -93,8 +93,9 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregator)
 
-	// only 1 root, verified by basePreConsensusMsgProcessing
+	// only 1 root, verified by expectedPreConsensusRootsAndDomain
 	root := roots[0]
+
 	// reconstruct selection proof sig
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
@@ -218,59 +219,57 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregator)
 
-	var successfullySubmittedAggregates uint32
-	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
-		if err != nil {
-			// If the reconstructed signature verification failed, fall back to verifying each partial signature
-			for _, root := range roots {
-				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-			}
-			return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
-		}
-		specSig := phase0.BLSSignature{}
-		copy(specSig[:], sig)
+	// only 1 root, verified by expectedPostConsensusRootsAndDomain
+	root := roots[0]
 
-		cd := &spectypes.ValidatorConsensusData{}
-		err = cd.Decode(r.GetState().DecidedValue)
-		if err != nil {
-			return errors.Wrap(err, "could not create consensus data")
-		}
-		aggregateAndProof, _, err := cd.GetAggregateAndProof()
-		if err != nil {
-			return errors.Wrap(err, "could not get aggregate and proof")
-		}
+	sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	if err != nil {
+		// If the reconstructed signature verification failed, fall back to verifying each partial signature
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+	}
+	specSig := phase0.BLSSignature{}
+	copy(specSig[:], sig)
 
-		msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
-		if err != nil {
-			return errors.Wrap(err, "could not construct versioned aggregate and proof")
-		}
-
-		start := time.Now()
-
-		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
-			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
-				fields.SubmissionTime(time.Since(start)),
-				zap.Error(err))
-			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
-		}
-		successfullySubmittedAggregates++
-		logger.Debug("✅ successful submitted aggregate",
-			fields.SubmissionTime(time.Since(start)),
-			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
-			fields.TotalDutyTime(r.measurements.TotalDutyTime()))
+	cd := &spectypes.ValidatorConsensusData{}
+	err = cd.Decode(r.GetState().DecidedValue)
+	if err != nil {
+		return errors.Wrap(err, "could not create consensus data")
+	}
+	aggregateAndProof, _, err := cd.GetAggregateAndProof()
+	if err != nil {
+		return errors.Wrap(err, "could not get aggregate and proof")
 	}
 
-	r.GetState().Finished = true
+	msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
+	if err != nil {
+		return errors.Wrap(err, "could not construct versioned aggregate and proof")
+	}
 
+	start := time.Now()
+
+	if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
+		recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
+		logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
+			fields.SubmissionTime(time.Since(start)),
+			zap.Error(err))
+		return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
+	}
+	logger.Debug("✅ successful submitted aggregate",
+		fields.SubmissionTime(time.Since(start)),
+		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+		fields.TotalDutyTime(r.measurements.TotalDutyTime()))
+
+	r.GetState().Finished = true
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx,
-		successfullySubmittedAggregates,
+	recordSuccessfulSubmission(
+		ctx,
+		1,
 		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleAggregator)
+		spectypes.BNRoleAggregator,
+	)
 
 	return nil
 }

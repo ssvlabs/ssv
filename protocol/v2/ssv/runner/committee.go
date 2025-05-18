@@ -517,10 +517,12 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		attestationsCount := len(attestations)
 		if attestationsCount <= math.MaxUint32 {
-			recordSuccessfulSubmission(ctx,
+			recordSuccessfulSubmission(
+				ctx,
 				uint32(attestationsCount),
 				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
-				spectypes.BNRoleAttester)
+				spectypes.BNRoleAttester,
+			)
 		}
 
 		attData, err := attestations[0].Data()
@@ -563,10 +565,12 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		syncMsgsCount := len(syncCommitteeMessages)
 		if syncMsgsCount <= math.MaxUint32 {
-			recordSuccessfulSubmission(ctx,
+			recordSuccessfulSubmission(
+				ctx,
 				uint32(syncMsgsCount),
 				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
-				spectypes.BNRoleSyncCommittee)
+				spectypes.BNRoleSyncCommittee,
+			)
 		}
 
 		logger.Info("✅ successfully submitted sync committee",
@@ -663,14 +667,14 @@ func findValidators(
 }
 
 // Unneeded since no preconsensus phase
-func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (cr *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("no pre consensus root for committee runner")
 }
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("expected post consensus roots function is unused")
+func (cr *CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return nil, spectypes.DomainError, errors.New("unexpected expectedPostConsensusRootsAndDomain func call")
 }
 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(logger *zap.Logger) (

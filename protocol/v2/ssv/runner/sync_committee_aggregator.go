@@ -131,6 +131,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 
 	if len(selectionProofs) == 0 {
 		r.GetState().Finished = true
+		r.measurements.EndDutyFlow()
 		return nil
 	}
 
@@ -320,14 +321,15 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	}
 
 	r.GetState().Finished = true
-
 	r.measurements.EndDutyFlow()
 
 	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx,
+	recordSuccessfulSubmission(
+		ctx,
 		successfullySubmittedContributions,
 		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleSyncCommitteeContribution)
+		spectypes.BNRoleSyncCommitteeContribution,
+	)
 
 	return nil
 }
