@@ -742,17 +742,23 @@ func TestChangingFilterState(t *testing.T) {
 	assert.Equal(t, specqbft.PrepareMsgType, seen2.Body.(*specqbft.Message).MsgType)
 }
 
-// TestQueueSaturationWithFilteredMessages tests whether a queue can get filled with filtered messages
-// and potentially drop important messages when filter conditions change
+// TestQueueSaturationWithFilteredMessages simulates a heavy load of low‐priority messages
+// (Prepare) that, due to the runner’s initial state, are filtered out and never consumed,
+// filling the queue to capacity.  We then verify that high‐priority messages (ExecuteDuty
+// and Proposal) still get through despite the full queue, and finally flip the runner’s
+// filter state so that the previously filtered Prepare messages become consumable—and
+// observe whether they drain out.
 //
-// Flow:
-// 1. Set up a small queue (capacity 5) and a runner that filters prepare messages
-// 2. Fill the queue completely with filtered prepare messages (not processed)
-// 3. Test if critical ExecuteDuty messages are still accepted and processed despite full queue
-// 4. Test if proposal messages are also accepted and processed despite full queue
-// 5. Change the runner state to accept prepare messages by setting ProposalAcceptedForCurrentRound
-// 6. Verify if previously filtered messages are now processed or remain in the queue
-// 7. Confirm the issue: filtered messages accumulate and aren't reprocessed when filter state changes
+//  1. Create a Committee with a tiny queue (capacity=5) and a runner whose State initially
+//     rejects all Prepare messages.
+//  2. Start the consumer goroutine via safeConsumeQueue.
+//  3. Push 5 Prepare messages—none should be processed because they’re filtered.
+//  4. Push an ExecuteDuty event—this must bypass the full queue and be processed immediately.
+//  5. Push a Proposal message—likewise, should be processed even though the queue was full.
+//  6. Cancel the first context, flip the runner’s State.ProposalAcceptedForCurrentRound so that
+//     Prepares are now accepted, and restart consumption under a new context.
+//  7. Observe over a short window how many of the old Prepare messages now drain.
+//  8. Assert that at least our two critical messages did indeed get handled.
 func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -768,14 +774,13 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	slot := phase0.Slot(123)
 	queueCapacity := 5
 
-	// Setup a runner with no proposal accepted state - will filter Prepare/Commit messages
 	committeeRunner := &runner.CommitteeRunner{
 		BaseRunner: &runner.BaseRunner{
 			State: &runner.State{
 				RunningInstance: &instance.Instance{
 					State: &specqbft.State{
 						Decided:                         false,
-						ProposalAcceptedForCurrentRound: nil, // no proposal accepted initially
+						ProposalAcceptedForCurrentRound: nil,
 						Round:                           1,
 					},
 				},
@@ -795,11 +800,14 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		},
 	}
 
-	processedMsgs := make([]*queue.SSVMessage, 0)
-	var processMsgsMutex sync.Mutex
-	handlerCalled := make(chan struct{}, queueCapacity*3) // buffer to avoid blocking
+	var (
+		processedMsgs    []*queue.SSVMessage
+		processMsgsMutex sync.Mutex
+		handlerCalled    = make(chan struct{}, queueCapacity*3)
+	)
 
-	handler := func(hCtx context.Context, hLogger *zap.Logger, msg *queue.SSVMessage) error {
+	// inline handler
+	processFn := func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 		processMsgsMutex.Lock()
 		processedMsgs = append(processedMsgs, msg)
 		processMsgsMutex.Unlock()
@@ -809,183 +817,104 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-
 	go func() {
 		defer wg.Done()
 		<-ctx.Done()
 	}()
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, runnerMutex)
+	// start consuming with initial filter
+	safeConsumeQueue(t, ctx, committee, q, logger, processFn, committeeRunner, runnerMutex)
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Fill the queue COMPLETELY with prepare messages that will be filtered
-	logger.Debug("pushing filtered messages to fill queue completely")
+	// fill with filtered Prepare messages
 	for i := 0; i < queueCapacity; i++ {
 		msgID := spectypes.MessageID{byte(i + 1)}
-		qbftMsg := &specqbft.Message{
-			Height:  specqbft.Height(slot),
-			Round:   1,
-			MsgType: specqbft.PrepareMsgType,
-		}
-		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, qbftMsg)
-		pushed := q.Q.TryPush(testMsg)
-		require.True(t, pushed)
+		prepare := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.PrepareMsgType}
+		require.True(t, q.Q.TryPush(makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepare)))
 	}
 
-	time.Sleep(100 * time.Millisecond)
-
-	// No messages should have been processed due to filtering
+	// nothing should come through yet
 	select {
 	case <-handlerCalled:
-		t.Fatalf("a filtered message was processed, which shouldn't happen at this stage")
+		t.Fatal("filtered message was processed too early")
 	default:
-		// no messages should be processed yet
 	}
 
-	executedutyMsgID := spectypes.MessageID{0xEE}
-	executeDutyData := &types.ExecuteCommitteeDutyData{
-		Duty: &spectypes.CommitteeDuty{
-			Slot: slot,
-		},
-	}
-
-	dutyDataJSON, err := json.Marshal(executeDutyData)
-	require.NoError(t, err)
-
-	eventMsg := &types.EventMsg{
-		Type: types.ExecuteDuty,
-		Data: dutyDataJSON,
-	}
-	executeDutyMsg := makeTestSSVMessage(t, message.SSVEventMsgType, executedutyMsgID, eventMsg)
-
-	logger.Debug("pushing executeDuty message to full queue")
-	var pushed bool
-	pushed = q.Q.TryPush(executeDutyMsg)
-	assert.True(t, pushed)
-
+	// push ExecuteDuty
+	execData, _ := json.Marshal(&types.ExecuteCommitteeDutyData{Duty: &spectypes.CommitteeDuty{Slot: slot}})
+	execMsg := makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{0xEE}, &types.EventMsg{Type: types.ExecuteDuty, Data: execData})
+	require.True(t, q.Q.TryPush(execMsg))
 	select {
 	case <-handlerCalled:
-		logger.Debug("executeDuty message processed despite full queue")
 	case <-time.After(500 * time.Millisecond):
-		t.Fatalf("timed out waiting for executeDuty message to be processed")
+		t.Fatal("timed out on ExecuteDuty")
 	}
 
-	// Try to push a proposal message - should also succeed due to prioritization
-	proposalMsgID := spectypes.MessageID{0xFF}
-	qbftProposalMsg := &specqbft.Message{
-		Height:  specqbft.Height(slot),
-		Round:   1,
-		MsgType: specqbft.ProposalMsgType,
-	}
-	proposalMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, proposalMsgID, qbftProposalMsg)
-
-	logger.Debug("pushing proposal message to full queue")
-	pushed = q.Q.TryPush(proposalMsg)
-	assert.True(t, pushed)
-
+	// push Proposal
+	proposal := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.ProposalMsgType}
+	propMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{0xFF}, proposal)
+	require.True(t, q.Q.TryPush(propMsg))
 	select {
 	case <-handlerCalled:
-		logger.Debug("proposal message processed despite full queue")
 	case <-time.After(500 * time.Millisecond):
-		t.Fatalf("timed out waiting for proposal message to be processed")
+		t.Fatal("timed out on Proposal")
 	}
 
+	// now flip runner state so prepares become valid
 	cancel()
 	wg.Wait()
 
 	ctx2, cancel2 := context.WithCancel(t.Context())
 	defer cancel2()
 
-	logger.Debug("updating runner state to process filtered messages")
-	processedProposal := &specqbft.ProcessingMessage{
-		QBFTMessage: qbftProposalMsg,
-	}
-
 	runnerMutex.Lock()
-	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound = processedProposal
+	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
+		&specqbft.ProcessingMessage{QBFTMessage: proposal}
 	runnerMutex.Unlock()
 
+	// restart consumption to let the old Prepares through
 	wg.Add(1)
-
 	go func() {
 		defer wg.Done()
 		<-ctx2.Done()
 	}()
+	safeConsumeQueue(t, ctx2, committee, q, logger, processFn, committeeRunner, runnerMutex)
 
-	safeConsumeQueue(t, ctx2, committee, q, logger, handler, committeeRunner, runnerMutex)
-
-	// Observe if previously filtered messages are processed after state change.
-	// Rely on handlerCalled and a timeout for this observation phase.
-	timeoutForReprocessing := time.After(1 * time.Second)
-	additionalProcessedCount := 0
-
-	logCh := make(chan string, 10)
-	defer close(logCh)
-
-observeReprocessingLoop:
+	// observe how many of the old Prepares now drain
+	drained := 0
+	timeout := time.After(1 * time.Second)
+Loop:
 	for {
 		select {
 		case <-handlerCalled:
-			additionalProcessedCount++
-			logCh <- fmt.Sprintf("message processed after state change (count: %d)", additionalProcessedCount)
-		case <-timeoutForReprocessing:
-			logCh <- fmt.Sprintf("timeout reached while observing reprocessing (count: %d)", additionalProcessedCount)
-			break observeReprocessingLoop
-		case <-ctx2.Done(): // If the main test context is cancelled earlier
-			logCh <- fmt.Sprintf("context done while observing reprocessing (count: %d)", additionalProcessedCount)
-			break observeReprocessingLoop
+			drained++
+		case <-timeout:
+			break Loop
 		}
 	}
 
-	// Process any log messages that were sent
-	for len(logCh) > 0 {
-		logMsg := <-logCh
-		logger.Debug(logMsg)
-	}
+	finalLen := q.Q.Len()
+	t.Logf("drained %d previously filtered, %d remain", drained, finalLen)
 
-	cancel2()
-	wg.Wait()
-
-	finalQueueLen := q.Q.Len()
-	if finalQueueLen > 0 {
-		t.Logf("ISSUE CONFIRMED: %d messages remain in the queue and were not reprocessed after state change (or during reprocessing observation window)",
-			finalQueueLen)
-		t.Log("CHECK ME: filtered messages accumulate and aren't reprocessed when filter state changes, or reprocessing was incomplete within the timeout.")
-	} else {
-		t.Log("all messages were processed after state change, or queue emptied during observation window.")
-	}
-
+	// verify essentials still got through
 	processMsgsMutex.Lock()
 	defer processMsgsMutex.Unlock()
-
-	processedTypes := make(map[spectypes.MsgType]int)
-	processedQbftTypes := make(map[specqbft.MessageType]int)
-
-	var executeDutyProcessed, proposalProcessed bool
-
-	for _, msg := range processedMsgs {
-		processedTypes[msg.MsgType]++
-
-		switch msg.MsgType {
-		case message.SSVEventMsgType:
-			if event, ok := msg.Body.(*types.EventMsg); ok && event.Type == types.ExecuteDuty {
-				executeDutyProcessed = true
+	var sawExec, sawProp bool
+	for _, m := range processedMsgs {
+		if m.MsgType == message.SSVEventMsgType {
+			if e := m.Body.(*types.EventMsg); e.Type == types.ExecuteDuty {
+				sawExec = true
 			}
-		case spectypes.SSVConsensusMsgType:
-			if qbftMsg, ok := msg.Body.(*specqbft.Message); ok {
-				processedQbftTypes[qbftMsg.MsgType]++
-				if qbftMsg.MsgType == specqbft.ProposalMsgType {
-					proposalProcessed = true
-				}
+		}
+		if m.MsgType == spectypes.SSVConsensusMsgType {
+			if b := m.Body.(*specqbft.Message); b.MsgType == specqbft.ProposalMsgType {
+				sawProp = true
 			}
-		default:
-			// skip
 		}
 	}
-
-	assert.True(t, executeDutyProcessed)
-	assert.True(t, proposalProcessed)
+	assert.True(t, sawExec, "missing ExecuteDuty")
+	assert.True(t, sawProp, "missing Proposal")
 }
 
 // TestCommitteeQueueFilteringScenarios tests different filtering scenarios and their impact on queue processing
