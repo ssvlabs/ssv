@@ -742,23 +742,19 @@ func TestChangingFilterState(t *testing.T) {
 	assert.Equal(t, specqbft.PrepareMsgType, seen2.Body.(*specqbft.Message).MsgType)
 }
 
-// TestQueueSaturationWithFilteredMessages simulates a heavy load of low‐priority messages
-// (Prepare) that, due to the runner’s initial state, are filtered out and never consumed,
-// filling the queue to capacity.  We then verify that high‐priority messages (ExecuteDuty
-// and Proposal) still get through despite the full queue, and finally flip the runner’s
-// filter state so that the previously filtered Prepare messages become consumable—and
-// observe whether they drain out.
+// TestQueueSaturationWithFilteredMessages verifies queue behavior when saturated with messages that are initially
+// filtered, then become processable after a state change, ensuring high-priority messages are handled correctly throughout.
 //
-//  1. Create a Committee with a tiny queue (capacity=5) and a runner whose State initially
-//     rejects all Prepare messages.
-//  2. Start the consumer goroutine via safeConsumeQueue.
-//  3. Push 5 Prepare messages—none should be processed because they’re filtered.
-//  4. Push an ExecuteDuty event—this must bypass the full queue and be processed immediately.
-//  5. Push a Proposal message—likewise, should be processed even though the queue was full.
-//  6. Cancel the first context, flip the runner’s State.ProposalAcceptedForCurrentRound so that
-//     Prepares are now accepted, and restart consumption under a new context.
-//  7. Observe over a short window how many of the old Prepare messages now drain.
-//  8. Assert that at least our two critical messages did indeed get handled.
+// Flow:
+//  1. Set up a committee with a small queue (capacity 5) and a runner that initially filters Prepare messages.
+//  2. Start consuming the queue.
+//  3. Fill the queue with Prepare messages (which should be filtered and not processed).
+//  4. Push an ExecuteDuty event message; verify it is processed despite the "full" queue of filtered messages.
+//  5. Push a Proposal message; verify it is also processed.
+//  6. Change the runner's state to accept Prepare messages.
+//  7. Restart queue consumption under a new context.
+//  8. Observe that the previously filtered Prepare messages are now processed.
+//  9. Verify that the critical ExecuteDuty and Proposal messages were indeed processed.
 func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -1350,7 +1346,15 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 }
 
 // TestHandleMessageQueueFullAndDropping verifies that HandleMessage drops messages
-// when the queue is full and logs a warning.
+// when the queue is full and implicitly checks for a warning log (though not asserted).
+//
+// Flow:
+// 1. Set up a committee with a small queue capacity (e.g., 2).
+// 2. Pre-create and add a queue container for a specific slot to the committee.
+// 3. Fill this queue to its capacity by calling HandleMessage repeatedly.
+// 4. Verify the queue length is equal to its capacity.
+// 5. Attempt to push one more message using HandleMessage.
+// 6. Verify that the message was dropped (queue length remains at capacity).
 func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
@@ -1406,6 +1410,16 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 // TestConsumeQueueStopsOnErrNoValidDuties verifies that ConsumeQueue stops
 // processing further messages if the handler returns runner.ErrNoValidDuties.
+//
+// Flow:
+//  1. Set up a committee and a queue container with multiple messages.
+//  2. Initialize a basic committee runner.
+//  3. Define a message handler that:
+//     a. Increments a counter for processed messages.
+//     b. Returns runner.ErrNoValidDuties if a specific (e.g., the first) message is processed.
+//  4. Call ConsumeQueue with this handler.
+//  5. Verify that only the message(s) processed before the error was returned were handled.
+//  6. Verify that remaining messages are still in the queue.
 func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
@@ -1461,8 +1475,17 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 }
 
 // TestConsumeQueueBurstTraffic verifies that under a burst of interleaved messages,
-// the queue still pops messages in non-decreasing priority order (ExecuteDuty → PartialSignature → Proposal → Prepare → Commit → RoundChange)
-// and that we pop exactly the same number of messages of each type as we enqueued.
+// the queue pops messages in non-decreasing priority order and processes all enqueued messages.
+//
+// Flow:
+//  1. Set up a committee with a single slot, its queue, and a runner in a "decided" state (allowing all message types).
+//  2. Generate a large number (e.g., 200) of randomized messages of different types (ExecuteDuty, PartialSignature, Proposal, Prepare, Commit, RoundChange).
+//  3. Keep track of the expected count for each message priority bucket.
+//  4. Shuffle all generated messages and push them onto the queue.
+//  5. Start consuming the queue with a handler that records the priority bucket of each popped message.
+//  6. Wait for all messages to be processed.
+//  7. Verify that the priorities of popped messages are non-decreasing.
+//  8. Verify that the actual counts of processed messages per priority bucket match the expected counts.
 func TestConsumeQueueBurstTraffic(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
