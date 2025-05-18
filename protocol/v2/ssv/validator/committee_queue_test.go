@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -74,6 +75,42 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 	return decoded
 }
 
+// safeConsumeQueue wraps ConsumeQueue execution in a goroutine and handles errors safely.
+// If runnerMutex is provided, it's used to synchronize access to the committee runner's state.
+func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
+	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
+	committeeRunner *runner.CommitteeRunner, runnerMutex ...*sync.RWMutex) {
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		var err error
+		if len(runnerMutex) > 0 && runnerMutex[0] != nil {
+			// Use mutex if provided
+			mutex := runnerMutex[0]
+			mutex.RLock()
+			err = committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+			mutex.RUnlock()
+		} else {
+			// No mutex, just call directly
+			err = committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+		}
+
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+
+	go func() {
+		for err := range errCh {
+			if err != nil {
+				t.Logf("ConsumeQueue error: %v", err)
+			}
+		}
+	}()
+}
+
 // TestHandleMessageCreatesQueue verifies that the HandleMessage method correctly
 // initializes a new queue when receiving a message for a slot that doesn't have
 // an associated queue yet.
@@ -139,7 +176,6 @@ func TestConsumeQueueBasic(t *testing.T) {
 		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-		mtx:           sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
@@ -199,10 +235,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 		return nil
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	for i := 0; i < 2; i++ {
 		select {
@@ -305,7 +338,6 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-		mtx:           sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
@@ -368,10 +400,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		return nil
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	expectedMsgCount := 4
 	for i := 0; i < expectedMsgCount; i++ {
@@ -436,7 +465,6 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-		mtx:           sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
@@ -505,10 +533,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 		return nil
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	select {
 	case <-handlerCalled:
@@ -541,7 +566,6 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-		mtx:           sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
@@ -610,10 +634,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 		return nil
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	for i := 0; i < 2; i++ {
 		select {
@@ -677,13 +698,7 @@ func TestChangingFilterState(t *testing.T) {
 		}
 		q.Q.TryPush(prepareMsg)
 
-		c := &Committee{
-			ctx:           ctx,
-			Queues:        make(map[phase0.Slot]queueContainer),
-			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-			BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-			mtx:           sync.RWMutex{},
-		}
+		c := &Committee{}
 
 		_ = c.ConsumeQueue(ctx, q, zap.NewNop(), handler, rnr)
 		return seen
@@ -747,7 +762,6 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-		mtx:           sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
@@ -800,10 +814,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		<-ctx.Done()
 	}()
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, runnerMutex)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -901,10 +912,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		<-ctx2.Done()
 	}()
 
-	errCh = make(chan error, 1)
-	go func() {
-		errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	}()
+	safeConsumeQueue(t, ctx2, committee, q, logger, handler, committeeRunner, runnerMutex)
 
 	// Observe if previously filtered messages are processed after state change.
 	// Rely on handlerCalled and a timeout for this observation phase.
@@ -1042,7 +1050,6 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				Queues:        make(map[phase0.Slot]queueContainer),
 				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 				BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-				mtx:           sync.RWMutex{},
 			}
 
 			slot := phase0.Slot(123)
@@ -1108,10 +1115,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 					}
 				}()
 			} else {
-				errCh := make(chan error, 1)
-				go func() {
-					errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-				}()
+				safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 			}
 
 			expectedProcessedCount := 0
@@ -1212,7 +1216,6 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 				Queues:        make(map[phase0.Slot]queueContainer),
 				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 				BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-				mtx:           sync.RWMutex{},
 			}
 
 			slot := phase0.Slot(123)
@@ -1265,10 +1268,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 				return nil
 			}
 
-			errCh := make(chan error, 1)
-			go func() {
-				errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-			}()
+			safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 			if tc.shouldBeFiltered {
 				select {
@@ -1312,7 +1312,6 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 		Queues:        make(map[phase0.Slot]queueContainer),
 		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-		mtx:           sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
@@ -1385,10 +1384,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 		return nil
 	}
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	}()
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	for i := 0; i < len(testMessages); i++ {
 		select {
@@ -1502,7 +1498,6 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	committee := &Committee{
 		ctx:           ctx,
 		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-		mtx:           sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
