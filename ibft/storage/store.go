@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -21,9 +20,7 @@ import (
 )
 
 const (
-	highestInstanceKey = "highest_instance"
-	instanceKey        = "instance"
-	participantsKey    = "pt"
+	participantsKey = "pt"
 )
 
 // participantStorage struct
@@ -31,9 +28,8 @@ const (
 type participantStorage struct {
 	logger *zap.Logger
 
-	prefix    []byte
-	oldPrefix string // kept back for cleanup
-	db        basedb.Database
+	prefix []byte
+	db     basedb.Database
 
 	// Participants cache for the current slot. Flushed to DB once every slot.
 	cachedParticipants map[spectypes.ValidatorPK][]spectypes.OperatorID
@@ -47,7 +43,6 @@ func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole, ne
 	st := &participantStorage{
 		logger:             logger,
 		prefix:             []byte{role},
-		oldPrefix:          prefix.String(),
 		db:                 db,
 		cachedSlot:         netCfg.Beacon.EstimatedCurrentSlot(),
 		cachedParticipants: make(map[spectypes.ValidatorPK][]spectypes.OperatorID),
@@ -63,20 +58,24 @@ func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole, ne
 func (st *participantStorage) saveParticipantsJob(slotTicker slotticker.SlotTicker) {
 	for range slotTicker.Next() {
 		slot := slotTicker.Slot()
-		// Flush previous slot participants.
-		st.cacheMu.Lock()
-		start := time.Now()
-		for pk, participants := range st.cachedParticipants {
-			if err := st.saveParticipants(pk, st.cachedSlot, participants); err != nil {
-				st.logger.Error("failed to save participants", fields.Validator(pk[:]), zap.Error(err))
-			}
-		}
-		st.logger.Debug("saved slot participants", fields.Slot(st.cachedSlot), fields.Took(time.Since(start)))
+		func() {
+			// Flush previous slot participants.
+			st.cacheMu.Lock()
+			defer st.cacheMu.Unlock()
 
-		// Reset cache for new slot.
-		st.cachedParticipants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
-		st.cachedSlot = slot
-		st.cacheMu.Unlock()
+			start := time.Now()
+			for pk, participants := range st.cachedParticipants {
+				if err := st.saveParticipants(pk, st.cachedSlot, participants); err != nil {
+					st.logger.Error("failed to save participants", fields.Validator(pk[:]), zap.Error(err))
+				}
+			}
+
+			st.logger.Debug("saved slot participants", fields.Slot(st.cachedSlot), fields.Took(time.Since(start)))
+
+			// Reset cache for new slot.
+			st.cachedParticipants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
+			st.cachedSlot = slot
+		}()
 	}
 }
 
@@ -187,15 +186,6 @@ func (i *participantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
 	}
 
 	return total
-}
-
-// CleanAllInstances removes all records in old format.
-func (i *participantStorage) CleanAllInstances() error {
-	if err := i.db.DropPrefix([]byte(i.oldPrefix)); err != nil {
-		return errors.Wrap(err, "failed to drop all records")
-	}
-
-	return nil
 }
 
 func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
