@@ -1,4 +1,13 @@
-## SSV proposer-duty flow background
+## Choosing `MEVDelay` value
+
+As per our own estimates the max reasonable value of `MEVDelay` is around ~1.65s, although we 
+recommend starting with something like 300ms gradually increasing it up (the higher `MEVDelay` 
+value is the higher the chance of missing Ethereum block proposal will be).
+
+As per the notes in other sections of this document `MEVDelay` depends on a number of things, to find
+the best value Operator might want to start with lower values like 300ms gradually increasing it up
+
+## MEV considerations & SSV proposer-duty flow background
 
 To understand how MEV fits with the SSV cluster, here is some background on the SSV proposer-duty flow:
 - SSV node participates in the pre-consensus phase to build RANDAO signature that will be used when 
@@ -51,23 +60,3 @@ becomes:
 ```
 RANDAOTime + MEVDelay + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
 ```
-
-## How to choose `MEVDelay` value
-
-As per the notes from above `MEVDelay` depends on a number of things, to find the best value Operator 
-might want to start with lower values like 300ms gradually increasing it up (the higher `MEVDelay` 
-value is the higher the chance of missing Ethereum block proposal will be).
-
-To estimate the max reasonable value of `MEVDelay` we can put in the average numbers in the equation and
-get something like ~1400ms:
-
-```
-~100ms + MEVDelay + ~1000ms + ~350ms + ~1000ms + ~150ms < ~4000ms
-```
-Note:
-- these numbers from above are just rough estimates observed during our testing, use these "estimates" 
-  at your own risk
-- `MEVBoostRelayTimeout` value is set by Operator and can be adjusted in conjunction with `MEVDelay`,
-  for example, 2s can be allocated between `MEVBoostRelayTimeout` and `MEVDelay` as 1s & 1s or 0.5s & 1.5s
-  which would result in different MEV outcomes depending on the exact Relays Operator has configured his
-  MEV-boost with

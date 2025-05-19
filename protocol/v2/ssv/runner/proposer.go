@@ -68,7 +68,7 @@ func NewProposerRunner(
 		return nil, errors.New("must have one share")
 	}
 
-	// Validate MEVDelay value, for details on how this value should be chosen see https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#how-to-choose-mevdelay-value
+	// Validate MEVDelay value, for details on how this value should be chosen see https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#choosing-mevdelay-value
 	const randaoTime = 100 * time.Millisecond
 	const mevBoostRelayTimeout = 200 * time.Millisecond
 	const qbftTime = 350 * time.Millisecond
