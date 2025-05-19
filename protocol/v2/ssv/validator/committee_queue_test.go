@@ -84,6 +84,8 @@ func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q
 
 	errCh := make(chan error, 1)
 
+	var tMutex sync.Mutex
+
 	go func() {
 		var err error
 		if len(runnerMutex) > 0 && runnerMutex[0] != nil {
@@ -106,7 +108,9 @@ func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q
 	go func() {
 		for err := range errCh {
 			if err != nil {
+				tMutex.Lock()
 				t.Logf("ConsumeQueue error: %v", err)
+				tMutex.Unlock()
 			}
 		}
 	}()
@@ -1488,7 +1492,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 //  8. Verify that the actual counts of processed messages per priority bucket match the expected counts.
 func TestConsumeQueueBurstTraffic(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	// --- Setup a single-slot committee and its queue ---
