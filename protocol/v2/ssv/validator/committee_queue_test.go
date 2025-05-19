@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -76,43 +75,19 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 	return decoded
 }
 
-// safeConsumeQueue wraps ConsumeQueue execution in a goroutine and handles errors safely.
-// If runnerMutex is provided, it's used to synchronize access to the committee runner's state.
+// safeConsumeQueue wraps ConsumeQueue execution in a goroutine with mutex protection.
 func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
 	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
-	committeeRunner *runner.CommitteeRunner, runnerMutex ...*sync.RWMutex) {
+	committeeRunner *runner.CommitteeRunner) {
+	t.Helper()
 
-	errCh := make(chan error, 1)
-
-	var tMutex sync.Mutex
-
-	go func() {
-		var err error
-		if len(runnerMutex) > 0 && runnerMutex[0] != nil {
-			// Use mutex if provided
-			mutex := runnerMutex[0]
-			mutex.RLock()
-			err = committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-			mutex.RUnlock()
-		} else {
-			// No mutex, just call directly
-			err = committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		}
-
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			errCh <- err
-		}
-		close(errCh)
-	}()
+	mutex := &sync.RWMutex{}
 
 	go func() {
-		for err := range errCh {
-			if err != nil {
-				tMutex.Lock()
-				t.Logf("ConsumeQueue error: %v", err)
-				tMutex.Unlock()
-			}
-		}
+		mutex.RLock()
+		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+		require.NoError(t, err)
+		mutex.RUnlock()
 	}()
 }
 
@@ -823,7 +798,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	}()
 
 	// start consuming with initial filter
-	safeConsumeQueue(t, ctx, committee, q, logger, processFn, committeeRunner, runnerMutex)
+	safeConsumeQueue(t, ctx, committee, q, logger, processFn, committeeRunner)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -879,7 +854,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		defer wg.Done()
 		<-ctx2.Done()
 	}()
-	safeConsumeQueue(t, ctx2, committee, q, logger, processFn, committeeRunner, runnerMutex)
+	safeConsumeQueue(t, ctx2, committee, q, logger, processFn, committeeRunner)
 
 	// observe how many of the old Prepares now drain
 	drained := 0
@@ -893,9 +868,6 @@ Loop:
 			break Loop
 		}
 	}
-
-	finalLen := q.Q.Len()
-	t.Logf("drained %d previously filtered, %d remain", drained, finalLen)
 
 	// verify essentials still got through
 	processMsgsMutex.Lock()
@@ -1085,14 +1057,6 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			}
 
 			assert.Equal(t, expectedProcessedCount, len(processed))
-
-			processedTypes := make([]specqbft.MessageType, 0, len(processed))
-			for _, msg := range processed {
-				if qbftMsg, ok := msg.Body.(*specqbft.Message); ok {
-					processedTypes = append(processedTypes, qbftMsg.MsgType)
-				}
-			}
-			t.Logf("Processed message types: %v", processedTypes)
 
 			for i, msgType := range tc.messagesTypes {
 				found := false
