@@ -12,12 +12,10 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	qbfttests "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
-
-	qbfttests "github.com/ssvlabs/ssv/integration/qbft/tests"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -101,7 +99,7 @@ func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q
 // 4. Verify that a new queue was created for the message's slot
 // 5. Confirm the queue has the correct properties (non-nil and proper slot)
 func TestHandleMessageCreatesQueue(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -146,7 +144,7 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 // 7. Verify both messages were received by the handler
 // 8. Confirm messages were processed in the expected order
 func TestConsumeQueueBasic(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
@@ -246,7 +244,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 // 3. Test scenario 2: Delete runner and call StartConsumeQueue for the existing slot (should error)
 // 4. Test scenario 3: Restore runner and call StartConsumeQueue for the valid slot (should succeed)
 func TestStartConsumeQueue(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -308,7 +306,7 @@ func TestStartConsumeQueue(t *testing.T) {
 // 6. Verify prepare and commit messages for current round are filtered out
 // 7. Confirm messages from future rounds are processed regardless of type
 func TestFilterNoProposalAccepted(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
@@ -435,7 +433,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 // 5. Verify only the consensus message is processed
 // 6. Confirm the partial signature message was filtered out
 func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
@@ -536,7 +534,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 // TestFilterDecidedAllowsAll verifies that all message types are processed
 // when the consensus instance has reached a decision.
 func TestFilterDecidedAllowsAll(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
@@ -645,6 +643,8 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 // 3. Second test: Use a runner with proposal accepted where prepare should process
 // 4. Verify prepare messages are properly filtered based on ProposalAccepted state
 func TestChangingFilterState(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
 	slot := phase0.Slot(123)
 	round := specqbft.Round(1)
 
@@ -681,7 +681,7 @@ func TestChangingFilterState(t *testing.T) {
 		mutex := &sync.RWMutex{}
 		mutex.RLock()
 		defer mutex.RUnlock()
-		_ = c.ConsumeQueue(ctx, q, zap.NewNop(), handler, rnr)
+		_ = c.ConsumeQueue(ctx, q, logger, handler, rnr)
 		return seen
 	}
 
@@ -736,7 +736,7 @@ func TestChangingFilterState(t *testing.T) {
 //  8. Observe that the previously filtered Prepare messages are now processed.
 //  9. Verify that the critical ExecuteDuty and Proposal messages were indeed processed.
 func TestQueueSaturationWithFilteredMessages(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -944,7 +944,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			logger := zaptest.NewLogger(t)
+			logger, _ := zap.NewDevelopment()
 			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 			defer cancel()
 
@@ -1102,7 +1102,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			logger := zaptest.NewLogger(t)
+			logger, _ := zap.NewDevelopment()
 			ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 			defer cancel()
 
@@ -1203,7 +1203,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 //  4. Commit
 //  5. RoundChange (lowest among consensus types)
 func TestConsumeQueuePrioritization(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
@@ -1325,7 +1325,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 // 5. Attempt to push one more message using HandleMessage.
 // 6. Verify that the message was dropped (queue length remains at capacity).
 func TestHandleMessageQueueFullAndDropping(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -1390,7 +1390,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 //  5. Verify that only the message(s) processed before the error was returned were handled.
 //  6. Verify that remaining messages are still in the queue.
 func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
@@ -1456,7 +1456,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 //  7. Verify that the priorities of popped messages are non-decreasing.
 //  8. Verify that the actual counts of processed messages per priority bucket match the expected counts.
 func TestConsumeQueueBurstTraffic(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
