@@ -1,11 +1,11 @@
 ## Choosing `MEVDelay` value
 
-As per our own estimates the max reasonable value of `MEVDelay` is around ~1.65s, although we 
-recommend starting with something like 300ms gradually increasing it up (the higher `MEVDelay` 
-value is the higher the chance of missing Ethereum block proposal will be).
+As per our own estimates the max reasonable value of `MEVDelay` for Etehreum mainnet is around ~1.65s, 
+although we recommend starting with something like 300ms gradually increasing it up - the higher 
+`MEVDelay` value is the higher the chance of missing Ethereum block proposal will be.
 
 As per the notes in other sections of this document `MEVDelay` depends on a number of things, to find
-the best value Operator might want to start with lower values like 300ms gradually increasing it up
+the best value Operator might want to start with lower values like 300ms gradually increasing it up.
 
 ## MEV considerations & SSV proposer-duty flow background
 
@@ -34,10 +34,11 @@ and so this means for the best SSV cluster operations we want the following cond
 ```
 RANDAOTime + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
 ```
-if this equation doesn't hold, Validator will miss his opportunity to propose block (slot will be missed)
+if this equation doesn't hold, Validator will miss his opportunity to propose the block (slot will be 
+missed if the corresponding Ethereum block isn't published within 4s after slot start time)
 
-and so the most straightforward approach to extract highest MEV (and it probably works out-of-the box 
-with SSV nodes already, but with caveats mentioned below) would be
+and so the most straightforward approach to extract highest MEV is (and it probably works out-of-the box 
+with SSV nodes already, but with caveats mentioned below):
 
 ### approach 1
 
