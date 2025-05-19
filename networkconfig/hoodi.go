@@ -23,4 +23,7 @@ var Hoodi = NetworkConfig{
 			"enr:-Ja4QIKlyNFuFtTOnVoavqwmpgSJXfhSmhpdSDOUhf5-FBr7bBxQRvG6VrpUvlkr8MtpNNuMAkM33AseduSaOhd9IeWGAZWjRbnvgmlkgnY0gmlwhCNVVTCJc2VjcDI1NmsxoQNTTyiJPoZh502xOZpHSHAfR-94NaXLvi5J4CNHMh2tjoNzc3YBg3RjcIITioN1ZHCCD6I",
 		},
 	},
+	ForksConfig: ForksConfig{
+		FinalityConsensusEpoch: 120, // TODO: use a different name when we have a better one, value as well
+	},
 }

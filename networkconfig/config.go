@@ -17,8 +17,6 @@ var SupportedConfigs = map[string]NetworkConfig{
 	Sepolia.Name:      Sepolia,
 }
 
-const forkName = "alan"
-
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
 		return network, nil
@@ -31,6 +29,7 @@ type NetworkConfig struct {
 	Name string
 	BeaconConfig
 	SSVConfig
+	ForksConfig
 }
 
 func (n NetworkConfig) String() string {
@@ -43,7 +42,7 @@ func (n NetworkConfig) String() string {
 }
 
 func (n NetworkConfig) NetworkName() string {
-	return fmt.Sprintf("%s:%s", n.Name, forkName)
+	return fmt.Sprintf("%s:%s", n.Name, "alan")
 }
 
 // ForkVersion returns the fork version of the network.

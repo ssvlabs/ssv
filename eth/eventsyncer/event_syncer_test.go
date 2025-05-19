@@ -87,7 +87,11 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, err)
 
 	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
-	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
+	client, err := executionclient.New(ctx,
+		executionclient.NewConfigFromNetwork(networkconfig.TestNetwork),
+		addr,
+		contractAddr,
+		executionclient.WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)

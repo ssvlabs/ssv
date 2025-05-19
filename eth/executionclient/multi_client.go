@@ -52,14 +52,14 @@ var _ Provider = &MultiClient{}
 // The execution MultiClient switches to EL2, the consensus multi client switches to CL2,
 // This shouldn't cause significant duty misses.
 type MultiClient struct {
+	config Config
+
 	// optional
 	logger                     *zap.Logger
 	connectionTimeout          time.Duration
 	healthInvalidationInterval time.Duration
 	logBatchSize               uint64
 	syncDistanceTolerance      uint64
-	followDistance             uint64 // Follow distance for pre-finality fork
-	finalityForkEpoch          uint64 // Epoch at which finality fork occurred TODO: use a proper name
 
 	contractAddress ethcommon.Address
 	chainID         atomic.Pointer[big.Int]
@@ -75,6 +75,7 @@ type MultiClient struct {
 // NewMulti creates a new instance of MultiClient.
 func NewMulti(
 	ctx context.Context,
+	config Config,
 	nodeAddrs []string,
 	contractAddr ethcommon.Address,
 	opts ...OptionMulti,
@@ -84,6 +85,7 @@ func NewMulti(
 	}
 
 	multiClient := &MultiClient{
+		config:            config,
 		nodeAddrs:         nodeAddrs,
 		clients:           make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
 		clientsMu:         make([]sync.Mutex, len(nodeAddrs)),
@@ -91,8 +93,6 @@ func NewMulti(
 		logger:            zap.NewNop(),
 		connectionTimeout: DefaultConnectionTimeout,
 		logBatchSize:      DefaultHistoricalLogsBatchSize,
-		followDistance:    DefaultFollowDistance,
-		finalityForkEpoch: FinalityForkEpoch,
 	}
 
 	for _, opt := range opts {
@@ -148,14 +148,13 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 
 	singleClient, err := New(
 		ctx,
+		mc.config,
 		mc.nodeAddrs[clientIndex],
 		mc.contractAddress,
 		WithLogger(logger),
 		WithConnectionTimeout(mc.connectionTimeout),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
-		WithFollowDistance(mc.followDistance),
-		WithFinalityForkEpoch(mc.finalityForkEpoch),
 	)
 	if err != nil {
 		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)

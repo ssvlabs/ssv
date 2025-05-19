@@ -21,4 +21,7 @@ var TestNetwork = NetworkConfig{
 			"enr:-Li4QFIQzamdvTxGJhvcXG_DFmCeyggSffDnllY5DiU47pd_K_1MRnSaJimWtfKJ-MD46jUX9TwgW5Jqe0t4pH41RYWGAYuFnlyth2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQN4v-N9zFYwEqzGPBBX37q24QPFvAVUtokIo1fblIsmTIN0Y3CCE4uDdWRwgg-j",
 		},
 	},
+	ForksConfig: ForksConfig{
+		FinalityConsensusEpoch: 1, // TODO: use a different name when we have a better one, value as well
+	},
 }

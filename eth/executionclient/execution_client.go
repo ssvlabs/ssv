@@ -59,6 +59,7 @@ const elResponseErrMsg = "Execution client returned an error"
 // ExecutionClient represents a client for interacting with Ethereum execution client.
 type ExecutionClient struct {
 	// mandatory
+	config          Config
 	nodeAddr        string
 	contractAddress ethcommon.Address
 
@@ -67,8 +68,6 @@ type ExecutionClient struct {
 	connectionTimeout          time.Duration
 	healthInvalidationInterval time.Duration
 	logBatchSize               uint64
-	followDistance             uint64 // Follow distance for pre-finality fork
-	finalityForkEpoch          uint64 // Epoch at which finality fork occurs
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
@@ -81,16 +80,20 @@ type ExecutionClient struct {
 }
 
 // New creates a new instance of ExecutionClient.
-func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
+func New(ctx context.Context,
+	config Config,
+	nodeAddr string,
+	contractAddr ethcommon.Address,
+	opts ...Option,
+) (*ExecutionClient, error) {
 	client := &ExecutionClient{
+		config:                     config,
 		nodeAddr:                   nodeAddr,
 		contractAddress:            contractAddr,
 		logger:                     zap.NewNop(),
 		connectionTimeout:          DefaultConnectionTimeout,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		logBatchSize:               DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
-		followDistance:             DefaultFollowDistance,
-		finalityForkEpoch:          FinalityForkEpoch,
 		closed:                     make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -148,9 +151,9 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		}
 
 		// Check if we're past the fork
-		currentEpoch := currentBlock / SlotsPerEpoch
+		currentEpoch := currentBlock / ec.config.SlotsPerEpoch
 
-		if currentEpoch > ec.finalityForkEpoch {
+		if currentEpoch > ec.config.FinalityConsensusEpoch {
 			// Just passed the fork threshold
 			ec.isPostForkState.Store(true)
 			toBlock, err = ec.getFinalizedBlock(ctx)
@@ -163,10 +166,10 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 			}
 		} else {
 			// Pre-fork: use follow distance
-			if currentBlock < ec.followDistance {
+			if currentBlock < ec.config.FollowDistance {
 				return nil, nil, ErrNothingToSync
 			}
-			toBlock = currentBlock - ec.followDistance
+			toBlock = currentBlock - ec.config.FollowDistance
 		}
 	}
 
@@ -394,7 +397,7 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 			return err
 		}
 
-		if currentBlock/SlotsPerEpoch > ec.finalityForkEpoch {
+		if currentBlock/ec.config.SlotsPerEpoch > ec.config.FinalityConsensusEpoch {
 			ec.isPostForkState.Store(true)
 			_, err := ec.getFinalizedBlock(ctx)
 			if err != nil {
@@ -521,7 +524,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				toBlock = finalizedBlock
 
 				if toBlock != lastFinalized {
-					finalizedEpoch := toBlock / SlotsPerEpoch
+					finalizedEpoch := toBlock / ec.config.SlotsPerEpoch
 					ec.logger.Info("⏱ finalized block changed",
 						zap.Uint64("new_finalized", toBlock),
 						zap.Uint64("estimated_epoch", finalizedEpoch),
@@ -530,9 +533,9 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				}
 			} else {
 				// Check if we need to transition to post-fork
-				currentEpoch := headerNum / SlotsPerEpoch
+				currentEpoch := headerNum / ec.config.SlotsPerEpoch
 
-				if currentEpoch > ec.finalityForkEpoch {
+				if currentEpoch > ec.config.FinalityConsensusEpoch {
 					ec.isPostForkState.Store(true)
 					finalizedBlock, err := ec.getFinalizedBlock(ctx)
 					if err != nil {
@@ -542,10 +545,10 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 					toBlock = finalizedBlock
 				} else {
 					// Pre-fork: follow distance approach
-					if headerNum < ec.followDistance {
+					if headerNum < ec.config.FollowDistance {
 						continue
 					}
-					toBlock = headerNum - ec.followDistance
+					toBlock = headerNum - ec.config.FollowDistance
 				}
 			}
 
@@ -601,14 +604,14 @@ func (ec *ExecutionClient) IsFinalizedFork(ctx context.Context) bool {
 		return false
 	}
 
-	currentEpoch := currentBlock / SlotsPerEpoch
+	currentEpoch := currentBlock / ec.config.SlotsPerEpoch
 
 	// Check if we've passed the fork point
-	if currentEpoch > ec.finalityForkEpoch {
+	if currentEpoch > ec.config.FinalityConsensusEpoch {
 		ec.isPostForkState.Store(true)
 		ec.logger.Info("finality fork threshold passed, using finalized blocks",
 			zap.Uint64("current_epoch", currentEpoch),
-			zap.Uint64("finality_fork_epoch", ec.finalityForkEpoch))
+			zap.Uint64("finality_fork_epoch", ec.config.FinalityConsensusEpoch))
 		return true
 	}
 

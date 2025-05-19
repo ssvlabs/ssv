@@ -15,6 +15,8 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/networkconfig"
+
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
@@ -51,22 +53,20 @@ func NewCommonTestInput(
 }
 
 type TestEnv struct {
-	eventSyncer       *eventsyncer.EventSyncer
-	validators        []*testValidatorData
-	ops               []*testOperator
-	nodeStorage       storage.Storage
-	sim               *simulator.Backend
-	boundContract     *simcontract.Simcontract
-	auth              *bind.TransactOpts
-	shares            [][]byte
-	execClient        *executionclient.ExecutionClient
-	rpcServer         *rpc.Server
-	httpSrv           *httptest.Server
-	validatorCtrl     *mocks.MockController
-	mockCtrl          *gomock.Controller
-	finalityBlocks    uint64
-	followDistance    uint64
-	finalityForkEpoch uint64
+	eventSyncer      *eventsyncer.EventSyncer
+	validators       []*testValidatorData
+	ops              []*testOperator
+	nodeStorage      storage.Storage
+	sim              *simulator.Backend
+	boundContract    *simcontract.Simcontract
+	auth             *bind.TransactOpts
+	shares           [][]byte
+	execClient       *executionclient.ExecutionClient
+	rpcServer        *rpc.Server
+	httpSrv          *httptest.Server
+	validatorCtrl    *mocks.MockController
+	mockCtrl         *gomock.Controller
+	execClientConfig executionclient.Config
 }
 
 func (e *TestEnv) shutdown() {
@@ -90,15 +90,20 @@ func (e *TestEnv) setup(
 	testAddresses []*ethcommon.Address,
 	validatorsCount uint64,
 	operatorsCount uint64,
+	useFinalityFork bool,
 ) error {
-	// Initialize defaults if not set
-	if e.finalityBlocks == 0 {
-		e.SetDefaultFinalityBlocks()
-	}
-	if e.followDistance == 0 {
-		e.SetDefaultFollowDistance()
-	}
 	logger := zaptest.NewLogger(t)
+
+	// set up basic network/fork stuff
+	e.execClientConfig = executionclient.NewConfigFromNetwork(networkconfig.TestNetwork)
+
+	if useFinalityFork {
+		// Post-fork config (use finality consensus)
+		e.execClientConfig = e.execClientConfig.WithFinalityConsensusEpoch(1)
+	} else {
+		// Pre-fork config (use follow distance)
+		e.execClientConfig = e.execClientConfig.WithFinalityConsensusEpoch(1000)
+	}
 
 	// Create operators RSA keys
 	ops, err := createOperators(operatorsCount, 0)
@@ -173,22 +178,12 @@ func (e *TestEnv) setup(
 		return fmt.Errorf("contractCode is empty")
 	}
 
-	// Create a client and connect to the simulator
-	execClientOpts := []executionclient.Option{
-		executionclient.WithLogger(logger),
-		executionclient.WithFollowDistance(e.followDistance),
-	}
-
-	// Apply finality fork settings if configured
-	if e.finalityForkEpoch < executionclient.FinalityForkEpoch {
-		execClientOpts = append(execClientOpts, executionclient.WithFinalityForkEpoch(e.finalityForkEpoch))
-	}
-
 	e.execClient, err = executionclient.New(
 		ctx,
+		e.execClientConfig,
 		addr,
 		contractAddr,
-		execClientOpts...,
+		executionclient.WithLogger(logger),
 	)
 	if err != nil {
 		return err
@@ -221,30 +216,9 @@ func (e *TestEnv) setup(
 	return nil
 }
 
-// SetDefaultFinalityBlocks sets the default finality blocks.
-func (e *TestEnv) SetDefaultFinalityBlocks() {
-	e.finalityBlocks = executionclient.FinalityDistance
-}
-
-// SetDefaultFollowDistance sets the default follow distance.
-func (e *TestEnv) SetDefaultFollowDistance() {
-	e.followDistance = executionclient.DefaultFollowDistance
-}
-
-// EnableFinalityFork enables the finality fork at the specified epoch.
-// Using a small epoch value enables finality, while the default high value effectively disables it.
-func (e *TestEnv) EnableFinalityFork(epoch uint64) {
-	e.finalityForkEpoch = epoch
-}
-
-// DisableFinalityFork disables the finality fork.
-func (e *TestEnv) DisableFinalityFork() {
-	e.finalityForkEpoch = executionclient.FinalityForkEpoch
-}
-
 // MineAndFinalize mines enough blocks to ensure finality.
 func (e *TestEnv) MineAndFinalize(blockNum *uint64) {
-	for i := uint64(0); i < e.finalityBlocks; i++ {
+	for i := uint64(0); i < e.execClientConfig.SlotsPerEpoch*2; i++ {
 		commitBlock(e.sim, blockNum)
 	}
 }

@@ -23,4 +23,7 @@ var Sepolia = NetworkConfig{
 			"enr:-Ja4QIE0Ml0a8Pq9zD-0g9KYGN3jAMPJ0CAP0i16fK-PSHfLeORl-Z5p8odoP1oS5S2E8IsF5jNG7gqTKhjVsHR-Z_CGAZXrnTJrgmlkgnY0gmlwhCOjXGWJc2VjcDI1NmsxoQKCRDQsIdFsJDmu_ZU2H6b2_HRJbuUneDXHLfFkSQH9O4Nzc3YBg3RjcIITioN1ZHCCD6I",
 		},
 	},
+	ForksConfig: ForksConfig{
+		FinalityConsensusEpoch: 120, // TODO: use a different name when we have a better one, value as well
+	},
 }

@@ -115,7 +115,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger), executionclient.WithFinalityForkEpoch(1))
+	client, err := executionclient.New(ctx,
+		executionclient.NewConfigFromNetwork(networkconfig.TestNetwork),
+		addr,
+		contractAddr,
+		executionclient.WithLogger(logger))
 	require.NoError(t, err)
 
 	contractFilterer, err := client.Filterer()
@@ -159,7 +163,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}
 
 		sim.Commit()
-		for i := 0; i < executionclient.FinalityDistance; i++ {
+		for i := 0; i < 64; i++ {
 			sim.Commit()
 		}
 
@@ -286,7 +290,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 
 		sim.Commit()
-		for i := 0; i < executionclient.FinalityDistance; i++ {
+		for i := 0; i < 64; i++ {
 			sim.Commit()
 		}
 
@@ -341,7 +345,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -395,7 +399,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -454,7 +458,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -507,7 +511,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -561,7 +565,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -609,7 +613,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -639,7 +643,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -683,7 +687,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -722,7 +726,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -763,7 +767,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -805,7 +809,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -855,7 +859,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -902,7 +906,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		sim.Commit()
 
-		for i := 0; i < executionclient.FinalityDistance; i++ {
+		for i := 0; i < 64; i++ {
 			sim.Commit()
 		}
 
@@ -967,7 +971,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		sim.Commit()
 
-		for i := 0; i < executionclient.FinalityDistance; i++ {
+		for i := 0; i < 64; i++ {
 			sim.Commit()
 		}
 
@@ -1021,7 +1025,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		sim.Commit()
 
-		for i := 0; i < executionclient.FinalityDistance; i++ {
+		for i := 0; i < 64; i++ {
 			sim.Commit()
 		}
 
@@ -1059,7 +1063,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		sim.Commit()
 
-		for i := 0; i < executionclient.FinalityDistance; i++ {
+		for i := 0; i < 64; i++ {
 			sim.Commit()
 		}
 
@@ -1116,7 +1120,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		sim.Commit()
 
-		for i := 0; i < executionclient.FinalityDistance; i++ {
+		for i := 0; i < 64; i++ {
 			sim.Commit()
 		}
 
@@ -1168,7 +1172,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -1248,7 +1252,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -1314,7 +1318,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -1349,7 +1353,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -1395,7 +1399,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 
@@ -1430,7 +1434,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			sim.Commit()
-			for i := 0; i < executionclient.FinalityDistance; i++ {
+			for i := 0; i < 64; i++ {
 				sim.Commit()
 			}
 

@@ -39,7 +39,7 @@ func TestEthExecLayer_PostFork(t *testing.T) {
 
 // E2E tests for ETH package with configurable finality approach
 func runTestEthExecLayer(t *testing.T, useFinalityFork bool) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	testAddresses := make([]*ethcommon.Address, 2)
@@ -57,21 +57,10 @@ func runTestEthExecLayer(t *testing.T, useFinalityFork bool) {
 	expectedNonce := registrystorage.Nonce(0)
 
 	testEnv := TestEnv{}
-	testEnv.SetDefaultFinalityBlocks()
-	testEnv.SetDefaultFollowDistance()
-
-	if useFinalityFork {
-		// Enable finality fork at epoch 1
-		testEnv.EnableFinalityFork(1)
-		t.Log("Running test with finality (post-fork)") // TODO: use the correct name when we know the name of the fork.
-	} else {
-		// Disable finality fork to use follow distance approach
-		testEnv.DisableFinalityFork()
-		t.Log("Running test with follow distance (pre-fork)") // TODO: use the correct name when we know the name of the fork.
-	}
 
 	defer testEnv.shutdown()
-	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
+
+	err := testEnv.setup(t, ctx, testAddresses, 7, 4, useFinalityFork)
 	require.NoError(t, err)
 
 	var (
@@ -133,7 +122,7 @@ func runTestEthExecLayer(t *testing.T, useFinalityFork bool) {
 				// When using follow distance, the last handled block is the current block minus follow distance
 				currentBlock, err := testEnv.sim.Client().BlockNumber(ctx)
 				require.NoError(t, err)
-				expectedLastHandledBlock = currentBlock - testEnv.followDistance
+				expectedLastHandledBlock = currentBlock - testEnv.execClientConfig.FollowDistance
 			}
 
 			// Run SyncHistory
