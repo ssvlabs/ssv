@@ -86,7 +86,7 @@ func TestRemoveSlot(t *testing.T) {
 	t.Run("remove slot older than", func(t *testing.T) {
 		threshold := phase0.Slot(100)
 
-		count := storage.removeSlotsOlderThan(zap.NewNop(), threshold)
+		count := storage.removeSlotsOlderThan(threshold)
 		require.Equal(t, 100, count)
 
 		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
@@ -209,7 +209,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	}
 
 	// initial cleanup removes ALL slots below 3
-	storage.Prune(ctx, zap.NewNop(), 3)
+	storage.Prune(ctx, 3)
 
 	pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
 	require.Nil(t, err)
@@ -227,7 +227,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		storage.PruneContinously(ctx, zap.NewNop(), tickerProv, 1)
+		storage.PruneContinously(ctx, tickerProv, 1)
 	}()
 
 	mockTimeChan <- time.Now()

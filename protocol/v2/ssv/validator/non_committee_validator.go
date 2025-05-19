@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"slices"
@@ -339,7 +340,7 @@ func (o *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signatur
 	return fmt.Errorf("unknown signer")
 }
 
-func (o *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
+func (o *CommitteeObserver) OnProposalMsg(ctx context.Context, msg *queue.SSVMessage) error {
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
 		o.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
@@ -363,11 +364,11 @@ func (o *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	o.rootsMtx.Lock()
 	defer o.rootsMtx.Unlock()
 
-	if err := o.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
+	if err := o.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
 		return err
 	}
 
-	if err := o.saveSyncCommRoots(epoch, beaconVote); err != nil {
+	if err := o.saveSyncCommRoots(ctx, epoch, beaconVote); err != nil {
 		return err
 	}
 
@@ -377,8 +378,8 @@ func (o *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (o *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
-	attesterDomain, err := o.domainCache.Get(epoch, spectypes.DomainAttester)
+func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
+	attesterDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAttester)
 	if err != nil {
 		return err
 	}
@@ -390,14 +391,18 @@ func (o *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *sp
 			return err
 		}
 
-		o.attesterRoots.Set(attesterRoot, struct{}{}, ttlcache.DefaultTTL)
+		ncv.attesterRoots.Set(attesterRoot, struct{}{}, ttlcache.DefaultTTL)
 	}
 
 	return nil
 }
 
-func (o *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote) error {
-	syncCommDomain, err := o.domainCache.Get(epoch, spectypes.DomainSyncCommittee)
+func (ncv *CommitteeObserver) saveSyncCommRoots(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	beaconVote *spectypes.BeaconVote,
+) error {
+	syncCommDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return err
 	}
@@ -408,7 +413,7 @@ func (o *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *sp
 		return err
 	}
 
-	o.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
+	ncv.syncCommRoots.Set(syncCommitteeRoot, struct{}{}, ttlcache.DefaultTTL)
 
 	return nil
 }

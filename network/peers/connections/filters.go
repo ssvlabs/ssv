@@ -23,7 +23,7 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 // BadPeerFilter avoids connecting to a bad peer
 func BadPeerFilter(logger *zap.Logger, n peers.Index) HandshakeFilter {
 	return func(senderID peer.ID, sni *records.NodeInfo) error {
-		if n.IsBad(logger, senderID) {
+		if n.IsBad(senderID) {
 			return errors.New("bad peer")
 		}
 		return nil

@@ -142,7 +142,7 @@ type SharesStorage interface {
 type P2PNetwork interface {
 	protocolp2p.Broadcaster
 	UseMessageRouter(router network.MessageRouter)
-	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	SubscribeRandoms(numSubnets int) error
 	ActiveSubnets() commons.Subnets
 	FixedSubnets() commons.Subnets
 }
@@ -358,15 +358,7 @@ func (c *controller) handleRouterMessages() {
 	}
 }
 
-// TODO: ecivt committeeObserver of dead committees by time or event
-//var committeeObserverValidatorTTLs = map[spectypes.RunnerRole]int{
-//	spectypes.RoleCommittee:                 64,
-//	spectypes.RoleProposer:                  4,
-//	spectypes.RoleAggregator:                4,
-//	spectypes.RoleSyncCommitteeContribution: 4,
-//}
-
-func (c *controller) handleWorkerMessages(netmsg network.DecodedSSVMessage) error {
+func (c *controller) handleWorkerMessages(ctx context.Context, netmsg network.DecodedSSVMessage) error {
 	msg := netmsg.(*queue.SSVMessage)
 	// Validate message should be processed
 	switch msg.GetType() {
@@ -380,7 +372,7 @@ func (c *controller) handleWorkerMessages(netmsg network.DecodedSSVMessage) erro
 		if !ok || subMsg.MsgType != specqbft.ProposalMsgType {
 			return nil
 		}
-		return c.getCommitteeObserver(msg.GetID()).OnProposalMsg(msg)
+		return c.getCommitteeObserver(msg.GetID()).OnProposalMsg(ctx, msg)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
@@ -458,7 +450,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		if len(inited) == 0 {
 			// If no validators were started and therefore we're not subscribed to any subnets,
 			// then subscribe to a random subnet to participate in the network.
-			if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
+			if err := c.network.SubscribeRandoms(1); err != nil {
 				c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
 			}
 		}
