@@ -19,14 +19,16 @@ import (
 )
 
 type Handler struct {
+	logger        *zap.Logger
 	db            basedb.Database
 	enableProf    bool
 	healthChecker HealthChecker
 }
 
 // NewHandler returns a new metrics handler.
-func NewHandler(db basedb.Database, enableProf bool, healthChecker HealthChecker) *Handler {
+func NewHandler(logger *zap.Logger, db basedb.Database, enableProf bool, healthChecker HealthChecker) *Handler {
 	mh := Handler{
+		logger:        logger,
 		db:            db,
 		enableProf:    enableProf,
 		healthChecker: healthChecker,
@@ -34,8 +36,8 @@ func NewHandler(db basedb.Database, enableProf bool, healthChecker HealthChecker
 	return &mh
 }
 
-func (h *Handler) Start(logger *zap.Logger, mux *http.ServeMux, addr string) error {
-	logger.Info("setup collection", fields.Address(addr), zap.Bool("enableProf", h.enableProf))
+func (h *Handler) Start(mux *http.ServeMux, addr string) error {
+	h.logger.Info("setup collection", fields.Address(addr), zap.Bool("enableProf", h.enableProf))
 
 	if h.enableProf {
 		h.configureProfiling()
