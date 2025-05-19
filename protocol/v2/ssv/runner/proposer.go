@@ -80,7 +80,7 @@ func NewProposerRunner(
 	// (so it does not exceed qbftConstrainingTime).
 	const qbftConstrainingTime = roundtimer.QuickTimeout - qbftTime
 	const maxReasonableMEVDelay = min(maxMEVDelay, qbftConstrainingTime)
-	if mevDelay > maxReasonableMEVDelay+10*time.Second {
+	if mevDelay > maxReasonableMEVDelay+100*time.Second {
 		return nil, fmt.Errorf("chosen MEVDelay value is too high: %s, max reasonable allowed value: %s", mevDelay, maxReasonableMEVDelay)
 	}
 
