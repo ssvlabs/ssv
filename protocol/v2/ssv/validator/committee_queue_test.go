@@ -78,16 +78,15 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 // safeConsumeQueue wraps ConsumeQueue execution in a goroutine with mutex protection.
 func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
 	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
-	committeeRunner *runner.CommitteeRunner) {
-	t.Helper()
+	committeeRunner *runner.CommitteeRunner, mutex *sync.RWMutex) {
 
-	mutex := &sync.RWMutex{}
+	t.Helper()
 
 	go func() {
 		mutex.RLock()
+		defer mutex.RUnlock()
 		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
 		require.NoError(t, err)
-		mutex.RUnlock()
 	}()
 }
 
@@ -215,7 +214,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
 
 	for i := 0; i < 2; i++ {
 		select {
@@ -380,7 +379,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
 
 	expectedMsgCount := 4
 	for i := 0; i < expectedMsgCount; i++ {
@@ -513,7 +512,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
 
 	select {
 	case <-handlerCalled:
@@ -614,7 +613,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
 
 	for i := 0; i < 2; i++ {
 		select {
@@ -679,7 +678,9 @@ func TestChangingFilterState(t *testing.T) {
 		q.Q.TryPush(prepareMsg)
 
 		c := &Committee{}
-
+		mutex := &sync.RWMutex{}
+		mutex.RLock()
+		defer mutex.RUnlock()
 		_ = c.ConsumeQueue(ctx, q, zap.NewNop(), handler, rnr)
 		return seen
 	}
@@ -749,6 +750,8 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 	slot := phase0.Slot(123)
 	queueCapacity := 5
 
+	runnerMutex := &sync.RWMutex{}
+
 	committeeRunner := &runner.CommitteeRunner{
 		BaseRunner: &runner.BaseRunner{
 			State: &runner.State{
@@ -762,8 +765,6 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 			},
 		},
 	}
-
-	runnerMutex := &sync.RWMutex{}
 
 	q := queueContainer{
 		Q: queue.New(queueCapacity),
@@ -781,7 +782,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		handlerCalled    = make(chan struct{}, queueCapacity*3)
 	)
 
-	// inline handler
+	// inline handler that synchronizes access to processed messages
 	processFn := func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
 		processMsgsMutex.Lock()
 		processedMsgs = append(processedMsgs, msg)
@@ -797,8 +798,7 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		<-ctx.Done()
 	}()
 
-	// start consuming with initial filter
-	safeConsumeQueue(t, ctx, committee, q, logger, processFn, committeeRunner)
+	safeConsumeQueue(t, ctx, committee, q, logger, processFn, committeeRunner, runnerMutex)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -854,7 +854,8 @@ func TestQueueSaturationWithFilteredMessages(t *testing.T) {
 		defer wg.Done()
 		<-ctx2.Done()
 	}()
-	safeConsumeQueue(t, ctx2, committee, q, logger, processFn, committeeRunner)
+
+	safeConsumeQueue(t, ctx2, committee, q, logger, processFn, committeeRunner, runnerMutex)
 
 	// observe how many of the old Prepares now drain
 	drained := 0
@@ -1017,7 +1018,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 					}
 				}()
 			} else {
-				safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+				safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
 			}
 
 			expectedProcessedCount := 0
@@ -1162,7 +1163,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 				return nil
 			}
 
-			safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+			safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
 
 			if tc.shouldBeFiltered {
 				select {
@@ -1275,7 +1276,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner)
+	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
 
 	// Wait for all messages
 	for i := 0; i < len(testMessages); i++ {
