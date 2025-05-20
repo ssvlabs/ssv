@@ -58,7 +58,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 					// Only attesting validators are eligible for registration duties.
 					continue
 				}
-				if phase0.Slot(share.ValidatorIndex)%registrationSlots != slot%registrationSlots {
+				if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
 					continue
 				}
 

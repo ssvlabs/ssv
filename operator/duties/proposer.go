@@ -83,7 +83,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			cancel()
 
 			// last slot of epoch
-			if slot%h.beaconConfig.GetSlotsPerEpoch() == h.beaconConfig.GetSlotsPerEpoch()-1 {
+			if uint64(slot)%h.beaconConfig.GetSlotsPerEpoch() == h.beaconConfig.GetSlotsPerEpoch()-1 {
 				h.duties.ResetEpoch(currentEpoch - 1)
 				h.fetchFirst = true
 			}

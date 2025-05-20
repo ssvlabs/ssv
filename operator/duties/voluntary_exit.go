@@ -115,7 +115,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	}
 
 	h.dutyQueue = pendingDuties
-	h.duties.RemoveSlot(slot - h.beaconConfig.GetSlotsPerEpoch())
+	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.GetSlotsPerEpoch()))
 
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
 		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution)

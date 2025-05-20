@@ -2,8 +2,6 @@ package validation
 
 import (
 	"time"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 // To add some encoding overhead for ssz, we use (N + N/encodingOverheadDivisor + 4) for a structure with expected size N
@@ -15,7 +13,7 @@ const (
 	clockErrorTolerance     = time.Millisecond * 50
 	allowedRoundsInFuture   = 1
 	allowedRoundsInPast     = 2
-	LateSlotAllowance       = phase0.Slot(2)
+	LateSlotAllowance       = 2
 	syncCommitteeSize       = 512
 	rsaSignatureSize        = 256
 	operatorIDSize          = 8 // uint64

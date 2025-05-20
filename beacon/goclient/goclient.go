@@ -208,7 +208,7 @@ func New(
 			ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * opt.BeaconConfig.SlotDuration),
 		),
 		blockRootToSlotCache: ttlcache.New(ttlcache.WithCapacity[phase0.Root, phase0.Slot](
-			uint64(opt.BeaconConfig.SlotsPerEpoch) * BlockRootToSlotCacheCapacityEpochs),
+			opt.BeaconConfig.SlotsPerEpoch * BlockRootToSlotCacheCapacityEpochs),
 		),
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,

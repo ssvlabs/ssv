@@ -86,12 +86,12 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next epoch in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
-			if slot%slotsPerEpoch == slotsPerEpoch/2-1 {
+			if uint64(slot)%slotsPerEpoch == slotsPerEpoch/2-1 {
 				h.fetchNextEpoch = true
 			}
 
 			// last slot of epoch
-			if slot%slotsPerEpoch == slotsPerEpoch-1 {
+			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
 				h.duties.ResetEpoch(currentEpoch - 1)
 			}
 
@@ -276,7 +276,7 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 
 	// execute task if slot already began and not pass 1 epoch
 	var attestationPropagationSlotRange = h.beaconConfig.GetSlotsPerEpoch()
-	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
+	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= attestationPropagationSlotRange {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
@@ -313,5 +313,5 @@ func toBeaconCommitteeSubscription(duty *eth2apiv1.AttesterDuty, role spectypes.
 
 func (h *AttesterHandler) shouldFetchNexEpoch(slot phase0.Slot) bool {
 	slotsPerEpoch := h.beaconConfig.GetSlotsPerEpoch()
-	return slot%slotsPerEpoch > slotsPerEpoch/2-2
+	return uint64(slot)%slotsPerEpoch > slotsPerEpoch/2-2
 }

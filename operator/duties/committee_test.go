@@ -30,19 +30,19 @@ func setupCommitteeDutiesMock(
 
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) uint64 {
-			return uint64(epoch / s.beaconConfig.EpochsPerSyncCommitteePeriod())
+			return uint64(epoch) / s.beaconConfig.EpochsPerSyncCommitteePeriod()
 		},
 	).AnyTimes()
 
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Epoch {
-			return phase0.Epoch(period) * s.beaconConfig.EpochsPerSyncCommitteePeriod()
+			return phase0.Epoch(period * s.beaconConfig.EpochsPerSyncCommitteePeriod())
 		},
 	).AnyTimes()
 
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
-			return phase0.Slot(epoch) * s.beaconConfig.GetSlotsPerEpoch()
+			return phase0.Slot(uint64(epoch) * s.beaconConfig.GetSlotsPerEpoch())
 		},
 	).AnyTimes()
 
