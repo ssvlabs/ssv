@@ -19,7 +19,6 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
@@ -120,10 +119,10 @@ const (
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log         *zap.Logger
+	log          *zap.Logger
 	beaconConfig networkconfig.BeaconConfig
-	clients     []Client
-	multiClient MultiClient
+	clients      []Client
+	multiClient  MultiClient
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
