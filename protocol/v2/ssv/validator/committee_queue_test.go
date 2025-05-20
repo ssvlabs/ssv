@@ -1722,6 +1722,8 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		go func() {
 			defer consumerWg.Done()
 			go func() {
+				runnerMutex.RLock()
+				defer runnerMutex.RUnlock()
 				err := committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
 				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 					logger.Error("ConsumeQueue exited with error", zap.Error(err))
@@ -1784,6 +1786,8 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		go func() {
 			defer consumer2Wg.Done()
 			go func() {
+				runnerMutex.RLock()
+				defer runnerMutex.RUnlock()
 				err := committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
 				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 					logger.Error("ConsumeQueue (phase 2) exited with error", zap.Error(err))
