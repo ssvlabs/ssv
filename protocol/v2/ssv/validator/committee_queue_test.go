@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -723,183 +724,20 @@ func TestChangingFilterState(t *testing.T) {
 	assert.Equal(t, specqbft.PrepareMsgType, seen2.Body.(*specqbft.Message).MsgType)
 }
 
-// TestQueueSaturationWithFilteredMessages verifies queue behavior when saturated with messages that are initially
-// filtered, then become processable after a state change, ensuring high-priority messages are handled correctly throughout.
+// TestCommitteeQueueFilteringScenarios verifies the message filtering logic of the ConsumeQueue method
+// across a range of committee runner states. It ensures that SSV messages are appropriately
+// processed or filtered based on the runner's current operational phase, such as whether a duty
+// is active, a proposal has been accepted for the current round, or a consensus decision
+// has been reached for the slot.
 //
-// Flow:
-//  1. Set up a committee with a small queue (capacity 5) and a runner that initially filters Prepare messages.
-//  2. Start consuming the queue.
-//  3. Fill the queue with Prepare messages (which should be filtered and not processed).
-//  4. Push an ExecuteDuty event message; verify it is processed despite the "full" queue of filtered messages.
-//  5. Push a Proposal message; verify it is also processed.
-//  6. Change the runner's state to accept Prepare messages.
-//  7. Restart queue consumption under a new context.
-//  8. Observe that the previously filtered Prepare messages are now processed.
-//  9. Verify that the critical ExecuteDuty and Proposal messages were indeed processed.
-func TestQueueSaturationWithFilteredMessages(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-	}
-
-	slot := phase0.Slot(123)
-	queueCapacity := 5
-
-	runnerMutex := &sync.RWMutex{}
-
-	committeeRunner := &runner.CommitteeRunner{
-		BaseRunner: &runner.BaseRunner{
-			State: &runner.State{
-				RunningInstance: &instance.Instance{
-					State: &specqbft.State{
-						Decided:                         false,
-						ProposalAcceptedForCurrentRound: nil,
-						Round:                           1,
-					},
-				},
-			},
-		},
-	}
-
-	q := queueContainer{
-		Q: queue.New(queueCapacity),
-		queueState: &queue.State{
-			HasRunningInstance: true,
-			Height:             specqbft.Height(slot),
-			Slot:               slot,
-			Round:              1,
-		},
-	}
-
-	var (
-		processedMsgs    []*queue.SSVMessage
-		processMsgsMutex sync.Mutex
-		handlerCalled    = make(chan struct{}, queueCapacity*3)
-	)
-
-	// inline handler that synchronizes access to processed messages
-	processFn := func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
-		processMsgsMutex.Lock()
-		processedMsgs = append(processedMsgs, msg)
-		processMsgsMutex.Unlock()
-		handlerCalled <- struct{}{}
-		return nil
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		<-ctx.Done()
-	}()
-
-	safeConsumeQueue(t, ctx, committee, q, logger, processFn, committeeRunner, runnerMutex)
-
-	time.Sleep(50 * time.Millisecond)
-
-	// fill with filtered Prepare messages
-	for i := 0; i < queueCapacity; i++ {
-		msgID := spectypes.MessageID{byte(i + 1)}
-		prepare := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.PrepareMsgType}
-		require.True(t, q.Q.TryPush(makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepare)))
-	}
-
-	// nothing should come through yet
-	select {
-	case <-handlerCalled:
-		t.Fatal("filtered message was processed too early")
-	default:
-	}
-
-	// push ExecuteDuty
-	execData, _ := json.Marshal(&types.ExecuteCommitteeDutyData{Duty: &spectypes.CommitteeDuty{Slot: slot}})
-	execMsg := makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{0xEE}, &types.EventMsg{Type: types.ExecuteDuty, Data: execData})
-	require.True(t, q.Q.TryPush(execMsg))
-	select {
-	case <-handlerCalled:
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("timed out on ExecuteDuty")
-	}
-
-	// push Proposal
-	proposal := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.ProposalMsgType}
-	propMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{0xFF}, proposal)
-	require.True(t, q.Q.TryPush(propMsg))
-	select {
-	case <-handlerCalled:
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("timed out on Proposal")
-	}
-
-	// now flip runner state so prepares become valid
-	cancel()
-	wg.Wait()
-
-	ctx2, cancel2 := context.WithCancel(t.Context())
-	defer cancel2()
-
-	runnerMutex.Lock()
-	committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
-		&specqbft.ProcessingMessage{QBFTMessage: proposal}
-	runnerMutex.Unlock()
-
-	// restart consumption to let the old Prepares through
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		<-ctx2.Done()
-	}()
-
-	safeConsumeQueue(t, ctx2, committee, q, logger, processFn, committeeRunner, runnerMutex)
-
-	// observe how many of the old Prepares now drain
-	drained := 0
-	timeout := time.After(1 * time.Second)
-Loop:
-	for {
-		select {
-		case <-handlerCalled:
-			drained++
-		case <-timeout:
-			break Loop
-		}
-	}
-
-	// verify essentials still got through
-	processMsgsMutex.Lock()
-	defer processMsgsMutex.Unlock()
-	var sawExec, sawProp bool
-	for _, m := range processedMsgs {
-		if m.MsgType == message.SSVEventMsgType {
-			if e := m.Body.(*types.EventMsg); e.Type == types.ExecuteDuty {
-				sawExec = true
-			}
-		}
-		if m.MsgType == spectypes.SSVConsensusMsgType {
-			if b := m.Body.(*specqbft.Message); b.MsgType == specqbft.ProposalMsgType {
-				sawProp = true
-			}
-		}
-	}
-	assert.True(t, sawExec, "missing ExecuteDuty")
-	assert.True(t, sawProp, "missing Proposal")
-}
-
-// TestCommitteeQueueFilteringScenarios tests different filtering scenarios and their impact on queue processing
-//
-// Flow:
-//  1. Define test cases for various runner states: no running duty, no proposal accepted,
-//     proposal accepted but not decided, and fully decided
-//  2. For each scenario, set up a committee with the corresponding runner state
-//  3. Push various message types (proposal, prepare, commit) to the queue
-//  4. Verify that only messages matching the filter criteria for that state are processed
-//  5. Confirm each message type is handled correctly based on the current filter state
+// The test defines a set of distinct scenarios, each configuring the committee runner
+// to a specific state (e.g., "no active duty", "no proposal accepted", "proposal accepted but not decided", "decided").
+// For each scenario, a collection of SSV messages with varying QBFT message types are pushed to the queue.
+// The test then asserts that:
+//   - Only those messages that align with the ConsumeQueue's filtering criteria for the given runner state
+//     are passed to the message handler.
+//   - Messages that should be filtered out in that state are indeed not processed.
+//   - The count of processed messages matches the expected number for that scenario.
 func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 	testCases := []struct {
 		name              string
@@ -1624,4 +1462,262 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 		actualCounts[b]++
 	}
 	require.Equal(t, expectedCounts, actualCounts)
+}
+
+// TestQueueLoadAndSaturationScenarios verifies committee queue handling under load and saturation conditions.
+// It tests two key scenarios:
+//
+//   - DropWhenInboxStrictlyFull: Confirms that when a queue's intake buffer reaches capacity,
+//     HandleMessage drops incoming messages regardless of potential processability by ConsumeQueue.
+//     This test validates concerns about message loss when filtering causes queue backups.
+//
+//   - PrioritizationWhenSaturatedWithFilteredMessages: Verifies that high-priority messages
+//     (e.g., ExecuteDuty, Proposals) can still be processed even when many filtered messages
+//     occupy the queue, provided the intake buffer has not reached absolute capacity.
+//     This demonstrates the effectiveness of the prioritization mechanism.
+func TestQueueLoadAndSaturationScenarios(t *testing.T) {
+	mainLogger, _ := zap.NewDevelopment()
+	mainBeaconNetwork := qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork()
+
+	t.Run("DropWhenInboxStrictlyFull", func(t *testing.T) {
+		logger := mainLogger.Named("DropWhenInboxStrictlyFull")
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		committee := &Committee{
+			ctx:           ctx,
+			Queues:        make(map[phase0.Slot]queueContainer),
+			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+			BeaconNetwork: mainBeaconNetwork,
+			mtx:           sync.RWMutex{},
+		}
+
+		slot := phase0.Slot(123)
+		currentRound := specqbft.Round(1)
+		nextRound := specqbft.Round(2)
+		queueCapacity := 3
+
+		qContainer := queueContainer{
+			Q: queue.New(queueCapacity),
+			queueState: &queue.State{
+				HasRunningInstance: true,
+				Height:             specqbft.Height(slot),
+				Slot:               slot,
+				Round:              currentRound,
+			},
+		}
+		committee.mtx.Lock()
+		committee.Queues[slot] = qContainer
+		committee.mtx.Unlock()
+
+		// 1. Fill the queue's inbox channel to capacity using HandleMessage.
+		for i := 0; i < queueCapacity; i++ {
+			msgID := spectypes.MessageID{byte(i + 1)}
+			prepareMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
+			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareMsgBody)
+			committee.HandleMessage(ctx, logger, testMsg)
+		}
+		require.Equal(t, queueCapacity, qContainer.Q.Len())
+
+		// 2. Attempt to HandleMessage a new Prepare message for the *nextRound*.
+		poppableMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: nextRound, MsgType: specqbft.PrepareMsgType}
+		poppableTestMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{0xAA}, poppableMsgBody)
+		committee.HandleMessage(ctx, logger, poppableTestMsg)
+
+		// 3. Verify the poppable message was dropped.
+		assert.Equal(t, queueCapacity, qContainer.Q.Len())
+
+		// 4. Verify the content of the queue.
+		drainedMessages := make([]*queue.SSVMessage, 0, queueCapacity)
+		for i := 0; i < queueCapacity; i++ {
+			popCtx, popCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
+			popCancel() // Ensure cancellation happens after Pop or timeout
+			require.NotNil(t, msg)
+			drainedMessages = append(drainedMessages, msg)
+		}
+
+		finalPopCtx, finalPopCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny), "Queue should be empty after draining initial messages")
+		finalPopCancel()
+
+		foundNextRoundMessage := false
+		for _, msg := range drainedMessages {
+			if qbftMsg, ok := msg.Body.(*specqbft.Message); ok {
+				if qbftMsg.Round == nextRound {
+					foundNextRoundMessage = true
+					break
+				}
+				assert.Equal(t, currentRound, qbftMsg.Round)
+			}
+		}
+		assert.False(t, foundNextRoundMessage)
+	})
+
+	t.Run("PrioritizationWhenSaturatedWithFilteredMessages", func(t *testing.T) {
+		logger := mainLogger.Named("PrioritizationWhenSaturated")
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		committee := &Committee{
+			ctx:           ctx,
+			Queues:        make(map[phase0.Slot]queueContainer),
+			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+			BeaconNetwork: mainBeaconNetwork,
+		}
+
+		slot := phase0.Slot(456)
+		queueCapacity := 5
+		currentRound := specqbft.Round(1)
+
+		runnerMutex := &sync.RWMutex{}
+		committeeRunner := &runner.CommitteeRunner{
+			BaseRunner: &runner.BaseRunner{
+				State: &runner.State{
+					RunningInstance: &instance.Instance{
+						State: &specqbft.State{
+							Decided:                         false,
+							ProposalAcceptedForCurrentRound: nil,
+							Round:                           currentRound,
+						},
+					},
+				},
+			},
+		}
+
+		q := queueContainer{
+			Q: queue.New(queueCapacity),
+			queueState: &queue.State{
+				HasRunningInstance: true,
+				Height:             specqbft.Height(slot),
+				Slot:               slot,
+				Round:              currentRound,
+			},
+		}
+
+		var (
+			processedMsgs    []*queue.SSVMessage
+			processMsgsMutex sync.Mutex
+			handlerCalled    = make(chan struct{}, queueCapacity*3)
+		)
+
+		processFn := func(_ context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
+			processMsgsMutex.Lock()
+			processedMsgs = append(processedMsgs, msg)
+			processMsgsMutex.Unlock()
+			handlerCalled <- struct{}{}
+			return nil
+		}
+
+		consumerCtx, consumerCancel := context.WithCancel(ctx)
+		var consumerWg sync.WaitGroup
+		consumerWg.Add(1)
+		go func() {
+			defer consumerWg.Done()
+			go func() {
+				err := committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
+				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+					logger.Error("ConsumeQueue exited with error", zap.Error(err))
+				}
+			}()
+			<-consumerCtx.Done()
+		}()
+
+		time.Sleep(50 * time.Millisecond)
+
+		// Fill with filtered Prepare messages
+		for i := 0; i < queueCapacity; i++ {
+			msgID := spectypes.MessageID{byte(i + 1)}
+			prepare := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
+			require.True(t, q.Q.TryPush(makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepare)))
+		}
+
+		select {
+		case <-handlerCalled:
+			t.Fatal("filtered message was processed too early")
+		default: // Expected
+		}
+
+		// Push ExecuteDuty
+		execData, _ := json.Marshal(&types.ExecuteCommitteeDutyData{Duty: &spectypes.CommitteeDuty{Slot: slot}})
+		execMsg := makeTestSSVMessage(t, message.SSVEventMsgType, spectypes.MessageID{0xEE}, &types.EventMsg{Type: types.ExecuteDuty, Data: execData})
+		require.True(t, q.Q.TryPush(execMsg))
+		select {
+		case <-handlerCalled: // Good
+		case <-time.After(1 * time.Second):
+			t.Fatal("timed out on ExecuteDuty")
+		}
+
+		// Push Proposal
+		proposal := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.ProposalMsgType}
+		propMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, spectypes.MessageID{0xFF}, proposal)
+		require.True(t, q.Q.TryPush(propMsg))
+		select {
+		case <-handlerCalled: // Good
+		case <-time.After(1 * time.Second):
+			t.Fatal("timed out on Proposal")
+		}
+
+		// Now flip runner state so prepares become valid
+		consumerCancel()  // Stop the current consumer
+		consumerWg.Wait() // Wait for it to finish
+
+		ctx2, cancel2 := context.WithCancel(ctx)
+		defer cancel2()
+
+		runnerMutex.Lock()
+		committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
+			&specqbft.ProcessingMessage{QBFTMessage: proposal} // proposal is from this subtest's scope
+		runnerMutex.Unlock()
+
+		// Restart consumption
+		consumer2Ctx, consumer2Cancel := context.WithCancel(ctx2)
+		var consumer2Wg sync.WaitGroup
+		consumer2Wg.Add(1)
+		go func() {
+			defer consumer2Wg.Done()
+			go func() {
+				err := committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
+				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+					logger.Error("ConsumeQueue (phase 2) exited with error", zap.Error(err))
+				}
+			}()
+			<-consumer2Ctx.Done()
+		}()
+
+		// Observe how many of the old Prepares now drain
+		timeout := time.After(2 * time.Second)
+	Loop:
+		for {
+			select {
+			case <-handlerCalled:
+			case <-timeout:
+				break Loop
+			case <-ctx2.Done():
+				break Loop
+			}
+		}
+
+		consumer2Cancel()
+		consumer2Wg.Wait()
+
+		processMsgsMutex.Lock()
+		var sawExec, sawProp bool
+		for _, m := range processedMsgs {
+			if m.MsgType == message.SSVEventMsgType {
+				if e, ok := m.Body.(*types.EventMsg); ok && e.Type == types.ExecuteDuty {
+					sawExec = true
+				}
+			}
+			if m.MsgType == spectypes.SSVConsensusMsgType {
+				if b, ok := m.Body.(*specqbft.Message); ok && b.MsgType == specqbft.ProposalMsgType {
+					sawProp = true
+				}
+			}
+		}
+		processMsgsMutex.Unlock()
+
+		assert.True(t, sawExec)
+		assert.True(t, sawProp)
+	})
 }
