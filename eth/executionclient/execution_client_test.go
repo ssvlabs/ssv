@@ -283,11 +283,10 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	})
 }
 
-// TestFetchHistoricalLogs_Subdivide tests the automatic subdivision logic for handling
-// RPC query limit errors during log fetching.
-// The test specifically targets query limit error handling for error code `-32005`, which
-// is returned by execution clients like Nethermind when too many logs are requested
-// in a single call.
+// TestFetchHistoricalLogs_Subdivide tests handling of EIP-1474 query limits.
+// When receiving error code -32005 ("Limit exceeded") from eth_getLogs requests,
+// the client recursively subdivides the block range until successful or until
+// hitting a non-recoverable error.
 func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 	testCases := []struct {
 		name        string

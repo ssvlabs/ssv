@@ -22,7 +22,7 @@ const elResponseErrMsg = "Execution client returned an error"
 
 const (
 	// errCodeQueryLimit refers to request exceeding the defined limit
-	// https://github.com/NethermindEth/nethermind/blob/a598851f3621f7e79ea2aff3ff6c90e2cec23ee0/src/Nethermind/Nethermind.JsonRpc/ErrorCodes.cs#L68
+	// https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1474.md
 	errCodeQueryLimit = -32005
 )
 
