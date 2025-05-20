@@ -465,7 +465,7 @@ var StartNodeCmd = &cobra.Command{
 				nodeStorage.ValidatorStore(), consensusClient,
 				dstore, networkConfig.Beacon.GetBeaconNetwork())
 
-			go collector.StartEvictionJob(cmd.Context(), slotTickerProvider)
+			go collector.DumpDataToDBPeriodically(cmd.Context(), slotTickerProvider)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
