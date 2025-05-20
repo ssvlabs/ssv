@@ -19,18 +19,18 @@ import (
 
 type Exporter struct {
 	ParticipantStores *ibftstorage.ParticipantStores
-	TraceStore        DutyTraceStore
+	TraceStore        dutyTraceStore
 	Validators        registrystorage.ValidatorStore
 }
 
-type DutyTraceStore interface {
+type dutyTraceStore interface {
 	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
-	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
+	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetAllCommitteeDecideds(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
 }
 
@@ -141,9 +141,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	for _, r := range request.Roles {
 		role := spectypes.BeaconRole(r)
 		switch role {
-		case spectypes.BNRoleAttester:
-			fallthrough
-		case spectypes.BNRoleSyncCommittee:
+		case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
 			for s := request.From; s <= request.To; s++ {
 				slot := phase0.Slot(s)
 				if len(pubkeys) == 0 {
@@ -152,6 +150,8 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 						continue
 					}
 					for _, pr := range participantsByPK {
+						// duty syncer fails to parse messages with no signers so instead
+						// we skip adding the message to the response altogether
 						if len(pr.Signers) == 0 {
 							continue
 						}
@@ -160,11 +160,17 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				}
 				// otherwise iterate over the pubkeys
 				for _, pubkey := range pubkeys {
-					participantsByPK, err := e.TraceStore.GetCommitteeDecideds(slot, pubkey)
+					participantsByPK, err := e.TraceStore.GetCommitteeDecideds(slot, pubkey, role)
 					if err != nil {
-						continue
+						if errors.Is(err, dutytracer.ErrNotFound) {
+							// we might not have a duty for this role, so we skip it
+							continue
+						}
+						return api.Error(fmt.Errorf("error getting committee duty: %w", err))
 					}
 					for _, pr := range participantsByPK {
+						// duty syncer fails to parse messages with no signers so instead
+						// we skip adding the message to the response altogether
 						if len(pr.Signers) == 0 {
 							continue
 						}
@@ -181,6 +187,8 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 						return api.Error(fmt.Errorf("error getting all validator duties: %w", err))
 					}
 					for _, pr := range participantsByPK {
+						// duty syncer fails to parse messages with no signers so instead
+						// we skip adding the message to the response altogether
 						if len(pr.Signers) == 0 {
 							continue
 						}
@@ -198,6 +206,8 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					continue
 				}
 				for _, pr := range participantsByPK {
+					// duty syncer fails to parse messages with no signers so instead
+					// we skip adding the message to the response altogether
 					if len(pr.Signers) == 0 {
 						continue
 					}
@@ -340,26 +350,28 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 					if err != nil {
 						return api.Error(fmt.Errorf("error getting committee ID: %w", err))
 					}
-					duty, err := e.TraceStore.GetCommitteeDuty(slot, committeeID)
+					duty, err := e.TraceStore.GetCommitteeDuty(slot, committeeID, role)
 					if err != nil {
+						if errors.Is(err, dutytracer.ErrNotFound) {
+							// we might not have a duty for this role, so we skip it
+							continue
+						}
 						return api.Error(fmt.Errorf("error getting committee duty: %w", err))
 					}
 
-					// de-duplicate SC and Attester duties
-					if (role == spectypes.BNRoleSyncCommittee && len(duty.SyncCommittee) > 0) ||
-						(role == spectypes.BNRoleAttester && len(duty.Attester) > 0) {
-						cDuty := &dutytracer.ValidatorDutyTrace{
-							CommitteeID: committeeID,
-							ValidatorDutyTrace: model.ValidatorDutyTrace{
-								ConsensusTrace: duty.ConsensusTrace,
-								Slot:           duty.Slot,
-								Validator:      index,
-								Role:           role,
-							},
-						}
-						results = append(results, cDuty)
-						continue
+					validatorDuty := &dutytracer.ValidatorDutyTrace{
+						CommitteeID: committeeID,
+						ValidatorDutyTrace: model.ValidatorDutyTrace{
+							ConsensusTrace: duty.ConsensusTrace,
+							Slot:           duty.Slot,
+							Validator:      index,
+							Role:           role,
+						},
 					}
+
+					results = append(results, validatorDuty)
+
+					continue
 				}
 
 				duty, err := e.TraceStore.GetValidatorDuty(role, slot, pubkey)

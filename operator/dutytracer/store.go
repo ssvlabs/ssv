@@ -119,10 +119,21 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.Co
 	return duties, nil
 }
 
-func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
+var ErrNotFound = errors.New("not found")
+
+func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, roles ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error) {
 	committeeSlots, found := c.committeeTraces.Get(committeeID)
 	if !found {
-		return c.getCommitteeDutyFromDisk(slot, committeeID)
+		trace, err := c.getCommitteeDutyFromDisk(slot, committeeID)
+		if err != nil {
+			return nil, fmt.Errorf("get committee duty from disk: %w", err)
+		}
+
+		if trace != nil && hasSignersForRoles(trace, roles...) {
+			return trace, nil
+		}
+
+		return nil, ErrNotFound
 	}
 
 	trace, found := committeeSlots.Get(slot)
@@ -132,17 +143,44 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 			return nil, fmt.Errorf("get committee duty from disk: %w", err)
 		}
 
-		if trace != nil {
+		if trace != nil && hasSignersForRoles(trace, roles...) {
 			return trace, nil
 		}
 
-		return nil, errors.New("slot not found")
+		return nil, ErrNotFound
+	}
+
+	if !hasSignersForRoles(&trace.CommitteeDutyTrace, roles...) {
+		return nil, ErrNotFound
 	}
 
 	trace.Lock()
 	defer trace.Unlock()
 
 	return deepCopyCommitteeDutyTrace(&trace.CommitteeDutyTrace), nil
+}
+
+// hasSignersForRole checks if the duty has signers for the given role
+// since we don't store a boolean flag to separate duties by their role in the db
+// we rely on the fact that during collection we separate the signers in their
+// corresponding fields (Attester and SyncCommittee) based on the role
+func hasSignersForRoles(duty *model.CommitteeDutyTrace, roles ...spectypes.BeaconRole) bool {
+	if len(roles) == 0 {
+		return true
+	}
+	for _, role := range roles {
+		switch role {
+		case spectypes.BNRoleAttester:
+			if len(duty.Attester) == 0 {
+				return false
+			}
+		case spectypes.BNRoleSyncCommittee:
+			if len(duty.SyncCommittee) == 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
@@ -202,7 +240,7 @@ func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot) (out []qbftstorage
 	return out, nil
 }
 
-func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.ValidatorPK) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) (out []qbftstorage.ParticipantsRangeEntry, err error) {
 	index, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
 		return nil, fmt.Errorf("validator not found: %s", hex.EncodeToString(pubkey[:]))
@@ -213,7 +251,7 @@ func (c *Collector) GetCommitteeDecideds(slot phase0.Slot, pubkey spectypes.Vali
 		return nil, fmt.Errorf("get committee ID by slot(%d) and index(%d): %w", slot, index, err)
 	}
 
-	duty, err := c.GetCommitteeDuty(slot, committeeID)
+	duty, err := c.GetCommitteeDuty(slot, committeeID, roles...)
 	if err != nil {
 		return nil, fmt.Errorf("get committee duty: %w", err)
 	}

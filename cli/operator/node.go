@@ -423,7 +423,7 @@ var StartNodeCmd = &cobra.Command{
 		if cfg.SSVOptions.ValidatorOptions.Exporter && !cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
-			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
+			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -465,7 +465,7 @@ var StartNodeCmd = &cobra.Command{
 				nodeStorage.ValidatorStore(), consensusClient,
 				dstore, networkConfig.Beacon.GetBeaconNetwork())
 
-			go collector.StartEvictionJob(cmd.Context(), slotTickerProvider, 0)
+			go collector.StartEvictionJob(cmd.Context(), slotTickerProvider)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
@@ -1120,7 +1120,7 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	}
 }
 
-func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	var wg sync.WaitGroup
 
 	threshold := slot - phase0.Slot(retain)

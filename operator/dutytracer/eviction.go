@@ -21,7 +21,7 @@ const (
 
 func (c *Collector) evictValidatorCommitteeLinks(threshold phase0.Slot) (totalSaved int) {
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
-		for slot := threshold; ; slot-- {
+		for slot := threshold; slot > 0; slot-- {
 			committeeID, found := slotToCommittee.Get(slot)
 			if !found {
 				break
@@ -45,7 +45,7 @@ func (c *Collector) evictValidatorCommitteeLinks(threshold phase0.Slot) (totalSa
 
 func (c *Collector) evictCommitteeTraces(threshold phase0.Slot) (totalSaved int) {
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
-		for slot := threshold; ; slot-- {
+		for slot := threshold; slot > 0; slot-- {
 			trace, found := slotToTraceMap.Get(slot)
 			if !found {
 				break
@@ -77,7 +77,7 @@ func (c *Collector) evictCommitteeTraces(threshold phase0.Slot) (totalSaved int)
 
 func (c *Collector) evictValidatorTraces(threshold phase0.Slot) (totalSaved int) {
 	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
-		for slot := threshold; ; slot-- {
+		for slot := threshold; slot > 0; slot-- {
 			trace, found := slotToTraceMap.Get(slot)
 			if !found {
 				break

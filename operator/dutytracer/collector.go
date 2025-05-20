@@ -47,7 +47,6 @@ type Collector struct {
 	client     DomainDataProvider
 	validators registrystorage.ValidatorStore
 
-	currentSlot     atomic.Uint64
 	lastEvictedSlot atomic.Uint64
 
 	lateArrivalThreshold phase0.Slot // number of slots to wait before saving late traces
@@ -90,11 +89,11 @@ func New(ctx context.Context,
 
 // scRootKey is a key for the sync committee root cache
 type scRootKey struct {
-	slot phase0.Slot
-	root phase0.Root // block root
+	slot      phase0.Slot
+	blockRoot phase0.Root
 }
 
-func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slotticker.Provider, offset phase0.Slot) {
+func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slotticker.Provider) {
 	c.logger.Info("start duty tracer cache to disk evictor")
 	ticker := tickerProvider()
 	for {
@@ -102,9 +101,8 @@ func (c *Collector) StartEvictionJob(ctx context.Context, tickerProvider slottic
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
-			currentSlot := ticker.Slot() + offset // optional offset
+			currentSlot := ticker.Slot()
 
-			c.currentSlot.Store(uint64(currentSlot))
 			// evict committee traces
 			committeThreshold := currentSlot - ttlCommittee
 			evicted := c.evictCommitteeTraces(committeThreshold)
@@ -449,7 +447,7 @@ func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, 
 		return phase0.Root{}, fmt.Errorf("decode beacon vote: %w", err)
 	}
 
-	key := scRootKey{slot: slot, root: beaconVote.BlockRoot}
+	key := scRootKey{slot: slot, blockRoot: beaconVote.BlockRoot}
 
 	// lookup in cache first
 	cacheItem := c.syncCommitteeRootsCache.Get(key)
@@ -481,8 +479,7 @@ func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, 
 			return phase0.Root{}, fmt.Errorf("compute sync committee root: %w", err)
 		}
 
-		ttl := time.Duration(ttlCommitteeRoot) * c.beacon.SlotDurationSec()
-		_ = c.syncCommitteeRootsCache.Set(key, signingRoot, ttl)
+		_ = c.syncCommitteeRootsCache.Set(key, signingRoot, ttlcache.DefaultTTL)
 
 		return signingRoot, nil
 	})
