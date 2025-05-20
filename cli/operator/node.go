@@ -448,7 +448,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterFull {
+		if (cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterFull) && len(fixedSubnets) == 0 {
 			fixedSubnets, err = networkcommons.FromString(networkcommons.AllSubnets)
 			if err != nil {
 				logger.Fatal("failed to parse all fixed subnets", zap.Error(err))
