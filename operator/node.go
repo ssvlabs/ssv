@@ -126,7 +126,7 @@ func (n *Node) Start() error {
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	if n.validatorOptions.Exporter {
+	if n.validatorOptions.Exporter || n.validatorOptions.ExporterFull {
 		// Subscribe to all subnets.
 		err := n.net.SubscribeAll()
 		if err != nil {

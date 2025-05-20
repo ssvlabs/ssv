@@ -18,7 +18,6 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -29,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator/metadata"
 	"github.com/ssvlabs/ssv/operator/validators"
@@ -72,6 +72,7 @@ type ControllerOptions struct {
 	Beacon                     beaconprotocol.BeaconNode
 	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
 	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:"Enable data export functionality"`
+	ExporterFull               bool   `yaml:"ExporterFull" env:"EXPORTER_FULL" env-default:"false" env-description:"Expose all validator duties to the exporter in addition to the decideds"`
 	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"Number of slots to retain in export data"`
 	BeaconSigner               ekm.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
@@ -80,6 +81,7 @@ type ControllerOptions struct {
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
+	DutyTraceCollector         *dutytracer.Collector
 	StorageMap                 *storage.ParticipantStores
 	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
@@ -118,11 +120,6 @@ type Controller interface {
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
-}
-
-type committeeObserver struct {
-	*validator.CommitteeObserver
-	sync.Mutex
 }
 
 type Nonce uint16
@@ -180,7 +177,7 @@ type controller struct {
 	messageValidator     validation.MessageValidator
 
 	// nonCommittees is a cache of initialized committeeObserver instances
-	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
+	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *validator.CommitteeObserver]
 	committeesObserversMutex sync.Mutex
 
 	attesterRoots   *ttlcache.Cache[phase0.Root, struct{}]
@@ -191,6 +188,8 @@ type controller struct {
 
 	indicesChange   chan struct{}
 	validatorExitCh chan duties.ExitDescriptor
+
+	traceCollector *dutytracer.Collector
 }
 
 // NewController creates a new validator controller instance
@@ -222,6 +221,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GasLimit:            options.GasLimit,
 		MessageValidator:    options.MessageValidator,
 		Graffiti:            options.Graffiti,
+		ExporterFull:        options.ExporterFull,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -250,6 +250,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
+		traceCollector:    options.DutyTraceCollector,
 
 		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
@@ -263,7 +264,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
 		committeesObservers: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *committeeObserver](cacheTTL),
+			ttlcache.WithTTL[spectypes.MessageID, *validator.CommitteeObserver](cacheTTL),
 		),
 		attesterRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
@@ -289,7 +290,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
 	go ctrl.domainCache.Start()
-	go ctrl.beaconVoteRoots.Start()
 
 	return &ctrl
 }
@@ -343,7 +343,7 @@ func (c *controller) handleRouterMessages() {
 					v.HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(ctx, c.logger, m)
-				} else if c.validatorOptions.Exporter {
+				} else if c.validatorOptions.Exporter || c.validatorOptions.ExporterFull {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
@@ -369,11 +369,12 @@ var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
 }
 
 func (c *controller) handleWorkerMessages(ctx context.Context, msg network.DecodedSSVMessage) error {
-	var ncv *committeeObserver
 	ssvMsg := msg.(*queue.SSVMessage)
 
-	item := c.getNonCommitteeValidators(ssvMsg.GetID())
-	if item == nil {
+	var ncv *validator.CommitteeObserver
+
+	item := c.committeesObservers.Get(ssvMsg.GetID())
+	if item == nil || item.Value() == nil {
 		committeeObserverOptions := validator.CommitteeObserverOptions{
 			Logger:            c.logger,
 			NetworkConfig:     c.networkConfig,
@@ -389,28 +390,32 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 			DomainCache:       c.domainCache,
 			BeaconVoteRoots:   c.beaconVoteRoots,
 		}
-		ncv = &committeeObserver{
-			CommitteeObserver: validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions),
-		}
+
+		ncv = validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions)
+
 		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
-		c.committeesObservers.Set(
-			ssvMsg.GetID(),
-			ncv,
-			time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
-		)
+		ttl := time.Duration(ttlSlots) * c.beacon.GetBeaconNetwork().SlotDurationSec()
+
+		c.committeesObservers.Set(ssvMsg.GetID(), ncv, ttl)
 	} else {
-		ncv = item
+		ncv = item.Value()
 	}
+
+	if c.validatorOptions.ExporterFull {
+		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
+	}
+
 	if err := c.handleNonCommitteeMessages(ctx, ssvMsg, ncv); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (c *controller) handleNonCommitteeMessages(
 	ctx context.Context,
 	msg *queue.SSVMessage,
-	ncv *committeeObserver,
+	ncv *validator.CommitteeObserver,
 ) error {
 	c.committeesObserversMutex.Lock()
 	defer c.committeesObserversMutex.Unlock()
@@ -427,7 +432,7 @@ func (c *controller) handleNonCommitteeMessages(
 			return nil
 		}
 
-		return ncv.OnProposalMsg(ctx, msg)
+		return ncv.SaveRoots(ctx, msg)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
@@ -436,14 +441,7 @@ func (c *controller) handleNonCommitteeMessages(
 
 		return ncv.ProcessMessage(msg)
 	}
-	return nil
-}
 
-func (c *controller) getNonCommitteeValidators(messageId spectypes.MessageID) *committeeObserver {
-	item := c.committeesObservers.Get(messageId)
-	if item != nil {
-		return item.Value()
-	}
 	return nil
 }
 
@@ -466,7 +464,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		}
 	}
 
-	if c.validatorOptions.Exporter {
+	if c.validatorOptions.Exporter || c.validatorOptions.ExporterFull {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
 	} else {
