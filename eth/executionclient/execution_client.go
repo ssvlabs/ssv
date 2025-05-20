@@ -281,13 +281,16 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	}
 
 	totalLogs := len(leftLogs) + len(rightLogs)
+	combinedLogs := make([]ethtypes.Log, 0, totalLogs)
+	combinedLogs = append(combinedLogs, leftLogs...)
+	combinedLogs = append(combinedLogs, rightLogs...)
 
 	ec.logger.Info("successfully fetched logs after subdivision",
 		fields.FromBlock(fromBlock),
 		fields.ToBlock(toBlock),
 		zap.Int("total_logs", totalLogs))
 
-	return append(leftLogs, rightLogs...), nil
+	return combinedLogs, nil
 }
 
 // StreamLogs subscribes to events emitted by the contract.
