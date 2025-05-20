@@ -21,7 +21,7 @@ import (
 
 // RecipientController submit proposal preparation to beacon node for all committee validators
 type RecipientController interface {
-	Start(logger *zap.Logger)
+	Start(ctx context.Context)
 }
 
 // ControllerOptions holds the needed dependencies
@@ -37,6 +37,7 @@ type ControllerOptions struct {
 
 // recipientController implementation of RecipientController
 type recipientController struct {
+	logger             *zap.Logger
 	ctx                context.Context
 	beaconClient       beaconprotocol.BeaconNode
 	beaconConfig       networkconfig.BeaconConfig
@@ -46,8 +47,9 @@ type recipientController struct {
 	operatorDataStore  operatordatastore.OperatorDataStore
 }
 
-func NewController(opts *ControllerOptions) *recipientController {
+func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientController {
 	return &recipientController{
+		logger:             logger,
 		ctx:                opts.Ctx,
 		beaconClient:       opts.BeaconClient,
 		beaconConfig:       opts.BeaconConfig,
@@ -58,8 +60,8 @@ func NewController(opts *ControllerOptions) *recipientController {
 	}
 }
 
-func (rc *recipientController) Start(logger *zap.Logger) {
-	rc.listenToTicker(logger)
+func (rc *recipientController) Start(ctx context.Context) {
+	rc.listenToTicker(ctx)
 }
 
 // listenToTicker loop over the given slot channel
@@ -67,7 +69,7 @@ func (rc *recipientController) Start(logger *zap.Logger) {
 // in addition, submitting "same data" every slot is not efficient and can overload beacon node
 // instead we can subscribe to beacon node events and submit only when there is
 // a new fee recipient event (or new validator) was handled or when there is a syncing issue with beacon node
-func (rc *recipientController) listenToTicker(logger *zap.Logger) {
+func (rc *recipientController) listenToTicker(ctx context.Context) {
 	firstTimeSubmitted := false
 	ticker := rc.slotTickerProvider()
 	for {
@@ -79,14 +81,13 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger) {
 		}
 		firstTimeSubmitted = true
 
-		err := rc.prepareAndSubmit(logger, slot)
-		if err != nil {
-			logger.Warn("could not submit proposal preparations", zap.Error(err))
+		if err := rc.prepareAndSubmit(ctx); err != nil {
+			rc.logger.Warn("could not submit proposal preparations", zap.Error(err))
 		}
 	}
 }
 
-func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.Slot) error {
+func (rc *recipientController) prepareAndSubmit(ctx context.Context) error {
 	shares := rc.shareStorage.List(
 		nil,
 		storage.ByOperatorID(rc.operatorDataStore.GetOperatorID()),
@@ -102,9 +103,9 @@ func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.
 		}
 		batch := shares[start:end]
 
-		count, err := rc.submit(logger, batch)
+		count, err := rc.submit(ctx, batch)
 		if err != nil {
-			logger.Warn("could not submit proposal preparation batch",
+			rc.logger.Warn("could not submit proposal preparation batch",
 				zap.Int("start_index", start),
 				zap.Error(err),
 			)
@@ -113,19 +114,19 @@ func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.
 		submitted += count
 	}
 
-	logger.Debug("✅  successfully submitted proposal preparations",
+	rc.logger.Debug("✅  successfully submitted proposal preparations",
 		zap.Int("submitted", submitted),
 		zap.Int("total", len(shares)),
 	)
 	return nil
 }
 
-func (rc *recipientController) submit(logger *zap.Logger, shares []*types.SSVShare) (int, error) {
+func (rc *recipientController) submit(ctx context.Context, shares []*types.SSVShare) (int, error) {
 	m, err := rc.toProposalPreparation(shares)
 	if err != nil {
 		return 0, errors.Wrap(err, "could not build proposal preparation batch")
 	}
-	err = rc.beaconClient.SubmitProposalPreparation(m)
+	err = rc.beaconClient.SubmitProposalPreparation(ctx, m)
 	if err != nil {
 		return 0, errors.Wrap(err, "could not submit proposal preparation batch")
 	}

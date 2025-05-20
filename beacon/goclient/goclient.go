@@ -120,12 +120,10 @@ const (
 
 // GoClient implementing Beacon struct
 type GoClient struct {
-	log          *zap.Logger
-	ctx          context.Context
+	log         *zap.Logger
 	beaconConfig networkconfig.BeaconConfig
-	clients      []Client
-	multiClient  MultiClient
-	specssv.VersionCalls
+	clients     []Client
+	multiClient MultiClient
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
@@ -182,6 +180,7 @@ type GoClient struct {
 
 // New init new client and go-client instance
 func New(
+	ctx context.Context,
 	logger *zap.Logger,
 	opt Options,
 	slotTickerProvider slotticker.Provider,
@@ -201,7 +200,6 @@ func New(
 
 	client := &GoClient{
 		log:                   logger.Named("consensus_client"),
-		ctx:                   opt.Context,
 		beaconConfig:          opt.BeaconConfig,
 		syncDistanceTolerance: phase0.Slot(opt.SyncDistanceTolerance),
 		registrations:         map[phase0.BLSPubKey]*validatorRegistration{},
@@ -235,12 +233,12 @@ func New(
 
 	beaconAddrList := strings.Split(opt.BeaconNodeAddr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 	for _, beaconAddr := range beaconAddrList {
-		if err := client.addSingleClient(opt.Context, beaconAddr); err != nil {
+		if err := client.addSingleClient(ctx, beaconAddr); err != nil {
 			return nil, err
 		}
 	}
 
-	err := client.initMultiClient(opt.Context)
+	err := client.initMultiClient(ctx)
 	if err != nil {
 		logger.Error("Consensus multi client initialization failed",
 			zap.String("address", opt.BeaconNodeAddr),
@@ -252,12 +250,12 @@ func New(
 
 	client.nodeSyncingFn = client.nodeSyncing
 
-	go client.registrationSubmitter(slotTickerProvider)
+	go client.registrationSubmitter(ctx, slotTickerProvider)
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()
 
 	logger.Info("starting event listener")
-	if err := client.startEventListener(opt.Context); err != nil {
+	if err := client.startEventListener(ctx); err != nil {
 		return nil, errors.Wrap(err, "failed to launch event listener")
 	}
 

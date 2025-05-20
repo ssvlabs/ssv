@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -56,7 +55,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 		client := eventsTestClient(t, server.URL)
 		defer server.Close()
 
-		err := client.SubscribeToHeadEvents(context.Background(), "test_caller", make(chan<- *apiv1.HeadEvent))
+		err := client.SubscribeToHeadEvents(t.Context(), "test_caller", make(chan<- *apiv1.HeadEvent))
 
 		assert.NoError(t, err)
 		assert.Len(t, client.headEventSubscribers, 1)
@@ -71,7 +70,7 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 		client.supportedTopics = []EventTopic{}
 		defer server.Close()
 
-		err := client.SubscribeToHeadEvents(context.Background(), "test_caller", make(chan<- *apiv1.HeadEvent))
+		err := client.SubscribeToHeadEvents(t.Context(), "test_caller", make(chan<- *apiv1.HeadEvent))
 
 		assert.Error(t, err)
 		assert.Equal(t, "the list of supported topics did not contain 'HeadEventTopic', cannot add new subscriber", err.Error())
@@ -80,11 +79,13 @@ func TestSubscribeToHeadEvents(t *testing.T) {
 }
 
 func eventsTestClient(t *testing.T, serverURL string) *GoClient {
-	server, err := New(zap.NewNop(), Options{
-		BeaconNodeAddr: serverURL,
-		Context:        context.Background(),
-		BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
-	},
+	server, err := New(
+		t.Context(),
+		zap.NewNop(),
+		Options{
+			BeaconNodeAddr: serverURL,
+			BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
+		},
 		tests.MockSlotTickerProvider)
 
 	require.NoError(t, err)
