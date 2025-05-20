@@ -1094,7 +1094,6 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 				Decided:                         false,
 				ProposalAcceptedForCurrentRound: acceptedProposal,
 				Round:                           currentRound,
-				Height:                          specqbft.Height(slot),
 			}}},
 		},
 	}
@@ -1465,21 +1464,32 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 }
 
 // TestQueueLoadAndSaturationScenarios verifies committee queue handling under load and saturation conditions.
-// It tests two key scenarios:
+// It tests three key scenarios:
 //
-//   - DropWhenInboxStrictlyFull: Confirms that when a queue's intake buffer reaches capacity,
+//   - drop when inbox strictly full: Confirms that when a queue's intake buffer reaches capacity,
 //     HandleMessage drops incoming messages regardless of potential processability by ConsumeQueue.
-//     This test validates concerns about message loss when filtering causes queue backups.
 //
-//   - PrioritizationWhenSaturatedWithFilteredMessages: Verifies that high-priority messages
+//   - high priority messages dropped when queue full: Demonstrates that even highest-priority messages
+//     like ExecuteDuty events are dropped when the queue's intake buffer is full.
+//
+//   - prioritization when saturated with filtered messages: Verifies that high-priority messages
 //     (e.g., ExecuteDuty, Proposals) can still be processed even when many filtered messages
 //     occupy the queue, provided the intake buffer has not reached absolute capacity.
 //     This demonstrates the effectiveness of the prioritization mechanism.
+//
+// POSSIBLE ISSUE:
+// This test suite has identified a potential issue with the queue's handling of messages under load and saturation conditions.
+//
+//  1. Message Dropping: When a queue fills up, new messages get dropped completely, even
+//     high-priority ones. This happens because the queue uses a non-blocking approach when
+//     receiving new messages. If there's no space, messages are discarded rather than waiting
+//     for space to become available. This means important messages could be lost during periods
+//     of heavy load or when messages get stuck in the queue due to filtering rules.
 func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	mainLogger, _ := zap.NewDevelopment()
 	mainBeaconNetwork := qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork()
 
-	t.Run("DropWhenInboxStrictlyFull", func(t *testing.T) {
+	t.Run("drop when inbox strictly full", func(t *testing.T) {
 		logger := mainLogger.Named("DropWhenInboxStrictlyFull")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
@@ -1554,7 +1564,104 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		assert.False(t, foundNextRoundMessage)
 	})
 
-	t.Run("PrioritizationWhenSaturatedWithFilteredMessages", func(t *testing.T) {
+	t.Run("high priority messages dropped when queue full", func(t *testing.T) {
+		logger := mainLogger.Named("HighPriorityDropping")
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		committee := &Committee{
+			ctx:           ctx,
+			Queues:        make(map[phase0.Slot]queueContainer),
+			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
+			BeaconNetwork: mainBeaconNetwork,
+			mtx:           sync.RWMutex{},
+		}
+
+		slot := phase0.Slot(789)
+		currentRound := specqbft.Round(1)
+		queueCapacity := 3
+
+		qContainer := queueContainer{
+			Q: queue.New(queueCapacity),
+			queueState: &queue.State{
+				HasRunningInstance: true,
+				Height:             specqbft.Height(slot),
+				Slot:               slot,
+				Round:              currentRound,
+			},
+		}
+		committee.mtx.Lock()
+		committee.Queues[slot] = qContainer
+		committee.mtx.Unlock()
+
+		// 1. Fill the queue with low-priority consensus messages
+		for i := 0; i < queueCapacity; i++ {
+			msgID := spectypes.MessageID{byte(i + 1)}
+			commitMsgBody := &specqbft.Message{
+				Height:  specqbft.Height(slot),
+				Round:   currentRound,
+				MsgType: specqbft.CommitMsgType, // Low priority consensus message
+			}
+			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, commitMsgBody)
+			committee.HandleMessage(ctx, logger, testMsg)
+		}
+		require.Equal(t, queueCapacity, qContainer.Q.Len(), "Queue should be at capacity")
+
+		// 2. Try to add a high-priority proposal message (proposals are higher priority than commits)
+		highPriorityMsgBody := &specqbft.Message{
+			Height:  specqbft.Height(slot),
+			Round:   currentRound,
+			MsgType: specqbft.ProposalMsgType, // Higher priority than commit
+		}
+		highPriorityMsg := makeTestSSVMessage(
+			t,
+			spectypes.SSVConsensusMsgType,
+			spectypes.MessageID{0xEE},
+			highPriorityMsgBody,
+		)
+
+		// Attempt to push using HandleMessage
+		// This should be dropped because the queue is full, even though it's a higher priority message
+		committee.HandleMessage(ctx, logger, highPriorityMsg)
+
+		// 3. Verify queue length still at capacity
+		assert.Equal(t, queueCapacity, qContainer.Q.Len())
+
+		// 4. Verify only the original messages are in the queue
+		drainedMessages := make([]*queue.SSVMessage, 0, queueCapacity)
+		for i := 0; i < queueCapacity; i++ {
+			popCtx, popCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
+			popCancel()
+			require.NotNil(t, msg)
+			drainedMessages = append(drainedMessages, msg)
+		}
+
+		// Verify no high priority proposal message in the queue
+		foundHighPriorityMessage := false
+		for _, msg := range drainedMessages {
+			if msg.MsgType == spectypes.SSVConsensusMsgType {
+				if qbftMsg, ok := msg.Body.(*specqbft.Message); ok && qbftMsg.MsgType == specqbft.ProposalMsgType {
+					foundHighPriorityMessage = true
+					break
+				}
+			}
+		}
+		assert.False(t, foundHighPriorityMessage)
+
+		// Verify all drained messages are the original commits
+		commitCount := 0
+		for _, msg := range drainedMessages {
+			if msg.MsgType == spectypes.SSVConsensusMsgType {
+				if qbftMsg, ok := msg.Body.(*specqbft.Message); ok && qbftMsg.MsgType == specqbft.CommitMsgType {
+					commitCount++
+				}
+			}
+		}
+		assert.Equal(t, queueCapacity, commitCount)
+	})
+
+	t.Run("prioritization when saturated with filtered messages", func(t *testing.T) {
 		logger := mainLogger.Named("PrioritizationWhenSaturated")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
@@ -1667,7 +1774,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 
 		runnerMutex.Lock()
 		committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
-			&specqbft.ProcessingMessage{QBFTMessage: proposal} // proposal is from this subtest's scope
+			&specqbft.ProcessingMessage{QBFTMessage: proposal}
 		runnerMutex.Unlock()
 
 		// Restart consumption
