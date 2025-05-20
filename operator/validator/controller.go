@@ -189,7 +189,7 @@ type controller struct {
 	syncCommRoots   *ttlcache.Cache[phase0.Root, struct{}]
 	beaconVoteRoots *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
 
-	domainCache *validator.DomainCache
+	domainCache *validator.DomainProvider
 
 	indicesChange   chan struct{}
 	validatorExitCh chan duties.ExitDescriptor

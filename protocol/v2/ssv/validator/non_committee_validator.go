@@ -41,7 +41,7 @@ type CommitteeObserver struct {
 	rootsMtx          *sync.RWMutex
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache       *DomainCache
+	domainCache       *DomainProvider
 
 	// cache to identify and skip duplicate computations of attester/sync committee roots
 	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
@@ -72,7 +72,7 @@ type CommitteeObserverOptions struct {
 	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	BeaconVoteRoots   *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
-	DomainCache       *DomainCache
+	DomainCache       *DomainProvider
 }
 
 func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {
@@ -379,7 +379,7 @@ func (o *CommitteeObserver) OnProposalMsg(ctx context.Context, msg *queue.SSVMes
 }
 
 func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
-	attesterDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAttester)
+	attesterDomain, err := ncv.domainCache.Fetch(ctx, epoch, spectypes.DomainAttester)
 	if err != nil {
 		return err
 	}
@@ -402,7 +402,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 	epoch phase0.Epoch,
 	beaconVote *spectypes.BeaconVote,
 ) error {
-	syncCommDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainSyncCommittee)
+	syncCommDomain, err := ncv.domainCache.Fetch(ctx, epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return err
 	}
