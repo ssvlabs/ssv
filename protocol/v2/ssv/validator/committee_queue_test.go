@@ -12,10 +12,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	qbfttests "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	qbfttests "github.com/ssvlabs/ssv/integration/qbft/tests"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -909,12 +910,12 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 		expectedProcessed []bool
 	}{
 		{
-			name:              "no running instance",
+			name:              "no active duty",
 			hasRunningDuty:    false,
 			decided:           false,
 			proposalAccepted:  false,
 			messagesTypes:     []specqbft.MessageType{specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType},
-			expectedProcessed: []bool{false, false, false}, // None should be processed
+			expectedProcessed: []bool{true, true, true}, // All messages processed with queue.FilterAny when no active duty
 		},
 		{
 			name:              "no proposal accepted",
@@ -988,6 +989,11 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				},
 			}
 
+			// false for HasRunningDuty()
+			if tc.name == "no active duty" {
+				committeeRunner.BaseRunner.State.Finished = true
+			}
+
 			processed := make([]*queue.SSVMessage, 0)
 			handlerCalled := make(chan struct{}, len(tc.messagesTypes))
 
@@ -1010,16 +1016,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				require.True(t, pushed)
 			}
 
-			if tc.name == "no running instance" {
-				// For this special test case, simply wait for context to be done
-				go func() {
-					for ctx.Err() == nil {
-						time.Sleep(50 * time.Millisecond)
-					}
-				}()
-			} else {
-				safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
-			}
+			safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
 
 			expectedProcessedCount := 0
 			for _, shouldProcess := range tc.expectedProcessed {
