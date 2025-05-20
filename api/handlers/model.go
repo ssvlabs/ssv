@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	model "github.com/ssvlabs/ssv/exporter/v2"
 )
@@ -218,5 +219,5 @@ func toUint64Slice(s []phase0.ValidatorIndex) []uint64 {
 
 //nolint:gosec
 func toTime(t uint64) time.Time {
-	return time.Unix(0, int64(t)*int64(time.Millisecond))
+	return time.UnixMilli(int64(t))
 }

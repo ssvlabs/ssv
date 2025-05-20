@@ -524,7 +524,7 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 	}()
 
 	//nolint:gosec
-	startTime := uint64(start.UnixNano() / int64(time.Millisecond))
+	startTime := uint64(start.UnixMilli())
 
 	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
