@@ -14,8 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	gomock "go.uber.org/mock/gomock"
-	"go.uber.org/zap"
+	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -43,9 +42,9 @@ func TestSubmitProposal(t *testing.T) {
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
 	network := networkconfig.TestNetwork
-	populateStorage(t, logger, shareStorage, operatorData)
+	populateStorage(t, shareStorage, operatorData)
 
-	frCtrl := NewController(&ControllerOptions{
+	frCtrl := NewController(logger, &ControllerOptions{
 		Ctx:               context.TODO(),
 		Network:           network,
 		ShareStorage:      shareStorage,
@@ -59,7 +58,7 @@ func TestSubmitProposal(t *testing.T) {
 		wg.Add(numberOfRequests) // Set up the wait group before starting goroutines
 
 		client := beacon.NewMockBeaconNode(ctrl)
-		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return nil
 		}).Times(numberOfRequests)
@@ -77,7 +76,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(logger)
+		go frCtrl.Start(t.Context())
 
 		slots := []phase0.Slot{
 			1,                                        // first time
@@ -102,7 +101,7 @@ func TestSubmitProposal(t *testing.T) {
 	t.Run("error handling", func(t *testing.T) {
 		var wg sync.WaitGroup
 		client := beacon.NewMockBeaconNode(ctrl)
-		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+		client.EXPECT().SubmitProposalPreparation(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return errors.New("failed to submit")
 		}).MinTimes(2).MaxTimes(2)
@@ -117,7 +116,7 @@ func TestSubmitProposal(t *testing.T) {
 			return ticker
 		}
 
-		go frCtrl.Start(logger)
+		go frCtrl.Start(t.Context())
 		mockTimeChan <- time.Now()
 		wg.Add(2)
 		wg.Wait()
@@ -137,7 +136,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, regis
 	return db, shareStorage, registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
 }
 
-func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
+func populateStorage(t *testing.T, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
 	createShare := func(index int, operatorID spectypes.OperatorID) *types.SSVShare {
 		ownerAddr := fmt.Sprintf("%d", index)
 		ownerAddrByte := [20]byte{}

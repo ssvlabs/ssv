@@ -216,7 +216,7 @@ func TestPeriodicGC(t *testing.T) {
 	})
 
 	db.wg.Add(1)
-	go db.periodicallyCollectGarbage(logger, 20*time.Millisecond)
+	go db.periodicallyCollectGarbage(20 * time.Millisecond)
 
 	prefix := []byte("periodic")
 
@@ -265,7 +265,7 @@ func TestPeriodicGC_Cancellation(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
 	db.wg.Add(1)
-	go db.periodicallyCollectGarbage(logger, 10*time.Hour)
+	go db.periodicallyCollectGarbage(10 * time.Hour)
 
 	cancel()
 	done := make(chan struct{})
