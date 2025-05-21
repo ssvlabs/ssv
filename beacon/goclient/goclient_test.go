@@ -24,13 +24,12 @@ func TestHealthy(t *testing.T) {
 		longTimeout   = 500 * time.Millisecond
 	)
 
-	ctx := context.Background()
 	undialableServer := tests.MockServer(nil)
-	c, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
+	c, err := mockClient(t.Context(), undialableServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
 
 	client := c.(*GoClient)
-	err = client.Healthy(ctx)
+	err = client.Healthy(t.Context())
 	require.NoError(t, err)
 
 	t.Run("sync distance larger than allowed", func(t *testing.T) {
@@ -45,7 +44,7 @@ func TestHealthy(t *testing.T) {
 
 		client.syncDistanceTolerance = 2
 
-		err = client.Healthy(ctx)
+		err = client.Healthy(t.Context())
 		require.ErrorIs(t, err, errSyncing)
 	})
 
@@ -61,14 +60,12 @@ func TestHealthy(t *testing.T) {
 
 		client.syncDistanceTolerance = 3
 
-		err = client.Healthy(ctx)
+		err = client.Healthy(t.Context())
 		require.NoError(t, err)
 	})
 }
 
 func TestTimeouts(t *testing.T) {
-	ctx := context.Background()
-
 	const (
 		commonTimeout = 100 * time.Millisecond
 		longTimeout   = 500 * time.Millisecond
@@ -82,7 +79,7 @@ func TestTimeouts(t *testing.T) {
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
-		_, err := mockClient(ctx, undialableServer.URL, commonTimeout, longTimeout)
+		_, err := mockClient(t.Context(), undialableServer.URL, commonTimeout, longTimeout)
 		require.ErrorContains(t, err, "client is not active")
 	}
 
@@ -97,10 +94,10 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
+		client, err := mockClient(t.Context(), unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		validators, err := client.GetValidatorData(nil) // Should call BeaconState internally.
+		validators, err := client.GetValidatorData(t.Context(), nil) // Should call BeaconState internally.
 		require.NoError(t, err)
 
 		var validatorKeys []phase0.BLSPubKey
@@ -108,10 +105,10 @@ func TestTimeouts(t *testing.T) {
 			validatorKeys = append(validatorKeys, v.Validator.PublicKey)
 		}
 
-		_, err = client.GetValidatorData(validatorKeys) // Shouldn't call BeaconState internally.
+		_, err = client.GetValidatorData(t.Context(), validatorKeys) // Shouldn't call BeaconState internally.
 		require.ErrorContains(t, err, "context deadline exceeded")
 
-		duties, err := client.ProposerDuties(ctx, mockServerEpoch, nil)
+		duties, err := client.ProposerDuties(t.Context(), mockServerEpoch, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
@@ -125,10 +122,10 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
+		client, err := mockClient(t.Context(), unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		_, err = client.ProposerDuties(ctx, mockServerEpoch, nil)
+		_, err = client.ProposerDuties(t.Context(), mockServerEpoch, nil)
 		require.ErrorContains(t, err, "context deadline exceeded")
 	}
 
@@ -146,14 +143,14 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(ctx, fastServer.URL, commonTimeout, longTimeout)
+		client, err := mockClient(t.Context(), fastServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		validators, err := client.GetValidatorData(nil)
+		validators, err := client.GetValidatorData(t.Context(), nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, validators)
 
-		duties, err := client.ProposerDuties(ctx, mockServerEpoch, nil)
+		duties, err := client.ProposerDuties(t.Context(), mockServerEpoch, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
@@ -161,9 +158,9 @@ func TestTimeouts(t *testing.T) {
 
 func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
 	return New(
+		ctx,
 		zap.NewNop(),
 		Options{
-			Context:        ctx,
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,

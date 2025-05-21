@@ -84,7 +84,7 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 		h.logger.Debug("no committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
 	}
 
-	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, h.logger, committeeMap)
+	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
 }
 
 func (h *CommitteeHandler) buildCommitteeDuties(
@@ -190,7 +190,7 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 
 	// execute task if slot already began and not pass 1 epoch
 	var attestationPropagationSlotRange = h.beaconConfig.GetSlotsPerEpoch()
-	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
+	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= attestationPropagationSlotRange {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {

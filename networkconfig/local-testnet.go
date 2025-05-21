@@ -3,7 +3,6 @@ package networkconfig
 import (
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -12,7 +11,7 @@ var LocalTestnet = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.PraterNetwork),
 		SlotDuration:  spectypes.PraterNetwork.SlotDurationSec(),
-		SlotsPerEpoch: phase0.Slot(spectypes.PraterNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch: spectypes.PraterNetwork.SlotsPerEpoch(),
 		ForkVersion:   spectypes.PraterNetwork.ForkVersion(),
 		GenesisTime:   time.Unix(int64(spectypes.PraterNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},

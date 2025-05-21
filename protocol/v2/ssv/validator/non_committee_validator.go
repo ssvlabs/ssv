@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"slices"
@@ -327,7 +328,7 @@ func (ncv *CommitteeObserver) verifyBeaconPartialSignature(signer uint64, signat
 	return fmt.Errorf("unknown signer")
 }
 
-func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
+func (ncv *CommitteeObserver) OnProposalMsg(ctx context.Context, msg *queue.SSVMessage) error {
 	beaconVote := &spectypes.BeaconVote{}
 	if err := beaconVote.Decode(msg.SignedSSVMessage.FullData); err != nil {
 		ncv.logger.Debug("❗ failed to get beacon vote data", zap.Error(err))
@@ -348,11 +349,11 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 
 	epoch := ncv.beaconConfig.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
-	if err := ncv.saveAttesterRoots(epoch, beaconVote, qbftMsg); err != nil {
+	if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
 		return err
 	}
 
-	if err := ncv.saveSyncCommRoots(epoch, beaconVote); err != nil {
+	if err := ncv.saveSyncCommRoots(ctx, epoch, beaconVote); err != nil {
 		return err
 	}
 
@@ -362,8 +363,8 @@ func (ncv *CommitteeObserver) OnProposalMsg(msg *queue.SSVMessage) error {
 	return nil
 }
 
-func (ncv *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
-	attesterDomain, err := ncv.domainCache.Get(epoch, spectypes.DomainAttester)
+func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
+	attesterDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAttester)
 	if err != nil {
 		return err
 	}
@@ -381,8 +382,12 @@ func (ncv *CommitteeObserver) saveAttesterRoots(epoch phase0.Epoch, beaconVote *
 	return nil
 }
 
-func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *spectypes.BeaconVote) error {
-	syncCommDomain, err := ncv.domainCache.Get(epoch, spectypes.DomainSyncCommittee)
+func (ncv *CommitteeObserver) saveSyncCommRoots(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	beaconVote *spectypes.BeaconVote,
+) error {
+	syncCommDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return err
 	}
@@ -400,7 +405,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(epoch phase0.Epoch, beaconVote *
 
 func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
 	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
-	return int(ncv.beaconConfig.GetSlotsPerEpoch()) + int(validation.LateSlotAllowance)
+	return int(ncv.beaconConfig.GetSlotsPerEpoch()) + validation.LateSlotAllowance
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {

@@ -7,7 +7,7 @@ import (
 // ValidatorState keeps track of the signers for a given public key and role.
 type ValidatorState struct {
 	operators       []*OperatorState
-	storedSlotCount phase0.Slot
+	storedSlotCount uint64
 }
 
 func (cs *ValidatorState) Signer(idx int) *OperatorState {
@@ -26,7 +26,7 @@ type OperatorState struct {
 	prevEpochDuties uint64
 }
 
-func newOperatorState(size phase0.Slot) *OperatorState {
+func newOperatorState(size uint64) *OperatorState {
 	return &OperatorState{
 		signers: make([]*SignerState, size),
 	}
