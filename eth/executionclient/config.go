@@ -26,16 +26,9 @@ type Config struct {
 // NewConfigFromNetwork creates a new Config with network-specific values
 // and default values for other parameters.
 func NewConfigFromNetwork(networkCfg networkconfig.NetworkConfig) Config {
-	var finalityConsensusEpoch phase0.Epoch
-
-	finalityConsensusFork := networkCfg.Forks.FindForkByName("Finality Consensus")
-	if finalityConsensusFork != nil {
-		finalityConsensusEpoch = finalityConsensusFork.Epoch
-	}
-
 	return Config{
 		SlotsPerEpoch:          networkCfg.SlotsPerEpoch(),
-		FinalityConsensusEpoch: finalityConsensusEpoch,
+		FinalityConsensusEpoch: networkCfg.Forks.GetFinalityConsensusEpoch(),
 		FollowDistance:         DefaultFollowDistance,
 	}
 }

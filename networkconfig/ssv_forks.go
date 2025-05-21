@@ -1,6 +1,10 @@
 package networkconfig
 
-import "github.com/attestantio/go-eth2-client/spec/phase0"
+import (
+	"math"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+)
 
 // Fork is a numerical identifier of specific network upgrades (forks).
 type Fork int
@@ -24,6 +28,9 @@ var forkToString = map[Fork]string{
 	FinalityConsensus: "Finality Consensus", // TODO: use a different name when we have a better one
 }
 
+// MaxEpoch represents undefined epoch for not-yet-scheduled forks
+var MaxEpoch = phase0.Epoch(math.MaxUint64)
+
 // SSVFork describes a single SSV protocol fork.
 type SSVFork struct {
 	// Name of the fork
@@ -46,6 +53,18 @@ func (f SSVForks) ActiveFork(epoch phase0.Epoch) *SSVFork {
 	return nil
 }
 
+// ComputeActiveFork returns the active fork for the given epoch
+func (f SSVForks) ComputeActiveFork(epoch phase0.Epoch) *SSVFork {
+	// Search from the end to find the most recent active fork
+	for i := len(f) - 1; i >= 0; i-- {
+		if epoch >= f[i].Epoch {
+			return f[i]
+		}
+	}
+	// If no active fork is found, return nil
+	return nil
+}
+
 // FindByName returns the fork with the given name, or nil if not found.
 func (f SSVForks) FindByName(name string) *SSVFork {
 	for _, fork := range f {
@@ -64,7 +83,6 @@ func (f SSVForks) IsForkActive(name string, epoch phase0.Epoch) bool {
 	}
 
 	activeFork := f.ActiveFork(epoch)
-
 	return activeFork != nil && activeFork.Name == name
 }
 
@@ -89,8 +107,12 @@ func (c SSVForkConfig) IsForkActive(name string, epoch phase0.Epoch) bool {
 	return c.Forks.IsForkActive(name, epoch)
 }
 
-// IsFinalityConsensusActive returns whether the FinalityConsensus fork is active at the given epoch.
-// TODO: use a different name when we have a better one
-func (c SSVForkConfig) IsFinalityConsensusActive(epoch phase0.Epoch) bool {
-	return c.IsForkActive("Finality Consensus", epoch)
+// GetFinalityConsensusEpoch returns the epoch at which the Finality Consensus fork is activated.
+// If the fork is not found, returns MaxEpoch (undefined).
+func (c SSVForkConfig) GetFinalityConsensusEpoch() phase0.Epoch {
+	fork := c.FindForkByName("Finality Consensus")
+	if fork != nil {
+		return fork.Epoch
+	}
+	return MaxEpoch
 }

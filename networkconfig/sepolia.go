@@ -30,7 +30,7 @@ var Sepolia = NetworkConfig{
 				},
 				{
 					Name:  "Finality Consensus",
-					Epoch: 120, // TODO: use a different name when we have a better one, value as well
+					Epoch: MaxEpoch,
 				},
 			},
 		},
