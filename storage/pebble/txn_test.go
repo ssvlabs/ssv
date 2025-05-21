@@ -612,8 +612,8 @@ func TestPebbleReadTxn_GetMany(t *testing.T) {
 }
 
 // Helper function to create a test PebbleDB instance
-func newTestPebbleDB(t *testing.T) *PebbleDB {
-	db, err := NewPebbleDB(zap.NewNop(), t.TempDir(), nil)
+func newTestPebbleDB(t *testing.T) *DB {
+	db, err := New(zap.NewNop(), t.TempDir(), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, db.Close())

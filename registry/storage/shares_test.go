@@ -645,7 +645,7 @@ func generateMaxPossibleShare() (*Share, error) {
 }
 
 type testStorage struct {
-	db             *kv.BadgerDB
+	db             *kv.DB
 	Operators      Operators
 	Shares         Shares
 	ValidatorStore ValidatorStore

@@ -10,17 +10,15 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// TODO: reconsider prefixes?
-var _ basedb.Database = &PebbleDB{}
+var _ basedb.Database = &DB{}
 
-// PebbleDB struct
-type PebbleDB struct {
+type DB struct {
 	*pebble.DB
 	logger *zap.Logger
 }
 
-func NewPebbleDB(logger *zap.Logger, path string, opts *pebble.Options) (*PebbleDB, error) {
-	pbdb := &PebbleDB{
+func New(logger *zap.Logger, path string, opts *pebble.Options) (*DB, error) {
+	pbdb := &DB{
 		logger: logger,
 	}
 	pdb, err := pebble.Open(path, opts)
@@ -31,25 +29,25 @@ func NewPebbleDB(logger *zap.Logger, path string, opts *pebble.Options) (*Pebble
 	return pbdb, nil
 }
 
-func (pdb *PebbleDB) Close() error {
+func (pdb *DB) Close() error {
 	return pdb.DB.Close()
 }
 
-func (pdb *PebbleDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+func (pdb *DB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	return getter(key, func(key []byte) ([]byte, io.Closer, error) {
 		return pdb.DB.Get(append(prefix, key...))
 	})
 }
 
-func (pdb *PebbleDB) Set(prefix, key, value []byte) error {
+func (pdb *DB) Set(prefix, key, value []byte) error {
 	return pdb.DB.Set(append(prefix, key...), value, pebble.Sync)
 }
 
-func (pdb *PebbleDB) Delete(prefix, key []byte) error {
+func (pdb *DB) Delete(prefix, key []byte) error {
 	return pdb.DB.Delete(append(prefix, key...), pebble.Sync)
 }
 
-func (pdb *PebbleDB) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
+func (pdb *DB) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
 	return manyGetter(pdb.logger, keys, func(key []byte) ([]byte, io.Closer, error) {
 		fullKey := append(prefix, key...)
 		return pdb.DB.Get(fullKey)
@@ -79,7 +77,7 @@ func makePrefixIter(dbOrBatch pebble.Reader, prefix []byte) (*pebble.Iterator, e
 	return dbOrBatch.NewIter(prefixIterOptions(prefix))
 }
 
-func (pdb *PebbleDB) GetAll(prefix []byte, fn func(int, basedb.Obj) error) (err error) {
+func (pdb *DB) GetAll(prefix []byte, fn func(int, basedb.Obj) error) (err error) {
 	iter, err := makePrefixIter(pdb.DB, prefix)
 	if err != nil {
 		return err
@@ -90,26 +88,26 @@ func (pdb *PebbleDB) GetAll(prefix []byte, fn func(int, basedb.Obj) error) (err 
 	return allGetter(pdb.logger, iter, prefix, fn)
 }
 
-func (pdb *PebbleDB) Begin() basedb.Txn {
+func (pdb *DB) Begin() basedb.Txn {
 	txn := pdb.NewIndexedBatch()
-	return newPebbleTxn(pdb.logger, txn)
+	return newTxn(pdb.logger, txn)
 }
 
-func (pdb *PebbleDB) Using(rw basedb.ReadWriter) basedb.ReadWriter {
+func (pdb *DB) Using(rw basedb.ReadWriter) basedb.ReadWriter {
 	if rw == nil {
 		return pdb
 	}
 	return rw
 }
 
-func (pdb *PebbleDB) UsingReader(r basedb.Reader) basedb.Reader {
+func (pdb *DB) UsingReader(r basedb.Reader) basedb.Reader {
 	if r == nil {
 		return pdb
 	}
 	return r
 }
 
-func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
+func (pdb *DB) CountPrefix(prefix []byte) (int64, error) {
 	iter, err := makePrefixIter(pdb.DB, prefix)
 	if err != nil {
 		return 0, err
@@ -129,7 +127,7 @@ func (pdb *PebbleDB) CountPrefix(prefix []byte) (int64, error) {
 	return count, nil
 }
 
-func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
+func (pdb *DB) DropPrefix(prefix []byte) error {
 	batch := pdb.NewBatch()
 	iter, err := makePrefixIter(pdb.DB, prefix)
 	if err != nil {
@@ -154,29 +152,29 @@ func (pdb *PebbleDB) DropPrefix(prefix []byte) error {
 	return batch.Commit(pebble.Sync)
 }
 
-func (pdb *PebbleDB) Update(fn func(basedb.Txn) error) error {
+func (pdb *DB) Update(fn func(basedb.Txn) error) error {
 	batch := pdb.NewIndexedBatch()
-	txn := newPebbleTxn(pdb.logger, batch)
+	txn := newTxn(pdb.logger, batch)
 	if err := fn(txn); err != nil {
 		return err
 	}
 	return batch.Commit(pebble.Sync)
 }
 
-func (pdb *PebbleDB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+func (pdb *DB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
 	batch := pdb.NewBatch()
-	txn := newPebbleTxn(pdb.logger, batch)
+	txn := newTxn(pdb.logger, batch)
 	if err := txn.SetMany(prefix, n, next); err != nil {
 		return err
 	}
 	return batch.Commit(pebble.Sync)
 }
 
-func (pdb *PebbleDB) QuickGC(ctx context.Context) error {
+func (pdb *DB) QuickGC(ctx context.Context) error {
 	return nil // pebble db does not require periodic gc
 }
 
-func (pdb *PebbleDB) FullGC(context.Context) error {
+func (pdb *DB) FullGC(context.Context) error {
 	iter, err := pdb.NewIter(nil)
 	if err != nil {
 		return err
@@ -197,6 +195,7 @@ func (pdb *PebbleDB) FullGC(context.Context) error {
 	return pdb.Compact(first, last, true)
 }
 
-func (pdb *PebbleDB) BeginRead() basedb.ReadTxn {
-	return &pebbleReadTxn{Snapshot: pdb.NewSnapshot(), logger: pdb.logger}
+func (pdb *DB) BeginRead() basedb.ReadTxn {
+	snapshot := pdb.NewSnapshot()
+	return newReadTxn(pdb.logger, snapshot)
 }

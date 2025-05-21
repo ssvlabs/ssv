@@ -10,9 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-type pFunc func(key []byte) ([]byte, io.Closer, error)
-
-func getter(key []byte, pFunc pFunc) (basedb.Obj, bool, error) {
+func getter(key []byte, pFunc func(key []byte) ([]byte, io.Closer, error)) (basedb.Obj, bool, error) {
 	value, closer, err := pFunc(key)
 	if errors.Is(err, pebble.ErrNotFound) {
 		return basedb.Obj{}, false, nil
@@ -21,6 +19,8 @@ func getter(key []byte, pFunc pFunc) (basedb.Obj, bool, error) {
 		return basedb.Obj{}, true, err
 	}
 
+	// Since the returned value is only valid until closer.Close(),
+	// we make a copy of it.
 	val := make([]byte, len(value))
 	copy(val, value)
 
@@ -34,7 +34,7 @@ func getter(key []byte, pFunc pFunc) (basedb.Obj, bool, error) {
 	}, true, nil
 }
 
-func manyGetter(logger *zap.Logger, keys [][]byte, pFunc pFunc, fn func(basedb.Obj) error) error {
+func manyGetter(logger *zap.Logger, keys [][]byte, pFunc func(key []byte) ([]byte, io.Closer, error), fn func(basedb.Obj) error) error {
 	for _, key := range keys {
 		value, closer, err := pFunc(key)
 		if err != nil {
@@ -80,6 +80,8 @@ func allGetter(logger *zap.Logger, iter *pebble.Iterator, prefix []byte, fn func
 			continue
 		}
 
+		// Since the returned key and value are only valid until the next
+		// call of iter.Next() - we make a copy of it.
 		key := make([]byte, len(iter.Key())-len(prefix))
 		copy(key, iter.Key()[len(prefix):])
 

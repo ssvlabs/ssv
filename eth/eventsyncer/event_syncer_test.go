@@ -146,7 +146,7 @@ func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
 	logger *zap.Logger,
-	db *kv.BadgerDB,
+	db *kv.DB,
 	nodeStorage operatorstorage.Storage,
 	operatorData *registrystorage.OperatorData,
 	privateKey keys.OperatorPrivateKey,

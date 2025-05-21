@@ -9,38 +9,38 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-type pebbleTxn struct {
+type txn struct {
 	*pebble.Batch
 	logger *zap.Logger
 }
 
-func newPebbleTxn(logger *zap.Logger, batch *pebble.Batch) basedb.Txn {
-	return &pebbleTxn{
+func newTxn(logger *zap.Logger, batch *pebble.Batch) basedb.Txn {
+	return &txn{
 		Batch:  batch,
 		logger: logger,
 	}
 }
 
-func (t *pebbleTxn) Commit() error {
-	return t.Batch.Commit(pebble.Sync)
+func (txn *txn) Commit() error {
+	return txn.Batch.Commit(pebble.Sync)
 }
 
-func (t *pebbleTxn) Discard() {
-	_ = t.Close()
+func (txn *txn) Discard() {
+	_ = txn.Close()
 }
 
-func (t *pebbleTxn) Set(prefix []byte, key []byte, value []byte) error {
-	return t.Batch.Set(append(prefix, key...), value, nil)
+func (txn *txn) Set(prefix []byte, key []byte, value []byte) error {
+	return txn.Batch.Set(append(prefix, key...), value, nil)
 }
 
-func (t *pebbleTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+func (tnx *txn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
 	for i := range n {
 		item, err := next(i)
 		if err != nil {
 			return err
 		}
 		key := append(prefix, item.Key...)
-		err = t.Batch.Set(key, item.Value, nil)
+		err = tnx.Batch.Set(key, item.Value, nil)
 		if err != nil {
 			return err
 		}
@@ -48,46 +48,53 @@ func (t *pebbleTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, er
 	return nil
 }
 
-func (t *pebbleTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+func (txn *txn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	return getter(key, func(key []byte) ([]byte, io.Closer, error) {
-		return t.Batch.Get(append(prefix, key...))
+		return txn.Batch.Get(append(prefix, key...))
 	})
 }
 
-func (t *pebbleTxn) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
-	return manyGetter(t.logger, keys, func(key []byte) ([]byte, io.Closer, error) {
-		return t.Batch.Get(append(prefix, key...))
+func (txn *txn) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
+	return manyGetter(txn.logger, keys, func(key []byte) ([]byte, io.Closer, error) {
+		return txn.Batch.Get(append(prefix, key...))
 	}, fn)
 }
 
-func (t *pebbleTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error {
-	iter, err := makePrefixIter(t.Batch, prefix)
+func (txn *txn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error {
+	iter, err := makePrefixIter(txn.Batch, prefix)
 	if err != nil {
 		return err
 	}
 
 	defer func() { _ = iter.Close() }()
 
-	return allGetter(t.logger, iter, prefix, fn)
+	return allGetter(txn.logger, iter, prefix, fn)
 }
 
-func (t *pebbleTxn) Delete(prefix []byte, key []byte) error {
-	return t.Batch.Delete(append(prefix, key...), nil)
+func (txn *txn) Delete(prefix []byte, key []byte) error {
+	return txn.Batch.Delete(append(prefix, key...), nil)
 }
 
-// pebbleReadTxn is a read-only transaction on a pebble.Snapshot.
-type pebbleReadTxn struct {
+// readTxn is a read-only transaction on a pebble.Snapshot.
+type readTxn struct {
 	*pebble.Snapshot
 	logger *zap.Logger
 }
 
-func (txn *pebbleReadTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+func newReadTxn(logger *zap.Logger, snapshot *pebble.Snapshot) basedb.ReadTxn {
+	return &readTxn{
+		Snapshot: snapshot,
+		logger:   logger,
+	}
+}
+
+func (txn *readTxn) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	return getter(key, func(key []byte) ([]byte, io.Closer, error) {
 		return txn.Snapshot.Get(append(prefix, key...))
 	})
 }
 
-func (txn *pebbleReadTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error {
+func (txn *readTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) error {
 	iter, err := makePrefixIter(txn.Snapshot, prefix)
 	if err != nil {
 		return err
@@ -98,12 +105,12 @@ func (txn *pebbleReadTxn) GetAll(prefix []byte, fn func(int, basedb.Obj) error) 
 	return allGetter(txn.logger, iter, prefix, fn)
 }
 
-func (txn *pebbleReadTxn) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
+func (txn *readTxn) GetMany(prefix []byte, keys [][]byte, fn func(basedb.Obj) error) error {
 	return manyGetter(txn.logger, keys, func(key []byte) ([]byte, io.Closer, error) {
 		return txn.Snapshot.Get(append(prefix, key...))
 	}, fn)
 }
 
-func (txn *pebbleReadTxn) Discard() {
+func (txn *readTxn) Discard() {
 	_ = txn.Close() // always nil
 }

@@ -13,10 +13,10 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func setupTestDB(t *testing.T) *PebbleDB {
+func setupTestDB(t *testing.T) *DB {
 	t.Helper()
 
-	db, err := NewPebbleDB(zap.NewNop(), t.TempDir(), &pebble.Options{})
+	db, err := New(zap.NewNop(), t.TempDir(), &pebble.Options{})
 	require.NoError(t, err)
 
 	return db

@@ -761,7 +761,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*badger.BadgerDB, error) {
+func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
@@ -786,7 +786,6 @@ func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
-		logger.Debug("post-migrations garbage collection errored", fields.Duration(start))
 		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
@@ -795,10 +794,10 @@ func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	return db, nil
 }
 
-func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*pebble.PebbleDB, error) {
+func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
 
-	db, err := pebble.NewPebbleDB(logger, dbPath, &cockroachdb.Options{})
+	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
@@ -825,7 +824,6 @@ func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
-		logger.Debug("post-migrations garbage collection errored", fields.Duration(start))
 		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
