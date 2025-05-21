@@ -37,8 +37,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var (
@@ -146,7 +146,7 @@ func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
 	logger *zap.Logger,
-	db *kv.BadgerDB,
+	db *kv.DB,
 	nodeStorage operatorstorage.Storage,
 	operatorData *registrystorage.OperatorData,
 	privateKey keys.OperatorPrivateKey,

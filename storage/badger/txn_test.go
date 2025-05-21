@@ -1,4 +1,4 @@
-package kv
+package badger
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ import (
 )
 
 // setupTxn creates a transaction for testing.
-func setupTxn(t *testing.T) (*BadgerDB, *badgerTxn) {
+func setupTxn(t *testing.T) (*DB, *badgerTxn) {
 	t.Helper()
 	db := setupDB(t, basedb.Options{})
 	txn := db.Begin()
@@ -23,7 +23,7 @@ func setupTxn(t *testing.T) (*BadgerDB, *badgerTxn) {
 }
 
 // setupTxnWithData creates a transaction with some predefined data.
-func setupTxnWithData(t *testing.T, prefix []byte, keyCount int) (*BadgerDB, *badgerTxn) {
+func setupTxnWithData(t *testing.T, prefix []byte, keyCount int) (*DB, *badgerTxn) {
 	t.Helper()
 	db, txn := setupTxn(t)
 
