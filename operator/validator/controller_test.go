@@ -1193,7 +1193,7 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 	t.Cleanup(ctrl.Finish) // Ensures gomock is properly cleaned up after the test
 
 	logger := logging.TestLogger(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	operators := buildOperators(t)
 	operatorsStorage, done := newOperatorStorageForTest(logger)
