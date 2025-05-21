@@ -207,7 +207,7 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 	}
 	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
 
-	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
 
 	span.SetStatus(codes.Ok, "")
 }

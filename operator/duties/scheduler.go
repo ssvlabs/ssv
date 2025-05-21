@@ -41,8 +41,8 @@ const (
 
 // DutiesExecutor is an interface for executing duties.
 type DutiesExecutor interface {
-	ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty)
-	ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap)
+	ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty)
+	ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap)
 }
 
 // DutyExecutor is an interface for executing duty.
@@ -93,6 +93,7 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
+	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
@@ -118,13 +119,14 @@ type Scheduler struct {
 	previousDutyDependentRoot phase0.Root
 }
 
-func NewScheduler(opts *SchedulerOptions) *Scheduler {
+func NewScheduler(logger *zap.Logger, opts *SchedulerOptions) *Scheduler {
 	dutyStore := opts.DutyStore
 	if dutyStore == nil {
 		dutyStore = dutystore.New()
 	}
 
 	s := &Scheduler{
+		logger:              logger.Named(logging.NameDutyScheduler),
 		beaconNode:          opts.BeaconNode,
 		executionClient:     opts.ExecutionClient,
 		network:             opts.Network,
@@ -161,12 +163,11 @@ type ReorgEvent struct {
 // Start initializes the Scheduler and begins its operation.
 // Note: This function includes blocking operations, especially within the handler's HandleInitialDuties call,
 // which will block until initial duties are fully handled.
-func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
-	logger = logger.Named(logging.NameDutyScheduler)
-	logger.Info("duty scheduler started")
+func (s *Scheduler) Start(ctx context.Context) error {
+	s.logger.Info("duty scheduler started")
 
-	logger.Info("subscribing to head events")
-	if err := s.listenToHeadEvents(ctx, logger); err != nil {
+	s.logger.Info("subscribing to head events")
+	if err := s.listenToHeadEvents(ctx); err != nil {
 		return fmt.Errorf("failed to listen to head events: %w", err)
 	}
 
@@ -183,7 +184,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 		handler.Setup(
 			handler.Name(),
-			logger,
+			s.logger,
 			s.beaconNode,
 			s.executionClient,
 			s.network,
@@ -197,8 +198,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 		// This call is blocking.
 		handler.HandleInitialDuties(ctx)
-
-		handler := handler
 		s.pool.Go(func(ctx context.Context) error {
 			// Wait for the head event subscription to complete before starting the handler.
 			handler.HandleDuties(ctx)
@@ -214,8 +213,8 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	return nil
 }
 
-func (s *Scheduler) listenToHeadEvents(ctx context.Context, logger *zap.Logger) error {
-	headEventHandler := s.HandleHeadEvent(logger)
+func (s *Scheduler) listenToHeadEvents(ctx context.Context) error {
+	headEventHandler := s.HandleHeadEvent()
 
 	// Subscribe to head events. This allows us to go early for attestations & sync committees if a block arrives,
 	// as well as re-request duties if there is a change in beacon block.
@@ -232,10 +231,10 @@ func (s *Scheduler) listenToHeadEvents(ctx context.Context, logger *zap.Logger) 
 				return
 			case headEvent := <-ch:
 				if headEvent == nil {
-					logger.Warn("head event was nil, skipping")
+					s.logger.Warn("head event was nil, skipping")
 					continue
 				}
-				logger.
+				s.logger.
 					With(fields.Slot(headEvent.Slot)).
 					With(fields.BlockRoot(headEvent.Block)).
 					Info("received head event. Processing...")
@@ -310,7 +309,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 }
 
 // HandleHeadEvent handles the "head" events from the beacon node.
-func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.HeadEvent) {
+func (s *Scheduler) HandleHeadEvent() func(event *eth2apiv1.HeadEvent) {
 	return func(event *eth2apiv1.HeadEvent) {
 		var zeroRoot phase0.Root
 
@@ -322,7 +321,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 		// check for reorg
 		epoch := s.network.Beacon.EstimatedEpochAtSlot(event.Slot)
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, event.Slot, event.Slot%32+1)
-		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
+		logger := s.logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
 			if epoch > s.lastBlockEpoch {
 				// Change of epoch.
@@ -388,7 +387,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.He
 }
 
 // ExecuteDuties tries to execute the given duties
-func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, duties []*spectypes.ValidatorDuty) {
+func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "scheduler.execute_duties"),
 		trace.WithAttributes(observability.DutyCountAttribute(len(duties))),
@@ -397,7 +396,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 
 	for _, duty := range duties {
 		duty := duty
-		logger := s.loggerWithDutyContext(logger, duty)
+		logger := s.loggerWithDutyContext(duty)
 
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
@@ -425,13 +424,13 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, logger *zap.Logger, dutie
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logger, duties committeeDutiesMap) {
+func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
 	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_committee_duties"))
 	defer span.End()
 
 	for _, committee := range duties {
 		duty := committee.duty
-		logger := s.loggerWithCommitteeDutyContext(logger, committee)
+		logger := s.loggerWithCommitteeDutyContext(committee) // TODO: extract this in dutyExecutor (validator controller), don't pass logger to ExecuteCommitteeDuty
 		dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
 
 		const eventMsg = "🔧 executing committee duty"
@@ -463,8 +462,8 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, logger *zap.Logg
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.ValidatorDuty) *zap.Logger {
-	return logger.
+func (s *Scheduler) loggerWithDutyContext(duty *spectypes.ValidatorDuty) *zap.Logger {
+	return s.logger.
 		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
@@ -475,12 +474,12 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Va
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
-func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeDuty *committeeDuty) *zap.Logger {
+func (s *Scheduler) loggerWithCommitteeDutyContext(committeeDuty *committeeDuty) *zap.Logger {
 	duty := committeeDuty.duty
 	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
 	committeeDutyID := fields.FormatCommitteeDutyID(committeeDuty.operatorIDs, dutyEpoch, duty.Slot)
 
-	return logger.
+	return s.logger.
 		With(fields.CommitteeID(committeeDuty.id)).
 		With(fields.DutyID(committeeDutyID)).
 		With(fields.Role(duty.RunnerRole())).

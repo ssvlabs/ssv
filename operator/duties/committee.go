@@ -99,7 +99,7 @@ func (h *CommitteeHandler) processExecution(ctx context.Context, period uint64, 
 		h.logger.Debug("no committee duties to execute", fields.Epoch(epoch), fields.Slot(slot))
 	}
 
-	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, h.logger, committeeMap)
+	h.dutiesExecutor.ExecuteCommitteeDuties(ctx, committeeMap)
 
 	span.SetStatus(codes.Ok, "")
 }

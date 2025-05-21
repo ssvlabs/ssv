@@ -126,7 +126,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 
 	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
-		h.dutiesExecutor.ExecuteDuties(ctx, h.logger, dutiesForExecution)
+		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution)
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),
 			fields.Count(dutyCount))
