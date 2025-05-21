@@ -4,7 +4,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
@@ -14,7 +13,7 @@ var TestNetwork = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.BeaconTestNetwork),
 		SlotDuration:  spectypes.BeaconTestNetwork.SlotDurationSec(),
-		SlotsPerEpoch: phase0.Slot(spectypes.BeaconTestNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch: spectypes.BeaconTestNetwork.SlotsPerEpoch(),
 		ForkVersion:   spectypes.BeaconTestNetwork.ForkVersion(),
 		GenesisTime:   time.Unix(int64(spectypes.BeaconTestNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},

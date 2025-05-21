@@ -9,7 +9,6 @@ import (
 	client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -17,7 +16,7 @@ import (
 
 const (
 	DefaultSlotDuration  = 12 * time.Second
-	DefaultSlotsPerEpoch = phase0.Slot(32)
+	DefaultSlotsPerEpoch = uint64(32)
 )
 
 // BeaconConfig returns the network Beacon configuration
@@ -29,8 +28,8 @@ func (gc *GoClient) BeaconConfig() networkconfig.BeaconConfig {
 }
 
 // fetchBeaconConfig must be called once on GoClient's initialization
-func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkconfig.BeaconConfig, error) {
-	specResponse, err := specForClient(gc.ctx, gc.log, client)
+func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthttp.Service) (networkconfig.BeaconConfig, error) {
+	specResponse, err := specForClient(ctx, gc.log, client)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Spec"), zap.Error(err))
 		return networkconfig.BeaconConfig{}, fmt.Errorf("failed to obtain spec response: %w", err)
@@ -61,14 +60,14 @@ func (gc *GoClient) fetchBeaconConfig(client *eth2clienthttp.Service) (networkco
 	slotsPerEpoch := DefaultSlotsPerEpoch
 	if slotsPerEpochRaw, ok := specResponse["SLOTS_PER_EPOCH"]; ok {
 		if slotsPerEpochDecoded, ok := slotsPerEpochRaw.(uint64); ok {
-			slotsPerEpoch = phase0.Slot(slotsPerEpochDecoded)
+			slotsPerEpoch = slotsPerEpochDecoded
 		} else {
 			gc.log.Warn("slots per epoch not known by chain, using default value",
-				zap.Any("value", slotsPerEpoch))
+				zap.Uint64("value", slotsPerEpoch))
 		}
 	}
 
-	genesisResponse, err := genesisForClient(gc.ctx, gc.log, client)
+	genesisResponse, err := genesisForClient(ctx, gc.log, client)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Genesis"), zap.Error(err))
 		return networkconfig.BeaconConfig{}, fmt.Errorf("failed to obtain genesis response: %w", err)

@@ -58,13 +58,13 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 					// Only attesting validators are eligible for registration duties.
 					continue
 				}
-				if phase0.Slot(share.ValidatorIndex)%registrationSlots != slot%registrationSlots {
+				if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
 					continue
 				}
 
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey[:])
-				h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{
+				h.dutiesExecutor.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{{
 					Type:           spectypes.BNRoleValidatorRegistration,
 					ValidatorIndex: share.ValidatorIndex,
 					PubKey:         pk,
@@ -82,10 +82,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				zap.Any("validator_registrations", vrs))
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
 	}
 }
