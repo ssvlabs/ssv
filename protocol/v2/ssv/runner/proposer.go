@@ -27,7 +27,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -68,18 +67,9 @@ func NewProposerRunner(
 		return nil, errors.New("must have one share")
 	}
 
-	// Validate MEVDelay value, for details on how this value should be chosen see https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#choosing-mevdelay-value
-	const randaoTime = 100 * time.Millisecond
-	const mevBoostRelayTimeout = 200 * time.Millisecond
-	const qbftTime = 350 * time.Millisecond
-	const miscellaneousTime = 150 * time.Millisecond
-	const blockSubmissionTime = 1000 * time.Millisecond
-	const maxMEVDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
-	// Also, other SSV nodes in our cluster might not even have MEVDelay configured, meaning they will start
-	// QBFT sooner and timeout round 1 sooner. To prevent that, we'll need to cap maxMEVDelay accordingly
-	// (so it does not exceed qbftConstrainingTime).
-	const qbftConstrainingTime = roundtimer.QuickTimeout - qbftTime
-	const maxReasonableMEVDelay = min(maxMEVDelay, qbftConstrainingTime)
+	// Validate mevDelay value, for details on how this value should be chosen see:
+	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#choosing-mevdelay-value
+	const maxReasonableMEVDelay = 1650 * time.Millisecond
 	if mevDelay > maxReasonableMEVDelay {
 		return nil, fmt.Errorf("chosen MEVDelay value is too high: %s, max reasonable allowed value: %s", mevDelay, maxReasonableMEVDelay)
 	}

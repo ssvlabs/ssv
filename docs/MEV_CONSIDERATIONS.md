@@ -27,7 +27,7 @@ To understand how MEV fits with the SSV cluster, here is some background on the 
   leader will be chosen to try and complete QBFT in round 2, etc.
 - once QBFT completes successfully, Operator needs to submit the signed block to Beacon node to 
   propagate it throughout Etehreum network (call it `BlockSubmissionTime`)
-- there is some time spend on executing various code to "glue" this whole thing together 
+- there is some time spent on executing various code to "glue" this whole thing together 
   that's small but still matters (call it `MiscellaneousTime`)
 
 and so this means for the best SSV cluster operations we want the following condition to always hold true:
@@ -61,3 +61,20 @@ becomes:
 ```
 RANDAOTime + MEVDelay + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
 ```
+plugging in some realistic numbers into that ^ formula we get a rough estimate of ~2.2s for `MEVDelay`: 
+```go
+const randaoTime = 100 * time.Millisecond
+const mevBoostRelayTimeout = 200 * time.Millisecond
+const qbftTime = 350 * time.Millisecond
+const miscellaneousTime = 150 * time.Millisecond
+const blockSubmissionTime = 1000 * time.Millisecond
+const mevDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
+```
+but on top of that another consideration Operator needs to take into account is - other SSV nodes in 
+his cluster might not even have MEVDelay configured (it's 0s by default), meaning they will start QBFT 
+sooner and timeout round 1 sooner. To prevent that round timeout we'll need to cap mevDelay accordingly 
+so it does not exceed that `QBFTConstrainingTime` - this would give us a rough estimate of ~1.65s:
+```go
+const qbftConstrainingTime = roundtimer.QuickTimeout - qbftTime
+```
+and thus we consider ~1.65s to be max reasonable value of `MEVDelay` Operator should be able to use safely.
