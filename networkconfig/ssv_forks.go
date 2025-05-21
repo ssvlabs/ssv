@@ -6,16 +6,16 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-// Fork is a numerical identifier of specific network upgrades (forks).
-type Fork int
+// SSVForkName is a numerical identifier of specific SSV protocol forks.
+type SSVForkName int
 
 const (
-	Alan              Fork = iota
-	FinalityConsensus      // TODO: use a different name when we have a better one
+	Alan              SSVForkName = iota
+	FinalityConsensus             // TODO: use a different name when we have a better one
 )
 
 // String implements fmt.Stringer.
-func (f Fork) String() string {
+func (f SSVForkName) String() string {
 	s, ok := forkToString[f]
 	if !ok {
 		return "Unknown fork"
@@ -23,7 +23,7 @@ func (f Fork) String() string {
 	return s
 }
 
-var forkToString = map[Fork]string{
+var forkToString = map[SSVForkName]string{
 	Alan:              "Alan",
 	FinalityConsensus: "Finality Consensus", // TODO: use a different name when we have a better one
 }
