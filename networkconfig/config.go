@@ -29,7 +29,6 @@ type NetworkConfig struct {
 	Name string
 	BeaconConfig
 	SSVConfig
-	ForksConfig
 }
 
 func (n NetworkConfig) String() string {

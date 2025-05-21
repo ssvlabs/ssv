@@ -31,8 +31,17 @@ var Mainnet = NetworkConfig{
 			// CryptoManufaktur
 			"enr:-Li4QH7FwJcL8gJj0zHAITXqghMkG-A5bfWh2-3Q7vosy9D1BS8HZk-1ITuhK_rfzG3v_UtBDI6uNJZWpdcWfrQFCxKGAYnQ1DRCh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQKeSDcZWSaY9FC723E9yYX1Li18bswhLNlxBZdLfgOKp4N0Y3CCE4mDdWRwgg-h",
 		},
-	},
-	ForksConfig: ForksConfig{
-		FinalityConsensusEpoch: 120, // TODO: use a different name when we have a better one, value as well
+		Forks: SSVForkConfig{
+			Forks: SSVForks{
+				{
+					Name:  "Alan",
+					Epoch: 0,
+				},
+				{
+					Name:  "Finality Consensus",
+					Epoch: 120, // TODO: use a different name when we have a better one, value as well
+				},
+			},
+		},
 	},
 }

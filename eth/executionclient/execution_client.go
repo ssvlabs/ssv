@@ -18,6 +18,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
@@ -151,7 +153,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		}
 
 		// Check if we're past the fork
-		currentEpoch := currentBlock / ec.config.SlotsPerEpoch
+		currentEpoch := phase0.Epoch(currentBlock / ec.config.SlotsPerEpoch)
 
 		if currentEpoch > ec.config.FinalityConsensusEpoch {
 			// Just passed the fork threshold
@@ -397,7 +399,8 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 			return err
 		}
 
-		if currentBlock/ec.config.SlotsPerEpoch > ec.config.FinalityConsensusEpoch {
+		currentEpoch := phase0.Epoch(currentBlock / ec.config.SlotsPerEpoch)
+		if currentEpoch > ec.config.FinalityConsensusEpoch {
 			ec.isPostForkState.Store(true)
 			_, err := ec.getFinalizedBlock(ctx)
 			if err != nil {
@@ -524,16 +527,16 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				toBlock = finalizedBlock
 
 				if toBlock != lastFinalized {
-					finalizedEpoch := toBlock / ec.config.SlotsPerEpoch
+					finalizedEpoch := phase0.Epoch(toBlock / ec.config.SlotsPerEpoch)
 					ec.logger.Info("⏱ finalized block changed",
 						zap.Uint64("new_finalized", toBlock),
-						zap.Uint64("estimated_epoch", finalizedEpoch),
+						zap.Uint64("estimated_epoch", uint64(finalizedEpoch)),
 						zap.Uint64("previous_finalized", lastFinalized))
 					lastFinalized = toBlock
 				}
 			} else {
 				// Check if we need to transition to post-fork
-				currentEpoch := headerNum / ec.config.SlotsPerEpoch
+				currentEpoch := phase0.Epoch(headerNum / ec.config.SlotsPerEpoch)
 
 				if currentEpoch > ec.config.FinalityConsensusEpoch {
 					ec.isPostForkState.Store(true)
@@ -604,14 +607,14 @@ func (ec *ExecutionClient) IsFinalizedFork(ctx context.Context) bool {
 		return false
 	}
 
-	currentEpoch := currentBlock / ec.config.SlotsPerEpoch
+	currentEpoch := phase0.Epoch(currentBlock / ec.config.SlotsPerEpoch)
 
 	// Check if we've passed the fork point
 	if currentEpoch > ec.config.FinalityConsensusEpoch {
 		ec.isPostForkState.Store(true)
 		ec.logger.Info("finality fork threshold passed, using finalized blocks",
-			zap.Uint64("current_epoch", currentEpoch),
-			zap.Uint64("finality_fork_epoch", ec.config.FinalityConsensusEpoch))
+			zap.Uint64("current_epoch", uint64(currentEpoch)),
+			zap.Uint64("finality_fork_epoch", uint64(ec.config.FinalityConsensusEpoch)))
 		return true
 	}
 

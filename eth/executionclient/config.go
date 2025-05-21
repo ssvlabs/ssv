@@ -3,6 +3,8 @@ package executionclient
 import (
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
@@ -16,17 +18,24 @@ type Options struct {
 }
 
 type Config struct {
-	SlotsPerEpoch          uint64 // Slots per epoch
-	FinalityConsensusEpoch uint64 // Epoch at which finality fork activates
-	FollowDistance         uint64 // Number of blocks to follow behind head
+	SlotsPerEpoch          uint64       // Slots per epoch
+	FinalityConsensusEpoch phase0.Epoch // Epoch at which finality fork activates
+	FollowDistance         uint64       // Number of blocks to follow behind head
 }
 
 // NewConfigFromNetwork creates a new Config with network-specific values
 // and default values for other parameters.
 func NewConfigFromNetwork(networkCfg networkconfig.NetworkConfig) Config {
+	var finalityConsensusEpoch phase0.Epoch
+
+	finalityConsensusFork := networkCfg.Forks.FindForkByName("Finality Consensus")
+	if finalityConsensusFork != nil {
+		finalityConsensusEpoch = finalityConsensusFork.Epoch
+	}
+
 	return Config{
 		SlotsPerEpoch:          networkCfg.SlotsPerEpoch(),
-		FinalityConsensusEpoch: networkCfg.FinalityConsensusEpoch,
+		FinalityConsensusEpoch: finalityConsensusEpoch,
 		FollowDistance:         DefaultFollowDistance,
 	}
 }
@@ -36,7 +45,7 @@ func (c Config) WithSlotsPerEpoch(slots uint64) Config {
 	return c
 }
 
-func (c Config) WithFinalityConsensusEpoch(epoch uint64) Config {
+func (c Config) WithFinalityConsensusEpoch(epoch phase0.Epoch) Config {
 	c.FinalityConsensusEpoch = epoch
 	return c
 }

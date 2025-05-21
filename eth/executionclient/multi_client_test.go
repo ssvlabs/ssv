@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -90,7 +91,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	})
 
 	t.Run("post-fork (finality)", func(t *testing.T) {
-		const customFinalityForkEpoch = uint64(5)
+		const customFinalityForkEpoch = phase0.Epoch(5)
 
 		mc, err := NewMulti(
 			ctx,
