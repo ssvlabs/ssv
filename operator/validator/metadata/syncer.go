@@ -149,7 +149,7 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 	return updatedValidators, nil
 }
 
-func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
+func (s *Syncer) Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -159,8 +159,7 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (beac
 		blsPubKeys[i] = phase0.BLSPubKey(pk)
 	}
 
-	// TODO: Refactor beacon.BeaconNode to support passing context.
-	validatorsIndexMap, err := s.beaconNode.GetValidatorData(blsPubKeys)
+	validatorsIndexMap, err := s.beaconNode.GetValidatorData(ctx, blsPubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
 	}

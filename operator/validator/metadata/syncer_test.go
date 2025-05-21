@@ -74,7 +74,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			data[tc.testPublicKey] = tc.metadata
 
 			beaconNode := beacon.NewMockBeaconNode(ctrl)
-			beaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(pubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+			beaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, pubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 				if tc.metadata == nil {
 					return map[phase0.ValidatorIndex]*eth2apiv1.Validator{}, nil
 				}
@@ -114,7 +114,7 @@ func TestSyncer_Sync(t *testing.T) {
 	logger := zap.NewNop()
 
 	defaultMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
-	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 		results := map[phase0.ValidatorIndex]*eth2apiv1.Validator{}
 		for i, pk := range validatorPubKeys {
 			results[phase0.ValidatorIndex(i+1)] = &eth2apiv1.Validator{
@@ -157,7 +157,9 @@ func TestSyncer_Sync(t *testing.T) {
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Times(0)
 
 		errMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
-		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).Return(nil, fmt.Errorf("fetch error"))
+		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Return(func(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+			return nil, fmt.Errorf("fetch error")
+		})
 
 		syncer := &Syncer{
 			logger:       logger,
@@ -194,7 +196,7 @@ func TestSyncer_Sync(t *testing.T) {
 
 		unusedMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
 		// GetValidatorData should not be called in this case
-		unusedMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).Times(0)
+		unusedMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Times(0)
 
 		syncer := &Syncer{
 			logger:       logger,
@@ -216,7 +218,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 	defer ctrl.Finish()
 
 	defaultMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
-	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 		results := map[phase0.ValidatorIndex]*eth2apiv1.Validator{}
 		for i, pk := range validatorPubKeys {
 			results[phase0.ValidatorIndex(i+1)] = &eth2apiv1.Validator{
@@ -343,7 +345,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockValidatorStore := NewMockselfValidatorStore(ctrl)
 
 		errMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
-		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 			return nil, fmt.Errorf("error")
 		})
 
@@ -392,7 +394,7 @@ func TestSyncer_Stream(t *testing.T) {
 	defer ctrl.Finish()
 
 	defaultMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
-	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+	defaultMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 		results := map[phase0.ValidatorIndex]*eth2apiv1.Validator{}
 		for i, pk := range validatorPubKeys {
 			results[phase0.ValidatorIndex(i+1)] = &eth2apiv1.Validator{
@@ -500,7 +502,7 @@ func TestSyncer_Stream(t *testing.T) {
 		mockValidatorStore := NewMockselfValidatorStore(ctrl)
 
 		errMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
-		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 			return nil, fmt.Errorf("fetch error")
 		}).AnyTimes()
 
