@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -41,7 +42,9 @@ func (n NetworkConfig) String() string {
 }
 
 func (n NetworkConfig) NetworkName() string {
-	return fmt.Sprintf("%s:%s", n.Name, "alan")
+	activeFork := n.Forks.ActiveFork(0) // Alan
+
+	return fmt.Sprintf("%s:%s", n.Name, strings.ToLower(activeFork.Name))
 }
 
 // ForkVersion returns the fork version of the network.
