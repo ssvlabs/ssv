@@ -157,9 +157,7 @@ func TestSyncer_Sync(t *testing.T) {
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Times(0)
 
 		errMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
-		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Return(func(ctx context.Context, validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
-			return nil, fmt.Errorf("fetch error")
-		})
+		errMockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("fetch error"))
 
 		syncer := &Syncer{
 			logger:       logger,
