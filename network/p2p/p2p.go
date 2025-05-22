@@ -614,7 +614,7 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 	}
 
 	ownSubnets := n.SubscribedSubnets()
-	peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
+	peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
 	return subnetPeersExcluding.Score(ownSubnets, peerSubnets)
 }
 
@@ -639,8 +639,10 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 		deadSubnetPriority = 16
 	)
 	score := float64(0)
+
 	for i := range a {
-		if ours[i] > 0 && theirs[i] > 0 {
+		// #nosec G115 -- subnet index is never negative
+		if ours.IsSet(uint64(i)) && theirs.IsSet(uint64(i)) {
 			switch a[i] {
 			case 0:
 				score += deadSubnetPriority

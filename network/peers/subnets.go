@@ -101,7 +101,7 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
 
 	subnets, ok := si.peerSubnets[id]
 	if !ok {
-		return commons.Subnets{}, false
+		return commons.ZeroSubnets, false
 	}
 
 	return subnets, true

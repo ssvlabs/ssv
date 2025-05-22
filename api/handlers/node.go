@@ -11,7 +11,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/ssvlabs/ssv/api"
-	"github.com/ssvlabs/ssv/network/commons"
 	networkpeers "github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/nodeprobe"
 )
@@ -171,10 +170,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) peers(peers []peer.ID) []peerJSON {
 	resp := make([]peerJSON, len(peers))
 	for i, id := range peers {
-		subnets, ok := h.PeersIndex.GetPeerSubnets(id)
-		if !ok {
-			subnets = commons.ZeroSubnets
-		}
+		subnets, _ := h.PeersIndex.GetPeerSubnets(id)
 
 		resp[i] = peerJSON{
 			ID:            id,

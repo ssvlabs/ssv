@@ -219,7 +219,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(newDomainString),
-			connections.BadPeerFilter(n.logger, n.idx),
+			connections.BadPeerFilter(n.idx),
 		}
 	}
 
