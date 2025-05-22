@@ -98,44 +98,34 @@ func collectMessagesFromQueue(t *testing.T, ctx context.Context, committee *Comm
 
 	t.Helper()
 
-	var (
-		receivedMessages = make([]*queue.SSVMessage, 0, expectedCount)
-		mu               sync.Mutex
-		handlerCalled    = make(chan struct{}, max(1, expectedCount))
-	)
+	msgChannel := make(chan *queue.SSVMessage, max(1, expectedCount))
 
 	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-		mu.Lock()
-		receivedMessages = append(receivedMessages, msg)
-		mu.Unlock()
-		handlerCalled <- struct{}{}
+		msgChannel <- msg
 		return nil
 	}
 
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
+	var receivedMessages []*queue.SSVMessage
+
 	// Special case: expectedCount == 0 means we're checking for absence of messages
 	if expectedCount == 0 {
 		select {
-		case <-handlerCalled:
-			t.Errorf("received unexpected message when expecting none")
+		case msg := <-msgChannel:
+			t.Errorf("received unexpected message when expecting none: %v", msg)
+			receivedMessages = append(receivedMessages, msg)
 		case <-time.After(timeout):
 			// This is the expected case - no messages received within timeout
 		}
-
-		mu.Lock()
-		result := make([]*queue.SSVMessage, len(receivedMessages))
-		copy(result, receivedMessages)
-		mu.Unlock()
-
-		return result
+		return receivedMessages
 	}
 
 	// Wait for the expected number of messages
 	for i := 0; i < expectedCount; i++ {
 		select {
-		case <-handlerCalled:
-			// A message was processed
+		case msg := <-msgChannel:
+			receivedMessages = append(receivedMessages, msg)
 		case <-time.After(timeout):
 			t.Fatalf("timed out waiting for message %d/%d", i+1, expectedCount)
 		}
@@ -143,18 +133,14 @@ func collectMessagesFromQueue(t *testing.T, ctx context.Context, committee *Comm
 
 	// Check if we received more messages than expected (test issue indicator)
 	select {
-	case <-handlerCalled:
+	case msg := <-msgChannel:
 		t.Logf("received more messages than expected (%d)", expectedCount)
+		receivedMessages = append(receivedMessages, msg)
 	case <-time.After(200 * time.Millisecond):
 		// No additional messages within timeout, which is the expected case
 	}
 
-	mu.Lock()
-	result := make([]*queue.SSVMessage, len(receivedMessages))
-	copy(result, receivedMessages)
-	mu.Unlock()
-
-	return result
+	return receivedMessages
 }
 
 // TestHandleMessageCreatesQueue verifies that the HandleMessage method correctly
@@ -861,12 +847,10 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				committeeRunner.BaseRunner.State.Finished = true // This makes HasRunningDuty() return false
 			}
 
-			processed := make([]*queue.SSVMessage, 0)
-			handlerCalled := make(chan struct{}, len(tc.messagesTypes))
+			msgChannel := make(chan *queue.SSVMessage, len(tc.messagesTypes))
 
 			handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-				processed = append(processed, msg)
-				handlerCalled <- struct{}{}
+				msgChannel <- msg
 				return nil
 			}
 
@@ -892,13 +876,16 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				}
 			}
 
+			var processed []*queue.SSVMessage
 			processedCount := 0
+
 			if expectedProcessedCount > 0 {
 				timeout := time.After(1 * time.Second)
 			waitLoop:
 				for processedCount < expectedProcessedCount {
 					select {
-					case <-handlerCalled:
+					case msg := <-msgChannel:
+						processed = append(processed, msg)
 						processedCount++
 					case <-timeout:
 						break waitLoop
@@ -911,14 +898,21 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			// Verify no additional messages are processed
 			if expectedProcessedCount > 0 {
 				select {
-				case <-handlerCalled:
-					t.Fatalf("unexpected message processed, expected only %d", expectedProcessedCount)
+				case msg := <-msgChannel:
+					t.Fatalf("unexpected message processed (type: %v), expected only %d",
+						msg.Body.(*specqbft.Message).MsgType, expectedProcessedCount)
 				case <-time.After(200 * time.Millisecond):
-					// timeout reached
+					// timeout reached - no more messages, as expected
 				}
 			} else {
 				// If we expect zero messages, just wait a bit longer to confirm none are processed
-				time.Sleep(200 * time.Millisecond)
+				select {
+				case msg := <-msgChannel:
+					t.Fatalf("unexpected message processed when expecting none: %v",
+						msg.Body.(*specqbft.Message).MsgType)
+				case <-time.After(200 * time.Millisecond):
+					// Timeout reached - no messages, as expected
+				}
 			}
 
 			assert.Equal(t, expectedProcessedCount, len(processed))
@@ -1109,24 +1103,22 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 		},
 	}
 
-	var received []*queue.SSVMessage
-	var mu sync.Mutex
-	handlerCalled := make(chan struct{}, len(testMessages))
+	msgChannel := make(chan *queue.SSVMessage, len(testMessages))
 
 	handler := func(ctx context.Context, _ *zap.Logger, msg *queue.SSVMessage) error {
-		mu.Lock()
-		received = append(received, msg)
-		mu.Unlock()
-		handlerCalled <- struct{}{}
+		msgChannel <- msg
 		return nil
 	}
 
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
+	var received []*queue.SSVMessage
+
 	// Wait for all messages
 	for i := 0; i < len(testMessages); i++ {
 		select {
-		case <-handlerCalled:
+		case msg := <-msgChannel:
+			received = append(received, msg)
 		case <-time.After(2 * time.Second):
 			t.Fatalf("timed out waiting for all messages processed, got %d", len(received))
 		}
