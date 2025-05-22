@@ -92,7 +92,7 @@ func (s *Syncer) SyncOnStartup(ctx context.Context) (beacon.ValidatorMetadataMap
 	shares := s.shareStorage.List(nil, registrystorage.ByNotLiquidated(), func(share *ssvtypes.SSVShare) bool {
 		networkcommons.SetCommitteeSubnet(subnetsBuf, share.CommitteeID())
 		subnet := subnetsBuf.Uint64()
-		return ownSubnets[subnet] != 0
+		return ownSubnets.IsSet(subnet)
 	})
 	if len(shares) == 0 {
 		s.logger.Info("could not find non-liquidated own subnets validator shares on initial metadata retrieval")
@@ -275,7 +275,7 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.
 
 		networkcommons.SetCommitteeSubnet(subnetsBuf, share.CommitteeID())
 		subnet := subnetsBuf.Uint64()
-		if ownSubnets[subnet] == 0 {
+		if !ownSubnets.IsSet(subnet) {
 			return true
 		}
 
@@ -327,14 +327,13 @@ func (s *Syncer) selfSubnets(buf *big.Int) networkcommons.Subnets {
 		localBuf = new(big.Int)
 	}
 
-	mySubnets := make(networkcommons.Subnets, networkcommons.SubnetsCount)
-	copy(mySubnets, s.fixedSubnets)
+	mySubnets := s.fixedSubnets
 
 	// Compute the new subnets according to the active committees/validators.
 	myValidators := s.validatorStore.SelfValidators()
 	for _, v := range myValidators {
 		networkcommons.SetCommitteeSubnet(localBuf, v.CommitteeID())
-		mySubnets[localBuf.Uint64()] = 1
+		mySubnets.Set(localBuf.Uint64())
 	}
 
 	return mySubnets
