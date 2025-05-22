@@ -102,8 +102,8 @@ func TestSubnetsList(t *testing.T) {
 	subnetList = subnets.SubnetList()
 
 	require.Lenf(t, subnetList, SubnetsCount, "Expected %d subnets, got %d", SubnetsCount, len(subnetList))
-	for i := 0; i < SubnetsCount; i++ {
-		require.Equalf(t, i, subnetList[i], "Expected subnet index %d, got %d", i, subnetList[i])
+	for i := uint64(0); i < SubnetsCount; i++ {
+		require.EqualValuesf(t, i, subnetList[i], "Expected subnet index %d, got %d", i, subnetList[i])
 	}
 
 	// Test Case 3: Random subnets set
@@ -130,7 +130,7 @@ func TestSubnetsList(t *testing.T) {
 	subnets.Set(42)
 	subnetList = subnets.SubnetList()
 	require.Lenf(t, subnetList, 1, "Expected 1 subnet, got %d", len(subnetList))
-	require.Equalf(t, 42, subnetList[0], "Expected subnet [42], got %v", subnetList)
+	require.EqualValuesf(t, 42, subnetList[0], "Expected subnet [42], got %v", subnetList)
 
 	// Test Case 6: Clearing subnets
 	subnets = AllSubnets

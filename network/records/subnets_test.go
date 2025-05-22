@@ -33,7 +33,7 @@ func Test_SubnetsEntry(t *testing.T) {
 
 	subnetsFromEnr, err := GetSubnetsEntry(node.Node().Record())
 	require.NoError(t, err)
-	require.Len(t, subnetsFromEnr, commons.SubnetsCount)
+
 	for i := uint64(0); i < commons.SubnetsCount; i++ {
 		if i%4 == 0 {
 			require.True(t, subnetsFromEnr.IsSet(i))
