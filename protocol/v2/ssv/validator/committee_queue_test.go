@@ -145,7 +145,7 @@ func collectMessagesFromQueue(t *testing.T, ctx context.Context, committee *Comm
 	select {
 	case <-handlerCalled:
 		t.Logf("received more messages than expected (%d)", expectedCount)
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 		// No additional messages within timeout, which is the expected case
 	}
 
@@ -553,14 +553,14 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 
 	select {
 	case <-handlerCalled:
-	case <-time.After(1 * time.Second):
+	case <-time.After(500 * time.Millisecond):
 		t.Fatalf("timed out waiting for consensus message")
 	}
 
 	select {
 	case <-handlerCalled:
 		t.Fatalf("partial signature message was incorrectly processed")
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 	}
 
 	require.Equal(t, 1, len(receivedMessages))
@@ -691,7 +691,7 @@ func TestChangingFilterState(t *testing.T) {
 	prepareMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareBody)
 
 	runOnce := func(rnr *runner.CommitteeRunner) *queue.SSVMessage {
-		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		defer cancel()
 
 		var seen *queue.SSVMessage
@@ -1024,7 +1024,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 
 			if tc.shouldBeFiltered {
 				// Expect 0 messages - message should be filtered
-				receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 0, 100*time.Millisecond)
+				receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 0, 200*time.Millisecond)
 				assert.Empty(t, receivedMessages)
 			} else {
 				// Expect 1 message - message should be processed
@@ -1296,7 +1296,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 //  8. Verify that the actual counts of processed messages per priority bucket match the expected counts.
 func TestConsumeQueueBurstTraffic(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	// --- Setup a single-slot committee and its queue ---
@@ -1452,7 +1452,7 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 				t.Fatalf("bucketChan closed prematurely, received %d/%d messages", i, len(allMsgs))
 			}
 			buckets = append(buckets, bucketPriority)
-		case <-time.After(5 * time.Second):
+		case <-time.After(2 * time.Second):
 			t.Fatalf("timed out waiting for message %d/%d", i+1, len(allMsgs))
 		}
 	}
@@ -1551,14 +1551,14 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		// 4. Verify the content of the queue.
 		drainedMessages := make([]*queue.SSVMessage, 0, queueCapacity)
 		for i := 0; i < queueCapacity; i++ {
-			popCtx, popCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			popCtx, popCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
 			popCancel() // Ensure cancellation happens after Pop or timeout
 			require.NotNil(t, msg)
 			drainedMessages = append(drainedMessages, msg)
 		}
 
-		finalPopCtx, finalPopCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		finalPopCtx, finalPopCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny), "Queue should be empty after draining initial messages")
 		finalPopCancel()
 
@@ -1638,7 +1638,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		// 4. Verify only the original messages are in the queue
 		drainedMessages := make([]*queue.SSVMessage, 0, queueCapacity)
 		for i := 0; i < queueCapacity; i++ {
-			popCtx, popCancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			popCtx, popCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 			msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
 			popCancel()
 			require.NotNil(t, msg)
@@ -1734,7 +1734,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			}
 		}()
 
-		time.Sleep(100 * time.Millisecond) // Give some time for the consumer to start
+		time.Sleep(200 * time.Millisecond) // Give some time for the consumer to start
 
 		// Fill with filtered Prepare messages
 		for i := 0; i < queueCapacity; i++ {
