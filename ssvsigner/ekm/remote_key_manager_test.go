@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+
 	"github.com/ssvlabs/ssv/ssvsigner"
 )
 
@@ -57,7 +58,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -88,7 +89,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -140,7 +141,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      mockRemoteSigner,
 		slashingProtector: mockSlashingProtector,
 		operatorPubKey:    mockOperatorPublicKey,
@@ -168,7 +169,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -703,7 +704,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -748,7 +749,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -796,7 +797,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -853,7 +854,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -910,7 +911,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -967,7 +968,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1045,7 +1046,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1123,7 +1124,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1203,7 +1204,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1283,7 +1284,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1388,7 +1389,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   consensusMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1495,7 +1496,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1524,7 +1525,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1556,7 +1557,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1581,7 +1582,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1609,7 +1610,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			consensusClient:   s.consensusClient,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1658,7 +1659,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessage() {
 
 	rm := &RemoteKeyManager{
 		logger:        zap.NewNop(),
-		netCfg:        testNetCfg,
+		beaconConfig:  testNetCfg,
 		signerClient:  mockRemoteSigner,
 		getOperatorId: func() spectypes.OperatorID { return 1 },
 		signLocks:     map[signKey]*sync.RWMutex{},
@@ -1716,7 +1717,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -1835,7 +1836,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -2013,7 +2014,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
 
 	rm := &RemoteKeyManager{
 		logger:            s.logger,
-		netCfg:            testNetCfg,
+		beaconConfig:      testNetCfg,
 		signerClient:      s.client,
 		consensusClient:   s.consensusClient,
 		getOperatorId:     func() spectypes.OperatorID { return 1 },
@@ -2164,8 +2165,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager() {
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
 
-	networkCfg := networkconfig.NetworkConfig{}
-
 	const sampleRSAPublicKey = `
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArVzXJ1Xm3YIY8QYs2MFL
@@ -2193,7 +2192,6 @@ QwIDAQAB
 		s.client,
 		s.consensusClient,
 		s.db,
-		networkCfg,
 		getOperatorId,
 	)
 
@@ -2206,8 +2204,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 	s.db.On("Begin").Return(s.txn, nil).Maybe()
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
-
-	networkCfg := networkconfig.NetworkConfig{}
 
 	invalidPubKey := "invalid-public-key-format"
 	s.client.On("OperatorIdentity", mock.Anything).Return(invalidPubKey, nil)
@@ -2224,7 +2220,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 		s.client,
 		s.consensusClient,
 		s.db,
-		networkCfg,
 		getOperatorId,
 	)
 
@@ -2237,8 +2232,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 	s.db.On("Begin").Return(s.txn, nil).Maybe()
 	s.txn.On("Commit").Return(nil).Maybe()
 	s.txn.On("Rollback").Return(nil).Maybe()
-
-	networkCfg := networkconfig.NetworkConfig{}
 
 	s.client.On("OperatorIdentity", mock.Anything).Return("", errors.New("err"))
 
@@ -2254,7 +2247,6 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 		s.client,
 		s.consensusClient,
 		s.db,
-		networkCfg,
 		getOperatorId,
 	)
 

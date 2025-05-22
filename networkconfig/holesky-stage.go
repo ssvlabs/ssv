@@ -2,16 +2,19 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var HoleskyStage = NetworkConfig{
 	Name: "holesky-stage",
 	BeaconConfig: BeaconConfig{
-		Beacon: beacon.NewNetwork(spectypes.HoleskyNetwork),
+		BeaconName:    string(spectypes.HoleskyNetwork),
+		SlotDuration:  spectypes.HoleskyNetwork.SlotDurationSec(),
+		SlotsPerEpoch: spectypes.HoleskyNetwork.SlotsPerEpoch(),
+		ForkVersion:   spectypes.HoleskyNetwork.ForkVersion(),
+		GenesisTime:   time.Unix(int64(spectypes.HoleskyNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},

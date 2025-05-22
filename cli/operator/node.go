@@ -264,12 +264,12 @@ var StartNodeCmd = &cobra.Command{
 
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
-				SlotDuration: networkConfig.SlotDurationSec(),
-				GenesisTime:  networkConfig.GetGenesisTime(),
+				SlotDuration: networkConfig.SlotDuration,
+				GenesisTime:  networkConfig.GenesisTime,
 			})
 		}
 
-		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
+		cfg.ConsensusClient.BeaconConfig = networkConfig.BeaconConfig
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
 		consensusClient := setupConsensusClient(cmd.Context(), logger, slotTickerProvider)
 
@@ -327,7 +327,6 @@ var StartNodeCmd = &cobra.Command{
 				ssvSignerClient,
 				consensusClient,
 				db,
-				networkConfig,
 				operatorDataStore.GetOperatorID,
 			)
 			if err != nil {
@@ -380,7 +379,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
-		cfg.SSVOptions.Network = networkConfig
+		cfg.SSVOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
@@ -422,7 +421,7 @@ var StartNodeCmd = &cobra.Command{
 
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
-			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
+			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
 		}
 
@@ -442,7 +441,7 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
-			networkConfig,
+			networkConfig.BeaconConfig,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -747,7 +746,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
+func setupDB(logger *zap.Logger, beaconConfig networkconfig.Beacon) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -761,9 +760,9 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv
 	}
 
 	migrationOpts := migrations.Options{
-		Db:            db,
-		DbPath:        cfg.DBOptions.Path,
-		NetworkConfig: networkConfig,
+		Db:           db,
+		DbPath:       cfg.DBOptions.Path,
+		BeaconConfig: beaconConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
@@ -928,7 +927,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		fields.Network(networkConfig.Name),
 		fields.Domain(networkConfig.DomainType),
 		zap.String("nodeType", nodeType),
-		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
+		zap.Any("beaconNetwork", networkConfig.GetBeaconName()),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
 	)
 

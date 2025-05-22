@@ -20,7 +20,6 @@ import (
 	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	types "github.com/ssvlabs/ssv-spec/types"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -853,20 +852,6 @@ func (m *MockBeaconNode) GetBeaconBlock(ctx context.Context, slot phase0.Slot, g
 func (mr *MockBeaconNodeMockRecorder) GetBeaconBlock(ctx, slot, graffiti, randao any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).GetBeaconBlock), ctx, slot, graffiti, randao)
-}
-
-// GetBeaconNetwork mocks base method.
-func (m *MockBeaconNode) GetBeaconNetwork() types.BeaconNetwork {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBeaconNetwork")
-	ret0, _ := ret[0].(types.BeaconNetwork)
-	return ret0
-}
-
-// GetBeaconNetwork indicates an expected call of GetBeaconNetwork.
-func (mr *MockBeaconNodeMockRecorder) GetBeaconNetwork() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconNetwork", reflect.TypeOf((*MockBeaconNode)(nil).GetBeaconNetwork))
 }
 
 // GetSyncCommitteeContribution mocks base method.

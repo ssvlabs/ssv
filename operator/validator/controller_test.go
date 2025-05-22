@@ -526,8 +526,6 @@ func TestSetupValidators(t *testing.T) {
 			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
 			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeeMap))
 
-			bc.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
-
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
@@ -591,9 +589,6 @@ func TestGetValidatorStats(t *testing.T) {
 	sharesStorage := mocks.NewMockSharesStorage(ctrl)
 	bc := beacon.NewMockBeaconNode(ctrl)
 	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
-
-	netCfg := networkconfig.TestNetwork
-	bc.EXPECT().GetBeaconNetwork().Return(netCfg.Beacon.GetBeaconNetwork()).AnyTimes()
 
 	t.Run("Test with multiple operators", func(t *testing.T) {
 		// Setup for this subtest

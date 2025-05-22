@@ -2,16 +2,19 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var TestNetwork = NetworkConfig{
 	Name: "testnet",
 	BeaconConfig: BeaconConfig{
-		Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
+		BeaconName:    string(spectypes.BeaconTestNetwork),
+		SlotDuration:  spectypes.BeaconTestNetwork.SlotDurationSec(),
+		SlotsPerEpoch: spectypes.BeaconTestNetwork.SlotsPerEpoch(),
+		ForkVersion:   spectypes.BeaconTestNetwork.ForkVersion(),
+		GenesisTime:   time.Unix(int64(spectypes.BeaconTestNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},

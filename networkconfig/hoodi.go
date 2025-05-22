@@ -2,16 +2,19 @@ package networkconfig
 
 import (
 	"math/big"
+	"time"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var Hoodi = NetworkConfig{
 	Name: "hoodi",
 	BeaconConfig: BeaconConfig{
-		Beacon: beacon.NewNetwork(spectypes.HoodiNetwork),
+		BeaconName:    string(spectypes.HoodiNetwork),
+		SlotDuration:  spectypes.HoodiNetwork.SlotDurationSec(),
+		SlotsPerEpoch: spectypes.HoodiNetwork.SlotsPerEpoch(),
+		ForkVersion:   spectypes.HoodiNetwork.ForkVersion(),
+		GenesisTime:   time.Unix(int64(spectypes.HoodiNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x3},

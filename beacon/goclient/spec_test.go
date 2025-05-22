@@ -8,10 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func TestSpec(t *testing.T) {
@@ -25,7 +23,7 @@ func TestSpec(t *testing.T) {
 			ctx,
 			zap.NewNop(),
 			Options{
-				Network:        beacon.NewNetwork(types.MainNetwork),
+				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,

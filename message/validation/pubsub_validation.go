@@ -12,7 +12,7 @@ func (mv *messageValidator) validatePubSubMessage(pMsg *pubsub.Message) error {
 
 	maxMsgSize := MaxEncodedMsgSizeBeforePectra
 
-	if mv.netCfg.Beacon.EstimatedCurrentEpoch() >= mv.pectraForkEpoch {
+	if mv.netCfg.EstimatedCurrentEpoch() >= mv.pectraForkEpoch {
 		maxMsgSize = MaxEncodedMsgSize
 	}
 
