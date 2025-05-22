@@ -22,8 +22,7 @@ type NetworkKeyProvider func() libp2pcrypto.PrivKey
 
 // peersIndex implements Index interface.
 type peersIndex struct {
-	logger *zap.Logger
-
+	logger         *zap.Logger
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 

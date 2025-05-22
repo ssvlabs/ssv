@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -17,52 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/async"
 )
 
-// SubnetPeers contains the number of peers we are connected to for each subnet.
-type SubnetPeers [commons.SubnetsCount]uint16 // TODO: change the type
-
-func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
-	var sum SubnetPeers
-	for i := range a {
-		sum[i] = a[i] + b[i]
-	}
-	return sum
-}
-
-// Score estimates how much the given peer would contribute to our subscribed subnets.
-// Score only rewards for shared subnets in which we don't have enough peers.
-func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
-	const (
-		duoSubnetPriority  = 1
-		soloSubnetPriority = 3
-		deadSubnetPriority = 90
-	)
-	score := float64(0)
-	for i := range a {
-		if ours.IsSet(uint64(i)) && theirs.IsSet(uint64(i)) {
-			switch a[i] {
-			case 0:
-				score += deadSubnetPriority
-			case 1:
-				score += soloSubnetPriority
-			case 2:
-				score += duoSubnetPriority
-			}
-		}
-	}
-	return score
-}
-
-func (a SubnetPeers) String() string {
-	var b strings.Builder
-	for i, v := range a {
-		if v > 0 {
-			_, _ = fmt.Fprintf(&b, "%d:%d ", i, v)
-		}
-	}
-	return b.String()
-}
-
-func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
+func (n *p2pNetwork) startDiscovery() error {
 	startTime := time.Now()
 
 	connector, err := n.getConnector()
@@ -72,7 +26,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 	// Spawn a goroutine to deduplicate discovered peers by peer ID.
 	connectorProposals := make(chan peer.AddrInfo, connectorQueueSize)
-	go n.bootstrapDiscovery(logger, connectorProposals)
+	go n.bootstrapDiscovery(connectorProposals)
 	go func() {
 		for proposal := range connectorProposals {
 			discoveredPeer := discovery.DiscoveredPeer{
@@ -84,9 +38,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 	}()
 
 	// Spawn a goroutine to repeatedly select & connect to the best peers.
-	// Try to connect only half as many peers as we have outbound slots available because this
-	// leaves some vacant slots for the next iteration - on the next iteration better peers
-	// might show up (so we don't want to "spend" all of these vacant slots at once).
 	// To find the best set of peers to connect we'll:
 	// - iterate over all available candidate-peers (peers discovered so far) and choose the best one
 	//   scoring peers based on how many dead/solo/duo subnets they resolve for us
@@ -116,9 +67,8 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 
 		// Compute number of peers we're connected to for each subnet.
 		ownSubnets := n.SubscribedSubnets()
-		ownSubnetPeers := SubnetPeers{}
-		peersByTopic := n.PeersByTopic()
-		for topic, peers := range peersByTopic {
+		currentSubnetPeers := SubnetPeers{}
+		for topic, peers := range n.PeersByTopic() {
 			subnet, err := strconv.ParseInt(commons.GetTopicBaseName(topic), 10, 64)
 			if err != nil {
 				n.logger.Error("failed to parse topic",
@@ -130,12 +80,12 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					zap.String("topic", topic), zap.Int("subnet", int(subnet)))
 				continue
 			}
-			ownSubnetPeers[subnet] = uint16(len(peers)) // nolint: gosec
+			currentSubnetPeers[subnet] = uint16(len(peers)) // nolint: gosec
 		}
 
 		n.logger.Debug("selecting discovered peers",
 			zap.Int("pool_size", n.discoveredPeersPool.SlowLen()),
-			zap.String("own_subnet_peers", ownSubnetPeers.String()))
+			zap.String("own_subnet_peers", currentSubnetPeers.String()))
 
 		// Limit new connections to the remaining outbound slots.
 		maxPeersToConnect := max(vacantOutboundSlots, 1)
@@ -146,7 +96,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 		pendingSubnetPeers := SubnetPeers{}
 		peersToConnect := make(map[peer.ID]discovery.DiscoveredPeer)
 		for i := range maxPeersToConnect {
-			optimisticSubnetPeers := ownSubnetPeers.Add(pendingSubnetPeers)
+			optimisticSubnetPeers := currentSubnetPeers.Add(pendingSubnetPeers)
 			peersByPriority := lane.NewMaxPriorityQueue[discovery.DiscoveredPeer, float64]()
 			minScore, maxScore := math.MaxFloat64, float64(0)
 			n.discoveredPeersPool.Range(func(peerID peer.ID, discoveredPeer discovery.DiscoveredPeer) bool {
@@ -175,7 +125,6 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 					peerScore *= peerRelevance * peerRelevance
 				}
 
-				// Push the peer.
 				peersByPriority.Push(discoveredPeer, peerScore)
 				minScore = min(minScore, peerScore)
 				maxScore = max(maxScore, peerScore)

@@ -60,7 +60,6 @@ func TestSubnetsParsing(t *testing.T) {
 	}
 
 	for _, subtest := range subtests {
-		subtest := subtest
 		t.Run(subtest.name, func(t *testing.T) {
 			s, err := SubnetsFromString(subtest.str)
 			if subtest.shouldError {
