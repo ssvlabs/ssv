@@ -207,6 +207,6 @@ func (n *Node) reportOperators() {
 	for i := range operators {
 		n.logger.Debug("report operator public key",
 			fields.OperatorID(operators[i].ID),
-			fields.PubKey(operators[i].PublicKey))
+			fields.OperatorPubKey(operators[i].PublicKey))
 	}
 }
