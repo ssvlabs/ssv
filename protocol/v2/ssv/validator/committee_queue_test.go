@@ -75,18 +75,18 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 	return decoded
 }
 
-// safeConsumeQueue wraps ConsumeQueue execution in a goroutine with mutex protection.
-func safeConsumeQueue(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
+// runConsumeQueueAsync wraps ConsumeQueue execution in a goroutine.
+func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
 	logger *zap.Logger, handler func(context.Context, *zap.Logger, *queue.SSVMessage) error,
-	committeeRunner *runner.CommitteeRunner, mutex *sync.RWMutex) {
+	committeeRunner *runner.CommitteeRunner) {
 
 	t.Helper()
 
 	go func() {
-		mutex.RLock()
-		defer mutex.RUnlock()
 		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-		require.NoError(t, err)
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("ConsumeQueue returned an unexpected error: %v", err)
+		}
 	}()
 }
 
@@ -214,7 +214,7 @@ func TestConsumeQueueBasic(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	for i := 0; i < 2; i++ {
 		select {
@@ -379,7 +379,7 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	expectedMsgCount := 4
 	for i := 0; i < expectedMsgCount; i++ {
@@ -512,7 +512,7 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	select {
 	case <-handlerCalled:
@@ -613,7 +613,7 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	for i := 0; i < 2; i++ {
 		select {
@@ -854,7 +854,7 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				require.True(t, pushed)
 			}
 
-			safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
+			runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
 			expectedProcessedCount := 0
 			for _, shouldProcess := range tc.expectedProcessed {
@@ -998,7 +998,7 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 				return nil
 			}
 
-			safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
+			runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
 			if tc.shouldBeFiltered {
 				select {
@@ -1110,7 +1110,7 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 		return nil
 	}
 
-	safeConsumeQueue(t, ctx, committee, q, logger, handler, committeeRunner, &sync.RWMutex{})
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	// Wait for all messages
 	for i := 0; i < len(testMessages); i++ {
@@ -1677,7 +1677,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		queueCapacity := 5
 		currentRound := specqbft.Round(1)
 
-		runnerMutex := &sync.RWMutex{}
 		committeeRunner := &runner.CommitteeRunner{
 			BaseRunner: &runner.BaseRunner{
 				State: &runner.State{
@@ -1721,15 +1720,10 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		consumerWg.Add(1)
 		go func() {
 			defer consumerWg.Done()
-			go func() {
-				runnerMutex.RLock()
-				defer runnerMutex.RUnlock()
-				err := committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
-				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-					logger.Error("ConsumeQueue exited with error", zap.Error(err))
-				}
-			}()
-			<-consumerCtx.Done()
+			err := committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				panic(fmt.Errorf("ConsumeQueue exited with unexpected error: %w", err))
+			}
 		}()
 
 		time.Sleep(50 * time.Millisecond)
@@ -1774,10 +1768,8 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		ctx2, cancel2 := context.WithCancel(ctx)
 		defer cancel2()
 
-		runnerMutex.Lock()
 		committeeRunner.BaseRunner.State.RunningInstance.State.ProposalAcceptedForCurrentRound =
 			&specqbft.ProcessingMessage{QBFTMessage: proposal}
-		runnerMutex.Unlock()
 
 		// Restart consumption
 		consumer2Ctx, consumer2Cancel := context.WithCancel(ctx2)
@@ -1785,27 +1777,21 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		consumer2Wg.Add(1)
 		go func() {
 			defer consumer2Wg.Done()
-			go func() {
-				runnerMutex.RLock()
-				defer runnerMutex.RUnlock()
-				err := committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
-				if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-					logger.Error("ConsumeQueue (phase 2) exited with error", zap.Error(err))
-				}
-			}()
-			<-consumer2Ctx.Done()
+			err := committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+				panic(fmt.Errorf("ConsumeQueue (phase 2) exited with unexpected error: %w", err))
+			}
 		}()
 
 		// Observe how many of the old Prepares now drain
 		timeout := time.After(2 * time.Second)
-	Loop:
-		for {
+		for done := false; !done; {
 			select {
 			case <-handlerCalled:
 			case <-timeout:
-				break Loop
+				done = true
 			case <-ctx2.Done():
-				break Loop
+				done = true
 			}
 		}
 
