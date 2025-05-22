@@ -1536,6 +1536,11 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 //     receiving new messages. If there's no space, messages are discarded rather than waiting
 //     for space to become available. This means important messages could be lost during periods
 //     of heavy load or when messages get stuck in the queue due to filtering rules.
+//
+// This test suite highlights a known behavior where the queue drops messages when full,
+// even high-priority ones, due to its non-blocking intake.
+// This behavior and potential improvements are tracked
+// in GitHub issue #1680 (https://github.com/ssvlabs/ssv/issues/1680).
 func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	mainLogger, _ := zap.NewDevelopment()
 	mainBeaconNetwork := qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork()
