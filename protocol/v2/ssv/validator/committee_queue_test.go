@@ -563,9 +563,6 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
-	cancel()
-	time.Sleep(50 * time.Millisecond)
-
 	require.Equal(t, 1, len(receivedMessages))
 	assert.Equal(t, spectypes.SSVConsensusMsgType, receivedMessages[0].MsgType)
 }
@@ -660,15 +657,13 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 		}
 	}
 
-	cancel()
-	time.Sleep(50 * time.Millisecond)
-
 	require.Equal(t, 2, len(receivedMessages))
 
 	msgTypes := make(map[spectypes.MsgType]bool)
 	for _, msg := range receivedMessages {
 		msgTypes[msg.MsgType] = true
 	}
+
 	assert.True(t, msgTypes[spectypes.SSVConsensusMsgType])
 	assert.True(t, msgTypes[spectypes.SSVPartialSignatureMsgType])
 }
@@ -1139,11 +1134,6 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 		}
 	}
 
-	cancel()
-	time.Sleep(50 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
 	require.Len(t, received, len(testMessages))
 
 	// Check ordering: Event first, then QBFT by type score
@@ -1460,7 +1450,6 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 			t.Fatalf("timed out waiting for message %d/%d", i+1, len(allMsgs))
 		}
 	}
-	cancel()
 
 	// --- 1) Assert monotonic (non-decreasing) priorities ---
 	for i := 1; i < len(buckets); i++ {
@@ -1478,6 +1467,7 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	for _, b := range buckets {
 		actualCounts[b]++
 	}
+
 	require.Equal(t, expectedCounts, actualCounts)
 }
 
