@@ -1177,13 +1177,11 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 		ctx:           ctx,
 		Queues:        make(map[phase0.Slot]queueContainer),
 		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
-		mtx:           sync.RWMutex{},
 	}
 
 	slot := phase0.Slot(123)
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
-	committee.mtx.Lock()
 	qContainer := queueContainer{
 		Q: queue.New(queueCapacity),
 		queueState: &queue.State{
@@ -1193,7 +1191,6 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 		},
 	}
 	committee.Queues[slot] = qContainer
-	committee.mtx.Unlock()
 
 	// Step 1: Fill the pre-made queue to its capacity by calling HandleMessage
 	// HandleMessage will find and use the qContainer we just set up.
@@ -1273,13 +1270,13 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 		return nil
 	}
 
-	// Run ConsumeQueue. It should stop after processing msg1.
-	_ = committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
-	// We don't assert on `err` itself directly because ConsumeQueue might return nil if context is cancelled,
-	// and ErrNoValidDuties causes a break, not necessarily a returned error from ConsumeQueue itself if ctx expires.
-	// The primary check is the number of processed messages.
-
-	time.Sleep(100 * time.Millisecond)
+	// Run ConsumeQueue. It should stop after processing the first message because the handler
+	// returns runner.ErrNoValidDuties.
+	// The ConsumeQueue method itself is designed to break its processing loop and return nil
+	// when its handler signals ErrNoValidDuties, treating it as a normal stop condition for the queue.
+	// Thus, we expect no error from the ConsumeQueue call.
+	err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
+	require.NoError(t, err)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&processedMessagesCount))
 	assert.Equal(t, 2, q.Q.Len())
@@ -1431,21 +1428,30 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	}
 
 	// --- Drain the queue, capturing the priority bucket of each popped message ---
-	var buckets []int
-	handlerC := make(chan struct{}, len(allMsgs))
+	bucketChan := make(chan int, len(allMsgs))
 	handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
-		buckets = append(buckets, priority(m))
-		handlerC <- struct{}{}
+		bucketChan <- priority(m)
 		return nil
 	}
 	go func() {
-		_ = committee.ConsumeQueue(ctx, qc, logger, handler, committee.Runners[slot])
+		defer close(bucketChan)
+		err := committee.ConsumeQueue(ctx, qc, logger, handler, committee.Runners[slot])
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			// If ConsumeQueue errors unexpectedly, it might not drain all messages.
+			// The test will likely fail on timeout or incorrect bucket counts.
+			t.Logf("ConsumeQueue in TestConsumeQueueBurstTraffic exited with error: %v", err)
+		}
 	}()
 
 	// Wait for exactly len(allMsgs) messages (or fail on timeout)
+	var buckets []int
 	for i := 0; i < len(allMsgs); i++ {
 		select {
-		case <-handlerC:
+		case bucketPriority, ok := <-bucketChan:
+			if !ok {
+				t.Fatalf("bucketChan closed prematurely, received %d/%d messages", i, len(allMsgs))
+			}
+			buckets = append(buckets, bucketPriority)
 		case <-time.After(5 * time.Second):
 			t.Fatalf("timed out waiting for message %d/%d", i+1, len(allMsgs))
 		}
@@ -1507,7 +1513,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			Queues:        make(map[phase0.Slot]queueContainer),
 			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 			BeaconNetwork: mainBeaconNetwork,
-			mtx:           sync.RWMutex{},
 		}
 
 		slot := phase0.Slot(123)
@@ -1524,9 +1529,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 				Round:              currentRound,
 			},
 		}
-		committee.mtx.Lock()
 		committee.Queues[slot] = qContainer
-		committee.mtx.Unlock()
 
 		// 1. Fill the queue's inbox channel to capacity using HandleMessage.
 		for i := 0; i < queueCapacity; i++ {
@@ -1582,7 +1585,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			Queues:        make(map[phase0.Slot]queueContainer),
 			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
 			BeaconNetwork: mainBeaconNetwork,
-			mtx:           sync.RWMutex{},
 		}
 
 		slot := phase0.Slot(789)
@@ -1598,9 +1600,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 				Round:              currentRound,
 			},
 		}
-		committee.mtx.Lock()
 		committee.Queues[slot] = qContainer
-		committee.mtx.Unlock()
 
 		// 1. Fill the queue with low-priority consensus messages
 		for i := 0; i < queueCapacity; i++ {
@@ -1734,7 +1734,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			}
 		}()
 
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond) // Give some time for the consumer to start
 
 		// Fill with filtered Prepare messages
 		for i := 0; i < queueCapacity; i++ {
