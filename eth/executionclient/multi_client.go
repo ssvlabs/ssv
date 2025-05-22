@@ -258,7 +258,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				f := func(client SingleClientProvider) (any, error) {
 					nextBlockToProcess, err := client.streamLogsToChan(ctx, logs, fromBlock)
 					if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-						return nextBlockToProcess, err
+						return nil, err
 					}
 
 					fromBlock = nextBlockToProcess
