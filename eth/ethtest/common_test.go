@@ -15,6 +15,8 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/networkconfig"
+
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
@@ -51,20 +53,20 @@ func NewCommonTestInput(
 }
 
 type TestEnv struct {
-	eventSyncer    *eventsyncer.EventSyncer
-	validators     []*testValidatorData
-	ops            []*testOperator
-	nodeStorage    storage.Storage
-	sim            *simulator.Backend
-	boundContract  *simcontract.Simcontract
-	auth           *bind.TransactOpts
-	shares         [][]byte
-	execClient     *executionclient.ExecutionClient
-	rpcServer      *rpc.Server
-	httpSrv        *httptest.Server
-	validatorCtrl  *mocks.MockController
-	mockCtrl       *gomock.Controller
-	followDistance *uint64
+	eventSyncer      *eventsyncer.EventSyncer
+	validators       []*testValidatorData
+	ops              []*testOperator
+	nodeStorage      storage.Storage
+	sim              *simulator.Backend
+	boundContract    *simcontract.Simcontract
+	auth             *bind.TransactOpts
+	shares           [][]byte
+	execClient       *executionclient.ExecutionClient
+	rpcServer        *rpc.Server
+	httpSrv          *httptest.Server
+	validatorCtrl    *mocks.MockController
+	mockCtrl         *gomock.Controller
+	execClientConfig executionclient.Config
 }
 
 func (e *TestEnv) shutdown() {
@@ -88,11 +90,20 @@ func (e *TestEnv) setup(
 	testAddresses []*ethcommon.Address,
 	validatorsCount uint64,
 	operatorsCount uint64,
+	useFinalityFork bool,
 ) error {
-	if e.followDistance == nil {
-		e.SetDefaultFollowDistance()
-	}
 	logger := zaptest.NewLogger(t)
+
+	// set up basic network/fork stuff
+	e.execClientConfig = executionclient.NewConfigFromNetwork(networkconfig.TestNetwork)
+
+	if useFinalityFork {
+		// Post-fork config (use finality consensus)
+		e.execClientConfig = e.execClientConfig.WithFinalityConsensusEpoch(1)
+	} else {
+		// Pre-fork config (use follow distance)
+		e.execClientConfig = e.execClientConfig.WithFinalityConsensusEpoch(1000)
+	}
 
 	// Create operators RSA keys
 	ops, err := createOperators(operatorsCount, 0)
@@ -167,13 +178,12 @@ func (e *TestEnv) setup(
 		return fmt.Errorf("contractCode is empty")
 	}
 
-	// Create a client and connect to the simulator
 	e.execClient, err = executionclient.New(
 		ctx,
+		e.execClientConfig,
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
-		executionclient.WithFollowDistance(*e.followDistance),
 	)
 	if err != nil {
 		return err
@@ -206,18 +216,14 @@ func (e *TestEnv) setup(
 	return nil
 }
 
-func (e *TestEnv) SetDefaultFollowDistance() {
-	// 8 is current production offset
-	value := uint64(8)
-	e.followDistance = &value
-}
-
-func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
-	for i := uint64(0); i < *e.followDistance; i++ {
+// MineAndFinalize mines enough blocks to ensure finality.
+func (e *TestEnv) MineAndFinalize(blockNum *uint64) {
+	for i := uint64(0); i < e.execClientConfig.SlotsPerEpoch*2; i++ {
 		commitBlock(e.sim, blockNum)
 	}
 }
 
+// commitBlock creates a new block and increments block counter.
 func commitBlock(sim *simulator.Backend, blockNum *uint64) {
 	sim.Commit()
 	*blockNum++

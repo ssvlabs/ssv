@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -16,8 +17,6 @@ var SupportedConfigs = map[string]NetworkConfig{
 	HoodiStage.Name:   HoodiStage,
 	Sepolia.Name:      Sepolia,
 }
-
-const forkName = "alan"
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
@@ -43,7 +42,9 @@ func (n NetworkConfig) String() string {
 }
 
 func (n NetworkConfig) NetworkName() string {
-	return fmt.Sprintf("%s:%s", n.Name, forkName)
+	activeFork := n.Forks.ActiveFork(0) // Alan
+
+	return fmt.Sprintf("%s:%s", n.Name, strings.ToLower(activeFork.Name))
 }
 
 // ForkVersion returns the fork version of the network.

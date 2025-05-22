@@ -16,6 +16,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient/simulated"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
@@ -86,7 +87,11 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, err)
 
 	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
-	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
+	client, err := executionclient.New(ctx,
+		executionclient.NewConfigFromNetwork(networkconfig.TestNetwork),
+		addr,
+		contractAddr,
+		executionclient.WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
@@ -243,6 +248,7 @@ func TestBlockBelowThreshold(t *testing.T) {
 
 	t.Run("fails on EC error", func(t *testing.T) {
 		err1 := errors.New("ec err")
+		m.EXPECT().IsFinalizedFork(ctx).Return(false)
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(nil, err1)
 		err := s.blockBelowThreshold(ctx, big.NewInt(1))
 		require.ErrorIs(t, err, err1)
@@ -250,6 +256,7 @@ func TestBlockBelowThreshold(t *testing.T) {
 
 	t.Run("fails if outside threshold", func(t *testing.T) {
 		header := &ethtypes.Header{Time: uint64(time.Now().Add(-(defaultStalenessThreshold + time.Second)).Unix())}
+		m.EXPECT().IsFinalizedFork(ctx).Return(false)
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
 		err := s.blockBelowThreshold(ctx, big.NewInt(1))
 		require.Error(t, err)
@@ -257,8 +264,39 @@ func TestBlockBelowThreshold(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		header := &ethtypes.Header{Time: uint64(time.Now().Add(-(defaultStalenessThreshold - time.Second)).Unix())}
+		m.EXPECT().IsFinalizedFork(ctx).Return(false)
 		m.EXPECT().HeaderByNumber(ctx, big.NewInt(1)).Return(header, nil)
 		err := s.blockBelowThreshold(ctx, big.NewInt(1))
 		require.NoError(t, err)
+	})
+
+	t.Run("finalized fork success", func(t *testing.T) {
+		finalizedHeader := &ethtypes.Header{
+			Time:   uint64(time.Now().Add(-(defaultFinalizedStalenessThreshold - time.Second)).Unix()),
+			Number: big.NewInt(100),
+		}
+		m.EXPECT().IsFinalizedFork(ctx).Return(true)
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64())).Return(finalizedHeader, nil)
+		err := s.blockBelowThreshold(ctx, big.NewInt(1)) // The block parameter is not used when IsFinalizedFork is true
+		require.NoError(t, err)
+	})
+
+	t.Run("finalized fork too old", func(t *testing.T) {
+		finalizedHeader := &ethtypes.Header{
+			Time:   uint64(time.Now().Add(-(defaultFinalizedStalenessThreshold + time.Second)).Unix()),
+			Number: big.NewInt(100),
+		}
+		m.EXPECT().IsFinalizedFork(ctx).Return(true)
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64())).Return(finalizedHeader, nil)
+		err := s.blockBelowThreshold(ctx, big.NewInt(1))
+		require.Error(t, err)
+	})
+
+	t.Run("finalized fork error", func(t *testing.T) {
+		err1 := errors.New("finalized block error")
+		m.EXPECT().IsFinalizedFork(ctx).Return(true)
+		m.EXPECT().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64())).Return(nil, err1)
+		err := s.blockBelowThreshold(ctx, big.NewInt(1))
+		require.ErrorIs(t, err, err1)
 	})
 }

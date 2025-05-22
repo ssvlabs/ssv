@@ -283,13 +283,11 @@ var StartNodeCmd = &cobra.Command{
 		if len(executionAddrList) == 1 {
 			ec, err := executionclient.New(
 				cmd.Context(),
+				executionclient.NewConfigFromNetwork(networkConfig),
 				executionAddrList[0],
 				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 				executionclient.WithLogger(logger),
-				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
-				executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 			)
@@ -301,13 +299,11 @@ var StartNodeCmd = &cobra.Command{
 		} else {
 			ec, err := executionclient.NewMulti(
 				cmd.Context(),
+				executionclient.NewConfigFromNetwork(networkConfig),
 				executionAddrList,
 				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 				executionclient.WithLoggerMulti(logger),
-				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
 				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
-				executionclient.WithReconnectionInitialIntervalMulti(executionclient.DefaultReconnectionInitialInterval),
-				executionclient.WithReconnectionMaxIntervalMulti(executionclient.DefaultReconnectionMaxInterval),
 				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 			)

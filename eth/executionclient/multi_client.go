@@ -52,17 +52,14 @@ var _ Provider = &MultiClient{}
 // The execution MultiClient switches to EL2, the consensus multi client switches to CL2,
 // This shouldn't cause significant duty misses.
 type MultiClient struct {
+	config Config
+
 	// optional
-	logger *zap.Logger
-	// followDistance defines an offset into the past from the head block such that the block
-	// at this offset will be considered as very likely finalized.
-	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
-	connectionTimeout           time.Duration
-	reconnectionInitialInterval time.Duration
-	reconnectionMaxInterval     time.Duration
-	healthInvalidationInterval  time.Duration
-	logBatchSize                uint64
-	syncDistanceTolerance       uint64
+	logger                     *zap.Logger
+	connectionTimeout          time.Duration
+	healthInvalidationInterval time.Duration
+	logBatchSize               uint64
+	syncDistanceTolerance      uint64
 
 	contractAddress ethcommon.Address
 	chainID         atomic.Pointer[big.Int]
@@ -78,6 +75,7 @@ type MultiClient struct {
 // NewMulti creates a new instance of MultiClient.
 func NewMulti(
 	ctx context.Context,
+	config Config,
 	nodeAddrs []string,
 	contractAddr ethcommon.Address,
 	opts ...OptionMulti,
@@ -87,16 +85,14 @@ func NewMulti(
 	}
 
 	multiClient := &MultiClient{
-		nodeAddrs:                   nodeAddrs,
-		clients:                     make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
-		clientsMu:                   make([]sync.Mutex, len(nodeAddrs)),
-		contractAddress:             contractAddr,
-		logger:                      zap.NewNop(),
-		followDistance:              DefaultFollowDistance,
-		connectionTimeout:           DefaultConnectionTimeout,
-		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
-		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize,
+		config:            config,
+		nodeAddrs:         nodeAddrs,
+		clients:           make([]SingleClientProvider, len(nodeAddrs)), // initialized with nil values (not connected)
+		clientsMu:         make([]sync.Mutex, len(nodeAddrs)),
+		contractAddress:   contractAddr,
+		logger:            zap.NewNop(),
+		connectionTimeout: DefaultConnectionTimeout,
+		logBatchSize:      DefaultHistoricalLogsBatchSize,
 	}
 
 	for _, opt := range opts {
@@ -152,13 +148,11 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 
 	singleClient, err := New(
 		ctx,
+		mc.config,
 		mc.nodeAddrs[clientIndex],
 		mc.contractAddress,
 		WithLogger(logger),
-		WithFollowDistance(mc.followDistance),
 		WithConnectionTimeout(mc.connectionTimeout),
-		WithReconnectionInitialInterval(mc.reconnectionInitialInterval),
-		WithReconnectionMaxInterval(mc.reconnectionMaxInterval),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
 	)
@@ -511,4 +505,20 @@ func methodFromContext(ctx context.Context) string {
 		return ""
 	}
 	return v
+}
+
+// IsFinalizedFork returns whether the client is currently using finalized blocks.
+func (mc *MultiClient) IsFinalizedFork(ctx context.Context) bool {
+	f := func(client SingleClientProvider) (any, error) {
+		return client.IsFinalizedFork(ctx), nil
+	}
+
+	res, err := mc.call(contextWithMethod(ctx, "IsFinalizedFork"), f, len(mc.clients))
+	if err != nil {
+		mc.logger.Warn("failed to check if using finalized fork, assuming not using it",
+			zap.Error(err))
+		return false
+	}
+
+	return res.(bool)
 }

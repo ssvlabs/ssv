@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -23,18 +24,15 @@ import (
 // https://github.com/ssvlabs/ssv/pull/1053
 
 const (
-	defaultStalenessThreshold = 300 * time.Second
-)
-
-var (
-	// ErrNodeNotReady is returned when node is not ready.
-	ErrNodeNotReady = fmt.Errorf("node not ready")
+	defaultStalenessThreshold          = 300 * time.Second
+	defaultFinalizedStalenessThreshold = 3 * 32 * 12 * time.Second // 3 epochs // TODO: set a proper value?
 )
 
 type ExecutionClient interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan executionclient.BlockLogs, errors <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error)
+	IsFinalizedFork(ctx context.Context) bool
 }
 
 type EventHandler interface {
@@ -48,8 +46,10 @@ type EventSyncer struct {
 	executionClient ExecutionClient
 	eventHandler    EventHandler
 
-	logger             *zap.Logger
-	stalenessThreshold time.Duration
+	logger *zap.Logger
+
+	stalenessThreshold          time.Duration
+	finalizedStalenessThreshold time.Duration
 
 	lastProcessedBlock       uint64
 	lastProcessedBlockChange time.Time
@@ -61,8 +61,9 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		executionClient: executionClient,
 		eventHandler:    eventHandler,
 
-		logger:             zap.NewNop(),
-		stalenessThreshold: defaultStalenessThreshold,
+		logger:                      zap.NewNop(),
+		stalenessThreshold:          defaultStalenessThreshold,
+		finalizedStalenessThreshold: defaultFinalizedStalenessThreshold,
 	}
 
 	for _, opt := range opts {
@@ -81,27 +82,62 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	if !found || lastProcessedBlock == nil || lastProcessedBlock.Uint64() == 0 {
 		return fmt.Errorf("last processed block is not set")
 	}
-	if es.lastProcessedBlock != lastProcessedBlock.Uint64() {
-		es.lastProcessedBlock = lastProcessedBlock.Uint64()
+
+	lastBlockNum := lastProcessedBlock.Uint64()
+	if es.lastProcessedBlock != lastBlockNum {
+		es.lastProcessedBlock = lastBlockNum
 		es.lastProcessedBlockChange = time.Now()
 		return nil
 	}
-	if time.Since(es.lastProcessedBlockChange) > es.stalenessThreshold {
-		return fmt.Errorf("syncing is stuck at block %d", lastProcessedBlock.Uint64())
+
+	staleness := time.Since(es.lastProcessedBlockChange)
+	threshold := es.stalenessThreshold
+
+	if es.executionClient.IsFinalizedFork(ctx) {
+		threshold = es.finalizedStalenessThreshold
+	}
+
+	if staleness > threshold {
+		return fmt.Errorf("syncing is stuck at block %d", lastBlockNum)
 	}
 
 	return es.blockBelowThreshold(ctx, lastProcessedBlock)
 }
 
+// blockBelowThreshold checks if the specified block is recent enough.
 func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) error {
-	header, err := es.executionClient.HeaderByNumber(ctx, block)
-	if err != nil {
-		return fmt.Errorf("failed to get header for block %d: %w", block, err)
-	}
+	usingFinalized := es.executionClient.IsFinalizedFork(ctx)
 
-	// #nosec G115
-	if header.Time < uint64(time.Now().Add(-es.stalenessThreshold).Unix()) {
-		return fmt.Errorf("block %d is too old", block)
+	if usingFinalized {
+		// When using finalized blocks, only check if the finalized block is fresh
+		finalizedHeader, err := es.executionClient.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+		if err != nil {
+			return fmt.Errorf("failed to get finalized block header: %w", err)
+		}
+
+		// #nosec G115
+		blockTime := time.Unix(int64(finalizedHeader.Time), 0)
+		staleness := time.Since(blockTime)
+
+		if staleness > es.finalizedStalenessThreshold {
+			return fmt.Errorf("finalized block %d is too old (age: %s)",
+				finalizedHeader.Number.Uint64(), staleness.Round(time.Second))
+		}
+	} else {
+		// When using safety distance, check the specific block
+		header, err := es.executionClient.HeaderByNumber(ctx, block)
+		if err != nil {
+			return fmt.Errorf("failed to get header for block %d: %w", block, err)
+		}
+
+		// #nosec G115
+		blockTime := time.Unix(int64(header.Time), 0)
+		staleness := time.Since(blockTime)
+
+		if staleness > es.stalenessThreshold {
+			return fmt.Errorf("block %d is too old (age: %s)",
+				block.Uint64(), staleness.Round(time.Second))
+		}
 	}
 
 	return nil
