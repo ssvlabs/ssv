@@ -59,31 +59,31 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(1), dvs.subnets[3])
-	require.Equal(t, byte(1), dvs.subnets[5])
-	require.Equal(t, byte(0), dvs.subnets[2])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.True(t, dvs.subnets.IsSet(3))
+	require.True(t, dvs.subnets.IsSet(5))
+	require.False(t, dvs.subnets.IsSet(2))
 
 	// Register the same subnets. Should not update the state
 	updated, err = dvs.RegisterSubnets(testLogger, 1, 3, 5)
 	assert.NoError(t, err)
 	assert.False(t, updated)
 
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(1), dvs.subnets[3])
-	require.Equal(t, byte(1), dvs.subnets[5])
-	require.Equal(t, byte(0), dvs.subnets[2])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.True(t, dvs.subnets.IsSet(3))
+	require.True(t, dvs.subnets.IsSet(5))
+	require.False(t, dvs.subnets.IsSet(2))
 
 	// Register different subnets
 	updated, err = dvs.RegisterSubnets(testLogger, 2, 4)
 	assert.NoError(t, err)
 	assert.True(t, updated)
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(1), dvs.subnets[2])
-	require.Equal(t, byte(1), dvs.subnets[3])
-	require.Equal(t, byte(1), dvs.subnets[4])
-	require.Equal(t, byte(1), dvs.subnets[5])
-	require.Equal(t, byte(0), dvs.subnets[6])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.True(t, dvs.subnets.IsSet(2))
+	require.True(t, dvs.subnets.IsSet(3))
+	require.True(t, dvs.subnets.IsSet(4))
+	require.True(t, dvs.subnets.IsSet(5))
+	require.False(t, dvs.subnets.IsSet(6))
 
 	// Close
 	err = dvs.Close()
@@ -97,18 +97,18 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	_, err := dvs.RegisterSubnets(testLogger, 1, 2, 3)
 	require.NoError(t, err)
 
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(1), dvs.subnets[2])
-	require.Equal(t, byte(1), dvs.subnets[3])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.True(t, dvs.subnets.IsSet(2))
+	require.True(t, dvs.subnets.IsSet(3))
 
 	// Deregister from 2 and 3
 	updated, err := dvs.DeregisterSubnets(testLogger, 2, 3)
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(0), dvs.subnets[2])
-	require.Equal(t, byte(0), dvs.subnets[3])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.False(t, dvs.subnets.IsSet(2))
+	require.False(t, dvs.subnets.IsSet(3))
 
 	// Deregistering non-existent subnets should not update
 	updated, err = dvs.DeregisterSubnets(testLogger, 4, 5)
@@ -279,8 +279,8 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	dvs.conns.(*MockConnection).SetAtLimit(false)
 
 	// Valid peer but no common subnet
-	subnets := make([]byte, len(commons.ZeroSubnets))
-	subnets[10] = 1
+	subnets := commons.Subnets{}
+	subnets.Set(10)
 	err = dvs.checkPeer(context.TODO(), testLogger, ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
 }

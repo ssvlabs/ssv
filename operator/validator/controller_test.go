@@ -187,7 +187,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 
 			network.EXPECT().ActiveSubnets().Return(subnets[:]).AnyTimes()
-			network.EXPECT().FixedSubnets().Return(make(commons.Subnets, commons.SubnetsCount)).AnyTimes()
+			network.EXPECT().FixedSubnets().Return(commons.Subnets{}).AnyTimes()
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)

@@ -97,8 +97,11 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
-	fixedSubnets  []byte
-	activeSubnets []byte
+	// persistentSubnets holds subnets on node startup,
+	// these subnets should not be unsubscribed from even if all validators associated with them are removed
+	persistentSubnets commons.Subnets
+	// currentSubnets holds current subnets which depend on current active validators and committees
+	currentSubnets commons.Subnets
 
 	libConnManager connmgrcore.ConnManager
 
@@ -135,7 +138,6 @@ func New(
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeCommittees:        hashmap.New[string, validatorStatus](),
-		activeSubnets:           make([]byte, commons.SubnetsCount),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
@@ -320,7 +322,7 @@ func (n *p2pNetwork) peersTrimming(logger *zap.Logger) func() {
 			maximumIrrelevantPeersToDisconnect,
 			n.host.Network(),
 			connectedPeers,
-			n.activeSubnets,
+			n.currentSubnets,
 		)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
@@ -495,7 +497,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(time.Second)
-	registeredSubnets := make([]byte, commons.SubnetsCount)
+	registeredSubnets := commons.Subnets{}
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
@@ -503,21 +505,23 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		start := time.Now()
 
 		updatedSubnets := n.SubscribedSubnets()
-		n.activeSubnets = updatedSubnets
+		n.currentSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]uint64, 0)
-		for subnet, active := range updatedSubnets {
-			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				addedSubnets = append(addedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
+		subnetList := updatedSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !registeredSubnets.IsSet(subnet) {
+				addedSubnets = append(addedSubnets, subnet)
 			}
 		}
 
 		// Compute the not anymore registered subnets.
 		removedSubnets := make([]uint64, 0)
-		for subnet, active := range registeredSubnets {
-			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
-				removedSubnets = append(removedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
+		subnetList = registeredSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !updatedSubnets.IsSet(subnet) {
+				removedSubnets = append(removedSubnets, subnet)
 			}
 		}
 
@@ -528,7 +532,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		}
 
 		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = commons.Subnets(n.activeSubnets).String()
+			self.Metadata.Subnets = n.currentSubnets.String()
 			return self
 		})
 
@@ -565,8 +569,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			go n.disc.PublishENR(logger.Named(logging.NameDiscoveryService))
 		}
 
-		allSubs, _ := commons.FromString(commons.AllSubnets)
-		subnetsList := commons.SharedSubnets(allSubs, n.activeSubnets, 0)
+		subnetsList := commons.AllSubnets.SharedSubnets(n.currentSubnets)
 		logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),
@@ -627,9 +630,11 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 	result := 0.0
 
-	peerSubnets := n.idx.GetPeerSubnets(peerID)
-	sharedSubnets := commons.SharedSubnets(n.activeSubnets, peerSubnets, 0)
-	for _, subnet := range sharedSubnets {
+	peerSubnets, ok := n.idx.GetPeerSubnets(peerID)
+	if !ok {
+		return result
+	}
+	for _, subnet := range n.currentSubnets.SharedSubnets(peerSubnets) {
 		result += n.score(peerID, subnet)
 	}
 
@@ -638,8 +643,8 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 
 // score assesses how valuable the contribution of peerID to specified subnet is by calculating
 // how valuable this peer would have been if we didn't have him, but then connected with.
-func (n *p2pNetwork) score(peerID peer.ID, subnet int) float64 {
-	topic := strconv.Itoa(subnet)
+func (n *p2pNetwork) score(peerID peer.ID, subnet uint64) float64 {
+	topic := strconv.FormatUint(subnet, 10)
 	subnetPeers, err := n.topicsCtrl.Peers(topic)
 	if err != nil {
 		n.logger.Debug(

@@ -9,11 +9,11 @@ import (
 )
 
 // createSubnets creates a commons.Subnets with the specified subnets active
-func createSubnets(activeSubnets ...int) commons.Subnets {
-	subnets := make(commons.Subnets, commons.SubnetsCount)
+func createSubnets(activeSubnets ...uint64) commons.Subnets {
+	subnets := commons.Subnets{}
 	for _, subnet := range activeSubnets {
-		if subnet >= 0 && subnet < commons.SubnetsCount {
-			subnets[subnet] = 1
+		if subnet < commons.SubnetsCount {
+			subnets.Set(subnet)
 		}
 	}
 	return subnets

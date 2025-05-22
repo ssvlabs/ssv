@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -72,7 +71,7 @@ type DiscV5Service struct {
 	sharedConn *SharedUDPConn
 
 	networkConfig networkconfig.NetworkConfig
-	subnets       []byte
+	subnets       commons.Subnets
 
 	publishLock chan struct{}
 }
@@ -188,8 +187,6 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	return nil
 }
 
-var zeroSubnets, _ = commons.FromString(commons.ZeroSubnets)
-
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
 	// TODO: uncomment errors once there are sufficient nodes with domain type.
@@ -208,7 +205,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, logger *zap.Logger, e P
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, peerSubnets) {
+	if commons.ZeroSubnets == peerSubnets {
 		recordPeerSkipped(ctx, skipReasonZeroSubnets)
 		return errors.New("zero subnets")
 	}
@@ -358,11 +355,11 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...uint64)
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, subnets, nil)
+	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), subnets, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
-	if updatedSubnets != nil {
+	if isUpdated {
 		dvs.subnets = updatedSubnets
 		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		return true, nil
@@ -377,11 +374,11 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...uint6
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, nil, subnets)
+	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), nil, subnets)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
-	if updatedSubnets != nil {
+	if isUpdated {
 		dvs.subnets = updatedSubnets
 		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		return true, nil
@@ -475,7 +472,7 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		fields.Domain(dvs.networkConfig.DomainType),
 	}
 
-	if HasActiveSubnets(opts.Subnets) {
+	if opts.Subnets.HasActive() {
 		logFields = append(logFields, fields.Subnets(opts.Subnets))
 	}
 

@@ -18,7 +18,7 @@ import (
 )
 
 // SubnetPeers contains the number of peers we are connected to for each subnet.
-type SubnetPeers [commons.SubnetsCount]uint16
+type SubnetPeers [commons.SubnetsCount]uint16 // TODO: change the type
 
 func (a SubnetPeers) Add(b SubnetPeers) SubnetPeers {
 	var sum SubnetPeers
@@ -38,7 +38,7 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 	)
 	score := float64(0)
 	for i := range a {
-		if ours[i] > 0 && theirs[i] > 0 {
+		if ours.IsSet(uint64(i)) && theirs.IsSet(uint64(i)) {
 			switch a[i] {
 			case 0:
 				score += deadSubnetPriority
@@ -159,7 +159,10 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 				// applying backoff penalty for peers with failed connection attempts:
 				// - the more a peer has been tried the less relevant it is (cooldown grows)
 				// - the more time has passed since last connect attempt the more relevant peer is (waited grows)
-				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
+				peerSubnets, ok := n.PeersIndex().GetPeerSubnets(peerID)
+				if !ok {
+					peerSubnets = commons.ZeroSubnets
+				}
 				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
 				if discoveredPeer.Tries > 0 {
 					const retryCooldownMin, retryCooldownMax = 30 * time.Second, 300 * time.Second
@@ -189,8 +192,12 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) error {
 			// Add the selected peer's subnets to pendingSubnetPeers,
 			// to be used in the next iteration.
 			bestPeerSubnets := SubnetPeers{}
-			for subnet, v := range n.PeersIndex().GetPeerSubnets(bestPeer.ID) {
-				bestPeerSubnets[subnet] = uint16(v)
+			subnets, ok := n.PeersIndex().GetPeerSubnets(bestPeer.ID)
+			if !ok {
+				subnets = commons.ZeroSubnets
+			}
+			for subnet, v := range subnets.SubnetList() {
+				bestPeerSubnets[subnet] = uint16(v) // #nosec G115 -- subnets has a constant max len of 128
 			}
 			pendingSubnetPeers = pendingSubnetPeers.Add(bestPeerSubnets)
 			peersToConnect[bestPeer.ID] = bestPeer
