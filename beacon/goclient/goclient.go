@@ -240,16 +240,16 @@ func New(
 
 	client.nodeSyncingFn = client.nodeSyncing
 
-	ctx, cancel := context.WithTimeout(ctx, client.longTimeout)
-	defer cancel()
+	initCtx, initCtxCancel := context.WithTimeout(ctx, client.longTimeout)
+	defer initCtxCancel()
 
 	select {
-	case <-ctx.Done():
+	case <-initCtx.Done():
 		logger.Warn("timeout occurred while waiting for beacon config initialization",
 			zap.Duration("timeout", client.longTimeout),
-			zap.Error(ctx.Err()),
+			zap.Error(initCtx.Err()),
 		)
-		return nil, fmt.Errorf("timed out awaiting config initialization: %w", ctx.Err())
+		return nil, fmt.Errorf("timed out awaiting config initialization: %w", initCtx.Err())
 	case <-client.beaconConfigInit:
 	}
 
