@@ -190,9 +190,7 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 
 	committee.HandleMessage(ctx, logger, testMsg)
 
-	committee.mtx.Lock()
 	q, ok := committee.Queues[slot]
-	committee.mtx.Unlock()
 
 	require.True(t, ok)
 
