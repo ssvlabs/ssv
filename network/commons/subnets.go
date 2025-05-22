@@ -88,6 +88,10 @@ type Subnets struct {
 
 // SubnetsFromString parses a given subnet string
 func SubnetsFromString(subnetsStr string) (Subnets, error) {
+	if len(subnetsStr) == 0 {
+		return ZeroSubnets, nil
+	}
+
 	subnetsStr = strings.TrimPrefix(subnetsStr, "0x")
 	data, err := hex.DecodeString(subnetsStr)
 	if err != nil {
