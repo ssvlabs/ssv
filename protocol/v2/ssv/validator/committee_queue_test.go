@@ -158,8 +158,8 @@ func TestConsumeQueueBasic(t *testing.T) {
 	}
 
 	slot := phase0.Slot(123)
-	msgID1 := spectypes.MessageID{1, 2, 3, 4}
-	msgID2 := spectypes.MessageID{5, 6, 7, 8}
+	msgID1 := spectypes.MessageID{1, 2, 3, 4} // Proposal message, round 1
+	msgID2 := spectypes.MessageID{5, 6, 7, 8} // Prepare message, round 1
 
 	qbftMsg1 := &specqbft.Message{
 		Height:  specqbft.Height(slot),
