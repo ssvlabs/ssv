@@ -91,8 +91,11 @@ func (c connManager) DisconnectFromBadPeers(net libp2pnetwork.Network, allPeers 
 func (c connManager) DisconnectFromIrrelevantPeers(disconnectQuota int, net libp2pnetwork.Network, allPeers []peer.ID, mySubnets commons.Subnets) int {
 	disconnectedPeers := 0
 	for _, peerID := range allPeers {
-		peerSubnets := c.subnetsIdx.GetPeerSubnets(peerID)
-		sharedSubnets := commons.SharedSubnets(mySubnets, peerSubnets, 0)
+		var sharedSubnets []uint64
+		peerSubnets, ok := c.subnetsIdx.GetPeerSubnets(peerID)
+		if ok {
+			sharedSubnets = mySubnets.SharedSubnets(peerSubnets)
+		}
 
 		// If there's no common subnet, disconnect from peer.
 		if len(sharedSubnets) == 0 {

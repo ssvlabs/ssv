@@ -98,8 +98,11 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 
-	fixedSubnets  []byte
-	activeSubnets []byte
+	// persistentSubnets holds subnets on node startup,
+	// these subnets should not be unsubscribed from even if all validators associated with them are removed
+	persistentSubnets commons.Subnets
+	// currentSubnets holds current subnets which depend on current active validators and committees
+	currentSubnets commons.Subnets
 
 	libConnManager connmgrcore.ConnManager
 
@@ -134,7 +137,6 @@ func New(
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeCommittees:        hashmap.New[string, validatorStatus](),
-		activeSubnets:           make([]byte, commons.SubnetsCount),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
@@ -318,7 +320,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 			maximumIrrelevantPeersToDisconnect,
 			n.host.Network(),
 			connectedPeers,
-			n.activeSubnets,
+			n.currentSubnets,
 		)
 		if disconnectedCnt > 0 {
 			// we can accept more peer connections now, no need to trim
@@ -460,7 +462,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/ssvlabs/ssv/pull/990
 	ticker := time.NewTicker(time.Second)
-	registeredSubnets := make([]byte, commons.SubnetsCount)
+	registeredSubnets := commons.Subnets{}
 	defer ticker.Stop()
 
 	// Run immediately and then every second.
@@ -468,21 +470,23 @@ func (n *p2pNetwork) UpdateSubnets() {
 		start := time.Now()
 
 		updatedSubnets := n.SubscribedSubnets()
-		n.activeSubnets = updatedSubnets
+		n.currentSubnets = updatedSubnets
 
 		// Compute the not yet registered subnets.
 		addedSubnets := make([]uint64, 0)
-		for subnet, active := range updatedSubnets {
-			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
-				addedSubnets = append(addedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
+		subnetList := updatedSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !registeredSubnets.IsSet(subnet) {
+				addedSubnets = append(addedSubnets, subnet)
 			}
 		}
 
 		// Compute the not anymore registered subnets.
 		removedSubnets := make([]uint64, 0)
-		for subnet, active := range registeredSubnets {
-			if active == byte(1) && updatedSubnets[subnet] == byte(0) {
-				removedSubnets = append(removedSubnets, uint64(subnet)) // #nosec G115 -- subnets has a constant max len of 128
+		subnetList = registeredSubnets.SubnetList()
+		for _, subnet := range subnetList {
+			if !updatedSubnets.IsSet(subnet) {
+				removedSubnets = append(removedSubnets, subnet)
 			}
 		}
 
@@ -493,7 +497,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 		}
 
 		n.idx.UpdateSelfRecord(func(self *records.NodeInfo) *records.NodeInfo {
-			self.Metadata.Subnets = commons.Subnets(n.activeSubnets).String()
+			self.Metadata.Subnets = n.currentSubnets.String()
 			return self
 		})
 
@@ -530,8 +534,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 			go n.disc.PublishENR()
 		}
 
-		allSubs, _ := commons.FromString(commons.AllSubnets)
-		subnetsList := commons.SharedSubnets(allSubs, n.activeSubnets, 0)
+		subnetsList := commons.AllSubnets.SharedSubnets(n.currentSubnets)
 		n.logger.Debug("updated subnets",
 			zap.Any("added", addedSubnets),
 			zap.Any("removed", removedSubnets),
@@ -611,7 +614,7 @@ func (n *p2pNetwork) peerScore(peerID peer.ID) float64 {
 	}
 
 	ownSubnets := n.SubscribedSubnets()
-	peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
+	peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
 	return subnetPeersExcluding.Score(ownSubnets, peerSubnets)
 }
 
@@ -636,8 +639,10 @@ func (a SubnetPeers) Score(ours, theirs commons.Subnets) float64 {
 		deadSubnetPriority = 16
 	)
 	score := float64(0)
+
 	for i := range a {
-		if ours[i] > 0 && theirs[i] > 0 {
+		// #nosec G115 -- subnet index is never negative
+		if ours.IsSet(uint64(i)) && theirs.IsSet(uint64(i)) {
 			switch a[i] {
 			case 0:
 				score += deadSubnetPriority
