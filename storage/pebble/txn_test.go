@@ -113,10 +113,10 @@ func TestPebbleTxn_GetMany(t *testing.T) {
 	}
 
 	// Set items
-	for _, item := range items {
-		err := txn.Set(prefix, item.Key, item.Value)
-		require.NoError(t, err)
-	}
+	err := txn.SetMany(prefix, len(items), func(i int) (basedb.Obj, error) {
+		return items[i], nil
+	})
+	require.NoError(t, err)
 
 	// Test getting all keys
 	keys := make([][]byte, len(items))
@@ -125,7 +125,7 @@ func TestPebbleTxn_GetMany(t *testing.T) {
 	}
 
 	var results []basedb.Obj
-	err := txn.GetMany(prefix, keys, func(obj basedb.Obj) error {
+	err = txn.GetMany(prefix, keys, func(obj basedb.Obj) error {
 		results = append(results, obj)
 		return nil
 	})
