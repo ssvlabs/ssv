@@ -1147,15 +1147,20 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 }
 
 // TestHandleMessageQueueFullAndDropping verifies that HandleMessage drops messages
-// when the queue is full and implicitly checks for a warning log (though not asserted).
+// when the queue is full. It also confirms that the correct message is dropped (the newest one)
+// and that messages already in the queue remain untouched.
 //
 // Flow:
-// 1. Set up a committee with a small queue capacity (e.g., 2).
-// 2. Pre-create and add a queue container for a specific slot to the committee.
-// 3. Fill this queue to its capacity by calling HandleMessage repeatedly.
-// 4. Verify the queue length is equal to its capacity.
-// 5. Attempt to push one more message using HandleMessage.
-// 6. Verify that the message was dropped (queue length remains at capacity).
+//  1. Set up a committee with a small queue capacity (e.g., 2).
+//  2. Pre-create and add a queue container for a specific slot to the committee.
+//  3. Fill this queue to its capacity by calling HandleMessage repeatedly with initial messages.
+//  4. Verify the queue length is equal to its capacity.
+//  5. Attempt to push one more message (the "dropped message") using HandleMessage.
+//  6. Verify that the queue length remains at capacity (indicating a message was dropped).
+//  7. Pop all messages from the queue and verify:
+//     a. The "dropped message" is NOT present among the popped messages.
+//     b. All initial messages ARE present and are of the correct type.
+//  8. Verify the queue is empty after all messages have been popped.
 func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 
@@ -1204,6 +1209,48 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	committee.HandleMessage(ctx, logger, testMsgDrop)
 
 	assert.Equal(t, queueCapacity, qContainer.Q.Len())
+
+	// Step 3: Verify that the dropped message is not in the queue and original messages are intact.
+	// Pop messages one by one and check their MsgID and Type.
+	// The `testMsgDrop` (Prepare message) should not be found.
+	// All `queueCapacity` messages found should be Proposal messages from Step 1.
+	foundDroppedMessage := false
+	proposalMessageCount := 0
+	for i := 0; i < queueCapacity; i++ {
+		popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+		// Use FilterAny since we are just checking the contents, not a live consumption scenario.
+		// The prioritizer does not matter here as we drain the queue completely.
+		msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
+		popCancel()
+
+		require.NotNil(t, msg)
+
+		if msg.MsgID == droppedMsgID {
+			foundDroppedMessage = true
+		}
+
+		if qbftBody, ok := msg.Body.(*specqbft.Message); ok {
+			if qbftBody.MsgType == specqbft.ProposalMsgType {
+				// Check if the MsgID matches one of the initially enqueued messages.
+				initialMsgID := msgIDBase
+				initialMsgID[3] = msg.MsgID[3] // original ID
+				if msg.MsgID == initialMsgID && msg.MsgID[3] < byte(queueCapacity) {
+					proposalMessageCount++
+				}
+			}
+		} else {
+			t.Errorf("unexpected message body type: %T", msg.Body)
+		}
+	}
+
+	assert.False(t, foundDroppedMessage)
+	assert.Equal(t, queueCapacity, proposalMessageCount)
+
+	// Step 4: Verify the queue is now empty.
+	finalPopCtx, finalPopCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+	assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny))
+
+	finalPopCancel()
 }
 
 // TestConsumeQueueStopsOnErrNoValidDuties verifies that ConsumeQueue stops
@@ -1541,14 +1588,14 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		// 4. Verify the content of the queue.
 		drainedMessages := make([]*queue.SSVMessage, 0, queueCapacity)
 		for i := 0; i < queueCapacity; i++ {
-			popCtx, popCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 			msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
 			popCancel() // Ensure cancellation happens after Pop or timeout
 			require.NotNil(t, msg)
 			drainedMessages = append(drainedMessages, msg)
 		}
 
-		finalPopCtx, finalPopCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		finalPopCtx, finalPopCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 		assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny), "Queue should be empty after draining initial messages")
 		finalPopCancel()
 
@@ -1628,7 +1675,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		// 4. Verify only the original messages are in the queue
 		drainedMessages := make([]*queue.SSVMessage, 0, queueCapacity)
 		for i := 0; i < queueCapacity; i++ {
-			popCtx, popCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 			msg := qContainer.Q.Pop(popCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny)
 			popCancel()
 			require.NotNil(t, msg)
