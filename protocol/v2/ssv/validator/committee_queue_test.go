@@ -72,6 +72,7 @@ func makeTestSSVMessage(t *testing.T, msgType spectypes.MsgType, msgID spectypes
 	}
 	decoded, err := queue.DecodeSignedSSVMessage(signed)
 	require.NoError(t, err)
+
 	return decoded
 }
 
@@ -88,6 +89,72 @@ func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committe
 			t.Errorf("ConsumeQueue returned an unexpected error: %v", err)
 		}
 	}()
+}
+
+// collectMessagesFromQueue is a test helper that consumes messages from a queue and returns the collected messages.
+// It handles the pattern of waiting for expected messages with proper synchronization.
+func collectMessagesFromQueue(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
+	logger *zap.Logger, committeeRunner *runner.CommitteeRunner, expectedCount int, timeout time.Duration) []*queue.SSVMessage {
+
+	t.Helper()
+
+	var (
+		receivedMessages = make([]*queue.SSVMessage, 0, expectedCount)
+		mu               sync.Mutex
+		handlerCalled    = make(chan struct{}, max(1, expectedCount))
+	)
+
+	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+		mu.Lock()
+		receivedMessages = append(receivedMessages, msg)
+		mu.Unlock()
+		handlerCalled <- struct{}{}
+		return nil
+	}
+
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
+
+	// Special case: expectedCount == 0 means we're checking for absence of messages
+	if expectedCount == 0 {
+		select {
+		case <-handlerCalled:
+			t.Errorf("received unexpected message when expecting none")
+		case <-time.After(timeout):
+			// This is the expected case - no messages received within timeout
+		}
+
+		mu.Lock()
+		result := make([]*queue.SSVMessage, len(receivedMessages))
+		copy(result, receivedMessages)
+		mu.Unlock()
+
+		return result
+	}
+
+	// Wait for the expected number of messages
+	for i := 0; i < expectedCount; i++ {
+		select {
+		case <-handlerCalled:
+			// A message was processed
+		case <-time.After(timeout):
+			t.Fatalf("timed out waiting for message %d/%d", i+1, expectedCount)
+		}
+	}
+
+	// Check if we received more messages than expected (test issue indicator)
+	select {
+	case <-handlerCalled:
+		t.Logf("received more messages than expected (%d)", expectedCount)
+	case <-time.After(100 * time.Millisecond):
+		// No additional messages within timeout, which is the expected case
+	}
+
+	mu.Lock()
+	result := make([]*queue.SSVMessage, len(receivedMessages))
+	copy(result, receivedMessages)
+	mu.Unlock()
+
+	return result
 }
 
 // TestHandleMessageCreatesQueue verifies that the HandleMessage method correctly
@@ -205,33 +272,12 @@ func TestConsumeQueueBasic(t *testing.T) {
 		},
 	}
 
-	receivedMessages := make([]*queue.SSVMessage, 0)
-	handlerCalled := make(chan struct{}, 2)
-
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-		receivedMessages = append(receivedMessages, msg)
-		handlerCalled <- struct{}{}
-		return nil
-	}
-
-	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
-
-	for i := 0; i < 2; i++ {
-		select {
-		case <-handlerCalled:
-		case <-time.After(1 * time.Second):
-			t.Fatalf("timed out waiting for message %d", i+1)
-		}
-	}
-
-	cancel()
-	time.Sleep(50 * time.Millisecond)
+	// Collect two messages from the queue with a 1 second timeout
+	receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 2, 1*time.Second)
 
 	assert.Equal(t, 2, len(receivedMessages))
-	if len(receivedMessages) >= 2 {
-		assert.Equal(t, specqbft.ProposalMsgType, receivedMessages[0].Body.(*specqbft.Message).MsgType)
-		assert.Equal(t, specqbft.PrepareMsgType, receivedMessages[1].Body.(*specqbft.Message).MsgType)
-	}
+	assert.Equal(t, specqbft.ProposalMsgType, receivedMessages[0].Body.(*specqbft.Message).MsgType)
+	assert.Equal(t, specqbft.PrepareMsgType, receivedMessages[1].Body.(*specqbft.Message).MsgType)
 }
 
 // TestStartConsumeQueue tests the StartConsumeQueue method, which orchestrates queue processing
@@ -323,6 +369,8 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	currentRound := specqbft.Round(1)
 	nextRound := specqbft.Round(2)
 
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	msgIDs := []spectypes.MessageID{
 		{1, 2, 3, 4}, // Proposal message, current round
 		{2, 3, 4, 5}, // Prepare message, current round
@@ -341,6 +389,21 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		{Height: specqbft.Height(slot), Round: nextRound, MsgType: specqbft.CommitMsgType},
 	}
 
+	// Combine message IDs and QBFT messages for shuffling
+	type messageWithID struct {
+		ID      spectypes.MessageID
+		Message *specqbft.Message
+	}
+
+	combinedMessages := make([]messageWithID, len(msgIDs))
+	for i := range msgIDs {
+		combinedMessages[i] = messageWithID{ID: msgIDs[i], Message: qbftMessages[i]}
+	}
+
+	rnd.Shuffle(len(combinedMessages), func(i, j int) {
+		combinedMessages[i], combinedMessages[j] = combinedMessages[j], combinedMessages[i]
+	})
+
 	q := queueContainer{
 		Q: queue.New(1000),
 		queueState: &queue.State{
@@ -351,8 +414,8 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		},
 	}
 
-	for i, msg := range qbftMessages {
-		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgIDs[i], msg)
+	for _, combined := range combinedMessages {
+		testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, combined.ID, combined.Message)
 		q.Q.TryPush(testMsg)
 	}
 
@@ -370,36 +433,10 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		},
 	}
 
-	receivedMessages := make([]*queue.SSVMessage, 0)
-	handlerCalled := make(chan struct{}, 10)
+	// Collect the expected messages from the queue
+	receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 4, 1*time.Second)
 
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-		receivedMessages = append(receivedMessages, msg)
-		handlerCalled <- struct{}{}
-		return nil
-	}
-
-	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
-
-	expectedMsgCount := 4
-	for i := 0; i < expectedMsgCount; i++ {
-		select {
-		case <-handlerCalled:
-		case <-time.After(1 * time.Second):
-			t.Fatalf("timed out waiting for expected messages")
-		}
-	}
-
-	select {
-	case <-handlerCalled:
-		t.Fatalf("unexpected message processed")
-	case <-time.After(200 * time.Millisecond):
-	}
-
-	cancel()
-	time.Sleep(50 * time.Millisecond)
-
-	require.Equal(t, expectedMsgCount, len(receivedMessages))
+	require.Equal(t, 4, len(receivedMessages))
 
 	processedMsgTypes := make(map[specqbft.MessageType]bool)
 	processedRounds := make(map[specqbft.Round]int)
@@ -665,7 +702,9 @@ func TestChangingFilterState(t *testing.T) {
 		var seen *queue.SSVMessage
 		handler := func(_ context.Context, _ *zap.Logger, m *queue.SSVMessage) error {
 			seen = m
-			return fmt.Errorf("stop") // we don't care about the error
+			// Return error to make ConsumeQueue exit early after processing one message.
+			// This is intentional for this test which just needs to check if a message was filtered.
+			return fmt.Errorf("intentionally stopping ConsumeQueue after first message")
 		}
 
 		q := queueContainer{
@@ -680,9 +719,6 @@ func TestChangingFilterState(t *testing.T) {
 		q.Q.TryPush(prepareMsg)
 
 		c := &Committee{}
-		mutex := &sync.RWMutex{}
-		mutex.RLock()
-		defer mutex.RUnlock()
 		_ = c.ConsumeQueue(ctx, q, logger, handler, rnr)
 		return seen
 	}
@@ -827,9 +863,9 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 				},
 			}
 
-			// false for HasRunningDuty()
-			if tc.name == "no active duty" {
-				committeeRunner.BaseRunner.State.Finished = true
+			// Set runner state based on hasRunningDuty parameter
+			if !tc.hasRunningDuty {
+				committeeRunner.BaseRunner.State.Finished = true // This makes HasRunningDuty() return false
 			}
 
 			processed := make([]*queue.SSVMessage, 0)
@@ -991,33 +1027,15 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			pushed := q.Q.TryPush(testMsg)
 			require.True(t, pushed)
 
-			messageProcessed := make(chan struct{}, 1)
-
-			handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-				messageProcessed <- struct{}{}
-				return nil
-			}
-
-			runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
-
 			if tc.shouldBeFiltered {
-				select {
-				case <-messageProcessed:
-					t.Fatalf("Partial signature message was processed when it should have been filtered")
-				case <-time.After(200 * time.Millisecond):
-					// Expected - message was filtered
-				}
+				// Expect 0 messages - message should be filtered
+				receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 0, 100*time.Millisecond)
+				assert.Empty(t, receivedMessages)
 			} else {
-				select {
-				case <-messageProcessed:
-					// Expected - message was processed
-				case <-time.After(500 * time.Millisecond):
-					t.Fatalf("Partial signature message was not processed when it should have been")
-				}
+				// Expect 1 message - message should be processed
+				receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 1, 1*time.Second)
+				assert.Len(t, receivedMessages, 1)
 			}
-
-			cancel()
-			time.Sleep(50 * time.Millisecond)
 		})
 	}
 }
