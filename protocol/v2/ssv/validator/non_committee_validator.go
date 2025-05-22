@@ -38,7 +38,7 @@ type CommitteeObserver struct {
 	networkConfig     networkconfig.NetworkConfig
 	ValidatorStore    registrystorage.ValidatorStore
 	newDecidedHandler qbftcontroller.NewDecidedHandler
-	rootsMtx          *sync.RWMutex
+	rootsMtx          sync.RWMutex
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache       *DomainProvider
@@ -48,7 +48,7 @@ type CommitteeObserver struct {
 
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
 
-	pccMtx                 *sync.Mutex
+	pccMtx                 sync.Mutex
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
