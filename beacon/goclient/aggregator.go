@@ -39,7 +39,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
-	if gc.DataVersion(gc.beaconConfig.EstimatedEpochAtSlot(attData.Slot)) < spec.DataVersionElectra {
+	if gc.DataVersion(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot)) < spec.DataVersionElectra {
 		attData.Index = committeeIndex
 	}
 
@@ -201,9 +201,9 @@ func isAggregator(committeeCount uint64, slotSig []byte) bool {
 
 // waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after slot start time)
 func (gc *GoClient) waitToSlotTwoThirds(slot phase0.Slot) {
-	oneThird := gc.beaconConfig.SlotDuration / 3 /* one third of slot duration */
-
-	finalTime := gc.beaconConfig.GetSlotStartTime(slot).Add(2 * oneThird)
+	config := gc.getBeaconConfig()
+	oneThird := config.SlotDuration / 3 /* one third of slot duration */
+	finalTime := config.GetSlotStartTime(slot).Add(2 * oneThird)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
