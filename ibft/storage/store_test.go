@@ -11,13 +11,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -34,8 +35,14 @@ func TestRemoveSlot(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	ctrl := gomock.NewController(t)
+	ticker := mockslotticker.NewMockSlotTicker(ctrl)
+
+	ticker.EXPECT().Next().Return(nil).MaxTimes(1)
+	slotTickerProvider := func() slotticker.SlotTicker { return ticker }
+
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(zap.NewNop(), db, role))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -115,8 +122,16 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	ctrl := gomock.NewController(t)
+	ticker := mockslotticker.NewMockSlotTicker(ctrl)
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return ticker
+	}
+
+	ticker.EXPECT().Next().Return(nil).MaxTimes(1)
+
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(zap.NewNop(), db, role))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -175,9 +190,6 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	// test
 	ctx, cancel := context.WithCancel(context.Background())
-
-	ctrl := gomock.NewController(t)
-	ticker := mockslotticker.NewMockSlotTicker(ctrl)
 
 	mockTimeChan := make(chan time.Time)
 	mockSlotChan := make(chan phase0.Slot)
@@ -355,4 +367,47 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectyp
 		rsaKeys = append(rsaKeys, pk)
 	}
 	return sks, nodes, rsaKeys
+}
+
+func Test_saveParticipantsJob(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	assert.NoError(t, err)
+
+	ticker := mockslotticker.NewMockSlotTicker(ctrl)
+
+	role := spectypes.BNRoleAttester
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return ticker
+	}
+
+	tt := make(chan time.Time, 1)
+
+	ticker.EXPECT().Next().Return(tt).Times(1)
+
+	ticker.EXPECT().Slot().DoAndReturn(func() phase0.Slot {
+		close(tt)
+		return phase0.Slot(1)
+	}).AnyTimes()
+
+	st := New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider)
+
+	ps := st.(*participantStorage)
+	ps.cachedParticipants[spectypes.ValidatorPK{1}] = []spectypes.OperatorID{1}
+
+	ps.cachedSlot = phase0.Slot(1)
+
+	tt <- time.Now()
+
+	time.Sleep(10 * time.Millisecond)
+
+	ps.cacheMu.Lock()
+	require.Empty(t, ps.cachedParticipants)
+	ps.cacheMu.Unlock()
+
+	diskParticipants, err := ps.getParticipants(spectypes.ValidatorPK{1}, phase0.Slot(1))
+	require.NoError(t, err)
+	require.Equal(t, []spectypes.OperatorID{1}, diskParticipants)
 }
