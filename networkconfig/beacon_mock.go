@@ -41,6 +41,20 @@ func (m *MockBeacon) EXPECT() *MockBeaconMockRecorder {
 	return m.recorder
 }
 
+// EpochDuration mocks base method.
+func (m *MockBeacon) EpochDuration() time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EpochDuration")
+	ret0, _ := ret[0].(time.Duration)
+	return ret0
+}
+
+// EpochDuration indicates an expected call of EpochDuration.
+func (mr *MockBeaconMockRecorder) EpochDuration() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochDuration", reflect.TypeOf((*MockBeacon)(nil).EpochDuration))
+}
+
 // EpochStartTime mocks base method.
 func (m *MockBeacon) EpochStartTime(epoch phase0.Epoch) time.Time {
 	m.ctrl.T.Helper()
@@ -53,20 +67,6 @@ func (m *MockBeacon) EpochStartTime(epoch phase0.Epoch) time.Time {
 func (mr *MockBeaconMockRecorder) EpochStartTime(epoch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochStartTime", reflect.TypeOf((*MockBeacon)(nil).EpochStartTime), epoch)
-}
-
-// EpochsPerSyncCommitteePeriod mocks base method.
-func (m *MockBeacon) EpochsPerSyncCommitteePeriod() uint64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EpochsPerSyncCommitteePeriod")
-	ret0, _ := ret[0].(uint64)
-	return ret0
-}
-
-// EpochsPerSyncCommitteePeriod indicates an expected call of EpochsPerSyncCommitteePeriod.
-func (mr *MockBeaconMockRecorder) EpochsPerSyncCommitteePeriod() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockBeacon)(nil).EpochsPerSyncCommitteePeriod))
 }
 
 // EstimatedCurrentEpoch mocks base method.
@@ -209,6 +209,20 @@ func (mr *MockBeaconMockRecorder) GetEpochFirstSlot(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochFirstSlot", reflect.TypeOf((*MockBeacon)(nil).GetEpochFirstSlot), epoch)
 }
 
+// GetEpochsPerSyncCommitteePeriod mocks base method.
+func (m *MockBeacon) GetEpochsPerSyncCommitteePeriod() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEpochsPerSyncCommitteePeriod")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// GetEpochsPerSyncCommitteePeriod indicates an expected call of GetEpochsPerSyncCommitteePeriod.
+func (mr *MockBeaconMockRecorder) GetEpochsPerSyncCommitteePeriod() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockBeacon)(nil).GetEpochsPerSyncCommitteePeriod))
+}
+
 // GetGenesisTime mocks base method.
 func (m *MockBeacon) GetGenesisTime() time.Time {
 	m.ctrl.T.Helper()
@@ -277,6 +291,34 @@ func (m *MockBeacon) GetSlotsPerEpoch() uint64 {
 func (mr *MockBeaconMockRecorder) GetSlotsPerEpoch() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotsPerEpoch", reflect.TypeOf((*MockBeacon)(nil).GetSlotsPerEpoch))
+}
+
+// GetSyncCommitteeSize mocks base method.
+func (m *MockBeacon) GetSyncCommitteeSize() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSyncCommitteeSize")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// GetSyncCommitteeSize indicates an expected call of GetSyncCommitteeSize.
+func (mr *MockBeaconMockRecorder) GetSyncCommitteeSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeSize", reflect.TypeOf((*MockBeacon)(nil).GetSyncCommitteeSize))
+}
+
+// IntervalDuration mocks base method.
+func (m *MockBeacon) IntervalDuration() time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IntervalDuration")
+	ret0, _ := ret[0].(time.Duration)
+	return ret0
+}
+
+// IntervalDuration indicates an expected call of IntervalDuration.
+func (mr *MockBeaconMockRecorder) IntervalDuration() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IntervalDuration", reflect.TypeOf((*MockBeacon)(nil).IntervalDuration))
 }
 
 // IsFirstSlotOfEpoch mocks base method.

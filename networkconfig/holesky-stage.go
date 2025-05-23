@@ -2,21 +2,13 @@ package networkconfig
 
 import (
 	"math/big"
-	"time"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var HoleskyStage = NetworkConfig{
-	Name: "holesky-stage",
-	BeaconConfig: BeaconConfig{
-		BeaconName:    string(spectypes.HoleskyNetwork),
-		SlotDuration:  spectypes.HoleskyNetwork.SlotDurationSec(),
-		SlotsPerEpoch: spectypes.HoleskyNetwork.SlotsPerEpoch(),
-		ForkVersion:   spectypes.HoleskyNetwork.ForkVersion(),
-		GenesisTime:   time.Unix(int64(spectypes.HoleskyNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
-	},
+	Name:         "holesky-stage",
+	BeaconConfig: Holesky.BeaconConfig,
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},
 		RegistrySyncOffset:   new(big.Int).SetInt64(84599),
@@ -29,5 +21,6 @@ var HoleskyStage = NetworkConfig{
 			// Private bootnode:
 			"enr:-Ja4QDRUBjWOvVfGxpxvv3FqaCy3psm7IsKu5ETb1GXiexGYDFppD33t7AHRfmQddoAkBiyb7pt4t7ZN0sNB9CsW4I-GAZGOmChMgmlkgnY0gmlwhAorXxuJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 		},
+		TotalEthereumValidators: Holesky.TotalEthereumValidators,
 	},
 }

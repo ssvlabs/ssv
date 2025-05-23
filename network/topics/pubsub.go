@@ -76,7 +76,6 @@ type PubSubConfig struct {
 type ScoringConfig struct {
 	IPWhitelist        []*net.IPNet
 	IPColocationWeight float64
-	OneEpochDuration   time.Duration
 }
 
 // PubsubBundle includes the pubsub router, plus involved components
@@ -167,7 +166,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, commi
 		}
 
 		// Get overall score params
-		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhitelist...)
+		peerScoreParams := params.PeerScoreParams(cfg.NetworkConfig, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhitelist...)
 
 		// Define score inspector
 		if inspector == nil {

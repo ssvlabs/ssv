@@ -233,7 +233,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		}
 	}
 
-	cacheTTL := options.NetworkConfig.GetSlotDuration() * time.Duration(options.NetworkConfig.GetSlotsPerEpoch()*2) // #nosec G115
+	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
 	ctrl := controller{
 		logger:            logger.Named(logging.NameController),
