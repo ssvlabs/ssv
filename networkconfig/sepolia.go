@@ -15,7 +15,7 @@ var Sepolia = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:                           string(spectypes.SepoliaNetwork),
 		SlotDuration:                         spectypes.SepoliaNetwork.SlotDurationSec(),
-		SlotsPerEpoch:                        phase0.Slot(spectypes.SepoliaNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch:                        spectypes.SepoliaNetwork.SlotsPerEpoch(),
 		EpochsPerSyncCommitteePeriod:         256,
 		SyncCommitteeSize:                    512,
 		SyncCommitteeSubnetCount:             4,

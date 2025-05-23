@@ -16,7 +16,7 @@ var Mainnet = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:                           string(spectypes.MainNetwork),
 		SlotDuration:                         spectypes.MainNetwork.SlotDurationSec(),
-		SlotsPerEpoch:                        phase0.Slot(spectypes.MainNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch:                        spectypes.MainNetwork.SlotsPerEpoch(),
 		EpochsPerSyncCommitteePeriod:         256,
 		SyncCommitteeSize:                    512,
 		SyncCommitteeSubnetCount:             4,

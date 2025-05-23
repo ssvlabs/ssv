@@ -20,9 +20,9 @@ func Test_specForClient(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,

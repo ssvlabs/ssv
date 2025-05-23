@@ -22,7 +22,7 @@ type Beacon interface {
 	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
 	IsFirstSlotOfEpoch(slot phase0.Slot) bool
 	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
-	GetEpochsPerSyncCommitteePeriod() phase0.Epoch
+	GetEpochsPerSyncCommitteePeriod() uint64
 	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
 	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
 	LastSlotOfSyncPeriod(period uint64) phase0.Slot
@@ -32,7 +32,7 @@ type Beacon interface {
 	IntervalDuration() time.Duration
 	EpochDuration() time.Duration
 	GetSlotDuration() time.Duration
-	GetSlotsPerEpoch() phase0.Slot
+	GetSlotsPerEpoch() uint64
 	GetGenesisTime() time.Time
 	GetSyncCommitteeSize() uint64
 	GetGenesisValidatorsRoot() phase0.Root
@@ -43,8 +43,8 @@ type Beacon interface {
 type BeaconConfig struct {
 	BeaconName                           string
 	SlotDuration                         time.Duration
-	SlotsPerEpoch                        phase0.Slot
-	EpochsPerSyncCommitteePeriod         phase0.Epoch
+	SlotsPerEpoch                        uint64
+	EpochsPerSyncCommitteePeriod         uint64
 	SyncCommitteeSize                    uint64
 	SyncCommitteeSubnetCount             uint64
 	TargetAggregatorsPerSyncSubcommittee uint64
@@ -102,32 +102,32 @@ func (b BeaconConfig) EstimatedCurrentEpoch() phase0.Epoch {
 
 // EstimatedEpochAtSlot estimates epoch at the given slot
 func (b BeaconConfig) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
-	return phase0.Epoch(slot / b.SlotsPerEpoch)
+	return phase0.Epoch(uint64(slot) / b.SlotsPerEpoch)
 }
 
 // IsFirstSlotOfEpoch estimates epoch at the given slot
 func (b BeaconConfig) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
-	return slot%b.SlotsPerEpoch == 0
+	return uint64(slot)%b.SlotsPerEpoch == 0
 }
 
 // GetEpochFirstSlot returns the beacon node first slot in epoch
 func (b BeaconConfig) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(epoch) * b.SlotsPerEpoch
+	return phase0.Slot(uint64(epoch) * b.SlotsPerEpoch)
 }
 
 // GetEpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
-func (b BeaconConfig) GetEpochsPerSyncCommitteePeriod() phase0.Epoch {
+func (b BeaconConfig) GetEpochsPerSyncCommitteePeriod() uint64 {
 	return b.EpochsPerSyncCommitteePeriod
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
 func (b BeaconConfig) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
-	return uint64(epoch / b.GetEpochsPerSyncCommitteePeriod())
+	return uint64(epoch) / b.GetEpochsPerSyncCommitteePeriod()
 }
 
 // FirstEpochOfSyncPeriod calculates the first epoch of the given sync period.
 func (b BeaconConfig) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
-	return phase0.Epoch(period) * b.GetEpochsPerSyncCommitteePeriod()
+	return phase0.Epoch(period * b.GetEpochsPerSyncCommitteePeriod())
 }
 
 // LastSlotOfSyncPeriod calculates the first epoch of the given sync period.
@@ -139,7 +139,7 @@ func (b BeaconConfig) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 }
 
 func (b BeaconConfig) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(epoch) * b.SlotsPerEpoch
+	return phase0.Slot(uint64(epoch) * b.SlotsPerEpoch)
 }
 
 func (b BeaconConfig) EpochStartTime(epoch phase0.Epoch) time.Time {
@@ -174,7 +174,7 @@ func (b BeaconConfig) GetSlotDuration() time.Duration {
 	return b.SlotDuration
 }
 
-func (b BeaconConfig) GetSlotsPerEpoch() phase0.Slot {
+func (b BeaconConfig) GetSlotsPerEpoch() uint64 {
 	return b.SlotsPerEpoch
 }
 

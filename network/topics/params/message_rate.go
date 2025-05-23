@@ -154,7 +154,7 @@ func (rc *rateCalculator) SyncCommitteeAggProb() float64 {
 }
 
 func (rc *rateCalculator) MaxAttestationDutiesPerEpochForCommittee() uint64 {
-	return uint64(rc.netCfg.GetSlotsPerEpoch())
+	return rc.netCfg.GetSlotsPerEpoch()
 }
 
 func (rc *rateCalculator) EstimatedAttestationCommitteeSize() float64 {

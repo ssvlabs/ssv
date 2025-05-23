@@ -15,7 +15,7 @@ var LocalTestnet = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:                           string(spectypes.PraterNetwork),
 		SlotDuration:                         spectypes.PraterNetwork.SlotDurationSec(),
-		SlotsPerEpoch:                        phase0.Slot(spectypes.PraterNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch:                        spectypes.PraterNetwork.SlotsPerEpoch(),
 		EpochsPerSyncCommitteePeriod:         256,
 		SyncCommitteeSize:                    512,
 		SyncCommitteeSubnetCount:             4,
