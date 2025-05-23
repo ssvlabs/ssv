@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
