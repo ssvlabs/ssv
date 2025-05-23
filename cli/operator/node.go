@@ -29,6 +29,8 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -66,7 +68,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -268,10 +269,9 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
-		cfg.ConsensusClient.Context = cmd.Context()
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
-		consensusClient := setupConsensusClient(logger, slotTickerProvider)
+		consensusClient := setupConsensusClient(cmd.Context(), logger, slotTickerProvider)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -396,7 +396,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 
 		if cfg.WsAPIPort != 0 {
-			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
+			ws := exporterapi.NewWsServer(cmd.Context(), logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(networkConfig, logger, ws)
@@ -417,7 +417,7 @@ var StartNodeCmd = &cobra.Command{
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			s := ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole)
+			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole)
 			storageMap.Add(storageRole, s)
 		}
 
@@ -431,15 +431,12 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		fixedSubnets, err := networkcommons.FromString(cfg.P2pNetworkConfig.Subnets)
+		fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
-			fixedSubnets, err = networkcommons.FromString(networkcommons.AllSubnets)
-			if err != nil {
-				logger.Fatal("failed to parse all fixed subnets", zap.Error(err))
-			}
+			fixedSubnets = networkcommons.AllSubnets
 		}
 
 		metadataSyncer := metadata.NewSyncer(
@@ -532,12 +529,12 @@ var StartNodeCmd = &cobra.Command{
 			)
 			start := time.Now()
 			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID())
-			mySubnets := make(networkcommons.Subnets, networkcommons.SubnetsCount)
+			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
 				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-				if mySubnets[subnet] == 0 {
-					mySubnets[subnet] = 1
+				if !mySubnets.IsSet(subnet) {
+					mySubnets.Set(subnet)
 					myActiveSubnets++
 				}
 			}
@@ -555,10 +552,10 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 				return validatorCtrl.GetValidatorStats()
 			}
-			if err := p2pNetwork.Setup(logger); err != nil {
+			if err := p2pNetwork.Setup(); err != nil {
 				logger.Fatal("failed to setup network", zap.Error(err))
 			}
-			if err := p2pNetwork.Start(logger); err != nil {
+			if err := p2pNetwork.Start(); err != nil {
 				logger.Fatal("failed to start network", zap.Error(err))
 			}
 		}
@@ -589,7 +586,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-		if err := operatorNode.Start(logger); err != nil {
+		if err := operatorNode.Start(); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
@@ -940,8 +937,8 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 }
 
 func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
-	istore := ssv_identity.NewIdentityStore(db)
-	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
+	istore := ssv_identity.NewIdentityStore(logger, db)
+	netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
@@ -954,8 +951,12 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	return n
 }
 
-func setupConsensusClient(logger *zap.Logger, slotTickerProvider slotticker.Provider) *goclient.GoClient {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, slotTickerProvider)
+func setupConsensusClient(
+	ctx context.Context,
+	logger *zap.Logger,
+	slotTickerProvider slotticker.Provider,
+) *goclient.GoClient {
+	cl, err := goclient.New(ctx, logger, cfg.ConsensusClient, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
@@ -1089,9 +1090,9 @@ func syncContractEvents(
 func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewHandler(db, enableProf, opNode)
+	metricsHandler := metrics.NewHandler(logger, db, enableProf, opNode)
 	addr := fmt.Sprintf(":%d", port)
-	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
+	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
 }
@@ -1106,7 +1107,7 @@ func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorag
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			store.Prune(ctx, logger, threshold)
+			store.Prune(ctx, threshold)
 		}()
 		return nil
 	})
@@ -1115,7 +1116,7 @@ func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorag
 
 	// start background job for removing old slots on every tick
 	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
-		go store.PruneContinously(ctx, logger, slotTickerProvider, phase0.Slot(retain))
+		go store.PruneContinously(ctx, slotTickerProvider, phase0.Slot(retain))
 		return nil
 	})
 }
