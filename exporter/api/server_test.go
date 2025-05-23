@@ -73,7 +73,7 @@ func TestHandleQuery(t *testing.T) {
 
 func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx := t.Context()
+	ctx := context.Background() // t.Context() breaks the test
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
@@ -83,6 +83,7 @@ func TestHandleStream(t *testing.T) {
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
+
 	client := NewWSClient(testCtx, logger)
 	go func() {
 		// sleep so setup will be finished
