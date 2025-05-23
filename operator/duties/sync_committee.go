@@ -25,7 +25,7 @@ type SyncCommitteeHandler struct {
 
 	// preparationSlots is the number of slots ahead of the sync committee
 	// period change at which to prepare the relevant duties.
-	preparationSlots phase0.Slot
+	preparationSlots uint64
 }
 
 func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitteeHandler {
@@ -93,7 +93,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// if we have reached the preparation slots -1, prepare the next period duties in the next slot.
 			periodSlots := h.slotsPerPeriod()
-			if slot%periodSlots == periodSlots-h.preparationSlots-1 {
+			if uint64(slot)%periodSlots == periodSlots-h.preparationSlots-1 {
 				h.fetchNextPeriod = true
 			}
 
@@ -176,7 +176,7 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 		}
 	}
 
-	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
 }
 
 // Period can be current or future.
@@ -320,9 +320,9 @@ func calculateSubscriptions(endEpoch phase0.Epoch, duties []*eth2apiv1.SyncCommi
 
 func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
 	periodSlots := h.slotsPerPeriod()
-	return slot%periodSlots > periodSlots-h.preparationSlots-2
+	return uint64(slot)%periodSlots > periodSlots-h.preparationSlots-2
 }
 
-func (h *SyncCommitteeHandler) slotsPerPeriod() phase0.Slot {
-	return phase0.Slot(h.beaconConfig.GetEpochsPerSyncCommitteePeriod()) * h.beaconConfig.GetSlotsPerEpoch()
+func (h *SyncCommitteeHandler) slotsPerPeriod() uint64 {
+	return h.beaconConfig.GetEpochsPerSyncCommitteePeriod() * h.beaconConfig.GetSlotsPerEpoch()
 }

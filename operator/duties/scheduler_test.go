@@ -102,7 +102,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 		},
 	}
 
-	s := NewScheduler(opts)
+	s := NewScheduler(logger, opts)
 	s.blockPropagateDelay = 1 * time.Millisecond
 	s.indicesChg = make(chan struct{})
 	s.handlers = handlers
@@ -110,7 +110,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotDuration().Return(150 * time.Millisecond).AnyTimes()
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotsPerEpoch().Return(phase0.Slot(32)).AnyTimes()
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotsPerEpoch().Return(uint64(32)).AnyTimes()
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {
 			return time.Now()
@@ -118,7 +118,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	).AnyTimes()
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
-			return phase0.Epoch(slot / s.beaconConfig.GetSlotsPerEpoch())
+			return phase0.Epoch(uint64(slot) / s.beaconConfig.GetSlotsPerEpoch())
 		},
 	).AnyTimes()
 
@@ -130,11 +130,11 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
-			return phase0.Epoch(currentSlot.Get() / s.beaconConfig.GetSlotsPerEpoch())
+			return phase0.Epoch(uint64(currentSlot.Get()) / s.beaconConfig.GetSlotsPerEpoch())
 		},
 	).AnyTimes()
 
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochsPerSyncCommitteePeriod().Return(phase0.Epoch(256)).AnyTimes()
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
 
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().IntervalDuration().Return(s.beaconConfig.GetSlotDuration() / 3).AnyTimes()
 
@@ -142,7 +142,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)
 
 	startFunction := func() {
-		err := s.Start(ctx, logger)
+		err := s.Start(ctx)
 		require.NoError(t, err)
 
 		schedulerPool.Go(func(ctx context.Context) error {
@@ -357,7 +357,7 @@ func TestScheduler_Run(t *testing.T) {
 		},
 	}
 
-	s := NewScheduler(opts)
+	s := NewScheduler(logger, opts)
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
@@ -375,7 +375,7 @@ func TestScheduler_Run(t *testing.T) {
 		mockDutyHandler.(*MockdutyHandler).EXPECT().Name().Times(1)
 	}
 
-	require.NoError(t, s.Start(ctx, logger))
+	require.NoError(t, s.Start(ctx))
 
 	// Cancel the context and test that the scheduler stops.
 	cancel()
@@ -406,13 +406,13 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 		IndicesChg: make(chan struct{}),
 	}
 
-	s := NewScheduler(opts)
+	s := NewScheduler(logger, opts)
 
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
-	err := s.Start(ctx, logger)
+	err := s.Start(ctx)
 	require.NoError(t, err)
 
 	s.indicesChg <- struct{}{} // first time make fanout stuck

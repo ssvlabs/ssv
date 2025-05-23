@@ -4,7 +4,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -15,7 +14,7 @@ var Hoodi = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:                           string(spectypes.HoodiNetwork),
 		SlotDuration:                         spectypes.HoodiNetwork.SlotDurationSec(),
-		SlotsPerEpoch:                        phase0.Slot(spectypes.HoodiNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch:                        spectypes.HoodiNetwork.SlotsPerEpoch(),
 		EpochsPerSyncCommitteePeriod:         256,
 		SyncCommitteeSize:                    512,
 		SyncCommitteeSubnetCount:             4,

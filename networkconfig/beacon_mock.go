@@ -280,10 +280,10 @@ func (mr *MockBeaconMockRecorder) GetSlotStartTime(slot any) *gomock.Call {
 }
 
 // GetSlotsPerEpoch mocks base method.
-func (m *MockBeacon) GetSlotsPerEpoch() phase0.Slot {
+func (m *MockBeacon) GetSlotsPerEpoch() uint64 {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSlotsPerEpoch")
-	ret0, _ := ret[0].(phase0.Slot)
+	ret0, _ := ret[0].(uint64)
 	return ret0
 }
 

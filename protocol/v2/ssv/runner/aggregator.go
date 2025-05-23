@@ -79,7 +79,7 @@ func (r *AggregatorRunner) HasRunningDuty() bool {
 }
 
 func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing selection proof message")
 	}
@@ -101,17 +101,14 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 
-	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-
 	logger.Debug("🧩 got partial signature quorum",
-		zap.Any("signer", signedMsg.Messages[0].Signer), // TODO: always 1?
-		fields.Slot(duty.Slot),
+		zap.Any("signer", signedMsg.Messages[0].Signer),
 	)
 
 	r.measurements.PauseDutyFlow()
 	// get block data
-	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
-	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
+	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
@@ -207,7 +204,7 @@ func (r *AggregatorRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 }
 
 func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -249,7 +246,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 		start := time.Now()
 
-		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
+		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(ctx, msg); err != nil {
 			recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
 			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 				fields.SubmissionTime(time.Since(start)),
@@ -280,7 +277,7 @@ func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot,
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	cd := &spectypes.ValidatorConsensusData{}
 	err := cd.Decode(r.GetState().DecidedValue)
 	if err != nil {

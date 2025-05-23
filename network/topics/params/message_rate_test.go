@@ -78,7 +78,6 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			rc := newRateCalculator(networkconfig.TestNetwork)
 			msgRate := rc.calculateMessageRateForTopic(tt.args.committees)
