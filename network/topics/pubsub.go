@@ -18,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -46,8 +45,6 @@ const (
 
 // PubSubConfig is the needed config to instantiate pubsub
 type PubSubConfig struct {
-	NetworkConfig networkconfig.NetworkConfig
-
 	Host        host.Host
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
