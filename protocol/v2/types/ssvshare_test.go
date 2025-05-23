@@ -67,7 +67,6 @@ func TestSSVShare_HasBeaconMetadata(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			require.Equal(t, tc.Result, tc.ShareMetadata.HasBeaconMetadata())
 		})
@@ -93,7 +92,6 @@ func TestValidCommitteeSize(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			for _, size := range tc.sizes {
 				require.Equal(t, tc.valid, ValidCommitteeSize(size))
@@ -154,7 +152,6 @@ func TestSSVShare_IsAttesting(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			result := tc.Share.IsAttesting(tc.Epoch)
 			require.Equal(t, tc.Expected, result)
@@ -211,9 +208,7 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-
 			result := tc.Share.IsParticipating(networkconfig.TestNetwork, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
@@ -307,7 +302,6 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			result := tc.Share.IsSyncCommitteeEligible(networkconfig.TestNetwork, tc.Epoch)
 			require.Equal(t, tc.Expected, result)

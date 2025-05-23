@@ -18,7 +18,7 @@ var TestNetwork = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:                           string(spectypes.BeaconTestNetwork),
 		SlotDuration:                         spectypes.BeaconTestNetwork.SlotDurationSec(),
-		SlotsPerEpoch:                        phase0.Slot(spectypes.BeaconTestNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch:                        spectypes.BeaconTestNetwork.SlotsPerEpoch(),
 		EpochsPerSyncCommitteePeriod:         256,
 		SyncCommitteeSize:                    512,
 		SyncCommitteeSubnetCount:             4,
@@ -78,7 +78,7 @@ var TestRealNetwork = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:                           string(spectypes.HoleskyNetwork),
 		SlotDuration:                         spectypes.HoleskyNetwork.SlotDurationSec(),
-		SlotsPerEpoch:                        phase0.Slot(spectypes.HoleskyNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch:                        spectypes.HoleskyNetwork.SlotsPerEpoch(),
 		EpochsPerSyncCommitteePeriod:         256,
 		SyncCommitteeSize:                    512,
 		SyncCommitteeSubnetCount:             4,

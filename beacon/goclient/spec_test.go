@@ -12,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-func TestSpec(t *testing.T) {
+func Test_specForClient(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -20,9 +20,9 @@ func TestSpec(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -31,7 +31,7 @@ func TestSpec(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		spec, err := client.Spec(ctx)
+		spec, err := specForClient(ctx, client.log, client.multiClient)
 		require.NoError(t, err)
 		require.NotNil(t, spec)
 

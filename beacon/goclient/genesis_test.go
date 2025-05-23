@@ -69,9 +69,9 @@ func Test_genesisForClient(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			logger,
 			Options{
-				Context:        ctx,
 				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -98,9 +98,9 @@ func Test_genesisForClient(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			logger,
 			Options{
-				Context:        ctx,
 				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -122,9 +122,9 @@ func Test_genesisForClient(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			logger,
 			Options{
-				Context:        ctx,
 				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,

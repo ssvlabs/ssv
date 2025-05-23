@@ -41,7 +41,7 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 	beaconNetwork := spectypes.HoleskyNetwork // it must be something known by ekm
 	mockNetwork := networkconfig.NewMockNetwork(ctrl)
 
-	mockNetwork.EXPECT().GetSlotsPerEpoch().Return(phase0.Slot(beaconNetwork.SlotsPerEpoch())).AnyTimes()
+	mockNetwork.EXPECT().GetSlotsPerEpoch().Return(beaconNetwork.SlotsPerEpoch()).AnyTimes()
 	mockNetwork.EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
 			return currentSlot.GetSlot()
@@ -64,7 +64,7 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 	).AnyTimes()
 	mockNetwork.EXPECT().IsFirstSlotOfEpoch(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) bool {
-			return slot%mockNetwork.GetSlotsPerEpoch() == 0
+			return uint64(slot)%mockNetwork.GetSlotsPerEpoch() == 0
 		},
 	).AnyTimes()
 	mockNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
