@@ -79,12 +79,6 @@ type DomainCalls interface {
 	DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error)
 }
 
-type VersionCalls interface {
-	// DataVersion returns a data version for the given epoch.
-	// In practice, for performance, responses can be cached in order not to always trigger an API call.
-	DataVersion(epoch phase0.Epoch) spec.DataVersion
-}
-
 // beaconDuties interface serves all duty related calls
 type beaconDuties interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
@@ -128,7 +122,6 @@ type BeaconNode interface {
 	ValidatorRegistrationCalls
 	VoluntaryExitCalls
 	DomainCalls
-	VersionCalls
 
 	beaconDuties
 	beaconSubscriber

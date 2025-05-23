@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -16,13 +17,13 @@ import (
 	"go.uber.org/zap"
 )
 
-func (gc *GoClient) voluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+func (gc *GoClient) voluntaryExitDomain() (phase0.Domain, error) {
 	value := gc.voluntaryExitDomainCached.Load()
 	if value != nil {
 		return *value, nil
 	}
 
-	v, err := gc.computeVoluntaryExitDomain(ctx)
+	v, err := gc.computeVoluntaryExitDomain()
 	if err != nil {
 		return phase0.Domain{}, fmt.Errorf("compute voluntary exit domain: %w", err)
 	}
@@ -30,26 +31,12 @@ func (gc *GoClient) voluntaryExitDomain(ctx context.Context) (phase0.Domain, err
 	return v, nil
 }
 
-func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
-	// TODO: pull from beacon node
-	specResponse, err := gc.Spec(ctx)
-	if err != nil {
-		return phase0.Domain{}, fmt.Errorf("fetch spec: %w", err)
-	}
-
-	// EIP-7044 requires using CAPELLA_FORK_VERSION for DomainVoluntaryExit: https://eips.ethereum.org/EIPS/eip-7044
-	forkVersionRaw, ok := specResponse["CAPELLA_FORK_VERSION"]
-	if !ok {
-		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
-	}
-	forkVersion, ok := forkVersionRaw.(phase0.Version)
-	if !ok {
-		return phase0.Domain{}, fmt.Errorf("failed to decode capella fork version")
-	}
+func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
+	beaconConfig := gc.getBeaconConfig()
 
 	forkData := &phase0.ForkData{
-		CurrentVersion:        forkVersion,
-		GenesisValidatorsRoot: gc.getBeaconConfig().GenesisValidatorsRoot,
+		CurrentVersion:        beaconConfig.Forks[spec.DataVersionCapella].CurrentVersion,
+		GenesisValidatorsRoot: beaconConfig.GenesisValidatorsRoot,
 	}
 
 	root, err := forkData.HashTreeRoot()
@@ -75,7 +62,7 @@ func (gc *GoClient) DomainData(
 		// to (Mainnet, Hoodi, etc.)
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
-			CurrentVersion:        gc.getBeaconConfig().ForkVersion,
+			CurrentVersion:        gc.getBeaconConfig().GenesisForkVersion,
 			GenesisValidatorsRoot: phase0.Root{},
 		}
 		root, err := forkData.HashTreeRoot()
@@ -88,7 +75,7 @@ func (gc *GoClient) DomainData(
 	case spectypes.DomainVoluntaryExit:
 		// Deneb upgrade introduced https://eips.ethereum.org/EIPS/eip-7044 that requires special
 		// handling for DomainVoluntaryExit
-		return gc.voluntaryExitDomain(ctx)
+		return gc.voluntaryExitDomain()
 	}
 
 	start := time.Now()
