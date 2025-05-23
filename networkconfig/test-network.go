@@ -11,6 +11,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
+// Not exporting any name as it's used for tests and not supposed to be passed in a config.
+
 var TestNetwork = NetworkConfig{
 	Name: "testnet",
 	BeaconConfig: BeaconConfig{
