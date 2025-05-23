@@ -77,7 +77,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
 	timeout := 200 * time.Millisecond
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
@@ -335,7 +335,7 @@ func TestScheduler_Run(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
@@ -387,7 +387,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	logger := logging.TestLogger(t)
 

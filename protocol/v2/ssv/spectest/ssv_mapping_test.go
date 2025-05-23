@@ -529,7 +529,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 		}
 	}
 
-	ctx := context.Background() // TODO refactor this
+	ctx := t.Context() // TODO refactor this
 	c := fixCommitteeForRun(t, ctx, logger, committeeMap)
 
 	return &CommitteeSpecTest{

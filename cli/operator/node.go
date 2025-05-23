@@ -147,7 +147,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig)
+		db, err := setupDB(cmd.Context(), logger, networkConfig)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -322,6 +322,7 @@ var StartNodeCmd = &cobra.Command{
 
 		if usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
+				cmd.Context(),
 				logger,
 				networkConfig,
 				ssvSignerClient,
@@ -747,7 +748,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
+func setupDB(ctx context.Context, logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -783,7 +784,7 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv
 	}
 
 	// Run a long garbage collection cycle with a timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
 		return nil, errors.Wrap(err, "failed to collect garbage")

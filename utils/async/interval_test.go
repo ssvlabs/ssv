@@ -12,7 +12,7 @@ import (
 
 func TestInterval(t *testing.T) {
 	i := int32(0)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	Interval(ctx, time.Millisecond*10, func() {
 		atomic.AddInt32(&i, 1)
 	})

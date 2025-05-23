@@ -59,7 +59,7 @@ var (
 func TestHandleBlockEventsStream(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	operatorsCount := uint64(0)

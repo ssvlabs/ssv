@@ -43,7 +43,7 @@ const rawValidatorAdded = `{
 
 func TestExecuteTask(t *testing.T) {
 	logger, _ := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	// Create operators rsa keys
 
@@ -101,7 +101,7 @@ func TestExecuteTask(t *testing.T) {
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	logger, observedLogs := setupLogsCapture()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// Create operators rsa keys
