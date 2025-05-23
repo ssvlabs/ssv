@@ -210,10 +210,10 @@ func (mr *MockBeaconMockRecorder) GetEpochFirstSlot(epoch any) *gomock.Call {
 }
 
 // GetEpochsPerSyncCommitteePeriod mocks base method.
-func (m *MockBeacon) GetEpochsPerSyncCommitteePeriod() phase0.Epoch {
+func (m *MockBeacon) GetEpochsPerSyncCommitteePeriod() uint64 {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEpochsPerSyncCommitteePeriod")
-	ret0, _ := ret[0].(phase0.Epoch)
+	ret0, _ := ret[0].(uint64)
 	return ret0
 }
 

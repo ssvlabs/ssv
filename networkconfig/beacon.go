@@ -40,7 +40,7 @@ type BeaconConfig struct {
 	BeaconName                           string
 	SlotDuration                         time.Duration
 	SlotsPerEpoch                        uint64
-	EpochsPerSyncCommitteePeriod         phase0.Epoch
+	EpochsPerSyncCommitteePeriod         uint64
 	SyncCommitteeSize                    uint64
 	SyncCommitteeSubnetCount             uint64
 	TargetAggregatorsPerSyncSubcommittee uint64

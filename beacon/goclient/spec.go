@@ -17,7 +17,7 @@ import (
 const (
 	DefaultSlotDuration                         = 12 * time.Second
 	DefaultSlotsPerEpoch                        = uint64(32)
-	DefaultEpochsPerSyncCommitteePeriod         = phase0.Epoch(256)
+	DefaultEpochsPerSyncCommitteePeriod         = uint64(256)
 	DefaultSyncCommitteeSize                    = uint64(512)
 	DefaultSyncCommitteeSubnetCount             = uint64(4)
 	DefaultTargetAggregatorsPerSyncSubcommittee = uint64(16)
@@ -76,7 +76,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 	epochsPerSyncCommitteePeriod := DefaultEpochsPerSyncCommitteePeriod
 	if epochsPerSyncCommitteePeriodRaw, ok := specResponse["EPOCHS_PER_SYNC_COMMITTEE_PERIOD"]; ok {
 		if epochsPerSyncCommitteePeriodDecoded, ok := epochsPerSyncCommitteePeriodRaw.(uint64); ok {
-			epochsPerSyncCommitteePeriod = phase0.Epoch(epochsPerSyncCommitteePeriodDecoded)
+			epochsPerSyncCommitteePeriod = epochsPerSyncCommitteePeriodDecoded
 		} else {
 			gc.log.Warn("epochs per sync committee wasn't found in beacon node response, using default value",
 				zap.Any("value", epochsPerSyncCommitteePeriod))
