@@ -196,7 +196,7 @@ func (h *handler) Start(ctx context.Context) error {
 			// Perform liveness checks during the first run or at the last slot of the epoch.
 			// This ensures that the beacon node has had enough time to observe blocks and attestations,
 			// preventing delays in marking a validator as safe.
-			if (!firstRun && currentSlot%slotsPerEpoch != slotsPerEpoch-1) || startEpoch == currentEpoch {
+			if (!firstRun && uint64(currentSlot)%slotsPerEpoch != slotsPerEpoch-1) || startEpoch == currentEpoch {
 				continue
 			}
 

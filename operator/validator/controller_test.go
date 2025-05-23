@@ -23,6 +23,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -42,8 +45,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -181,13 +182,13 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			defer ctrl.Finish()
 			mockValidatorsMap := validators.New(context.TODO())
 
-			subnets := [commons.SubnetsCount]byte{}
+			subnets := commons.Subnets{}
 			for _, share := range sharesWithMetadata {
-				subnets[commons.CommitteeSubnet(share.CommitteeID())] = 1
+				subnets.Set(commons.CommitteeSubnet(share.CommitteeID()))
 			}
 
-			network.EXPECT().ActiveSubnets().Return(subnets[:]).AnyTimes()
-			network.EXPECT().FixedSubnets().Return(make(commons.Subnets, commons.SubnetsCount)).AnyTimes()
+			network.EXPECT().ActiveSubnets().Return(subnets).AnyTimes()
+			network.EXPECT().FixedSubnets().Return(commons.Subnets{}).AnyTimes()
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
@@ -252,7 +253,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(msg network.DecodedSSVMessage) error {
+	ctr.messageWorker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
 		wg.Done()
 		return nil
 	})

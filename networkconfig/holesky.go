@@ -4,7 +4,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -13,7 +12,7 @@ var Holesky = NetworkConfig{
 	BeaconConfig: BeaconConfig{
 		BeaconName:    string(spectypes.HoleskyNetwork),
 		SlotDuration:  spectypes.HoleskyNetwork.SlotDurationSec(),
-		SlotsPerEpoch: phase0.Slot(spectypes.HoleskyNetwork.SlotsPerEpoch()),
+		SlotsPerEpoch: spectypes.HoleskyNetwork.SlotsPerEpoch(),
 		ForkVersion:   spectypes.HoleskyNetwork.ForkVersion(),
 		GenesisTime:   time.Unix(int64(spectypes.HoleskyNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
 	},

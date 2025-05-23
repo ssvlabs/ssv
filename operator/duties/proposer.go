@@ -83,7 +83,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			cancel()
 
 			// last slot of epoch
-			if slot%h.beaconConfig.GetSlotsPerEpoch() == h.beaconConfig.GetSlotsPerEpoch()-1 {
+			if uint64(slot)%h.beaconConfig.GetSlotsPerEpoch() == h.beaconConfig.GetSlotsPerEpoch()-1 {
 				h.duties.ResetEpoch(currentEpoch - 1)
 				h.fetchFirst = true
 			}
@@ -144,7 +144,7 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
 		}
 	}
-	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
 }
 
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {

@@ -57,10 +57,10 @@ func (mr *MockNetworkMockRecorder) EpochStartTime(epoch any) *gomock.Call {
 }
 
 // EpochsPerSyncCommitteePeriod mocks base method.
-func (m *MockNetwork) EpochsPerSyncCommitteePeriod() phase0.Epoch {
+func (m *MockNetwork) EpochsPerSyncCommitteePeriod() uint64 {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "EpochsPerSyncCommitteePeriod")
-	ret0, _ := ret[0].(phase0.Epoch)
+	ret0, _ := ret[0].(uint64)
 	return ret0
 }
 
@@ -281,10 +281,10 @@ func (mr *MockNetworkMockRecorder) GetSlotStartTime(slot any) *gomock.Call {
 }
 
 // GetSlotsPerEpoch mocks base method.
-func (m *MockNetwork) GetSlotsPerEpoch() phase0.Slot {
+func (m *MockNetwork) GetSlotsPerEpoch() uint64 {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSlotsPerEpoch")
-	ret0, _ := ret[0].(phase0.Slot)
+	ret0, _ := ret[0].(uint64)
 	return ret0
 }
 
