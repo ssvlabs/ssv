@@ -232,19 +232,26 @@ func (i *ibftStorage) getCommittee(
 	if !found {
 		return nil, nil
 	}
-	operatorsBySlot := decodeOperatorsBySlot(val)
-	if len(operatorsBySlot) == 0 {
-		return nil, fmt.Errorf("no operators found for identifier %s", identifier.String())
+	committeeBySlot := decodeCommitteeBySlot(val)
+	if len(committeeBySlot) == 0 {
+		return nil, fmt.Errorf("no committee found for identifier %s", identifier.String())
 	}
 
-	slots := slices.Sorted(maps.Keys(operatorsBySlot))
-	for idx := len(slots) - 1; idx >= 0; idx-- {
-		if slot >= slots[idx] {
-			return operatorsBySlot[slots[idx]], nil
-		}
-	}
+	committeeSlots := slices.Sorted(maps.Keys(committeeBySlot))
+	idx, ok := slices.BinarySearch(committeeSlots, slot)
+	switch {
+	case ok:
+		// exact start match
+		return committeeBySlot[committeeSlots[idx]], nil
 
-	return nil, fmt.Errorf("no operators found for slot %d, seen slots %v", slot, slots)
+	case idx == 0:
+		// before the very first interval
+		return nil, fmt.Errorf("no committee for slot %d (earlier than first %d)", slot, committeeSlots[0])
+
+	default:
+		// predecessor interval
+		return committeeBySlot[committeeSlots[idx-1]], nil
+	}
 }
 
 func (i *ibftStorage) saveCommittee(
@@ -258,16 +265,16 @@ func (i *ibftStorage) saveCommittee(
 		return err
 	}
 
-	operatorsBySlot := make(map[phase0.Slot][]spectypes.OperatorID)
+	committeeBySlot := make(map[phase0.Slot][]spectypes.OperatorID)
 	if found {
-		operatorsBySlot = decodeOperatorsBySlot(val)
+		committeeBySlot = decodeCommitteeBySlot(val)
 	}
 
-	if changed := i.upsertSlot(operatorsBySlot, slot, operators); !changed {
+	if changed := i.upsertSlot(committeeBySlot, slot, operators); !changed {
 		return nil
 	}
 
-	bytes, err := encodeOperatorsBySlot(operatorsBySlot)
+	bytes, err := encodeCommitteeBySlot(committeeBySlot)
 	if err != nil {
 		return fmt.Errorf("encode operators: %w", err)
 	}
@@ -280,53 +287,53 @@ func (i *ibftStorage) saveCommittee(
 }
 
 func (i *ibftStorage) upsertSlot(
-	operatorsBySlot map[phase0.Slot][]spectypes.OperatorID,
+	committeeBySlot map[phase0.Slot][]spectypes.OperatorID,
 	slot phase0.Slot,
-	operators []spectypes.OperatorID,
+	committee []spectypes.OperatorID,
 ) bool {
-	slots := slices.Sorted(maps.Keys(operatorsBySlot))
+	slots := slices.Sorted(maps.Keys(committeeBySlot))
 	if len(slots) == 0 {
-		operatorsBySlot[slot] = operators
+		committeeBySlot[slot] = committee
 		return true
 	}
 
-	if slot < slots[0] {
-		// slot is earlier than any existing => move the first slot or insert the new slot
-		if slices.Equal(operators, operatorsBySlot[slots[0]]) {
-			// first slot has same operators => move the first slot
-			operatorsBySlot[slot] = operatorsBySlot[slots[0]]
-			delete(operatorsBySlot, slots[0])
-			return true
-		}
+	// 3. Locate slot
+	idx, ok := slices.BinarySearch(slots, slot)
 
-		// first slot has different operators => insert new slot
-		operatorsBySlot[slot] = operators
+	// 4. Exact-boundary update
+	if ok {
+		if slices.Equal(committeeBySlot[slot], committee) {
+			return false // no change
+		}
+		committeeBySlot[slot] = committee
 		return true
 	}
 
-	for i := len(slots) - 1; i >= 0; i-- {
-		if slot < slots[i] {
-			continue
-		}
+	// 5. Fetch predecessor and successor slices (if any)
+	var prev, next []spectypes.OperatorID
+	if idx > 0 {
+		prev = committeeBySlot[slots[idx-1]]
+	}
+	if idx < len(slots) {
+		next = committeeBySlot[slots[idx]]
+	}
 
-		if slices.Equal(operators, operatorsBySlot[slots[i]]) {
-			// operators are same => sequence is fine, nothing to do
-			return false
-		}
+	// 6. Merge with predecessor?
+	if prev != nil && slices.Equal(prev, committee) {
+		return false // extending prev interval implicitly
+	}
 
-		if i+1 < len(slots) && slices.Equal(operators, operatorsBySlot[slots[i+1]]) {
-			// next slot exists and has same operators => move the next slot earlier
-			operatorsBySlot[slot] = operatorsBySlot[slots[i+1]]
-			delete(operatorsBySlot, slots[i+1])
-			return true
-		}
-
-		// slot is between existing slots with different operators => create a new entry for the slot
-		operatorsBySlot[slot] = operators
+	// 7. Merge with successor?
+	if next != nil && slices.Equal(next, committee) {
+		// move successor boundary backward
+		delete(committeeBySlot, slots[idx])
+		committeeBySlot[slot] = next
 		return true
 	}
 
-	return false
+	// 8. No merge: insert new boundary
+	committeeBySlot[slot] = committee
+	return true
 }
 
 func (i *ibftStorage) save(txn basedb.ReadWriter, value []byte, id string, pk []byte, keyParams ...[]byte) error {
@@ -402,16 +409,16 @@ func decodeOperators(encoded []byte) []spectypes.OperatorID {
 	return decoded
 }
 
-func encodeOperatorsBySlot(operatorsBySlot map[phase0.Slot][]spectypes.OperatorID) ([]byte, error) {
-	return json.Marshal(operatorsBySlot)
+func encodeCommitteeBySlot(committeeBySlot map[phase0.Slot][]spectypes.OperatorID) ([]byte, error) {
+	return json.Marshal(committeeBySlot)
 }
 
-func decodeOperatorsBySlot(encoded []byte) map[phase0.Slot][]spectypes.OperatorID {
-	var operatorsBySlot map[phase0.Slot][]spectypes.OperatorID
+func decodeCommitteeBySlot(encoded []byte) map[phase0.Slot][]spectypes.OperatorID {
+	var committeeBySlot map[phase0.Slot][]spectypes.OperatorID
 
-	if err := json.Unmarshal(encoded, &operatorsBySlot); err != nil {
-		panic("corrupted storage: operators by slot could not be decoded")
+	if err := json.Unmarshal(encoded, &committeeBySlot); err != nil {
+		panic("corrupted storage: committee by slot could not be decoded")
 	}
 
-	return operatorsBySlot
+	return committeeBySlot
 }
