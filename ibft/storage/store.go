@@ -2,7 +2,10 @@ package storage
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -22,6 +25,7 @@ const (
 	highestInstanceKey = "highest_instance"
 	instanceKey        = "instance"
 	participantsKey    = "participants"
+	committeesKey      = "committees"
 )
 
 var errNotBitmask = errors.New("not a bitmask")
@@ -105,6 +109,10 @@ func (i *ibftStorage) UpdateParticipants(identifier convert.MessageID, slot phas
 		return false, fmt.Errorf("save participants bitmask: %w", err)
 	}
 
+	if err := i.saveCommittee(txn, identifier, slot, newParticipants.Committee); err != nil {
+		return false, fmt.Errorf("save committee: %w", err)
+	}
+
 	if err := txn.Commit(); err != nil {
 		return false, fmt.Errorf("commit transaction: %w", err)
 	}
@@ -116,12 +124,11 @@ func (i *ibftStorage) GetParticipantsInRange(
 	identifier convert.MessageID,
 	from,
 	to phase0.Slot,
-	committee []spectypes.OperatorID,
 ) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
-		participants, err := i.GetParticipants(identifier, slot, committee)
+		participants, err := i.GetParticipants(identifier, slot)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get participants: %w", err)
 		}
@@ -143,7 +150,6 @@ func (i *ibftStorage) GetParticipantsInRange(
 func (i *ibftStorage) GetParticipants(
 	identifier convert.MessageID,
 	slot phase0.Slot,
-	committee []spectypes.OperatorID,
 ) ([]spectypes.OperatorID, error) {
 	bm, err := i.getParticipantsBitMask(nil, identifier, slot)
 	if errors.Is(err, errNotBitmask) {
@@ -151,6 +157,11 @@ func (i *ibftStorage) GetParticipants(
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get participants bit mask: %w", err)
+	}
+
+	committee, err := i.getCommittee(nil, identifier, slot)
+	if err != nil {
+		return nil, fmt.Errorf("get committee: %w", err)
 	}
 
 	return bm.Signers(committee)
@@ -207,6 +218,115 @@ func (i *ibftStorage) saveParticipantsBitMask(
 // mergeParticipantsBitMask merges two participants bitmasks. Extracted into a method for testing.
 func mergeParticipantsBitMask(existingParticipants, newParticipants qbftstorage.SignersBitMask) qbftstorage.SignersBitMask {
 	return existingParticipants | newParticipants
+}
+
+func (i *ibftStorage) getCommittee(
+	txn basedb.ReadWriter,
+	identifier convert.MessageID,
+	slot phase0.Slot,
+) ([]spectypes.OperatorID, error) {
+	val, found, err := i.get(txn, committeesKey, identifier[:])
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	operatorsBySlot := decodeOperatorsBySlot(val)
+	if len(operatorsBySlot) == 0 {
+		return nil, fmt.Errorf("no operators found for identifier %s", identifier.String())
+	}
+
+	slots := slices.Sorted(maps.Keys(operatorsBySlot))
+	for idx := len(slots) - 1; idx >= 0; idx-- {
+		if slot >= slots[idx] {
+			return operatorsBySlot[slots[idx]], nil
+		}
+	}
+
+	return nil, fmt.Errorf("no operators found for slot %d, seen slots %v", slot, slots)
+}
+
+func (i *ibftStorage) saveCommittee(
+	txn basedb.ReadWriter,
+	identifier convert.MessageID,
+	slot phase0.Slot,
+	operators []spectypes.OperatorID,
+) error {
+	val, found, err := i.get(txn, committeesKey, identifier[:])
+	if err != nil {
+		return err
+	}
+
+	operatorsBySlot := make(map[phase0.Slot][]spectypes.OperatorID)
+	if found {
+		operatorsBySlot = decodeOperatorsBySlot(val)
+	}
+
+	if changed := i.upsertSlot(operatorsBySlot, slot, operators); !changed {
+		return nil
+	}
+
+	bytes, err := encodeOperatorsBySlot(operatorsBySlot)
+	if err != nil {
+		return fmt.Errorf("encode operators: %w", err)
+	}
+
+	if err := i.save(txn, bytes, committeesKey, identifier[:]); err != nil {
+		return fmt.Errorf("save to DB: %w", err)
+	}
+
+	return nil
+}
+
+func (i *ibftStorage) upsertSlot(
+	operatorsBySlot map[phase0.Slot][]spectypes.OperatorID,
+	slot phase0.Slot,
+	operators []spectypes.OperatorID,
+) bool {
+	slots := slices.Sorted(maps.Keys(operatorsBySlot))
+	if len(slots) == 0 {
+		operatorsBySlot[slot] = operators
+		return true
+	}
+
+	if slot < slots[0] {
+		// slot is earlier than any existing => move the first slot or insert the new slot
+		if slices.Equal(operators, operatorsBySlot[slots[0]]) {
+			// first slot has same operators => move the first slot
+			operatorsBySlot[slot] = operatorsBySlot[slots[0]]
+			delete(operatorsBySlot, slots[0])
+			return true
+		}
+
+		// first slot has different operators => insert new slot
+		operatorsBySlot[slot] = operators
+		return true
+	}
+
+	for i := len(slots) - 1; i >= 0; i-- {
+		if slot < slots[i] {
+			continue
+		}
+
+		if slices.Equal(operators, operatorsBySlot[slots[i]]) {
+			// operators are same => sequence is fine, nothing to do
+			return false
+		}
+
+		if i+1 < len(slots) && slices.Equal(operators, operatorsBySlot[slots[i+1]]) {
+			// next slot exists and has same operators => move the next slot earlier
+			operatorsBySlot[slot] = operatorsBySlot[slots[i+1]]
+			delete(operatorsBySlot, slots[i+1])
+			return true
+		}
+
+		// slot is between existing slots with different operators => create a new entry for the slot
+		operatorsBySlot[slot] = operators
+		return true
+	}
+
+	return false
 }
 
 func (i *ibftStorage) save(txn basedb.ReadWriter, value []byte, id string, pk []byte, keyParams ...[]byte) error {
@@ -280,4 +400,18 @@ func decodeOperators(encoded []byte) []spectypes.OperatorID {
 	}
 
 	return decoded
+}
+
+func encodeOperatorsBySlot(operatorsBySlot map[phase0.Slot][]spectypes.OperatorID) ([]byte, error) {
+	return json.Marshal(operatorsBySlot)
+}
+
+func decodeOperatorsBySlot(encoded []byte) map[phase0.Slot][]spectypes.OperatorID {
+	var operatorsBySlot map[phase0.Slot][]spectypes.OperatorID
+
+	if err := json.Unmarshal(encoded, &operatorsBySlot); err != nil {
+		panic("corrupted storage: operators by slot could not be decoded")
+	}
+
+	return operatorsBySlot
 }

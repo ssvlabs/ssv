@@ -121,23 +121,11 @@ func (h *Handler) HandleParticipantsQuery(nm *NetworkMessage) {
 		return
 	}
 
-	share, ok := h.shares.Get(nil, pkRaw)
-	if !ok {
-		h.logger.Warn("share doesn't exist", fields.Validator(pkRaw))
-		res.Data = []string{"internal error - role storage doesn't exist", beaconRole.String()}
-		nm.Msg = res
-		return
-	}
-
 	msgID := convert.NewMsgID(h.domain, pkRaw, runnerRole)
 	from := phase0.Slot(nm.Msg.Filter.From)
 	to := phase0.Slot(nm.Msg.Filter.To)
-	operatorIDs := make([]spectypes.OperatorID, 0, len(share.Committee))
-	for _, sm := range share.Committee {
-		operatorIDs = append(operatorIDs, sm.Signer)
-	}
 
-	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to, operatorIDs)
+	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
 	if err != nil {
 		h.logger.Warn("failed to get participants", zap.Error(err))
 		res.Data = []string{"internal error - could not get participants messages"}

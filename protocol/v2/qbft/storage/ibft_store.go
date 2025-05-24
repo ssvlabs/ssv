@@ -104,8 +104,8 @@ type QBFTStore interface {
 	UpdateParticipants(identifier convert.MessageID, slot phase0.Slot, newParticipants Quorum) (bool, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
-	GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot, committee []spectypes.OperatorID) ([]ParticipantsRangeEntry, error)
+	GetParticipantsInRange(identifier convert.MessageID, from, to phase0.Slot) ([]ParticipantsRangeEntry, error)
 
 	// GetParticipants returns participants in quorum for the given slot.
-	GetParticipants(identifier convert.MessageID, slot phase0.Slot, committee []spectypes.OperatorID) ([]spectypes.OperatorID, error)
+	GetParticipants(identifier convert.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error)
 }

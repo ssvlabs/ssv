@@ -81,17 +81,7 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 			from := phase0.Slot(request.From)
 			to := phase0.Slot(request.To)
 
-			share, ok := e.Shares.Get(nil, pubKey)
-			if !ok {
-				return api.Error(fmt.Errorf("share not found"))
-			}
-
-			operatorIDs := make([]spectypes.OperatorID, 0, len(share.Committee))
-			for _, sm := range share.Committee {
-				operatorIDs = append(operatorIDs, sm.Signer)
-			}
-
-			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to, operatorIDs)
+			participantsList, err := qbftStore.GetParticipantsInRange(msgID, from, to)
 			if err != nil {
 				return api.Error(fmt.Errorf("error getting participants: %w", err))
 			}
