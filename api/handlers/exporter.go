@@ -12,14 +12,12 @@ import (
 	"github.com/ssvlabs/ssv/exporter/convert"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
 type Exporter struct {
 	DomainType spectypes.DomainType
 	QBFTStores *ibftstorage.QBFTStores
-	Shares     registrystorage.Shares
 }
 
 type ParticipantResponse struct {
