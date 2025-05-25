@@ -72,7 +72,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey[:])
-				h.dutiesExecutor.ExecuteDuties(ctx, h.logger, []*spectypes.ValidatorDuty{{
+				h.dutiesExecutor.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{{
 					Type:           spectypes.BNRoleValidatorRegistration,
 					ValidatorIndex: share.ValidatorIndex,
 					PubKey:         pk,
@@ -107,7 +107,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			// Kick off validator registration duty to notify various Ethereum actors (e.g. Relays)
 			// about fee recipient change as soon as possible.
-			h.dutiesExecutor.ExecuteDuties(context.Background(), h.logger, []*spectypes.ValidatorDuty{{
+			h.dutiesExecutor.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{{
 				Type:           spectypes.BNRoleValidatorRegistration,
 				ValidatorIndex: regDescriptor.ValidatorIndex,
 				PubKey:         regDescriptor.ValidatorPubkey,

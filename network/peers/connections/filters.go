@@ -3,7 +3,6 @@ package connections
 import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
@@ -21,9 +20,9 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 }
 
 // BadPeerFilter avoids connecting to a bad peer
-func BadPeerFilter(logger *zap.Logger, n peers.Index) HandshakeFilter {
+func BadPeerFilter(n peers.Index) HandshakeFilter {
 	return func(senderID peer.ID, sni *records.NodeInfo) error {
-		if n.IsBad(logger, senderID) {
+		if n.IsBad(senderID) {
 			return errors.New("bad peer")
 		}
 		return nil

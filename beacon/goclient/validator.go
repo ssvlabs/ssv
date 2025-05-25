@@ -1,6 +1,7 @@
 package goclient
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"slices"
@@ -24,14 +25,17 @@ type validatorRegistration struct {
 }
 
 // GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
-func (gc *GoClient) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+func (gc *GoClient) GetValidatorData(
+	ctx context.Context,
+	validatorPubKeys []phase0.BLSPubKey,
+) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 	reqStart := time.Now()
-	resp, err := gc.multiClient.Validators(gc.ctx, &api.ValidatorsOpts{
+	resp, err := gc.multiClient.Validators(ctx, &api.ValidatorsOpts{
 		State:   "head", // TODO maybe need to get the chainId (head) as var
 		PubKeys: validatorPubKeys,
 		Common:  api.CommonOpts{Timeout: gc.longTimeout},
 	})
-	recordRequestDuration(gc.ctx, "Validators", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
+	recordRequestDuration(ctx, "Validators", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Validators"),
@@ -76,11 +80,11 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 // This allows us to keep the amount of registration submissions small and not having to worry
 // about pruning gc.registrations "cache" (since it might contain registrations for validators that
 // are no longer operating) while still submitting all validator-registrations that matter asap.
-func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
+func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvider slotticker.Provider) {
 	ticker := slotTickerProvider()
 	for {
 		select {
-		case <-gc.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
@@ -132,8 +136,8 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 			// Submit validator registrations in chunks.
 			for chunk := range slices.Chunk(registrations, 500) {
 				reqStart := time.Now()
-				err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, chunk)
-				recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
+				err := gc.multiClient.SubmitValidatorRegistrations(ctx, chunk)
+				recordRequestDuration(ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
 				if err != nil {
 					gc.log.Error(clResponseErrMsg, zap.Error(err))
 					break
