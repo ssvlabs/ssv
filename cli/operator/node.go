@@ -191,7 +191,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
 			}
 
-			ssvSignerClient := ssvsigner.NewClient(
+			ssvSignerClient = ssvsigner.NewClient(
 				cfg.SSVSigner.Endpoint,
 				ssvSignerOptions...,
 			)
