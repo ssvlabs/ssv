@@ -129,7 +129,9 @@ var StartNodeCmd = &cobra.Command{
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		var observabilityOptions []observability.Option
-		observabilityOptions = append(observabilityOptions, observability.WithMetrics())
+		if cfg.MetricsAPIPort > 0 {
+			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
+		}
 		if cfg.EnableTraces {
 			observabilityOptions = append(observabilityOptions, observability.WithTraces())
 		}
