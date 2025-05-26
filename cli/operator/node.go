@@ -204,7 +204,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
 			}
 
-			ssvSignerClient := ssvsigner.NewClient(
+			ssvSignerClient = ssvsigner.NewClient(
 				cfg.SSVSigner.Endpoint,
 				ssvSignerOptions...,
 			)
@@ -439,15 +439,12 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		fixedSubnets, err := networkcommons.FromString(cfg.P2pNetworkConfig.Subnets)
+		fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
-			fixedSubnets, err = networkcommons.FromString(networkcommons.AllSubnets)
-			if err != nil {
-				logger.Fatal("failed to parse all fixed subnets", zap.Error(err))
-			}
+			fixedSubnets = networkcommons.AllSubnets
 		}
 
 		metadataSyncer := metadata.NewSyncer(
@@ -540,12 +537,12 @@ var StartNodeCmd = &cobra.Command{
 			)
 			start := time.Now()
 			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID())
-			mySubnets := make(networkcommons.Subnets, networkcommons.SubnetsCount)
+			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
 				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-				if mySubnets[subnet] == 0 {
-					mySubnets[subnet] = 1
+				if !mySubnets.IsSet(subnet) {
+					mySubnets.Set(subnet)
 					myActiveSubnets++
 				}
 			}
