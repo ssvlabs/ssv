@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -24,7 +26,10 @@ const (
 	highestInstanceKey = "highest_instance"
 	instanceKey        = "instance"
 	participantsKey    = "pt"
+	committeesKey      = "committees"
 )
+
+var errNotBitmask = errors.New("not a bitmask")
 
 // participantStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
@@ -48,47 +53,47 @@ func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole) qb
 }
 
 // Prune waits for the initial tick and then removes all slots below the tickSlot - retain
-func (i *participantStorage) Prune(ctx context.Context, threshold phase0.Slot) {
-	i.logger.Info("start initial stale slot cleanup", zap.String("store", i.ID()), fields.Slot(threshold))
+func (ps *participantStorage) Prune(ctx context.Context, threshold phase0.Slot) {
+	ps.logger.Info("start initial stale slot cleanup", zap.String("store", ps.ID()), fields.Slot(threshold))
 
 	// remove ALL slots below the threshold
 	start := time.Now()
-	count := i.removeSlotsOlderThan(threshold)
+	count := ps.removeSlotsOlderThan(threshold)
 
-	i.logger.Info("removed stale slot entries", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
+	ps.logger.Info("removed stale slot entries", zap.String("store", ps.ID()), fields.Slot(threshold), zap.Int("count", count), zap.Duration("took", time.Since(start)))
 }
 
 // PruneContinuously on every tick looks up and removes the slots that fall below the retain threshold
-func (i *participantStorage) PruneContinously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
+func (ps *participantStorage) PruneContinously(ctx context.Context, slotTickerProvider slotticker.Provider, retain phase0.Slot) {
 	ticker := slotTickerProvider()
-	i.logger.Info("start stale slot cleanup loop", zap.String("store", i.ID()))
+	ps.logger.Info("start stale slot cleanup loop", zap.String("store", ps.ID()))
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
 			threshold := ticker.Slot() - retain - 1
-			count, err := i.removeSlotAt(threshold)
+			count, err := ps.removeSlotAt(threshold)
 			if err != nil {
-				i.logger.Error("remove slot at", zap.String("store", i.ID()), fields.Slot(threshold))
+				ps.logger.Error("remove slot at", zap.String("store", ps.ID()), fields.Slot(threshold))
 			}
 
-			i.logger.Debug("removed stale slots", zap.String("store", i.ID()), fields.Slot(threshold), zap.Int("count", count))
+			ps.logger.Debug("removed stale slots", zap.String("store", ps.ID()), fields.Slot(threshold), zap.Int("count", count))
 		}
 	}
 }
 
 // removes ALL entries that have given slot in their prefix
-func (i *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
+func (ps *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
 	var keySet [][]byte
 
-	prefix := i.makePrefix(slotToByteSlice(slot))
+	prefix := ps.makeParticipantsPrefix(slotToByteSlice(slot))
 
-	tx := i.db.Begin()
+	tx := ps.db.Begin()
 	defer tx.Discard()
 
 	// filter and collect keys
-	err := i.db.UsingReader(tx).GetAll(prefix, func(i int, o basedb.Obj) error {
+	err := ps.db.UsingReader(tx).GetAll(prefix, func(i int, o basedb.Obj) error {
 		keySet = append(keySet, o.Key)
 		return nil
 	})
@@ -102,7 +107,7 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
 	}
 
 	for _, id := range keySet {
-		if err := i.db.Using(tx).Delete(append(prefix, id...), nil); err != nil {
+		if err := ps.db.Using(tx).Delete(append(prefix, id...), nil); err != nil {
 			return 0, fmt.Errorf("remove slot: %w", err)
 		}
 	}
@@ -117,32 +122,32 @@ func (i *participantStorage) removeSlotAt(slot phase0.Slot) (int, error) {
 var dropPrefixMu sync.Mutex
 
 // removes ALL entries for any slots older or equal to given slot
-func (i *participantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
+func (ps *participantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
 	var total int
 	for {
 		slot-- // slots are incremental
-		prefix := i.makePrefix(slotToByteSlice(slot))
+		prefix := ps.makeParticipantsPrefix(slotToByteSlice(slot))
 		stop := func() bool {
 			dropPrefixMu.Lock()
 			defer dropPrefixMu.Unlock()
 
-			count, err := i.db.CountPrefix(prefix)
+			count, err := ps.db.CountPrefix(prefix)
 			if err != nil {
-				i.logger.Error("count prefix of stale slots", zap.String("store", i.ID()), fields.Slot(slot), zap.Error(err))
+				ps.logger.Error("count prefix of stale slots", zap.String("store", ps.ID()), fields.Slot(slot), zap.Error(err))
 				return true
 			}
 
 			if count == 0 {
-				i.logger.Debug("no more keys at slot", zap.String("store", i.ID()), fields.Slot(slot))
+				ps.logger.Debug("no more keys at slot", zap.String("store", ps.ID()), fields.Slot(slot))
 				return true
 			}
 
-			if err := i.db.DropPrefix(prefix); err != nil {
-				i.logger.Error("drop prefix of stale slots", zap.String("store", i.ID()), fields.Slot(slot), zap.Error(err))
+			if err := ps.db.DropPrefix(prefix); err != nil {
+				ps.logger.Error("drop prefix of stale slots", zap.String("store", ps.ID()), fields.Slot(slot), zap.Error(err))
 				return true
 			}
 
-			i.logger.Debug("drop prefix", zap.String("store", i.ID()), zap.Int64("count", count), fields.Slot(slot))
+			ps.logger.Debug("drop prefix", zap.String("store", ps.ID()), zap.Int64("count", count), fields.Slot(slot))
 			total += int(count)
 
 			return false
@@ -157,39 +162,59 @@ func (i *participantStorage) removeSlotsOlderThan(slot phase0.Slot) int {
 }
 
 // CleanAllInstances removes all records in old format.
-func (i *participantStorage) CleanAllInstances() error {
-	if err := i.db.DropPrefix([]byte(i.oldPrefix)); err != nil {
+func (ps *participantStorage) CleanAllInstances() error {
+	if err := ps.db.DropPrefix([]byte(ps.oldPrefix)); err != nil {
 		return errors.Wrap(err, "failed to drop all records")
 	}
 
 	return nil
 }
 
-func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
+func (ps *participantStorage) SaveParticipants(
+	pk spectypes.ValidatorPK,
+	slot phase0.Slot,
+	newParticipants qbftstorage.Quorum,
+) (updated bool, err error) {
 	start := time.Now()
 	defer func() {
 		dur := time.Since(start)
-		recordSaveDuration(i.ID(), dur)
+		recordSaveDuration(ps.ID(), dur)
 	}()
 
-	i.participantsMu.Lock()
-	defer i.participantsMu.Unlock()
+	ps.participantsMu.Lock()
+	defer ps.participantsMu.Unlock()
 
-	txn := i.db.Begin()
+	txn := ps.db.Begin()
 	defer txn.Discard()
 
-	existingParticipants, err := i.getParticipants(txn, pk, slot)
-	if err != nil {
-		return false, fmt.Errorf("get participants %w", err)
+	existing, err := ps.getParticipantsBitMask(txn, pk, slot)
+	if errors.Is(err, errNotBitmask) {
+		existingList, err := ps.getParticipants(txn, pk, slot)
+		if err != nil {
+			return false, fmt.Errorf("get participants: %w", err)
+		}
+
+		quorumAdapter, err := qbftstorage.NewQuorum(existingList, newParticipants.Committee)
+		if err != nil {
+			return false, fmt.Errorf("create quorum adapter: %w", err)
+		}
+
+		existing = quorumAdapter.ToSignersBitMask()
+	} else if err != nil {
+		return false, fmt.Errorf("get participants bitmask: %w", err)
 	}
 
-	mergedParticipants := mergeParticipants(existingParticipants, newParticipants)
-	if slices.Equal(mergedParticipants, existingParticipants) {
+	merged := mergeParticipantsBitMask(existing, newParticipants.ToSignersBitMask())
+	if merged == existing {
 		return false, nil
 	}
 
-	if err := i.saveParticipants(txn, pk, slot, mergedParticipants); err != nil {
-		return false, fmt.Errorf("save participants: %w", err)
+	if err := ps.saveParticipantsBitMask(txn, pk, slot, merged); err != nil {
+		return false, fmt.Errorf("save participants bitmask: %w", err)
+	}
+
+	if err := ps.saveCommittee(txn, pk, slot, newParticipants.Committee); err != nil {
+		return false, fmt.Errorf("save committee: %w", err)
 	}
 
 	if err := txn.Commit(); err != nil {
@@ -199,16 +224,33 @@ func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot pha
 	return true, nil
 }
 
-func (i *participantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (ps *participantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	var ee []qbftstorage.ParticipantsRangeEntry
 	for slot := from; slot <= to; slot++ {
 		slotBytes := slotToByteSlice(slot)
-		prefix := i.makePrefix(slotBytes)
-		err := i.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
+		prefix := ps.makeParticipantsPrefix(slotBytes)
+		err := ps.db.GetAll(prefix, func(_ int, o basedb.Obj) error {
+			signersBitMask := qbftstorage.SignersBitMask(byteSliceToUInt16(o.Value))
+
+			pk := o.Key
+			if len(pk) != len(spectypes.ValidatorPK{}) {
+				return fmt.Errorf("invalid pk length: %d", len(pk))
+			}
+
+			committee, err := ps.getCommittee(nil, spectypes.ValidatorPK(pk), slot)
+			if err != nil {
+				return fmt.Errorf("get committee: %w", err)
+			}
+
+			signers, err := signersBitMask.Signers(committee)
+			if err != nil {
+				return fmt.Errorf("get signers: %w", err)
+			}
+
 			re := qbftstorage.ParticipantsRangeEntry{
 				Slot:    slot,
 				PubKey:  spectypes.ValidatorPK(o.Key),
-				Signers: decodeOperators(o.Value),
+				Signers: signers,
 			}
 			ee = append(ee, re)
 			return nil
@@ -222,11 +264,11 @@ func (i *participantStorage) GetAllParticipantsInRange(from, to phase0.Slot) ([]
 	return ee, nil
 }
 
-func (i *participantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (ps *participantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
 
 	for slot := from; slot <= to; slot++ {
-		participants, err := i.GetParticipants(pk, slot)
+		participants, err := ps.GetParticipants(pk, slot)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get participants: %w", err)
 		}
@@ -245,12 +287,46 @@ func (i *participantStorage) GetParticipantsInRange(pk spectypes.ValidatorPK, fr
 	return participantsRange, nil
 }
 
-func (i *participantStorage) GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	return i.getParticipants(nil, pk, slot)
+func (ps *participantStorage) GetParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	bm, err := ps.getParticipantsBitMask(nil, pk, slot)
+	if errors.Is(err, errNotBitmask) {
+		return ps.getParticipants(nil, pk, slot)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get participants bit mask: %w", err)
+	}
+
+	committee, err := ps.getCommittee(nil, pk, slot)
+	if err != nil {
+		return nil, fmt.Errorf("get committee: %w", err)
+	}
+
+	return bm.Signers(committee)
 }
 
-func (i *participantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-	val, found, err := i.get(txn, pk[:], slotToByteSlice(slot))
+func (ps *participantStorage) getParticipantsBitMask(
+	txn basedb.ReadWriter,
+	pk spectypes.ValidatorPK,
+	slot phase0.Slot,
+) (qbftstorage.SignersBitMask, error) {
+	val, found, err := ps.getParticipantsAtSlot(txn, pk[:], slotToByteSlice(slot))
+	if err != nil {
+		return 0, err
+	}
+	if !found {
+		return 0, nil
+	}
+
+	if len(val) != 2 { // uint16
+		return 0, errNotBitmask
+	}
+
+	return qbftstorage.SignersBitMask(byteSliceToUInt16(val)), nil
+}
+
+// DEPRECATED, left for compatibility with old data format
+func (ps *participantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	val, found, err := ps.getParticipantsAtSlot(txn, pk[:], slotToByteSlice(slot))
 	if err != nil {
 		return nil, err
 	}
@@ -262,32 +338,151 @@ func (i *participantStorage) getParticipants(txn basedb.ReadWriter, pk spectypes
 	return operators, nil
 }
 
-func (i *participantStorage) saveParticipants(txn basedb.ReadWriter, pk spectypes.ValidatorPK, slot phase0.Slot, operators []spectypes.OperatorID) error {
-	bytes, err := encodeOperators(operators)
-	if err != nil {
-		return fmt.Errorf("encode operators: %w", err)
-	}
-	if err := i.save(txn, bytes, pk[:], slotToByteSlice(slot)); err != nil {
+func (ps *participantStorage) saveParticipantsBitMask(
+	txn basedb.ReadWriter,
+	pk spectypes.ValidatorPK,
+	slot phase0.Slot,
+	operatorsBitMask qbftstorage.SignersBitMask,
+) error {
+	b := uInt16ToByteSlice(uint16(operatorsBitMask))
+	if err := ps.saveParticipantsAtSlot(txn, b, pk[:], slotToByteSlice(slot)); err != nil {
 		return fmt.Errorf("save to DB: %w", err)
 	}
 
 	return nil
 }
 
-func mergeParticipants(existingParticipants, newParticipants []spectypes.OperatorID) []spectypes.OperatorID {
-	allParticipants := slices.Concat(existingParticipants, newParticipants)
-	slices.Sort(allParticipants)
-	return slices.Compact(allParticipants)
+func mergeParticipantsBitMask(existingParticipants, newParticipants qbftstorage.SignersBitMask) qbftstorage.SignersBitMask {
+	return existingParticipants | newParticipants
 }
 
-func (i *participantStorage) save(txn basedb.ReadWriter, value []byte, pk, slot []byte) error {
-	prefix := i.makePrefix(slot)
-	return i.db.Using(txn).Set(prefix, pk, value)
+func (ps *participantStorage) getCommittee(
+	txn basedb.ReadWriter,
+	pk spectypes.ValidatorPK,
+	slot phase0.Slot,
+) ([]spectypes.OperatorID, error) {
+	val, found, err := ps.getCommitteeForPK(txn, pk[:])
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil
+	}
+	committeeBySlot := decodeCommitteeBySlot(val)
+	if len(committeeBySlot) == 0 {
+		return nil, fmt.Errorf("no committee found for pk %s", pk)
+	}
+
+	committeeSlots := maps.Keys(committeeBySlot)
+	slices.Sort(committeeSlots)
+	idx, ok := slices.BinarySearch(committeeSlots, slot)
+	switch {
+	case ok:
+		// exact start match
+		return committeeBySlot[committeeSlots[idx]], nil
+
+	case idx == 0:
+		// before the very first interval
+		return nil, fmt.Errorf("no committee for slot %d (earlier than first %d)", slot, committeeSlots[0])
+
+	default:
+		// predecessor interval
+		return committeeBySlot[committeeSlots[idx-1]], nil
+	}
 }
 
-func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte, bool, error) {
-	prefix := i.makePrefix(slot)
-	obj, found, err := i.db.Using(txn).Get(prefix, pk)
+func (ps *participantStorage) saveCommittee(
+	txn basedb.ReadWriter,
+	pk spectypes.ValidatorPK,
+	slot phase0.Slot,
+	operators []spectypes.OperatorID,
+) error {
+	val, found, err := ps.getCommitteeForPK(txn, pk[:])
+	if err != nil {
+		return err
+	}
+
+	committeeBySlot := make(map[phase0.Slot][]spectypes.OperatorID)
+	if found {
+		committeeBySlot = decodeCommitteeBySlot(val)
+	}
+
+	if changed := ps.upsertSlot(committeeBySlot, slot, operators); !changed {
+		return nil
+	}
+
+	bytes, err := encodeCommitteeBySlot(committeeBySlot)
+	if err != nil {
+		return fmt.Errorf("encode operators: %w", err)
+	}
+
+	if err := ps.saveCommitteeForPK(txn, bytes, pk[:]); err != nil {
+		return fmt.Errorf("save to DB: %w", err)
+	}
+
+	return nil
+}
+
+func (ps *participantStorage) upsertSlot(
+	committeeBySlot map[phase0.Slot][]spectypes.OperatorID,
+	slot phase0.Slot,
+	committee []spectypes.OperatorID,
+) bool {
+	slots := maps.Keys(committeeBySlot)
+	if len(slots) == 0 {
+		committeeBySlot[slot] = committee
+		return true
+	}
+
+	slices.Sort(slots)
+
+	// 3. Locate slot
+	idx, ok := slices.BinarySearch(slots, slot)
+
+	// 4. Exact-boundary update
+	if ok {
+		if slices.Equal(committeeBySlot[slot], committee) {
+			return false // no change
+		}
+		committeeBySlot[slot] = committee
+		return true
+	}
+
+	// 5. Fetch predecessor and successor slices (if any)
+	var prev, next []spectypes.OperatorID
+	if idx > 0 {
+		prev = committeeBySlot[slots[idx-1]]
+	}
+	if idx < len(slots) {
+		next = committeeBySlot[slots[idx]]
+	}
+
+	// 6. Merge with predecessor?
+	if prev != nil && slices.Equal(prev, committee) {
+		return false // extending prev interval implicitly
+	}
+
+	// 7. Merge with successor?
+	if next != nil && slices.Equal(next, committee) {
+		// move successor boundary backward
+		delete(committeeBySlot, slots[idx])
+		committeeBySlot[slot] = next
+		return true
+	}
+
+	// 8. No merge: insert new boundary
+	committeeBySlot[slot] = committee
+	return true
+}
+
+func (ps *participantStorage) saveParticipantsAtSlot(txn basedb.ReadWriter, value []byte, pk, slot []byte) error {
+	prefix := ps.makeParticipantsPrefix(slot)
+	return ps.db.Using(txn).Set(prefix, pk, value)
+}
+
+func (ps *participantStorage) getParticipantsAtSlot(txn basedb.ReadWriter, pk, slot []byte) ([]byte, bool, error) {
+	prefix := ps.makeParticipantsPrefix(slot)
+	obj, found, err := ps.db.Using(txn).Get(prefix, pk)
 	if err != nil {
 		return nil, false, err
 	}
@@ -297,16 +492,40 @@ func (i *participantStorage) get(txn basedb.ReadWriter, pk, slot []byte) ([]byte
 	return obj.Value, found, nil
 }
 
-func (i *participantStorage) ID() string {
-	bnr := spectypes.BeaconRole(uint64(i.prefix[0]))
+func (ps *participantStorage) saveCommitteeForPK(txn basedb.ReadWriter, value []byte, pk []byte) error {
+	prefix := ps.makeCommitteesPrefix()
+	return ps.db.Using(txn).Set(prefix, pk, value)
+}
+
+func (ps *participantStorage) getCommitteeForPK(txn basedb.ReadWriter, pk []byte) ([]byte, bool, error) {
+	prefix := ps.makeCommitteesPrefix()
+	obj, found, err := ps.db.Using(txn).Get(prefix, pk)
+	if err != nil {
+		return nil, false, err
+	}
+	if !found {
+		return nil, found, nil
+	}
+	return obj.Value, found, nil
+}
+
+func (ps *participantStorage) ID() string {
+	bnr := spectypes.BeaconRole(ps.prefix[0])
 	return bnr.String()
 }
 
-func (i *participantStorage) makePrefix(slot []byte) []byte {
+func (ps *participantStorage) makeParticipantsPrefix(slot []byte) []byte {
 	prefix := make([]byte, 0, len(participantsKey)+1+len(slot))
 	prefix = append(prefix, participantsKey...)
-	prefix = append(prefix, i.prefix...)
+	prefix = append(prefix, ps.prefix...)
 	prefix = append(prefix, slot...)
+	return prefix
+}
+
+func (ps *participantStorage) makeCommitteesPrefix() []byte {
+	prefix := make([]byte, 0, len(committeesKey)+1)
+	prefix = append(prefix, committeesKey...)
+	prefix = append(prefix, ps.prefix...)
 	return prefix
 }
 
@@ -320,6 +539,17 @@ func slotToByteSlice(v phase0.Slot) []byte {
 	return b
 }
 
+func uInt16ToByteSlice(n uint16) []byte {
+	b := make([]byte, 2)
+	binary.LittleEndian.PutUint16(b, n)
+	return b
+}
+
+func byteSliceToUInt16(b []byte) uint16 {
+	return binary.LittleEndian.Uint16(b)
+}
+
+// DEPRECATED, left for compatibility with old data format (tests only)
 func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
 	encoded := make([]byte, len(operators)*8)
 	for i, v := range operators {
@@ -329,6 +559,7 @@ func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
 	return encoded, nil
 }
 
+// DEPRECATED, left for compatibility with old data format
 func decodeOperators(encoded []byte) []spectypes.OperatorID {
 	if len(encoded)%8 != 0 {
 		panic("corrupted storage: wrong encoded operators length")
@@ -340,4 +571,18 @@ func decodeOperators(encoded []byte) []spectypes.OperatorID {
 	}
 
 	return decoded
+}
+
+func encodeCommitteeBySlot(committeeBySlot map[phase0.Slot][]spectypes.OperatorID) ([]byte, error) {
+	return json.Marshal(committeeBySlot)
+}
+
+func decodeCommitteeBySlot(encoded []byte) map[phase0.Slot][]spectypes.OperatorID {
+	var committeeBySlot map[phase0.Slot][]spectypes.OperatorID
+
+	if err := json.Unmarshal(encoded, &committeeBySlot); err != nil {
+		panic("corrupted storage: committee by slot could not be decoded")
+	}
+
+	return committeeBySlot
 }

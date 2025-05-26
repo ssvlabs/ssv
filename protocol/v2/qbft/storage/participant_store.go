@@ -11,6 +11,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
+const maxCommitteeSize = 13 // TODO: define in ssv network config
+
 // Participation extends ParticipantsRangeEntry with role and pubkey.
 type Participation struct {
 	ParticipantsRangeEntry
@@ -46,7 +48,7 @@ type ParticipantStore interface {
 	CleanAllInstances() error
 
 	// SaveParticipants updates participants in quorum.
-	SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
+	SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants Quorum) (bool, error)
 
 	// GetParticipantsInRange returns participants in quorum for the given slot range.
 	GetAllParticipantsInRange(from, to phase0.Slot) ([]ParticipantsRangeEntry, error)

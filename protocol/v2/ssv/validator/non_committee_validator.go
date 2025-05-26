@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
-	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -132,22 +130,12 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 	}
 
 	for key, quorum := range quorums {
-		var operatorIDs []string
-		for _, share := range quorum {
-			operatorIDs = append(operatorIDs, strconv.FormatUint(share, 10))
-		}
-
-		validator, exists := ncv.ValidatorStore.ValidatorByIndex(key.ValidatorIndex)
-		if !exists {
-			return fmt.Errorf("could not find share for validator with index %d", key.ValidatorIndex)
-		}
-
 		beaconRoles := ncv.getBeaconRoles(msg, key.Root)
 		if len(beaconRoles) == 0 {
 			logger.Warn("no roles found for quorum root",
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
-				fields.Validator(validator.ValidatorPubKey[:]),
-				zap.String("signers", strings.Join(operatorIDs, ", ")),
+				fields.Validator(quorum.ValidatorPK[:]),
+				zap.Uint64s("signers", quorum.Signers),
 				fields.BlockRoot(key.Root),
 				zap.String("qbft_ctrl_identifier", hex.EncodeToString(ncv.msgID[:])),
 			)
@@ -159,7 +147,7 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				return fmt.Errorf("role storage doesn't exist: %v", beaconRole)
 			}
 
-			updated, err := roleStorage.SaveParticipants(validator.ValidatorPubKey, slot, quorum)
+			updated, err := roleStorage.SaveParticipants(quorum.ValidatorPK, slot, quorum.Quorum)
 			if err != nil {
 				return fmt.Errorf("update participants: %w", err)
 			}
@@ -171,8 +159,8 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 			logger.Info("✅ saved participants",
 				zap.String("role", beaconRole.String()),
 				zap.Uint64("validator_index", uint64(key.ValidatorIndex)),
-				fields.Validator(validator.ValidatorPubKey[:]),
-				zap.String("signers", strings.Join(operatorIDs, ", ")),
+				fields.Validator(quorum.ValidatorPK[:]),
+				zap.Uint64s("signers", quorum.Signers),
 				fields.BlockRoot(key.Root),
 			)
 
@@ -180,10 +168,10 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 				p := qbftstorage.Participation{
 					ParticipantsRangeEntry: qbftstorage.ParticipantsRangeEntry{
 						Slot:    slot,
-						Signers: quorum,
+						Signers: quorum.Signers,
 					},
 					Role:   beaconRole,
-					PubKey: validator.ValidatorPubKey,
+					PubKey: quorum.ValidatorPK,
 				}
 
 				ncv.newDecidedHandler(p)
@@ -265,10 +253,15 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 	return nil
 }
 
+type quorumWithValidatorPK struct {
+	qbftstorage.Quorum
+	ValidatorPK spectypes.ValidatorPK
+}
+
 func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 	signedMsg *spectypes.PartialSignatureMessages,
-) (map[validatorIndexAndRoot][]spectypes.OperatorID, error) {
-	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
+) (map[validatorIndexAndRoot]quorumWithValidatorPK, error) {
+	quorums := make(map[validatorIndexAndRoot]quorumWithValidatorPK)
 
 	currentSlot := signedMsg.Slot
 	slotValidators, exist := ncv.postConsensusContainer[currentSlot]
@@ -282,6 +275,12 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 		if !exists {
 			return nil, fmt.Errorf("could not find share for validator with index %d", msg.ValidatorIndex)
 		}
+
+		committee := make([]spectypes.OperatorID, 0, len(validator.Committee))
+		for _, sm := range validator.Committee {
+			committee = append(committee, sm.Signer)
+		}
+
 		container, ok := slotValidators[msg.ValidatorIndex]
 		if !ok {
 			container = ssv.NewPartialSigContainer(validator.Quorum())
@@ -296,14 +295,20 @@ func (ncv *CommitteeObserver) verifySigAndgetQuorums(
 		rootSignatures := container.GetSignatures(msg.ValidatorIndex, msg.SigningRoot)
 		if uint64(len(rootSignatures)) >= validator.Quorum() {
 			key := validatorIndexAndRoot{ValidatorIndex: msg.ValidatorIndex, Root: msg.SigningRoot}
-			longestSigners := quorums[key]
+			longestSigners := quorums[key].Signers
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
 				newSigners := make([]spectypes.OperatorID, 0, newLength)
 				for signer := range rootSignatures {
 					newSigners = append(newSigners, signer)
 				}
 				slices.Sort(newSigners)
-				quorums[key] = newSigners
+				quorums[key] = quorumWithValidatorPK{
+					Quorum: qbftstorage.Quorum{
+						Signers:   newSigners,
+						Committee: committee,
+					},
+					ValidatorPK: validator.ValidatorPubKey,
+				}
 			}
 		}
 	}
