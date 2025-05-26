@@ -171,9 +171,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			results, err := ec.subdivideLogFetch(ctx, query)
 			if err != nil {
-				ec.logger.Error(elResponseErrMsg,
-					zap.String("method", "eth_getLogs"),
-					zap.Error(err))
 				errCh <- err
 				return
 			}
@@ -244,53 +241,63 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		return logs, nil
 	}
 
-	if !isRPCQueryLimitError(err) || q.FromBlock == nil || q.ToBlock == nil {
-		return nil, err
+	if isRPCQueryLimitError(err) {
+		if q.FromBlock == nil || q.ToBlock == nil {
+			return nil, err
+		}
+
+		fromBlock := q.FromBlock.Uint64()
+		toBlock := q.ToBlock.Uint64()
+
+		// require at least 2 blocks to subdivide (fromBlock must be less than toBlock)
+		if fromBlock >= toBlock {
+			return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
+		}
+
+		ec.logger.Warn("execution client query limit exceeded, subdividing query",
+			zap.String("method", "eth_getLogs"),
+			fields.FromBlock(fromBlock),
+			fields.ToBlock(toBlock),
+			zap.Error(err))
+
+		midBlock := fromBlock + (toBlock-fromBlock)/2
+
+		leftQuery := q
+		leftQuery.FromBlock = new(big.Int).SetUint64(fromBlock)
+		leftQuery.ToBlock = new(big.Int).SetUint64(midBlock)
+
+		rightQuery := q
+		rightQuery.FromBlock = new(big.Int).SetUint64(midBlock + 1)
+		rightQuery.ToBlock = new(big.Int).SetUint64(toBlock)
+
+		leftLogs, leftErr := ec.subdivideLogFetch(ctx, leftQuery)
+		if leftErr != nil {
+			return nil, leftErr
+		}
+
+		rightLogs, rightErr := ec.subdivideLogFetch(ctx, rightQuery)
+		if rightErr != nil {
+			return nil, rightErr
+		}
+
+		totalLogs := len(leftLogs) + len(rightLogs)
+		combinedLogs := make([]ethtypes.Log, 0, totalLogs)
+		combinedLogs = append(combinedLogs, leftLogs...)
+		combinedLogs = append(combinedLogs, rightLogs...)
+
+		ec.logger.Info("successfully fetched logs after subdivision",
+			fields.FromBlock(fromBlock),
+			fields.ToBlock(toBlock),
+			zap.Int("total_logs", totalLogs))
+
+		return combinedLogs, nil
 	}
 
-	fromBlock := q.FromBlock.Uint64()
-	toBlock := q.ToBlock.Uint64()
+	ec.logger.Error(elResponseErrMsg,
+		zap.String("method", "eth_getLogs"),
+		zap.Error(err))
 
-	// require at least 2 blocks to subdivide (fromBlock must be less than toBlock)
-	if fromBlock >= toBlock {
-		return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
-	}
-
-	ec.logger.Info("subdividing log fetch due to query limit",
-		fields.FromBlock(fromBlock),
-		fields.ToBlock(toBlock))
-
-	midBlock := fromBlock + (toBlock-fromBlock)/2
-
-	leftQuery := q
-	leftQuery.FromBlock = new(big.Int).SetUint64(fromBlock)
-	leftQuery.ToBlock = new(big.Int).SetUint64(midBlock)
-
-	rightQuery := q
-	rightQuery.FromBlock = new(big.Int).SetUint64(midBlock + 1)
-	rightQuery.ToBlock = new(big.Int).SetUint64(toBlock)
-
-	leftLogs, leftErr := ec.subdivideLogFetch(ctx, leftQuery)
-	if leftErr != nil {
-		return nil, leftErr
-	}
-
-	rightLogs, rightErr := ec.subdivideLogFetch(ctx, rightQuery)
-	if rightErr != nil {
-		return nil, rightErr
-	}
-
-	totalLogs := len(leftLogs) + len(rightLogs)
-	combinedLogs := make([]ethtypes.Log, 0, totalLogs)
-	combinedLogs = append(combinedLogs, leftLogs...)
-	combinedLogs = append(combinedLogs, rightLogs...)
-
-	ec.logger.Info("successfully fetched logs after subdivision",
-		fields.FromBlock(fromBlock),
-		fields.ToBlock(toBlock),
-		zap.Int("total_logs", totalLogs))
-
-	return combinedLogs, nil
+	return nil, err
 }
 
 // StreamLogs subscribes to events emitted by the contract.
