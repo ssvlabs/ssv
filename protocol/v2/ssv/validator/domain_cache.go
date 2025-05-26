@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -33,14 +34,18 @@ func (dc *DomainCache) Start() {
 	dc.cache.Start()
 }
 
-func (dc *DomainCache) Get(epoch phase0.Epoch, domainType phase0.DomainType) (phase0.Domain, error) {
+func (dc *DomainCache) Get(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	domainType phase0.DomainType,
+) (phase0.Domain, error) {
 	key := domainCacheKey{Epoch: epoch, DomainType: domainType}
 	item := dc.cache.Get(key)
 	if item != nil {
 		return item.Value(), nil
 	}
 
-	domain, err := dc.beaconNode.DomainData(epoch, domainType)
+	domain, err := dc.beaconNode.DomainData(ctx, epoch, domainType)
 	if err != nil {
 		return phase0.Domain{}, err
 	}
