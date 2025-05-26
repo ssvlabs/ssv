@@ -1,20 +1,22 @@
 package commons
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
-	"strconv"
+	"math/bits"
 	"strings"
 
-	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 const (
-	// SubnetsCount returns the subnet count for this fork
+	// SubnetsCount returns the subnet count for this fork. It must be power of 2.
 	SubnetsCount = 128
+
+	byteCount = SubnetsCount / 8
 
 	UnknownSubnetId = math.MaxUint64
 
@@ -70,113 +72,141 @@ func Topics() []string {
 	return topics
 }
 
-const (
+var (
 	// ZeroSubnets is the representation of no subnets
-	ZeroSubnets = "00000000000000000000000000000000"
+	ZeroSubnets = Subnets{v: [byteCount]byte(bytes.Repeat([]byte{0x00}, byteCount))}
 	// AllSubnets is the representation of all subnets
-	AllSubnets = "ffffffffffffffffffffffffffffffff"
+	AllSubnets = Subnets{v: [byteCount]byte(bytes.Repeat([]byte{0xFF}, byteCount))}
 )
 
-// Subnets holds all the subscribed subnets of a specific node
-type Subnets []byte
-
-// Clone clones the independent byte slice
-func (s Subnets) Clone() Subnets {
-	cp := make([]byte, len(s))
-	copy(cp, s)
-	return cp
+// Subnets holds all the subscribed subnets of a specific node.
+// The array index represents a subnet number,
+// the value holds either 0 or 1 representing if the node is subscribed to the subnet number.
+type Subnets struct {
+	v [byteCount]byte // wrapped by a struct to forbid indexing outsize of this package
 }
 
-func (s Subnets) String() string {
-	subnetsVec := bitfield.NewBitvector128()
-	subnet := uint64(0)
-	for _, val := range s {
-		subnetsVec.SetBitAt(subnet, val > uint8(0))
-		subnet++
+// SubnetsFromString parses a given subnet string
+func SubnetsFromString(subnetsStr string) (Subnets, error) {
+	if len(subnetsStr) == 0 {
+		return ZeroSubnets, nil
 	}
-	return hex.EncodeToString(subnetsVec.Bytes())
+
+	subnetsStr = strings.TrimPrefix(subnetsStr, "0x")
+	data, err := hex.DecodeString(subnetsStr)
+	if err != nil {
+		return Subnets{}, err
+	}
+
+	if len(data) != byteCount {
+		return Subnets{}, fmt.Errorf("invalid subnets length %d, expected %d", len(data), byteCount)
+	}
+
+	var subnets Subnets
+	copy(subnets.v[:], data)
+	return subnets, nil
 }
 
-func (s Subnets) Active() int {
-	var active int
-	for _, val := range s {
-		if val > 0 {
-			active++
+// IsSet checks if the i-th subnet is set.
+func (s *Subnets) IsSet(i uint64) bool {
+	if i >= SubnetsCount {
+		return false
+	}
+	byteIndex := i / 8
+	bitIndex := i % 8
+	return (s.v[byteIndex] & (1 << bitIndex)) != 0
+}
+
+// Set marks the i-th subnet as set.
+func (s *Subnets) Set(i uint64) {
+	if i >= SubnetsCount {
+		return
+	}
+	byteIndex := i / 8
+	bitIndex := i % 8
+	s.v[byteIndex] |= 1 << bitIndex
+}
+
+// Clear marks the i-th subnet as not set.
+func (s *Subnets) Clear(i uint64) {
+	if i >= SubnetsCount {
+		return
+	}
+	byteIndex := i / 8
+	bitIndex := i % 8
+	s.v[byteIndex] &^= 1 << bitIndex
+}
+
+func (s *Subnets) String() string {
+	return hex.EncodeToString(s.v[:])
+}
+
+func (s *Subnets) SubnetList() []uint64 {
+	indices := make([]uint64, 0)
+	for byteIdx, b := range s.v {
+		if byteIdx >= SubnetsCount {
+			break
 		}
+		for bitIdx := uint64(0); bitIdx < 8; bitIdx++ {
+			bit := byte(1 << uint(bitIdx)) // #nosec G115 -- subnets has a constant max len of 128
+			if b&bit == bit {
+				subnet := uint64(byteIdx)*8 + bitIdx
+				indices = append(indices, subnet)
+			}
+		}
+	}
+
+	return indices
+}
+
+func (s *Subnets) ActiveCount() int {
+	active := 0
+	for _, b := range s.v {
+		active += bits.OnesCount8(b)
 	}
 	return active
 }
 
-// FromString parses a given subnet string
-func FromString(subnetsStr string) (Subnets, error) {
-	subnetsStr = strings.Replace(subnetsStr, "0x", "", 1)
-	var data []byte
-	for i := 0; i+1 < len(subnetsStr); i += 2 {
-		maskData1, err := getCharMask(string(subnetsStr[i]))
-		if err != nil {
-			return nil, err
-		}
-		maskData2, err := getCharMask(string(subnetsStr[i+1]))
-		if err != nil {
-			return nil, err
-		}
-		data = append(data, maskData2...)
-		data = append(data, maskData1...)
+func (s *Subnets) HasActive() bool {
+	return s.ActiveCount() > 0
+}
+
+// ToMap returns a map with all subnets and their values
+func (s *Subnets) ToMap() map[uint64]bool {
+	m := make(map[uint64]bool)
+	for i := uint64(0); i < SubnetsCount; i++ {
+		m[i] = s.IsSet(i)
 	}
-	return data, nil
+	return m
 }
 
 // SharedSubnets returns the shared subnets
-func SharedSubnets(a, b []byte, maxLen int) []int {
-	var shared []int
-	if maxLen == 0 {
-		maxLen = len(a)
+func (s *Subnets) SharedSubnets(other Subnets) []uint64 {
+	return s.SharedSubnetsN(other, 0)
+}
+
+func (s *Subnets) SharedSubnetsN(other Subnets, n int) []uint64 {
+	var shared []uint64
+	if n <= 0 {
+		n = SubnetsCount
 	}
-	if len(a) == 0 || len(b) == 0 {
-		return shared
-	}
-	for subnet, aval := range a {
-		if aval == 0 {
-			continue
-		}
-		if b[subnet] == 0 {
-			continue
-		}
-		shared = append(shared, subnet)
-		if len(shared) == maxLen {
-			break
+	for i := uint64(0); i < SubnetsCount; i++ {
+		if s.IsSet(i) && other.IsSet(i) {
+			shared = append(shared, i)
+			if len(shared) == n {
+				break
+			}
 		}
 	}
 	return shared
 }
 
-// DiffSubnets returns a diff of the two given subnets.
-// returns a map with all the different entries and their post change value
-func DiffSubnets(a, b []byte) map[int]byte {
-	diff := make(map[int]byte)
-	for subnet, bval := range b {
-		if subnet >= len(a) {
-			diff[subnet] = bval
-		} else if aval := a[subnet]; aval != bval {
-			diff[subnet] = bval
-		}
+func (s *Subnets) DiffSubnets(other Subnets) (added Subnets, removed Subnets) {
+	for i := 0; i < byteCount; i++ {
+		// Bits to add: set in 'other' but not in 's'
+		added.v[i] = other.v[i] &^ s.v[i]
+		// Bits to remove: set in 's' but not in 'other'
+		removed.v[i] = s.v[i] &^ other.v[i]
 	}
-	return diff
-}
-
-func getCharMask(str string) ([]byte, error) {
-	val, err := strconv.ParseUint(str, 16, 8)
-	if err != nil {
-		return nil, err
-	}
-	mask := fmt.Sprintf("%04b", val)
-	maskData := make([]byte, 0, 4)
-	for j := 0; j < len(mask); j++ {
-		val, err := strconv.ParseUint(string(mask[len(mask)-1-j]), 2, 8)
-		if err != nil {
-			return nil, err
-		}
-		maskData = append(maskData, uint8(val)) // nolint:gosec
-	}
-	return maskData, nil
+	return added, removed
 }
