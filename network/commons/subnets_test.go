@@ -61,7 +61,7 @@ func TestSubnetsParsing(t *testing.T) {
 
 	for _, subtest := range subtests {
 		t.Run(subtest.name, func(t *testing.T) {
-			s, err := FromString(subtest.str)
+			s, err := SubnetsFromString(subtest.str)
 			if subtest.shouldError {
 				require.Error(t, err)
 			} else {
@@ -73,27 +73,73 @@ func TestSubnetsParsing(t *testing.T) {
 }
 
 func TestSharedSubnets(t *testing.T) {
-	s1, err := FromString("0xffffffffffffffffffffffffffffffff")
-	require.NoError(t, err)
-	s2, err := FromString("0x57b080fffd743d9878dc41a184ab160a")
+	s1 := AllSubnets
+	s2, err := SubnetsFromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
-	var expectedShared []int
-	for subnet, val := range s2 {
-		if val > 0 {
-			expectedShared = append(expectedShared, subnet)
-		}
-	}
-	shared := SharedSubnets(s1, s2, 0)
+	expectedShared := s2.SubnetList()
+	shared := s1.SharedSubnets(s2)
 	require.Equal(t, expectedShared, shared)
 }
 
 func TestDiffSubnets(t *testing.T) {
-	s1, err := FromString("0xffffffffffffffffffffffffffffffff")
-	require.NoError(t, err)
-	s2, err := FromString("0x57b080fffd743d9878dc41a184ab160a")
+	s1 := AllSubnets
+	s2, err := SubnetsFromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
-	diff := DiffSubnets(s1, s2)
-	require.Len(t, diff, 128-62)
+	added, removed := s1.DiffSubnets(s2)
+	require.Equal(t, 128-62, added.ActiveCount()+removed.ActiveCount())
+}
+
+func TestSubnetsList(t *testing.T) {
+	// Test Case 1: All subnets unset
+	subnets := ZeroSubnets
+	subnetList := subnets.SubnetList()
+	require.Emptyf(t, subnetList, "Expected 0 subnets, got %d", len(subnetList))
+
+	// Test Case 2: All subnets set
+	subnets = AllSubnets
+	subnetList = subnets.SubnetList()
+
+	require.Lenf(t, subnetList, SubnetsCount, "Expected %d subnets, got %d", SubnetsCount, len(subnetList))
+	for i := uint64(0); i < SubnetsCount; i++ {
+		require.EqualValuesf(t, i, subnetList[i], "Expected subnet index %d, got %d", i, subnetList[i])
+	}
+
+	// Test Case 3: Random subnets set
+	expected := []uint64{0, 15, 16, 31, 63, 64, 127}
+
+	subnets = ZeroSubnets
+	for _, v := range expected {
+		subnets.Set(v)
+	}
+
+	subnetList = subnets.SubnetList()
+	require.Lenf(t, subnetList, len(expected), "Expected %d subnets, got %d", len(expected), len(subnetList))
+	for i, idx := range expected {
+		require.Equalf(t, idx, subnetList[i], "At position %d: expected %d, got %d", i, idx, subnetList[i])
+	}
+
+	// Test Case 4: No subnets set
+	subnets = ZeroSubnets
+	subnetList = subnets.SubnetList()
+	require.Emptyf(t, subnetList, "Expected 0 subnets, got %d", len(subnetList))
+
+	// Test Case 5: Single subnet set
+	subnets = ZeroSubnets
+	subnets.Set(42)
+	subnetList = subnets.SubnetList()
+	require.Lenf(t, subnetList, 1, "Expected 1 subnet, got %d", len(subnetList))
+	require.EqualValuesf(t, 42, subnetList[0], "Expected subnet [42], got %v", subnetList)
+
+	// Test Case 6: Clearing subnets
+	subnets = AllSubnets
+	subnets.Clear(0)
+	subnets.Clear(64)
+	subnets.Clear(127)
+	subnetList = subnets.SubnetList()
+	require.Lenf(t, subnetList, SubnetsCount-3, "Expected %d subnets, got %d", SubnetsCount-3, len(subnetList))
+	for _, idx := range []int{0, 64, 127} {
+		require.NotContainsf(t, subnetList, idx, "Subnet %d should have been cleared", idx)
+	}
 }
