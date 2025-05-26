@@ -1,5 +1,11 @@
 ## Choosing `MEVDelay` value
 
+To get the most out of MEV opportunities, Operator can configure MEVDelay configuration setting using a configuration 
+file (or `MEV_DELAY` environment variable):
+```
+MEVDelay: 300ms
+```
+
 As per our own estimates the max reasonable value of `MEVDelay` for Ethereum mainnet is around ~1.65s, 
 although we recommend starting with something like 300ms gradually increasing it up - the higher 
 `MEVDelay` value is the higher the chance of missing Ethereum block proposal will be.
