@@ -82,9 +82,14 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 		trace.WithAttributes(
 			observability.BeaconSlotAttribute(signedMsg.Slot),
 			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
-			observability.ValidatorIndexAttribute(r.voluntaryExit.ValidatorIndex),
 		))
 	defer span.End()
+
+	var validatorIndex phase0.ValidatorIndex
+	if r.voluntaryExit != nil {
+		validatorIndex = r.voluntaryExit.ValidatorIndex
+		span.SetAttributes(observability.ValidatorIndexAttribute(validatorIndex))
+	}
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
@@ -131,7 +136,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(ctx context.Context, logger *z
 	span.AddEvent(eventMsg)
 	logger.Debug(eventMsg,
 		fields.Epoch(r.voluntaryExit.Epoch),
-		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
+		zap.Uint64("validator_index", uint64(validatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 	)
 
