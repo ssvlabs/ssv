@@ -209,6 +209,9 @@ func (ps *participantStorage) SaveParticipants(
 		return false, nil
 	}
 
+	// saveParticipantsBitMask & saveCommittee change the data format to the new one
+	// (storing participants bitmask + committee instead of signers),
+	// so it's only one-way compatible and the old code won't be able to read the new format
 	if err := ps.saveParticipantsBitMask(txn, pk, slot, merged); err != nil {
 		return false, fmt.Errorf("save participants bitmask: %w", err)
 	}
