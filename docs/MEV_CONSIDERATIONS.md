@@ -1,6 +1,6 @@
-## Choosing `MEVDelay` value
+## Getting started with `MEV` configuration
 
-To get the most out of MEV opportunities, Operator can configure MEVDelay configuration setting using a configuration 
+To get the most out of MEV opportunities, Operator can configure MEVDelay configuration setting using a configuration
 file (or `MEV_DELAY` environment variable):
 ```
 MEVDelay: 300ms
