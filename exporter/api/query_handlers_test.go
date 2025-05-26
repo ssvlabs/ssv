@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -17,8 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/storage"
+	protocolqbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -35,7 +36,9 @@ func TestHandleUnknownQuery(t *testing.T) {
 		Conn: nil,
 	}
 
-	h := NewHandler(logger)
+	h := Handler{
+		logger: logger,
+	}
 	h.HandleUnknownQuery(&nm)
 	errs, ok := nm.Msg.Data.([]string)
 	require.True(t, ok)
@@ -72,7 +75,9 @@ func TestHandleErrorQuery(t *testing.T) {
 				Err:  test.netErr,
 				Conn: nil,
 			}
-			h := NewHandler(logger)
+			h := Handler{
+				logger: logger,
+			}
 			h.HandleErrorQuery(&nm)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
@@ -123,15 +128,18 @@ func TestHandleDecidedQuery(t *testing.T) {
 			_, err := ibftStorage.Get(role).SaveParticipants(
 				spectypes.ValidatorPK(pk.Serialize()),
 				phase0.Slot(d.State.Height),
-				d.DecidedMessage.OperatorIDs,
+				protocolqbftstorage.Quorum{
+					Signers:   d.DecidedMessage.OperatorIDs,
+					Committee: oids,
+				},
 			)
 			require.NoError(t, err)
 		}
 
 		t.Run("valid range", func(t *testing.T) {
 			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, networkConfig.DomainType)
+			h := NewHandler(l, ibftStorage, networkConfig.DomainType)
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			msgs, ok := nm.Msg.Data.([]*ParticipantsAPI)
 
@@ -141,8 +149,8 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		t.Run("invalid range", func(t *testing.T) {
 			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 400, 404)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, networkConfig.DomainType)
+			h := NewHandler(l, ibftStorage, networkConfig.DomainType)
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			data, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
@@ -151,8 +159,8 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		t.Run("non-existing validator", func(t *testing.T) {
 			nm := newParticipantsAPIMsg("xxx", spectypes.BNRoleAttester, 400, 404)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, networkConfig.DomainType)
+			h := NewHandler(l, ibftStorage, networkConfig.DomainType)
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
@@ -161,8 +169,8 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		t.Run("non-existing role", func(t *testing.T) {
 			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, networkConfig.DomainType)
+			h := NewHandler(l, ibftStorage, networkConfig.DomainType)
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
@@ -171,8 +179,8 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 		t.Run("non-existing storage", func(t *testing.T) {
 			nm := newParticipantsAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
-			h := NewHandler(l)
-			h.HandleParticipantsQuery(ibftStorage, nm, networkConfig.DomainType)
+			h := NewHandler(l, ibftStorage, networkConfig.DomainType)
+			h.HandleParticipantsQuery(nm)
 			require.NotNil(t, nm.Msg.Data)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
