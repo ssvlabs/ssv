@@ -1,6 +1,6 @@
 ## Choosing `MEVDelay` value
 
-As per our own estimates the max reasonable value of `MEVDelay` for Etehreum mainnet is around ~1.65s, 
+As per our own estimates the max reasonable value of `MEVDelay` for Ethereum mainnet is around ~1.65s, 
 although we recommend starting with something like 300ms gradually increasing it up - the higher 
 `MEVDelay` value is the higher the chance of missing Ethereum block proposal will be.
 
@@ -26,7 +26,7 @@ To understand how MEV fits with the SSV cluster, here is some background on the 
   within 4s from slot start) meaning if round 1 doesn't complete in under `RoundTimeout` another 
   leader will be chosen to try and complete QBFT in round 2, etc.
 - once QBFT completes successfully, Operator needs to submit the signed block to Beacon node to 
-  propagate it throughout Etehreum network (call it `BlockSubmissionTime`)
+  propagate it throughout Ethereum network (call it `BlockSubmissionTime`)
 - there is some time spent on executing various code to "glue" this whole thing together 
   that's small but still matters (call it `MiscellaneousTime`)
 
