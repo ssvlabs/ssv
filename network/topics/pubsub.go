@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -45,10 +46,11 @@ const (
 
 // PubSubConfig is the needed config to instantiate pubsub
 type PubSubConfig struct {
-	Host        host.Host
-	TraceLog    bool
-	StaticPeers []peer.AddrInfo
-	MsgHandler  PubsubMessageHandler
+	NetworkConfig networkconfig.NetworkConfig
+	Host          host.Host
+	TraceLog      bool
+	StaticPeers   []peer.AddrInfo
+	MsgHandler    PubsubMessageHandler
 	// MsgValidator accepts the topic name and returns the corresponding msg validator
 	// in case we need different validators for specific topics,
 	// this should be the place to map a validator to topic
@@ -113,7 +115,13 @@ type CommitteesProvider interface {
 }
 
 // NewPubSub creates a new pubsub router and the necessary components
-func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, committeesProvider CommitteesProvider, gossipScoreIndex peers.GossipScoreIndex) (*pubsub.PubSub, Controller, error) {
+func NewPubSub(
+	ctx context.Context,
+	logger *zap.Logger,
+	cfg *PubSubConfig,
+	committeesProvider CommitteesProvider,
+	gossipScoreIndex peers.GossipScoreIndex,
+) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}

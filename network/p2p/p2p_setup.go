@@ -308,11 +308,12 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	cfg := &topics.PubSubConfig{
-		Host:         n.host,
-		TraceLog:     n.cfg.PubSubTrace,
-		MsgValidator: n.msgValidator,
-		MsgHandler:   n.handlePubsubMessages(),
-		ScoreIndex:   n.idx,
+		NetworkConfig: n.cfg.NetworkConfig,
+		Host:          n.host,
+		TraceLog:      n.cfg.PubSubTrace,
+		MsgValidator:  n.msgValidator,
+		MsgHandler:    n.handlePubsubMessages(),
+		ScoreIndex:    n.idx,
 		//Discovery: n.disc,
 		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
