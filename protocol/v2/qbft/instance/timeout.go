@@ -14,7 +14,7 @@ import (
 )
 
 func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) error {
-	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "round_timeout"))
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "qbft.instance.round_timeout"))
 	defer span.End()
 
 	if !i.CanProcessMessages() {
