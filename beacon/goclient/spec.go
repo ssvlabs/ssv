@@ -72,94 +72,89 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 
 	// types of most values are already cast: https://github.com/attestantio/go-eth2-client/blob/v0.21.7/http/spec.go#L78
 
-	networkNameRaw, ok := specResponse["CONFIG_NAME"]
-	if !ok {
-		return networkconfig.BeaconConfig{}, fmt.Errorf("config name wasn't found in beacon node response")
+	networkName, err := get[string](specResponse, "CONFIG_NAME")
+	if err != nil {
+		return networkconfig.BeaconConfig{}, fmt.Errorf("get CONFIG_NAME: %w", err)
 	}
 
-	networkName, ok := networkNameRaw.(string)
-	if !ok {
-		return networkconfig.BeaconConfig{}, fmt.Errorf("failed to decode config name")
+	slotDuration, err := get[time.Duration](specResponse, "SECONDS_PER_SLOT")
+	if err != nil {
+		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+			zap.Error(err),
+			zap.String("parameter", "SECONDS_PER_SLOT"),
+			zap.Any("default_value", DefaultSlotDuration))
+
+		slotDuration = DefaultSlotDuration
 	}
 
-	slotDuration := DefaultSlotDuration
-	if slotDurationRaw, ok := specResponse["SECONDS_PER_SLOT"]; ok {
-		if slotDurationDecoded, ok := slotDurationRaw.(time.Duration); ok {
-			slotDuration = slotDurationDecoded
-		} else {
-			gc.log.Warn("seconds per slot wasn't found in beacon node response, using default value",
-				zap.Any("value", slotDuration))
-		}
+	slotsPerEpoch, err := get[uint64](specResponse, "SLOTS_PER_EPOCH")
+	if err != nil {
+		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+			zap.Error(err),
+			zap.String("parameter", "SLOTS_PER_EPOCH"),
+			zap.Any("default_value", DefaultSlotsPerEpoch))
+
+		slotsPerEpoch = DefaultSlotsPerEpoch
 	}
 
-	slotsPerEpoch := DefaultSlotsPerEpoch
-	if slotsPerEpochRaw, ok := specResponse["SLOTS_PER_EPOCH"]; ok {
-		if slotsPerEpochDecoded, ok := slotsPerEpochRaw.(uint64); ok {
-			slotsPerEpoch = slotsPerEpochDecoded
-		} else {
-			gc.log.Warn("slots per epoch wasn't found in beacon node response, using default value",
-				zap.Uint64("value", slotsPerEpoch))
-		}
+	epochsPerSyncCommitteePeriod, err := get[uint64](specResponse, "EPOCHS_PER_SYNC_COMMITTEE_PERIOD")
+	if err != nil {
+		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+			zap.Error(err),
+			zap.String("parameter", "EPOCHS_PER_SYNC_COMMITTEE_PERIOD"),
+			zap.Any("default_value", DefaultEpochsPerSyncCommitteePeriod))
+
+		epochsPerSyncCommitteePeriod = DefaultEpochsPerSyncCommitteePeriod
 	}
 
-	epochsPerSyncCommitteePeriod := DefaultEpochsPerSyncCommitteePeriod
-	if epochsPerSyncCommitteePeriodRaw, ok := specResponse["EPOCHS_PER_SYNC_COMMITTEE_PERIOD"]; ok {
-		if epochsPerSyncCommitteePeriodDecoded, ok := epochsPerSyncCommitteePeriodRaw.(uint64); ok {
-			epochsPerSyncCommitteePeriod = epochsPerSyncCommitteePeriodDecoded
-		} else {
-			gc.log.Warn("epochs per sync committee wasn't found in beacon node response, using default value",
-				zap.Any("value", epochsPerSyncCommitteePeriod))
-		}
+	syncCommitteeSize, err := get[uint64](specResponse, "SYNC_COMMITTEE_SIZE")
+	if err != nil {
+		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+			zap.Error(err),
+			zap.String("parameter", "SYNC_COMMITTEE_SIZE"),
+			zap.Any("default_value", DefaultSyncCommitteeSize))
+
+		syncCommitteeSize = DefaultSyncCommitteeSize
 	}
 
-	syncCommitteeSize := DefaultSyncCommitteeSize
-	if syncCommitteeSizeRaw, ok := specResponse["SYNC_COMMITTEE_SIZE"]; ok {
-		if syncCommitteeSizeDecoded, ok := syncCommitteeSizeRaw.(uint64); ok {
-			syncCommitteeSize = syncCommitteeSizeDecoded
-		} else {
-			gc.log.Warn("sync committee size wasn't found in beacon node response, using default value",
-				zap.Any("value", syncCommitteeSize))
-		}
+	targetAggregatorsPerCommittee, err := get[uint64](specResponse, "TARGET_AGGREGATORS_PER_COMMITTEE")
+	if err != nil {
+		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+			zap.Error(err),
+			zap.String("parameter", "TARGET_AGGREGATORS_PER_COMMITTEE"),
+			zap.Any("default_value", DefaultTargetAggregatorsPerCommittee))
+
+		targetAggregatorsPerCommittee = DefaultTargetAggregatorsPerCommittee
 	}
 
-	targetAggregatorsPerCommittee := DefaultTargetAggregatorsPerCommittee
-	if targetAggregatorsPerCommitteeRaw, ok := specResponse["TARGET_AGGREGATORS_PER_COMMITTEE"]; ok {
-		if targetAggregatorsPerCommitteeDecoded, ok := targetAggregatorsPerCommitteeRaw.(uint64); ok {
-			targetAggregatorsPerCommittee = targetAggregatorsPerCommitteeDecoded
-		} else {
-			gc.log.Warn("target aggregators per committee wasn't found in beacon node response, using default value",
-				zap.Any("value", targetAggregatorsPerCommittee))
-		}
+	targetAggregatorsPerSyncSubcommittee, err := get[uint64](specResponse, "TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE")
+	if err != nil {
+		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+			zap.Error(err),
+			zap.String("parameter", "TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"),
+			zap.Any("default_value", DefaultTargetAggregatorsPerSyncSubcommittee))
+
+		targetAggregatorsPerSyncSubcommittee = DefaultTargetAggregatorsPerSyncSubcommittee
 	}
 
-	targetAggregatorsPerSyncSubcommittee := DefaultTargetAggregatorsPerSyncSubcommittee
-	if targetAggregatorsPerSyncSubcommitteeRaw, ok := specResponse["TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE"]; ok {
-		if targetAggregatorsPerSyncSubcommitteeDecoded, ok := targetAggregatorsPerSyncSubcommitteeRaw.(uint64); ok {
-			targetAggregatorsPerSyncSubcommittee = targetAggregatorsPerSyncSubcommitteeDecoded
-		} else {
-			gc.log.Warn("target aggregators per sync subcommittee wasn't found in beacon node response, using default value",
-				zap.Any("value", targetAggregatorsPerSyncSubcommittee))
-		}
+	intervalsPerSlot, err := get[uint64](specResponse, "INTERVALS_PER_SLOT")
+	if err != nil {
+		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+			zap.Error(err),
+			zap.String("parameter", "INTERVALS_PER_SLOT"),
+			zap.Any("default_value", DefaultIntervalsPerSlot))
+
+		intervalsPerSlot = DefaultIntervalsPerSlot
 	}
 
-	intervalsPerSlot := DefaultIntervalsPerSlot
-	if intervalsPerSlotRaw, ok := specResponse["INTERVALS_PER_SLOT"]; ok {
-		if intervalsPerSlotDecoded, ok := intervalsPerSlotRaw.(uint64); ok {
-			intervalsPerSlot = intervalsPerSlotDecoded
-		} else {
-			gc.log.Warn("intervals per slot wasn't found in beacon node response, using default value",
-				zap.Any("value", intervalsPerSlot))
-		}
-	}
+	syncCommitteeSubnetCount, err := get[uint64](specResponse, "SYNC_COMMITTEE_SUBNET_COUNT")
+	if err != nil {
+		gc.log.Warn("could not get extract parameter from beacon node response, using default value",
+			zap.Error(err),
+			zap.String("parameter", "SYNC_COMMITTEE_SUBNET_COUNT"),
+			zap.Any("default_value", DefaultSyncCommitteeSubnetCount))
 
-	syncCommitteeSubnetCount := DefaultSyncCommitteeSubnetCount
-	if syncCommitteeSubnetCountRaw, ok := specResponse["SYNC_COMMITTEE_SUBNET_COUNT"]; ok {
-		if syncCommitteeSubnetCountDecoded, ok := syncCommitteeSubnetCountRaw.(uint64); ok {
-			syncCommitteeSubnetCount = syncCommitteeSubnetCountDecoded
-		} else {
-			gc.log.Warn("sync committee subnet count wasn't found in beacon node response, using default value",
-				zap.Any("value", syncCommitteeSubnetCount))
-		}
+		syncCommitteeSubnetCount = DefaultSyncCommitteeSubnetCount
 	}
 
 	forkData, err := gc.getForkData(specResponse)
@@ -307,4 +302,19 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 	}
 
 	return forkEpochs, nil
+}
+
+func get[T any](response map[string]any, key string) (T, error) {
+	val, ok := response[key]
+	if !ok {
+		return val.(T), fmt.Errorf("missing key '%s' in response", key)
+	}
+
+	var zero T
+	switch t := val.(type) {
+	case T:
+		return t, nil
+	default:
+		return zero, fmt.Errorf("key %s of type '%T' cannot be converted to '%T'", key, val, zero)
+	}
 }
