@@ -1,7 +1,6 @@
 package roundtimer
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -56,8 +55,14 @@ func setupMockBeaconConfig() networkconfig.BeaconConfig {
 	return config
 }
 
-func setupTimer(beaconConfig networkconfig.BeaconConfig, onTimeout OnRoundTimeoutF, role spectypes.RunnerRole, round specqbft.Round) *RoundTimer {
-	timer := New(context.Background(), beaconConfig, role, onTimeout)
+func setupTimer(
+	t *testing.T,
+	beaconConfig networkconfig.BeaconConfig,
+	onTimeout OnRoundTimeoutF,
+	role spectypes.RunnerRole,
+	round specqbft.Round,
+) *RoundTimer {
+	timer := New(t.Context(), beaconConfig, role, onTimeout)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: round,
 		quick:          100 * time.Millisecond,
@@ -75,7 +80,7 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(mockBeaconNetwork, onTimeout, role, threshold)
+	timer := setupTimer(t, mockBeaconNetwork, onTimeout, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
@@ -91,7 +96,7 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(mockBeaconNetwork, onTimeout, role, threshold)
+	timer := setupTimer(t, mockBeaconNetwork, onTimeout, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
 	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
@@ -119,7 +124,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func(index int) {
-			timer := New(context.Background(), mockBeaconConfig, role, func(round specqbft.Round) { onTimeout(index) })
+			timer := New(t.Context(), mockBeaconConfig, role, func(round specqbft.Round) { onTimeout(index) })
 			timer.timeoutOptions = TimeoutOptions{
 				quickThreshold: threshold,
 				quick:          100 * time.Millisecond,
@@ -132,7 +137,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold
 
 	wg.Wait() // Wait for all go-routines to finish
 
-	timer := New(context.Background(), mockBeaconConfig, role, nil)
+	timer := New(t.Context(), mockBeaconConfig, role, nil)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
 		quick:          100 * time.Millisecond,
