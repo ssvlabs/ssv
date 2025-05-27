@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -97,13 +98,12 @@ func (e *TestEnv) setup(
 	// set up basic network/fork stuff
 	e.execClientConfig = executionclient.NewConfigFromNetworkConfig(networkconfig.TestNetwork)
 
+	finalityEpoch := phase0.Epoch(1000) // Pre-fork config (use follow distance)
 	if useFinalityFork {
-		// Post-fork config (use finality consensus)
-		e.execClientConfig = e.execClientConfig.WithFinalityConsensusEpoch(1)
-	} else {
-		// Pre-fork config (use follow distance)
-		e.execClientConfig = e.execClientConfig.WithFinalityConsensusEpoch(1000)
+		finalityEpoch = 1 // Post-fork config (use finality consensus)
 	}
+
+	e.execClientConfig = e.execClientConfig.WithFinalityConsensusEpoch(finalityEpoch)
 
 	// Create operators RSA keys
 	ops, err := createOperators(operatorsCount, 0)
