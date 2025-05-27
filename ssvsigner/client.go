@@ -100,6 +100,10 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 		c.logger.Debug("requested to add keys to remote signer", fields.Count(len(shares)), zap.Duration("duration", duration), zap.Error(err))
 	}()
 
+	if len(shares) > addShareLimit {
+		return fmt.Errorf("too many shares, max %d", addShareLimit)
+	}
+
 	encodedShares := make([]ShareKeys, 0, len(shares))
 	for _, share := range shares {
 		encodedShares = append(encodedShares, ShareKeys{
