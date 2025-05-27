@@ -571,7 +571,7 @@ func TestDBCreation(t *testing.T) {
 		logger := logging.TestLogger(t)
 		dir := setupTempDir(t, "badger-gc-test")
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		options := basedb.Options{
@@ -587,11 +587,11 @@ func TestDBCreation(t *testing.T) {
 
 		time.Sleep(200 * time.Millisecond)
 
-		err = db.QuickGC(context.Background())
+		err = db.QuickGC(t.Context())
 
 		require.NoError(t, err)
 
-		err = db.FullGC(context.Background())
+		err = db.FullGC(t.Context())
 
 		require.NoError(t, err)
 	})
@@ -600,7 +600,7 @@ func TestDBCreation(t *testing.T) {
 		zapCore, observedLogs := observer.New(zap.DebugLevel)
 		logger := zap.New(zapCore)
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		options := basedb.Options{

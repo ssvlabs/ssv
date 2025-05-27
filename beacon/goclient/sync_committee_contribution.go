@@ -153,8 +153,9 @@ func (gc *GoClient) SubmitSignedContributionAndProof(
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after slot start time)
 func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
-	delay := gc.beaconConfig.SlotDuration / 3 /* a third of the slot duration */
-	finalTime := gc.beaconConfig.GetSlotStartTime(slot).Add(delay)
+	config := gc.getBeaconConfig()
+	delay := config.SlotDuration / 3 /* a third of the slot duration */
+	finalTime := config.GetSlotStartTime(slot).Add(delay)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return

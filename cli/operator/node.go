@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -142,12 +141,25 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}()
 
-		networkConfig, err := setupSSVNetwork(logger)
+		ssvNetworkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
+
+		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
+		if err != nil {
+			logger.Fatal("failed to create beacon go-client", zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
+		}
+
+		networkConfig := networkconfig.NetworkConfig{
+			Name:         cfg.SSVOptions.NetworkName,
+			SSVConfig:    ssvNetworkConfig,
+			BeaconConfig: consensusClient.BeaconConfig(),
+		}
+
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig)
+		db, err := setupDB(cmd.Context(), logger, networkConfig)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -261,17 +273,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
-
-		slotTickerProvider := func() slotticker.SlotTicker {
-			return slotticker.New(logger, slotticker.Config{
-				SlotDuration: networkConfig.SlotDuration,
-				GenesisTime:  networkConfig.GenesisTime,
-			})
-		}
-
-		cfg.ConsensusClient.BeaconConfig = networkConfig.BeaconConfig
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
-		consensusClient := setupConsensusClient(cmd.Context(), logger, slotTickerProvider)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -284,7 +286,7 @@ var StartNodeCmd = &cobra.Command{
 			ec, err := executionclient.New(
 				cmd.Context(),
 				executionAddrList[0],
-				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
 				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
@@ -302,7 +304,7 @@ var StartNodeCmd = &cobra.Command{
 			ec, err := executionclient.NewMulti(
 				cmd.Context(),
 				executionAddrList,
-				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
 				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
 				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
@@ -322,6 +324,7 @@ var StartNodeCmd = &cobra.Command{
 
 		if usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
+				cmd.Context(),
 				logger,
 				networkConfig,
 				ssvSignerClient,
@@ -417,6 +420,13 @@ var StartNodeCmd = &cobra.Command{
 		for _, storageRole := range storageRoles {
 			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole)
 			storageMap.Add(storageRole, s)
+		}
+
+		slotTickerProvider := func() slotticker.SlotTicker {
+			return slotticker.New(logger, slotticker.Config{
+				SlotDuration: networkConfig.SlotDuration,
+				GenesisTime:  networkConfig.GenesisTime,
+			})
 		}
 
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
@@ -704,7 +714,6 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 			return fmt.Errorf("incompatible config change: %w", err)
 		}
 	} else {
-
 		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
 			return fmt.Errorf("failed to store config: %w", err)
 		}
@@ -746,7 +755,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, beaconConfig networkconfig.Beacon) (*kv.BadgerDB, error) {
+func setupDB(ctx context.Context, logger *zap.Logger, beaconConfig networkconfig.Beacon) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -782,7 +791,7 @@ func setupDB(logger *zap.Logger, beaconConfig networkconfig.Beacon) (*kv.BadgerD
 	}
 
 	// Run a long garbage collection cycle with a timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
 		return nil, errors.Wrap(err, "failed to collect garbage")
@@ -891,30 +900,41 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 	return nil
 }
 
-func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
-	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
-	if err != nil {
-		return networkconfig.NetworkConfig{}, err
+func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
+	var ssvConfig networkconfig.SSVConfig
+
+	if cfg.SSVOptions.CustomNetwork != nil {
+		ssvConfig = *cfg.SSVOptions.CustomNetwork
+		logger.Info("using custom network config")
+	} else if cfg.SSVOptions.NetworkName != "" {
+		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
+		if err != nil {
+			return ssvConfig, err
+		}
+		ssvConfig = snc
+		logger.Info("found network config by name",
+			zap.String("name", cfg.SSVOptions.NetworkName),
+		)
 	}
 
 	if cfg.SSVOptions.CustomDomainType != "" {
 		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
-			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
+			return networkconfig.SSVConfig{}, errors.New("custom domain type must be a hex string")
 		}
 		domainBytes, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
-			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+			return networkconfig.SSVConfig{}, errors.Wrap(err, "failed to decode custom domain type")
 		}
 		if len(domainBytes) != 4 {
-			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
+			return networkconfig.SSVConfig{}, errors.New("custom domain type must be 4 bytes")
 		}
 
 		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
 		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
-		binary.BigEndian.PutUint32(networkConfig.DomainType[:], postForkDomain)
+		binary.BigEndian.PutUint32(ssvConfig.DomainType[:], postForkDomain)
 
-		logger.Info("running with custom domain type",
-			fields.Domain(networkConfig.DomainType),
+		logger.Warn("running with custom domain type; it's deprecated, consider using custom network instead",
+			fields.Domain(ssvConfig.DomainType),
 		)
 	}
 
@@ -924,14 +944,12 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	}
 
 	logger.Info("setting ssv network",
-		fields.Network(networkConfig.Name),
-		fields.Domain(networkConfig.DomainType),
+		zap.Any("config", ssvConfig),
 		zap.String("nodeType", nodeType),
-		zap.Any("beaconNetwork", networkConfig.GetBeaconName()),
-		zap.String("registryContract", networkConfig.RegistryContractAddr),
+		zap.String("registryContract", ssvConfig.RegistryContractAddr.String()),
 	)
 
-	return networkConfig, nil
+	return ssvConfig, nil
 }
 
 func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
@@ -947,20 +965,6 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 		logger.Fatal("failed to setup p2p network", zap.Error(err))
 	}
 	return n
-}
-
-func setupConsensusClient(
-	ctx context.Context,
-	logger *zap.Logger,
-	slotTickerProvider slotticker.Provider,
-) *goclient.GoClient {
-	cl, err := goclient.New(ctx, logger, cfg.ConsensusClient, slotTickerProvider)
-	if err != nil {
-		logger.Fatal("failed to create beacon go-client", zap.Error(err),
-			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
-	}
-
-	return cl
 }
 
 // syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.

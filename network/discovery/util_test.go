@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -32,7 +31,6 @@ import (
 
 var (
 	testLogger    = zap.NewNop()
-	testCtx       = context.Background()
 	testNetConfig = networkconfig.TestNetwork
 
 	testIP             = "127.0.0.1"
@@ -78,7 +76,7 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig networkconfig.SSVConfig) *O
 // Testing discovery with a given NetworkConfig
 func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig networkconfig.SSVConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, ssvConfig)
-	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 	require.NotNil(t, dvs)
 	return dvs

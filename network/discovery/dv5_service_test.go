@@ -25,7 +25,7 @@ import (
 
 func TestCheckPeer(t *testing.T) {
 	var (
-		ctx          = context.Background()
+		ctx          = t.Context()
 		logger       = zap.NewNop()
 		myDomainType = spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
 		mySubnets    = mockSubnets(1, 2, 3)

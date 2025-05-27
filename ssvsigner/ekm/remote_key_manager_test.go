@@ -2,7 +2,6 @@ package ekm
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"errors"
 	"sync"
@@ -77,7 +76,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 		EncryptedPrivKey: encShare,
 	}).Return(nil)
 
-	err := rm.AddShare(context.Background(), encShare, pubKey)
+	err := rm.AddShare(s.T().Context(), encShare, pubKey)
 
 	s.NoError(err)
 	s.client.AssertExpectations(s.T())
@@ -105,7 +104,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 
 	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(nil)
 
-	err := rm.RemoveShare(context.Background(), pubKey)
+	err := rm.RemoveShare(s.T().Context(), pubKey)
 
 	s.NoError(err)
 	s.client.AssertExpectations(s.T())
@@ -163,7 +162,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignError() {
 }
 
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() {
-	ctx := context.Background()
+	ctx := s.T().Context()
 
 	mockSlashingProtector := &MockSlashingProtector{}
 
@@ -698,7 +697,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectWithMockedOperatorKey() 
 }
 
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
-	ctx := context.Background()
+	ctx := s.T().Context()
 
 	mockSlashingProtector := &MockSlashingProtector{}
 
@@ -1513,7 +1512,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 			EncryptedPrivKey: encShare,
 		}).Return(errors.New("add validators error")).Once()
 
-		err := rmTest.AddShare(context.Background(), encShare, pubKey)
+		err := rmTest.AddShare(s.T().Context(), encShare, pubKey)
 
 		s.ErrorContains(err, "add validator")
 		clientMock.AssertExpectations(s.T())
@@ -1544,7 +1543,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		slashingMock.On("BumpSlashingProtection", pubKey).Return(errors.New("bump slashing protection error")).Once()
 
-		err := rmTest.AddShare(context.Background(), encShare, pubKey)
+		err := rmTest.AddShare(s.T().Context(), encShare, pubKey)
 
 		s.ErrorContains(err, "could not bump slashing protection")
 		clientMock.AssertExpectations(s.T())
@@ -1572,7 +1571,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
 			Return(errors.New("remove validators error"))
 
-		s.ErrorContains(rm.RemoveShare(context.Background(), pubKey), "remove validator")
+		s.ErrorContains(rm.RemoveShare(s.T().Context(), pubKey), "remove validator")
 		s.client.AssertExpectations(s.T())
 	})
 
@@ -1599,7 +1598,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		slashingMock.On("RemoveHighestAttestation", pubKey).
 			Return(errors.New("remove highest attestation error")).Once()
 
-		s.ErrorContains(rmTest.RemoveShare(context.Background(), pubKey), "could not remove highest attestation")
+		s.ErrorContains(rmTest.RemoveShare(s.T().Context(), pubKey), "could not remove highest attestation")
 		clientMock.AssertExpectations(s.T())
 		slashingMock.AssertExpectations(s.T())
 	})
@@ -1626,7 +1625,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		slashingMock.On("RemoveHighestAttestation", pubKey).Return(nil).Once()
 		slashingMock.On("RemoveHighestProposal", pubKey).Return(errors.New("remove highest proposal error")).Once()
 
-		s.ErrorContains(rmTest.RemoveShare(context.Background(), pubKey), "could not remove highest proposal")
+		s.ErrorContains(rmTest.RemoveShare(s.T().Context(), pubKey), "could not remove highest proposal")
 		clientMock.AssertExpectations(s.T())
 		slashingMock.AssertExpectations(s.T())
 	})
@@ -1711,7 +1710,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignSSVMessageErrors() {
 }
 
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
-	ctx := context.Background()
+	ctx := s.T().Context()
 
 	mockSlashingProtector := &MockSlashingProtector{}
 
@@ -1830,7 +1829,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectAdditionalDomains() {
 }
 
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
-	ctx := context.Background()
+	ctx := s.T().Context()
 
 	mockSlashingProtector := &MockSlashingProtector{}
 
@@ -2008,7 +2007,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectMoreDomains() {
 }
 
 func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectTypeCastErrors() {
-	ctx := context.Background()
+	ctx := s.T().Context()
 
 	mockSlashingProtector := &MockSlashingProtector{}
 
@@ -2187,6 +2186,7 @@ QwIDAQAB
 	}
 
 	_, err := NewRemoteKeyManager(
+		s.T().Context(),
 		logger,
 		testNetCfg,
 		s.client,
@@ -2215,6 +2215,7 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Wro
 	}
 
 	_, err := NewRemoteKeyManager(
+		s.T().Context(),
 		logger,
 		testNetCfg,
 		s.client,
@@ -2242,6 +2243,7 @@ func (s *RemoteKeyManagerTestSuite) TestNewRemoteKeyManager_OperatorIdentity_Err
 	}
 
 	_, err := NewRemoteKeyManager(
+		s.T().Context(),
 		logger,
 		testNetCfg,
 		s.client,
