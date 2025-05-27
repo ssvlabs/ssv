@@ -36,12 +36,12 @@ type Beacon interface {
 	GetGenesisTime() time.Time
 	GetSyncCommitteeSize() uint64
 	GetGenesisValidatorsRoot() phase0.Root
-	GetBeaconName() string
+	GetNetworkName() string
 	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
 }
 
 type BeaconConfig struct {
-	BeaconName                           string
+	NetworkName                          string
 	SlotDuration                         time.Duration
 	SlotsPerEpoch                        uint64
 	EpochsPerSyncCommitteePeriod         uint64
@@ -190,8 +190,8 @@ func (b BeaconConfig) GetGenesisValidatorsRoot() phase0.Root {
 	return b.GenesisValidatorsRoot
 }
 
-func (b BeaconConfig) GetBeaconName() string {
-	return b.BeaconName
+func (b BeaconConfig) GetNetworkName() string {
+	return b.NetworkName
 }
 
 func (b BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
@@ -222,8 +222,8 @@ func (b BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0
 }
 
 func (b BeaconConfig) AssertSame(other BeaconConfig) error {
-	if b.BeaconName != other.BeaconName {
-		return fmt.Errorf("different BeaconName")
+	if b.NetworkName != other.NetworkName {
+		return fmt.Errorf("different NetworkName")
 	}
 	if b.SlotDuration != other.SlotDuration {
 		return fmt.Errorf("different SlotDuration")

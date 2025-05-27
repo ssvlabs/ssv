@@ -16,7 +16,7 @@ import (
 var TestNetwork = NetworkConfig{
 	Name: "testnet",
 	BeaconConfig: BeaconConfig{
-		BeaconName:                           string(spectypes.BeaconTestNetwork),
+		NetworkName:                          string(spectypes.BeaconTestNetwork),
 		SlotDuration:                         spectypes.BeaconTestNetwork.SlotDurationSec(),
 		SlotsPerEpoch:                        spectypes.BeaconTestNetwork.SlotsPerEpoch(),
 		EpochsPerSyncCommitteePeriod:         256,

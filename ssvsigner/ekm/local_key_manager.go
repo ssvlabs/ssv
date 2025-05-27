@@ -90,7 +90,7 @@ func NewLocalKeyManager(
 		}
 	}
 
-	beaconSigner := signer.NewSimpleSigner(wallet, protection, core.Network(beaconConfig.GetBeaconName()))
+	beaconSigner := signer.NewSimpleSigner(wallet, protection, core.Network(beaconConfig.GetNetworkName()))
 
 	return &LocalKeyManager{
 		wallet:            wallet,

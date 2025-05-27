@@ -175,7 +175,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 	}
 
 	beaconConfig := networkconfig.BeaconConfig{
-		BeaconName:                           networkName,
+		NetworkName:                          networkName,
 		SlotDuration:                         slotDuration,
 		SlotsPerEpoch:                        slotsPerEpoch,
 		EpochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,

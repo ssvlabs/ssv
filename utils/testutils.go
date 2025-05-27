@@ -100,7 +100,7 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 
 	mockNetwork.EXPECT().GetDomainType().Return(domainType).AnyTimes()
 
-	mockNetwork.EXPECT().GetBeaconName().Return(string(beaconNetwork)).AnyTimes()
+	mockNetwork.EXPECT().GetNetworkName().Return(string(beaconNetwork)).AnyTimes()
 
 	return mockNetwork
 }

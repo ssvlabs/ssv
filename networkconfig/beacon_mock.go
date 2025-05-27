@@ -197,20 +197,6 @@ func (mr *MockBeaconMockRecorder) ForkAtEpoch(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkAtEpoch", reflect.TypeOf((*MockBeacon)(nil).ForkAtEpoch), epoch)
 }
 
-// GetBeaconName mocks base method.
-func (m *MockBeacon) GetBeaconName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBeaconName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetBeaconName indicates an expected call of GetBeaconName.
-func (mr *MockBeaconMockRecorder) GetBeaconName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconName", reflect.TypeOf((*MockBeacon)(nil).GetBeaconName))
-}
-
 // GetEpochFirstSlot mocks base method.
 func (m *MockBeacon) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 	m.ctrl.T.Helper()
@@ -265,6 +251,20 @@ func (m *MockBeacon) GetGenesisValidatorsRoot() phase0.Root {
 func (mr *MockBeaconMockRecorder) GetGenesisValidatorsRoot() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenesisValidatorsRoot", reflect.TypeOf((*MockBeacon)(nil).GetGenesisValidatorsRoot))
+}
+
+// GetNetworkName mocks base method.
+func (m *MockBeacon) GetNetworkName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNetworkName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetNetworkName indicates an expected call of GetNetworkName.
+func (mr *MockBeaconMockRecorder) GetNetworkName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkName", reflect.TypeOf((*MockBeacon)(nil).GetNetworkName))
 }
 
 // GetSlotDuration mocks base method.

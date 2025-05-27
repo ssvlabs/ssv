@@ -303,7 +303,7 @@ func (km *RemoteKeyManager) handleDomainAttester(
 		return nil, errors.New("could not cast obj to AttestationData")
 	}
 
-	network := core.Network(km.beaconConfig.GetBeaconName())
+	network := core.Network(km.beaconConfig.GetNetworkName())
 	if !signer.IsValidFarFutureEpoch(network, data.Target.Epoch) {
 		return nil, fmt.Errorf("target epoch too far into the future")
 	}
@@ -436,7 +436,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 
 	blockSlot := ret.BlockHeader.Slot
 
-	network := core.Network(km.beaconConfig.GetBeaconName())
+	network := core.Network(km.beaconConfig.GetNetworkName())
 	if !signer.IsValidFarFutureSlot(network, blockSlot) {
 		return nil, fmt.Errorf("proposed block slot too far into the future")
 	}
