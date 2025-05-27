@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -19,7 +18,7 @@ import (
 const genesisPath = "/eth/v1/beacon/genesis"
 
 func TestGenesis(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("success", func(t *testing.T) {
 		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
