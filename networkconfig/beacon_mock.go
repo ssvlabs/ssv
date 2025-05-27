@@ -13,6 +13,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	spec "github.com/attestantio/go-eth2-client/spec"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -181,6 +182,21 @@ func (mr *MockBeaconMockRecorder) FirstSlotAtEpoch(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FirstSlotAtEpoch", reflect.TypeOf((*MockBeacon)(nil).FirstSlotAtEpoch), epoch)
 }
 
+// ForkAtEpoch mocks base method.
+func (m *MockBeacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForkAtEpoch", epoch)
+	ret0, _ := ret[0].(spec.DataVersion)
+	ret1, _ := ret[1].(*phase0.Fork)
+	return ret0, ret1
+}
+
+// ForkAtEpoch indicates an expected call of ForkAtEpoch.
+func (mr *MockBeaconMockRecorder) ForkAtEpoch(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkAtEpoch", reflect.TypeOf((*MockBeacon)(nil).ForkAtEpoch), epoch)
+}
+
 // GetBeaconName mocks base method.
 func (m *MockBeacon) GetBeaconName() string {
 	m.ctrl.T.Helper()
@@ -235,6 +251,20 @@ func (m *MockBeacon) GetGenesisTime() time.Time {
 func (mr *MockBeaconMockRecorder) GetGenesisTime() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenesisTime", reflect.TypeOf((*MockBeacon)(nil).GetGenesisTime))
+}
+
+// GetGenesisValidatorsRoot mocks base method.
+func (m *MockBeacon) GetGenesisValidatorsRoot() phase0.Root {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGenesisValidatorsRoot")
+	ret0, _ := ret[0].(phase0.Root)
+	return ret0
+}
+
+// GetGenesisValidatorsRoot indicates an expected call of GetGenesisValidatorsRoot.
+func (mr *MockBeaconMockRecorder) GetGenesisValidatorsRoot() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenesisValidatorsRoot", reflect.TypeOf((*MockBeacon)(nil).GetGenesisValidatorsRoot))
 }
 
 // GetSlotDuration mocks base method.

@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
@@ -18,8 +18,10 @@ const (
 	specPath    = "/eth/v1/config/spec"
 )
 
-func TestGenesis(t *testing.T) {
+func Test_genesisForClient(t *testing.T) {
 	ctx := t.Context()
+
+	logger := logging.TestLogger(t)
 
 	t.Run("success", func(t *testing.T) {
 		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
@@ -35,10 +37,21 @@ func TestGenesis(t *testing.T) {
 			if r.URL.Path == specPath {
 				return json.RawMessage(`{
 					"data": {
-						"CONFIG_NAME": "holesky",
+						"CONFIG_NAME": "mainnet",
 						"GENESIS_FORK_VERSION": "0x00000000",
-						"CAPELLA_FORK_VERSION": "0x04017000",
-						"MIN_GENESIS_TIME": "1695902100",
+						"ALTAIR_FORK_VERSION": "0x01000000",
+						"ALTAIR_FORK_EPOCH": "74240",
+						"BELLATRIX_FORK_VERSION": "0x02000000",
+						"BELLATRIX_FORK_EPOCH": "144896",
+						"CAPELLA_FORK_VERSION": "0x03000000",
+						"CAPELLA_FORK_EPOCH": "194048",
+						"DENEB_FORK_VERSION": "0x04000000",
+						"DENEB_FORK_EPOCH": "269568",
+						"ELECTRA_FORK_VERSION": "0x05000000",
+						"ELECTRA_FORK_EPOCH": "364032",
+						"FULU_FORK_VERSION": "0x06000000",
+						"FULU_FORK_EPOCH": "18446744073709551615",
+						"MIN_GENESIS_TIME": "1606824000",
 						"SECONDS_PER_SLOT": "12",
 						"SLOTS_PER_EPOCH": "32",
 						"EPOCHS_PER_SYNC_COMMITTEE_PERIOD": "256",
@@ -46,12 +59,7 @@ func TestGenesis(t *testing.T) {
 						"SYNC_COMMITTEE_SUBNET_COUNT": "4",
 						"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
 						"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
-						"INTERVALS_PER_SLOT": "3",
-						"ALTAIR_FORK_EPOCH": "74240",
-						"BELLATRIX_FORK_EPOCH": "144896",
-						"CAPELLA_FORK_EPOCH": "194048",
-						"DENEB_FORK_EPOCH": "269568",
-						"ELECTRA_FORK_EPOCH": "18446744073709551615"
+						"INTERVALS_PER_SLOT": "3"
 					}
 				}`), nil
 			}
@@ -61,7 +69,7 @@ func TestGenesis(t *testing.T) {
 
 		client, err := New(
 			ctx,
-			zap.NewNop(),
+			logger,
 			Options{
 				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
@@ -71,7 +79,7 @@ func TestGenesis(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		genesis, err := client.Genesis(ctx)
+		genesis, err := genesisForClient(ctx, logger, client.multiClient)
 		require.NoError(t, err)
 		require.NotNil(t, genesis)
 
@@ -90,7 +98,7 @@ func TestGenesis(t *testing.T) {
 
 		client, err := New(
 			ctx,
-			zap.NewNop(),
+			logger,
 			Options{
 				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
@@ -114,7 +122,7 @@ func TestGenesis(t *testing.T) {
 
 		client, err := New(
 			ctx,
-			zap.NewNop(),
+			logger,
 			Options{
 				BeaconConfig:   networkconfig.Mainnet.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,

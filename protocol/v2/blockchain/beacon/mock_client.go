@@ -450,44 +450,6 @@ func (mr *MockDomainCallsMockRecorder) DomainData(ctx, epoch, domain any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainData", reflect.TypeOf((*MockDomainCalls)(nil).DomainData), ctx, epoch, domain)
 }
 
-// MockVersionCalls is a mock of VersionCalls interface.
-type MockVersionCalls struct {
-	ctrl     *gomock.Controller
-	recorder *MockVersionCallsMockRecorder
-	isgomock struct{}
-}
-
-// MockVersionCallsMockRecorder is the mock recorder for MockVersionCalls.
-type MockVersionCallsMockRecorder struct {
-	mock *MockVersionCalls
-}
-
-// NewMockVersionCalls creates a new mock instance.
-func NewMockVersionCalls(ctrl *gomock.Controller) *MockVersionCalls {
-	mock := &MockVersionCalls{ctrl: ctrl}
-	mock.recorder = &MockVersionCallsMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockVersionCalls) EXPECT() *MockVersionCallsMockRecorder {
-	return m.recorder
-}
-
-// DataVersion mocks base method.
-func (m *MockVersionCalls) DataVersion(epoch phase0.Epoch) spec.DataVersion {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DataVersion", epoch)
-	ret0, _ := ret[0].(spec.DataVersion)
-	return ret0
-}
-
-// DataVersion indicates an expected call of DataVersion.
-func (mr *MockVersionCallsMockRecorder) DataVersion(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DataVersion", reflect.TypeOf((*MockVersionCalls)(nil).DataVersion), epoch)
-}
-
 // MockbeaconDuties is a mock of beaconDuties interface.
 type MockbeaconDuties struct {
 	ctrl     *gomock.Controller

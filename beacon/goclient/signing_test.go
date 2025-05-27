@@ -33,7 +33,7 @@ func Test_computeVoluntaryExitDomain(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		domain, err := client.computeVoluntaryExitDomain(ctx)
+		domain, err := client.computeVoluntaryExitDomain()
 		require.NoError(t, err)
 		require.NotNil(t, domain)
 
