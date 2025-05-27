@@ -145,7 +145,7 @@ type allPeersAndTopics = AllPeersAndTopicsJSON
 // TestNodeHandlers verifies the endpoints of the Node (identity, peers, health, topics).
 func TestNodeHandlers(t *testing.T) {
 	n := 4
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	defer cancel()
 

@@ -1,7 +1,6 @@
 package ekm
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -24,7 +23,7 @@ import (
 )
 
 func TestSlashing(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
@@ -37,7 +36,7 @@ func TestSlashing(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(context.Background(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
 	currentSlot := network.EstimatedCurrentSlot()
 	currentEpoch := network.EstimatedEpochAtSlot(currentSlot)
@@ -114,7 +113,7 @@ func TestSlashing(t *testing.T) {
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 	})
 	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
-		require.NoError(t, km.AddShare(context.Background(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 		_, sig, err := km.(*LocalKeyManager).SignBeaconObject(
 			ctx,
 			beaconBlock,
@@ -128,7 +127,7 @@ func TestSlashing(t *testing.T) {
 }
 
 func TestSlashing_Attestation(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
@@ -246,7 +245,7 @@ func TestSlashing_Attestation(t *testing.T) {
 }
 
 func TestConcurrentSlashingProtectionAttData(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
@@ -326,7 +325,7 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 }
 
 func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
@@ -402,7 +401,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 }
 
 func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
@@ -430,7 +429,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(context.Background(), encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
 	currentSlot := network.EstimatedCurrentSlot()
@@ -506,7 +505,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 }
 
 func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
@@ -534,7 +533,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(validator.sk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(context.Background(), encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
 	currentSlot := network.EstimatedCurrentSlot()
@@ -620,7 +619,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	// Add the share to the key manager
 	encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(sharePrivKey.SerializeToHexStr()))
 	require.NoError(t, err)
-	require.NoError(t, km.AddShare(context.Background(), encryptedPrivKey, sharePubKey))
+	require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, sharePubKey))
 
 	// --- First Block Proposal ---
 	slotToSign := network.EstimatedCurrentSlot() + 5 // Sign a block slightly in the future
@@ -634,7 +633,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 
 	// Sign the block - should succeed
 	_, _, err = km.SignBeaconObject(
-		context.Background(),
+		t.Context(),
 		block1,
 		phase0.Domain{},
 		sharePubKey,
@@ -651,7 +650,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 
 	// Attempt to sign second block - should fail
 	_, _, err = km.SignBeaconObject(
-		context.Background(),
+		t.Context(),
 		block2,
 		phase0.Domain{},
 		sharePubKey,
@@ -669,7 +668,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 
 	// Attempt to sign - should fail
 	_, _, err = km.SignBeaconObject(
-		context.Background(),
+		t.Context(),
 		block3,
 		phase0.Domain{},
 		sharePubKey,
@@ -686,7 +685,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 
 	// Attempt to sign - should succeed
 	_, _, err = km.SignBeaconObject(
-		context.Background(),
+		t.Context(),
 		block4,
 		phase0.Domain{},
 		sharePubKey,

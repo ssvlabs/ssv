@@ -25,7 +25,7 @@ import (
 
 func TestCheckPeer(t *testing.T) {
 	var (
-		ctx          = context.Background()
+		ctx          = t.Context()
 		logger       = zap.NewNop()
 		myDomainType = spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
 		mySubnets    = mockSubnets(1, 2, 3)
@@ -82,11 +82,8 @@ func TestCheckPeer(t *testing.T) {
 		}
 	)
 
-	var checkPeerTestNetwork = networkconfig.NetworkConfig{
-		BeaconConfig: networkconfig.TestNetwork.BeaconConfig,
-		SSVConfig: networkconfig.SSVConfig{
-			DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-		},
+	var checkPeerTestSSVConfig = networkconfig.SSVConfig{
+		DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
 	}
 
 	// Create the LocalNode instances for the tests.
@@ -122,7 +119,7 @@ func TestCheckPeer(t *testing.T) {
 		ctx:                 ctx,
 		conns:               &mock.MockConnectionIndex{LimitValue: false},
 		subnetsIdx:          subnetIndex,
-		networkConfig:       checkPeerTestNetwork,
+		ssvConfig:           checkPeerTestSSVConfig,
 		subnets:             mySubnets,
 		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
 		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
