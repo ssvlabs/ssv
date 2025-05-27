@@ -283,7 +283,7 @@ var StartNodeCmd = &cobra.Command{
 		if len(executionAddrList) == 1 {
 			ec, err := executionclient.New(
 				cmd.Context(),
-				executionclient.NewConfigFromNetwork(networkConfig),
+				executionclient.NewConfigFromNetworkConfig(networkConfig),
 				executionAddrList[0],
 				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 				executionclient.WithLogger(logger),
@@ -299,7 +299,7 @@ var StartNodeCmd = &cobra.Command{
 		} else {
 			ec, err := executionclient.NewMulti(
 				cmd.Context(),
-				executionclient.NewConfigFromNetwork(networkConfig),
+				executionclient.NewConfigFromNetworkConfig(networkConfig),
 				executionAddrList,
 				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 				executionclient.WithLoggerMulti(logger),

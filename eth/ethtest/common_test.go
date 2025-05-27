@@ -95,7 +95,7 @@ func (e *TestEnv) setup(
 	logger := zaptest.NewLogger(t)
 
 	// set up basic network/fork stuff
-	e.execClientConfig = executionclient.NewConfigFromNetwork(networkconfig.TestNetwork)
+	e.execClientConfig = executionclient.NewConfigFromNetworkConfig(networkconfig.TestNetwork)
 
 	if useFinalityFork {
 		// Post-fork config (use finality consensus)

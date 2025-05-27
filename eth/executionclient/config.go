@@ -23,9 +23,9 @@ type Config struct {
 	FollowDistance         uint64       // Number of blocks to follow behind head
 }
 
-// NewConfigFromNetwork creates a new Config with network-specific values
+// NewConfigFromNetworkConfig creates a new Config with network-specific values
 // and default values for other parameters.
-func NewConfigFromNetwork(networkCfg networkconfig.NetworkConfig) Config {
+func NewConfigFromNetworkConfig(networkCfg networkconfig.NetworkConfig) Config {
 	return Config{
 		SlotsPerEpoch:          networkCfg.SlotsPerEpoch(),
 		FinalityConsensusEpoch: networkCfg.Forks.GetFinalityConsensusEpoch(),

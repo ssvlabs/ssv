@@ -88,7 +88,7 @@ func TestEventSyncer(t *testing.T) {
 
 	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
 	client, err := executionclient.New(ctx,
-		executionclient.NewConfigFromNetwork(networkconfig.TestNetwork),
+		executionclient.NewConfigFromNetworkConfig(networkconfig.TestNetwork),
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger))

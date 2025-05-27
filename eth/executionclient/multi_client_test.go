@@ -27,7 +27,7 @@ func TestNewMulti(t *testing.T) {
 	t.Run("no node addresses", func(t *testing.T) {
 		ctx := context.Background()
 
-		mc, err := NewMulti(ctx, NewConfigFromNetwork(networkconfig.TestNetwork), []string{}, ethcommon.Address{})
+		mc, err := NewMulti(ctx, NewConfigFromNetworkConfig(networkconfig.TestNetwork), []string{}, ethcommon.Address{})
 
 		require.Nil(t, mc, "MultiClient should be nil on error")
 		require.Error(t, err, "expected an error due to no node addresses")
@@ -39,7 +39,7 @@ func TestNewMulti(t *testing.T) {
 		addr := "invalid-addr"
 		addresses := []string{addr}
 
-		mc, err := NewMulti(ctx, NewConfigFromNetwork(networkconfig.TestNetwork), addresses, ethcommon.Address{})
+		mc, err := NewMulti(ctx, NewConfigFromNetworkConfig(networkconfig.TestNetwork), addresses, ethcommon.Address{})
 
 		require.Nil(t, mc, "MultiClient should be nil on error")
 		require.Error(t, err)
@@ -71,7 +71,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	t.Run("pre-fork (follow distance)", func(t *testing.T) {
 		mc, err := NewMulti(
 			ctx,
-			NewConfigFromNetwork(networkconfig.TestNetwork).WithFollowDistance(customFollowDistance),
+			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(customFollowDistance),
 			addresses,
 			contractAddr,
 			WithLoggerMulti(customLogger),
@@ -95,7 +95,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 
 		mc, err := NewMulti(
 			ctx,
-			NewConfigFromNetwork(networkconfig.TestNetwork).WithFinalityConsensusEpoch(customFinalityForkEpoch),
+			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFinalityConsensusEpoch(customFinalityForkEpoch),
 			addresses,
 			contractAddr,
 			WithLoggerMulti(customLogger),

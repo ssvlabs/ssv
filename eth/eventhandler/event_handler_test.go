@@ -116,7 +116,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	// Create a client and connect to the simulator
 	client, err := executionclient.New(ctx,
-		executionclient.NewConfigFromNetwork(networkconfig.TestNetwork),
+		executionclient.NewConfigFromNetworkConfig(networkconfig.TestNetwork),
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger))
