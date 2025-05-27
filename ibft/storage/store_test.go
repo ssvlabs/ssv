@@ -189,7 +189,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	}
 
 	// test
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	mockTimeChan := make(chan time.Time)
 	mockSlotChan := make(chan phase0.Slot)

@@ -10,10 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
@@ -26,7 +26,7 @@ import (
 
 func TestCheckPeer(t *testing.T) {
 	var (
-		ctx          = context.Background()
+		ctx          = t.Context()
 		logger       = zap.NewNop()
 		myDomainType = spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
 		mySubnets    = mockSubnets(1, 2, 3)
@@ -50,10 +50,11 @@ func TestCheckPeer(t *testing.T) {
 				expectedError: errors.New("domain type 01020305 doesn't match 01020304"),
 			},
 			{
-				name:          "missing subnets",
-				domainType:    &myDomainType,
-				subnets:       nil,
-				expectedError: errors.New("could not read subnets"),
+				name:           "missing subnets",
+				domainType:     &myDomainType,
+				subnets:        commons.Subnets{},
+				missingSubnets: true,
+				expectedError:  errors.New("could not read subnets"),
 			},
 			{
 				name:          "inactive subnets",
@@ -109,7 +110,7 @@ func TestCheckPeer(t *testing.T) {
 				err := records.SetDomainTypeEntry(localNode, records.KeyDomainType, *test.domainType)
 				require.NoError(t, err)
 			}
-			if test.subnets != nil {
+			if !test.missingSubnets {
 				err := records.SetSubnetsEntry(localNode, test.subnets)
 				require.NoError(t, err)
 			}
@@ -119,7 +120,7 @@ func TestCheckPeer(t *testing.T) {
 	}
 
 	// Run the tests.
-	subnetIndex := peers.NewSubnetsIndex(commons.SubnetsCount)
+	subnetIndex := peers.NewSubnetsIndex()
 	dvs := &DiscV5Service{
 		ctx:                 ctx,
 		conns:               &mock.MockConnectionIndex{LimitValue: false},
@@ -145,17 +146,18 @@ func TestCheckPeer(t *testing.T) {
 }
 
 type checkPeerTest struct {
-	name          string
-	domainType    *spectypes.DomainType
-	subnets       []byte
-	localNode     *enode.LocalNode
-	expectedError error
+	name           string
+	domainType     *spectypes.DomainType
+	subnets        commons.Subnets
+	missingSubnets bool
+	localNode      *enode.LocalNode
+	expectedError  error
 }
 
-func mockSubnets(active ...int) []byte {
-	subnets := make([]byte, commons.SubnetsCount)
+func mockSubnets(active ...uint64) commons.Subnets {
+	subnets := commons.Subnets{}
 	for _, subnet := range active {
-		subnets[subnet] = 1
+		subnets.Set(subnet)
 	}
 	return subnets
 }

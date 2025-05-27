@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -355,7 +355,7 @@ func slotToByteSlice(v phase0.Slot) []byte {
 	b := make([]byte, 4)
 
 	// we're casting down but we should be good for now
-	slot := uint32(uint64(v)) // #nosec G115
+	slot := uint32(v) // #nosec G115
 
 	binary.LittleEndian.PutUint32(b, slot)
 	return b

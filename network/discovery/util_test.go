@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -19,10 +18,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/records"
@@ -32,7 +31,6 @@ import (
 
 var (
 	testLogger    = zap.NewNop()
-	testCtx       = context.Background()
 	testNetConfig = networkconfig.TestNetwork
 
 	testIP             = "127.0.0.1"
@@ -62,8 +60,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 	}
 
 	// Discovery options
-	allSubs, _ := commons.FromString(commons.AllSubnets)
-	subnetsIndex := peers.NewSubnetsIndex(len(allSubs))
+	subnetsIndex := peers.NewSubnetsIndex()
 	connectionIndex := NewMockConnection()
 
 	return &Options{
@@ -79,7 +76,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 // Testing discovery with a given NetworkConfig
 func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, netConfig)
-	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 	require.NotNil(t, dvs)
 	return dvs
@@ -133,7 +130,7 @@ func NodeWithoutNextDomain(t *testing.T) *enode.Node {
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, false, nil)
+	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, false, commons.Subnets{})
 }
 
 func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
@@ -141,17 +138,17 @@ func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDo
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, zeroSubnets)
+	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, commons.ZeroSubnets)
 }
 
-func NodeWithCustomSubnets(t *testing.T, subnets []byte) *enode.Node {
+func NodeWithCustomSubnets(t *testing.T, subnets commons.Subnets) *enode.Node {
 	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, subnets)
 }
 
 func CustomNode(t *testing.T,
 	setDomainType bool, domainType spectypes.DomainType,
 	setNextDomainType bool, nextDomainType spectypes.DomainType,
-	setSubnets bool, subnets []byte) *enode.Node {
+	setSubnets bool, subnets commons.Subnets) *enode.Node {
 
 	// Generate key
 	nodeKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -184,8 +181,8 @@ func CustomNode(t *testing.T,
 	}
 	if setSubnets {
 		subnetsVec := bitfield.NewBitvector128()
-		for i, subnet := range subnets {
-			subnetsVec.SetBitAt(uint64(i), subnet > 0)
+		for i := uint64(0); i < commons.SubnetsCount; i++ {
+			subnetsVec.SetBitAt(i, subnets.IsSet(i))
 		}
 		record.Set(enr.WithEntry("subnets", &subnetsVec))
 	}
