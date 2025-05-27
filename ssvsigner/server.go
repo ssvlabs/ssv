@@ -39,6 +39,10 @@ const (
 	pathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
 )
 
+const (
+	addShareLimit = 10
+)
+
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
@@ -162,6 +166,13 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	logger = logger.With(zap.Int("req_count", len(req.ShareKeys)))
+
+	if len(req.ShareKeys) > addShareLimit {
+		logger.Warn("requested too many shares to be added")
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest,
+			fmt.Errorf("requested too many shares to be added: %d", len(req.ShareKeys)))
+		return
+	}
 
 	var importKeystoreReq web3signer.ImportKeystoreRequest
 	for i, share := range req.ShareKeys {

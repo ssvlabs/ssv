@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"testing"
 	"unicode"
 
@@ -252,6 +253,27 @@ func (s *ServerTestSuite) TestAddValidator() {
 		assert.Equal(t, fasthttp.StatusInternalServerError, resp.StatusCode())
 
 		s.remoteSigner.ImportError = nil
+	})
+
+	t.Run("too many shares", func(t *testing.T) {
+		tooBigRequest := request
+		for i := 0; i < addShareLimit*2; i++ {
+			sk := new(bls.SecretKey)
+			sk.SetByCSPRNG()
+			pubKey := sk.GetPublicKey().Serialize()
+
+			tooBigRequest.ShareKeys = append(tooBigRequest.ShareKeys, ShareKeys{
+				EncryptedPrivKey: []byte("encrypted_key" + strconv.Itoa(i)),
+				PubKey:           phase0.BLSPubKey(pubKey),
+			})
+		}
+
+		tooBigRequestBody, err := json.Marshal(tooBigRequest)
+		require.NoError(t, err)
+
+		resp, err := s.ServeHTTP("POST", pathValidators, tooBigRequestBody)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
 	})
 }
 
