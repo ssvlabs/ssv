@@ -31,6 +31,7 @@ func (gc *GoClient) voluntaryExitDomain(ctx context.Context) (phase0.Domain, err
 }
 
 func (gc *GoClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+	// TODO: pull from beacon node
 	specResponse, err := gc.Spec(ctx)
 	if err != nil {
 		return phase0.Domain{}, fmt.Errorf("fetch spec: %w", err)
@@ -80,7 +81,7 @@ func (gc *GoClient) DomainData(
 		// to (Mainnet, Hoodi, etc.)
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
-			CurrentVersion:        gc.beaconConfig.ForkVersion,
+			CurrentVersion:        gc.getBeaconConfig().ForkVersion,
 			GenesisValidatorsRoot: phase0.Root{},
 		}
 		root, err := forkData.HashTreeRoot()

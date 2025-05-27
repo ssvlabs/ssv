@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -38,6 +39,15 @@ type BeaconConfig struct {
 	SlotsPerEpoch uint64
 	ForkVersion   phase0.Version
 	GenesisTime   time.Time
+}
+
+func (b BeaconConfig) String() string {
+	marshaled, err := json.Marshal(b)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(marshaled)
 }
 
 // GetSlotStartTime returns the start time for the given slot

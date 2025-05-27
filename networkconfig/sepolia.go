@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"time"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -19,7 +20,7 @@ var Sepolia = NetworkConfig{
 	SSVConfig: SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x69},
 		RegistrySyncOffset:   new(big.Int).SetInt64(7795814),
-		RegistryContractAddr: "0x261419B48F36EdF420743E9f91bABF4856e76f99",
+		RegistryContractAddr: ethcommon.HexToAddress("0x261419B48F36EdF420743E9f91bABF4856e76f99"),
 		DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 		Bootnodes: []string{
 			// SSV Labs
