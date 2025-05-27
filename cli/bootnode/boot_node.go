@@ -59,7 +59,7 @@ var StartBootNodeCmd = &cobra.Command{
 			logger.Fatal("failed to get network config", zap.Error(err))
 		}
 
-		bootNode, err := bootnode.New(logger, networkConfig.SSVConfig, cfg.Options)
+		bootNode, err := bootnode.New(logger, networkConfig, cfg.Options)
 		if err != nil {
 			logger.Fatal("failed to set up boot node", zap.Error(err))
 		}
