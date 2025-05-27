@@ -2,21 +2,13 @@ package networkconfig
 
 import (
 	"math/big"
-	"time"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var HoodiStage = NetworkConfig{
-	Name: "hoodi-stage",
-	BeaconConfig: BeaconConfig{
-		BeaconName:    string(spectypes.HoodiNetwork),
-		SlotDuration:  spectypes.HoodiNetwork.SlotDurationSec(),
-		SlotsPerEpoch: spectypes.HoodiNetwork.SlotsPerEpoch(),
-		ForkVersion:   spectypes.HoodiNetwork.ForkVersion(),
-		GenesisTime:   time.Unix(int64(spectypes.HoodiNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
-	},
+	Name:         "hoodi-stage",
+	BeaconConfig: Hoodi.BeaconConfig,
 	SSVConfig: SSVConfig{
 		DomainType:           [4]byte{0x00, 0x00, 0x31, 0x14},
 		RegistrySyncOffset:   new(big.Int).SetInt64(1004),
@@ -26,5 +18,6 @@ var HoodiStage = NetworkConfig{
 			// SSV Labs
 			"enr:-Ja4QJZcaYfS0GpX-5xREVBa26a-E-QHMFek-EndsJdgM6loIM7pfbJwPDCNK1VzPkUhMjwcTTuNASiHU6X-sjsrxFmGAZWjNu06gmlkgnY0gmlwhErcGnyJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 		},
+		TotalEthereumValidators: Hoodi.TotalEthereumValidators,
 	},
 }

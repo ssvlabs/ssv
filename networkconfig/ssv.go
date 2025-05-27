@@ -36,11 +36,12 @@ type SSV interface {
 }
 
 type SSVConfig struct {
-	DomainType           spectypes.DomainType
-	RegistrySyncOffset   *big.Int
-	RegistryContractAddr ethcommon.Address
-	Bootnodes            []string
-	DiscoveryProtocolID  [6]byte
+	DomainType              spectypes.DomainType
+	RegistrySyncOffset      *big.Int
+	RegistryContractAddr    ethcommon.Address
+	Bootnodes               []string
+	DiscoveryProtocolID     [6]byte
+	TotalEthereumValidators int // value needs to be maintained — consider getting it from external API with default or per-network value(s) as fallback
 }
 
 func (s SSVConfig) String() string {
@@ -53,21 +54,23 @@ func (s SSVConfig) String() string {
 }
 
 type marshaledConfig struct {
-	DomainType           hexutil.Bytes     `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
-	RegistrySyncOffset   *big.Int          `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
-	RegistryContractAddr ethcommon.Address `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
-	Bootnodes            []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
-	DiscoveryProtocolID  hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	DomainType              hexutil.Bytes     `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
+	RegistrySyncOffset      *big.Int          `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr    ethcommon.Address `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes               []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
 func (s SSVConfig) marshal() marshaledConfig {
 	aux := marshaledConfig{
-		DomainType:           s.DomainType[:],
-		RegistrySyncOffset:   s.RegistrySyncOffset,
-		RegistryContractAddr: s.RegistryContractAddr,
-		Bootnodes:            s.Bootnodes,
-		DiscoveryProtocolID:  s.DiscoveryProtocolID[:],
+		DomainType:              s.DomainType[:],
+		RegistrySyncOffset:      s.RegistrySyncOffset,
+		RegistryContractAddr:    s.RegistryContractAddr,
+		Bootnodes:               s.Bootnodes,
+		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
+		TotalEthereumValidators: s.TotalEthereumValidators,
 	}
 
 	return aux
@@ -92,11 +95,12 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 	}
 
 	*s = SSVConfig{
-		DomainType:           spectypes.DomainType(aux.DomainType),
-		RegistrySyncOffset:   aux.RegistrySyncOffset,
-		RegistryContractAddr: aux.RegistryContractAddr,
-		Bootnodes:            aux.Bootnodes,
-		DiscoveryProtocolID:  [6]byte(aux.DiscoveryProtocolID),
+		DomainType:              spectypes.DomainType(aux.DomainType),
+		RegistrySyncOffset:      aux.RegistrySyncOffset,
+		RegistryContractAddr:    aux.RegistryContractAddr,
+		Bootnodes:               aux.Bootnodes,
+		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
+		TotalEthereumValidators: aux.TotalEthereumValidators,
 	}
 
 	return nil
