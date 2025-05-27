@@ -142,7 +142,7 @@ func TestSyncer_Sync(t *testing.T) {
 
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(expectedUpdatedShares, nil)
 
-		result, err := syncer.Sync(context.Background(), []spectypes.ValidatorPK{{0x1}, {0x2}})
+		result, err := syncer.Sync(t.Context(), []spectypes.ValidatorPK{{0x1}, {0x2}})
 		require.NoError(t, err)
 		require.Equal(t, expectedUpdatedShares, result)
 	})
@@ -163,7 +163,7 @@ func TestSyncer_Sync(t *testing.T) {
 		}
 
 		pubKeys := []spectypes.ValidatorPK{{0x1}, {0x2}}
-		result, err := syncer.Sync(context.Background(), pubKeys)
+		result, err := syncer.Sync(t.Context(), pubKeys)
 		require.Error(t, err)
 		require.Nil(t, result)
 	})
@@ -179,7 +179,7 @@ func TestSyncer_Sync(t *testing.T) {
 			beaconNode:   defaultMockBeaconNode,
 		}
 
-		result, err := syncer.Sync(context.Background(), []spectypes.ValidatorPK{{0x1}, {0x2}})
+		result, err := syncer.Sync(t.Context(), []spectypes.ValidatorPK{{0x1}, {0x2}})
 		require.Error(t, err)
 		require.Nil(t, result)
 	})
@@ -200,7 +200,7 @@ func TestSyncer_Sync(t *testing.T) {
 		}
 
 		var pubKeys []spectypes.ValidatorPK
-		result, err := syncer.Sync(context.Background(), pubKeys)
+		result, err := syncer.Sync(t.Context(), pubKeys)
 		require.NoError(t, err)
 		require.Nil(t, result)
 	})
@@ -239,7 +239,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{}).AnyTimes()
 
 		// Call method
-		result, err := syncer.SyncOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -280,7 +280,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockValidatorStore.EXPECT().SelfValidators().Return(shares).AnyTimes()
 
 		// Call method
-		result, err := syncer.SyncOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -325,7 +325,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		}, nil)
 
 		// Call method
-		result, err := syncer.SyncOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -374,7 +374,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{share1}).AnyTimes()
 
 		// Call method
-		result, err := syncer.SyncOnStartup(context.Background())
+		result, err := syncer.SyncOnStartup(t.Context())
 
 		// Assert
 		require.Error(t, err)
@@ -419,7 +419,7 @@ func TestSyncer_Stream(t *testing.T) {
 		}
 
 		// Context with cancel
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		// Share to be returned
@@ -513,7 +513,7 @@ func TestSyncer_Stream(t *testing.T) {
 		}
 
 		// Context with cancel
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		// Share to be returned
@@ -586,7 +586,7 @@ func TestSyncer_Stream(t *testing.T) {
 		}
 
 		// Context with cancel
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		// Mock shareStorage.Range to not call the callback (no shares)
@@ -677,7 +677,7 @@ func TestSyncer_sleep(t *testing.T) {
 
 	t.Run("SleptSuccessfully", func(t *testing.T) {
 		// Create a background context that won't be canceled.
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// Define the sleep duration.
 		duration := 50 * time.Millisecond
@@ -700,7 +700,7 @@ func TestSyncer_sleep(t *testing.T) {
 
 	t.Run("ContextCanceledBeforeSleep", func(t *testing.T) {
 		// Create a context that is already canceled.
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
 		// Define the sleep duration.
@@ -724,7 +724,7 @@ func TestSyncer_sleep(t *testing.T) {
 
 	t.Run("ContextCanceledDuringSleep", func(t *testing.T) {
 		// Create a cancellable context.
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		// Define the sleep duration.
@@ -755,7 +755,7 @@ func TestSyncer_sleep(t *testing.T) {
 
 	t.Run("ZeroDurationSleep", func(t *testing.T) {
 		// Create a background context that won't be canceled.
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// Define a zero duration.
 		duration := 0 * time.Millisecond
