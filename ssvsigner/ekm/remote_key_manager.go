@@ -61,6 +61,7 @@ type signerClient interface {
 // identity from the signerClient, sets up local slashing protection, and uses
 // the provided consensusClient to get the current fork/genesis for sign requests.
 func NewRemoteKeyManager(
+	ctx context.Context,
 	logger *zap.Logger,
 	beaconConfig networkconfig.Beacon,
 	signerClient signerClient,
@@ -70,7 +71,7 @@ func NewRemoteKeyManager(
 	signerStore := NewSignerStorage(db, beaconConfig, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	operatorPubKeyString, err := signerClient.OperatorIdentity(context.Background()) // TODO: use context
+	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
 	}

@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -20,7 +19,7 @@ const (
 )
 
 func Test_genesisForClient(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	logger := logging.TestLogger(t)
 

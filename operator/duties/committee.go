@@ -99,11 +99,11 @@ func (h *CommitteeHandler) buildCommitteeDuties(
 
 	validatorCommittees := map[phase0.ValidatorIndex]committeeDuty{}
 	for _, validatorShare := range selfValidators {
-		committeeDuty := committeeDuty{
+		cd := committeeDuty{
 			id:          validatorShare.CommitteeID(),
 			operatorIDs: validatorShare.OperatorIDs(),
 		}
-		validatorCommittees[validatorShare.ValidatorIndex] = committeeDuty
+		validatorCommittees[validatorShare.ValidatorIndex] = cd
 	}
 
 	resultCommitteeMap := make(committeeDutiesMap)
