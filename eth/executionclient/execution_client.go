@@ -439,7 +439,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
 				logCh <- block
-				fromBlock = max(fromBlock, block.BlockNumber+1)
+				fromBlock = block.BlockNumber + 1
 			}
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
