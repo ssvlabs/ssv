@@ -228,19 +228,18 @@ func (c *Committee) prepareDuty(logger *zap.Logger, duty *spectypes.CommitteeDut
 
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-	msgType := msg.GetType()
-	slot, _ := msg.Slot() // TODO: handle error
-
-	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)
-	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+	traceContext, dutyID := c.buildTraceContext(ctx, msg)
+	ctx, span := tracer.Start(traceContext,
 		observability.InstrumentName(observabilityNamespace, "process_committee_message"),
 		trace.WithAttributes(
 			observability.ValidatorMsgIDAttribute(msg.GetID()),
-			observability.ValidatorMsgTypeAttribute(msgType),
 			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
 			observability.DutyIDAttribute(dutyID),
 		))
 	defer span.End()
+
+	msgType := msg.GetType()
+	span.SetAttributes(observability.ValidatorMsgTypeAttribute(msgType))
 
 	// Validate message
 	if msgType != message.SSVEventMsgType {
@@ -339,6 +338,17 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (c *Committee) buildTraceContext(ctx context.Context, msg *queue.SSVMessage) (context.Context, string) {
+	slot, err := msg.Slot()
+	if err != nil {
+		c.logger.Warn("could not get slot from message while building Trace context", zap.Error(err))
+		return ctx, "unknown"
+	}
+
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)
+	return observability.TraceContext(ctx, dutyID), dutyID
 }
 
 func (c *Committee) unsafePruneExpiredRunners(logger *zap.Logger, currentSlot phase0.Slot) error {
