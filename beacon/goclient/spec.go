@@ -305,12 +305,13 @@ func (gc *GoClient) getForkData(specResponse map[string]any) (map[spec.DataVersi
 }
 
 func get[T any](response map[string]any, key string) (T, error) {
+	var zero T
+
 	val, ok := response[key]
 	if !ok {
-		return val.(T), fmt.Errorf("missing key '%s' in response", key)
+		return zero, fmt.Errorf("missing key '%s' in response", key)
 	}
 
-	var zero T
 	switch t := val.(type) {
 	case T:
 		return t, nil
