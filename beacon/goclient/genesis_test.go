@@ -37,9 +37,9 @@ func TestGenesis(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -67,9 +67,9 @@ func TestGenesis(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
@@ -94,9 +94,9 @@ func TestGenesis(t *testing.T) {
 		defer mockServer.Close()
 
 		client, err := New(
+			ctx,
 			zap.NewNop(),
 			Options{
-				Context:        ctx,
 				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,

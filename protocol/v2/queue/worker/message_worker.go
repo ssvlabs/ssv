@@ -10,7 +10,7 @@ import (
 )
 
 // MsgHandler func that receive message.SSVMessage to handle
-type MsgHandler func(msg network.DecodedSSVMessage) error
+type MsgHandler func(ctx context.Context, msg network.DecodedSSVMessage) error
 
 // ErrorHandler func that handles an error for a specific message
 type ErrorHandler func(msg *queue.SSVMessage, err error) error
@@ -72,7 +72,7 @@ func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *queue.SSVMessage) {
 		case <-ctx.Done():
 			return
 		case msg := <-ch:
-			w.process(logger, msg)
+			w.process(ctx, logger, msg)
 		}
 	}
 }
@@ -111,12 +111,12 @@ func (w *Worker) Size() int {
 }
 
 // process the msg's from queue
-func (w *Worker) process(logger *zap.Logger, msg *queue.SSVMessage) {
+func (w *Worker) process(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	if w.handler == nil {
 		logger.Warn("❗ no handler for worker")
 		return
 	}
-	if err := w.handler(msg); err != nil {
+	if err := w.handler(ctx, msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
 			logger.Debug("❌ failed to handle message", zap.Error(handlerErr))
 			return

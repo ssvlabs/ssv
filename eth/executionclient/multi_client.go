@@ -290,7 +290,6 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 	p := pool.New().WithErrors().WithContext(ctx)
 
 	for i := range mc.clients {
-		i := i
 		p.Go(func(ctx context.Context) error {
 			client, err := mc.getClient(ctx, i)
 			if err != nil {
