@@ -158,7 +158,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
 
 	// Change network config
-	dvs.networkConfig = networkconfig.TestNetwork
+	dvs.ssvConfig = networkconfig.TestNetwork.SSVConfig
 	// Test PublishENR method
 	dvs.PublishENR()
 
