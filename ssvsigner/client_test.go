@@ -56,13 +56,17 @@ func (s *SSVSignerClientSuite) resetMux() {
 }
 
 // assertErrorResult asserts that the error matches expectations.
-func (s *SSVSignerClientSuite) assertErrorResult(err error, expectError bool, t *testing.T) {
+func (s *SSVSignerClientSuite) assertErrorResult(err error, expectError, expectNoRequest bool, t *testing.T) {
 	if expectError {
 		require.Error(t, err)
 	} else {
 		require.NoError(t, err)
 	}
-	assert.Equal(t, 1, s.serverHits)
+	if expectNoRequest {
+		assert.Equal(t, 0, s.serverHits)
+	} else {
+		assert.Equal(t, 1, s.serverHits)
+	}
 }
 
 // writeJSONResponse writes a JSON response with the given status code and data.
@@ -95,9 +99,10 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		expectedResponse   web3signer.ImportKeystoreResponse
 		expectError        bool
 		isDecryptionError  bool
+		expectNoRequest    bool
 	}{
 		{
-			name: "Success", // TODO: fix
+			name: "Success",
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted1"),
@@ -116,7 +121,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			expectError: false,
 		},
 		{
-			name: "DecryptionError", // TODO: fix
+			name: "DecryptionError",
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("bad_encrypted"),
@@ -129,7 +134,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			isDecryptionError:  true,
 		},
 		{
-			name: "ServerError", // TODO: fix
+			name: "ServerError",
 			shares: []ShareKeys{
 				{
 					EncryptedPrivKey: []byte("encrypted"),
@@ -148,6 +153,59 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				Data: []web3signer.KeyManagerResponseData{},
 			},
 			expectError: false,
+		},
+		{
+			name: "TooManyShares",
+			shares: []ShareKeys{
+				{
+					EncryptedPrivKey: []byte("encrypted1"),
+					PubKey:           phase0.BLSPubKey{1},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted2"),
+					PubKey:           phase0.BLSPubKey{2},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted3"),
+					PubKey:           phase0.BLSPubKey{3},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted4"),
+					PubKey:           phase0.BLSPubKey{4},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted5"),
+					PubKey:           phase0.BLSPubKey{5},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted6"),
+					PubKey:           phase0.BLSPubKey{6},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted7"),
+					PubKey:           phase0.BLSPubKey{7},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted8"),
+					PubKey:           phase0.BLSPubKey{8},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted9"),
+					PubKey:           phase0.BLSPubKey{9},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted10"),
+					PubKey:           phase0.BLSPubKey{10},
+				},
+				{
+					EncryptedPrivKey: []byte("encrypted11"),
+					PubKey:           phase0.BLSPubKey{11},
+				},
+			},
+			expectedStatusCode: http.StatusOK,
+			expectedResponse:   web3signer.ImportKeystoreResponse{},
+			expectError:        true,
+			expectNoRequest:    true,
 		},
 	}
 
@@ -178,7 +236,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 
 			err := s.client.AddValidators(context.Background(), tc.shares...)
 
-			s.assertErrorResult(err, tc.expectError, t)
+			s.assertErrorResult(err, tc.expectError, tc.expectNoRequest, t)
 
 			if tc.isDecryptionError {
 				var decryptErr ShareDecryptionError
@@ -260,7 +318,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 
 			err := s.client.RemoveValidators(context.Background(), tc.pubKeys...)
 
-			s.assertErrorResult(err, tc.expectError, t)
+			s.assertErrorResult(err, tc.expectError, false, t)
 		})
 	}
 }
