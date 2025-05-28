@@ -5,7 +5,6 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -19,7 +18,7 @@ const (
 	ttlCommitteeRoot = 4
 )
 
-func (c *Collector) evictValidatorCommitteeLinks(threshold phase0.Slot) (totalSaved int) {
+func (c *Collector) dumpLinkToDBPeriodically(threshold phase0.Slot) (totalSaved int) {
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
 		for slot := threshold; slot > 0; slot-- {
 			committeeID, found := slotToCommittee.Get(slot)
@@ -43,7 +42,7 @@ func (c *Collector) evictValidatorCommitteeLinks(threshold phase0.Slot) (totalSa
 	return
 }
 
-func (c *Collector) evictCommitteeTraces(threshold phase0.Slot) (totalSaved int) {
+func (c *Collector) dumpCommitteeToDBPeriodically(threshold phase0.Slot) (totalSaved int) {
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		for slot := threshold; slot > 0; slot-- {
 			trace, found := slotToTraceMap.Get(slot)
@@ -51,15 +50,7 @@ func (c *Collector) evictCommitteeTraces(threshold phase0.Slot) (totalSaved int)
 				break
 			}
 
-			// lock only for copying
-			var local *model.CommitteeDutyTrace
-			func() {
-				trace.Lock()
-				defer trace.Unlock()
-				local = deepCopyCommitteeDutyTrace(&trace.CommitteeDutyTrace)
-			}()
-
-			if err := c.store.SaveCommitteeDuty(local); err != nil {
+			if err := c.store.SaveCommitteeDuty(trace.Clone()); err != nil {
 				c.logger.Error("save committee duty to disk", zap.Error(err))
 				continue
 			}
@@ -75,7 +66,7 @@ func (c *Collector) evictCommitteeTraces(threshold phase0.Slot) (totalSaved int)
 	return
 }
 
-func (c *Collector) evictValidatorTraces(threshold phase0.Slot) (totalSaved int) {
+func (c *Collector) dumpValidatorToDBPeriodically(threshold phase0.Slot) (totalSaved int) {
 	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		for slot := threshold; slot > 0; slot-- {
 			trace, found := slotToTraceMap.Get(slot)
@@ -83,18 +74,8 @@ func (c *Collector) evictValidatorTraces(threshold phase0.Slot) (totalSaved int)
 				break
 			}
 
-			// lock only for copying
-			var roles []*model.ValidatorDutyTrace
-			func() {
-				trace.Lock()
-				defer trace.Unlock()
-
-				for _, role := range trace.Roles {
-					roles = append(roles, deepCopyValidatorDutyTrace(role))
-				}
-			}()
-
 			var savedCount int
+			roles := trace.Clone()
 
 			for _, role := range roles {
 				// TODO(me): confirm it makes sense

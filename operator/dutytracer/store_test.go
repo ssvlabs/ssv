@@ -107,7 +107,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 
 	// evict validator committee mapping in slot 4 and lower
 	thresholdSlot := phase0.Slot(4)
-	collector.evictValidatorCommitteeLinks(thresholdSlot)
+	collector.dumpLinkToDBPeriodically(thresholdSlot)
 
 	// check that slot 3 and 4 are evicted from cache
 	indexToSlotMap, found := collector.validatorIndexToCommitteeLinks.Get(1)
@@ -274,8 +274,8 @@ func TestCommitteeDutyStore(t *testing.T) {
 	// meaning that slot 3 and 4 should be evicted to disk
 	// but slot 7 should be in memory
 	slot8 := phase0.Slot(4)
-	collector.evictCommitteeTraces(slot8)
-	collector.evictValidatorCommitteeLinks(slot8)
+	collector.dumpCommitteeToDBPeriodically(slot8)
+	collector.dumpLinkToDBPeriodically(slot8)
 
 	// step 3: retrieve trace from disk (3,4) and memory (7)
 	{
@@ -458,7 +458,7 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	// evict slot 3 and 4
 	slot6 := phase0.Slot(4)
-	collector.evictValidatorTraces(slot6)
+	collector.dumpValidatorToDBPeriodically(slot6)
 
 	var inMem = make(map[phase0.Slot]struct{})
 	collector.validatorTraces.Range(func(key spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {

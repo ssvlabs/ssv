@@ -15,6 +15,8 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
+var ErrNotFound = errors.New("not found")
+
 // ValidatorDutyTrace is a wrapper around the model.ValidatorDutyTrace that adds a CommitteeID and pubkey field
 // to avoid extra lookups
 type ValidatorDutyTrace struct {
@@ -36,13 +38,13 @@ type DutyTraceStore interface {
 	GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error)
 }
 
-func (a *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
-	index, found := a.validators.ValidatorIndex(pubkey)
+func (c *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
+	index, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
 		return spectypes.CommitteeID{}, 0, fmt.Errorf("validator not found")
 	}
 
-	committeeID, err := a.getCommitteeIDBySlotAndIndex(slot, index)
+	committeeID, err := c.getCommitteeIDBySlotAndIndex(slot, index)
 	if err != nil {
 		return spectypes.CommitteeID{}, 0, fmt.Errorf("get committee ID: %w", err)
 	}
@@ -50,11 +52,11 @@ func (a *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorP
 	return committeeID, index, nil
 }
 
-func (a *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
+func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	// lookup in cache
-	validatorSlots, found := a.validatorTraces.Get(pubkey)
+	validatorSlots, found := c.validatorTraces.Get(pubkey)
 	if !found {
-		return a.getValidatorDutiesFromDisk(role, slot, pubkey)
+		return c.getValidatorDutiesFromDisk(role, slot, pubkey)
 	}
 
 	traces, found := validatorSlots.Get(slot)
@@ -74,16 +76,16 @@ func (a *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 	}
 
 	// go to disk for the older ones
-	return a.getValidatorDutiesFromDisk(role, slot, pubkey)
+	return c.getValidatorDutiesFromDisk(role, slot, pubkey)
 }
 
-func (a *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
-	vIndex, found := a.validators.ValidatorIndex(pubkey)
+func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
+	vIndex, found := c.validators.ValidatorIndex(pubkey)
 	if !found {
 		return nil, fmt.Errorf("validator not found by pubkey: %x", pubkey)
 	}
 
-	trace, err := a.store.GetValidatorDuty(slot, role, vIndex)
+	trace, err := c.store.GetValidatorDuty(slot, role, vIndex)
 	if err != nil {
 		return nil, fmt.Errorf("get validator duty from disk: %w", err)
 	}
@@ -96,16 +98,13 @@ func (a *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot p
 
 func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.CommitteeDutyTrace, err error) {
 	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
-		committeeSlots.Range(func(slot phase0.Slot, dt *committeeDutyTrace) bool {
-			if wantSlot == slot {
-				func() {
-					dt.Lock()
-					defer dt.Unlock()
-					duties = append(duties, deepCopyCommitteeDutyTrace(&dt.CommitteeDutyTrace))
-				}()
-			}
+		dt, found := committeeSlots.Get(wantSlot)
+		if !found {
 			return true
-		})
+		}
+
+		duties = append(duties, dt.Clone())
+
 		return true
 	})
 
@@ -119,8 +118,6 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.Co
 	return duties, nil
 }
 
-var ErrNotFound = errors.New("not found")
-
 func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, roles ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error) {
 	committeeSlots, found := c.committeeTraces.Get(committeeID)
 	if !found {
@@ -129,7 +126,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 			return nil, fmt.Errorf("get committee duty from disk: %w", err)
 		}
 
-		if trace != nil && hasSignersForRoles(trace, roles...) {
+		if hasSignersForRoles(trace, roles...) {
 			return trace, nil
 		}
 
@@ -143,21 +140,20 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 			return nil, fmt.Errorf("get committee duty from disk: %w", err)
 		}
 
-		if trace != nil && hasSignersForRoles(trace, roles...) {
+		if hasSignersForRoles(trace, roles...) {
 			return trace, nil
 		}
 
 		return nil, ErrNotFound
 	}
 
-	if !hasSignersForRoles(&trace.CommitteeDutyTrace, roles...) {
+	clone := trace.Clone()
+
+	if !hasSignersForRoles(clone, roles...) {
 		return nil, ErrNotFound
 	}
 
-	trace.Lock()
-	defer trace.Unlock()
-
-	return deepCopyCommitteeDutyTrace(&trace.CommitteeDutyTrace), nil
+	return clone, nil
 }
 
 // hasSignersForRole checks if the duty has signers for the given role

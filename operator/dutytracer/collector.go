@@ -105,17 +105,17 @@ func (c *Collector) DumpDataToDBPeriodically(ctx context.Context, tickerProvider
 
 			// evict committee traces
 			committeThreshold := currentSlot - ttlCommittee
-			evicted := c.evictCommitteeTraces(committeThreshold)
+			evicted := c.dumpCommitteeToDBPeriodically(committeThreshold)
 			c.logger.Info("evicted committee duty traces to disk", fields.Slot(committeThreshold), zap.Int("count", evicted))
 
 			// evict validator traces
 			validatorThreshold := currentSlot - ttlValidator
-			evicted = c.evictValidatorTraces(validatorThreshold)
+			evicted = c.dumpValidatorToDBPeriodically(validatorThreshold)
 			c.logger.Info("evicted validator duty traces to disk", fields.Slot(validatorThreshold), zap.Int("count", evicted))
 
 			// evict validator committee links
 			mappingThreshold := currentSlot - ttlMapping
-			evicted = c.evictValidatorCommitteeLinks(mappingThreshold)
+			evicted = c.dumpLinkToDBPeriodically(mappingThreshold)
 			c.logger.Info("evicted validator mappings to disk", fields.Slot(mappingThreshold), zap.Int("count", evicted))
 
 			// remove old SC roots
@@ -184,22 +184,7 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 		return traces, roleDutyTrace, false, nil
 	}
 
-	traces.Lock()
-	defer traces.Unlock()
-
-	// find the trace for the role
-	for _, t := range traces.Roles {
-		if t.Role == role {
-			return traces, t, false, nil
-		}
-	}
-
-	// or create a new one
-	roleDutyTrace := &model.ValidatorDutyTrace{
-		Slot: slot,
-		Role: role,
-	}
-	traces.Roles = append(traces.Roles, roleDutyTrace)
+	roleDutyTrace := traces.getOrCreate(slot, role)
 
 	return traces, roleDutyTrace, false, nil
 }
@@ -748,10 +733,48 @@ type validatorDutyTrace struct {
 	Roles []*model.ValidatorDutyTrace
 }
 
+func (dt *validatorDutyTrace) getOrCreate(slot phase0.Slot, role spectypes.BeaconRole) *model.ValidatorDutyTrace {
+	dt.Lock()
+	defer dt.Unlock()
+
+	// find the trace for the role
+	for _, t := range dt.Roles {
+		if t.Role == role {
+			return t
+		}
+	}
+
+	// or create a new one
+	roleDutyTrace := &model.ValidatorDutyTrace{
+		Slot: slot,
+		Role: role,
+	}
+	dt.Roles = append(dt.Roles, roleDutyTrace)
+
+	return roleDutyTrace
+}
+
+func (c *validatorDutyTrace) Clone() (roles []*model.ValidatorDutyTrace) {
+	c.Lock()
+	defer c.Unlock()
+
+	for _, role := range c.Roles {
+		roles = append(roles, deepCopyValidatorDutyTrace(role))
+	}
+
+	return
+}
+
 type committeeDutyTrace struct {
 	sync.Mutex
 	syncCommitteeRoot phase0.Root
 	model.CommitteeDutyTrace
+}
+
+func (dt *committeeDutyTrace) Clone() *model.CommitteeDutyTrace {
+	dt.Lock()
+	defer dt.Unlock()
+	return deepCopyCommitteeDutyTrace(&dt.CommitteeDutyTrace)
 }
 
 // must be called under parent trace lock
