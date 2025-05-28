@@ -3,7 +3,10 @@ package beacon
 import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
+
+type ValidatorMetadataMap map[spectypes.ValidatorPK]*ValidatorMetadata
 
 // ValidatorMetadata represents validator metadata from Ethereum beacon node
 type ValidatorMetadata struct {
@@ -20,6 +23,11 @@ func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
 		m.Index == other.Index &&
 		m.ActivationEpoch == other.ActivationEpoch &&
 		m.ExitEpoch == other.ExitEpoch
+}
+
+// Unknown returns true if the validator is unknown
+func (m *ValidatorMetadata) Unknown() bool {
+	return m.Status == eth2apiv1.ValidatorStateUnknown
 }
 
 // Pending returns true if the validator is pending
@@ -42,8 +50,8 @@ func (m *ValidatorMetadata) IsAttesting() bool {
 	return m.Status.IsAttesting()
 }
 
-// Exiting returns true if the validator is existing or exited
-func (m *ValidatorMetadata) Exiting() bool {
+// Exited returns true if the validator is existing or exited
+func (m *ValidatorMetadata) Exited() bool {
 	return m.Status.IsExited() || m.Status.HasExited()
 }
 

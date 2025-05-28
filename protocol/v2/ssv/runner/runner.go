@@ -15,6 +15,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -67,8 +68,7 @@ type BaseRunner struct {
 	State          *State
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
-	DomainType     spectypes.DomainType
-	BeaconNetwork  spectypes.BeaconNetwork
+	NetworkConfig  networkconfig.Network
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
@@ -92,7 +92,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State              *State
 		Share              map[phase0.ValidatorIndex]*spectypes.Share
 		QBFTController     *controller.Controller
-		BeaconNetwork      spectypes.BeaconNetwork
+		BeaconConfig       networkconfig.Beacon
 		RunnerRoleType     spectypes.RunnerRole
 		highestDecidedSlot phase0.Slot
 	}
@@ -102,7 +102,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State:              b.State,
 		Share:              b.Share,
 		QBFTController:     b.QBFTController,
-		BeaconNetwork:      b.BeaconNetwork,
+		BeaconConfig:       b.NetworkConfig,
 		RunnerRoleType:     b.RunnerRoleType,
 		highestDecidedSlot: b.highestDecidedSlot,
 	}
@@ -135,8 +135,7 @@ func NewBaseRunner(
 	state *State,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
-	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	runnerRoleType spectypes.RunnerRole,
 	highestDecidedSlot phase0.Slot,
 ) *BaseRunner {
@@ -144,8 +143,7 @@ func NewBaseRunner(
 		State:              state,
 		Share:              share,
 		QBFTController:     controller,
-		BeaconNetwork:      beaconNetwork,
-		DomainType:         domainType,
+		NetworkConfig:      networkConfig,
 		RunnerRoleType:     runnerRoleType,
 		highestDecidedSlot: highestDecidedSlot,
 	}

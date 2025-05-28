@@ -172,7 +172,7 @@ func UpdatedENRLocalNode(val *enode.LocalNode) zapcore.Field {
 }
 
 func Subnets(val commons.Subnets) zapcore.Field {
-	return zap.Stringer(FieldSubnets, val)
+	return zap.Stringer(FieldSubnets, &val)
 }
 
 func PeerID(val peer.ID) zapcore.Field {

@@ -19,6 +19,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -38,8 +39,7 @@ type SyncCommitteeAggregatorRunner struct {
 }
 
 func NewSyncCommitteeAggregatorRunner(
-	domainType spectypes.DomainType,
-	beaconNetwork spectypes.BeaconNetwork,
+	networkConfig networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
@@ -56,8 +56,7 @@ func NewSyncCommitteeAggregatorRunner(
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleSyncCommitteeContribution,
-			DomainType:         domainType,
-			BeaconNetwork:      beaconNetwork,
+			NetworkConfig:      networkConfig,
 			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
@@ -262,7 +261,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(ctx context.Context, lo
 		Messages: msgs,
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 
 	encodedMsg, err := postConsensusMsg.Encode()
 	if err != nil {
@@ -408,7 +407,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
 	recordSuccessfulSubmission(ctx,
 		successfullySubmittedContributions,
-		r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
+		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
 		spectypes.BNRoleSyncCommitteeContribution)
 
 	span.SetStatus(codes.Ok, "")
@@ -426,7 +425,7 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(
 		SelectionProof:  proof,
 	}
 
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 	dContribAndProof, err := r.GetBeaconNode().DomainData(ctx, epoch, spectypes.DomainContributionAndProof)
 	if err != nil {
 		return nil, phase0.Root{}, errors.Wrap(err, "could not get domain data")
@@ -522,7 +521,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(ctx context.Context, logger 
 		msgs.Messages = append(msgs.Messages, msg)
 	}
 
-	msgID := spectypes.NewMsgID(r.BaseRunner.DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())

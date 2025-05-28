@@ -34,7 +34,7 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	NetworkConfig networkconfig.NetworkConfig
+	NetworkConfig networkconfig.Network
 	DutyRunners   runner.ValidatorDutyRunners
 	Network       specqbft.Network
 
@@ -121,7 +121,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type, vDuty.ValidatorIndex))
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.NetworkConfig.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type, vDuty.ValidatorIndex))
 	logger = v.withDutyID(logger, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.
