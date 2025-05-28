@@ -101,21 +101,10 @@ func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committe
 	}
 }
 
-// collectMessagesFromQueue is a test helper that consumes messages from a queue and returns the collected messages.
-// It handles the pattern of waiting for expected messages with proper synchronization.
-func collectMessagesFromQueue(t *testing.T, ctx context.Context, committee *Committee, q queueContainer,
-	logger *zap.Logger, committeeRunner *runner.CommitteeRunner, expectedCount int, timeout time.Duration) []*queue.SSVMessage {
-
+// collectMessagesFromQueue collects and returns messages received on the provided channel.
+// It waits for the expected number of messages or times out.
+func collectMessagesFromQueue(t *testing.T, msgChannel <-chan *queue.SSVMessage, expectedCount int, timeout time.Duration) []*queue.SSVMessage {
 	t.Helper()
-
-	msgChannel := make(chan *queue.SSVMessage, max(1, expectedCount))
-
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-		msgChannel <- msg
-		return nil
-	}
-
-	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
 	var receivedMessages []*queue.SSVMessage
 
@@ -151,6 +140,19 @@ func collectMessagesFromQueue(t *testing.T, ctx context.Context, committee *Comm
 	}
 
 	return receivedMessages
+}
+
+// setupMessageCollection creates a message channel and handler function for queue message processing.
+// It returns the message channel and the handler function that adds messages to this channel.
+func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.Context, *zap.Logger, *queue.SSVMessage) error) {
+	msgChannel := make(chan *queue.SSVMessage, max(1, capacity))
+
+	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+		msgChannel <- msg
+		return nil
+	}
+
+	return msgChannel, handler
 }
 
 // TestHandleMessageCreatesQueue verifies that the HandleMessage method correctly
@@ -266,8 +268,10 @@ func TestConsumeQueueBasic(t *testing.T) {
 		},
 	}
 
-	// Collect two messages from the queue with a 1 second timeout
-	receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 2, 1*time.Second)
+	msgChannel, handler := setupMessageCollection(2)
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
+
+	receivedMessages := collectMessagesFromQueue(t, msgChannel, 2, 1*time.Second)
 
 	assert.Equal(t, 2, len(receivedMessages))
 	assert.Equal(t, specqbft.ProposalMsgType, receivedMessages[0].Body.(*specqbft.Message).MsgType)
@@ -427,8 +431,10 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 		},
 	}
 
-	// Collect the expected messages from the queue
-	receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 4, 1*time.Second)
+	msgChannel, handler := setupMessageCollection(4)
+	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
+
+	receivedMessages := collectMessagesFromQueue(t, msgChannel, 4, 1*time.Second)
 
 	require.Equal(t, 4, len(receivedMessages))
 
@@ -534,28 +540,10 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 		},
 	}
 
-	receivedMessages := make([]*queue.SSVMessage, 0)
-	handlerCalled := make(chan struct{}, 2)
-
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-		receivedMessages = append(receivedMessages, msg)
-		handlerCalled <- struct{}{}
-		return nil
-	}
-
+	msgChannel, handler := setupMessageCollection(2)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
-	select {
-	case <-handlerCalled:
-	case <-time.After(500 * time.Millisecond):
-		t.Fatalf("timed out waiting for consensus message")
-	}
-
-	select {
-	case <-handlerCalled:
-		t.Fatalf("partial signature message was incorrectly processed")
-	case <-time.After(500 * time.Millisecond):
-	}
+	receivedMessages := collectMessagesFromQueue(t, msgChannel, 1, 1*time.Second)
 
 	require.Equal(t, 1, len(receivedMessages))
 	assert.Equal(t, spectypes.SSVConsensusMsgType, receivedMessages[0].MsgType)
@@ -632,24 +620,10 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 		},
 	}
 
-	receivedMessages := make([]*queue.SSVMessage, 0)
-	handlerCalled := make(chan struct{}, 2)
-
-	handler := func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
-		receivedMessages = append(receivedMessages, msg)
-		handlerCalled <- struct{}{}
-		return nil
-	}
-
+	msgChannel, handler := setupMessageCollection(2)
 	runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 
-	for i := 0; i < 2; i++ {
-		select {
-		case <-handlerCalled:
-		case <-time.After(1 * time.Second):
-			t.Fatalf("timed out waiting for message %d", i+1)
-		}
-	}
+	receivedMessages := collectMessagesFromQueue(t, msgChannel, 2, 1*time.Second)
 
 	require.Equal(t, 2, len(receivedMessages))
 
@@ -1026,11 +1000,15 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 
 			if tc.shouldBeFiltered {
 				// Expect 0 messages - message should be filtered
-				receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 0, 200*time.Millisecond)
+				msgChannel, handler := setupMessageCollection(1)
+				runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
+				receivedMessages := collectMessagesFromQueue(t, msgChannel, 0, 200*time.Millisecond)
 				assert.Empty(t, receivedMessages)
 			} else {
 				// Expect 1 message - message should be processed
-				receivedMessages := collectMessagesFromQueue(t, ctx, committee, q, logger, committeeRunner, 1, 1*time.Second)
+				msgChannel, handler := setupMessageCollection(1)
+				runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
+				receivedMessages := collectMessagesFromQueue(t, msgChannel, 1, 1*time.Second)
 				assert.Len(t, receivedMessages, 1)
 			}
 		})
