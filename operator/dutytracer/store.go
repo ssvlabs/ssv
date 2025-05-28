@@ -96,7 +96,7 @@ func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot p
 	}, nil
 }
 
-func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.CommitteeDutyTrace, err error) {
+func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.BeaconRole) (duties []*model.CommitteeDutyTrace, err error) {
 	c.committeeTraces.Range(func(committeeID spectypes.CommitteeID, committeeSlots *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		dt, found := committeeSlots.Get(wantSlot)
 		if !found {
@@ -115,7 +115,14 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot) (duties []*model.Co
 
 	duties = append(duties, diskDuties...)
 
-	return duties, nil
+	var filteredDuties []*model.CommitteeDutyTrace
+	for _, duty := range duties {
+		if hasSignersForRoles(duty, roles...) {
+			filteredDuties = append(filteredDuties, duty)
+		}
+	}
+
+	return filteredDuties, nil
 }
 
 func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, roles ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error) {
@@ -188,8 +195,8 @@ func (c *Collector) getCommitteeDutyFromDisk(slot phase0.Slot, committeeID spect
 	return trace, nil
 }
 
-func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot) (out []qbftstorage.ParticipantsRangeEntry, err error) {
-	duties, err := c.GetCommitteeDuties(slot)
+func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) (out []qbftstorage.ParticipantsRangeEntry, err error) {
+	duties, err := c.GetCommitteeDuties(slot, roles...)
 	if err != nil {
 		return nil, fmt.Errorf("get committee duties: %w", err)
 	}

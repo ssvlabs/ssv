@@ -509,7 +509,7 @@ func (m *mockTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 	return nil, nil
 }
 
-func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error) {
+func (m *mockTraceStore) GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*exportertypes.CommitteeDutyTrace, error) {
 	if m.GetCommitteeDutiesFunc != nil {
 		return m.GetCommitteeDutiesFunc(slot)
 	}
@@ -547,7 +547,7 @@ func (m *mockTraceStore) GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes
 	return m.committeeDecideds[key], nil
 }
 
-func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
 	if m.GetAllCommitteeDecidedsFunc != nil {
 		return m.GetAllCommitteeDecidedsFunc(slot)
 	}

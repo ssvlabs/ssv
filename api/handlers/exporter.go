@@ -26,12 +26,12 @@ type Exporter struct {
 type dutyTraceStore interface {
 	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error)
-	GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
+	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetAllCommitteeDecideds(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
 }
 
 type ParticipantResponse struct {
@@ -145,7 +145,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 			for s := request.From; s <= request.To; s++ {
 				slot := phase0.Slot(s)
 				if len(pubkeys) == 0 {
-					participantsByPK, err := e.TraceStore.GetAllCommitteeDecideds(slot)
+					participantsByPK, err := e.TraceStore.GetAllCommitteeDecideds(slot, role)
 					if err != nil {
 						continue
 					}
