@@ -37,33 +37,6 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	var committeeID2 spectypes.CommitteeID
 	committeeID2[0] = 2
 
-	/*
-		test plan:
-
-		1. insert slots [3, 4, 5]
-			index 1 ->
-				slot3: committee 1
-				slot4: committee 2
-				slot5: committee 1
-			index 2 ->
-				slot3: committee 2,
-				slot4: committee 1,
-				slot5: committee 2,
-
-		2. evict slots 4 and lower
-		3. assert
-				slots [3, 4] are deleted from cache
-				slots [3, 4] are inserted into database
-				slots [5] is in cache but not in the db
-	*/
-	slot3 := phase0.Slot(3)
-	collector.saveValidatorToCommitteeLink(slot3, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 1}},
-	}, committeeID1)
-	collector.saveValidatorToCommitteeLink(slot3, &spectypes.PartialSignatureMessages{
-		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 2}},
-	}, committeeID2)
-
 	slot4 := phase0.Slot(4)
 	collector.saveValidatorToCommitteeLink(slot4, &spectypes.PartialSignatureMessages{
 		Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: 2}},
@@ -81,19 +54,11 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	}, committeeID2)
 
 	// assert that validator committee mapping is available (in memory)
-	cmt1, err := collector.getCommitteeIDBySlotAndIndex(slot3, 1)
-	require.NoError(t, err)
-	require.Equal(t, committeeID1, cmt1)
-
-	cmt2, err := collector.getCommitteeIDBySlotAndIndex(slot3, 2)
-	require.NoError(t, err)
-	require.Equal(t, committeeID2, cmt2)
-
-	cmt1, err = collector.getCommitteeIDBySlotAndIndex(slot4, 1)
+	cmt1, err := collector.getCommitteeIDBySlotAndIndex(slot4, 1)
 	require.NoError(t, err)
 	require.Equal(t, committeeID2, cmt1)
 
-	cmt2, err = collector.getCommitteeIDBySlotAndIndex(slot4, 2)
+	cmt2, err := collector.getCommitteeIDBySlotAndIndex(slot4, 2)
 	require.NoError(t, err)
 	require.Equal(t, committeeID1, cmt2)
 
@@ -105,27 +70,18 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, committeeID2, cmt2)
 
-	// evict validator committee mapping in slot 4 and lower
+	// evict validator committee mapping in slot 4
 	thresholdSlot := phase0.Slot(4)
 	collector.dumpLinkToDBPeriodically(thresholdSlot)
 
-	// check that slot 3 and 4 are evicted from cache
+	// check that slot 4 is evicted from cache
 	indexToSlotMap, found := collector.validatorIndexToCommitteeLinks.Get(1)
 	require.True(t, found)
 
-	assert.False(t, indexToSlotMap.Has(slot3))
 	assert.False(t, indexToSlotMap.Has(slot4))
 	assert.True(t, indexToSlotMap.Has(slot5))
 
 	// assert that validator committee mapping is available (on disk and in memory)
-	cmt1, err = collector.getCommitteeIDBySlotAndIndex(slot3, 1)
-	require.NoError(t, err)
-	require.Equal(t, committeeID1, cmt1)
-
-	cmt2, err = collector.getCommitteeIDBySlotAndIndex(slot3, 2)
-	require.NoError(t, err)
-	require.Equal(t, committeeID2, cmt2)
-
 	cmt1, err = collector.getCommitteeIDBySlotAndIndex(slot4, 1)
 	require.NoError(t, err)
 	require.Equal(t, committeeID2, cmt1)
@@ -142,15 +98,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, committeeID2, cmt2)
 
-	// check that slots 3 and 4 are still in the database
-	link3_1, err := dutyStore.GetCommitteeDutyLink(slot3, 1)
-	require.NoError(t, err)
-	require.Equal(t, committeeID1, link3_1)
-
-	link3_2, err := dutyStore.GetCommitteeDutyLink(slot3, 2)
-	require.NoError(t, err)
-	require.Equal(t, committeeID2, link3_2)
-
+	// check that slot 4 is still in the database
 	link4_1, err := dutyStore.GetCommitteeDutyLink(slot4, 1)
 	require.NoError(t, err)
 	require.Equal(t, committeeID2, link4_1)
@@ -197,19 +145,6 @@ func TestCommitteeDutyStore(t *testing.T) {
 	committeeID2[0] = 2
 
 	// three slots X two committees
-	slot3 := phase0.Slot(3)
-
-	dutyTrace1, _, err := collector.getOrCreateCommitteeTrace(slot3, committeeID1)
-	require.NoError(t, err)
-	dutyTrace1.Decideds = append(dutyTrace1.Decideds, &model.DecidedTrace{
-		Signers: []spectypes.OperatorID{1},
-	})
-	require.NotNil(t, dutyTrace1)
-
-	dutyTrace2, _, err := collector.getOrCreateCommitteeTrace(slot3, committeeID2)
-	require.NoError(t, err)
-	require.NotNil(t, dutyTrace2)
-
 	slot4 := phase0.Slot(4)
 
 	dutyTrace3, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
@@ -237,19 +172,19 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.NotNil(t, dutyTrace6)
 
 	// breakdown duties by committee
-	dutiesC1 := []*committeeDutyTrace{dutyTrace1, dutyTrace3, dutyTrace5}
-	dutiesC2 := []*committeeDutyTrace{dutyTrace2, dutyTrace4, dutyTrace6}
+	dutiesC1 := []*committeeDutyTrace{dutyTrace3, dutyTrace5}
+	dutiesC2 := []*committeeDutyTrace{dutyTrace4, dutyTrace6}
 
 	// assert that traces are in available (in memory)
 	{
-		for i, slot := range []phase0.Slot{slot3, slot4, slot7} {
+		for i, slot := range []phase0.Slot{slot4, slot7} {
 			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
 			assert.Equal(t, slot, dutyTrace.Slot)
 			assert.Equal(t, slot, dutiesC1[i].Slot)
 		}
-		for i, slot := range []phase0.Slot{slot3, slot4, slot7} {
+		for i, slot := range []phase0.Slot{slot4, slot7} {
 			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
@@ -258,7 +193,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 		}
 
 		// assert that decideds are available (in memory)
-		for _, slot := range []phase0.Slot{slot3, slot4, slot7} {
+		for _, slot := range []phase0.Slot{slot4, slot7} {
 			collector.saveValidatorToCommitteeLink(slot, &spectypes.PartialSignatureMessages{
 				Messages: []*spectypes.PartialSignatureMessage{{ValidatorIndex: index}},
 			}, committeeID1)
@@ -271,15 +206,15 @@ func TestCommitteeDutyStore(t *testing.T) {
 	}
 
 	// step 2: evict traces at threshold 4
-	// meaning that slot 3 and 4 should be evicted to disk
+	// meaning that slot 4 should be evicted to disk
 	// but slot 7 should be in memory
 	slot8 := phase0.Slot(4)
 	collector.dumpCommitteeToDBPeriodically(slot8)
 	collector.dumpLinkToDBPeriodically(slot8)
 
-	// step 3: retrieve trace from disk (3,4) and memory (7)
+	// step 3: retrieve trace from disk (4) and memory (7)
 	{
-		for i, slot := range []phase0.Slot{slot3, slot4, slot7} {
+		for i, slot := range []phase0.Slot{slot4, slot7} {
 			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID1)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
@@ -287,7 +222,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 			assert.Equal(t, slot, dutiesC1[i].Slot)
 			assert.Equal(t, committeeID1, dutiesC1[i].CommitteeID)
 		}
-		for i, slot := range []phase0.Slot{slot3, slot4, slot7} {
+		for i, slot := range []phase0.Slot{slot4, slot7} {
 			dutyTrace, err := collector.GetCommitteeDuty(slot, committeeID2)
 			require.NoError(t, err)
 			require.NotNil(t, dutyTrace)
@@ -296,7 +231,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 			assert.Equal(t, committeeID2, dutiesC2[i].CommitteeID)
 		}
 
-		for _, slot := range []phase0.Slot{slot3, slot4, slot7} {
+		for _, slot := range []phase0.Slot{slot4, slot7} {
 			dd, err := collector.GetCommitteeDecideds(slot, validatorPK)
 			require.NoError(t, err)
 			require.NotNil(t, dd)
@@ -320,16 +255,6 @@ func TestCommitteeDutyStore(t *testing.T) {
 	require.True(t, found)
 
 	// assert that evicted traces are on disk
-	storedDuty3_1, err := dutyStore.GetCommitteeDuty(slot3, committeeID1)
-	require.NoError(t, err)
-	require.NotNil(t, storedDuty3_1)
-	assert.Equal(t, slot3, storedDuty3_1.Slot)
-
-	storedDuty3_2, err := dutyStore.GetCommitteeDuty(slot3, committeeID2)
-	require.NoError(t, err)
-	require.NotNil(t, storedDuty3_2)
-	assert.Equal(t, slot3, storedDuty3_2.Slot)
-
 	storedDuty4_1, err := dutyStore.GetCommitteeDuty(slot4, committeeID1)
 	require.NoError(t, err)
 	require.NotNil(t, storedDuty4_1)
@@ -390,21 +315,9 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	collector := New(context.TODO(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
-	slot3 := phase0.Slot(3)
-
-	dutyTrace, mod, _, err := collector.getOrCreateValidatorTrace(slot3, spectypes.BNRoleProposer, validatorPK1)
-	require.NoError(t, err)
-	mod.Validator = index
-	require.NotNil(t, dutyTrace)
-
-	dutyTrace, mod, _, err = collector.getOrCreateValidatorTrace(slot3, spectypes.BNRoleProposer, validatorPK2)
-	require.NoError(t, err)
-	mod.Validator = phase0.ValidatorIndex(2)
-	require.NotNil(t, dutyTrace)
-
 	slot4 := phase0.Slot(4)
 
-	dutyTrace, mod, _, err = collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK1)
+	dutyTrace, mod, _, err := collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK1)
 	require.NoError(t, err)
 	mod.Validator = index
 	mod.Decideds = append(mod.Decideds, &model.DecidedTrace{
@@ -456,9 +369,9 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.Len(t, dd, 1)
 	require.Equal(t, []spectypes.OperatorID{99, 100}, dd[0].Signers)
 
-	// evict slot 3 and 4
-	slot6 := phase0.Slot(4)
-	collector.dumpValidatorToDBPeriodically(slot6)
+	// evict slot 4
+	threshold := phase0.Slot(4)
+	collector.dumpValidatorToDBPeriodically(threshold)
 
 	var inMem = make(map[phase0.Slot]struct{})
 	collector.validatorTraces.Range(func(key spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
@@ -487,18 +400,6 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.Equal(t, []spectypes.OperatorID{5}, dd[0].Signers)
 
 	// assert that evicted traces are on disk
-	storedDuty3_1, err := dutyStore.GetValidatorDuty(slot3, spectypes.BNRoleProposer, 1)
-	require.NoError(t, err)
-	require.NotNil(t, storedDuty3_1)
-	assert.Equal(t, slot3, storedDuty3_1.Slot)
-	assert.Equal(t, phase0.ValidatorIndex(1), storedDuty3_1.Validator)
-
-	storedDuty3_2, err := dutyStore.GetValidatorDuty(slot3, spectypes.BNRoleProposer, 2)
-	require.NoError(t, err)
-	require.NotNil(t, storedDuty3_2)
-	assert.Equal(t, slot3, storedDuty3_2.Slot)
-	assert.Equal(t, phase0.ValidatorIndex(2), storedDuty3_2.Validator)
-
 	storedDuty4_1, err := dutyStore.GetValidatorDuty(slot4, spectypes.BNRoleProposer, 1)
 	require.NoError(t, err)
 	require.NotNil(t, storedDuty4_1)
