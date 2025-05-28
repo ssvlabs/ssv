@@ -194,6 +194,11 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 
 	assert.NotNil(t, q.Q)
 	assert.Equal(t, slot, q.queueState.Slot)
+	assert.False(t, q.queueState.HasRunningInstance)
+	assert.Equal(t, specqbft.Height(slot), q.queueState.Height)
+
+	// default, the queueState.Round is not explicitly initialized from the incoming message
+	assert.Equal(t, specqbft.Round(0), q.queueState.Round)
 }
 
 // TestConsumeQueueBasic tests the fundamental queue consumption functionality
