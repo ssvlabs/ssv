@@ -108,6 +108,10 @@ func (km *RemoteKeyManager) AddShare(
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
+	if err := km.BumpSlashingProtection(pubKey); err != nil {
+		return fmt.Errorf("could not bump slashing protection: %w", err)
+	}
+
 	shareKeys := ssvsigner.ShareKeys{
 		EncryptedPrivKey: hexutil.Bytes(encryptedPrivKey),
 		PubKey:           pubKey,
@@ -115,10 +119,6 @@ func (km *RemoteKeyManager) AddShare(
 
 	if err := km.signerClient.AddValidators(ctx, shareKeys); err != nil {
 		return fmt.Errorf("add validator: %w", err)
-	}
-
-	if err := km.BumpSlashingProtection(pubKey); err != nil {
-		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
 	return nil
