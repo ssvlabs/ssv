@@ -95,7 +95,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				return result, nil
 			}).AnyTimes()
 
-			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork, beaconNode, commons.ZeroSubnets)
+			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork.BeaconConfig, beaconNode, commons.ZeroSubnets)
 			_, err := syncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
@@ -422,7 +422,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
-			networkConfig:     networkconfig.TestNetwork,
+			beaconConfig:      networkconfig.TestNetwork.BeaconConfig,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -521,7 +521,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        errMockBeaconNode,
-			networkConfig:     networkconfig.TestNetwork,
+			beaconConfig:      networkconfig.TestNetwork.BeaconConfig,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -595,7 +595,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
-			networkConfig:     networkconfig.TestNetwork,
+			beaconConfig:      networkconfig.TestNetwork.BeaconConfig,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -667,7 +667,7 @@ func TestWithUpdateInterval(t *testing.T) {
 		logger,
 		mockShareStorage,
 		mockValidatorStore,
-		networkconfig.TestNetwork,
+		networkconfig.TestNetwork.BeaconConfig,
 		mockBeaconNode,
 		commons.ZeroSubnets,
 		WithSyncInterval(interval),

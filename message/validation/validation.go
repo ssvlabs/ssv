@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ssvlabs/ssv/utils/casts"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -55,7 +53,7 @@ type peerIDWithMessageID struct {
 
 type messageValidator struct {
 	logger          *zap.Logger
-	netCfg          networkconfig.NetworkConfig
+	netCfg          networkconfig.Network
 	pectraForkEpoch phase0.Epoch
 	state           *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
 	validatorStore  validatorStore
@@ -81,7 +79,7 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 // It starts a goroutine that cleans up the state.
 func New(
-	netCfg networkconfig.NetworkConfig,
+	netCfg networkconfig.Network,
 	validatorStore validatorStore,
 	operators operators,
 	dutyStore *dutystore.Store,
@@ -89,14 +87,9 @@ func New(
 	pectraForkEpoch phase0.Epoch,
 	opts ...Option,
 ) MessageValidator {
-	ttl := time.Duration(MaxStoredSlots(netCfg)) * netCfg.SlotDurationSec() // #nosec G115 -- amount of slots cannot exceed int64
-
 	mv := &messageValidator{
-		logger: zap.NewNop(),
-		netCfg: netCfg,
-		state: ttlcache.New(
-			ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
-		),
+		logger:              zap.NewNop(),
+		netCfg:              netCfg,
 		validationLockCache: ttlcache.New[peerIDWithMessageID, *sync.Mutex](),
 		validatorStore:      validatorStore,
 		operators:           operators,
@@ -104,6 +97,11 @@ func New(
 		signatureVerifier:   signatureVerifier,
 		pectraForkEpoch:     pectraForkEpoch,
 	}
+
+	ttl := time.Duration(mv.maxStoredSlots()) * netCfg.GetSlotDuration() // #nosec G115 -- amount of slots cannot exceed int64
+	mv.state = ttlcache.New(
+		ttlcache.WithTTL[peerIDWithMessageID, *ValidatorState](ttl),
+	)
 
 	for _, opt := range opts {
 		opt(mv)
@@ -248,7 +246,6 @@ func (mv *messageValidator) getValidationLock(key peerIDWithMessageID) *sync.Mut
 
 		lock := &sync.Mutex{}
 
-		epochDuration := casts.DurationFromUint64(mv.netCfg.Beacon.SlotsPerEpoch()) * mv.netCfg.Beacon.SlotDurationSec()
 		// validationLockTTL specifies how much time a particular validation lock is meant to
 		// live. It must be large enough for validation lock to never expire while we still are
 		// expecting to process messages targeting that same validation lock. For a message
@@ -257,8 +254,7 @@ func (mv *messageValidator) getValidationLock(key peerIDWithMessageID) *sync.Mut
 		// be allowed to take place).
 		// 2 epoch duration is a safe TTL to use - message validation will reject processing
 		// for any message older than that.
-		validationLockTTL := 2 * epochDuration
-		mv.validationLockCache.Set(key, lock, validationLockTTL)
+		mv.validationLockCache.Set(key, lock, 2*mv.netCfg.EpochDuration())
 
 		return lock, nil
 	})
@@ -302,7 +298,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	// Rule: If validator is not active
-	if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	if !share.IsAttesting(mv.netCfg.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = share.Status.String()
 		return CommitteeInfo{}, e
@@ -324,14 +320,14 @@ func (mv *messageValidator) validatorState(key peerIDWithMessageID, committee []
 
 	cs := &ValidatorState{
 		operators:       make([]*OperatorState, len(committee)),
-		storedSlotCount: MaxStoredSlots(mv.netCfg),
+		storedSlotCount: mv.maxStoredSlots(),
 	}
 	mv.state.Set(key, cs, ttlcache.DefaultTTL)
 	return cs
 }
 
-// MaxStoredSlots stores max amount of slots message validation stores.
+// maxStoredSlots stores max amount of slots message validation stores.
 // It's exported to allow usage outside of message validation
-func MaxStoredSlots(netCfg networkconfig.NetworkConfig) phase0.Slot {
-	return phase0.Slot(netCfg.Beacon.SlotsPerEpoch()) + LateSlotAllowance
+func (mv *messageValidator) maxStoredSlots() uint64 {
+	return mv.netCfg.GetSlotsPerEpoch() + LateSlotAllowance
 }

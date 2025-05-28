@@ -47,11 +47,10 @@ const (
 // PubSubConfig is the needed config to instantiate pubsub
 type PubSubConfig struct {
 	NetworkConfig networkconfig.NetworkConfig
-
-	Host        host.Host
-	TraceLog    bool
-	StaticPeers []peer.AddrInfo
-	MsgHandler  PubsubMessageHandler
+	Host          host.Host
+	TraceLog      bool
+	StaticPeers   []peer.AddrInfo
+	MsgHandler    PubsubMessageHandler
 	// MsgValidator accepts the topic name and returns the corresponding msg validator
 	// in case we need different validators for specific topics,
 	// this should be the place to map a validator to topic
@@ -76,7 +75,6 @@ type PubSubConfig struct {
 type ScoringConfig struct {
 	IPWhitelist        []*net.IPNet
 	IPColocationWeight float64
-	OneEpochDuration   time.Duration
 }
 
 // PubsubBundle includes the pubsub router, plus involved components
@@ -117,7 +115,13 @@ type CommitteesProvider interface {
 }
 
 // NewPubSub creates a new pubsub router and the necessary components
-func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, committeesProvider CommitteesProvider, gossipScoreIndex peers.GossipScoreIndex) (*pubsub.PubSub, Controller, error) {
+func NewPubSub(
+	ctx context.Context,
+	logger *zap.Logger,
+	cfg *PubSubConfig,
+	committeesProvider CommitteesProvider,
+	gossipScoreIndex peers.GossipScoreIndex,
+) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
@@ -167,7 +171,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, commi
 		}
 
 		// Get overall score params
-		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhitelist...)
+		peerScoreParams := params.PeerScoreParams(cfg.NetworkConfig, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhitelist...)
 
 		// Define score inspector
 		if inspector == nil {

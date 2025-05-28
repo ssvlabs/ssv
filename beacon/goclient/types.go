@@ -7,12 +7,6 @@ import (
 )
 
 var (
-	SyncCommitteeSize                    uint64 = 512
-	SyncCommitteeSubnetCount             uint64 = 4
-	TargetAggregatorsPerSyncSubcommittee uint64 = 16
-	EpochsPerSyncCommitteePeriod         uint64 = 256
-	TargetAggregatorsPerCommittee        uint64 = 16
 	// FarFutureEpoch is the null representation of an epoch.
-	FarFutureEpoch   phase0.Epoch = math.MaxUint64
-	IntervalsPerSlot uint64       = 3
+	FarFutureEpoch phase0.Epoch = math.MaxUint64
 )

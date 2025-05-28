@@ -30,7 +30,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	gc.waitToSlotTwoThirds(slot)
 
 	// differ from spec because we need to subscribe to subnet
-	isAggregator := isAggregator(committeeLength, slotSig)
+	isAggregator := gc.isAggregator(committeeLength, slotSig)
 	if !isAggregator {
 		return nil, DataVersionNil, fmt.Errorf("validator is not an aggregator")
 	}
@@ -39,7 +39,9 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
-	if gc.DataVersion(gc.network.EstimatedEpochAtSlot(attData.Slot)) < spec.DataVersionElectra {
+
+	dataVersion, _ := gc.beaconConfig.ForkAtEpoch(gc.getBeaconConfig().EstimatedEpochAtSlot(attData.Slot))
+	if dataVersion < spec.DataVersionElectra {
 		attData.Index = committeeIndex
 	}
 
@@ -188,8 +190,8 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(
 //	 committee = get_beacon_committee(state, slot, index)
 //	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
 //	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
-func isAggregator(committeeCount uint64, slotSig []byte) bool {
-	modulo := committeeCount / TargetAggregatorsPerCommittee
+func (gc *GoClient) isAggregator(committeeCount uint64, slotSig []byte) bool {
+	modulo := committeeCount / gc.beaconConfig.TargetAggregatorsPerCommittee
 	if modulo == 0 {
 		// Modulo must be at least 1.
 		modulo = 1
@@ -201,9 +203,9 @@ func isAggregator(committeeCount uint64, slotSig []byte) bool {
 
 // waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after slot start time)
 func (gc *GoClient) waitToSlotTwoThirds(slot phase0.Slot) {
-	oneThird := gc.network.SlotDurationSec() / 3 /* one third of slot duration */
-
-	finalTime := gc.slotStartTime(slot).Add(2 * oneThird)
+	config := gc.getBeaconConfig()
+	oneInterval := config.IntervalDuration()
+	finalTime := config.GetSlotStartTime(slot).Add(2 * oneInterval)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
