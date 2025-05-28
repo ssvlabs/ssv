@@ -411,7 +411,7 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 
 	// High contention test with concurrent read, add, update, and remove
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 	for i := 0; i < 100; i++ {
 		for _, op := range []string{"add", "update", "remove1", "remove4", "read"} {

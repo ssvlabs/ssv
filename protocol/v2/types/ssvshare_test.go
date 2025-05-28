@@ -7,9 +7,9 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/crypto"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
@@ -209,7 +209,7 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsParticipating(networkconfig.Mainnet, tc.Epoch)
+			result := tc.Share.IsParticipating(networkconfig.TestNetwork, tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}

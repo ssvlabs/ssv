@@ -73,8 +73,8 @@ type Config struct {
 	UserAgent string
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
-	// Network defines a network configuration.
-	Network networkconfig.NetworkConfig
+	// NetworkConfig defines a network configuration.
+	NetworkConfig networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
 
@@ -183,12 +183,12 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 func (c *Config) TransformBootnodes() []string {
 
 	if c.Bootnodes == "" {
-		return c.Network.Bootnodes
+		return c.NetworkConfig.Bootnodes
 	}
 
 	// extend additional bootnodes from config
 	extraBootnodes := strings.Split(c.Bootnodes, ";")
-	return append(extraBootnodes, c.Network.Bootnodes...)
+	return append(extraBootnodes, c.NetworkConfig.Bootnodes...)
 }
 
 func userAgent(fromCfg string) string {

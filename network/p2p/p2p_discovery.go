@@ -109,7 +109,7 @@ func (n *p2pNetwork) startDiscovery() error {
 				// applying backoff penalty for peers with failed connection attempts:
 				// - the more a peer has been tried the less relevant it is (cooldown grows)
 				// - the more time has passed since last connect attempt the more relevant peer is (waited grows)
-				peerSubnets := n.PeersIndex().GetPeerSubnets(peerID)
+				peerSubnets, _ := n.PeersIndex().GetPeerSubnets(peerID)
 				peerScore := optimisticSubnetPeers.Score(ownSubnets, peerSubnets)
 				if discoveredPeer.Tries > 0 {
 					const retryCooldownMin, retryCooldownMax = 30 * time.Second, 300 * time.Second
@@ -138,8 +138,9 @@ func (n *p2pNetwork) startDiscovery() error {
 			// Add the selected peer's subnets to pendingSubnetPeers,
 			// to be used in the next iteration.
 			bestPeerSubnets := SubnetPeers{}
-			for subnet, v := range n.PeersIndex().GetPeerSubnets(bestPeer.ID) {
-				bestPeerSubnets[subnet] = uint16(v)
+			subnets, _ := n.PeersIndex().GetPeerSubnets(bestPeer.ID)
+			for subnet, v := range subnets.SubnetList() {
+				bestPeerSubnets[subnet] = uint16(v) // #nosec G115 -- subnets has a constant max len of 128
 			}
 			pendingSubnetPeers = pendingSubnetPeers.Add(bestPeerSubnets)
 			peersToConnect[bestPeer.ID] = bestPeer

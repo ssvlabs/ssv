@@ -28,7 +28,7 @@ type RecipientController interface {
 type ControllerOptions struct {
 	Ctx                context.Context
 	BeaconClient       beaconprotocol.BeaconNode
-	Network            networkconfig.NetworkConfig
+	BeaconConfig       networkconfig.BeaconConfig
 	ShareStorage       storage.Shares
 	RecipientStorage   storage.Recipients
 	SlotTickerProvider slotticker.Provider
@@ -40,7 +40,7 @@ type recipientController struct {
 	logger             *zap.Logger
 	ctx                context.Context
 	beaconClient       beaconprotocol.BeaconNode
-	network            networkconfig.NetworkConfig
+	beaconConfig       networkconfig.BeaconConfig
 	shareStorage       storage.Shares
 	recipientStorage   storage.Recipients
 	slotTickerProvider slotticker.Provider
@@ -52,7 +52,7 @@ func NewController(logger *zap.Logger, opts *ControllerOptions) *recipientContro
 		logger:             logger,
 		ctx:                opts.Ctx,
 		beaconClient:       opts.BeaconClient,
-		network:            opts.Network,
+		beaconConfig:       opts.BeaconConfig,
 		shareStorage:       opts.ShareStorage,
 		recipientStorage:   opts.RecipientStorage,
 		slotTickerProvider: opts.SlotTickerProvider,
@@ -76,7 +76,7 @@ func (rc *recipientController) listenToTicker(ctx context.Context) {
 		<-ticker.Next()
 		slot := ticker.Slot()
 		// submit if first time or if first slot in epoch
-		if firstTimeSubmitted && uint64(slot)%rc.network.SlotsPerEpoch() != (rc.network.SlotsPerEpoch()/2) {
+		if firstTimeSubmitted && uint64(slot)%rc.beaconConfig.SlotsPerEpoch != (rc.beaconConfig.SlotsPerEpoch/2) {
 			continue
 		}
 		firstTimeSubmitted = true
