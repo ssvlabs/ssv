@@ -83,12 +83,22 @@ func runConsumeQueueAsync(t *testing.T, ctx context.Context, committee *Committe
 
 	t.Helper()
 
+	errCh := make(chan error, 1)
 	go func() {
 		err := committee.ConsumeQueue(ctx, q, logger, handler, committeeRunner)
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+
+	select {
+	case err, ok := <-errCh:
+		if ok && err != nil {
 			t.Errorf("ConsumeQueue returned an unexpected error: %v", err)
 		}
-	}()
+	default:
+	}
 }
 
 // collectMessagesFromQueue is a test helper that consumes messages from a queue and returns the collected messages.
@@ -1470,14 +1480,15 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 		bucketChan <- priority(m)
 		return nil
 	}
+
+	errCh := make(chan error, 1)
 	go func() {
 		defer close(bucketChan)
 		err := committee.ConsumeQueue(ctx, qc, logger, handler, committee.Runners[slot])
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-			// If ConsumeQueue errors unexpectedly, it might not drain all messages.
-			// The test will likely fail on timeout or incorrect bucket counts.
-			t.Logf("ConsumeQueue in TestConsumeQueueBurstTraffic exited with error: %v", err)
+			errCh <- err
 		}
+		close(errCh)
 	}()
 
 	// Wait for exactly len(allMsgs) messages (or fail on timeout)
@@ -1768,11 +1779,13 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		consumerCtx, consumerCancel := context.WithCancel(ctx)
 		var consumerWg sync.WaitGroup
 		consumerWg.Add(1)
+
+		consumerErrCh := make(chan error, 1)
 		go func() {
 			defer consumerWg.Done()
 			err := committee.ConsumeQueue(consumerCtx, q, logger, processFn, committeeRunner)
 			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				panic(fmt.Errorf("ConsumeQueue exited with unexpected error: %w", err))
+				consumerErrCh <- err
 			}
 		}()
 
@@ -1825,11 +1838,13 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		consumer2Ctx, consumer2Cancel := context.WithCancel(ctx2)
 		var consumer2Wg sync.WaitGroup
 		consumer2Wg.Add(1)
+
+		consumer2ErrCh := make(chan error, 1)
 		go func() {
 			defer consumer2Wg.Done()
 			err := committee.ConsumeQueue(consumer2Ctx, q, logger, processFn, committeeRunner)
 			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				panic(fmt.Errorf("ConsumeQueue (phase 2) exited with unexpected error: %w", err))
+				consumer2ErrCh <- err
 			}
 		}()
 
