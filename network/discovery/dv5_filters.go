@@ -6,7 +6,6 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
 )
 
@@ -78,7 +77,7 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 			return false
 		}
 		for _, subnet := range subnets {
-			if fromEntry[subnet] > 0 {
+			if fromEntry.IsSet(subnet) {
 				return true
 			}
 		}
@@ -93,14 +92,11 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 		if n == 0 {
 			return true
 		}
-		if len(dvs.subnets) == 0 {
-			return true
-		}
 		nodeSubnets, err := records.GetSubnetsEntry(node.Record())
 		if err != nil {
 			return false
 		}
-		shared := commons.SharedSubnets(dvs.subnets, nodeSubnets, n)
+		shared := dvs.subnets.SharedSubnetsN(nodeSubnets, n)
 		// logger.Debug("shared subnets", zap.Ints("shared", shared),
 		//	zap.String("node", node.String()))
 

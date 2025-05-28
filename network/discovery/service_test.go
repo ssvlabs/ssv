@@ -34,7 +34,7 @@ func TestNewDiscV5Service(t *testing.T) {
 	assert.NotNil(t, dvs.dv5Listener)
 	assert.NotNil(t, dvs.conns)
 	assert.NotNil(t, dvs.subnetsIdx)
-	assert.NotNil(t, dvs.networkConfig)
+	assert.NotNil(t, dvs.ssvConfig)
 
 	// Check bootnodes
 	CheckBootnodes(t, dvs, testNetConfig)
@@ -59,31 +59,31 @@ func TestDiscV5Service_RegisterSubnets(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(1), dvs.subnets[3])
-	require.Equal(t, byte(1), dvs.subnets[5])
-	require.Equal(t, byte(0), dvs.subnets[2])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.True(t, dvs.subnets.IsSet(3))
+	require.True(t, dvs.subnets.IsSet(5))
+	require.False(t, dvs.subnets.IsSet(2))
 
 	// Register the same subnets. Should not update the state
 	updated, err = dvs.RegisterSubnets(1, 3, 5)
 	assert.NoError(t, err)
 	assert.False(t, updated)
 
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(1), dvs.subnets[3])
-	require.Equal(t, byte(1), dvs.subnets[5])
-	require.Equal(t, byte(0), dvs.subnets[2])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.True(t, dvs.subnets.IsSet(3))
+	require.True(t, dvs.subnets.IsSet(5))
+	require.False(t, dvs.subnets.IsSet(2))
 
 	// Register different subnets
 	updated, err = dvs.RegisterSubnets(2, 4)
 	assert.NoError(t, err)
 	assert.True(t, updated)
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(1), dvs.subnets[2])
-	require.Equal(t, byte(1), dvs.subnets[3])
-	require.Equal(t, byte(1), dvs.subnets[4])
-	require.Equal(t, byte(1), dvs.subnets[5])
-	require.Equal(t, byte(0), dvs.subnets[6])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.True(t, dvs.subnets.IsSet(2))
+	require.True(t, dvs.subnets.IsSet(3))
+	require.True(t, dvs.subnets.IsSet(4))
+	require.True(t, dvs.subnets.IsSet(5))
+	require.False(t, dvs.subnets.IsSet(6))
 
 	// Close
 	err = dvs.Close()
@@ -97,18 +97,18 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	_, err := dvs.RegisterSubnets(1, 2, 3)
 	require.NoError(t, err)
 
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(1), dvs.subnets[2])
-	require.Equal(t, byte(1), dvs.subnets[3])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.True(t, dvs.subnets.IsSet(2))
+	require.True(t, dvs.subnets.IsSet(3))
 
 	// Deregister from 2 and 3
 	updated, err := dvs.DeregisterSubnets(2, 3)
 	assert.NoError(t, err)
 	assert.True(t, updated)
 
-	require.Equal(t, byte(1), dvs.subnets[1])
-	require.Equal(t, byte(0), dvs.subnets[2])
-	require.Equal(t, byte(0), dvs.subnets[3])
+	require.True(t, dvs.subnets.IsSet(1))
+	require.False(t, dvs.subnets.IsSet(2))
+	require.False(t, dvs.subnets.IsSet(3))
 
 	// Deregistering non-existent subnets should not update
 	updated, err = dvs.DeregisterSubnets(4, 5)
@@ -141,10 +141,10 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
 	dvs, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 
@@ -158,21 +158,21 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
 
 	// Change network config
-	dvs.networkConfig = networkconfig.HoleskyStage
+	dvs.ssvConfig = networkconfig.TestNetwork.SSVConfig
 	// Test PublishENR method
 	dvs.PublishENR()
 
 	// Check LocalNode has been updated
-	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.HoleskyStage)
+	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.TestNetwork)
 }
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
 
-	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
+	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 
 	// Replace listener
@@ -277,8 +277,8 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	dvs.conns.(*MockConnection).SetAtLimit(false)
 
 	// Valid peer but no common subnet
-	subnets := make([]byte, len(commons.ZeroSubnets))
-	subnets[10] = 1
+	subnets := commons.Subnets{}
+	subnets.Set(10)
 	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomSubnets(t, subnets)))
 	require.ErrorContains(t, err, "no shared subnets")
 }
@@ -361,11 +361,11 @@ func TestServiceAddressConfiguration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
 			// create options with unique ports for parallel testing
-			opts := testingDiscoveryOptions(t, testNetConfig)
+			opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
 			opts.DiscV5Opts.Port = uint16(13000 + i*10)
 			opts.DiscV5Opts.TCPPort = uint16(14000 + i*10)
 			opts.HostAddress = tc.hostAddress

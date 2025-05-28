@@ -123,8 +123,8 @@ func PubKey(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldPubKey, stringer.HexStringer{Val: pubKey})
 }
 
-func OperatorPubKey(pubKey []byte) zapcore.Field {
-	return zap.String(FieldOperatorPubKey, string(pubKey))
+func OperatorPubKey(pubKey string) zapcore.Field {
+	return zap.String(FieldOperatorPubKey, pubKey)
 }
 
 func Validator(pubKey []byte) zapcore.Field {
@@ -172,7 +172,7 @@ func UpdatedENRLocalNode(val *enode.LocalNode) zapcore.Field {
 }
 
 func Subnets(val commons.Subnets) zapcore.Field {
-	return zap.Stringer(FieldSubnets, val)
+	return zap.Stringer(FieldSubnets, &val)
 }
 
 func PeerID(val peer.ID) zapcore.Field {

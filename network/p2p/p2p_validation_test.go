@@ -44,7 +44,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	)
 	var vNet *VirtualNet
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// Create 20 fake validator public keys.

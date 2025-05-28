@@ -9,6 +9,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 type ENRKey string
@@ -68,31 +70,32 @@ func GetDomainTypeEntry(record *enr.Record, key ENRKey) (spectypes.DomainType, e
 }
 
 // SetSubnetsEntry adds subnets entry to our enode.LocalNode
-func SetSubnetsEntry(node *enode.LocalNode, subnets []byte) error {
+func SetSubnetsEntry(node *enode.LocalNode, subnets commons.Subnets) error {
 	subnetsVec := bitfield.NewBitvector128()
-	for i, subnet := range subnets { // #nosec G115 -- subnets has a constant len of 128
-		subnetsVec.SetBitAt(uint64(i), subnet > 0)
+
+	for i := uint64(0); i < commons.SubnetsCount; i++ {
+		subnetsVec.SetBitAt(i, subnets.IsSet(i))
 	}
 	node.Set(enr.WithEntry("subnets", &subnetsVec))
 	return nil
 }
 
 // GetSubnetsEntry extracts the value of subnets entry from some record
-func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
+func GetSubnetsEntry(record *enr.Record) (commons.Subnets, error) {
 	subnetsVec := bitfield.NewBitvector128()
 	if err := record.Load(enr.WithEntry("subnets", &subnetsVec)); err != nil {
 		if enr.IsNotFound(err) {
-			return nil, ErrEntryNotFound
+			return commons.Subnets{}, ErrEntryNotFound
 		}
-		return nil, err
+		return commons.Subnets{}, err
 	}
-	res := make([]byte, 0, subnetsVec.Len())
-	for i := uint64(0); i < subnetsVec.Len(); i++ {
-		val := byte(0)
+	res := commons.Subnets{}
+	for i := uint64(0); i < commons.SubnetsCount; i++ {
 		if subnetsVec.BitAt(i) {
-			val = 1
+			res.Set(i)
+		} else {
+			res.Clear(i)
 		}
-		res = append(res, val)
 	}
 	return res, nil
 }

@@ -91,21 +91,21 @@ type PeerInfoIndex interface {
 // SubnetsStats holds a snapshot of subnets stats
 type SubnetsStats struct {
 	AvgConnected int
-	PeersCount   []int
-	Connected    []int
+	PeersCount   [commons.SubnetsCount]int
+	Connected    [commons.SubnetsCount]int
 }
 
 // SubnetsIndex stores information on subnets.
 // it keeps track of subnets but doesn't mind regards actual connections that we have.
 type SubnetsIndex interface {
 	// UpdatePeerSubnets updates the given peer's subnets
-	UpdatePeerSubnets(id peer.ID, s commons.Subnets) bool
+	UpdatePeerSubnets(id peer.ID, subnets commons.Subnets) bool
 
 	// GetSubnetPeers returns peers that are interested in the given subnet
-	GetSubnetPeers(s int) []peer.ID
+	GetSubnetPeers(subnet int) []peer.ID
 
-	// GetPeerSubnets returns subnets of the given peer
-	GetPeerSubnets(id peer.ID) commons.Subnets
+	// GetPeerSubnets returns subnets of the given peer and whether it was found
+	GetPeerSubnets(id peer.ID) (subnets commons.Subnets, ok bool)
 
 	// GetSubnetsStats collects and returns subnets stats
 	GetSubnetsStats() *SubnetsStats

@@ -3,7 +3,6 @@ package peers
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -40,14 +39,20 @@ type peersIndex struct {
 }
 
 // NewPeersIndex creates a new Index
-func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
-	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration, gossipScoreIndex GossipScoreIndex) *peersIndex {
+func NewPeersIndex(
+	logger *zap.Logger,
+	network libp2pnetwork.Network,
+	self *records.NodeInfo,
+	maxPeers MaxPeersProvider,
+	netKeyProvider NetworkKeyProvider,
+	gossipScoreIndex GossipScoreIndex,
+) *peersIndex {
 
 	return &peersIndex{
 		logger:           logger,
 		network:          network,
 		scoreIdx:         newScoreIndex(),
-		SubnetsIndex:     NewSubnetsIndex(subnetsCount),
+		SubnetsIndex:     NewSubnetsIndex(),
 		PeerInfoIndex:    NewPeerInfoIndex(),
 		self:             self,
 		selfLock:         &sync.RWMutex{},
@@ -161,7 +166,7 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 	if stats == nil {
 		return nil
 	}
-	stats.Connected = make([]int, len(stats.PeersCount))
+
 	var sumConnected int
 	for subnet := range stats.PeersCount {
 		peers := pi.GetSubnetPeers(subnet)
@@ -174,9 +179,8 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 		stats.Connected[subnet] = connectedCount
 		sumConnected += connectedCount
 	}
-	if len(stats.PeersCount) > 0 {
-		stats.AvgConnected = sumConnected / len(stats.PeersCount)
-	}
+
+	stats.AvgConnected = sumConnected / len(stats.PeersCount)
 
 	return stats
 }

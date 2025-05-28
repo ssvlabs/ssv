@@ -1,6 +1,7 @@
 package eventhandler
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
@@ -121,7 +122,7 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 			if tc.saved {
 				for _, operator := range tc.operators {
 					od := &storage.OperatorData{
-						PublicKey:    binary.LittleEndian.AppendUint64(nil, operator),
+						PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, operator)),
 						OwnerAddress: common.Address{},
 						ID:           operator,
 					}
