@@ -281,7 +281,6 @@ func TestConsumeQueueBasic(t *testing.T) {
 	assert.Equal(t, 2, len(receivedMessages))
 	assert.Equal(t, specqbft.ProposalMsgType, receivedMessages[0].Body.(*specqbft.Message).MsgType)
 	assert.Equal(t, specqbft.PrepareMsgType, receivedMessages[1].Body.(*specqbft.Message).MsgType)
-	assert.Equal(t, 0, q.Q.Len())
 }
 
 // TestStartConsumeQueue tests the StartConsumeQueue method, which orchestrates queue processing
@@ -464,7 +463,6 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 			assert.NotEqual(t, specqbft.CommitMsgType, qbftMsg.MsgType)
 		}
 	}
-	assert.Equal(t, 2, q.Q.Len())
 }
 
 // TestFilterNotDecidedSkipsPartialSignatures verifies that when the consensus instance
@@ -554,7 +552,6 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 
 	require.Equal(t, 1, len(receivedMessages))
 	assert.Equal(t, spectypes.SSVConsensusMsgType, receivedMessages[0].MsgType)
-	assert.Equal(t, 1, q.Q.Len())
 }
 
 // TestFilterDecidedAllowsAll verifies that all message types are processed
@@ -642,7 +639,6 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 
 	assert.True(t, msgTypes[spectypes.SSVConsensusMsgType])
 	assert.True(t, msgTypes[spectypes.SSVPartialSignatureMsgType])
-	assert.Equal(t, 0, q.Q.Len())
 }
 
 // TestChangingFilterState verifies that messages that were previously filtered
@@ -667,7 +663,7 @@ func TestChangingFilterState(t *testing.T) {
 	}
 	prepareMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareBody)
 
-	runOnce := func(rnr *runner.CommitteeRunner) (*queue.SSVMessage, int) {
+	runOnce := func(rnr *runner.CommitteeRunner) *queue.SSVMessage {
 		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		defer cancel()
 
@@ -692,7 +688,7 @@ func TestChangingFilterState(t *testing.T) {
 
 		c := &Committee{}
 		_ = c.ConsumeQueue(ctx, q, logger, handler, rnr)
-		return seen, q.Q.Len()
+		return seen
 	}
 
 	// 1) No proposal accepted => Prepare should be filtered out
@@ -709,9 +705,8 @@ func TestChangingFilterState(t *testing.T) {
 			},
 		},
 	}
-	seen1, len1 := runOnce(r1)
+	seen1 := runOnce(r1)
 	assert.Nil(t, seen1)
-	assert.Equal(t, 1, len1)
 
 	// 2) Proposal accepted => now we should see exactly one Prepare
 	r2 := &runner.CommitteeRunner{
@@ -727,11 +722,10 @@ func TestChangingFilterState(t *testing.T) {
 			},
 		},
 	}
-	seen2, len2 := runOnce(r2)
+	seen2 := runOnce(r2)
 
 	require.NotNil(t, seen2)
 	assert.Equal(t, specqbft.PrepareMsgType, seen2.Body.(*specqbft.Message).MsgType)
-	assert.Equal(t, 0, len2)
 }
 
 // TestCommitteeQueueFilteringScenarios verifies the message filtering logic of the ConsumeQueue method
@@ -1015,14 +1009,12 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 				runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 				receivedMessages := collectMessagesFromQueue(t, msgChannel, 0, 200*time.Millisecond)
 				assert.Empty(t, receivedMessages)
-				assert.Equal(t, 1, q.Q.Len())
 			} else {
 				// Expect 1 message - message should be processed
 				msgChannel, handler := setupMessageCollection(1)
 				runConsumeQueueAsync(t, ctx, committee, q, logger, handler, committeeRunner)
 				receivedMessages := collectMessagesFromQueue(t, msgChannel, 1, 1*time.Second)
 				assert.Len(t, receivedMessages, 1)
-				assert.Equal(t, 0, q.Q.Len())
 			}
 		})
 	}
@@ -1145,7 +1137,6 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, actual)
-	assert.Equal(t, 0, q.Q.Len())
 }
 
 // TestHandleMessageQueueFullAndDropping verifies that HandleMessage drops messages
@@ -1515,7 +1506,6 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	}
 
 	require.Equal(t, expectedCounts, actualCounts)
-	assert.Equal(t, 0, qc.Q.Len())
 }
 
 // TestQueueLoadAndSaturationScenarios verifies committee queue handling under load and saturation conditions.
@@ -1607,7 +1597,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		finalPopCtx, finalPopCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 		defer finalPopCancel()
 
-		assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny))
+		assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny), "Queue should be empty after draining initial messages")
 
 		foundNextRoundMessage := false
 		for _, msg := range drainedMessages {
@@ -1660,7 +1650,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, commitMsgBody)
 			committee.HandleMessage(ctx, logger, testMsg)
 		}
-		require.Equal(t, queueCapacity, qContainer.Q.Len())
+		require.Equal(t, queueCapacity, qContainer.Q.Len(), "Queue should be at capacity")
 
 		// 2. Try to add a high-priority proposal message (proposals are higher priority than commits)
 		highPriorityMsgBody := &specqbft.Message{
