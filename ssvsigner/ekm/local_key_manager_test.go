@@ -1,7 +1,6 @@
 package ekm
 
 import (
-	"context"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -35,7 +34,7 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, *networkconfig.NetworkConfig) {
+func testKeyManager(t *testing.T, network networkconfig.Network, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -44,12 +43,10 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operator
 	require.NoError(t, err)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{}
-		network.Beacon = utils.SetupMockBeaconNetwork(t, nil)
-		network.DomainType = networkconfig.TestNetwork.DomainType
+		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, nil)
 	}
 
-	km, err := NewLocalKeyManager(logger, db, *network, operatorPrivateKey)
+	km, err := NewLocalKeyManager(logger, db, network, operatorPrivateKey)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -64,8 +61,8 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operator
 	encryptedSK2, err := operatorPrivateKey.Public().Encrypt([]byte(sk2.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(context.Background(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
-	require.NoError(t, km.AddShare(context.Background(), encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
 
 	return km, network
 }
@@ -88,7 +85,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
 
@@ -136,7 +133,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 }
 
 func TestSignBeaconObject(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
@@ -149,9 +146,9 @@ func TestSignBeaconObject(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(context.Background(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
-	currentSlot := network.Beacon.EstimatedCurrentSlot()
+	currentSlot := network.EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	t.Run("Sign Deneb block", func(t *testing.T) {
@@ -338,8 +335,8 @@ func TestRemoveShare(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(pk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(context.Background(), encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
-		require.NoError(t, km.RemoveShare(context.Background(), phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
 	})
 
 	t.Run("key doesn't exist", func(t *testing.T) {
@@ -348,7 +345,7 @@ func TestRemoveShare(t *testing.T) {
 		pk := &bls.SecretKey{}
 		pk.SetByCSPRNG()
 
-		err := km.RemoveShare(context.Background(), phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
+		err := km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
 		require.NoError(t, err)
 	})
 }

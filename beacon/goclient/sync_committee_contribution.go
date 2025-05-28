@@ -24,7 +24,10 @@ func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) bool {
 	hash := sha256.Sum256(proof)
 
 	// Keep the signature if it's an aggregator.
-	modulo := SyncCommitteeSize / SyncCommitteeSubnetCount / TargetAggregatorsPerSyncSubcommittee
+	cfg := gc.BeaconConfig()
+
+	// as per spec: https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/validator.md#aggregation-selection
+	modulo := cfg.SyncCommitteeSize / cfg.SyncCommitteeSubnetCount / cfg.TargetAggregatorsPerSyncSubcommittee
 	if modulo == uint64(0) {
 		// Modulo must be at least 1.
 		modulo = 1
@@ -34,7 +37,7 @@ func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) bool {
 
 // SyncCommitteeSubnetID returns sync committee subnet ID from subcommittee index
 func (gc *GoClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
-	return uint64(index) / (SyncCommitteeSize / SyncCommitteeSubnetCount)
+	return uint64(index) / (gc.BeaconConfig().SyncCommitteeSize / gc.BeaconConfig().SyncCommitteeSubnetCount)
 }
 
 // GetSyncCommitteeContribution returns
@@ -153,8 +156,9 @@ func (gc *GoClient) SubmitSignedContributionAndProof(
 
 // waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after slot start time)
 func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
-	delay := gc.network.SlotDurationSec() / 3 /* a third of the slot duration */
-	finalTime := gc.slotStartTime(slot).Add(delay)
+	config := gc.getBeaconConfig()
+	delay := config.IntervalDuration()
+	finalTime := config.GetSlotStartTime(slot).Add(delay)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return

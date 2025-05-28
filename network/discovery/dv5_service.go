@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -73,8 +72,8 @@ type DiscV5Service struct {
 	conn       *net.UDPConn
 	sharedConn *SharedUDPConn
 
-	networkConfig networkconfig.NetworkConfig
-	subnets       []byte
+	ssvConfig networkconfig.SSVConfig
+	subnets   commons.Subnets
 
 	publishLock chan struct{}
 }
@@ -87,7 +86,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, opts *Options) (
 		cancel:              cancel,
 		conns:               opts.ConnIndex,
 		subnetsIdx:          opts.SubnetsIdx,
-		networkConfig:       opts.NetworkConfig,
+		ssvConfig:           opts.SSVConfig,
 		subnets:             opts.DiscV5Opts.Subnets,
 		publishLock:         make(chan struct{}, 1),
 		discoveredPeersPool: opts.DiscoveredPeersPool,
@@ -189,8 +188,6 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	return nil
 }
 
-var zeroSubnets, _ = commons.FromString(commons.ZeroSubnets)
-
 func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	// Get the peer's domain type, skipping if it mismatches ours.
 	// TODO: uncomment errors once there are sufficient nodes with domain type.
@@ -199,9 +196,9 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	if err != nil {
 		return errors.Wrap(err, "could not read domain type")
 	}
-	if dvs.networkConfig.DomainType != nodeDomainType {
+	if dvs.ssvConfig.DomainType != nodeDomainType {
 		recordPeerSkipped(ctx, skipReasonDomainTypeMismatch)
-		return fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.networkConfig.DomainType)
+		return fmt.Errorf("domain type %x doesn't match %x", nodeDomainType, dvs.ssvConfig.DomainType)
 	}
 
 	// Get the peer's subnets, skipping if it has none.
@@ -209,7 +206,7 @@ func (dvs *DiscV5Service) checkPeer(ctx context.Context, e PeerEvent) error {
 	if err != nil {
 		return fmt.Errorf("could not read subnets: %w", err)
 	}
-	if bytes.Equal(zeroSubnets, peerSubnets) {
+	if commons.ZeroSubnets == peerSubnets {
 		recordPeerSkipped(ctx, skipReasonZeroSubnets)
 		return errors.New("zero subnets")
 	}
@@ -256,7 +253,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	}
 
 	// Get the protocol ID, or set to default if not provided
-	protocolID := dvs.networkConfig.DiscoveryProtocolID
+	protocolID := dvs.ssvConfig.DiscoveryProtocolID
 	emptyProtocolID := [6]byte{}
 	if protocolID == emptyProtocolID {
 		protocolID = DefaultSSVProtocolID
@@ -281,7 +278,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		fields.BindIP(bindIP),
 		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
-		fields.Domain(discOpts.NetworkConfig.DomainType),
+		fields.Domain(discOpts.SSVConfig.DomainType),
 		fields.ProtocolID(protocolID),
 	)
 
@@ -300,7 +297,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		fields.BindIP(bindIP),
 		zap.Uint16("UdpPort", opts.Port),
 		fields.ENRLocalNode(localNode),
-		fields.Domain(discOpts.NetworkConfig.DomainType),
+		fields.Domain(discOpts.SSVConfig.DomainType),
 	)
 
 	dvs.dv5Listener = NewForkingDV5Listener(dvs.logger, dv5PreForkListener, dv5PostForkListener, 5*time.Second)
@@ -359,11 +356,11 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...uint64) (updated bool, err 
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, subnets, nil)
+	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), subnets, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
-	if updatedSubnets != nil {
+	if isUpdated {
 		dvs.subnets = updatedSubnets
 		dvs.logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		return true, nil
@@ -376,11 +373,11 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...uint64) (updated bool, er
 	if len(subnets) == 0 {
 		return false, nil
 	}
-	updatedSubnets, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.SubnetsCount, nil, subnets)
+	updatedSubnets, isUpdated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), nil, subnets)
 	if err != nil {
 		return false, errors.Wrap(err, "could not update ENR")
 	}
-	if updatedSubnets != nil {
+	if isUpdated {
 		dvs.subnets = updatedSubnets
 		dvs.logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		return true, nil
@@ -391,12 +388,12 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...uint64) (updated bool, er
 // PublishENR publishes the ENR with the current domain type across the network
 func (dvs *DiscV5Service) PublishENR() {
 	// Update own node record.
-	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.networkConfig.DomainType)
+	err := records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyDomainType, dvs.ssvConfig.DomainType)
 	if err != nil {
 		dvs.logger.Error("could not set domain type", zap.Error(err))
 		return
 	}
-	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.networkConfig.DomainType)
+	err = records.SetDomainTypeEntry(dvs.dv5Listener.LocalNode(), records.KeyNextDomainType, dvs.ssvConfig.DomainType)
 	if err != nil {
 		dvs.logger.Error("could not set next domain type", zap.Error(err))
 		return
@@ -461,8 +458,8 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
-		DecorateWithDomainType(records.KeyDomainType, dvs.networkConfig.DomainType),
-		DecorateWithDomainType(records.KeyNextDomainType, dvs.networkConfig.DomainType),
+		DecorateWithDomainType(records.KeyDomainType, dvs.ssvConfig.DomainType),
+		DecorateWithDomainType(records.KeyNextDomainType, dvs.ssvConfig.DomainType),
 		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
@@ -471,10 +468,10 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 
 	logFields := []zapcore.Field{
 		fields.ENRLocalNode(localNode),
-		fields.Domain(dvs.networkConfig.DomainType),
+		fields.Domain(dvs.ssvConfig.DomainType),
 	}
 
-	if HasActiveSubnets(opts.Subnets) {
+	if opts.Subnets.HasActive() {
 		logFields = append(logFields, fields.Subnets(opts.Subnets))
 	}
 

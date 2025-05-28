@@ -59,7 +59,7 @@ var (
 func TestHandleBlockEventsStream(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	operatorsCount := uint64(0)
@@ -69,9 +69,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	operatorsCount += uint64(len(ops))
 
 	currentSlot := &utils.SlotValue{}
-	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
-	mockNetworkConfig := &networkconfig.NetworkConfig{}
-	mockNetworkConfig.Beacon = mockBeaconNetwork
+	mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
 
 	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
 	if err != nil {
@@ -853,8 +851,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 
-		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
@@ -902,8 +900,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
@@ -993,8 +991,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Greater(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Greater(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Greater(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Greater(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
@@ -1350,7 +1348,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network *networkconfig.NetworkConfig, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network networkconfig.Network, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -1362,11 +1360,10 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	operatorDataStore := operatordatastore.New(operatorData)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{}
-		network.Beacon = utils.SetupMockBeaconNetwork(t, &utils.SlotValue{})
+		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, &utils.SlotValue{})
 	}
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, *network, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, network, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1388,7 +1385,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			nodeStorage,
 			parser,
 			validatorCtrl,
-			*network,
+			network,
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
@@ -1405,7 +1402,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
-		NetworkConfig:     *network,
+		NetworkConfig:     network,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		BeaconSigner:      keyManager,
@@ -1423,7 +1420,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		*network,
+		network,
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
