@@ -25,7 +25,7 @@ import (
 
 func TestNewMulti(t *testing.T) {
 	t.Run("no node addresses", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 
 		mc, err := NewMulti(ctx, NewConfigFromNetworkConfig(networkconfig.TestNetwork), []string{}, ethcommon.Address{})
 
@@ -35,7 +35,7 @@ func TestNewMulti(t *testing.T) {
 	})
 
 	t.Run("error creating single client", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 		addr := "invalid-addr"
 		addresses := []string{addr}
 
@@ -48,7 +48,7 @@ func TestNewMulti(t *testing.T) {
 }
 
 func TestNewMulti_WithOptions(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	sim := simTestBackend(testAddr)
 
@@ -130,7 +130,7 @@ func TestMultiClient_assertSameChainIDs(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 5, expected.Uint64())
 
-	chainID, err := mc.ChainID(context.Background())
+	chainID, err := mc.ChainID(t.Context())
 	require.NoError(t, err)
 	require.NotNil(t, chainID)
 	require.Equal(t, int64(5), chainID.Int64())
@@ -152,7 +152,7 @@ func TestMultiClient_assertSameChainIDs_Error(t *testing.T) {
 	require.Error(t, err)
 	require.EqualValues(t, 5, expected.Uint64())
 
-	chainID, err := mc.ChainID(context.Background())
+	chainID, err := mc.ChainID(t.Context())
 	require.NoError(t, err)
 	require.NotNil(t, chainID)
 	require.Equal(t, int64(5), chainID.Int64())
@@ -162,7 +162,7 @@ func TestMultiClient_FetchHistoricalLogs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	mockClient := NewMockSingleClientProvider(ctrl)
@@ -220,7 +220,7 @@ func TestMultiClient_FetchHistoricalLogs_AllClientsNothingToSync(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	mockClient1 := NewMockSingleClientProvider(ctrl)
@@ -269,7 +269,7 @@ func TestMultiClient_FetchHistoricalLogs_MixedErrors(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	mockClient1 := NewMockSingleClientProvider(ctrl)
@@ -318,7 +318,7 @@ func TestMultiClient_StreamLogs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	mockClient1 := NewMockSingleClientProvider(ctrl)
@@ -400,7 +400,7 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	mockClient := NewMockSingleClientProvider(ctrl)
@@ -467,7 +467,7 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	mockClient1 := NewMockSingleClientProvider(ctrl)
@@ -549,7 +549,7 @@ func TestMultiClient_StreamLogs_SameFromBlock(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	mockClient1 := NewMockSingleClientProvider(ctrl)
@@ -609,7 +609,7 @@ func TestMultiClient_StreamLogs_MultipleFailoverAttempts(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	mockClient1 := NewMockSingleClientProvider(ctrl)
@@ -704,7 +704,7 @@ func TestMultiClient_Healthy(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	err := mc.Healthy(context.Background())
+	err := mc.Healthy(t.Context())
 	require.NoError(t, err)
 }
 
@@ -736,7 +736,7 @@ func TestMultiClient_Healthy_MultiClient(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	err := mc.Healthy(context.Background())
+	err := mc.Healthy(t.Context())
 	require.NoError(t, err, "expected all clients to be healthy")
 }
 
@@ -767,7 +767,7 @@ func TestMultiClient_Healthy_AllClientsUnhealthy(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	err := mc.Healthy(context.Background())
+	err := mc.Healthy(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "client1 unhealthy")
 	require.Contains(t, err.Error(), "client2 unhealthy")
@@ -793,7 +793,7 @@ func TestMultiClient_BlockByNumber(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	blk, err := mc.BlockByNumber(context.Background(), big.NewInt(1234))
+	blk, err := mc.BlockByNumber(t.Context(), big.NewInt(1234))
 	require.NoError(t, err)
 	require.NotNil(t, blk)
 }
@@ -818,7 +818,7 @@ func TestMultiClient_BlockByNumber_Error(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	blk, err := mc.BlockByNumber(context.Background(), big.NewInt(1234))
+	blk, err := mc.BlockByNumber(t.Context(), big.NewInt(1234))
 	require.Error(t, err)
 	require.Nil(t, blk)
 	require.Contains(t, err.Error(), "block not found")
@@ -844,7 +844,7 @@ func TestMultiClient_HeaderByNumber(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	blk, err := mc.HeaderByNumber(context.Background(), big.NewInt(1234))
+	blk, err := mc.HeaderByNumber(t.Context(), big.NewInt(1234))
 	require.NoError(t, err)
 	require.NotNil(t, blk)
 }
@@ -869,7 +869,7 @@ func TestMultiClient_HeaderByNumber_Error(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	blk, err := mc.HeaderByNumber(context.Background(), big.NewInt(1234))
+	blk, err := mc.HeaderByNumber(t.Context(), big.NewInt(1234))
 	require.Error(t, err)
 	require.Nil(t, blk)
 	require.Contains(t, err.Error(), "header not found")
@@ -905,7 +905,7 @@ func TestMultiClient_SubscribeFilterLogs(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	subscription, err := mc.SubscribeFilterLogs(context.Background(), query, logCh)
+	subscription, err := mc.SubscribeFilterLogs(t.Context(), query, logCh)
 	require.NoError(t, err)
 	require.Equal(t, sub, subscription)
 }
@@ -938,7 +938,7 @@ func TestMultiClient_SubscribeFilterLogs_Error(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	subscription, err := mc.SubscribeFilterLogs(context.Background(), query, logCh)
+	subscription, err := mc.SubscribeFilterLogs(t.Context(), query, logCh)
 	require.Error(t, err)
 	require.Nil(t, subscription)
 	require.Contains(t, err.Error(), "subscription error")
@@ -969,7 +969,7 @@ func TestMultiClient_FilterLogs(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	logs, err := mc.FilterLogs(context.Background(), query)
+	logs, err := mc.FilterLogs(t.Context(), query)
 	require.NoError(t, err)
 	require.Equal(t, expectedLogs, logs)
 }
@@ -995,7 +995,7 @@ func TestMultiClient_FilterLogs_Error(t *testing.T) {
 		closed:    make(chan struct{}),
 	}
 
-	logs, err := mc.FilterLogs(context.Background(), query)
+	logs, err := mc.FilterLogs(t.Context(), query)
 	require.Error(t, err)
 	require.Nil(t, logs)
 	require.Contains(t, err.Error(), "filtering error")
@@ -1058,7 +1058,7 @@ func TestMultiClient_ChainID(t *testing.T) {
 	}
 	mc.chainID.Store(big.NewInt(5))
 
-	cid, err := mc.ChainID(context.Background())
+	cid, err := mc.ChainID(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(5), cid)
 }
@@ -1069,7 +1069,7 @@ func TestMultiClient_ChainID_NotSet(t *testing.T) {
 		closed: make(chan struct{}),
 	}
 
-	cid, err := mc.ChainID(context.Background())
+	cid, err := mc.ChainID(t.Context())
 	require.NoError(t, err)
 	require.Nil(t, cid, "expected ChainID to be nil when not set")
 }
@@ -1181,7 +1181,7 @@ func TestMultiClient_Call_Concurrency(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			defer wg.Done()
-			_, err := mc.BlockByNumber(context.Background(), big.NewInt(1234))
+			_, err := mc.BlockByNumber(t.Context(), big.NewInt(1234))
 			require.NoError(t, err)
 		}()
 	}
@@ -1233,7 +1233,7 @@ func TestMultiClient_Call_AllClientsFail(t *testing.T) {
 		return client.streamLogsToChan(context.TODO(), nil, 200)
 	}
 
-	_, err := mc.call(context.Background(), f, len(mc.clients))
+	_, err := mc.call(t.Context(), f, len(mc.clients))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "all clients failed")
 }

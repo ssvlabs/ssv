@@ -52,7 +52,7 @@ var (
 func TestEventSyncer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	const testTimeout = 5 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	defer cancel()
 
 	blockStream := make(chan []*ethtypes.Block)
@@ -242,7 +242,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 func TestBlockBelowThreshold(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	m := NewMockExecutionClient(ctrl)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	s := New(nil, m, nil)
 
