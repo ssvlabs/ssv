@@ -26,7 +26,7 @@ func TestPebbleTxn_Discard(t *testing.T) {
 	db := newTestPebbleDB(t)
 	txn := db.Begin()
 
-	txn.Discard() // Should not panic
+	assert.NotPanics(t, txn.Discard)
 }
 
 func TestPebbleTxn_Set(t *testing.T) {

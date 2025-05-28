@@ -783,8 +783,12 @@ func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
 	start := time.Now()
+
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
+
+	logger.Debug("running full GC cycle...", fields.Duration(start))
+
 	if err := db.FullGC(ctx); err != nil {
 		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
@@ -821,8 +825,12 @@ func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	// Close & reopen the database to trigger any unknown internal
 	// startup/shutdown procedures that the storage engine may have.
 	start := time.Now()
+
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
+
+	logger.Debug("running full GC cycle...", fields.Duration(start))
+
 	if err := db.FullGC(ctx); err != nil {
 		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
