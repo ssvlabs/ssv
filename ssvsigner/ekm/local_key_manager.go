@@ -53,7 +53,6 @@ type LocalKeyManager struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
-	domain            spectypes.DomainType
 	operatorDecrypter keys.OperatorDecrypter
 	slashingProtector
 }
@@ -62,10 +61,10 @@ type LocalKeyManager struct {
 func NewLocalKeyManager(
 	logger *zap.Logger,
 	db basedb.Database,
-	network networkconfig.NetworkConfig,
+	beaconConfig networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*LocalKeyManager, error) {
-	signerStore := NewSignerStorage(db, network.Beacon, logger)
+	signerStore := NewSignerStorage(db, beaconConfig, logger)
 	if err := signerStore.SetEncryptionKey(operatorPrivKey.EKMHash()); err != nil {
 		return nil, err
 	}
@@ -91,14 +90,13 @@ func NewLocalKeyManager(
 		}
 	}
 
-	beaconSigner := signer.NewSimpleSigner(wallet, protection, core.Network(network.Beacon.GetBeaconNetwork()))
+	beaconSigner := signer.NewSimpleSigner(wallet, protection, core.Network(beaconConfig.GetNetworkName()))
 
 	return &LocalKeyManager{
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
-		domain:            network.DomainType,
-		slashingProtector: NewSlashingProtector(logger, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
 		operatorDecrypter: operatorPrivKey,
 	}, nil
 }
