@@ -1236,9 +1236,9 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	// Step 4: Verify the queue is now empty.
 	finalPopCtx, finalPopCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-	assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny))
+	defer finalPopCancel()
 
-	finalPopCancel()
+	assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny))
 }
 
 // TestConsumeQueueStopsOnErrNoValidDuties verifies that ConsumeQueue stops
@@ -1590,8 +1590,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		}
 
 		finalPopCtx, finalPopCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+		defer finalPopCancel()
+
 		assert.Nil(t, qContainer.Q.Pop(finalPopCtx, queue.NewCommitteeQueuePrioritizer(qContainer.queueState), queue.FilterAny), "Queue should be empty after draining initial messages")
-		finalPopCancel()
 
 		foundNextRoundMessage := false
 		for _, msg := range drainedMessages {
