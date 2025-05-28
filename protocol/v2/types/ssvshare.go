@@ -126,8 +126,8 @@ func (s *SSVShare) Slashed() bool {
 // IsParticipating returns true if the validator can participate in *any* SSV duty at the given epoch.
 // Note: the validator may be eligible only for sync committee, but not to attest and propose. See IsParticipatingAndAttesting.
 // Requirements: not liquidated and attesting or exited in the current or previous sync committee period.
-func (s *SSVShare) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
-	return !s.Liquidated && s.IsSyncCommitteeEligible(cfg, epoch)
+func (s *SSVShare) IsParticipating(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
+	return !s.Liquidated && s.IsSyncCommitteeEligible(beaconCfg, epoch)
 }
 
 // IsParticipatingAndAttesting returns true if the validator can participate in *all* SSV duties at the given epoch.
@@ -136,7 +136,7 @@ func (s *SSVShare) IsParticipatingAndAttesting(epoch phase0.Epoch) bool {
 	return !s.Liquidated && s.IsAttesting(epoch)
 }
 
-func (s *SSVShare) IsSyncCommitteeEligible(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
+func (s *SSVShare) IsSyncCommitteeEligible(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
 	if s.IsAttesting(epoch) {
 		return true
 	}
@@ -144,7 +144,7 @@ func (s *SSVShare) IsSyncCommitteeEligible(cfg networkconfig.NetworkConfig, epoc
 	if s.Status.IsExited() || s.Status == eth2apiv1.ValidatorStateWithdrawalPossible || s.Status == eth2apiv1.ValidatorStateActiveSlashed {
 		// if validator exited within Current Period OR Current Period - 1, then it is eligible
 		// because Sync committees are assigned EPOCHS_PER_SYNC_COMMITTEE_PERIOD in advance
-		if epoch >= s.ExitEpoch && cfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)-cfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(s.ExitEpoch) <= 1 {
+		if epoch >= s.ExitEpoch && beaconCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)-beaconCfg.EstimatedSyncCommitteePeriodAtEpoch(s.ExitEpoch) <= 1 {
 			return true
 		}
 	}
