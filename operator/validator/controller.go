@@ -850,7 +850,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 			return nil, fmt.Errorf("operator not found")
 		}
 
-		operatorPEM, err := base64.StdEncoding.DecodeString(string(opdata.PublicKey))
+		operatorPEM, err := base64.StdEncoding.DecodeString(opdata.PublicKey)
 		if err != nil {
 			return nil, fmt.Errorf("could not decode public key: %w", err)
 		}
@@ -863,7 +863,7 @@ func (c *controller) committeeMemberFromShare(share *ssvtypes.SSVShare) (*specty
 
 	f := ssvtypes.ComputeF(uint64(len(share.Committee)))
 
-	operatorPEM, err := base64.StdEncoding.DecodeString(string(c.operatorDataStore.GetOperatorData().PublicKey))
+	operatorPEM, err := base64.StdEncoding.DecodeString(c.operatorDataStore.GetOperatorData().PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("could not decode public key: %w", err)
 	}

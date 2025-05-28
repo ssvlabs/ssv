@@ -808,15 +808,15 @@ func setupDB(ctx context.Context, logger *zap.Logger, beaconConfig networkconfig
 func setupOperatorDataStore(
 	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
-	pubKey string,
+	base64PubKey string,
 ) operatordatastore.OperatorDataStore {
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(pubKey))
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, base64PubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: []byte(pubKey),
+			PublicKey: base64PubKey,
 		}
 	}
 	if operatorData == nil {

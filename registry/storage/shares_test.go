@@ -95,7 +95,7 @@ func TestSharesStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	for operatorID := range splitKeys {
-		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: []byte(strconv.FormatUint(operatorID, 10))})
+		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: strconv.FormatUint(operatorID, 10)})
 		require.NoError(t, err)
 	}
 
