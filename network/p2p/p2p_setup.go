@@ -158,18 +158,22 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	return nil
 }
 
-// SetupServices configures the required services
+// SetupServices configures the required services.
+// IMPORTANT: setupPeerServices must be invoked before setupPubsub to ensure n.idx is correctly initialized.
 func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 	if err := n.setupStreamCtrl(logger); err != nil {
 		return errors.Wrap(err, "could not setup stream controller")
 	}
+
+	if err := n.setupPeerServices(logger); err != nil {
+		return errors.Wrap(err, "could not setup peer services")
+	}
+
 	_, err := n.setupPubsub(logger)
 	if err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
-	if err := n.setupPeerServices(logger); err != nil {
-		return errors.Wrap(err, "could not setup peer services")
-	}
+
 	if err := n.setupDiscovery(logger); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
 	}
