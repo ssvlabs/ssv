@@ -21,8 +21,7 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
-
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -71,6 +70,7 @@ import (
 	pebble "github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
+	"go.uber.org/zap"
 )
 
 type KeyStore struct {
@@ -772,9 +772,9 @@ func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	}
 
 	migrationOpts := migrations.Options{
-		Db:            db,
-		DbPath:        cfg.DBOptions.Path,
-		NetworkConfig: networkConfig,
+		Db:           db,
+		DbPath:       cfg.DBOptions.Path,
+		BeaconConfig: networkConfig.BeaconConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
@@ -811,9 +811,9 @@ func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	}
 
 	migrationOpts := migrations.Options{
-		Db:            db,
-		DbPath:        dbPath,
-		NetworkConfig: networkConfig,
+		Db:           db,
+		DbPath:       dbPath,
+		BeaconConfig: networkConfig.BeaconConfig,
 	}
 
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
