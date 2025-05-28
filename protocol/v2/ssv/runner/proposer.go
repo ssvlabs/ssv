@@ -43,10 +43,10 @@ type ProposerRunner struct {
 	measurements        measurementsStore
 	graffiti            []byte
 
-	// mevDelay allows Operator to configure a delay to wait out before requesting Ethereum
+	// proposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
 	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
 	// higher MEV.
-	mevDelay time.Duration
+	proposerDelay time.Duration
 }
 
 func NewProposerRunner(
@@ -61,17 +61,17 @@ func NewProposerRunner(
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
-	mevDelay time.Duration,
+	proposerDelay time.Duration,
 ) (Runner, error) {
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
 	}
 
-	// Validate mevDelay value, for details on how this value should be chosen see:
-	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#choosing-mevdelay-value
-	const maxReasonableMEVDelay = 1650 * time.Millisecond
-	if mevDelay > maxReasonableMEVDelay {
-		return nil, fmt.Errorf("chosen MEVDelay value is too high: %s, max reasonable allowed value: %s", mevDelay, maxReasonableMEVDelay)
+	// Validate proposerDelay value, for details on how this value should be chosen see:
+	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration
+	const maxReasonableProposerDelay = 1650 * time.Millisecond
+	if proposerDelay > maxReasonableProposerDelay {
+		return nil, fmt.Errorf("chosen ProposerDelay value is too high: %s, max reasonable allowed value: %s", proposerDelay, maxReasonableProposerDelay)
 	}
 
 	return &ProposerRunner{
@@ -92,7 +92,7 @@ func NewProposerRunner(
 		measurements:        NewMeasurementsStore(),
 		graffiti:            graffiti,
 
-		mevDelay: mevDelay,
+		proposerDelay: proposerDelay,
 	}, nil
 }
 
@@ -141,8 +141,14 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 	)
 
-	// Wait out MEV delay if any is configured.
-	time.Sleep(r.mevDelay)
+	// Wait out Proposer delay if any is configured, instead of sleeping exactly r.proposerDelay
+	// duration take slot start time as the sleep starting point and adjust the amount to sleep
+	// accordingly - this is done to make sure block-proposal is still made on time even if
+	// Proposer duty started a bit late (eg. due to node being under load).
+	slotStartTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
+	timeIntoSlot := max(time.Since(slotStartTime), 0)
+	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
+	time.Sleep(proposerDelayAdjusted)
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
@@ -163,7 +169,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("mev_delay", r.mevDelay),
+		zap.Duration("proposer_delay", r.proposerDelay),
 		zap.Duration("took", time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
 

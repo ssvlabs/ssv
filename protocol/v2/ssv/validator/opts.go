@@ -40,7 +40,7 @@ type Options struct {
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
 	Graffiti            []byte
-	MEVDelay            time.Duration
+	ProposerDelay       time.Duration
 }
 
 func (o *Options) defaults() {

@@ -1,16 +1,16 @@
 ## Getting started with `MEV` configuration
 
-To get the most out of MEV opportunities Operator can configure MEVDelay configuration setting using a configuration
-file (or `MEV_DELAY` environment variable):
+To get the most out of MEV opportunities Operator can configure ProposerDelay configuration setting using a configuration
+file (or `PROPOSER_DELAY` environment variable):
 ```
-MEVDelay: 300ms
+ProposerDelay: 300ms
 ```
 
-As per our own estimates the max reasonable value of `MEVDelay` for Ethereum mainnet is around ~1.65s, 
+As per our own estimates the max reasonable value of `ProposerDelay` for Ethereum mainnet is around ~1.65s, 
 although we recommend starting with something like 300ms gradually increasing it up - the higher 
-`MEVDelay` value is the higher the chance of missing Ethereum block proposal will be.
+`ProposerDelay` value is the higher the chance of missing Ethereum block proposal will be.
 
-As per the notes in other sections of this document `MEVDelay` depends on a number of things, to find
+As per the notes in other sections of this document `ProposerDelay` depends on a number of things, to find
 the best value Operator might want to start with lower values like 300ms gradually increasing it up.
 
 ## MEV considerations & SSV proposer-duty flow background
@@ -61,26 +61,26 @@ thus an alternative approach would be:
 
 ### approach 2
 
-To introduce an additional configurable delay `MEVDelay` SSV Operator can set so 
+To introduce an additional configurable delay `ProposerDelay` SSV Operator can set so 
 that it will work nicely even with Relays that "reply as fast as possible", the equation from above
 becomes:
 ```
-RANDAOTime + MEVDelay + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
+RANDAOTime + ProposerDelay + MEVBoostRelayTimeout + QBFTTime + BlockSubmissionTime + MiscellaneousTime < 4s
 ```
-plugging in some realistic numbers into that ^ formula we get a rough estimate of ~2.2s for `MEVDelay`: 
+plugging in some realistic numbers into that ^ formula we get a rough estimate of ~2.2s for `ProposerDelay`: 
 ```go
 const randaoTime = 100 * time.Millisecond
 const mevBoostRelayTimeout = 200 * time.Millisecond
 const qbftTime = 350 * time.Millisecond
 const miscellaneousTime = 150 * time.Millisecond
 const blockSubmissionTime = 1000 * time.Millisecond
-const mevDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
+const proposerDelay = 4*time.Second - randaoTime - mevBoostRelayTimeout - qbftTime - blockSubmissionTime - miscellaneousTime
 ```
 but on top of that another consideration Operator needs to take into account is - other SSV nodes in 
-his cluster might not even have MEVDelay configured (it's 0s by default), meaning they will start QBFT 
-sooner and timeout round 1 sooner. To prevent that round timeout we'll need to cap mevDelay accordingly 
+his cluster might not even have ProposerDelay configured (it's 0s by default), meaning they will start QBFT 
+sooner and timeout round 1 sooner. To prevent that round timeout we'll need to cap proposerDelay accordingly 
 so it does not exceed that `QBFTConstrainingTime` - this would give us a rough estimate of ~1.65s:
 ```go
 const qbftConstrainingTime = roundtimer.QuickTimeout - qbftTime
 ```
-and thus we consider ~1.65s to be max reasonable value of `MEVDelay` Operator should be able to use safely.
+and thus we consider ~1.65s to be max reasonable value of `ProposerDelay` Operator should be able to use safely.
