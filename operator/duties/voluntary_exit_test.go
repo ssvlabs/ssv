@@ -5,16 +5,17 @@ import (
 	"math/big"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/trie"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
@@ -150,9 +151,9 @@ func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 			return expectedBlock, nil
 		},
 	).AnyTimes()
-	scheduler.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(
-		func(time int64) phase0.Slot {
-			return phase0.Slot(time)
+	scheduler.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(
+		func(time time.Time) phase0.Slot {
+			return phase0.Slot(time.Unix())
 		},
 	).AnyTimes()
 
@@ -166,7 +167,7 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	require.NoError(t, err)
 	require.NotNil(t, block)
 
-	slot := scheduler.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+	slot := scheduler.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0))
 	require.EqualValues(t, blockNumber, slot)
 }
 

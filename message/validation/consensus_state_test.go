@@ -3,61 +3,60 @@ package validation
 import (
 	"testing"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 )
 
 func TestOperatorState(t *testing.T) {
 	t.Run("TestNewOperatorState", func(t *testing.T) {
-		size := phase0.Slot(10)
+		const size = 10
 		os := newOperatorState(size)
 		require.NotNil(t, os)
-		require.Equal(t, len(os.signers), int(size))
+		require.Equal(t, len(os.signers), size)
 	})
 
 	t.Run("TestGetAndSet", func(t *testing.T) {
-		size := phase0.Slot(10)
+		const size = 10
 		os := newOperatorState(size)
 
-		slot := phase0.Slot(5)
-		epoch := phase0.Epoch(1)
+		const slot = 5
+		const epoch = 1
 		signerState := &SignerState{Slot: slot}
 
 		os.Set(slot, epoch, signerState)
 		retrievedState := os.Get(slot)
 
 		require.NotNil(t, retrievedState)
-		require.Equal(t, retrievedState.Slot, slot)
+		require.EqualValues(t, retrievedState.Slot, slot)
 	})
 
 	t.Run("TestGetInvalidSlot", func(t *testing.T) {
-		size := phase0.Slot(10)
+		const size = 10
 		os := newOperatorState(size)
 
-		slot := phase0.Slot(5)
+		const slot = 5
 		retrievedState := os.Get(slot)
 
 		require.Nil(t, retrievedState)
 	})
 
 	t.Run("TestMaxSlot", func(t *testing.T) {
-		size := phase0.Slot(10)
+		const size = 10
 		os := newOperatorState(size)
 
-		slot := phase0.Slot(5)
-		epoch := phase0.Epoch(1)
+		const slot = 5
+		const epoch = 1
 		signerState := &SignerState{Slot: slot}
 
 		os.Set(slot, epoch, signerState)
-		require.Equal(t, os.MaxSlot(), slot)
+		require.EqualValues(t, os.MaxSlot(), slot)
 	})
 
 	t.Run("TestDutyCount", func(t *testing.T) {
-		size := phase0.Slot(10)
+		const size = 10
 		os := newOperatorState(size)
 
-		slot := phase0.Slot(5)
-		epoch := phase0.Epoch(1)
+		const slot = 5
+		const epoch = 1
 		signerState1 := &SignerState{Slot: slot}
 
 		os.Set(slot, epoch, signerState1)
@@ -65,8 +64,8 @@ func TestOperatorState(t *testing.T) {
 		require.Equal(t, os.DutyCount(epoch), uint64(1))
 		require.Equal(t, os.DutyCount(epoch-1), uint64(0))
 
-		slot2 := phase0.Slot(6)
-		epoch2 := phase0.Epoch(2)
+		const slot2 = 6
+		const epoch2 = 2
 		signerState2 := &SignerState{Slot: slot2}
 
 		os.Set(slot2, epoch2, signerState2)
@@ -77,17 +76,17 @@ func TestOperatorState(t *testing.T) {
 	})
 
 	t.Run("TestIncrementLastEpochDuties", func(t *testing.T) {
-		size := phase0.Slot(10)
+		const size = 10
 		os := newOperatorState(size)
 
-		slot := phase0.Slot(5)
-		epoch := phase0.Epoch(1)
+		const slot = 5
+		const epoch = 1
 		signerState1 := &SignerState{Slot: slot}
 
 		os.Set(slot, epoch, signerState1)
 		require.Equal(t, os.DutyCount(epoch), uint64(1))
 
-		slot2 := phase0.Slot(6)
+		const slot2 = 6
 		signerState2 := &SignerState{Slot: slot2}
 		os.Set(slot2, epoch, signerState2)
 

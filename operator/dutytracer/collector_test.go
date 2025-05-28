@@ -39,7 +39,7 @@ func TestValidatorDuty(t *testing.T) {
 
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
 
-	collector := New(context.TODO(), logger, validators, nil, nil, networkconfig.TestNetwork.Beacon.GetBeaconNetwork())
+	collector := New(context.TODO(), logger, validators, nil, nil, networkconfig.TestNetwork.BeaconConfig)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
@@ -378,7 +378,7 @@ func TestCommitteeDuty(t *testing.T) {
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
 	validators.EXPECT().Committee(committeeID).Return(committee, true)
 
-	tracer := New(context.TODO(), logger, validators, nil, nil, networkconfig.TestNetwork.Beacon.GetBeaconNetwork())
+	tracer := New(context.TODO(), logger, validators, nil, nil, networkconfig.TestNetwork.BeaconConfig)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
@@ -700,7 +700,7 @@ func justification(rcj [][]byte) []byte {
 }
 
 func TestDutyTracer_SyncCommitteeRoots(t *testing.T) {
-	collector := New(context.TODO(), zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.Beacon.GetBeaconNetwork())
+	collector := New(context.TODO(), zap.NewNop(), nil, mockclient{}, nil, networkconfig.TestNetwork.BeaconConfig)
 
 	bnVote := &spectypes.BeaconVote{BlockRoot: [32]byte{1, 2, 3}}
 

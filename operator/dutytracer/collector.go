@@ -20,6 +20,7 @@ import (
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -41,7 +42,7 @@ type Collector struct {
 	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
 	syncCommitteeRootsSf    singleflight.Group
 
-	beacon spectypes.BeaconNetwork
+	beacon networkconfig.BeaconConfig
 
 	store      DutyTraceStore
 	client     DomainDataProvider
@@ -64,10 +65,10 @@ func New(ctx context.Context,
 	validators registrystorage.ValidatorStore,
 	client DomainDataProvider,
 	store DutyTraceStore,
-	beaconNetwork spectypes.BeaconNetwork,
+	beaconNetwork networkconfig.BeaconConfig,
 ) *Collector {
 
-	ttl := time.Duration(ttlCommitteeRoot) * beaconNetwork.SlotDurationSec()
+	ttl := time.Duration(ttlCommitteeRoot) * beaconNetwork.SlotDuration
 
 	tracer := &Collector{
 		logger:                         logger,

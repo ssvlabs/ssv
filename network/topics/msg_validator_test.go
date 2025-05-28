@@ -60,7 +60,7 @@ func TestMsgValidator(t *testing.T) {
 
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
+	slot := networkconfig.TestNetwork.EstimatedCurrentSlot()
 
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]

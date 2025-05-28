@@ -3,7 +3,6 @@ package validator
 import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -20,7 +19,7 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	NetworkConfig       networkconfig.NetworkConfig
+	NetworkConfig       networkconfig.Network
 	Network             specqbft.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
