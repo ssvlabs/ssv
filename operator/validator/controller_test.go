@@ -1226,7 +1226,6 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 		},
 	}
 
-	mockBeaconNode.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
 	mockRecipientsStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
 
 	return validatorCtrl, mockSharesStorage
