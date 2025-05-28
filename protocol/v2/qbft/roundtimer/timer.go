@@ -10,6 +10,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
@@ -58,21 +59,21 @@ type RoundTimer struct {
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
 	role spectypes.RunnerRole
-	// beaconNetwork is the beacon network
-	beaconNetwork BeaconNetwork
+	// beaconConfig is the beacon config
+	beaconConfig networkconfig.Beacon
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
+func New(pctx context.Context, beaconConfig networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
-		mtx:           &sync.RWMutex{},
-		ctx:           ctx,
-		cancelCtx:     cancelCtx,
-		timer:         nil,
-		done:          done,
-		role:          role,
-		beaconNetwork: beaconNetwork,
+		mtx:          &sync.RWMutex{},
+		ctx:          ctx,
+		cancelCtx:    cancelCtx,
+		timer:        nil,
+		done:         done,
+		role:         role,
+		beaconConfig: beaconConfig,
 		timeoutOptions: TimeoutOptions{
 			quickThreshold: QuickTimeoutThreshold,
 			quick:          QuickTimeout,
@@ -110,10 +111,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	switch t.role {
 	case spectypes.RoleCommittee:
 		// third of the slot time
-		baseDuration = t.beaconNetwork.SlotDurationSec() / 3
+		baseDuration = t.beaconConfig.GetSlotDuration() / 3
 	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
 		// two-third of the slot time
-		baseDuration = t.beaconNetwork.SlotDurationSec() / 3 * 2
+		baseDuration = t.beaconConfig.GetSlotDuration() / 3 * 2
 	default:
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
@@ -135,7 +136,7 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	timeoutDuration := baseDuration + additionalTimeout
 
 	// Get the start time of the duty
-	dutyStartTime := t.beaconNetwork.GetSlotStartTime(phase0.Slot(height))
+	dutyStartTime := t.beaconConfig.GetSlotStartTime(phase0.Slot(height))
 
 	// Calculate the time until the duty should start plus the timeout duration
 	return time.Until(dutyStartTime.Add(timeoutDuration))

@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -10,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/ssvlabs/ssv-spec/types"
 )
 
 // TODO: add missing tests
@@ -79,12 +79,6 @@ type DomainCalls interface {
 	DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error)
 }
 
-type VersionCalls interface {
-	// DataVersion returns a data version for the given epoch.
-	// In practice, for performance, responses can be cached in order not to always trigger an API call.
-	DataVersion(epoch phase0.Epoch) spec.DataVersion
-}
-
 // beaconDuties interface serves all duty related calls
 type beaconDuties interface {
 	AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
@@ -120,7 +114,6 @@ type signer interface {
 
 // BeaconNode interface for all beacon duty calls
 type BeaconNode interface {
-	GetBeaconNetwork() types.BeaconNetwork
 	AttesterCalls
 	ProposerCalls
 	AggregatorCalls
@@ -129,11 +122,21 @@ type BeaconNode interface {
 	ValidatorRegistrationCalls
 	VoluntaryExitCalls
 	DomainCalls
-	VersionCalls
 
 	beaconDuties
 	beaconSubscriber
 	beaconValidator
 	signer // TODO need to handle differently
 	proposer
+}
+
+// Options for controller struct creation
+type Options struct {
+	Context                     context.Context
+	BeaconNodeAddr              string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true" env-description:"Beacon node URL(s). Multiple nodes are supported via semicolon-separated URLs (e.g. 'http://localhost:5052;http://localhost:5053')"`
+	SyncDistanceTolerance       uint64 `yaml:"SyncDistanceTolerance" env:"BEACON_SYNC_DISTANCE_TOLERANCE" env-default:"4" env-description:"Maximum number of slots behind head considered in-sync"`
+	WithWeightedAttestationData bool   `yaml:"WithWeightedAttestationData" env:"WITH_WEIGHTED_ATTESTATION_DATA" env-default:"false" env-description:"Enable attestation data scoring across multiple beacon nodes"`
+
+	CommonTimeout time.Duration // Optional.
+	LongTimeout   time.Duration // Optional.
 }

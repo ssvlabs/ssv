@@ -19,11 +19,11 @@ import (
 
 func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancelServerCtx := context.WithCancel(context.Background())
+	ctx, cancelServerCtx := context.WithCancel(t.Context())
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, zap.NewNop(), func(nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
-			{PublicKey: []byte(fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From))},
+			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
 	}, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
@@ -73,7 +73,7 @@ func TestHandleQuery(t *testing.T) {
 
 func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx := context.Background()
+	ctx := context.Background() // t.Context() breaks the test
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
@@ -83,6 +83,7 @@ func TestHandleStream(t *testing.T) {
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
+
 	client := NewWSClient(testCtx, logger)
 	go func() {
 		// sleep so setup will be finished
@@ -98,7 +99,7 @@ func TestHandleStream(t *testing.T) {
 
 		msg2 := newTestMessage()
 		msg2.Data = []registrystorage.OperatorData{
-			{PublicKey: []byte("pubkey-operator")},
+			{PublicKey: "pubkey-operator"},
 		}
 		ws.out.Send(msg2)
 

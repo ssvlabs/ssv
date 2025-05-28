@@ -53,20 +53,20 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db            basedb.Database
-	NodeStorage   operatorstorage.Storage
-	DbPath        string
-	NetworkConfig networkconfig.NetworkConfig
+	Db           basedb.Database
+	NodeStorage  operatorstorage.Storage
+	DbPath       string
+	BeaconConfig networkconfig.Beacon
 }
 
 // nolint
 func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error) {
-	return operatorstorage.NewNodeStorage(o.NetworkConfig, logger, o.Db)
+	return operatorstorage.NewNodeStorage(o.BeaconConfig, logger, o.Db)
 }
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.NetworkConfig.Beacon, logger)
+	return ekm.NewSignerStorage(o.Db, o.BeaconConfig, logger)
 }
 
 // Run executes the migrations.

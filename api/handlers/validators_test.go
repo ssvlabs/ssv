@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/api"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -500,8 +500,8 @@ func (m *mockShares) Drop() error {
 	return nil
 }
 
-func (m *mockShares) UpdateValidatorsMetadata(_ map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	return nil
+func (m *mockShares) UpdateValidatorsMetadata(_ beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	return nil, nil
 }
 
 // TestValidatorsList tests the List method of the Validators handler.
