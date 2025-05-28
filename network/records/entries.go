@@ -3,11 +3,11 @@ package records
 import (
 	"io"
 
+	"github.com/OffchainLabs/go-bitfield"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-bitfield"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/network/commons"

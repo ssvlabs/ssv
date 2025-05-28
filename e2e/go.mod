@@ -22,7 +22,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e // indirect
+	github.com/OffchainLabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e // indirect
 	github.com/r3labs/sse/v2 v2.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.23.0 // indirect

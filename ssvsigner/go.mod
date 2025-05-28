@@ -14,6 +14,7 @@ module github.com/ssvlabs/ssv/ssvsigner
 go 1.24
 
 require (
+	github.com/OffchainLabs/go-bitfield v0.0.0-20250408211841-ad7364de91a5
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
 	github.com/carlmjohnson/requests v0.24.3
@@ -24,7 +25,6 @@ require (
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/holiman/uint256 v1.3.2
 	github.com/microsoft/go-crypto-openssl v0.2.9
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.5
 	github.com/ssvlabs/ssv v1.2.1-0.20250527163031-8fc6fde91908
 	github.com/ssvlabs/ssv-spec v1.1.3

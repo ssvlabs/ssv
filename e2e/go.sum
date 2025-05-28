@@ -298,8 +298,8 @@ github.com/prometheus/common v0.42.0 h1:EKsfXEYo4JpWMHH5cg+KOUWeuJSov1Id8zGR8eeI
 github.com/prometheus/common v0.42.0/go.mod h1:xBwqVerjNdUDjgODMpudtOMwlOwf2SaTr1yjz4b7Zbc=
 github.com/prometheus/procfs v0.10.1 h1:kYK1Va/YMlutzCGazswoHKo//tZVlFpKYh+PymziUAg=
 github.com/prometheus/procfs v0.10.1/go.mod h1:nwNm2aOCAYw8uTR/9bWRREkZFxAUcWzPHWJq+XBB/FM=
-github.com/prysmaticlabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e h1:ATgOe+abbzfx9kCPeXIW4fiWyDdxlwHw07j8UGhdTd4=
-github.com/prysmaticlabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e/go.mod h1:wmuf/mdK4VMD+jA9ThwcUKjg3a2XWM9cVfFYjDyY4j4=
+github.com/OffchainLabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e h1:ATgOe+abbzfx9kCPeXIW4fiWyDdxlwHw07j8UGhdTd4=
+github.com/OffchainLabs/go-bitfield v0.0.0-20240328144219-a1caa50c3a1e/go.mod h1:wmuf/mdK4VMD+jA9ThwcUKjg3a2XWM9cVfFYjDyY4j4=
 github.com/prysmaticlabs/prysm/v4 v4.0.8 h1:F6Rt5gpaxbW50aP63jMmSXE16JW42HaEzUT55L9laaM=
 github.com/quic-go/qpack v0.4.0 h1:Cr9BXA1sQS2SmDUWjSofMPNKmvF6IiIfDRmgU0w1ZCo=
 github.com/quic-go/qtls-go1-19 v0.3.3 h1:wznEHvJwd+2X3PqftRha0SUKmGsnb6dfArMhy9PeJVE=
