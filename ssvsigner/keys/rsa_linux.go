@@ -14,15 +14,17 @@ import (
 )
 
 type privateKey struct {
-	privKey       *rsa.PrivateKey
-	cachedPrivKey *openssl.PrivateKeyRSA
-	once          sync.Once
+	privKey        *rsa.PrivateKey
+	cachedPrivKey  *openssl.PrivateKeyRSA
+	opensslInitErr error
+	once           sync.Once
 }
 
 type publicKey struct {
-	pubKey       *rsa.PublicKey
-	cachedPubkey *openssl.PublicKeyRSA
-	once         sync.Once
+	pubKey         *rsa.PublicKey
+	cachedPubkey   *openssl.PublicKeyRSA
+	opensslInitErr error
+	once           sync.Once
 }
 
 func init() {
@@ -54,11 +56,10 @@ func rsaPublicKeyToOpenSSL(pub *rsa.PublicKey) (*openssl.PublicKeyRSA, error) {
 }
 
 func checkCachePrivkey(priv *privateKey) (*openssl.PrivateKeyRSA, error) {
-	var err error
 	priv.once.Do(func() {
-		priv.cachedPrivKey, err = rsaPrivateKeyToOpenSSL(priv.privKey)
+		priv.cachedPrivKey, priv.opensslInitErr = rsaPrivateKeyToOpenSSL(priv.privKey)
 	})
-	return priv.cachedPrivKey, err
+	return priv.cachedPrivKey, priv.opensslInitErr
 }
 
 func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
@@ -87,9 +88,8 @@ func VerifyRSA(pub *publicKey, data, signature []byte) error {
 }
 
 func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
-	var err error
 	pub.once.Do(func() {
-		pub.cachedPubkey, err = rsaPublicKeyToOpenSSL(pub.pubKey)
+		pub.cachedPubkey, pub.opensslInitErr = rsaPublicKeyToOpenSSL(pub.pubKey)
 	})
-	return pub.cachedPubkey, err
+	return pub.cachedPubkey, pub.opensslInitErr
 }
