@@ -150,7 +150,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -197,7 +197,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			encodedPubKey, err := ops[i].privateKey.Public().Base64()
 			require.NoError(t, err)
 
-			require.Equal(t, encodedPubKey, string(data.PublicKey))
+			require.Equal(t, encodedPubKey, data.PublicKey)
 		}
 	})
 
@@ -1054,7 +1054,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			// Call the RegisterOperator contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -1277,7 +1277,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -1457,14 +1457,14 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(encodedPubKey))
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey:    []byte(encodedPubKey),
+			PublicKey:    encodedPubKey,
 			ID:           operator.id,
 			OwnerAddress: testAddr,
 		}

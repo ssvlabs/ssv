@@ -14,7 +14,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/networkconfig"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -54,7 +54,7 @@ type Shares interface {
 	Drop() error
 
 	// UpdateValidatorsMetadata updates the metadata of the given validators
-	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error)
 }
 
 type sharesStorage struct {
@@ -360,9 +360,14 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	return s.db.Using(rw).Delete(s.storagePrefix, SharesDBKey(pubKey))
 }
 
-// UpdateValidatorsMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	var shares []*types.SSVShare
+// UpdateValidatorsMetadata updates shares with provided validator metadata.
+// It returns only metadata entries that actually changed the stored shares.
+// The returned map is nil if no changes occurred.
+func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	var (
+		changedShares   []*types.SSVShare
+		changedMetadata beacon.ValidatorMetadataMap
+	)
 
 	s.storageMtx.Lock()
 	defer s.storageMtx.Unlock()
@@ -378,24 +383,43 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			if metadata == nil {
 				continue
 			}
+
 			share, exists := s.unsafeGet(pk[:])
 			if !exists {
 				continue
 			}
-			share.ValidatorIndex = metadata.Index
-			share.Status = metadata.Status
-			share.ActivationEpoch = metadata.ActivationEpoch
-			share.ExitEpoch = metadata.ExitEpoch
-			shares = append(shares, share)
+
+			if metadata.Equals(share.BeaconMetadata()) {
+				continue
+			}
+
+			// Update the share with the new metadata
+			share.SetBeaconMetadata(metadata)
+			changedShares = append(changedShares, share)
+
+			if changedMetadata == nil {
+				changedMetadata = make(beacon.ValidatorMetadataMap)
+			}
+			changedMetadata[pk] = metadata
 		}
 
-		return s.validatorStore.handleSharesUpdated(shares...)
+		if len(changedShares) == 0 {
+			return nil
+		}
+
+		return s.validatorStore.handleSharesUpdated(changedShares...)
 	}()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return s.saveToDB(nil, shares...)
+	if len(changedShares) > 0 {
+		if err := s.saveToDB(nil, changedShares...); err != nil {
+			return nil, err
+		}
+	}
+
+	return changedMetadata, nil
 }
 
 // Drop deletes all shares.

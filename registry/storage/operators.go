@@ -8,9 +8,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -24,8 +24,38 @@ var (
 // OperatorData the public data of an operator
 type OperatorData struct {
 	ID           spectypes.OperatorID `json:"id"`
-	PublicKey    []byte               `json:"publicKey"`
+	PublicKey    string               `json:"publicKey"` // stored as base64 string
 	OwnerAddress common.Address       `json:"ownerAddress"`
+}
+
+// MarshalJSON marshals OperatorData with PublicKey as []byte to match the DB format.
+func (o OperatorData) MarshalJSON() ([]byte, error) {
+	type Alias OperatorData
+	return json.Marshal(&struct {
+		PublicKey []byte `json:"publicKey"` // still emit as []byte (JSON string)
+		Alias
+	}{
+		PublicKey: []byte(o.PublicKey),
+		Alias:     (Alias)(o),
+	})
+}
+
+// UnmarshalJSON unmarshals OperatorData with PublicKey as []byte to match the DB format.
+func (o *OperatorData) UnmarshalJSON(data []byte) error {
+	type Alias OperatorData
+	aux := &struct {
+		PublicKey []byte `json:"publicKey"` // read as []byte (JSON string)
+		*Alias
+	}{
+		Alias: (*Alias)(o),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	o.PublicKey = string(aux.PublicKey)
+	return nil
 }
 
 // GetOperatorData is a function that returns the operator data
@@ -33,7 +63,7 @@ type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 
 // Operators is the interface for managing operators data
 type Operators interface {
-	GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*OperatorData, bool, error)
+	GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*OperatorData, bool, error)
 	GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*OperatorData, bool, error)
 	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
 	SaveOperatorData(rw basedb.ReadWriter, operatorData *OperatorData) (bool, error)
@@ -100,10 +130,7 @@ func (s *operatorsStorage) OperatorsExist(
 }
 
 // GetOperatorDataByPubKey returns data of the given operator by public key
-func (s *operatorsStorage) GetOperatorDataByPubKey(
-	r basedb.Reader,
-	operatorPubKey []byte,
-) (*OperatorData, bool, error) {
+func (s *operatorsStorage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*OperatorData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -112,14 +139,14 @@ func (s *operatorsStorage) GetOperatorDataByPubKey(
 
 func (s *operatorsStorage) getOperatorDataByPubKey(
 	r basedb.Reader,
-	operatorPubKey []byte,
+	operatorPubKey string,
 ) (*OperatorData, bool, error) {
 	operatorsData, err := s.listOperators(r, 0, 0)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "could not get all operators")
 	}
 	for _, op := range operatorsData {
-		if bytes.Equal(op.PublicKey, operatorPubKey) {
+		if op.PublicKey == operatorPubKey {
 			return &op, true, nil
 		}
 	}

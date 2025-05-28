@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -51,7 +50,7 @@ func (sv *signatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 			return fmt.Errorf("operator not found")
 		}
 
-		operatorPubKey, err = keys.PublicKeyFromString(string(operator.PublicKey))
+		operatorPubKey, err = keys.PublicKeyFromString(operator.PublicKey)
 		if err != nil {
 			return err
 		}

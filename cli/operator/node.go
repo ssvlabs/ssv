@@ -21,6 +21,8 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -70,7 +72,6 @@ import (
 	pebble "github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
-	"go.uber.org/zap"
 )
 
 type KeyStore struct {
@@ -461,7 +462,6 @@ var StartNodeCmd = &cobra.Command{
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
-			networkConfig.BeaconConfig,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -847,15 +847,15 @@ func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 func setupOperatorDataStore(
 	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
-	pubKey string,
+	base64PubKey string,
 ) operatordatastore.OperatorDataStore {
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(pubKey))
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, base64PubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: []byte(pubKey),
+			PublicKey: base64PubKey,
 		}
 	}
 	if operatorData == nil {
