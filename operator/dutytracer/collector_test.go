@@ -67,7 +67,6 @@ func TestValidatorDuty(t *testing.T) {
 	partSigMessagesData, err := partSigMessages.Encode()
 	require.NoError(t, err)
 
-	dummyVerify := func(*spectypes.PartialSignatureMessages) error { return nil }
 	{ // TC 1 - PartialSig - Aggregator - pre-consensus
 		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
 		err := collector.Collect(context.Background(), partSigMsg, dummyVerify)
