@@ -1767,14 +1767,14 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			}
 		}()
 
-		time.Sleep(200 * time.Millisecond) // Give some time for the consumer to start
-
 		// Fill with filtered Prepare messages
 		for i := 0; i < queueCapacity; i++ {
 			msgID := spectypes.MessageID{byte(i + 1)}
 			prepare := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
 			require.True(t, q.Q.TryPush(makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepare)))
 		}
+
+		time.Sleep(200 * time.Millisecond) // Give time for the consumer to process (and filter) messages
 
 		select {
 		case <-handlerCalled:
