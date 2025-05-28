@@ -42,13 +42,3 @@ func isSubnet(ns string) bool {
 	defer done()
 	return r.MatchString(ns)
 }
-
-// HasActiveSubnets checks if there is at least one active subnet in the provided byte slice.
-func HasActiveSubnets(subnets []byte) bool {
-	for _, val := range subnets {
-		if val > 0 {
-			return true
-		}
-	}
-	return false
-}

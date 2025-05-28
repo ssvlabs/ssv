@@ -16,7 +16,7 @@ import (
 func TestWorker(t *testing.T) {
 	logger := logging.TestLogger(t)
 	worker := NewWorker(logger, &Config{
-		Ctx:          context.Background(),
+		Ctx:          t.Context(),
 		WorkersCount: 1,
 		Buffer:       2,
 	})
@@ -36,7 +36,7 @@ func TestManyWorkers(t *testing.T) {
 	var wg sync.WaitGroup
 
 	worker := NewWorker(logger, &Config{
-		Ctx:          context.Background(),
+		Ctx:          t.Context(),
 		WorkersCount: 10,
 		Buffer:       0,
 	})
@@ -60,7 +60,7 @@ func TestBuffer(t *testing.T) {
 	var wg sync.WaitGroup
 
 	worker := NewWorker(logger, &Config{
-		Ctx:          context.Background(),
+		Ctx:          t.Context(),
 		WorkersCount: 1,
 		Buffer:       10,
 	})

@@ -92,13 +92,11 @@ func (n *p2pNetwork) initCfg() error {
 		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
 	}
 	if len(n.cfg.Subnets) > 0 {
-		subnets, err := p2pcommons.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
+		subnets, err := p2pcommons.SubnetsFromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
 		if err != nil {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
-		n.fixedSubnets = subnets
-	} else {
-		n.fixedSubnets = make(p2pcommons.Subnets, p2pcommons.SubnetsCount)
+		n.persistentSubnets = subnets
 	}
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer
@@ -193,13 +191,13 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		NodeVersion: commons.GetNodeVersion(),
-		Subnets:     p2pcommons.Subnets(n.fixedSubnets).String(),
+		Subnets:     n.persistentSubnets.String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.SubnetsCount, 10*time.Minute, peers.NewGossipScoreIndex())
+	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, peers.NewGossipScoreIndex())
 	n.isIdxSet.Store(true)
 
 	n.logger.Debug("peers index is ready")
@@ -221,7 +219,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(newDomainString),
-			connections.BadPeerFilter(n.logger, n.idx),
+			connections.BadPeerFilter(n.idx),
 		}
 	}
 
@@ -251,11 +249,11 @@ func (n *p2pNetwork) setupPeerServices() error {
 }
 
 func (n *p2pNetwork) ActiveSubnets() p2pcommons.Subnets {
-	return n.activeSubnets
+	return n.currentSubnets
 }
 
 func (n *p2pNetwork) FixedSubnets() p2pcommons.Subnets {
-	return n.fixedSubnets
+	return n.persistentSubnets
 }
 
 func (n *p2pNetwork) setupDiscovery() error {
@@ -276,9 +274,9 @@ func (n *p2pNetwork) setupDiscovery() error {
 			Bootnodes:     n.cfg.TransformBootnodes(),
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if discovery.HasActiveSubnets(n.fixedSubnets) {
-			discV5Opts.Subnets = n.fixedSubnets
-			logger = logger.With(fields.Subnets(n.fixedSubnets))
+		if n.persistentSubnets.HasActive() {
+			discV5Opts.Subnets = n.persistentSubnets
+			logger = logger.With(fields.Subnets(n.persistentSubnets))
 		}
 		logger.Info("discovery: using discv5",
 			zap.Strings("bootnodes", discV5Opts.Bootnodes),

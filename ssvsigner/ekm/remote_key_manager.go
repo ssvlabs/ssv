@@ -21,15 +21,14 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/storage/basedb"
-
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // RemoteKeyManager implements KeyManager by delegating signing operations to
@@ -67,6 +66,7 @@ type consensusClient interface {
 // identity from the signerClient, sets up local slashing protection, and uses
 // the provided consensusClient to get the current fork/genesis for sign requests.
 func NewRemoteKeyManager(
+	ctx context.Context,
 	logger *zap.Logger,
 	netCfg networkconfig.NetworkConfig,
 	signerClient signerClient,
@@ -78,7 +78,7 @@ func NewRemoteKeyManager(
 	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	operatorPubKeyString, err := signerClient.OperatorIdentity(context.Background()) // TODO: use context
+	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
 	}

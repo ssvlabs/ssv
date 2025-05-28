@@ -6,9 +6,9 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -99,11 +99,11 @@ func (h *CommitteeHandler) buildCommitteeDuties(
 
 	validatorCommittees := map[phase0.ValidatorIndex]committeeDuty{}
 	for _, validatorShare := range selfValidators {
-		committeeDuty := committeeDuty{
+		cd := committeeDuty{
 			id:          validatorShare.CommitteeID(),
 			operatorIDs: validatorShare.OperatorIDs(),
 		}
-		validatorCommittees[validatorShare.ValidatorIndex] = committeeDuty
+		validatorCommittees[validatorShare.ValidatorIndex] = cd
 	}
 
 	resultCommitteeMap := make(committeeDutiesMap)

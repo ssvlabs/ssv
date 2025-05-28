@@ -10,11 +10,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -65,7 +65,7 @@ func TestController_LiquidateCluster(t *testing.T) {
 		validatorsMap:     mockValidatorsMap,
 		validatorOptions:  validator.Options{},
 	}
-	ctr := setupController(logger, controllerOptions)
+	ctr := setupController(t, logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
 
 	require.Equal(t, mockValidatorsMap.SizeValidators(), 1)
@@ -131,13 +131,13 @@ func TestController_StopValidator(t *testing.T) {
 		validatorOptions:  validator.Options{},
 		signer:            signer,
 	}
-	ctr := setupController(logger, controllerOptions)
+	ctr := setupController(t, logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
 
 	encryptedSharePrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(context.Background(), encryptedSharePrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
+	require.NoError(t, signer.AddShare(t.Context(), encryptedSharePrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	d, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
@@ -149,7 +149,7 @@ func TestController_StopValidator(t *testing.T) {
 	slot := phase0.Slot(1)
 
 	_, _, err = signer.SignBeaconObject(
-		context.Background(),
+		t.Context(),
 		spectypes.SSZBytes(root[:]),
 		d,
 		phase0.BLSPubKey(secretKey.GetPublicKey().Serialize()),
@@ -206,14 +206,14 @@ func TestController_ReactivateCluster(t *testing.T) {
 		},
 		signer: signer,
 	}
-	ctr := setupController(logger, controllerOptions)
+	ctr := setupController(t, logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
 	ctr.indicesChange = make(chan struct{})
 
 	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(context.Background(), encryptedPrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
+	require.NoError(t, signer.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	d, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
@@ -225,7 +225,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	slot := phase0.Slot(1)
 
 	_, _, err = signer.SignBeaconObject(
-		context.Background(),
+		t.Context(),
 		spectypes.SSZBytes(root[:]),
 		d,
 		phase0.BLSPubKey(secretKey.GetPublicKey().Serialize()),

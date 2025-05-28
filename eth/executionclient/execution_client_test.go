@@ -71,7 +71,7 @@ type testEnv struct {
 
 // setupTestEnv creates a new test environment with simulators, contracts, and clients' setup.
 func setupTestEnv(t *testing.T, testTimeout time.Duration) *testEnv {
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	t.Cleanup(cancel)
 
 	// Create simulator instance
@@ -519,7 +519,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// TODO: fix reorg test
 	// logger := zaptest.NewLogger(t)
 	// const testTimeout = 2 * time.Second
-	// ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	// ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	// defer cancel()
 
 	// sim := simTestBackend(testAddr)
@@ -567,7 +567,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// 	}
 	// }
 	// // 5. Fork off the chain after the first transaction
-	// if err := sim.Fork(context.Background(), parent.Hash()); err != nil {
+	// if err := sim.Fork(t.Context(), parent.Hash()); err != nil {
 	// 	t.Errorf("forking: %v", err)
 	// }
 	// // 6. Add more blocks and 1 transaction after the fork

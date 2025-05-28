@@ -9,9 +9,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
@@ -183,6 +183,7 @@ func (eh *EventHandler) handleValidatorAdded(
 			zap.String("signature", hex.EncodeToString(signature)),
 			zap.String("owner", event.Owner.String()),
 			zap.String("validator_public_key", hex.EncodeToString(event.PublicKey)),
+			zap.Uint16("expected_nonce", uint16(nonce)),
 			zap.Error(err))
 
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
