@@ -41,7 +41,7 @@ type Provider interface {
 type SingleClientProvider interface {
 	Provider
 	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
-	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
+	streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (nextBlockToProcess uint64, err error)
 }
 
 var _ Provider = &ExecutionClient{}
@@ -248,7 +248,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 			case <-ec.closed:
 				return
 			default:
-				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+				nextBlockToProcess, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 					// Closed gracefully.
 					return
@@ -264,14 +264,16 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				if tries > 2 {
 					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
 				}
-				if lastBlock > fromBlock {
+
+				if nextBlockToProcess > fromBlock {
 					// Successfully streamed some logs, reset tries.
 					tries = 0
 				}
 
 				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 				ec.reconnect(ctx) // TODO: ethclient implements reconnection, consider removing this logic after thorough testing
-				fromBlock = lastBlock + 1
+
+				fromBlock = nextBlockToProcess
 			}
 		}
 	}()
@@ -388,9 +390,9 @@ func (ec *ExecutionClient) isClosed() bool {
 }
 
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
-// streamLogsToChan *always* returns the last block it fetched, even if it errored.
+// streamLogsToChan *always* returns the next block to process.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
-func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 	heads := make(chan *ethtypes.Header)
 
 	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
@@ -439,15 +441,17 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			if toBlock < fromBlock {
 				continue
 			}
+
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
-				logs <- block
-				lastBlock = block.BlockNumber
+				logCh <- block
+				fromBlock = block.BlockNumber + 1
 			}
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
-				return lastBlock, fmt.Errorf("fetch logs: %w", err)
+				return fromBlock, fmt.Errorf("fetch logs: %w", err)
 			}
+
 			fromBlock = toBlock + 1
 			observability.RecordUint64Value(ctx, fromBlock, lastProcessedBlockGauge.Record, metric.WithAttributes(semconv.ServerAddress(ec.nodeAddr)))
 		}
