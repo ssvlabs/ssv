@@ -395,16 +395,16 @@ func Test_saveParticipantsJob(t *testing.T) {
 	st := New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider)
 
 	ps := st.(*participantStorage)
-	ps.cachedParticipants[spectypes.ValidatorPK{1}] = []spectypes.OperatorID{1}
+	ps.cachedParticipants.participants[spectypes.ValidatorPK{1}] = []spectypes.OperatorID{1}
 
-	ps.cachedSlot = phase0.Slot(1)
+	ps.cachedParticipants.slot = phase0.Slot(1)
 
 	tt <- time.Now()
 
 	time.Sleep(10 * time.Millisecond)
 
 	ps.cacheMu.Lock()
-	require.Empty(t, ps.cachedParticipants)
+	require.Empty(t, ps.cachedParticipants.participants)
 	ps.cacheMu.Unlock()
 
 	diskParticipants, err := ps.getParticipants(spectypes.ValidatorPK{1}, phase0.Slot(1))

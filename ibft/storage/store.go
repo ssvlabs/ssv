@@ -32,20 +32,26 @@ type participantStorage struct {
 	db     basedb.Database
 
 	// Participants cache for the current slot. Flushed to DB once every slot.
-	cachedParticipants map[spectypes.ValidatorPK][]spectypes.OperatorID
-	cachedSlot         phase0.Slot
+	cachedParticipants CachedParticipants
 	cacheMu            sync.RWMutex
+}
+
+type CachedParticipants struct {
+	slot         phase0.Slot
+	participants map[spectypes.ValidatorPK][]spectypes.OperatorID
 }
 
 // New create new participant store
 func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole, netCfg networkconfig.NetworkConfig, slotTickerProvider slotticker.Provider) qbftstorage.ParticipantStore {
 	role := byte(prefix & 0xff)
 	st := &participantStorage{
-		logger:             logger,
-		prefix:             []byte{role},
-		db:                 db,
-		cachedSlot:         netCfg.Beacon.EstimatedCurrentSlot(),
-		cachedParticipants: make(map[spectypes.ValidatorPK][]spectypes.OperatorID),
+		logger: logger,
+		prefix: []byte{role},
+		db:     db,
+		cachedParticipants: CachedParticipants{
+			slot:         netCfg.Beacon.EstimatedCurrentSlot(),
+			participants: make(map[spectypes.ValidatorPK][]spectypes.OperatorID),
+		},
 	}
 
 	// Persist in-memory participants to DB once every slot.
@@ -64,17 +70,17 @@ func (st *participantStorage) saveParticipantsJob(slotTicker slotticker.SlotTick
 			defer st.cacheMu.Unlock()
 
 			start := time.Now()
-			for pk, participants := range st.cachedParticipants {
-				if err := st.saveParticipants(pk, st.cachedSlot, participants); err != nil {
+			for pk, participants := range st.cachedParticipants.participants {
+				if err := st.saveParticipants(pk, st.cachedParticipants.slot, participants); err != nil {
 					st.logger.Error("failed to save participants", fields.Validator(pk[:]), zap.Error(err))
 				}
 			}
 
-			st.logger.Debug("saved slot participants", fields.Slot(st.cachedSlot), fields.Took(time.Since(start)))
+			st.logger.Debug("saved slot participants", fields.Slot(st.cachedParticipants.slot), fields.Took(time.Since(start)))
 
 			// Reset cache for new slot.
-			st.cachedParticipants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
-			st.cachedSlot = slot
+			st.cachedParticipants.participants = make(map[spectypes.ValidatorPK][]spectypes.OperatorID)
+			st.cachedParticipants.slot = slot
 		}()
 	}
 }
@@ -207,14 +213,14 @@ func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot pha
 
 	// Write to cache or DB.
 	i.cacheMu.Lock()
-	if i.cachedSlot != slot {
+	if i.cachedParticipants.slot != slot {
 		i.cacheMu.Unlock()
 		if err := i.saveParticipants(pk, slot, mergedParticipants); err != nil {
 			return false, fmt.Errorf("save participants: %w", err)
 		}
 		return true, nil
 	}
-	i.cachedParticipants[pk] = mergedParticipants
+	i.cachedParticipants.participants[pk] = mergedParticipants
 	i.cacheMu.Unlock()
 
 	return true, nil
@@ -273,8 +279,8 @@ func (i *participantStorage) GetParticipants(pk spectypes.ValidatorPK, slot phas
 func (i *participantStorage) getParticipants(pk spectypes.ValidatorPK, slot phase0.Slot) ([]spectypes.OperatorID, error) {
 	// Check cache first.
 	i.cacheMu.RLock()
-	if i.cachedSlot == slot {
-		participants, ok := i.cachedParticipants[pk]
+	if i.cachedParticipants.slot == slot {
+		participants, ok := i.cachedParticipants.participants[pk]
 		if ok {
 			i.cacheMu.RUnlock()
 			return participants, nil
@@ -295,8 +301,8 @@ func (i *participantStorage) getParticipants(pk spectypes.ValidatorPK, slot phas
 
 	// Update cache.
 	i.cacheMu.Lock()
-	if i.cachedSlot == slot {
-		i.cachedParticipants[pk] = operators
+	if i.cachedParticipants.slot == slot {
+		i.cachedParticipants.participants[pk] = operators
 	}
 	i.cacheMu.Unlock()
 
