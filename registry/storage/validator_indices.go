@@ -16,38 +16,39 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
 
-type BaseValidatorStore interface {
+type BaseValidatorIndices interface {
 	Validator(pubKey []byte) (*types.SSVShare, bool)
 	ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool)
 	Validators() []*types.SSVShare
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	OperatorValidators(id spectypes.OperatorID) []*types.SSVShare
 
-	Committee(id spectypes.CommitteeID) (*Committee, bool)
-	Committees() []*Committee
-	ParticipatingCommittees(epoch phase0.Epoch) []*Committee
-	OperatorCommittees(id spectypes.OperatorID) []*Committee
+	Committee(id spectypes.CommitteeID) (*IndexedCommittee, bool)
+	Committees() []*IndexedCommittee
+	ParticipatingCommittees(epoch phase0.Epoch) []*IndexedCommittee
+	OperatorCommittees(id spectypes.OperatorID) []*IndexedCommittee
 
 	// TODO: save recipient address
 }
 
-type ValidatorStore interface {
-	BaseValidatorStore
+// DEPRECATED: Will be replaced by the new ValidatorIndices.
+type ValidatorIndices interface {
+	BaseValidatorIndices
 
-	WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore
+	WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorIndices
 }
 
-type SelfValidatorStore interface {
-	BaseValidatorStore
+type SelfValidatorIndices interface {
+	BaseValidatorIndices
 
 	SelfValidators() []*types.SSVShare
 	SelfParticipatingValidators(phase0.Epoch) []*types.SSVShare
 
-	SelfCommittees() []*Committee
-	SelfParticipatingCommittees(phase0.Epoch) []*Committee
+	SelfCommittees() []*IndexedCommittee
+	SelfParticipatingCommittees(phase0.Epoch) []*IndexedCommittee
 }
 
-type Committee struct {
+type IndexedCommittee struct {
 	ID         spectypes.CommitteeID
 	Operators  []spectypes.OperatorID
 	Validators []*types.SSVShare
@@ -55,7 +56,7 @@ type Committee struct {
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
-func (c *Committee) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
+func (c *IndexedCommittee) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
 	for _, validator := range c.Validators {
 		if validator.IsParticipating(cfg, epoch) {
 			return true
@@ -66,16 +67,16 @@ func (c *Committee) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase
 
 type sharesAndCommittees struct {
 	shares     []*types.SSVShare
-	committees []*Committee
+	committees []*IndexedCommittee
 }
 
-type validatorStore struct {
+type validatorIndices struct {
 	operatorID func() spectypes.OperatorID
 	shares     func() []*types.SSVShare
 	byPubKey   func([]byte) (*types.SSVShare, bool)
 
 	byValidatorIndex map[phase0.ValidatorIndex]*types.SSVShare
-	byCommitteeID    map[spectypes.CommitteeID]*Committee
+	byCommitteeID    map[spectypes.CommitteeID]*IndexedCommittee
 	byOperatorID     map[spectypes.OperatorID]*sharesAndCommittees
 
 	networkConfig networkconfig.NetworkConfig
@@ -87,22 +88,22 @@ func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
 	networkConfig networkconfig.NetworkConfig,
-) *validatorStore {
-	return &validatorStore{
+) *validatorIndices {
+	return &validatorIndices{
 		shares:           shares,
 		byPubKey:         shareByPubKey,
 		byValidatorIndex: make(map[phase0.ValidatorIndex]*types.SSVShare),
-		byCommitteeID:    make(map[spectypes.CommitteeID]*Committee),
+		byCommitteeID:    make(map[spectypes.CommitteeID]*IndexedCommittee),
 		byOperatorID:     make(map[spectypes.OperatorID]*sharesAndCommittees),
 		networkConfig:    networkConfig,
 	}
 }
 
-func (c *validatorStore) Validator(pubKey []byte) (*types.SSVShare, bool) {
+func (c *validatorIndices) Validator(pubKey []byte) (*types.SSVShare, bool) {
 	return c.byPubKey(pubKey)
 }
 
-func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool) {
+func (c *validatorIndices) ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -114,11 +115,11 @@ func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types.S
 	return share, true
 }
 
-func (c *validatorStore) Validators() []*types.SSVShare {
+func (c *validatorIndices) Validators() []*types.SSVShare {
 	return c.shares()
 }
 
-func (c *validatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
+func (c *validatorIndices) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	var validators []*types.SSVShare
 	for _, share := range c.shares() {
 		if share.IsParticipating(c.networkConfig, epoch) {
@@ -128,7 +129,7 @@ func (c *validatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SS
 	return validators
 }
 
-func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SSVShare {
+func (c *validatorIndices) OperatorValidators(id spectypes.OperatorID) []*types.SSVShare {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -138,7 +139,7 @@ func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SS
 	return nil
 }
 
-func (c *validatorStore) Committee(id spectypes.CommitteeID) (*Committee, bool) {
+func (c *validatorIndices) Committee(id spectypes.CommitteeID) (*IndexedCommittee, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -150,18 +151,18 @@ func (c *validatorStore) Committee(id spectypes.CommitteeID) (*Committee, bool) 
 	return committee, true
 }
 
-func (c *validatorStore) Committees() []*Committee {
+func (c *validatorIndices) Committees() []*IndexedCommittee {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return slices.Collect(maps.Values(c.byCommitteeID))
 }
 
-func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committee {
+func (c *validatorIndices) ParticipatingCommittees(epoch phase0.Epoch) []*IndexedCommittee {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var committees []*Committee
+	var committees []*IndexedCommittee
 	for _, committee := range c.byCommitteeID {
 		if committee.IsParticipating(c.networkConfig, epoch) {
 			committees = append(committees, committee)
@@ -170,7 +171,7 @@ func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committe
 	return committees
 }
 
-func (c *validatorStore) OperatorCommittees(id spectypes.OperatorID) []*Committee {
+func (c *validatorIndices) OperatorCommittees(id spectypes.OperatorID) []*IndexedCommittee {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -180,19 +181,19 @@ func (c *validatorStore) OperatorCommittees(id spectypes.OperatorID) []*Committe
 	return nil
 }
 
-func (c *validatorStore) WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore {
+func (c *validatorIndices) WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorIndices {
 	c.operatorID = operatorID
 	return c
 }
 
-func (c *validatorStore) SelfValidators() []*types.SSVShare {
+func (c *validatorIndices) SelfValidators() []*types.SSVShare {
 	if c.operatorID == nil {
 		return nil
 	}
 	return c.OperatorValidators(c.operatorID())
 }
 
-func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
+func (c *validatorIndices) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	if c.operatorID == nil {
 		return nil
 	}
@@ -207,19 +208,19 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 	return participating
 }
 
-func (c *validatorStore) SelfCommittees() []*Committee {
+func (c *validatorIndices) SelfCommittees() []*IndexedCommittee {
 	if c.operatorID == nil {
 		return nil
 	}
 	return c.OperatorCommittees(c.operatorID())
 }
 
-func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Committee {
+func (c *validatorIndices) SelfParticipatingCommittees(epoch phase0.Epoch) []*IndexedCommittee {
 	if c.operatorID == nil {
 		return nil
 	}
 	committees := c.OperatorCommittees(c.operatorID())
-	var participating []*Committee
+	var participating []*IndexedCommittee
 	for _, committee := range committees {
 		if committee.IsParticipating(c.networkConfig, epoch) {
 			participating = append(participating, committee)
@@ -228,7 +229,7 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 	return participating
 }
 
-func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
+func (c *validatorIndices) handleSharesAdded(shares ...*types.SSVShare) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -274,7 +275,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 			if !exists {
 				data = &sharesAndCommittees{
 					shares:     []*types.SSVShare{},
-					committees: []*Committee{},
+					committees: []*IndexedCommittee{},
 				}
 			}
 
@@ -287,7 +288,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 
 			// Copy `committees` to avoid shared state issues.
 			updated := false
-			newCommittees := make([]*Committee, len(data.committees))
+			newCommittees := make([]*IndexedCommittee, len(data.committees))
 			copy(newCommittees, data.committees)
 			for i, c := range newCommittees {
 				if c.ID == committee.ID {
@@ -308,7 +309,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 	return nil
 }
 
-func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
+func (c *validatorIndices) handleShareRemoved(share *types.SSVShare) error {
 	if share == nil {
 		return fmt.Errorf("nil share")
 	}
@@ -353,7 +354,7 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 		}
 
 		// Copy `committees` to avoid shared state issues.
-		newCommittees := make([]*Committee, len(data.committees))
+		newCommittees := make([]*IndexedCommittee, len(data.committees))
 		copy(newCommittees, data.committees)
 		for i, c := range newCommittees {
 			if c.ID == committeeID {
@@ -379,7 +380,7 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 	return nil
 }
 
-func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
+func (c *validatorIndices) handleSharesUpdated(shares ...*types.SSVShare) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -427,7 +428,7 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 			}
 
 			// Copy `committees` to avoid shared state issues.
-			newCommittees := make([]*Committee, len(data.committees))
+			newCommittees := make([]*IndexedCommittee, len(data.committees))
 			copy(newCommittees, data.committees)
 			for i, c := range newCommittees {
 				if c.ID == committeeID {
@@ -443,12 +444,12 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 	return nil
 }
 
-func (c *validatorStore) handleDrop() {
+func (c *validatorIndices) handleDrop() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.byValidatorIndex = make(map[phase0.ValidatorIndex]*types.SSVShare)
-	c.byCommitteeID = make(map[spectypes.CommitteeID]*Committee)
+	c.byCommitteeID = make(map[spectypes.CommitteeID]*IndexedCommittee)
 	c.byOperatorID = make(map[spectypes.OperatorID]*sharesAndCommittees)
 }
 
@@ -461,7 +462,7 @@ func containsShare(shares []*types.SSVShare, share *types.SSVShare) bool {
 	return false
 }
 
-func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShare) (*Committee, error) {
+func removeShareFromCommittee(committee *IndexedCommittee, shareToRemove *types.SSVShare) (*IndexedCommittee, error) {
 	var shares []*types.SSVShare
 	removed := false
 
@@ -486,7 +487,7 @@ func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShar
 	}
 
 	if len(shares) == 0 {
-		return &Committee{
+		return &IndexedCommittee{
 			ID: committee.ID,
 		}, nil
 	}
@@ -494,7 +495,7 @@ func removeShareFromCommittee(committee *Committee, shareToRemove *types.SSVShar
 	return buildCommittee(shares), nil
 }
 
-func updateCommitteeWithShare(committee *Committee, shareToUpdate *types.SSVShare) (*Committee, error) {
+func updateCommitteeWithShare(committee *IndexedCommittee, shareToUpdate *types.SSVShare) (*IndexedCommittee, error) {
 	shares := make([]*types.SSVShare, len(committee.Validators))
 	copy(shares, committee.Validators)
 
@@ -524,8 +525,8 @@ func removeShareFromOperator(data *sharesAndCommittees, share *types.SSVShare) (
 	return false
 }
 
-func buildCommittee(shares []*types.SSVShare) *Committee {
-	committee := &Committee{
+func buildCommittee(shares []*types.SSVShare) *IndexedCommittee {
+	committee := &IndexedCommittee{
 		ID:         shares[0].CommitteeID(),
 		Operators:  make([]spectypes.OperatorID, 0, len(shares)),
 		Validators: shares,

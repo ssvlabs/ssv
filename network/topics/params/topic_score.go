@@ -161,7 +161,7 @@ func NewOpts(activeValidators uint64, subnets int) *Options {
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
+func NewSubnetTopicOpts(activeValidators uint64, subnets int, committees []*storage.IndexedCommittee) *Options {
 	// Create options with default values
 	opts := NewOpts(activeValidators, subnets)
 	opts.defaults()

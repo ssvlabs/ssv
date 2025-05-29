@@ -108,8 +108,8 @@ func (m NodeStorage) Shares() registrystorage.Shares {
 	panic("unexpected Shares call")
 }
 
-func (m NodeStorage) ValidatorStore() registrystorage.ValidatorStore {
-	panic("unexpected ValidatorStore call")
+func (m NodeStorage) ValidatorStore() registrystorage.ValidatorIndices {
+	panic("unexpected ValidatorIndices call")
 }
 
 func (m NodeStorage) DropOperators() error {

@@ -44,7 +44,7 @@ type Storage interface {
 	registrystorage.Operators
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
-	ValidatorStore() registrystorage.ValidatorStore
+	ValidatorStore() registrystorage.ValidatorIndices
 
 	GetPrivateKeyHash() (string, bool, error)
 	SavePrivateKeyHash(privKeyHash string) error
@@ -60,7 +60,7 @@ type storage struct {
 	operatorStore  registrystorage.Operators
 	recipientStore registrystorage.Recipients
 	shareStore     registrystorage.Shares
-	validatorStore registrystorage.ValidatorStore
+	validatorStore registrystorage.ValidatorIndices
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -94,7 +94,7 @@ func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
 }
 
-func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
+func (s *storage) ValidatorStore() registrystorage.ValidatorIndices {
 	return s.validatorStore
 }
 

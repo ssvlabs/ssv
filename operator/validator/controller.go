@@ -81,7 +81,7 @@ type ControllerOptions struct {
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.ParticipantStores
-	ValidatorStore             registrystorage.ValidatorStore
+	ValidatorStore             registrystorage.ValidatorIndices
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	DoppelgangerHandler        doppelganger.Provider
@@ -164,7 +164,7 @@ type controller struct {
 	operatorDataStore operatordatastore.OperatorDataStore
 
 	validatorOptions        validator.Options
-	validatorStore          registrystorage.ValidatorStore
+	validatorStore          registrystorage.ValidatorIndices
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validator.Validator) (bool, error)
 	committeeValidatorSetup chan struct{}

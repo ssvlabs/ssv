@@ -113,7 +113,7 @@ func (cfg *PubSubConfig) initScoring() {
 }
 
 type CommitteesProvider interface {
-	Committees() []*storage.Committee
+	Committees() []*storage.IndexedCommittee
 }
 
 // NewPubSub creates a new pubsub router and the necessary components

@@ -31,7 +31,7 @@ func (s *Share) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = ssz.WriteOffset(dst, offset)
 	offset += len(s.SharePubKey)
 
-	// Offset (3) 'Committee'
+	// Offset (3) 'IndexedCommittee'
 	dst = ssz.WriteOffset(dst, offset)
 	for ii := 0; ii < len(s.Committee); ii++ {
 		offset += 4
@@ -69,9 +69,9 @@ func (s *Share) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	}
 	dst = append(dst, s.SharePubKey...)
 
-	// Field (3) 'Committee'
+	// Field (3) 'IndexedCommittee'
 	if size := len(s.Committee); size > 13 {
-		err = ssz.ErrListTooBigFn("Share.Committee", size, 13)
+		err = ssz.ErrListTooBigFn("Share.IndexedCommittee", size, 13)
 		return
 	}
 	{
@@ -126,7 +126,7 @@ func (s *Share) UnmarshalSSZ(buf []byte) error {
 		return ssz.ErrInvalidVariableOffset
 	}
 
-	// Offset (3) 'Committee'
+	// Offset (3) 'IndexedCommittee'
 	if o3 = ssz.ReadOffset(buf[60:64]); o3 > size || o2 > o3 {
 		return ssz.ErrOffset
 	}
@@ -169,7 +169,7 @@ func (s *Share) UnmarshalSSZ(buf []byte) error {
 		s.SharePubKey = append(s.SharePubKey, buf...)
 	}
 
-	// Field (3) 'Committee'
+	// Field (3) 'IndexedCommittee'
 	{
 		buf = tail[o3:o6]
 		num, err := ssz.DecodeDynamicLength(buf, 13)
@@ -212,7 +212,7 @@ func (s *Share) SizeSSZ() (size int) {
 	// Field (2) 'SharePubKey'
 	size += len(s.SharePubKey)
 
-	// Field (3) 'Committee'
+	// Field (3) 'IndexedCommittee'
 	for ii := 0; ii < len(s.Committee); ii++ {
 		size += 4
 		size += s.Committee[ii].SizeSSZ()
@@ -255,7 +255,7 @@ func (s *Share) HashTreeRootWith(hh ssz.HashWalker) (err error) {
 		hh.MerkleizeWithMixin(elemIndx, byteLen, (48+31)/32)
 	}
 
-	// Field (3) 'Committee'
+	// Field (3) 'IndexedCommittee'
 	{
 		subIndx := hh.Index()
 		num := uint64(len(s.Committee))

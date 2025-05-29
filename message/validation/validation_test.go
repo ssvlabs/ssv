@@ -69,7 +69,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	committeeID := shares.active.CommitteeID()
 
-	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.IndexedCommittee, bool) {
 		if id == committeeID {
 
 			share1 := cloneSSVShare(t, shares.active)
@@ -78,7 +78,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			share3 := cloneSSVShare(t, share2)
 			share3.ValidatorIndex = share2.ValidatorIndex + 1
 
-			return &registrystorage.Committee{
+			return &registrystorage.IndexedCommittee{
 				ID:        id,
 				Operators: committee,
 				Validators: []*ssvtypes.SSVShare{

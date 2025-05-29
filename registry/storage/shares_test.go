@@ -226,7 +226,7 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 		require.True(t, exists)
 		require.NotNil(t, savedShare)
 
-		// Ensure the share is saved correctly in the validatorStore
+		// Ensure the share is saved correctly in the validatorIndices
 		validatorShareFromStore, exists := storage.ValidatorStore.Validator(validatorShare.ValidatorPubKey[:])
 		require.True(t, exists)
 		require.NotNil(t, validatorShareFromStore)
@@ -243,7 +243,7 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 		require.False(t, exists)
 		require.Nil(t, deletedShare, "Share should be deleted from shareStorage")
 
-		// Verify that the validatorStore reflects the removal correctly
+		// Verify that the validatorIndices reflects the removal correctly
 		removedShare, exists := storage.ValidatorStore.Validator(validatorShare.ValidatorPubKey[:])
 		require.False(t, exists)
 		require.Nil(t, removedShare, "Share should be removed from validator store after deletion")
@@ -251,7 +251,7 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 		// Further checks on internal data structures
 		committee, exists := storage.ValidatorStore.Committee(validatorShare.CommitteeID())
 		require.False(t, exists)
-		require.Nil(t, committee, "Committee should be nil after share deletion")
+		require.Nil(t, committee, "IndexedCommittee should be nil after share deletion")
 
 		// Verify that other internal mappings are updated accordingly
 		byIndex, exists := storage.ValidatorStore.ValidatorByIndex(validatorShare.ValidatorIndex)
@@ -305,7 +305,7 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 		require.True(t, exists)
 		require.NotNil(t, savedShare)
 
-		// Verify that the validatorStore has the share via SharesStorage
+		// Verify that the validatorIndices has the share via SharesStorage
 		storedShare, exists := storage.ValidatorStore.Validator(testShare.ValidatorPubKey[:])
 		require.True(t, exists)
 		require.NotNil(t, storedShare, "Share should be present in validator store after adding to sharesStorage")
@@ -325,7 +325,7 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 		}))
 		reopen(t)
 
-		// Ensure the updated share is reflected in validatorStore
+		// Ensure the updated share is reflected in validatorIndices
 		updatedShare, exists := storage.ValidatorStore.Validator(testShare.ValidatorPubKey[:])
 		require.True(t, exists)
 		require.NotNil(t, updatedShare, "Updated share should be present in validator store")
@@ -340,7 +340,7 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 		require.NoError(t, storage.Shares.Delete(nil, testShare.ValidatorPubKey[:]))
 		reopen(t)
 
-		// Verify that the share is removed from both sharesStorage and validatorStore
+		// Verify that the share is removed from both sharesStorage and validatorIndices
 		deletedShare, exists := storage.Shares.Get(nil, testShare.ValidatorPubKey[:])
 		require.False(t, exists)
 		require.Nil(t, deletedShare, "Share should be deleted from sharesStorage")
@@ -387,14 +387,14 @@ func TestShareStorage_MultipleCommittees(t *testing.T) {
 		// Test that a committee with multiple validators is removed when all committee validators are removed.
 		deleteAndVerify(share1)
 
-		// Test that ValidatorStore is empty after all validators are removed.
+		// Test that ValidatorIndices is empty after all validators are removed.
 		deleteAndVerify(share3)
 		deleteAndVerify(share4)
 		require.Empty(t, storage.ValidatorStore.Validators())
 		require.Empty(t, storage.ValidatorStore.Committees())
 		require.Empty(t, storage.ValidatorStore.OperatorValidators(1))
 
-		// Re-add share2 to test that ValidatorStore is updated correctly.
+		// Re-add share2 to test that ValidatorIndices is updated correctly.
 		saveAndVerify(share2)
 	})
 }
@@ -649,7 +649,7 @@ type testStorage struct {
 	db             *kv.BadgerDB
 	Operators      Operators
 	Shares         Shares
-	ValidatorStore ValidatorStore
+	ValidatorStore ValidatorIndices
 }
 
 func newTestStorage(logger *zap.Logger) (*testStorage, error) {

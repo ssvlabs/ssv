@@ -45,7 +45,7 @@ type operators interface {
 // validatorStore defines the minimal interface needed for validation
 type validatorStore interface {
 	Validator(pubKey []byte) (*ssvtypes.SSVShare, bool)
-	Committee(id spectypes.CommitteeID) (*registrystorage.Committee, bool)
+	Committee(id spectypes.CommitteeID) (*registrystorage.IndexedCommittee, bool)
 }
 
 type peerIDWithMessageID struct {
@@ -180,7 +180,7 @@ func (mv *messageValidator) handleSignedSSVMessage(
 		return decodedMessage, err
 	}
 
-	// TODO: leverage the validatorStore to keep track of committees' indices and return them in Committee methods (which already return a Committee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
+	// TODO: leverage the validatorStore to keep track of committees' indices and return them in IndexedCommittee methods (which already return a IndexedCommittee struct that we should add an Indices filter to): https://github.com/ssvlabs/ssv/pull/1393#discussion_r1667681686
 	committeeInfo, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return decodedMessage, err

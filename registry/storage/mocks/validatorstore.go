@@ -19,7 +19,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockBaseValidatorStore is a mock of BaseValidatorStore interface.
+// MockBaseValidatorStore is a mock of BaseValidatorIndices interface.
 type MockBaseValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockBaseValidatorStoreMockRecorder
@@ -44,10 +44,10 @@ func (m *MockBaseValidatorStore) EXPECT() *MockBaseValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockBaseValidatorStore) Committee(id types.CommitteeID) (*storage.Committee, bool) {
+func (m *MockBaseValidatorStore) Committee(id types.CommitteeID) (*storage.IndexedCommittee, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Committee", id)
-	ret0, _ := ret[0].(*storage.Committee)
+	ret := m.ctrl.Call(m, "IndexedCommittee", id)
+	ret0, _ := ret[0].(*storage.IndexedCommittee)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -55,14 +55,14 @@ func (m *MockBaseValidatorStore) Committee(id types.CommitteeID) (*storage.Commi
 // Committee indicates an expected call of Committee.
 func (mr *MockBaseValidatorStoreMockRecorder) Committee(id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committee", reflect.TypeOf((*MockBaseValidatorStore)(nil).Committee), id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexedCommittee", reflect.TypeOf((*MockBaseValidatorStore)(nil).Committee), id)
 }
 
 // Committees mocks base method.
-func (m *MockBaseValidatorStore) Committees() []*storage.Committee {
+func (m *MockBaseValidatorStore) Committees() []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committees")
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -73,10 +73,10 @@ func (mr *MockBaseValidatorStoreMockRecorder) Committees() *gomock.Call {
 }
 
 // OperatorCommittees mocks base method.
-func (m *MockBaseValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.Committee {
+func (m *MockBaseValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OperatorCommittees", id)
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -101,10 +101,10 @@ func (mr *MockBaseValidatorStoreMockRecorder) OperatorValidators(id any) *gomock
 }
 
 // ParticipatingCommittees mocks base method.
-func (m *MockBaseValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.Committee {
+func (m *MockBaseValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipatingCommittees", epoch)
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -172,7 +172,7 @@ func (mr *MockBaseValidatorStoreMockRecorder) Validators() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validators", reflect.TypeOf((*MockBaseValidatorStore)(nil).Validators))
 }
 
-// MockValidatorStore is a mock of ValidatorStore interface.
+// MockValidatorStore is a mock of ValidatorIndices interface.
 type MockValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorStoreMockRecorder
@@ -197,10 +197,10 @@ func (m *MockValidatorStore) EXPECT() *MockValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockValidatorStore) Committee(id types.CommitteeID) (*storage.Committee, bool) {
+func (m *MockValidatorStore) Committee(id types.CommitteeID) (*storage.IndexedCommittee, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Committee", id)
-	ret0, _ := ret[0].(*storage.Committee)
+	ret := m.ctrl.Call(m, "IndexedCommittee", id)
+	ret0, _ := ret[0].(*storage.IndexedCommittee)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -208,14 +208,14 @@ func (m *MockValidatorStore) Committee(id types.CommitteeID) (*storage.Committee
 // Committee indicates an expected call of Committee.
 func (mr *MockValidatorStoreMockRecorder) Committee(id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committee", reflect.TypeOf((*MockValidatorStore)(nil).Committee), id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexedCommittee", reflect.TypeOf((*MockValidatorStore)(nil).Committee), id)
 }
 
 // Committees mocks base method.
-func (m *MockValidatorStore) Committees() []*storage.Committee {
+func (m *MockValidatorStore) Committees() []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committees")
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -226,10 +226,10 @@ func (mr *MockValidatorStoreMockRecorder) Committees() *gomock.Call {
 }
 
 // OperatorCommittees mocks base method.
-func (m *MockValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.Committee {
+func (m *MockValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OperatorCommittees", id)
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -254,10 +254,10 @@ func (mr *MockValidatorStoreMockRecorder) OperatorValidators(id any) *gomock.Cal
 }
 
 // ParticipatingCommittees mocks base method.
-func (m *MockValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.Committee {
+func (m *MockValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipatingCommittees", epoch)
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -326,10 +326,10 @@ func (mr *MockValidatorStoreMockRecorder) Validators() *gomock.Call {
 }
 
 // WithOperatorID mocks base method.
-func (m *MockValidatorStore) WithOperatorID(operatorID func() types.OperatorID) storage.SelfValidatorStore {
+func (m *MockValidatorStore) WithOperatorID(operatorID func() types.OperatorID) storage.SelfValidatorIndices {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WithOperatorID", operatorID)
-	ret0, _ := ret[0].(storage.SelfValidatorStore)
+	ret0, _ := ret[0].(storage.SelfValidatorIndices)
 	return ret0
 }
 
@@ -339,7 +339,7 @@ func (mr *MockValidatorStoreMockRecorder) WithOperatorID(operatorID any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithOperatorID", reflect.TypeOf((*MockValidatorStore)(nil).WithOperatorID), operatorID)
 }
 
-// MockSelfValidatorStore is a mock of SelfValidatorStore interface.
+// MockSelfValidatorStore is a mock of SelfValidatorIndices interface.
 type MockSelfValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockSelfValidatorStoreMockRecorder
@@ -364,10 +364,10 @@ func (m *MockSelfValidatorStore) EXPECT() *MockSelfValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockSelfValidatorStore) Committee(id types.CommitteeID) (*storage.Committee, bool) {
+func (m *MockSelfValidatorStore) Committee(id types.CommitteeID) (*storage.IndexedCommittee, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Committee", id)
-	ret0, _ := ret[0].(*storage.Committee)
+	ret := m.ctrl.Call(m, "IndexedCommittee", id)
+	ret0, _ := ret[0].(*storage.IndexedCommittee)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -375,14 +375,14 @@ func (m *MockSelfValidatorStore) Committee(id types.CommitteeID) (*storage.Commi
 // Committee indicates an expected call of Committee.
 func (mr *MockSelfValidatorStoreMockRecorder) Committee(id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Committee", reflect.TypeOf((*MockSelfValidatorStore)(nil).Committee), id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexedCommittee", reflect.TypeOf((*MockSelfValidatorStore)(nil).Committee), id)
 }
 
 // Committees mocks base method.
-func (m *MockSelfValidatorStore) Committees() []*storage.Committee {
+func (m *MockSelfValidatorStore) Committees() []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committees")
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -393,10 +393,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) Committees() *gomock.Call {
 }
 
 // OperatorCommittees mocks base method.
-func (m *MockSelfValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.Committee {
+func (m *MockSelfValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OperatorCommittees", id)
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -421,10 +421,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) OperatorValidators(id any) *gomock
 }
 
 // ParticipatingCommittees mocks base method.
-func (m *MockSelfValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.Committee {
+func (m *MockSelfValidatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipatingCommittees", epoch)
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -449,10 +449,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) ParticipatingValidators(epoch any)
 }
 
 // SelfCommittees mocks base method.
-func (m *MockSelfValidatorStore) SelfCommittees() []*storage.Committee {
+func (m *MockSelfValidatorStore) SelfCommittees() []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SelfCommittees")
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 
@@ -463,10 +463,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) SelfCommittees() *gomock.Call {
 }
 
 // SelfParticipatingCommittees mocks base method.
-func (m *MockSelfValidatorStore) SelfParticipatingCommittees(arg0 phase0.Epoch) []*storage.Committee {
+func (m *MockSelfValidatorStore) SelfParticipatingCommittees(arg0 phase0.Epoch) []*storage.IndexedCommittee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SelfParticipatingCommittees", arg0)
-	ret0, _ := ret[0].([]*storage.Committee)
+	ret0, _ := ret[0].([]*storage.IndexedCommittee)
 	return ret0
 }
 

@@ -22,7 +22,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 0 validators",
 			func() *Options {
 				validators := uint64(0)
-				opts := NewSubnetTopicOpts(validators, 128, []*storage.Committee{})
+				opts := NewSubnetTopicOpts(validators, 128, []*storage.IndexedCommittee{})
 				return opts
 			},
 			nil,

@@ -23,11 +23,11 @@ func createTestingValidators(n int) []*types.SSVShare {
 	return ret
 }
 
-func createTestingSingleCommittees(n uint64) []*storage.Committee {
-	ret := make([]*storage.Committee, 0)
+func createTestingSingleCommittees(n uint64) []*storage.IndexedCommittee {
+	ret := make([]*storage.IndexedCommittee, 0)
 	for i := uint64(0); i <= n; i++ {
 		opRef := i*4 + 1
-		ret = append(ret, &storage.Committee{
+		ret = append(ret, &storage.IndexedCommittee{
 			Operators:  []uint64{opRef, opRef + 1, opRef + 2, opRef + 3},
 			Validators: createTestingValidators(1),
 		})
@@ -44,7 +44,7 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 	}
 
 	type args struct {
-		committees []*storage.Committee
+		committees []*storage.IndexedCommittee
 	}
 	tests := []struct {
 		name string
@@ -54,7 +54,7 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 		{
 			name: "Case 1",
 			args: args{
-				committees: []*storage.Committee{
+				committees: []*storage.IndexedCommittee{
 					{
 						Operators:  []uint64{1, 2, 3, 4},
 						Validators: createTestingValidators(500),

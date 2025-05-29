@@ -109,7 +109,7 @@ func expectedSingleSCCommitteeDutiesPerEpochCached(numValidators int) float64 {
 }
 
 // Calculates the message rate for a topic given its committees' configurations (number of operators and number of validators)
-func calculateMessageRateForTopic(committees []*storage.Committee) float64 {
+func calculateMessageRateForTopic(committees []*storage.IndexedCommittee) float64 {
 	if len(committees) == 0 {
 		return 0
 	}

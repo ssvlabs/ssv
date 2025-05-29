@@ -61,7 +61,7 @@ type sharesStorage struct {
 	db             basedb.Database
 	storagePrefix  []byte
 	shares         map[string]*types.SSVShare
-	validatorStore *validatorStore
+	validatorStore *validatorIndices
 	// storageMtx serializes access to the database in order to avoid
 	// re-creation of a deleted share during update metadata
 	storageMtx sync.Mutex
@@ -121,7 +121,7 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(networkConfig networkconfig.NetworkConfig, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(networkConfig networkconfig.NetworkConfig, db basedb.Database, prefix []byte) (Shares, ValidatorIndices, error) {
 	storage := &sharesStorage{
 		shares:        make(map[string]*types.SSVShare),
 		db:            db,
@@ -230,7 +230,7 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		for _, share := range shares {
 			key := hex.EncodeToString(share.ValidatorPubKey[:])
 
-			// Update validatorStore indices.
+			// Update validatorIndices indices.
 			if _, ok := s.shares[key]; ok {
 				updateShares = append(updateShares, share)
 			} else {

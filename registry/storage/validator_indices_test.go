@@ -449,7 +449,7 @@ func BenchmarkValidatorStore_Add(b *testing.B) {
 		committees[committee]++
 	}
 	tbl := table.New(os.Stdout)
-	tbl.SetHeaders("Committee", "Validators")
+	tbl.SetHeaders("IndexedCommittee", "Validators")
 	for committee, count := range committees {
 		tbl.AddRow(fmt.Sprintf("%v", committee), fmt.Sprintf("%d", count))
 	}
@@ -538,7 +538,7 @@ func BenchmarkValidatorStore_Update(b *testing.B) {
 		committees[committee]++
 	}
 	tbl := table.New(os.Stdout)
-	tbl.SetHeaders("Committee", "Validators")
+	tbl.SetHeaders("IndexedCommittee", "Validators")
 	for committee, count := range committees {
 		tbl.AddRow(fmt.Sprintf("%v", committee), fmt.Sprintf("%d", count))
 	}
@@ -940,11 +940,11 @@ func TestValidatorStore_HandleDuplicateSharesAdded(t *testing.T) {
 	})
 }
 
-// requireValidatorStoreIntegrity checks that every function of the ValidatorStore returns the expected results,
+// requireValidatorStoreIntegrity checks that every function of the ValidatorIndices returns the expected results,
 // by reconstructing the expected state from the given shares and comparing it to the actual state of the store.
-// This may seem like an overkill, but as ValidatorStore's implementation becomes more optimized and complex,
+// This may seem like an overkill, but as ValidatorIndices's implementation becomes more optimized and complex,
 // it's a good way to double-check it with a dumb implementation that never changes.
-func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares []*ssvtypes.SSVShare) {
+func requireValidatorStoreIntegrity(t *testing.T, store ValidatorIndices, shares []*ssvtypes.SSVShare) {
 	// Check that there are no false positives.
 	const nonExistingIndex = phase0.ValidatorIndex(math.MaxUint64 - 1)
 	const nonExistingOperatorID = spectypes.OperatorID(math.MaxUint64 - 1)
@@ -1040,7 +1040,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 		require.Equal(t, len(committees), len(storeOperatorCommittees), "operator %d has %d committees, but %d in store", operatorID, len(committees), len(storeOperatorCommittees))
 		for committee := range committees {
 			// Find the committee in the store.
-			storeIndex := slices.IndexFunc(storeOperatorCommittees, func(storeCommittee *Committee) bool {
+			storeIndex := slices.IndexFunc(storeOperatorCommittees, func(storeCommittee *IndexedCommittee) bool {
 				return storeCommittee.ID == committee
 			})
 			require.NotEqual(t, -1, storeIndex)
@@ -1089,7 +1089,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 	}
 }
 
-func createValidatorStore(shares map[spectypes.ValidatorPK]*ssvtypes.SSVShare) *validatorStore {
+func createValidatorStore(shares map[spectypes.ValidatorPK]*ssvtypes.SSVShare) *validatorIndices {
 	return newValidatorStore(
 		func() []*ssvtypes.SSVShare { return slices.Collect(maps.Values(shares)) },
 		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
