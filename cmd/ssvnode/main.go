@@ -7,7 +7,7 @@ import (
 )
 
 // AppName is the application name
-var AppName = "SSV-Nodeax"
+var AppName = "SSV-Nodeaxx"
 
 // Version is the app version
 var Version = "latest"
