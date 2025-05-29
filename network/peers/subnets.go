@@ -107,21 +107,14 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
 	return subnets, true
 }
 
-// GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
-// subnets with low peer count would get higher score, and overloaded subnets gets a lower score (possibly negative).
-// Subnets in which the node doesn't participate receive a score of 0.
-func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets commons.Subnets, topicMaxPeers int) [commons.SubnetsCount]float64 {
-	const activeSubnetBoost = 0.2
-
-	activeSubnets := commons.AllSubnets.SharedSubnets(mySubnets)
-
-	var scores [commons.SubnetsCount]float64
-	for _, s := range activeSubnets {
-		var connected int
-		if s < uint64(len(stats.Connected)) {
-			connected = stats.Connected[s]
+// GetSubnetsDistributionScores calculates distribution scores for subnets
+func GetSubnetsDistributionScores(stats *SubnetsStats, minPeers int, mySubnets commons.Subnets, maxPeers int) []float64 {
+	scores := make([]float64, commons.SubnetsCount)
+	for i := 0; i < commons.SubnetsCount; i++ {
+		if !mySubnets.IsSet(uint64(i)) {
+			continue
 		}
-		scores[s] = activeSubnetBoost + scoreSubnet(connected, minPerSubnet, topicMaxPeers)
+		scores[i] = ScoreSubnet(stats.Connected[i], minPeers, maxPeers)
 	}
 	return scores
 }
@@ -148,4 +141,15 @@ func scoreSubnet(connected, min, max int) float64 {
 	// Linear scaling when connected is between min and max.
 	proportion := float64(connected-min) / float64(max-min)
 	return 1 - proportion
+}
+
+// ScoreSubnet calculates a score for a subnet based on the number of connected peers
+func ScoreSubnet(connected, min, max int) float64 {
+	if connected >= max {
+		return 0
+	}
+	if connected <= min {
+		return float64(max-min) / float64(min)
+	}
+	return float64(max-connected) / float64(max-min)
 }

@@ -1,14 +1,16 @@
-package peers
+package scores_test
 
 import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/network/peers/scores"
 )
 
 func TestGetGossipScore(t *testing.T) {
-	index := NewGossipScoreIndex()
+	index := scores.NewGossipScoreIndex()
 	peerID := peer.ID("peer1")
 	peerID2 := peer.ID("peer2")
 
@@ -33,7 +35,7 @@ func TestGetGossipScore(t *testing.T) {
 }
 
 func TestSetScores(t *testing.T) {
-	index := NewGossipScoreIndex()
+	index := scores.NewGossipScoreIndex()
 	peerID := peer.ID("peer1")
 	peerID2 := peer.ID("peer2")
 	peerID3 := peer.ID("peer3")
@@ -57,20 +59,20 @@ func TestSetScores(t *testing.T) {
 }
 
 func TestClear(t *testing.T) {
-	index := NewGossipScoreIndex()
+	index := scores.NewGossipScoreIndex()
 	peerID := peer.ID("peer1")
 
 	index.SetScores(map[peer.ID]float64{
 		peerID: 10.0,
 	})
-	index.clear()
+	index.Clear()
 	score, exists := index.GetGossipScore(peerID)
 	require.False(t, exists)
 	require.Equal(t, 0.0, score)
 }
 
 func TestHasBadGossipScore(t *testing.T) {
-	index := NewGossipScoreIndex()
+	index := scores.NewGossipScoreIndex()
 	peerID := peer.ID("peer1")
 
 	bad, score := index.HasBadGossipScore(peerID)
@@ -78,16 +80,16 @@ func TestHasBadGossipScore(t *testing.T) {
 	require.Equal(t, 0.0, score)
 
 	index.SetScores(map[peer.ID]float64{
-		peerID: index.graylistThreshold - 1,
+		peerID: index.GraylistThreshold - 1,
 	})
 	bad, score = index.HasBadGossipScore(peerID)
 	require.True(t, bad)
-	require.Equal(t, index.graylistThreshold-1, score)
+	require.Equal(t, index.GraylistThreshold-1, score)
 
 	index.SetScores(map[peer.ID]float64{
-		peerID: index.graylistThreshold + 1,
+		peerID: index.GraylistThreshold + 1,
 	})
 	bad, score = index.HasBadGossipScore(peerID)
 	require.False(t, bad)
-	require.Equal(t, index.graylistThreshold+1, score)
+	require.Equal(t, index.GraylistThreshold+1, score)
 }

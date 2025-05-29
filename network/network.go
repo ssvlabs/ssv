@@ -5,15 +5,13 @@ import (
 	"crypto/rsa"
 	"io"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
+	discovery "github.com/ssvlabs/ssv/network/discovery"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network/discovery"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
 // DecodedSSVMessage serves as a marker interface for any SSV message types.

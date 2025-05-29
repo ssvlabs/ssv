@@ -11,11 +11,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -87,7 +88,11 @@ func (n *p2pNetwork) BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.P
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
+	var permActiveEpoch phase0.Epoch
+
+	// permActiveEpoch = n.cfg.NetworkConfig.PermissionlessActivationEpoch
+
+	if n.cfg.NetworkConfig.EstimatedCurrentEpoch() > permActiveEpoch {
 
 		if pk == nil {
 			signature := [128]byte{1}
@@ -112,47 +117,6 @@ func (n *p2pNetwork) BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.P
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
-		}
-	}
-	return nil
-}
-
-// Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.PrivateKey, id spectypes.OperatorID) error {
-	if !n.isReady() {
-		return p2pprotocol.ErrNetworkIsNotReady
-	}
-
-	encodedMsg, err := commons.EncodeNetworkMsg(msg)
-	if err != nil {
-		return errors.Wrap(err, "could not decode msg")
-	}
-
-	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
-
-		if pk == nil {
-			signature := [128]byte{1}
-
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, id, signature[:])
-		} else {
-			hash := sha256.Sum256(encodedMsg)
-
-			signature, err := rsa.SignPKCS1v15(nil, pk, crypto.SHA256, hash[:])
-			if err != nil {
-				return err
-			}
-
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, id, signature)
-		}
-	}
-
-	vpk := msg.GetID().GetPubKey()
-	topics := commons.ValidatorTopicID(vpk)
-
-	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
-			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
 	return nil

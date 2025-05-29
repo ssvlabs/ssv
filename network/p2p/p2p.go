@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	p2pnet "github.com/libp2p/go-libp2p/core/network"
@@ -20,9 +21,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -31,11 +29,13 @@ import (
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections"
+	s "github.com/ssvlabs/ssv/network/peers/scores"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
@@ -82,6 +82,7 @@ type p2pNetwork struct {
 
 	host         host.Host
 	streamCtrl   streams.StreamController
+	gsix         s.GossipScoreIndex
 	idx          peers.Index
 	isIdxSet     atomic.Bool
 	disc         discovery.Service
@@ -307,7 +308,7 @@ func (n *p2pNetwork) peersTrimming() func() {
 			_ = n.idx.GetSubnetsStats() // collect metrics
 		}()
 
-		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.idx)
+		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx, n.gsix)
 
 		disconnectedCnt := connMgr.DisconnectFromBadPeers(n.host.Network(), n.host.Network().Peers())
 		if disconnectedCnt > 0 {

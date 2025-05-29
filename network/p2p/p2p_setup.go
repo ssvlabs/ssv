@@ -27,6 +27,7 @@ import (
 	"github.com/ssvlabs/ssv/network/discovery"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections"
+	s "github.com/ssvlabs/ssv/network/peers/scores"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
@@ -200,7 +201,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, peers.NewGossipScoreIndex())
+	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, s.NewGossipScoreIndex())
 	n.isIdxSet.Store(true)
 
 	n.logger.Debug("peers index is ready")
@@ -341,14 +342,13 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	go cfg.MsgIDHandler.Start()
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
-
-	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), n.idx)
+	si := s.NewGossipScoreIndex()
+	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), si)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not setup pubsub")
 	}
 
 	n.topicsCtrl = tc
-	n.pubsub = pubsub
 	n.logger.Debug("topics controller is ready")
 	return tc, nil
 }

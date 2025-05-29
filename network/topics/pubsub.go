@@ -16,7 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/peers"
+	s "github.com/ssvlabs/ssv/network/peers/scores"
 	"github.com/ssvlabs/ssv/network/topics/params"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -55,7 +55,7 @@ type PubSubConfig struct {
 	// in case we need different validators for specific topics,
 	// this should be the place to map a validator to topic
 	MsgValidator messageValidator
-	ScoreIndex   peers.ScoreIndex
+	ScoreIndex   s.ScoreIndex
 	Scoring      *ScoringConfig
 	MsgIDHandler MsgIDHandler
 	Discovery    discovery.Discovery
@@ -120,7 +120,7 @@ func NewPubSub(
 	logger *zap.Logger,
 	cfg *PubSubConfig,
 	committeesProvider CommitteesProvider,
-	gossipScoreIndex peers.GossipScoreIndex,
+	gossipScoreIndex s.GossipScoreIndex,
 ) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
