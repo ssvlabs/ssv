@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
@@ -16,7 +17,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -43,6 +44,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -187,7 +189,7 @@ type controller struct {
 
 	domainCache *validator.DomainCache
 
-	indicesChangeCh           chan struct{}
+	indicesChangeCh         chan struct{}
 	validatorRegistrationCh chan duties.RegistrationDescriptor
 	validatorExitCh         chan duties.ExitDescriptor
 }
@@ -273,7 +275,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beaconVoteRoots: ttlcache.New(
 			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
 		),
-		indicesChangeCh:           make(chan struct{}),
+		indicesChangeCh:         make(chan struct{}),
 		validatorRegistrationCh: make(chan duties.RegistrationDescriptor),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
