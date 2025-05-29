@@ -7,6 +7,8 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 func TestNodeInfo_Seal_Consume(t *testing.T) {
@@ -18,7 +20,7 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			OperatorID:    "xxx",
+			Subnets:       commons.AllSubnets.String(),
 		},
 	}
 
@@ -32,21 +34,26 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 }
 
 func TestNodeInfo_Marshal_Unmarshal(t *testing.T) {
-	ni := &NodeInfo{
+	oldSerializedData := []byte(`{"Entries":["", "testnet", "{\"NodeVersion\":\"v0.1.12\",\"ExecutionNode\":\"geth/x\",\"ConsensusNode\":\"prysm/x\",\"Subnets\":\"ffffffffffffffffffffffffffffffff\"}"]}`)
+
+	currentSerializedData := &NodeInfo{
 		NetworkID: "testnet",
 		Metadata: &NodeMetadata{
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			OperatorID:    "xxx",
+			Subnets:       commons.AllSubnets.String(),
 		},
 	}
 
-	data, err := ni.MarshalRecord()
+	data, err := currentSerializedData.MarshalRecord()
 	require.NoError(t, err)
 
 	parsedRec := &NodeInfo{}
 	require.NoError(t, parsedRec.UnmarshalRecord(data))
 
-	require.True(t, reflect.DeepEqual(ni, parsedRec))
+	// Attempt to unmarshal old data into the latest version of NodeInfo
+	require.NoError(t, parsedRec.UnmarshalRecord(oldSerializedData))
+
+	require.True(t, reflect.DeepEqual(currentSerializedData, parsedRec))
 }

@@ -12,7 +12,7 @@ db:
 ssv:
   # The SSV network to join to
   # Mainnet = Network: mainnet (default)
-  # Testnet = Network: jato-v2
+  # Testnet = Network: holesky
   Network: mainnet
 
 eth2:
@@ -20,8 +20,6 @@ eth2:
   BeaconNodeAddr: http://example.url:5052
 
   ValidatorOptions:
-    # Whether to enable MEV block production. Requires the connected Beacon node to be MEV-enabled.
-    BuilderProposals: false
 
 eth1:
   # WebSocket URL of the Eth1 node to connect to.
@@ -38,5 +36,9 @@ p2p:
 # Note: Operator private key can be generated with the `generate-operator-keys` command.
 OperatorPrivateKey:
 
-# This enables monitoring at the specified port, see https://github.com/bloxapp/ssv/tree/main/monitoring
+# This enables monitoring at the specified port, see https://github.com/ssvlabs/ssv/tree/main/monitoring
 MetricsAPIPort: 15000
+
+# This enables the SSV API at the specified port. Refer to the documentation at https://bloxapp.github.io/ssv/
+# It's recommended to keep this port private to prevent potential resource-intensive attacks.
+# SSVAPIPort: 16000

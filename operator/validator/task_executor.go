@@ -3,14 +3,16 @@ package validator
 import (
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/operator/duties"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {
@@ -19,20 +21,10 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 		With(fields...)
 }
 
-func (c *controller) StartValidator(share *types.SSVShare) error {
-	// logger := c.taskLogger("StartValidator", fields.PubKey(share.ValidatorPubKey))
-
-	// Since we don't yet have the Beacon metadata for this validator,
-	// we can't yet start it. Starting happens in `UpdateValidatorMetaDataLoop`,
-	// so this task is currently a no-op.
-
-	return nil
-}
-
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
-	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey))
+	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
-	c.metrics.ValidatorRemoved(pubKey)
+	validatorsRemovedCounter.Add(c.ctx, 1)
 	c.onShareStop(pubKey)
 
 	logger.Info("removed validator")
@@ -45,7 +37,7 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []specty
 
 	for _, share := range toLiquidate {
 		c.onShareStop(share.ValidatorPubKey)
-		logger.With(fields.PubKey(share.ValidatorPubKey)).Debug("liquidated share")
+		logger.With(fields.PubKey(share.ValidatorPubKey[:])).Debug("liquidated share")
 	}
 
 	return nil
@@ -53,7 +45,6 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []specty
 
 func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toReactivate []*types.SSVShare) error {
 	logger := c.taskLogger("ReactivateCluster", fields.Owner(owner), fields.OperatorIDs(operatorIDs))
-
 	var startedValidators int
 	var errs error
 	for _, share := range toReactivate {
@@ -69,9 +60,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	if startedValidators > 0 {
 		// Notify DutyScheduler about the changes in validator indices without blocking.
 		go func() {
-			select {
-			case c.indicesChange <- struct{}{}:
-			case <-time.After(12 * time.Second):
+			if !c.reportIndicesChange(c.ctx) {
 				logger.Error("failed to notify indices change")
 			}
 		}()
@@ -88,7 +77,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
-	c.validatorsMap.ForEach(func(v *validator.Validator) bool {
+	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
 			v.Share.FeeRecipientAddress = recipient
 
@@ -96,6 +85,32 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		}
 		return true
 	})
+
+	return nil
+}
+
+func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error {
+	logger := c.taskLogger("ExitValidator",
+		fields.PubKey(pubKey[:]),
+		fields.BlockNumber(blockNumber),
+		zap.Uint64("validator_index", uint64(validatorIndex)),
+	)
+
+	exitDesc := duties.ExitDescriptor{
+		OwnValidator:   ownValidator,
+		PubKey:         pubKey,
+		ValidatorIndex: validatorIndex,
+		BlockNumber:    blockNumber,
+	}
+
+	go func() {
+		select {
+		case c.validatorExitCh <- exitDesc:
+			logger.Debug("added voluntary exit task to pipeline")
+		case <-time.After(2 * c.networkConfig.GetSlotDuration()):
+			logger.Error("failed to schedule ExitValidator duty!")
+		}
+	}()
 
 	return nil
 }

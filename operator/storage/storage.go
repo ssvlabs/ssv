@@ -1,31 +1,28 @@
 package storage
 
 import (
-	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/networkconfig"
+	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-var HashedPrivateKey = "hashed-private-key"
-
 var (
-	storagePrefix         = []byte("operator/")
+	OperatorStoragePrefix = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
 	configKey             = []byte("config")
+	hashedPrivkeyDBKey    = "hashed-private-key"
+	pubkeyDBKey           = "public-key"
 )
 
 // Storage represents the interface for ssv node storage
@@ -47,34 +44,41 @@ type Storage interface {
 	registrystorage.Operators
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
+	ValidatorStore() registrystorage.ValidatorStore
 
-	GetPrivateKey() (*rsa.PrivateKey, bool, error)
-	SetupPrivateKey(operatorKeyBase64 string) ([]byte, error)
+	GetPrivateKeyHash() (string, bool, error)
+	SavePrivateKeyHash(privKeyHash string) error
+
+	GetPublicKey() (string, bool, error)
+	SavePublicKey(pubKey string) error
 }
 
 type storage struct {
 	logger *zap.Logger
 	db     basedb.Database
 
-	operatorPrivateKey []byte
-	operatorStore      registrystorage.Operators
-	recipientStore     registrystorage.Recipients
-	shareStore         registrystorage.Shares
+	operatorStore  registrystorage.Operators
+	recipientStore registrystorage.Recipients
+	shareStore     registrystorage.Shares
+	validatorStore registrystorage.ValidatorStore
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
+func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,
-		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, storagePrefix),
-		recipientStore: registrystorage.NewRecipientsStorage(logger, db, storagePrefix),
+		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, OperatorStoragePrefix),
+		recipientStore: registrystorage.NewRecipientsStorage(logger, db, OperatorStoragePrefix),
 	}
+
 	var err error
-	stg.shareStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
+
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, OperatorStoragePrefix)
 	if err != nil {
 		return nil, err
 	}
+
 	return stg, nil
 }
 
@@ -90,7 +94,11 @@ func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
 }
 
-func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
+func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
+	return s.validatorStore
+}
+
+func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
 	return s.operatorStore.GetOperatorDataByPubKey(r, operatorPubKey)
 }
 
@@ -169,11 +177,11 @@ func (s *storage) DropRegistryData() error {
 // TODO: review what's not needed anymore and delete
 
 func (s *storage) SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) error {
-	return s.db.Using(rw).Set(storagePrefix, lastProcessedBlockKey, offset.Bytes())
+	return s.db.Using(rw).Set(OperatorStoragePrefix, lastProcessedBlockKey, offset.Bytes())
 }
 
 func (s *storage) dropLastProcessedBlock() error {
-	return s.db.DropPrefix(append(storagePrefix, lastProcessedBlockKey...))
+	return s.db.DropPrefix(append(OperatorStoragePrefix, lastProcessedBlockKey...))
 }
 
 func (s *storage) DropOperators() error {
@@ -190,7 +198,7 @@ func (s *storage) DropShares() error {
 
 // GetLastProcessedBlock returns the last processed block.
 func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error) {
-	obj, found, err := s.db.UsingReader(r).Get(storagePrefix, lastProcessedBlockKey)
+	obj, found, err := s.db.UsingReader(r).Get(OperatorStoragePrefix, lastProcessedBlockKey)
 	if !found {
 		return nil, found, nil
 	}
@@ -202,111 +210,43 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 	return offset, found, nil
 }
 
-// GetHashedPrivateKey return sha256 hashed private key
-func (s *storage) GetHashedPrivateKey() ([]byte, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, []byte(HashedPrivateKey))
+// GetPrivateKeyHash return sha256 hashed private key
+func (s *storage) GetPrivateKeyHash() (string, bool, error) {
+	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey))
 	if !found {
-		return nil, found, nil
+		return "", found, nil
 	}
 	if err != nil {
-		return nil, found, err
+		return "", found, err
 	}
-	return obj.Value, found, nil
+	return string(obj.Value), found, nil
 }
 
-// GetPrivateKey return rsa private key
-func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
-	privateKey := s.operatorPrivateKey
-	if privateKey == nil {
-		return nil, false, nil
-	}
-	sk, err := rsaencryption.ConvertPemToPrivateKey(string(privateKey))
-	if err != nil {
-		return nil, false, err
-	}
-	return sk, true, nil
+// SavePrivateKeyHash saves operator private key hash
+func (s *storage) SavePrivateKeyHash(hashedKey string) error {
+	return s.db.Set(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey), []byte(hashedKey))
 }
 
-// SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
-func (s *storage) SetupPrivateKey(operatorKeyBase64 string) ([]byte, error) {
-	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to decode base64")
-	}
-	var operatorKey = string(operatorKeyByte)
-
-	if err := s.validateKey(operatorKey); err != nil {
-		return nil, err
-	}
-
-	sk, found, err := s.GetPrivateKey()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get operator private key")
-	}
+// GetPublicKey returns public key.
+func (s *storage) GetPublicKey() (string, bool, error) {
+	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(pubkeyDBKey))
 	if !found {
-		return nil, errors.New("failed to find operator private key")
+		return "", false, nil
 	}
-
-	operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to extract operator public key")
+		return "", false, err
 	}
 
-	//TODO change the log to generated/loaded private key to indicate better on the action
-	s.logger.Info("successfully setup operator keys", zap.String("pubkey", operatorPublicKey))
-	return []byte(operatorPublicKey), nil
+	return string(obj.Value), true, nil
 }
 
-// validateKey validate provided and exist key. save if needed.
-func (s *storage) validateKey(operatorKey string) error {
-	// check if passed new key. if so, save new key (force to always save key when provided)
-	storedPrivateKey, privateKeyExist, err := s.GetHashedPrivateKey()
-	if err != nil {
-		return errors.New("Can't Get Operator private key from storage")
-	}
-	hashedKey, err := rsaencryption.HashRsaKey([]byte(operatorKey))
-	if err != nil {
-		return errors.New("Cannot hash Operator private key")
-	}
-	if privateKeyExist && hashedKey != string(storedPrivateKey) {
-		return errors.New("Operator private key is not matching the one encrypted the storage")
-	}
-	if operatorKey != "" {
-		return s.savePrivateKey(operatorKey)
-	}
-	// new key not provided, check if key exist
-	_, found, err := s.GetPrivateKey()
-	if err != nil {
-		return err
-	}
-	// if no, check  if you need to generate. if no, return error
-	if !found {
-		return errors.New("key not exist or provided")
-	}
-
-	// key exist in storage.
-	return nil
-}
-
-// SavePrivateKey save operator private key
-func (s *storage) savePrivateKey(operatorKey string) error {
-	hashedKey, err := rsaencryption.HashRsaKey([]byte(operatorKey))
-	if err != nil {
-		return err
-	}
-	if err := s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey)); err != nil {
-		return err
-	}
-	s.operatorPrivateKey = []byte(operatorKey)
-	return nil
-}
-
-func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
-	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
+// SavePublicKey saves operator public key.
+func (s *storage) SavePublicKey(publicKey string) error {
+	return s.db.Set(OperatorStoragePrefix, []byte(pubkeyDBKey), []byte(publicKey))
 }
 
 func (s *storage) GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error) {
-	obj, found, err := s.db.Using(rw).Get(storagePrefix, configKey)
+	obj, found, err := s.db.Using(rw).Get(OperatorStoragePrefix, configKey)
 	if err != nil {
 		return nil, false, fmt.Errorf("db: %w", err)
 	}
@@ -328,7 +268,7 @@ func (s *storage) SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	if err := s.db.Using(rw).Set(storagePrefix, configKey, b); err != nil {
+	if err := s.db.Using(rw).Set(OperatorStoragePrefix, configKey, b); err != nil {
 		return fmt.Errorf("db: %w", err)
 	}
 
@@ -336,5 +276,5 @@ func (s *storage) SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error {
 }
 
 func (s *storage) DeleteConfig(rw basedb.ReadWriter) error {
-	return s.db.Using(rw).Delete(storagePrefix, configKey)
+	return s.db.Using(rw).Delete(OperatorStoragePrefix, configKey)
 }

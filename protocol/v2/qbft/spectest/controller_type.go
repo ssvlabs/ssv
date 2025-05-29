@@ -2,6 +2,7 @@ package qbft
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -10,20 +11,20 @@ import (
 	"reflect"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
@@ -33,18 +34,22 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	logger := logging.TestLogger(t)
 	contr := generateController(logger)
 
+	if test.StartHeight != nil {
+		contr.Height = *test.StartHeight
+	}
+
 	var lastErr error
-	for i, runData := range test.RunInstanceData {
-		height := specqbft.Height(i)
+	height := specqbft.Height(0)
+	for _, runData := range test.RunInstanceData {
 		if runData.Height != nil {
 			height = *runData.Height
 		}
 		if err := runInstanceWithData(t, logger, height, contr, runData); err != nil {
 			lastErr = err
 		}
+		height++
 	}
-
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
@@ -53,10 +58,11 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.BNRoleAttester)
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet())
 	return qbfttesting.NewTestingQBFTController(
+		spectestingutils.Testing4SharesSet(),
 		identifier[:],
-		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
+		spectestingutils.TestingCommitteeMember(spectestingutils.Testing4SharesSet()),
 		config,
 		false,
 	)
@@ -85,7 +91,7 @@ func testProcessMsg(
 	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decided, err := contr.ProcessMsg(logger, msg)
+		decided, err := contr.ProcessMsg(context.TODO(), logger, msg)
 		if err != nil {
 			lastErr = err
 		}
@@ -105,33 +111,33 @@ func testBroadcastedDecided(
 	config *qbft.Config,
 	identifier []byte,
 	runData *spectests.RunInstanceData,
+	committee []*spectypes.Operator,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
-		require.Greater(t, len(broadcastedMsgs), 0)
+		broadcastedSignedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+		require.Greater(t, len(broadcastedSignedMsgs), 0)
+		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, committee))
 		found := false
-		for _, msg := range broadcastedMsgs {
+		for _, msg := range broadcastedSignedMsgs {
 
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
 			msgID := spectypes.MessageID{}
 			copy(msgID[:], identifier)
 
-			if !bytes.Equal(msgID[:], msg.MsgID[:]) {
+			if !bytes.Equal(msgID[:], msg.SSVMessage.MsgID[:]) {
 				continue
 			}
 
-			msg1 := &specqbft.SignedMessage{}
-			require.NoError(t, msg1.Decode(msg.Data))
-			r1, err := msg1.GetRoot()
+			r1, err := msg.GetRoot()
 			require.NoError(t, err)
 
 			r2, err := runData.ExpectedDecidedState.BroadcastedDecided.GetRoot()
 			require.NoError(t, err)
 
 			if r1 == r2 &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signers, msg1.Signers) &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signature, msg1.Signature) {
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.OperatorIDs, msg.OperatorIDs) &&
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signatures, msg.Signatures) {
 				require.False(t, found)
 				found = true
 			}
@@ -141,7 +147,7 @@ func testBroadcastedDecided(
 }
 
 func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(logger, height, runData.InputValue)
+	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err
@@ -153,7 +159,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 		lastErr = err
 	}
 
-	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData)
+	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.CommitteeMember.Committee)
 
 	// test root
 	r, err := contr.GetRoot()

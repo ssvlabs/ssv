@@ -3,20 +3,22 @@ package discovery
 import (
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 type NodeRecordDecoration func(*enode.LocalNode) error
 
-func DecorateWithDomainType(domainType spectypes.DomainType) NodeRecordDecoration {
+func DecorateWithDomainType(key records.ENRKey, domainType spectypes.DomainType) NodeRecordDecoration {
 	return func(node *enode.LocalNode) error {
-		return records.SetDomainTypeEntry(node, domainType)
+		return records.SetDomainTypeEntry(node, key, domainType)
 	}
 }
 
-func DecorateWithSubnets(subnets []byte) NodeRecordDecoration {
+func DecorateWithSubnets(subnets commons.Subnets) NodeRecordDecoration {
 	return func(node *enode.LocalNode) error {
 		return records.SetSubnetsEntry(node, subnets)
 	}

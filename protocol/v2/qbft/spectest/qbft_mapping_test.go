@@ -7,23 +7,20 @@ import (
 	"strings"
 	"testing"
 
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func TestQBFTMapping(t *testing.T) {
 	path, _ := os.Getwd()
-	jsonTests, err := protocoltesting.GetSpecTestJSON(path, "qbft")
+	jsonTests, err := protocoltesting.GenerateSpecTestJSON(path, "qbft")
 	require.NoError(t, err)
 
 	untypedTests := map[string]interface{}{}
@@ -31,12 +28,10 @@ func TestQBFTMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
-
 	for name, test := range untypedTests {
-		name, test := name, test
 		testName := strings.Split(name, "_")[1]
 		testType := strings.Split(name, "_")[0]
+
 		switch testType {
 		case reflect.TypeOf(&spectests.MsgProcessingSpecTest{}).String():
 			byts, err := json.Marshal(test)
@@ -71,12 +66,12 @@ func TestQBFTMapping(t *testing.T) {
 		case reflect.TypeOf(&spectests.CreateMsgSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &spectests.CreateMsgSpecTest{}
+			typedTest := &CreateMsgSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				t.Parallel()
-				RunCreateMsg(t, typedTest)
+				typedTest.RunCreateMsg(t)
 			})
 		case reflect.TypeOf(&spectests.RoundRobinSpecTest{}).String():
 			byts, err := json.Marshal(test)
@@ -99,20 +94,25 @@ func TestQBFTMapping(t *testing.T) {
 
 			// a little trick we do to instantiate all the internal instance params
 
-			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
+			ks := testingutils.Testing4SharesSet()
+			signer := testingutils.NewOperatorSigner(ks, 1)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
-				typedTest.Pre.State.Share,
+				testing2.TestingConfig(logger, testingutils.KeySetForCommitteeMember(typedTest.Pre.State.CommitteeMember)),
+				typedTest.Pre.State.CommitteeMember,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,
+				signer,
 			)
 			err = pre.Decode(preByts)
 			require.NoError(t, err)
 			typedTest.Pre = pre
+			t.Run(typedTest.Name, func(t *testing.T) { // using only spec struct so no need to run our version (TODO: check how we choose leader)
+				t.Parallel()
+				RunTimeout(t, typedTest)
+			})
 
-			RunTimeout(t, typedTest)
 		default:
 			t.Fatalf("unsupported test type %s [%s]", testType, testName)
 		}

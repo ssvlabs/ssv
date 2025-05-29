@@ -5,19 +5,21 @@ import (
 	"fmt"
 	"sync"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/cornelk/hashmap"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -28,16 +30,19 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners runner.DutyRunners
-	Network     specqbft.Network
-	Share       *types.SSVShare
-	Signer      spectypes.KeyManager
+	NetworkConfig networkconfig.Network
+	DutyRunners   runner.ValidatorDutyRunners
+	Network       specqbft.Network
 
-	Storage *storage.QBFTStores
-	Queues  map[spectypes.BeaconRole]queueContainer
+	Operator       *spectypes.CommitteeMember
+	Share          *ssvtypes.SSVShare
+	Signer         ekm.BeaconSigner
+	OperatorSigner ssvtypes.OperatorSigner
+
+	Queues map[spectypes.RunnerRole]queueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
-	dutyIDs *hashmap.Map[spectypes.BeaconRole, string]
+	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
 
 	state uint32
 
@@ -48,22 +53,20 @@ type Validator struct {
 func NewValidator(pctx context.Context, cancel func(), options Options) *Validator {
 	options.defaults()
 
-	if options.Metrics == nil {
-		options.Metrics = &NopMetrics{}
-	}
-
 	v := &Validator{
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
 		cancel:           cancel,
+		NetworkConfig:    options.NetworkConfig,
 		DutyRunners:      options.DutyRunners,
 		Network:          options.Network,
-		Storage:          options.Storage,
+		Operator:         options.Operator,
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
-		Queues:           make(map[spectypes.BeaconRole]queueContainer),
+		OperatorSigner:   options.OperatorSigner,
+		Queues:           make(map[spectypes.RunnerRole]queueContainer),
 		state:            uint32(NotStarted),
-		dutyIDs:          hashmap.New[spectypes.BeaconRole, string](),
+		dutyIDs:          hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
 		messageValidator: options.MessageValidator,
 	}
 
@@ -71,11 +74,11 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		// Set timeout function.
 		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
 
-		// Setup the queue.
-		role := dutyRunner.GetBaseRunner().BeaconRoleType
+		//Setup the queue.
+		role := dutyRunner.GetBaseRunner().RunnerRoleType
 
 		v.Queues[role] = queueContainer{
-			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
+			Q: queue.New(options.QueueSize),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,
@@ -89,16 +92,21 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 }
 
 // StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	dutyRunner := v.DutyRunners[duty.Type]
+func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	vDuty, ok := duty.(*spectypes.ValidatorDuty)
+	if !ok {
+		return fmt.Errorf("expected ValidatorDuty, got %T", duty)
+	}
+
+	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(vDuty.Type)]
 	if dutyRunner == nil {
-		return errors.Errorf("no runner for duty type %s", duty.Type.String())
+		return errors.Errorf("no runner for duty type %s", vDuty.Type.String())
 	}
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(duty.Type, fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
-	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.NetworkConfig.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
+	logger = v.withDutyID(logger, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.
 	if baseRunner.QBFTController != nil {
@@ -107,50 +115,81 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 
 	logger.Info("ℹ️ starting duty processing")
 
-	return dutyRunner.StartNewDuty(logger, duty)
+	return dutyRunner.StartNewDuty(ctx, logger, vDuty, v.Operator.GetQuorum())
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error {
+	if msg.GetType() != message.SSVEventMsgType {
+		// Validate message
+		if err := msg.SignedSSVMessage.Validate(); err != nil {
+			return errors.Wrap(err, "invalid SignedSSVMessage")
+		}
+
+		// Verify SignedSSVMessage's signature
+		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
+			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+		}
+	}
+
 	messageID := msg.GetID()
+	// Get runner
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
 		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
 	}
 
+	// Validate message for runner
 	if err := validateMessage(v.Share.Share, msg); err != nil {
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
-		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
+		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
-		logger = logger.With(fields.Height(signedMsg.Message.Height))
-		return dutyRunner.ProcessConsensus(logger, signedMsg)
-	case spectypes.SSVPartialSignatureMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
-		signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+		if err := qbftMsg.Validate(); err != nil {
+			return errors.Wrap(err, "invalid qbft Message")
+		}
+
+		logger = v.withDutyID(logger, messageID.GetRoleType()).
+			With(fields.Slot(phase0.Slot(qbftMsg.Height))).
+			With(fields.Height(qbftMsg.Height))
+
+		return dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
+	case spectypes.SSVPartialSignatureMsgType:
+		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		if signedMsg.Message.Type == spectypes.PostConsensusPartialSig {
-			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
+
+		logger = v.withDutyID(logger, messageID.GetRoleType()).
+			With(fields.Slot(signedMsg.Slot))
+
+		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
+			return errors.New("PartialSignatureMessage has more than 1 signer")
 		}
-		return dutyRunner.ProcessPreConsensus(logger, signedMsg)
+
+		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
+			return errors.Wrap(err, "invalid PartialSignatureMessages")
+		}
+
+		if signedMsg.Type == spectypes.PostConsensusPartialSig {
+			return dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg)
+		}
+
+		return dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg)
 	case message.SSVEventMsgType:
-		return v.handleEventMessage(logger, msg, dutyRunner)
+		return v.handleEventMessage(ctx, logger, msg, dutyRunner)
 	default:
 		return errors.New("unknown msg")
 	}
 }
 
-func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
+func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
@@ -162,9 +201,11 @@ func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error 
 	return nil
 }
 
-func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.BeaconRole, string], role spectypes.BeaconRole) *zap.Logger {
-	if dutyID, ok := dutyIDs.Get(role); ok {
+// withDutyID returns a logger with the duty ID for the given role.
+func (v *Validator) withDutyID(logger *zap.Logger, role spectypes.RunnerRole) *zap.Logger {
+	if dutyID, ok := v.dutyIDs.Get(role); ok {
 		return logger.With(fields.DutyID(dutyID))
 	}
+
 	return logger
 }

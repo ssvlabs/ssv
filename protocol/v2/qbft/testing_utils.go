@@ -1,11 +1,11 @@
 package qbft
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/herumi/bls-eth-go-binary/bls"
+	"crypto/rsa"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 var TestingMessage = &specqbft.Message{
@@ -16,51 +16,19 @@ var TestingMessage = &specqbft.Message{
 	Root:       [32]byte{1, 2, 3, 4},
 }
 
-var TestingSignedMsg = func() *specqbft.SignedMessage {
-	return SignMsg(TestingSK, 1, TestingMessage)
+var TestingSignedMsg = func() *specqbft.ProcessingMessage {
+	return testingutils.ToProcessingMessage(testingutils.SignQBFTMsg(TestingSK, 1, TestingMessage))
 }()
 
-var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message) *specqbft.SignedMessage {
-	domain := testingutils.TestingSSVDomainType
-	sigType := types.QBFTSignatureType
-
-	r, _ := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
-	sig := sk.SignByte(r[:])
-
-	return &specqbft.SignedMessage{
-		Message:   *msg,
-		Signers:   []types.OperatorID{id},
-		Signature: sig.Serialize(),
-	}
-}
-
-var TestingSK = func() *bls.SecretKey {
-	types.InitBLS()
-	ret := &bls.SecretKey{}
-	ret.SetByCSPRNG()
+var TestingSK = func() *rsa.PrivateKey {
+	skPem, _, _ := spectypes.GenerateKey()
+	ret, _ := spectypes.PemToPrivateKey(skPem)
 	return ret
 }()
 
-var testingValidatorPK = phase0.BLSPubKey{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4}
-
-var testingShare = &types.Share{
-	OperatorID:      1,
-	ValidatorPubKey: testingValidatorPK[:],
-	SharePubKey:     TestingSK.GetPublicKey().Serialize(),
-	DomainType:      testingutils.TestingSSVDomainType,
-	Quorum:          3,
-	PartialQuorum:   2,
-	Committee: []*types.Operator{
-		{
-			OperatorID: 1,
-			PubKey:     TestingSK.GetPublicKey().Serialize(),
-		},
-	},
-}
-
 var TestingInstanceStruct = &specqbft.Instance{
 	State: &specqbft.State{
-		Share:                           testingShare,
+		CommitteeMember:                 testingutils.TestingCommitteeMember(testingutils.Testing4SharesSet()),
 		ID:                              []byte{1, 2, 3, 4},
 		Round:                           1,
 		Height:                          1,
@@ -71,28 +39,28 @@ var TestingInstanceStruct = &specqbft.Instance{
 		DecidedValue:                    []byte{1, 2, 3, 4},
 
 		ProposeContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		PrepareContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		CommitContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		RoundChangeContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			Msgs: map[specqbft.Round][]*specqbft.ProcessingMessage{
 				1: {
 					TestingSignedMsg,
 				},
@@ -104,6 +72,6 @@ var TestingInstanceStruct = &specqbft.Instance{
 var TestingControllerStruct = &specqbft.Controller{
 	Identifier:      []byte{1, 2, 3, 4},
 	Height:          specqbft.Height(1),
-	Share:           testingShare,
+	CommitteeMember: testingutils.TestingCommitteeMember(testingutils.Testing4SharesSet()),
 	StoredInstances: specqbft.InstanceContainer{TestingInstanceStruct},
 }

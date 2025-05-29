@@ -2,22 +2,21 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
-	"github.com/golang/mock/gomock"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/bloxapp/ssv/eth/executionclient"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 // const rawOperatorAdded = `{
@@ -45,7 +44,7 @@ const rawValidatorAdded = `{
 
 func TestExecuteTask(t *testing.T) {
 	logger, _ := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	// Create operators rsa keys
 
@@ -55,51 +54,12 @@ func TestExecuteTask(t *testing.T) {
 	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, nil, ops[0], true)
 	require.NoError(t, err)
 
-	t.Run("test AddValidator task execution - not started", func(t *testing.T) {
-		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-		validatorAddedEvent, err := eh.eventParser.ParseValidatorAdded(logValidatorAdded)
-		if err != nil {
-			t.Fatal("parse ValidatorAdded", err)
-		}
-		share := &ssvtypes.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: validatorAddedEvent.PublicKey,
-			},
-		}
-		validatorCtrl.EXPECT().StartValidator(gomock.Any()).Return(nil).AnyTimes()
-
-		task := NewStartValidatorTask(eh.taskExecutor, share)
-		require.NoError(t, task.Execute())
-	})
-
-	// Currently Start Validator is a no-op in Controller, but we need to check this anyway
-	t.Run("test AddValidator task execution - started", func(t *testing.T) {
-		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-		validatorAddedEvent, err := eh.eventParser.ParseValidatorAdded(logValidatorAdded)
-		if err != nil {
-			t.Fatal("parse ValidatorAdded", err)
-		}
-		share := &ssvtypes.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: validatorAddedEvent.PublicKey,
-			},
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Index: 1,
-				},
-			},
-		}
-
-		validatorCtrl.EXPECT().StartValidators().AnyTimes()
-		task := NewStartValidatorTask(eh.taskExecutor, share)
-		require.NoError(t, task.Execute())
-	})
 	valPk := "b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"
 
 	t.Run("test StopValidator task execution", func(t *testing.T) {
 		validatorCtrl.EXPECT().StopValidator(gomock.Any()).Return(nil).AnyTimes()
 
-		task := NewStopValidatorTask(eh.taskExecutor, ethcommon.Hex2Bytes(valPk))
+		task := NewStopValidatorTask(eh.taskExecutor, spectypes.ValidatorPK(ethcommon.Hex2Bytes(valPk)))
 		require.NoError(t, task.Execute())
 	})
 
@@ -107,7 +67,7 @@ func TestExecuteTask(t *testing.T) {
 		var shares []*ssvtypes.SSVShare
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: ethcommon.Hex2Bytes(valPk),
+				ValidatorPubKey: spectypes.ValidatorPK(ethcommon.Hex2Bytes(valPk)),
 			},
 		}
 
@@ -121,7 +81,7 @@ func TestExecuteTask(t *testing.T) {
 		var shares []*ssvtypes.SSVShare
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: ethcommon.Hex2Bytes(valPk),
+				ValidatorPubKey: spectypes.ValidatorPK(ethcommon.Hex2Bytes(valPk)),
 			},
 		}
 
@@ -142,7 +102,7 @@ func TestExecuteTask(t *testing.T) {
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	logger, observedLogs := setupLogsCapture()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// Create operators rsa keys
@@ -156,7 +116,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 
 	for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 		od := &storage.OperatorData{
-			PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
+			PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, id)),
 			OwnerAddress: ethcommon.Address{},
 			ID:           id,
 		}
@@ -180,7 +140,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		}
 	}()
 
-	lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, true)
+	lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 
@@ -189,7 +149,6 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)
 	}
 	happyFlow := []string{
-		"successfully setup operator keys",
 		"setting up validator controller",
 		"malformed event: failed to verify signature",
 		"processed events from block",

@@ -10,7 +10,7 @@ import (
 )
 
 // periodicallyCollectGarbage runs a QuickGC cycle periodically.
-func (b *BadgerDB) periodicallyCollectGarbage(logger *zap.Logger, interval time.Duration) {
+func (b *BadgerDB) periodicallyCollectGarbage(interval time.Duration) {
 	defer b.wg.Done()
 	for {
 		select {
@@ -20,9 +20,9 @@ func (b *BadgerDB) periodicallyCollectGarbage(logger *zap.Logger, interval time.
 			start := time.Now()
 			err := b.QuickGC(context.Background())
 			if err != nil {
-				logger.Error("periodic GC cycle failed", zap.Error(err))
+				b.logger.Error("periodic GC cycle failed", zap.Error(err))
 			} else {
-				logger.Debug("periodic GC cycle completed", zap.Duration("took", time.Since(start)))
+				b.logger.Debug("periodic GC cycle completed", zap.Duration("took", time.Since(start)))
 			}
 		}
 	}

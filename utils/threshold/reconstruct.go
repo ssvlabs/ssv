@@ -4,11 +4,12 @@ import (
 	"fmt"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // ReconstructSignatures receives a map of user indexes and serialized bls.Sign.
 // It then reconstructs the original threshold signature using lagrange interpolation
-func ReconstructSignatures(signatures map[uint64][]byte) (*bls.Sign, error) {
+func ReconstructSignatures(signatures map[spectypes.OperatorID][]byte) (*bls.Sign, error) {
 	reconstructedSig := bls.Sign{}
 
 	idVec := make([]bls.ID, 0)

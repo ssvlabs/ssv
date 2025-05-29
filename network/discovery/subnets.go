@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 var (
@@ -15,7 +15,7 @@ var (
 )
 
 // nsToSubnet converts the given topic to subnet
-func (dvs *DiscV5Service) nsToSubnet(ns string) (int, error) {
+func (dvs *DiscV5Service) nsToSubnet(ns string) (uint64, error) {
 	r, done := regPool.Get()
 	defer done()
 
@@ -29,11 +29,11 @@ func (dvs *DiscV5Service) nsToSubnet(ns string) (int, error) {
 		return 0, err
 	}
 
-	if val >= uint64(commons.Subnets()) {
+	if val >= commons.SubnetsCount {
 		return 0, errValueOutOfRange
 	}
 
-	return int(val), nil
+	return val, nil
 }
 
 // isSubnet checks if the given string is a subnet string

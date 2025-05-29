@@ -6,51 +6,48 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	p2pcommons "github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
-	"github.com/bloxapp/ssv/network/testing"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/network"
+	p2pcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/testing"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/storage"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
-// PeersIndexProvider holds peers index instance
-type PeersIndexProvider interface {
-	PeersIndex() peers.Index
-}
-
-// HostProvider holds host instance
-type HostProvider interface {
-	Host() host.Host
-}
+// TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
-	Nodes    []network.P2PNetwork
 	NodeKeys []testing.NodeKeys
 	Bootnode *discovery.Bootnode
+	Nodes    []network.P2PNetwork
 
 	udpRand testing.UDPPortsRandomizer
 }
 
 // WithBootnode adds a bootnode to the network
 func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
-	bnSk, err := commons.GenNetworkKey()
+	bnSk, err := p2pcommons.GenNetworkKey()
 	if err != nil {
 		return err
 	}
-	isk, err := commons.ECDSAPrivToInterface(bnSk)
+	isk, err := p2pcommons.ECDSAPrivToInterface(bnSk)
 	if err != nil {
 		return err
 	}
@@ -58,7 +55,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork.SSVConfig, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -82,10 +79,8 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 
 		eg, ctx := errgroup.WithContext(pCtx)
 		for i, node := range ln.Nodes {
-			i, node := i, node //hack to avoid closures. price of using error groups
-
 			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
-				if err := node.Start(logger); err != nil {
+				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
 				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -126,25 +121,74 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 	}
 }
 
+type mockSignatureVerifier struct{}
+
+func (mockSignatureVerifier) VerifySignature(operatorID spectypes.OperatorID, message *spectypes.SSVMessage, signature []byte) error {
+	return nil
+}
+
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
-	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
+	operatorPubkey, err := keys.OperatorKey.Public().Base64()
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(keys, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
-	cfg.Ctx = ctx
-	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
-	cfg.NodeStorage = mock.NodeStorage{
-		MockGetPrivateKey:               keys.OperatorKey,
-		RegisteredOperatorPublicKeyPEMs: []string{},
+
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	if err != nil {
+		return nil, err
 	}
-	cfg.Metrics = nil
-	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
-	cfg.Network = networkconfig.TestNetwork
+
+	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, share := range options.Shares {
+		if err := nodeStorage.Shares().Save(nil, share); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, share := range options.Shares {
+		for _, sm := range share.Committee {
+			_, ok, err := nodeStorage.GetOperatorData(nil, sm.Signer)
+			if err != nil {
+				return nil, err
+			}
+
+			if !ok {
+				_, err := nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
+					ID:           sm.Signer,
+					PublicKey:    operatorPubkey,
+					OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
+				})
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	dutyStore := dutystore.New()
+	signatureVerifier := &mockSignatureVerifier{}
+
+	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	cfg.Ctx = ctx
+	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
+	cfg.NodeStorage = nodeStorage
+	cfg.MessageValidator = validation.New(
+		networkconfig.TestNetwork,
+		nodeStorage.ValidatorStore(),
+		nodeStorage,
+		dutyStore,
+		signatureVerifier,
+		phase0.Epoch(0),
+	)
+	cfg.NetworkConfig = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return uint64(options.TotalValidators), uint64(options.ActiveValidators), uint64(options.MyValidators), nil
+			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
 		}
 	}
 
@@ -160,7 +204,15 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	if options.MessageValidatorProvider != nil {
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
-		cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithSelfAccept(selfPeerID, true))
+		cfg.MessageValidator = validation.New(
+			networkconfig.TestNetwork,
+			nodeStorage.ValidatorStore(),
+			nodeStorage,
+			dutyStore,
+			signatureVerifier,
+			phase0.Epoch(0),
+			validation.WithSelfAccept(selfPeerID, true),
+		)
 	}
 
 	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {
@@ -170,8 +222,13 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
 
-	p := New(logger, cfg)
-	err = p.Setup(logger)
+	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: nodeIndex + 1})
+
+	p, err := New(logger, cfg)
+	if err != nil {
+		return nil, err
+	}
+	err = p.Setup()
 	if err != nil {
 		return nil, err
 	}
@@ -179,13 +236,14 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 }
 
 type LocalNetOptions struct {
-	MessageValidatorProvider                        func(int) validation.MessageValidator
+	MessageValidatorProvider                        func(uint64) validation.MessageValidator
 	Nodes                                           int
 	MinConnected                                    int
 	UseDiscv5                                       bool
-	TotalValidators, ActiveValidators, MyValidators int
+	TotalValidators, ActiveValidators, MyValidators uint64
 	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 	PeerScoreInspectorInterval                      time.Duration
+	Shares                                          []*ssvtypes.SSVShare
 }
 
 // NewLocalNet creates a new mdns network
@@ -197,7 +255,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 			return nil, err
 		}
 	}
-	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex int, keys testing.NodeKeys) network.P2PNetwork {
+	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex uint64, keys testing.NodeKeys) network.P2PNetwork {
 		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
 		p, err := ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
 		if err != nil {
@@ -215,7 +273,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort uint16, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {
@@ -236,12 +294,9 @@ func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discover
 		PubSubTrace:        false,
 		PubSubScoring:      true,
 		NetworkPrivateKey:  keys.NetKey,
-		OperatorPrivateKey: keys.OperatorKey,
+		OperatorSigner:     keys.OperatorKey,
 		OperatorPubKeyHash: operatorPubKeyHash,
 		UserAgent:          ua,
 		Discovery:          discT,
-		Permissioned: func() bool {
-			return false
-		},
 	}
 }

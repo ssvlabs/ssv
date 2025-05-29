@@ -1,88 +1,67 @@
 package connections
 
 import (
-	"context"
-	"crypto"
-	"crypto/rsa"
 	"testing"
-	"time"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/connections/mock"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 type TestData struct {
 	NetworkPrivateKey libp2pcrypto.PrivKey
-	SenderPrivateKey  *rsa.PrivateKey
+	SenderPrivateKey  keys.OperatorPrivateKey
 
-	HandshakeData       records.HandshakeData
-	HashedHandshakeData []byte
-	Signature           []byte
+	Signature [256]byte
 
 	SenderPeerID    peer.ID
 	RecipientPeerID peer.ID
 
-	PrivateKeyPEM            []byte
 	SenderBase64PublicKeyPEM string
 
 	Handshaker handshaker
 	Conn       mock.Conn
 
-	NodeInfo       *records.NodeInfo
-	SignedNodeInfo *records.SignedNodeInfo
+	NodeInfo *records.NodeInfo
 }
 
 func getTestingData(t *testing.T) TestData {
 	peerID1 := peer.ID("1.1.1.1")
 	peerID2 := peer.ID("2.2.2.2")
 
-	_, privateKeyPem, err := rsaencryption.GenerateKeys()
+	privateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	senderPrivateKey, err := rsaencryption.ConvertPemToPrivateKey(string(privateKeyPem))
-	require.NoError(t, err)
-
-	senderPublicKey, err := rsaencryption.ExtractPublicKey(senderPrivateKey)
+	senderPublicKey, err := privateKey.Public().Base64()
 	require.NoError(t, err)
 
 	nodeInfo := &records.NodeInfo{
 		NetworkID: "some-network-id",
 		Metadata: &records.NodeMetadata{
 			NodeVersion:   "some-node-version",
-			OperatorID:    "some-operator-id",
 			ExecutionNode: "some-execution-node",
 			ConsensusNode: "some-consensus-node",
-			Subnets:       "some-subnets",
+			Subnets:       commons.AllSubnets.String(),
 		},
 	}
 
-	handshakeData := records.HandshakeData{
-		SenderPeerID:    peerID2,
-		RecipientPeerID: peerID1,
-		Timestamp:       time.Now(),
-		SenderPublicKey: []byte(senderPublicKey),
-	}
-	hashed := handshakeData.Hash()
-
-	hashedHandshakeData := hashed[:]
-
-	signature, err := rsa.SignPKCS1v15(nil, senderPrivateKey, crypto.SHA256, hashedHandshakeData)
-	require.NoError(t, err)
-
-	sni := &records.SignedNodeInfo{
-		NodeInfo:      nodeInfo,
-		HandshakeData: handshakeData,
-		Signature:     signature,
-	}
-
 	nii := mock.NodeInfoIndex{
-		MockNodeInfo:   nil,
+		MockNodeInfo: &records.NodeInfo{
+			NetworkID: "test-network-id",
+			Metadata: &records.NodeMetadata{
+				NodeVersion:   "test-node-version",
+				ExecutionNode: "test-execution-node",
+				ConsensusNode: "test-consensus-node",
+				Subnets:       commons.AllSubnets.String(),
+			},
+		},
 		MockSelfSealed: []byte("something"),
 	}
 	ns := peers.NewPeerInfoIndex()
@@ -98,12 +77,6 @@ func getTestingData(t *testing.T) TestData {
 	net := mock.Net{
 		MockPeerstore: ps,
 	}
-	nst := mock.NodeStorage{
-		MockGetPrivateKey: senderPrivateKey,
-		RegisteredOperatorPublicKeyPEMs: []string{
-			senderPublicKey,
-		},
-	}
 
 	networkPrivateKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.ECDSA, 0)
 	require.NoError(t, err)
@@ -116,15 +89,15 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:          context.Background(),
-		nodeInfos:    nii,
-		peerInfos:    ns,
-		ids:          ids,
-		net:          net,
-		nodeStorage:  nst,
-		streams:      sc,
-		filters:      func() []HandshakeFilter { return []HandshakeFilter{} },
-		Permissioned: func() bool { return false },
+		ctx:        t.Context(),
+		nodeInfos:  nii,
+		peerInfos:  ns,
+		subnetsIdx: peers.NewSubnetsIndex(),
+		ids:        ids,
+		net:        net,
+		streams:    sc,
+		filters:    func() []HandshakeFilter { return []HandshakeFilter{} },
+		domainType: networkconfig.TestNetwork.DomainType,
 	}
 
 	mockConn := mock.Conn{
@@ -132,18 +105,13 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	return TestData{
-		SenderPrivateKey:         senderPrivateKey,
-		HandshakeData:            handshakeData,
-		HashedHandshakeData:      hashedHandshakeData,
-		Signature:                signature,
+		SenderPrivateKey:         privateKey,
 		SenderPeerID:             peerID2,
 		RecipientPeerID:          peerID1,
-		PrivateKeyPEM:            privateKeyPem,
 		SenderBase64PublicKeyPEM: senderPublicKey,
 		Handshaker:               mockHandshaker,
 		Conn:                     mockConn,
 		NetworkPrivateKey:        networkPrivateKey,
 		NodeInfo:                 nodeInfo,
-		SignedNodeInfo:           sni,
 	}
 }

@@ -34,7 +34,7 @@ const Home: React.FC = () => {
     );
   }
 
-  const files = parseDiff(diffString);
+  const files = parseDiff(diffString, { nearbySequences: "zip" });
 
   const renderFile = ({
     oldPath,
@@ -57,54 +57,63 @@ const Home: React.FC = () => {
     const tokens = tokenize(hunks, options);
 
     return (
-      <div className="mb-8 bg-gray-100 shadow rounded-lg overflow-hidden">
-        <div className="flex items-center py-2 text-base text-left border-b-2 border-gray-200">
-          <div className="flex items-center flex-grow px-4">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="w-5 h-5 mr-1.5"
+      <div className="mb-8 rounded-lg border-2 border-gray-300">
+        <div className="sticky top-0">
+          <div className="flex items-center py-2 text-base text-left rounded-tl-lg rounded-tr-lg border-b bg-gray-100 border-gray-300">
+            <div className="flex items-center flex-grow px-4">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-5 h-5 mr-1.5"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5.25 8.25h15m-16.5 7.5h15m-1.8-13.5l-3.9 19.5m-2.1-19.5l-3.9 19.5"
+                />
+              </svg>
+              <span>{oldPath.substring(oldPath.indexOf("@") + 1)}</span>
+            </div>
+            <button
+              className={`px-4 py-0.5 mr-2 border rounded-md transition-colors duration-150 ${
+                isApproved
+                  ? "bg-blue-100 text-blue-600 hover:bg-blue-100 border-blue-300"
+                  : "border-gray-400 text-gray-600 hover:bg-gray-100"
+              }`}
+              onClick={() => {
+                if (isApproved) {
+                  setApprovedChanges(
+                    approvedChanges.filter((change) => change !== changeId)
+                  );
+                } else {
+                  setApprovedChanges([...approvedChanges, changeId]);
+                }
+              }}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M5.25 8.25h15m-16.5 7.5h15m-1.8-13.5l-3.9 19.5m-2.1-19.5l-3.9 19.5"
-              />
-            </svg>
-            <span>{oldPath.substring(oldPath.indexOf("@") + 1)}</span>
+              {isApproved ? "Approved" : "Approve"}
+            </button>
           </div>
-          <button
-            className={`px-4 py-0.5 mr-2 border rounded-md transition-colors duration-150 ${
-              isApproved
-                ? "bg-blue-100 text-blue-600 hover:bg-blue-100 border-blue-300"
-                : "border-gray-400 text-gray-600 hover:bg-gray-100"
-            }`}
-            onClick={() => {
-              if (isApproved) {
-                setApprovedChanges(
-                  approvedChanges.filter((change) => change !== changeId)
-                );
-              } else {
-                setApprovedChanges([...approvedChanges, changeId]);
-              }
-            }}
+          <div
+            className={
+              "flex h-full bg-gray-100 text-sm text-gray-600 " +
+              (isApproved
+                ? "rounded-bl-lg rounded-br-lg"
+                : "border-b border-gray-300")
+            }
           >
-            {isApproved ? "Approved" : "Approve"}
-          </button>
-        </div>
-        <div className="flex h-full bg-gray-50 text-sm border-b-2 border-gray-200 text-gray-600">
-          <div className="flex-1 py-2 px-4">
-            {oldPath.substring(0, oldPath.indexOf("@"))}
-          </div>
-          <div className="flex-1 py-2 px-4 border-l-2 border-gray-200">
-            {newPath.substring(0, newPath.indexOf("@"))}
+            <div className="flex-1 py-2 px-4">
+              {oldPath.substring(0, oldPath.indexOf("@"))}
+            </div>
+            <div className="flex-1 py-2 px-4 border-l-2 border-gray-200">
+              {newPath.substring(0, newPath.indexOf("@"))}
+            </div>
           </div>
         </div>
         {!isApproved && (
-          <div className="bg-white">
+          <div className="bg-white rounded-bl-lg rounded-br-lg">
             <Diff
               key={oldRevision + "-" + newRevision}
               viewType="split"
@@ -123,8 +132,8 @@ const Home: React.FC = () => {
   };
 
   return (
-    <div className="relative">
-      <div className="sticky top-0 bg-gray-100 flex py-4 px-4 items-center justify-center text-base text-left border-b-2 border-gray-200 shadow-md">
+    <div className="flex flex-col h-[100vh]">
+      <div className="bg-gray-100 flex py-4 px-4 items-center justify-center text-base text-left border-b-2 border-gray-300 z-10">
         <div className="pl-6 flex-grow whitespace-nowrap flex items-center">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -158,7 +167,9 @@ const Home: React.FC = () => {
         </div>
       </div>
 
-      <div className="h-full px-4 py-8">{files.map(renderFile)}</div>
+      <div className="flex-grow overflow-y-auto">
+        <div className="px-4 py-8">{files.map(renderFile)}</div>
+      </div>
     </div>
   );
 };

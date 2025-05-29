@@ -1,16 +1,17 @@
 package validator
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 const (
@@ -19,21 +20,23 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	Network           specqbft.Network
-	Beacon            specssv.BeaconNode
-	BeaconNetwork     beacon.BeaconNetwork
-	Storage           *storage.QBFTStores
-	SSVShare          *types.SSVShare
-	Signer            spectypes.KeyManager
-	DutyRunners       runner.DutyRunners
-	NewDecidedHandler qbftctrl.NewDecidedHandler
-	FullNode          bool
-	Exporter          bool
-	BuilderProposals  bool
-	QueueSize         int
-	GasLimit          uint64
-	MessageValidator  validation.MessageValidator
-	Metrics           Metrics
+	NetworkConfig       networkconfig.Network
+	Network             specqbft.Network
+	Beacon              beacon.BeaconNode
+	Storage             *storage.ParticipantStores
+	SSVShare            *ssvtypes.SSVShare
+	Operator            *spectypes.CommitteeMember
+	Signer              ekm.BeaconSigner
+	OperatorSigner      ssvtypes.OperatorSigner
+	DoppelgangerHandler runner.DoppelgangerProvider
+	DutyRunners         runner.ValidatorDutyRunners
+	NewDecidedHandler   qbftctrl.NewDecidedHandler
+	FullNode            bool
+	Exporter            bool
+	QueueSize           int
+	GasLimit            uint64
+	MessageValidator    validation.MessageValidator
+	Graffiti            []byte
 }
 
 func (o *Options) defaults() {

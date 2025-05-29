@@ -3,21 +3,22 @@ package networkconfig
 import (
 	"math/big"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
-var HoleskyStage = NetworkConfig{
-	Name:                 "holesky-stage",
-	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
-	Domain:               [4]byte{0x00, 0x00, 0x31, 0x12},
-	GenesisEpoch:         1,
+const HoleskyStageName = "holesky-stage"
+
+var HoleskyStageSSV = SSVConfig{
+	DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
-	RegistryContractAddr: "0x0d33801785340072C452b994496B19f196b7eE15",
+	RegistryContractAddr: ethcommon.HexToAddress("0x0d33801785340072C452b994496B19f196b7eE15"),
+	DiscoveryProtocolID:  [6]byte{'s', 's', 'v', 'd', 'v', '5'},
 	Bootnodes: []string{
-		"enr:-Li4QPnPGESWx2wnu3s2qeu6keFbkaV2M0ZiGHgxxGI9ThP4XSgSaFzl6zYsF1zAdni3Mh04iA6BEZqoC6LZ52UFnwKGAYxEgLqeh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDQiKqmJc2VjcDI1NmsxoQP2e508AoA0B-KH-IaAd3nVCfI9q16lNztV-oTpcH72tIN0Y3CCE4mDdWRwgg-h",
+		// Public bootnode:
+		// "enr:-Ja4QDYHVgUs9NvlMqq93ot6VNqbmrIlMrwKnq4X3DPRgyUNB4ospDp8ubMvsf-KsgqY8rzpZKy4GbE1DLphabpRBc-GAY_diLjngmlkgnY0gmlwhDQrLYqJc2VjcDI1NmsxoQKnAiuSlgSR8asjCH0aYoVKM8uPbi4noFuFHZHaAHqknYNzc3YBg3RjcIITiYN1ZHCCD6E",
+
+		// Private bootnode:
+		"enr:-Ja4QDRUBjWOvVfGxpxvv3FqaCy3psm7IsKu5ETb1GXiexGYDFppD33t7AHRfmQddoAkBiyb7pt4t7ZN0sNB9CsW4I-GAZGOmChMgmlkgnY0gmlwhAorXxuJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
-	WhitelistedOperatorKeys:       []string{},
-	PermissionlessActivationEpoch: 10560,
+	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
 }

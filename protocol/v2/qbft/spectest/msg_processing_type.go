@@ -1,6 +1,7 @@
 package qbft
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
@@ -8,17 +9,18 @@ import (
 	"testing"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -27,13 +29,15 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
-	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
+	ks := spectestingutils.KeySetForCommitteeMember(test.Pre.State.CommitteeMember)
+	signer := spectestingutils.NewOperatorSigner(ks, 1)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
-		test.Pre.State.Share,
+		qbfttesting.TestingConfig(logger, ks),
+		test.Pre.State.CommitteeMember,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
+		signer,
 	)
 	require.NoError(t, pre.Decode(preByts))
 
@@ -48,14 +52,13 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
-		_, _, _, err := preInstance.ProcessMsg(logger, msg)
+		_, _, _, err := preInstance.ProcessMsg(context.TODO(), logger, spectestingutils.ToProcessingMessage(msg))
 		if err != nil {
 			lastErr = err
 		}
 	}
-
-	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError, "expected %v, but got %v", test.ExpectedError, lastErr)
+	if test.ExpectedError != "" {
+		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}
@@ -73,11 +76,8 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 		for i, msg := range test.OutputMessages {
 			r1, _ := msg.GetRoot()
-
-			msg2 := &specqbft.SignedMessage{}
-			require.NoError(t, msg2.Decode(broadcastedMsgs[i].Data))
+			msg2 := broadcastedMsgs[i]
 			r2, _ := msg2.GetRoot()
-
 			require.EqualValues(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))
 		}
 	}

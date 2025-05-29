@@ -1,13 +1,13 @@
 package topics
 
 import (
-	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 // SubFilter is a wrapper on top of pubsub.SubscriptionFilter,
@@ -96,7 +96,7 @@ func (wl *dynamicWhitelist) Register(name string) {
 
 // Deregister removes the given topic from the whitelist
 func (wl *dynamicWhitelist) Deregister(name string) {
-	wl.whitelist.Del(name)
+	wl.whitelist.Delete(name)
 }
 
 // Whitelisted checks if the given name was whitelisted

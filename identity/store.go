@@ -3,12 +3,13 @@ package p2p
 import (
 	"crypto/ecdsa"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 var (
@@ -24,21 +25,22 @@ var (
 )
 
 // Store represents the interface for accessing the node's keys (operator and network keys)
-// TODO: add operator key
 type Store interface {
 	GetNetworkKey() (*ecdsa.PrivateKey, bool, error)
-	SetupNetworkKey(logger *zap.Logger, skEncoded string) (*ecdsa.PrivateKey, error)
-	// GetOperatorKey() (*rsa.PrivateKey, bool, error)
-	// SetupOperatorkKey(skEncoded string) (*rsa.PrivateKey, error)
+	SetupNetworkKey(skEncoded string) (*ecdsa.PrivateKey, error)
 }
 
 type identityStore struct {
-	db basedb.Database
+	logger *zap.Logger
+	db     basedb.Database
 }
 
 // NewIdentityStore creates a new identity store
-func NewIdentityStore(db basedb.Database) Store {
-	es := identityStore{db}
+func NewIdentityStore(logger *zap.Logger, db basedb.Database) Store {
+	es := identityStore{
+		logger: logger.Named(logging.NameP2PStorage),
+		db:     db,
+	}
 	return &es
 }
 
@@ -58,16 +60,16 @@ func (s identityStore) GetNetworkKey() (*ecdsa.PrivateKey, bool, error) {
 	return pk, found, nil
 }
 
-func (s identityStore) SetupNetworkKey(logger *zap.Logger, skEncoded string) (*ecdsa.PrivateKey, error) {
+func (s identityStore) SetupNetworkKey(skEncoded string) (*ecdsa.PrivateKey, error) {
 	privateKey, found, err := s.GetNetworkKey()
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to get privateKey")
 	}
 	if skEncoded == "" && found && privateKey != nil {
-		logger.Debug("using p2p network privateKey from storage")
+		s.logger.Debug("using p2p network privateKey from storage")
 		return privateKey, nil
 	}
-	privateKey, err = utils.ECDSAPrivateKey(logger.Named(logging.NameP2PStorage), skEncoded)
+	privateKey, err = utils.ECDSAPrivateKey(s.logger, skEncoded)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to generate private key")
 	}

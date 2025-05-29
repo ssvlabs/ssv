@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // Func is the interface of functions to trigger
@@ -18,7 +17,7 @@ type funcResult struct {
 }
 
 // ExecWithTimeout triggers some function in the given time frame, returns true if completed
-func ExecWithTimeout(ctx context.Context, logger *zap.Logger, fn Func, t time.Duration) (bool, interface{}, error) {
+func ExecWithTimeout(ctx context.Context, fn Func, timeout time.Duration) (bool, interface{}, error) {
 	c := make(chan funcResult, 1)
 	stopper := newStopper()
 
@@ -40,7 +39,7 @@ func ExecWithTimeout(ctx context.Context, logger *zap.Logger, fn Func, t time.Du
 			stopper.stop()
 		}()
 		return false, struct{}{}, nil
-	case <-time.After(t):
+	case <-time.After(timeout):
 		go func() {
 			stopper.stop()
 		}()

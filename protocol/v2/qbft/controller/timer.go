@@ -1,14 +1,16 @@
 package controller
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // OnTimeout is trigger upon timeout for the given height
-func (c *Controller) OnTimeout(logger *zap.Logger, msg types.EventMsg) error {
+func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg types.EventMsg) error {
 	// TODO add validation
 
 	timeoutData, err := msg.GetTimeoutData()
@@ -28,5 +30,5 @@ func (c *Controller) OnTimeout(logger *zap.Logger, msg types.EventMsg) error {
 	if decided, _ := instance.IsDecided(); decided {
 		return nil
 	}
-	return instance.UponRoundTimeout(logger)
+	return instance.UponRoundTimeout(ctx, logger)
 }

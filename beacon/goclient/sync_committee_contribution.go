@@ -1,76 +1,123 @@
 package goclient
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 // IsSyncCommitteeAggregator returns tru if aggregator
-func (gc *goClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
+func (gc *GoClient) IsSyncCommitteeAggregator(proof []byte) bool {
 	// Hash the signature.
 	hash := sha256.Sum256(proof)
 
 	// Keep the signature if it's an aggregator.
-	modulo := SyncCommitteeSize / SyncCommitteeSubnetCount / TargetAggregatorsPerSyncSubcommittee
+	cfg := gc.BeaconConfig()
+
+	// as per spec: https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/validator.md#aggregation-selection
+	modulo := cfg.SyncCommitteeSize / cfg.SyncCommitteeSubnetCount / cfg.TargetAggregatorsPerSyncSubcommittee
 	if modulo == uint64(0) {
 		// Modulo must be at least 1.
 		modulo = 1
 	}
-	return binary.LittleEndian.Uint64(hash[:8])%modulo == 0, nil
+	return binary.LittleEndian.Uint64(hash[:8])%modulo == 0
 }
 
 // SyncCommitteeSubnetID returns sync committee subnet ID from subcommittee index
-func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
-	return uint64(index) / (SyncCommitteeSize / SyncCommitteeSubnetCount), nil
+func (gc *GoClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) uint64 {
+	return uint64(index) / (gc.BeaconConfig().SyncCommitteeSize / gc.BeaconConfig().SyncCommitteeSubnetCount)
 }
 
 // GetSyncCommitteeContribution returns
-func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *GoClient) GetSyncCommitteeContribution(
+	ctx context.Context,
+	slot phase0.Slot,
+	selectionProofs []phase0.BLSSignature,
+	subnetIDs []uint64,
+) (ssz.Marshaler, spec.DataVersion, error) {
 	if len(selectionProofs) != len(subnetIDs) {
-		return nil, DataVersionNil, errors.New("mismatching number of selection proofs and subnet IDs")
+		return nil, DataVersionNil, fmt.Errorf("mismatching number of selection proofs and subnet IDs")
 	}
 
 	gc.waitForOneThirdSlotDuration(slot)
 
 	scDataReqStart := time.Now()
-	blockRoot, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
+	beaconBlockRootResp, err := gc.multiClient.BeaconBlockRoot(ctx, &api.BeaconBlockRootOpts{
+		Block: fmt.Sprint(slot),
+	})
+	recordRequestDuration(ctx, "BeaconBlockRoot", gc.multiClient.Address(), http.MethodGet, time.Since(scDataReqStart), err)
 	if err != nil {
-		return nil, DataVersionNil, err
+		gc.log.Error(clResponseErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+			zap.Error(err),
+		)
+		return nil, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
 	}
-	if blockRoot == nil {
-		return nil, DataVersionNil, errors.New("block root is nil")
+	if beaconBlockRootResp == nil {
+		gc.log.Error(clNilResponseErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+		)
+		return nil, DataVersionNil, fmt.Errorf("beacon block root response is nil")
+	}
+	if beaconBlockRootResp.Data == nil {
+		gc.log.Error(clNilResponseDataErrMsg,
+			zap.String("api", "BeaconBlockRoot"),
+		)
+		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
-	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
+	blockRoot := beaconBlockRootResp.Data
 
 	gc.waitToSlotTwoThirds(slot)
 
 	// Fetch sync committee contributions for each subnet in parallel.
 	var (
-		sccDataReqStart = time.Now()
-		contributions   = make(spectypes.Contributions, 0, len(subnetIDs))
-		g               errgroup.Group
+		contributions = make(spectypes.Contributions, 0, len(subnetIDs))
+		g             errgroup.Group
 	)
 	for i := range subnetIDs {
 		index := i
 		g.Go(func() error {
-			contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetIDs[index], *blockRoot)
+			start := time.Now()
+			syncCommitteeContrResp, err := gc.multiClient.SyncCommitteeContribution(ctx, &api.SyncCommitteeContributionOpts{
+				Slot:              slot,
+				SubcommitteeIndex: subnetIDs[index],
+				BeaconBlockRoot:   *blockRoot,
+			})
+			recordRequestDuration(ctx, "SyncCommitteeContribution", gc.multiClient.Address(), http.MethodGet, time.Since(start), err)
 			if err != nil {
-				return err
+				gc.log.Error(clResponseErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+					zap.Error(err),
+				)
+				return fmt.Errorf("failed to obtain sync committee contribution: %w", err)
 			}
-			if contribution == nil {
-				return errors.New("contribution is nil")
+			if syncCommitteeContrResp == nil {
+				gc.log.Error(clNilResponseErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+				)
+				return fmt.Errorf("sync committee contribution response is nil")
 			}
+			if syncCommitteeContrResp.Data == nil {
+				gc.log.Error(clNilResponseDataErrMsg,
+					zap.String("api", "SyncCommitteeContribution"),
+				)
+				return fmt.Errorf("sync committee contribution data is nil")
+			}
+
+			contribution := syncCommitteeContrResp.Data
 			contributions = append(contributions, &spectypes.Contribution{
 				SelectionProofSig: selectionProofs[index],
 				Contribution:      *contribution,
@@ -82,20 +129,36 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, err
 	}
 
-	metricsSyncCommitteeContributionDataRequest.Observe(time.Since(sccDataReqStart).Seconds())
-
 	return &contributions, spec.DataVersionAltair, nil
 }
 
 // SubmitSignedContributionAndProof broadcasts to the network
-func (gc *goClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
-	return gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
+func (gc *GoClient) SubmitSignedContributionAndProof(
+	ctx context.Context,
+	contribution *altair.SignedContributionAndProof,
+) error {
+	clientAddress := gc.multiClient.Address()
+	logger := gc.log.With(
+		zap.String("api", "SubmitSyncCommitteeContributions"),
+		zap.String("client_addr", clientAddress))
+
+	start := time.Now()
+	err := gc.multiClient.SubmitSyncCommitteeContributions(ctx, []*altair.SignedContributionAndProof{contribution})
+	recordRequestDuration(ctx, "SubmitSyncCommitteeContributions", clientAddress, http.MethodPost, time.Since(start), err)
+	if err != nil {
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		return err
+	}
+
+	logger.Debug("consensus client submitted signed contribution and proof")
+	return nil
 }
 
-// waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
-	delay := gc.network.SlotDurationSec() / 3 /* a third of the slot duration */
-	finalTime := gc.slotStartTime(slot).Add(delay)
+// waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after slot start time)
+func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
+	config := gc.getBeaconConfig()
+	delay := config.IntervalDuration()
+	finalTime := config.GetSlotStartTime(slot).Add(delay)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return

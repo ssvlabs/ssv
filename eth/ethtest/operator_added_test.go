@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/eventparser"
 )
 
 type testOperatorAddedEventInput struct {
@@ -71,9 +71,13 @@ func (input *ProduceOperatorAddedEventsInput) produce() {
 
 	for _, event := range input.events {
 		op := event.op
-		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.rsaPub)
+		encodedPubKey, err := op.privateKey.Public().Base64()
 		require.NoError(input.t, err)
-		_, err = input.boundContract.SimcontractTransactor.RegisterOperator(event.auth, packedOperatorPubKey, big.NewInt(100_000_000))
+
+		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
+		require.NoError(input.t, err)
+
+		_, err = input.boundContract.RegisterOperator(event.auth, packedOperatorPubKey, big.NewInt(100_000_000))
 		require.NoError(input.t, err)
 
 		if !input.doInOneBlock {

@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var (
@@ -31,6 +31,31 @@ type RecipientData struct {
 	// ** The Nonce field can be nil because the 'FeeRecipientAddressUpdatedEvent'
 	// might occur before the addition of a validator to the network, and this event does not increment the nonce.
 	Nonce *Nonce `json:"nonce"`
+}
+
+func (r *RecipientData) MarshalJSON() ([]byte, error) {
+	return json.Marshal(recipientDataJSON{
+		Owner:        r.Owner,
+		FeeRecipient: r.FeeRecipient,
+		Nonce:        r.Nonce,
+	})
+}
+
+func (r *RecipientData) UnmarshalJSON(input []byte) error {
+	var data recipientDataJSON
+	if err := json.Unmarshal(input, &data); err != nil {
+		return errors.Wrap(err, "invalid JSON")
+	}
+	r.Owner = data.Owner
+	r.FeeRecipient = data.FeeRecipient
+	r.Nonce = data.Nonce
+	return nil
+}
+
+type recipientDataJSON struct {
+	Owner        common.Address `json:"ownerAddress"`
+	FeeRecipient [20]byte       `json:"feeRecipientAddress"`
+	Nonce        *Nonce         `json:"nonce"`
 }
 
 // Recipients is the interface for managing recipients data
@@ -61,7 +86,7 @@ func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte)
 	}
 }
 
-// GetRecipientsPrefix returns the prefix
+// GetRecipientsPrefix returns DB prefix
 func (s *recipientsStorage) GetRecipientsPrefix() []byte {
 	return recipientsPrefix
 }
@@ -132,7 +157,10 @@ func (s *recipientsStorage) GetNextNonce(r basedb.Reader, owner common.Address) 
 }
 
 func (s *recipientsStorage) BumpNonce(rw basedb.ReadWriter, owner common.Address) error {
-	rData, found, err := s.GetRecipientData(rw, owner)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	rData, found, err := s.getRecipientData(rw, owner)
 	if err != nil {
 		return errors.Wrap(err, "could not get recipient data")
 	}

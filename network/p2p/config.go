@@ -3,12 +3,10 @@ package p2pv1
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rsa"
 	"fmt"
 	"strings"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -18,13 +16,14 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/storage"
-	uc "github.com/bloxapp/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	uc "github.com/ssvlabs/ssv/utils/commons"
 )
 
 const (
@@ -34,61 +33,63 @@ const (
 
 // Config holds the configuration options for p2p network
 type Config struct {
-	Ctx       context.Context
-	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:""`
-	Discovery string `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery system to use" env-default:"discv5"`
+	Ctx          context.Context
+	Bootnodes    string   `yaml:"Bootnodes" env:"BOOTNODES" env-default:"" env-description:"Bootnodes to use for discovery (semicolon-separated ENRs, e.g. 'enr:-abc123;enr:-def456')" `
+	Discovery    string   `yaml:"Discovery" env:"P2P_DISCOVERY" env-default:"discv5" env-description:"Discovery protocol to use (discv5, mdns)" `
+	TrustedPeers []string `yaml:"TrustedPeers" env:"TRUSTED_PEERS" env-default:"" env-description:"List of peer IDs to always connect to"`
 
-	TCPPort     int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
-	UDPPort     int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
-	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External ip node is exposed for discovery"`
-	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
+	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for P2P transport"`
+	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
+	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (can be overridden by HostDNS)"`
+	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (overrides HostAddress if both are specified)"`
 
-	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s"`
-	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Connected peers limit for connections"`
-	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Connected peers limit per pubsub topic"`
+	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s" env-description:"Timeout for P2P requests"`
+	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of objects returned in a batch response"`
+
+	MaxPeers             int  `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Maximum number of connected peers"`
+	DynamicMaxPeers      bool `yaml:"DynamicMaxPeers" env:"P2P_DYNAMIC_MAX_PEERS" env-default:"true" env-description:"Automatically adjust MaxPeers based on committee count"`
+	DynamicMaxPeersLimit int  `yaml:"DynamicMaxPeersLimit" env:"P2P_DYNAMIC_MAX_PEERS_LIMIT" env-default:"150" env-description:"Upper limit for MaxPeers when DynamicMaxPeers is enabled"`
+	TopicMaxPeers        int  `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Maximum peers per pubsub topic"`
 
 	// Subnets is a static bit list of subnets that this node will register upon start.
-	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
+	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string (32 characters) representing 128 subnets to join on startup. Each bit corresponds to a subnet - 1 means join, 0 means skip. Examples: '0x0000000000000000000000000000ffff' (join last 16 subnets), '0xffffffffffffffffffffffffffffffff' (join all 128 subnets)"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
-	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-default:"true" env-description:"Flag to turn on/off pubsub scoring"`
+	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-default:"true" env-description:"Enable pubsub peer scoring"`
 	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
-	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
+	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Enable pubsub debug tracing in logs"`
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
-	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
+	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Enable discovery debug tracing in logs"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
-	// OperatorPrivateKey is used for operator identity, MUST be injected
-	OperatorPrivateKey *rsa.PrivateKey
+	// OperatorSigner is used for signing with operator private key, MUST be injected
+	OperatorSigner keys.OperatorSigner
 	// OperatorPubKeyHash is hash of operator public key, used for identity, optional
 	OperatorPubKeyHash string
-	// OperatorID contains numeric operator ID
-	OperatorID func() spectypes.OperatorID
+	// OperatorDataStore contains own operator data including its ID
+	OperatorDataStore operatordatastore.OperatorDataStore
 	// Router propagate incoming network messages to the responsive components
 	Router network.MessageRouter
 	// UserAgent to use by libp2p identify protocol
 	UserAgent string
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
-	// Network defines a network configuration.
-	Network networkconfig.NetworkConfig
+	// NetworkConfig defines a network configuration.
+	NetworkConfig networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
-	// Metrics report metrics.
-	Metrics *metricsreporter.MetricsReporter
 
-	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
-	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
-	PubsubValidationQueueSize int           `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"The size that we assign to the pubsub validation queue"`
-	PubsubValidateThrottle    int           `yaml:"PubsubPubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"The amount of goroutines used for pubsub msg validation"`
+	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"Duration to remember a message ID as seen"`
+	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"Size of the outbound pubsub message queue"`
+	PubsubValidationQueueSize int           `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"Size of the pubsub validation queue"`
+	PubsubValidateThrottle    int           `yaml:"PubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"Number of goroutines for pubsub message validation"`
 
 	// FullNode determines whether the network should sync decided history from peers.
 	// If false, SyncDecidedByRange becomes a no-op.
 	FullNode bool
 
-	GetValidatorStats network.GetValidatorStats
+	DisableIPRateLimit bool `yaml:"DisableIPRateLimit" env:"DISABLE_IP_RATE_LIMIT" default:"false" env-description:"Disable IP-based rate limiting"`
 
-	Permissioned func() bool // this is not loaded from config file but set up in full node setup
+	GetValidatorStats network.GetValidatorStats
 
 	// PeerScoreInspector is called periodically to inspect the peer scores.
 	PeerScoreInspector func(peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
@@ -121,8 +122,9 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 	}
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
-
-	opts = commons.AddOptions(opts)
+	opts = append(opts, libp2p.Ping(true))
+	opts = append(opts, libp2p.EnableNATService())
+	opts = append(opts, libp2p.AutoNATServiceRateLimit(15, 3, 1*time.Minute))
 
 	return opts, nil
 }
@@ -148,10 +150,12 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
-	// AddrFactory for host address if provided
-	if c.HostAddress != "" {
+	// note, only one of (HostDNS, HostAddress) can be used with libp2p - if multiple of these
+	// are set we have to prioritize between them.
+	if c.HostDNS != "" {
+		// AddrFactory for DNS address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
+			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
 			if err != nil {
 				logger.Error("unable to create external multiaddress", zap.Error(err))
 			} else {
@@ -159,13 +163,12 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 			}
 			return addrs
 		}))
-	}
-	// AddrFactory for DNS address if provided
-	if c.HostDNS != "" {
+	} else if c.HostAddress != "" {
+		// AddrFactory for host address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
+			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
 			if err != nil {
-				logger.Warn("unable to create external multiaddress", zap.Error(err))
+				logger.Error("unable to create external multiaddress", zap.Error(err))
 			} else {
 				addrs = append(addrs, external)
 			}
@@ -180,12 +183,12 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 func (c *Config) TransformBootnodes() []string {
 
 	if c.Bootnodes == "" {
-		return c.Network.Bootnodes
+		return c.NetworkConfig.Bootnodes
 	}
 
 	// extend additional bootnodes from config
 	extraBootnodes := strings.Split(c.Bootnodes, ";")
-	return append(extraBootnodes, c.Network.Bootnodes...)
+	return append(extraBootnodes, c.NetworkConfig.Bootnodes...)
 }
 
 func userAgent(fromCfg string) string {

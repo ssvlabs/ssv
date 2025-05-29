@@ -1,20 +1,8 @@
-ApprovedChanges: ["256a3dc0f1eb7abf","22b66e9a63ba145b","12c1c3a1622fb7cc","1c44824d71b5c502","8e30d75eb6b02ec9","f7efb56ca768b59a","3244def428adeb84",
-                  "e4a62b36b122e3dc","80ae9e6205bbf4da","d1e758f8c0d53aab","920a32aae48fadfc","e28e02f2afc1435c","592b02c8c59eabac","6945d51ab1f64602",
-                  "10fc3a8409f13e8b","56f57ba70ab09f42","2ac4feb2b67e46c0","484f78bc04c520f0","b06833aec59b4702","f8f7a100070e00c4","eb2d40a21add9dbd",
-                  "38aed088743c431e","e3dc79486f65bbfd","99d912f6989c77ba","3bc69adb21972b11","96aa231afd3e914","59b2375130aef5df","42448d531a36a19d",
-                  "8980f976020e6f46","2a6230c1d8e2cbdd","2f12dcf68f2f8463","23103ca39c8fb43d","6247a32b8ff6b311","5458d821d32c401","cb0077057b56e137",
-                  "70852fd2321ba1c5","d2cafc5ec262f84d","8850900b5d9bcc65","f47fee244932848d","88c74f6aaf78edf","b1e2e1d7012c2111","556cb12b8c458cf0",
-                  "17a1cf958f2b3b06","be53b04b01612f32","a5d3405074af9f39","374be3ca8e029b32","86f0ead2480383f","576a7230fab694d7","d6e610032cfaa0c",
-                  "db32f358b6e8e2bb","f372e174e1f34c3b","bc47b3d202e8cd0d","86a6abca1a1c16d6","1655d21d5a4cad4","ac4e427097fc5533","6b4d5a114f8066ff",
-                  "9482fb9b6a953c48","5778a05e0976a6eb","24e2c7f54d5dd1d","2a8937e50d20faa9","587c629a67ef07ed","9d06d8e0ee4e1113","e624ec802068e711",
-                  "943be3ce709a99d3","5b3bb2d2262fe8be","c20c4c7ed8d1711d","b10c6fc7dd9eee7","c121cdaab6c1c698","e12b17f3910be26b","e47bf52e962c90af",
-                  "90b8a0c8d2c30e95","e8292a58d2eb08ab","17cf3119ac6879f2","3f31546191c9e6b2","29c96f90edc2458d","f29db2624fd63635","dff6fea2c2d32a5f",
-                  "ae1b53fc580ce346","c117bd5db3eeabd6","d06552d71b9ca4cd","4cb333a88af66575","2a580187c312c79a","bf8cf93c55c1eadb","6d877e24991465e4",
-                  "b1c8e0148a4a755","2c25abb7c776bd54","a1754e08473bd1fa","4dbab14670fa155d","2a3667a499a23b16","930379d323dd95e8","65efe31656e8814f",
-                  "1270cef2e573f846","aeafb38ca9114f12","2a83e3384b45f2d7","91fbb874b3ce2570","74ad51ca63526e1e","defd8406641d53a5"]
+ApprovedChanges: ["34e8b7999dfb14b5","56ceb03cd44ff702","ccc48c575f7ab4eb","262a19d18869cedd","e710070bfb15d3ab","1c0da45940bfa76f","881fc8fbb6a4edb1","31bc6100f3d4db08","c7ce0261a1b6014f","c4c4caa5d0938b85","60f1d510640499ac","91073f39440ab37f","d308bd7c553ccdcf","bdaf172971637cbe","396137c9cb425893","d4fef6512374c1f5","1bbcbe4e8194370d","59b2375130aef5df","1bd46741a98043b0","417e005d18c1f7d4","14dd874e7df81b37","50cea598241b0bc9","3ddc92a39c324d69","b0934079dcd986cc","e27b9c1ea1c64357","fe62097e8814c106","74a928f5dcb2fdd9","cbbfdb5e68cdac80","6577bf381d78bae2","39ea06bfd1477d2d","7e2550bab51f22b2","87ebd29bd49fc52f","ef39dd5223e0d080","aebb8e4348b6d667","6146023d4d5708a2","fe14e7f0503ea188","fb4cac598a68c592","257c7eb81d6eb245","62547d1b32ce44e3","5be5c4ce7d3212da","960a9c64cd4ec93c","df3771e2589008f9","c8f122c9fb83793e","2c6054db7088bcef","5714652b88e2d44f","7a53b3b037c56325","11587bf00d05a4e2","601862214795ec47","b523eed171e5b6bf","5797f56a84b7ebef","81a60407a3a0ba80","38faed802f80914b","bcb381e843ace421","1067c9a5622c3508","4b58762c0b433442","d293ec1bc61bb707","3e88c3b49d093605","4890ff80c88cc41d","9b70726386e38170","8bbf7eba3fa0cf7e","8cc38593ebe049b6","ef7b63d9848dc185","7f816e2f33da3186","2314d7fa0b387cff","267886c6b07733d7","f9480b2e48319466","98c46ae55d1d4e39","edfd442b4d725fbb","122f053573538a32","d720d714a20833e1","a81c092c985de728","143c7821cd65bcac","9e53c73ee60b1cc2","9d265e99dd31d4f5","70d29c9e7a4ef797","f2972b2906912d3a","c411b0f9f069c032","a037c260bd97c7d2","96631f77414215f5","389037ae98d33f26","b3e7d9382b320d70","3426003abbd5ebf0","22b9026cb0221ce0","e07da5b414afe6a6","50e62cbde34516ee","57c1885b43dd8d19","e8a49856a5edd893","9273478f6feccd62","1cfd3a3660a62879","859884a25fccea80","8651bdc20c1946f3","5a44c960cc4178dd","108b9575f7c1d4bc","5499865be87b7e00","159536003eeddac8","a20ea51df8b7d65b","9133b167cc5a601d","a748ad5c74850749","16ebe47404323cc1","48bfe5cf1e578b47","4366899a2cb05197","730c3e5e59393b7d","5b44a4b425ecc397","df5debc50ec8babc","92a41554b2910bb8","c36c680554dde59f","f265acf7423fa9b1","447feaa5cdc1a010","8ac6baea1b755066","2bc023c7e062f24b","274336ec1127e6c0","ddf404c2905d3b26","8c43f241aeac6d75","832fc9a9a2b71d00","8850900b5d9bcc65","cc22f28953b787ea","3bad6ae11596a574","8f84422a240d889c","82b392ba39c6c594","7975821460ebe1e7","173c505e12aabb8f","47ee0d148148a56f","6707ecfefa5fec21","d5a7389d730464f1","8e4ec8debe331b36","875393173d59b0f2","943be3ce709a99d3", "4e22a08543b079b", "f66dbe09241b5a4", "fd6796ea6d131c3", "634abeefa604ee2", "e939b25394581c4", "6ccbcb02e457e66", "e1d82f0619360a5", "5a7ad98296703f6", "f4ce01b385c68a2"]
 
 IgnoredIdentifiers:
   - logger
+  - ctx
 ReducedPackageNames:
   - spectypes
   - specssv
@@ -27,6 +15,8 @@ ReducedPackageNames:
 Comparisons:
   - Packages:
       Left:
+        - ./protocol/v2/ssv
+        - ./protocol/v2/ssv/validator
         - ./protocol/v2/ssv/runner
         - ./protocol/v2/types
       Right:
@@ -46,6 +36,7 @@ Comparisons:
   - Packages:
       Left:
         - ./protocol/v2/types
+        - ./utils/threshold
       Right:
         - ./types
     Hints:

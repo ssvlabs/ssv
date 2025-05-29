@@ -9,12 +9,12 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 var (
@@ -27,7 +27,7 @@ var (
 
 // E2E tests for ETH package
 func TestEthExecLayer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	testAddresses := make([]*ethcommon.Address, 2)
@@ -146,8 +146,6 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 1: Add more validators
 		{
-			validatorCtrl.EXPECT().StartValidator(gomock.Any()).AnyTimes()
-
 			// Check current nonce before start
 			nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
 			require.NoError(t, err)
@@ -165,11 +163,38 @@ func TestEthExecLayer(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, expectedNonce, nonce)
 
+			lastBlockNum, err := testEnv.sim.Client().BlockByNumber(ctx, nil)
+			require.NoError(t, err)
 			// Not sure does this make sense
-			require.Equal(t, uint64(testEnv.sim.Blockchain.CurrentBlock().Number.Int64()), *common.blockNum)
+			require.Equal(t, lastBlockNum.Number().Uint64(), *common.blockNum)
 		}
 
-		// Step 2: remove validator
+		// Step 2: Exit validator
+		{
+			validatorCtrl.EXPECT().ExitValidator(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+			shares := nodeStorage.Shares().List(nil)
+			require.Equal(t, 7, len(shares))
+
+			valExit := NewTestValidatorExitedEventsInput(common)
+			valExit.prepare(
+				validators,
+				[]uint64{0, 1},
+				[]uint64{1, 2, 3, 4},
+				auth,
+				cluster,
+			)
+			valExit.produce()
+			testEnv.CloseFollowDistance(&blockNum)
+
+			// Wait to make sure the state is not changed
+			time.Sleep(time.Millisecond * 500)
+
+			shares = nodeStorage.Shares().List(nil)
+			require.Equal(t, 7, len(shares))
+		}
+
+		// Step 3: Remove validator
 		{
 			validatorCtrl.EXPECT().StopValidator(gomock.Any()).AnyTimes()
 
@@ -195,12 +220,13 @@ func TestEthExecLayer(t *testing.T) {
 
 			for _, event := range valRemove.events {
 				valPubKey := event.validator.masterPubKey.Serialize()
-				valShare := nodeStorage.Shares().Get(nil, valPubKey)
+				valShare, exists := nodeStorage.Shares().Get(nil, valPubKey)
+				require.False(t, exists)
 				require.Nil(t, valShare)
 			}
 		}
 
-		// Step 3 Liquidate Cluster
+		// Step 4 Liquidate Cluster
 		{
 			validatorCtrl.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -219,10 +245,9 @@ func TestEthExecLayer(t *testing.T) {
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
 
-			clusterID, err := ssvtypes.ComputeClusterIDHash(testAddrAlice.Bytes(), []uint64{1, 2, 3, 4})
-			require.NoError(t, err)
+			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
-			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 
@@ -231,14 +256,13 @@ func TestEthExecLayer(t *testing.T) {
 			}
 		}
 
-		// Step 4 Reactivate Cluster
+		// Step 5 Reactivate Cluster
 		{
 			validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-			clusterID, err := ssvtypes.ComputeClusterIDHash(testAddrAlice.Bytes(), []uint64{1, 2, 3, 4})
-			require.NoError(t, err)
+			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
-			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 
@@ -261,7 +285,7 @@ func TestEthExecLayer(t *testing.T) {
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
 
-			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 
@@ -270,7 +294,7 @@ func TestEthExecLayer(t *testing.T) {
 			}
 		}
 
-		// Step 5 Remove some Operators
+		// Step 6 Remove some Operators
 		{
 			operators, err := nodeStorage.ListOperators(nil, 0, 10)
 			require.NoError(t, err)
@@ -284,7 +308,7 @@ func TestEthExecLayer(t *testing.T) {
 			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
 		}
 
-		// Step 6 Update Fee Recipient
+		// Step 7 Update Fee Recipient
 		{
 			validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Times(1)
 

@@ -2,888 +2,934 @@ package validation
 
 import (
 	"bytes"
-	"crypto"
-	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	libp2ptest "github.com/libp2p/go-libp2p/core/test"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/storage"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/message/signatureverifier"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
 	logger := zaptest.NewLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := storage.NewNodeStorage(logger, db)
+	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	require.NoError(t, err)
-
-	const validatorIndex = 123
-
-	ks := spectestingutils.Testing4SharesSet()
-	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  validatorIndex,
-			},
-			Liquidated: false,
-		},
-	}
-	require.NoError(t, ns.Shares().Save(nil, share))
 
 	netCfg := networkconfig.TestNetwork
 
-	roleAttester := spectypes.BNRoleAttester
+	ks := spectestingutils.Testing4SharesSet()
+	shares := generateShares(t, ks, ns, netCfg)
+
+	dutyStore := dutystore.New()
+	validatorStore := mocks.NewMockValidatorStore(ctrl)
+	operators := mocks.NewMockOperators(ctrl)
+
+	committee := slices.Collect(maps.Keys(ks.Shares))
+	slices.Sort(committee)
+
+	committeeID := shares.active.CommitteeID()
+
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.Committee, bool) {
+		if id == committeeID {
+
+			share1 := cloneSSVShare(t, shares.active)
+			share2 := cloneSSVShare(t, share1)
+			share2.ValidatorIndex = share1.ValidatorIndex + 1
+			share3 := cloneSSVShare(t, share2)
+			share3.ValidatorIndex = share2.ValidatorIndex + 1
+
+			return &registrystorage.Committee{
+				ID:        id,
+				Operators: committee,
+				Validators: []*ssvtypes.SSVShare{
+					share1,
+					share2,
+					share3,
+				},
+				Indices: []phase0.ValidatorIndex{
+					share1.ValidatorIndex,
+					share2.ValidatorIndex,
+					share3.ValidatorIndex,
+				},
+			}, true
+		}
+
+		return nil, false
+	}).AnyTimes()
+
+	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+		for _, share := range []*ssvtypes.SSVShare{
+			shares.active,
+			shares.liquidated,
+			shares.inactive,
+			shares.nonUpdatedMetadata,
+			shares.nonUpdatedMetadataNextEpoch,
+			shares.noMetadata,
+		} {
+			if bytes.Equal(share.ValidatorPubKey[:], pubKey) {
+				return share, true
+			}
+		}
+		return nil, false
+	}).AnyTimes()
+
+	for _, id := range []spectypes.OperatorID{1, 2, 3, 4, 5} {
+		operators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{id}).
+			Return(true, nil).
+			AnyTimes()
+	}
+
+	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+	signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	wrongSignatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+	wrongSignatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("test")).AnyTimes()
+
+	committeeRole := spectypes.RoleCommittee
+	nonCommitteeRole := spectypes.RoleAggregator
+
+	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
+	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, committeeRole)
+	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), nonCommitteeRole)
+
+	peerID, err := libp2ptest.RandPeerID()
+	require.NoError(t, err)
 
 	// Message validation happy flow, messages are not ignored or rejected and there are no errors
 	t.Run("happy flow", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 	})
 
 	// Make sure messages are incremented and throw an ignore message if more than 1 for a commit
 	t.Run("message counts", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
-		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
-		state := validator.consensusState(msgID)
-		for i := spectypes.OperatorID(1); i <= 4; i++ {
-			signerState := state.GetSignerState(i)
-			require.Nil(t, signerState)
+		key := peerIDWithMessageID{
+			peerID:    peerID,
+			messageID: committeeIdentifier,
+		}
+		state := validator.validatorState(key, committee)
+		for i := range committee {
+			signerState := state.Signer(i)
+			require.NotNil(t, signerState)
 		}
 
-		signedMsg := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedMsg, err := signedMsg.Encode()
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		ssvMsg := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   msgID,
-			Data:    encodedMsg,
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
+
+		stateBySlot := state.Signer(0)
+		require.NotNil(t, stateBySlot)
+
+		storedState := stateBySlot.Get(slot)
+		require.NotNil(t, storedState)
+		require.EqualValues(t, height, storedState.Slot)
+		require.EqualValues(t, 1, storedState.Round)
+		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.SeenMsgTypes)
+		for i := 1; i < len(committee); i++ {
+			require.NotNil(t, state.Signer(i))
 		}
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
+		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Round = 2
+			message.MsgType = specqbft.PrepareMsgType
+		})
+		signedSSVMessage.FullData = nil
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
-		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
+		storedState = stateBySlot.Get(slot)
+		require.NotNil(t, storedState)
+		require.EqualValues(t, height, storedState.Slot)
+		require.EqualValues(t, 2, storedState.Round)
+		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.SeenMsgTypes)
 
-		state1 := state.GetSignerState(1)
-		require.NotNil(t, state1)
-		require.EqualValues(t, height, state1.Slot)
-		require.EqualValues(t, 1, state1.Round)
-		require.EqualValues(t, MessageCounts{Proposal: 1}, state1.MessageCounts)
-		for i := spectypes.OperatorID(2); i <= 4; i++ {
-			signerState := state.GetSignerState(i)
-			require.Nil(t, signerState)
-		}
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
-		signedMsg = spectestingutils.TestingPrepareMessageWithParams(ks.Shares[1], 1, 2, height, spectestingutils.TestingIdentifier, spectestingutils.TestingQBFTRootData)
-		encodedMsg, err = signedMsg.Encode()
+		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot+1, func(message *specqbft.Message) {
+			message.MsgType = specqbft.CommitMsgType
+		})
+		signedSSVMessage.FullData = nil
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.NoError(t, err)
 
-		ssvMsg.Data = encodedMsg
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
+		storedState = stateBySlot.Get(phase0.Slot(height) + 1)
+		require.NotNil(t, storedState)
+		require.EqualValues(t, 1, storedState.Round)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
+		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
+
+		signedSSVMessage = generateMultiSignedMessage(ks, committeeIdentifier, slot+1)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.NoError(t, err)
-
-		require.NotNil(t, state1)
-		require.EqualValues(t, height, state1.Slot)
-		require.EqualValues(t, 2, state1.Round)
-		require.EqualValues(t, MessageCounts{Prepare: 1}, state1.MessageCounts)
-
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
-		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
-
-		signedMsg = spectestingutils.TestingCommitMessageWithHeight(ks.Shares[1], 1, height+1)
-		encodedMsg, err = signedMsg.Encode()
-		require.NoError(t, err)
-
-		ssvMsg.Data = encodedMsg
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
-		require.NoError(t, err)
-		require.NotNil(t, state1)
-		require.EqualValues(t, height+1, state1.Slot)
-		require.EqualValues(t, 1, state1.Round)
-		require.EqualValues(t, MessageCounts{Commit: 1}, state1.MessageCounts)
-
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
-		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
-
-		signedMsg = spectestingutils.TestingCommitMultiSignerMessageWithHeight([]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, height+1)
-		encodedMsg, err = signedMsg.Encode()
-		require.NoError(t, err)
-
-		ssvMsg.Data = encodedMsg
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
-		require.NoError(t, err)
-		require.NotNil(t, state1)
-		require.EqualValues(t, height+1, state1.Slot)
-		require.EqualValues(t, 1, state1.Round)
-		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1}, state1.MessageCounts)
+		require.NotNil(t, stateBySlot)
+		require.EqualValues(t, 1, storedState.Round)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
 	})
 
 	// Send a pubsub message with no data should cause an error
 	t.Run("pubsub message has no data", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
 		pmsg := &pubsub.Message{}
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err := validator.validateP2PMessage(pmsg, receivedAt)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		_, err := validator.handlePubsubMessage(pmsg, receivedAt)
 
 		require.ErrorIs(t, err, ErrPubSubMessageHasNoData)
 	})
 
 	// Send a pubsub message where there is too much data should cause an error
 	t.Run("pubsub data too big", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
+		msgSize := maxSignedMsgSize*2 + MessageOffset
+
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
-				Data:  bytes.Repeat([]byte{1}, 10_000_000),
+				Data:  bytes.Repeat([]byte{1}, msgSize),
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
 			},
 		}
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		_, err = validator.handlePubsubMessage(pmsg, receivedAt)
 
 		e := ErrPubSubDataTooBig
-		e.got = 10_000_000
+		e.got = msgSize
 		require.ErrorIs(t, err, e)
 	})
 
 	// Send a malformed pubsub message (empty message) should return an error
 	t.Run("empty pubsub message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
-				Data:  []byte{1},
+				Data:  bytes.Repeat([]byte{1}, 1+MessageOffset),
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
 			},
 		}
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		_, err = validator.handlePubsubMessage(pmsg, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 	})
 
 	// Send a message with incorrect data (unable to decode incorrect message type)
 	t.Run("bad data format", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    bytes.Repeat([]byte{1}, 500),
-		}
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, 500)
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
-		require.ErrorContains(t, err, ErrMalformedMessage.Error())
+		require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
 	})
 
 	// Send a message with no data should return an error
 	t.Run("no data", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    []byte{},
-		}
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		_, _, err := validator.validateSSVMessage(message, time.Now(), nil)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.Data = []byte{}
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrEmptyData)
 
-		message = &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    nil,
-		}
-
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		signedSSVMessage.SSVMessage.Data = nil
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrEmptyData)
 	})
 
 	// Send a message where there is too much data should cause an error
 	t.Run("data too big", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		const tooBigMsgSize = maxMessageSize * 2
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    bytes.Repeat([]byte{0x1}, tooBigMsgSize),
-		}
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
-		_, _, err := validator.validateSSVMessage(message, time.Now(), nil)
+		tooBigMsgSize := maxPayloadDataSize * 2
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, tooBigMsgSize)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+
 		expectedErr := ErrSSVDataTooBig
 		expectedErr.got = tooBigMsgSize
-		expectedErr.want = maxMessageSize
+		expectedErr.want = maxPayloadDataSize
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Send exact allowed data size amount but with invalid data (fails to decode)
 	t.Run("data size borderline / malformed message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    bytes.Repeat([]byte{0x1}, maxMessageSize),
-		}
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		_, _, err := validator.validateSSVMessage(message, time.Now(), nil)
-		require.ErrorContains(t, err, ErrMalformedMessage.Error())
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadDataSize)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+
+		require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
 	})
 
 	// Send an invalid SSV message type returns an error
 	t.Run("invalid SSV message type", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		message := &spectypes.SSVMessage{
-			MsgType: math.MaxUint64,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    []byte{0x1},
-		}
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.MsgType = math.MaxUint64
+
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, time.Now())
 		require.ErrorContains(t, err, ErrUnknownSSVMessageType.Error())
-	})
-
-	// Empty validator public key returns an error
-	t.Run("empty validator public key", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, spectypes.ValidatorPK{}, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
-		require.ErrorContains(t, err, ErrDeserializePublicKey.Error())
 	})
 
 	// Generate random validator and validate it is unknown to the network
 	t.Run("unknown validator", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
 
 		sk, err := eth2types.GenerateBLSPrivateKey()
 		require.NoError(t, err)
 
-		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
+		unknown := spectypes.NewMsgID(netCfg.DomainType, sk.PublicKey().Marshal(), nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, unknown, slot)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, sk.PublicKey().Marshal(), roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
+		_, exists := validatorStore.Validator(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())
+		require.False(t, exists)
 
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		topicID := commons.CommitteeTopicID(shares.active.CommitteeID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, time.Now())
 		expectedErr := ErrUnknownValidator
 		expectedErr.got = hex.EncodeToString(sk.PublicKey().Marshal())
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Generate random committee ID and validate it is unknown to the network
+	t.Run("unknown committee ID", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		unknownCommitteeID := bytes.Repeat([]byte{1}, 48)
+		unknownIdentifier := spectypes.NewMsgID(netCfg.DomainType, unknownCommitteeID, committeeRole)
+		signedSSVMessage := generateSignedMessage(ks, unknownIdentifier, slot)
+
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, time.Now())
+		expectedErr := ErrNonExistentCommitteeID
+		expectedErr.got = hex.EncodeToString(unknownCommitteeID[16:])
+		require.ErrorIs(t, err, expectedErr)
+	})
+
 	// Make sure messages are dropped if on the incorrect network
 	t.Run("wrong domain", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
-
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
 		wrongDomain := spectypes.DomainType{math.MaxUint8, math.MaxUint8, math.MaxUint8, math.MaxUint8}
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(wrongDomain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
+		badIdentifier := spectypes.NewMsgID(wrongDomain, encodedCommitteeID, committeeRole)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrWrongDomain
 		expectedErr.got = hex.EncodeToString(wrongDomain[:])
-		expectedErr.want = hex.EncodeToString(netCfg.Domain[:])
+		domain := netCfg.DomainType
+		expectedErr.want = hex.EncodeToString(domain[:])
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Send message with a value that refers to a non-existent role
 	t.Run("invalid role", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
+		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, math.MaxInt32)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, math.MaxUint64),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrInvalidRole)
 	})
 
-	// Perform validator registration with a consensus type message will give an error
-	t.Run("consensus validator registration", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+	// Perform validator registration or voluntary exit with a consensus type message will give an error
+	t.Run("unexpected consensus message", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
+		badIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleValidatorRegistration)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, spectypes.BNRoleValidatorRegistration),
-			Data:    encodedValidSignedMessage,
-		}
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		expectedErr := ErrUnexpectedConsensusMessage
+		expectedErr.got = spectypes.RoleValidatorRegistration
+		require.ErrorIs(t, err, expectedErr)
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorIs(t, err, ErrConsensusValidatorRegistration)
+		badIdentifier = spectypes.NewMsgID(netCfg.DomainType, shares.active.ValidatorPubKey[:], spectypes.RoleVoluntaryExit)
+		signedSSVMessage = generateSignedMessage(ks, badIdentifier, slot)
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		expectedErr.got = spectypes.RoleVoluntaryExit
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Ignore messages related to a validator that is liquidated
 	t.Run("liquidated validator", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
-		require.NoError(t, err)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		liquidatedShare := &ssvtypes.SSVShare{
-			Share: *spectestingutils.TestingShare(ks),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-				},
-				Liquidated: true,
-			},
-		}
-		liquidatedShare.ValidatorPubKey = liquidatedSK.PublicKey().Marshal()
+		liquidatedIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.liquidated.ValidatorPubKey[:], nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, liquidatedIdentifier, slot)
 
-		require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
-
-		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, liquidatedShare.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrValidatorLiquidated
 		require.ErrorIs(t, err, expectedErr)
-
-		require.NoError(t, ns.Shares().Delete(nil, liquidatedShare.ValidatorPubKey))
 	})
 
-	// Ignore messages related to a validator that is not active
-	t.Run("inactive validator", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+	// Ignore messages related to a validator with unknown state
+	t.Run("unknown state validator", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		inactiveSK, err := eth2types.GenerateBLSPrivateKey()
-		require.NoError(t, err)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		inactiveShare := &ssvtypes.SSVShare{
-			Share: *spectestingutils.TestingShare(ks),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateUnknown,
-				},
-				Liquidated: false,
-			},
-		}
-		inactiveShare.ValidatorPubKey = inactiveSK.PublicKey().Marshal()
+		inactiveIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.inactive.ValidatorPubKey[:], nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, inactiveIdentifier, slot)
 
-		require.NoError(t, ns.Shares().Save(nil, inactiveShare))
-
-		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, inactiveShare.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		expectedErr := ErrValidatorNotAttesting
-		expectedErr.got = eth2apiv1.ValidatorStateUnknown.String()
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		expectedErr := ErrNoShareMetadata
 		require.ErrorIs(t, err, expectedErr)
+	})
 
-		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
+	// Ignore messages related to a validator that in pending queued state
+	t.Run("pending queued state validator", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		nonUpdatedMetadataNextEpochIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.nonUpdatedMetadataNextEpoch.ValidatorPubKey[:], nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, nonUpdatedMetadataNextEpochIdentifier, slot)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		expectedErr := ErrValidatorNotAttesting
+		expectedErr.got = eth2apiv1.ValidatorStatePendingQueued.String()
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Don't ignore messages related to a validator that in pending queued state (in case metadata is not updated),
+	// but it is active (activation epoch <= current epoch)
+	t.Run("active validator with pending queued state", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.EstimatedCurrentSlot()
+
+		nonUpdatedMetadataIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.nonUpdatedMetadata.ValidatorPubKey[:], nonCommitteeRole)
+		qbftMessage := &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     specqbft.Height(slot),
+			Round:      specqbft.FirstRound,
+			Identifier: nonUpdatedMetadataIdentifier[:],
+			Root:       sha256.Sum256(spectestingutils.TestingQBFTFullData),
+
+			RoundChangeJustification: [][]byte{},
+			PrepareJustification:     [][]byte{},
+		}
+
+		leader := validator.roundRobinProposer(specqbft.Height(slot), specqbft.FirstRound, committee)
+		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[leader], leader, qbftMessage)
+		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
 	})
 
 	// Unable to process a message with a validator that is not on the network
 	t.Run("no share metadata", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		noMetadataSK, err := eth2types.GenerateBLSPrivateKey()
-		require.NoError(t, err)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		noMetadataShare := &ssvtypes.SSVShare{
-			Share: *spectestingutils.TestingShare(ks),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: nil,
-				Liquidated:     false,
-			},
-		}
-		noMetadataShare.ValidatorPubKey = noMetadataSK.PublicKey().Marshal()
+		noMetadataIdentifier := spectypes.NewMsgID(netCfg.DomainType, shares.noMetadata.ValidatorPubKey[:], nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, noMetadataIdentifier, slot)
 
-		require.NoError(t, ns.Shares().Save(nil, noMetadataShare))
-
-		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, noMetadataShare.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrNoShareMetadata)
-
-		require.NoError(t, ns.Shares().Delete(nil, noMetadataShare.ValidatorPubKey))
 	})
 
 	// Receive error if more than 2 attestation duties in an epoch
 	t.Run("too many duties", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		epoch := phase0.Epoch(1)
+		slot := netCfg.FirstSlotAtEpoch(epoch)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		dutyStore.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+			{Slot: slot + 4, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+			{Slot: slot + 8, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+
+		role := spectypes.RoleAggregator
+		identifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), role)
+		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
+
+		// First duty.
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot))
 		require.NoError(t, err)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+		// Second duty.
+		signedSSVMessage = generateSignedMessage(ks, identifier, slot+4)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot+4))
 		require.NoError(t, err)
 
-		validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+4)
-		encodedValidSignedMessage, err = validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message.Data = encodedValidSignedMessage
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+4).Add(validator.waitAfterSlotStart(roleAttester)), nil)
-		require.NoError(t, err)
-
-		validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+8)
-		encodedValidSignedMessage, err = validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message.Data = encodedValidSignedMessage
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+		// Third duty.
+		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot+8))
 		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
 	})
 
 	// Throw error if getting a message for proposal and see there is no message from beacon
 	t.Run("no proposal duties", func(t *testing.T) {
 		const epoch = 1
-		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(epoch)
 
-		dutyStore := dutystore.New()
-		dutyStore.Proposer.Add(epoch, slot, validatorIndex+1, &eth2apiv1.ProposerDuty{}, true)
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns), WithDutyStore(dutyStore)).(*messageValidator)
+		ds := dutystore.New()
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex + 1, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
+		identifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), spectypes.RoleProposer)
+		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, spectypes.BNRoleProposer),
-			Data:    encodedValidSignedMessage,
-		}
-
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)), nil)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot))
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
-		dutyStore = dutystore.New()
-		dutyStore.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{}, true)
-		validator = NewMessageValidator(netCfg, WithNodeStorage(ns), WithDutyStore(dutyStore)).(*messageValidator)
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)), nil)
+		ds = dutystore.New()
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+		validator = New(netCfg, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot))
 		require.NoError(t, err)
 	})
 
-	// Get error when receiving a message with over 13 partial signatures
-	t.Run("partial message too big", func(t *testing.T) {
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
+		currentSlot := &utils.SlotValue{}
+		mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
 
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
-		for i := 0; i < 13; i++ {
-			msg.Message.Messages = append(msg.Message.Messages, msg.Message.Messages[0])
+		const epoch = 1
+		currentSlot.SetSlot(netCfg.FirstSlotAtEpoch(epoch))
+
+		ds := dutystore.New()
+
+		validator := New(mockNetworkConfig, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
+		encodedMessages, err := messages.Encode()
+		require.NoError(t, err)
+
+		dutyExecutorID := shares.active.ValidatorPubKey[:]
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.GetDomainType(), dutyExecutorID, spectypes.RoleProposer),
+			Data:    encodedMessages,
+		}
+
+		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+
+		receivedAt := mockNetworkConfig.GetSlotStartTime(currentSlot.GetSlot())
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+
+		require.False(t, ds.Proposer.IsEpochSet(epoch))
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+	})
+
+	t.Run("reject pre-consensus randao message when epoch duties are set", func(t *testing.T) {
+		currentSlot := &utils.SlotValue{}
+		mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
+
+		const epoch = 1
+		currentSlot.SetSlot(mockNetworkConfig.FirstSlotAtEpoch(epoch))
+
+		ds := dutystore.New()
+		ds.Proposer.Set(epoch, make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0))
+
+		validator := New(mockNetworkConfig, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
+		encodedMessages, err := messages.Encode()
+		require.NoError(t, err)
+
+		dutyExecutorID := shares.active.ValidatorPubKey[:]
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(mockNetworkConfig.GetDomainType(), dutyExecutorID, spectypes.RoleProposer),
+			Data:    encodedMessages,
+		}
+
+		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+
+		receivedAt := mockNetworkConfig.GetSlotStartTime(currentSlot.GetSlot())
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+
+		require.True(t, ds.Proposer.IsEpochSet(epoch))
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrNoDuty.Error())
+	})
+
+	//// Get error when receiving a message with over 13 partial signatures
+	t.Run("partial message too big", func(t *testing.T) {
+		// slot := netCfg.FirstSlotAtEpoch(1)
+		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		for i := 0; i < 1512; i++ {
+			msg.Messages = append(msg.Messages, msg.Messages[0])
 		}
 
 		_, err := msg.Encode()
-		require.ErrorContains(t, err, "max expected 13 and 14 found")
+		require.ErrorContains(t, err, "max expected 1512 and 1513 found")
 	})
 
 	// Get error when receiving message from operator who is not affiliated with the validator
 	t.Run("signer ID not in committee", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.EstimatedCurrentSlot()
 
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 5, specqbft.Height(slot))
+		qbftMessage := &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     specqbft.Height(slot),
+			Round:      specqbft.FirstRound,
+			Identifier: committeeIdentifier[:],
+			Root:       sha256.Sum256(spectestingutils.TestingQBFTFullData),
 
-		encoded, err := msg.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
+			RoundChangeJustification: [][]byte{},
+			PrepareJustification:     [][]byte{},
 		}
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorIs(t, err, ErrSignerNotInCommittee)
+		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 5, qbftMessage)
+		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrSignerNotInCommittee.Error())
 	})
 
 	// Get error when receiving message from operator who is non-existent (operator id 0)
 	t.Run("partial zero signer ID", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 0, specqbft.Height(slot))
+		msg := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)))
+		msg.OperatorIDs = []spectypes.OperatorID{0}
 
-		encoded, err := msg.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(msg, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrZeroSigner)
 	})
 
 	// Get error when receiving partial signature message from operator who is the incorrect signer
 	t.Run("partial inconsistent signer ID", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
-		msg.Message.Messages[0].Signer = 2
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
+		ssvMessage.MsgID = committeeIdentifier
+		partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
+		partialSigSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
 
-		encoded, err := msg.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		expectedErr := ErrUnexpectedSigner
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(partialSigSSVMessage, topicID, peerID, receivedAt)
+		expectedErr := ErrInconsistentSigners
 		expectedErr.got = spectypes.OperatorID(2)
 		expectedErr.want = spectypes.OperatorID(1)
 		require.ErrorIs(t, err, expectedErr)
 	})
 
-	// Receive error when receiving a duplicated partial signature message
-	t.Run("partial duplicated message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
-		msg.Message.Messages = append(msg.Message.Messages, msg.Message.Messages[0])
-
-		encoded, err := msg.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorIs(t, err, ErrDuplicatedPartialSignatureMessage)
-	})
-
 	// Receive error when "partialSignatureMessages" does not contain any "partialSignatureMessage"
 	t.Run("no partial signature messages", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
-		msg.Message.Messages = []*spectypes.PartialSignatureMessage{}
+		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages.Messages = nil
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, messages)
+		ssvMessage.MsgID = committeeIdentifier
+		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
-		encoded, err := msg.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorIs(t, err, ErrNoPartialMessages)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrNoPartialSignatureMessages)
 	})
 
-	// Receive error when the partial signature message is not enough bytes
-	t.Run("partial wrong signature size", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+	// Receive error when the partial RSA signature message is not enough bytes
+	t.Run("partial wrong RSA signature size", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
-		msg.Signature = []byte{1}
+		partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)))
+		partialSigSSVMessage.Signatures = [][]byte{{1}}
 
-		encoded, err := msg.Encode()
-		require.ErrorContains(t, err, "bytes array does not have the correct length")
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorContains(t, err, ErrMalformedMessage.Error())
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(partialSigSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(partialSigSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrWrongRSASignatureSize.Error())
 	})
 
 	// Run partial message type validation tests
 	t.Run("partial message type validation", func(t *testing.T) {
-		slot := netCfg.Beacon.FirstSlotAtEpoch(162304)
-
-		// Check happy flow of a duty for each role
+		// Check happy flow of a duty for each committeeRole
 		t.Run("valid", func(t *testing.T) {
-			tests := map[spectypes.BeaconRole][]spectypes.PartialSigMsgType{
-				spectypes.BNRoleAttester:                  {spectypes.PostConsensusPartialSig},
-				spectypes.BNRoleAggregator:                {spectypes.PostConsensusPartialSig, spectypes.SelectionProofPartialSig},
-				spectypes.BNRoleProposer:                  {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
-				spectypes.BNRoleSyncCommittee:             {spectypes.PostConsensusPartialSig},
-				spectypes.BNRoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, spectypes.ContributionProofs},
-				spectypes.BNRoleValidatorRegistration:     {spectypes.ValidatorRegistrationPartialSig},
+			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
+				spectypes.RoleCommittee:                 {spectypes.PostConsensusPartialSig},
+				spectypes.RoleAggregator:                {spectypes.PostConsensusPartialSig, spectypes.SelectionProofPartialSig},
+				spectypes.RoleProposer:                  {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig},
+				spectypes.RoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, spectypes.ContributionProofs},
+				spectypes.RoleValidatorRegistration:     {spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleVoluntaryExit:             {spectypes.VoluntaryExitPartialSig},
 			}
 
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
-					validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-					msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), message.PartialMsgTypeToString(msgType))
+					t.Run(subtestName, func(t *testing.T) {
+						ds := dutystore.New()
+						ds.Proposer.Set(spectestingutils.TestingDutyEpoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+							{Slot: spectestingutils.TestingDutySlot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+						})
+						ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+							{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+						})
+						ds.VoluntaryExit.AddDuty(spectestingutils.TestingDutySlot, phase0.BLSPubKey(shares.active.ValidatorPubKey))
 
-					innerSig, r, err := spectestingutils.NewTestingKeyManager().SignBeaconObject(spectypes.SSZUint64(spectestingutils.TestingDutyEpoch), phase0.Domain{}, ks.Shares[1].GetPublicKey().Serialize(), phase0.DomainType{})
-					require.NoError(t, err)
+						validator := New(netCfg, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-					innerMsg := spectypes.PartialSignatureMessages{
-						Type: msgType,
-						Messages: []*spectypes.PartialSignatureMessage{
-							{
-								PartialSignature: innerSig,
-								SigningRoot:      r,
-								Signer:           1,
-							},
-						},
-					}
+						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+						messages.Type = msgType
 
-					sig, err := spectestingutils.NewTestingKeyManager().SignRoot(innerMsg, spectypes.PartialSignatureType, ks.Shares[1].GetPublicKey().Serialize())
-					require.NoError(t, err)
+						encodedMessages, err := messages.Encode()
+						require.NoError(t, err)
 
-					msg := &spectypes.SignedPartialSignatureMessage{
-						Message:   innerMsg,
-						Signature: sig,
-						Signer:    1,
-					}
+						dutyExecutorID := shares.active.ValidatorPubKey[:]
+						if validator.committeeRole(role) {
+							dutyExecutorID = encodedCommitteeID
+						}
+						ssvMessage := &spectypes.SSVMessage{
+							MsgType: spectypes.SSVPartialSignatureMsgType,
+							MsgID:   spectypes.NewMsgID(netCfg.DomainType, dutyExecutorID, role),
+							Data:    encodedMessages,
+						}
 
-					encoded, err := msg.Encode()
-					require.NoError(t, err)
+						signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
-					message := &spectypes.SSVMessage{
-						MsgType: spectypes.SSVPartialSignatureMsgType,
-						MsgID:   msgID,
-						Data:    encoded,
-					}
+						receivedAt := netCfg.GetSlotStartTime(spectestingutils.TestingDutySlot)
 
-					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-					_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-					require.NoError(t, err)
+						topicID := commons.CommitteeTopicID(committeeID)[0]
+
+						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+						require.NoError(t, err)
+					})
 				}
 			}
 		})
 
 		// Get error when receiving a message with an incorrect message type
 		t.Run("invalid message type", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-			msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
+			validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-			msg := &spectypes.SignedPartialSignatureMessage{
-				Message: spectypes.PartialSignatureMessages{
-					Type: math.MaxUint64,
-				},
-				Signature: make([]byte, 96),
-				Signer:    1,
-			}
+			messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+			messages.Type = math.MaxUint64
 
-			encoded, err := msg.Encode()
+			encodedMessages, err := messages.Encode()
 			require.NoError(t, err)
 
-			message := &spectypes.SSVMessage{
+			ssvMessage := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVPartialSignatureMsgType,
-				MsgID:   msgID,
-				Data:    encoded,
+				MsgID:   committeeIdentifier,
+				Data:    encodedMessages,
 			}
 
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-			require.ErrorContains(t, err, ErrUnknownPartialMessageType.Error())
+			signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+
+			receivedAt := netCfg.GetSlotStartTime(spectestingutils.TestingDutySlot)
+			topicID := commons.CommitteeTopicID(committeeID)[0]
+			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+			require.ErrorContains(t, err, ErrInvalidPartialSignatureType.Error())
 		})
 
 		// Get error when sending an unexpected message type for the required duty (sending randao for attestor duty)
 		t.Run("mismatch", func(t *testing.T) {
-			tests := map[spectypes.BeaconRole][]spectypes.PartialSigMsgType{
-				spectypes.BNRoleAttester:                  {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.BNRoleAggregator:                {spectypes.RandaoPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.BNRoleProposer:                  {spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.BNRoleSyncCommittee:             {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.BNRoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ValidatorRegistrationPartialSig},
-				spectypes.BNRoleValidatorRegistration:     {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
+			tests := map[spectypes.RunnerRole][]spectypes.PartialSigMsgType{
+				spectypes.RoleCommittee:                 {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleAggregator:                {spectypes.RandaoPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleProposer:                  {spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ValidatorRegistrationPartialSig},
+				spectypes.RoleValidatorRegistration:     {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
+				spectypes.RoleVoluntaryExit:             {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
 			}
 
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
-					validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-					msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+					subtestName := fmt.Sprintf("%v/%v", message.RunnerRoleToString(role), message.PartialMsgTypeToString(msgType))
+					t.Run(subtestName, func(t *testing.T) {
+						ds := dutystore.New()
+						ds.Proposer.Set(spectestingutils.TestingDutyEpoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+							{Slot: spectestingutils.TestingDutySlot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+						})
+						ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+							{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+						})
 
-					msg := &spectypes.SignedPartialSignatureMessage{
-						Message: spectypes.PartialSignatureMessages{
-							Type: msgType,
-						},
-						Signature: make([]byte, 96),
-						Signer:    1,
-					}
+						validator := New(netCfg, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-					encoded, err := msg.Encode()
-					require.NoError(t, err)
+						messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+						messages.Type = msgType
 
-					message := &spectypes.SSVMessage{
-						MsgType: spectypes.SSVPartialSignatureMsgType,
-						MsgID:   msgID,
-						Data:    encoded,
-					}
+						encodedMessages, err := messages.Encode()
+						require.NoError(t, err)
 
-					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-					_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-					require.ErrorContains(t, err, ErrPartialSignatureTypeRoleMismatch.Error())
+						dutyExecutorID := shares.active.ValidatorPubKey[:]
+						if validator.committeeRole(role) {
+							dutyExecutorID = encodedCommitteeID
+						}
+						ssvMessage := &spectypes.SSVMessage{
+							MsgType: spectypes.SSVPartialSignatureMsgType,
+							MsgID:   spectypes.NewMsgID(netCfg.DomainType, dutyExecutorID, role),
+							Data:    encodedMessages,
+						}
+
+						signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
+
+						receivedAt := netCfg.GetSlotStartTime(spectestingutils.TestingDutySlot)
+						topicID := commons.CommitteeTopicID(committeeID)[0]
+						t.Log(signedSSVMessage.SSVMessage.MsgID.GetDomain())
+						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+						require.ErrorContains(t, err, ErrPartialSignatureTypeRoleMismatch.Error())
+					})
 				}
 			}
 		})
@@ -891,283 +937,245 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving QBFT message with an invalid type
 	t.Run("invalid QBFT message type", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = math.MaxUint64
+		})
 
-		msg := &specqbft.Message{
-			MsgType:    math.MaxUint64,
-			Height:     height,
-			Round:      specqbft.FirstRound,
-			Identifier: spectestingutils.TestingIdentifier,
-			Root:       spectestingutils.TestingQBFTRootData,
-		}
-		signedMsg := spectestingutils.SignQBFTMsg(ks.Shares[1], 1, msg)
-
-		encodedValidSignedMessage, err := signedMsg.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		expectedErr := ErrUnknownQBFTMessageType
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Get error when receiving an incorrect signature size (too small)
 	t.Run("wrong signature size", func(t *testing.T) {
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		validSignedMessage.Signature = []byte{0x1}
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.Signatures = [][]byte{{0x1}}
 
-		_, err := validSignedMessage.Encode()
-		require.Error(t, err)
-	})
-
-	// Initialize signature tests
-	t.Run("zero signature", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
-
-		// Get error when receiving a consensus message with a zero signature
-		t.Run("consensus message", func(t *testing.T) {
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-			zeroSignature := [signatureSize]byte{}
-			validSignedMessage.Signature = zeroSignature[:]
-
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-			require.ErrorIs(t, err, ErrZeroSignature)
-		})
-
-		// Get error when receiving a consensus message with a zero signature
-		t.Run("partial signature message", func(t *testing.T) {
-			partialSigMessage := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, height)
-			zeroSignature := [signatureSize]byte{}
-			partialSigMessage.Signature = zeroSignature[:]
-
-			encoded, err := partialSigMessage.Encode()
-			require.NoError(t, err)
-
-			ssvMessage := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVPartialSignatureMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
-			require.ErrorIs(t, err, ErrZeroSignature)
-		})
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrWrongRSASignatureSize.Error())
 	})
 
 	// Get error when receiving a message with an empty list of signers
 	t.Run("no signers", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = nil
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		validSignedMessage.Signers = []spectypes.OperatorID{}
-
-		encoded, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrNoSigners)
 	})
 
-	// Initialize no signer tests
-	t.Run("zero signer", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+	// Get error when receiving a message with more signers than committee size.
+	// It tests ErrMoreSignersThanCommitteeSize from knowledge base.
+	t.Run("more signers than committee size", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		inactiveSK, err := eth2types.GenerateBLSPrivateKey()
-		require.NoError(t, err)
-
-		zeroSignerKS := spectestingutils.Testing7SharesSet()
-		zeroSignerShare := &ssvtypes.SSVShare{
-			Share: *spectestingutils.TestingShare(zeroSignerKS),
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: eth2apiv1.ValidatorStateActiveOngoing,
-				},
-				Liquidated: false,
-			},
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2, 3, 4, 5}
+		signedSSVMessage.Signatures = [][]byte{
+			signedSSVMessage.Signatures[0],
+			signedSSVMessage.Signatures[0],
+			signedSSVMessage.Signatures[0],
+			signedSSVMessage.Signatures[0],
+			signedSSVMessage.Signatures[0],
 		}
-		zeroSignerShare.Committee[0].OperatorID = 0
-		zeroSignerShare.ValidatorPubKey = inactiveSK.PublicKey().Marshal()
 
-		require.NoError(t, ns.Shares().Save(nil, zeroSignerShare))
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrSignerNotInCommittee.Error())
+	})
 
-		// Get error when receiving a consensus message with a zero signer
-		t.Run("consensus message", func(t *testing.T) {
-			validSignedMessage := spectestingutils.TestingProposalMessage(zeroSignerKS.Shares[1], 1)
-			validSignedMessage.Signers = []spectypes.OperatorID{0}
+	// Get error when receiving a consensus message with zero signer
+	t.Run("consensus zero signer", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-			encodedValidSignedMessage, err := validSignedMessage.Encode()
-			require.NoError(t, err)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{0}
 
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, zeroSignerShare.ValidatorPubKey, roleAttester),
-				Data:    encodedValidSignedMessage,
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-			require.ErrorIs(t, err, ErrZeroSigner)
-		})
-
-		// Get error when receiving a partial message with a zero signer
-		t.Run("partial signature message", func(t *testing.T) {
-			partialSignatureMessage := spectestingutils.PostConsensusAttestationMsg(zeroSignerKS.Shares[1], 1, specqbft.Height(slot))
-			partialSignatureMessage.Signer = 0
-
-			encoded, err := partialSignatureMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVPartialSignatureMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, zeroSignerShare.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-			require.ErrorIs(t, err, ErrZeroSigner)
-		})
-
-		require.NoError(t, ns.Shares().Delete(nil, zeroSignerShare.ValidatorPubKey))
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrZeroSigner)
 	})
 
 	// Get error when receiving a message with duplicated signers
 	t.Run("non unique signer", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2, 2}
 
-		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
-			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrDuplicatedSigner)
+	})
 
-		validSignedMessage.Signers = []spectypes.OperatorID{1, 2, 2}
+	// Get error when receiving a message with an operator that does not exist and has not been removed
+	t.Run("operator exists and not removed", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		encoded, err := validSignedMessage.Encode()
+		err := validator.validateSignerIsKnown(1)
 		require.NoError(t, err)
+	})
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
+	// Get error when receiving a message with an operator that does not exist but has been removed
+	t.Run("operator exists but removed", func(t *testing.T) {
+
+		// Configure mock to return false for operator 999, simulating a removed operator
+		operators.EXPECT().OperatorsExist(gomock.Any(), []spectypes.OperatorID{999}).Return(false, nil)
+
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+		err := validator.validateSignerIsKnown(999)
+		expectedErr := ErrUnknownOperator
+		expectedErr.got = spectypes.OperatorID(999)
+
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Get error when receiving a message with an operator and there is an error during operator validation
+	t.Run("error during operator validation", func(t *testing.T) {
+		// Configure mock to return an error when checking if operator 6 exists (1-5 are already in the store)
+		// This simulates a storage or network error during validation
+		operators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{6}).
+			Return(false, fmt.Errorf("validation error"))
+
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+		err := validator.validateSignerIsKnown(6)
+		expectedErr := ErrOperatorValidation
+		expectedErr.got = spectypes.OperatorID(6)
+
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Test that validateSignedSSVMessage returns the error from validateSignerIsKnown
+	// when the error is not ErrUnknownOperator
+	t.Run("signer exists error propagation", func(t *testing.T) {
+		localCtrl := gomock.NewController(t)
+		localMockOperators := mocks.NewMockOperators(localCtrl)
+
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{1}).
+			Return(true, nil).
+			AnyTimes()
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{2}).
+			Return(true, nil).
+			AnyTimes()
+
+		// For operator 3, return an error other than ErrUnknownOperator
+		// This simulates a database error or other validation failure
+		customErr := fmt.Errorf("custom validation error")
+
+		localMockOperators.EXPECT().
+			OperatorsExist(gomock.Any(), []spectypes.OperatorID{3}).
+			Return(false, customErr).
+			AnyTimes()
+
+		localValidator := New(netCfg, validatorStore, localMockOperators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		testMsg := &spectypes.SignedSSVMessage{
+			OperatorIDs: []spectypes.OperatorID{1, 2, 3},
+			Signatures: [][]byte{
+				bytes.Repeat([]byte{1}, rsaSignatureSize),
+				bytes.Repeat([]byte{2}, rsaSignatureSize),
+				bytes.Repeat([]byte{3}, rsaSignatureSize),
+			},
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   committeeIdentifier,
+				Data:    []byte{1, 2, 3},
+			},
 		}
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorIs(t, err, ErrDuplicatedSigner)
+		// Validate the message - should return an error since operator 3 returns a non-ErrUnknownOperator error
+		err := localValidator.validateSignedSSVMessage(testMsg)
+
+		require.Error(t, err)
+
+		// Verify that the error is an ErrOperatorValidation error and has operator ID 3
+		var valErr Error
+		require.True(t, errors.As(err, &valErr))
+		require.Equal(t, valErr.got, spectypes.OperatorID(3))
+		require.Equal(t, valErr.text, ErrOperatorValidation.text)
 	})
 
 	// Get error when receiving a message with non-sorted signers
 	t.Run("signers not sorted", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{3, 2, 1}
 
-		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
-			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
-
-		validSignedMessage.Signers = []spectypes.OperatorID{3, 2, 1}
-
-		encoded, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrSignersNotSorted)
 	})
 
-	// Get error when receiving message from non quorum size amount of signers
-	t.Run("wrong signers length", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+	// Get error when receiving message with different amount of signers and signatures
+	t.Run("wrong signers/signatures length", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = committee
 
-		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
-			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
-		validSignedMessage.Signers = []spectypes.OperatorID{1, 2}
+		require.ErrorContains(t, err, ErrSignersAndSignaturesWithDifferentLength.Error())
+	})
 
-		encoded, err := validSignedMessage.Encode()
-		require.NoError(t, err)
+	// Get error when receiving message from less than quorum size amount of signers
+	t.Run("decided too few signers", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2}
+		signedSSVMessage.Signatures = signedSSVMessage.Signatures[:2]
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
-		expectedErr := ErrWrongSignersLength
-		expectedErr.got = 2
-		expectedErr.want = "between 3 and 4"
-		require.ErrorIs(t, err, expectedErr)
+		require.ErrorContains(t, err, ErrDecidedNotEnoughSigners.Error())
 	})
 
 	// Get error when receiving a non decided message with multiple signers
 	t.Run("non decided with multiple signers", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.ProposalMsgType
+		})
 
-		validSignedMessage := spectestingutils.TestingMultiSignerProposalMessage(
-			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
-
-		encoded, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encoded,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
 		expectedErr := ErrNonDecidedWithMultipleSigners
 		expectedErr.got = 3
@@ -1176,221 +1184,164 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Send late message for all roles and receive late message error
 	t.Run("late message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		const epoch = 1
+		slot := netCfg.FirstSlotAtEpoch(epoch)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		ds := dutystore.New()
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+		ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+			{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+		})
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
+		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		tests := map[spectypes.BeaconRole]time.Time{
-			spectypes.BNRoleAttester:                  netCfg.Beacon.GetSlotStartTime(slot + 35).Add(validator.waitAfterSlotStart(spectypes.BNRoleAttester)),
-			spectypes.BNRoleAggregator:                netCfg.Beacon.GetSlotStartTime(slot + 35).Add(validator.waitAfterSlotStart(spectypes.BNRoleAggregator)),
-			spectypes.BNRoleProposer:                  netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)),
-			spectypes.BNRoleSyncCommittee:             netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(spectypes.BNRoleSyncCommittee)),
-			spectypes.BNRoleSyncCommitteeContribution: netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(spectypes.BNRoleSyncCommitteeContribution)),
+		tests := map[spectypes.RunnerRole]time.Time{
+			spectypes.RoleCommittee:                 netCfg.GetSlotStartTime(slot + 35),
+			spectypes.RoleAggregator:                netCfg.GetSlotStartTime(slot + 35),
+			spectypes.RoleProposer:                  netCfg.GetSlotStartTime(slot + 4),
+			spectypes.RoleSyncCommitteeContribution: netCfg.GetSlotStartTime(slot + 4),
 		}
 
 		for role, receivedAt := range tests {
-			role, receivedAt := role, receivedAt
-			t.Run(role.String(), func(t *testing.T) {
-				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
-
-				message := &spectypes.SSVMessage{
-					MsgType: spectypes.SSVConsensusMsgType,
-					MsgID:   msgID,
-					Data:    encodedValidSignedMessage,
+			t.Run(message.RunnerRoleToString(role), func(t *testing.T) {
+				dutyExecutorID := shares.active.ValidatorPubKey[:]
+				if validator.committeeRole(role) {
+					dutyExecutorID = encodedCommitteeID
 				}
 
-				_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-				require.ErrorContains(t, err, ErrLateMessage.Error())
+				msgID := spectypes.NewMsgID(netCfg.DomainType, dutyExecutorID, role)
+				signedSSVMessage := generateSignedMessage(ks, msgID, slot)
+
+				topicID := commons.CommitteeTopicID(committeeID)[0]
+				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+				require.ErrorContains(t, err, ErrLateSlotMessage.Error())
 			})
 		}
 	})
 
 	// Send early message for all roles before the duty start and receive early message error
 	t.Run("early message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
+		receivedAt := netCfg.GetSlotStartTime(slot - 1)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot - 1)
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorIs(t, err, ErrEarlyMessage)
+		require.ErrorContains(t, err, ErrEarlySlotMessage.Error())
 	})
 
 	// Send message from non-leader acting as a leader should receive an error
 	t.Run("not a leader", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[2], 2, height)
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		expectedErr := ErrSignerNotLeader
-		expectedErr.got = spectypes.OperatorID(2)
-		expectedErr.want = spectypes.OperatorID(1)
-		require.ErrorIs(t, err, expectedErr)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrSignerNotLeader.Error())
 	})
 
 	// Send wrong size of data (8 bytes) for a prepare justification message should receive an error
 	t.Run("malformed prepare justification", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.PrepareJustification = [][]byte{{1}}
+		})
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		validSignedMessage.Message.PrepareJustification = [][]byte{{1}}
-
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error())
 	})
 
 	// Send prepare justification message without a proposal message should receive an error
 	t.Run("non-proposal with prepare justification", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		msg := spectestingutils.TestingProposalMessageWithParams(
-			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
-			nil,
-			spectestingutils.MarshalJustifications([]*specqbft.SignedMessage{
-				spectestingutils.TestingRoundChangeMessage(ks.Shares[1], spectypes.OperatorID(1)),
-			}))
-		msg.Message.MsgType = specqbft.PrepareMsgType
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.PrepareJustification = spectestingutils.MarshalJustifications([]*spectypes.SignedSSVMessage{
+				generateSignedMessage(ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
+					justMsg.MsgType = specqbft.RoundChangeMsgType
+				}),
+			})
+			message.MsgType = specqbft.PrepareMsgType
+		})
+		signedSSVMessage.FullData = nil
 
-		encodedValidSignedMessage, err := msg.Encode()
-		require.NoError(t, err)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-
-		expectedErr := ErrUnexpectedPrepareJustifications
-		expectedErr.got = specqbft.PrepareMsgType
-		require.ErrorIs(t, err, expectedErr)
+		require.ErrorContains(t, err, ErrUnexpectedPrepareJustifications.Error())
 	})
 
 	// Send round change justification message without a proposal message should receive an error
 	t.Run("non-proposal with round change justification", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		msg := spectestingutils.TestingProposalMessageWithParams(
-			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
-			spectestingutils.MarshalJustifications([]*specqbft.SignedMessage{
-				spectestingutils.TestingPrepareMessage(ks.Shares[1], spectypes.OperatorID(1)),
-			}),
-			nil,
-		)
-		msg.Message.MsgType = specqbft.PrepareMsgType
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.RoundChangeJustification = spectestingutils.MarshalJustifications([]*spectypes.SignedSSVMessage{
+				generateSignedMessage(ks, committeeIdentifier, slot, func(justMsg *specqbft.Message) {
+					justMsg.MsgType = specqbft.PrepareMsgType
+				}),
+			})
+			message.MsgType = specqbft.PrepareMsgType
+		})
+		signedSSVMessage.FullData = nil
 
-		encodedValidSignedMessage, err := msg.Encode()
-		require.NoError(t, err)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-
-		expectedErr := ErrUnexpectedRoundChangeJustifications
-		expectedErr.got = specqbft.PrepareMsgType
-		require.ErrorIs(t, err, expectedErr)
+		require.ErrorContains(t, err, ErrUnexpectedRoundChangeJustifications.Error())
 	})
 
 	// Send round change justification message with a malformed message (1 byte) should receive an error
 	t.Run("malformed round change justification", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		validSignedMessage.Message.RoundChangeJustification = [][]byte{{1}}
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.RoundChangeJustification = [][]byte{{1}}
+		})
+		signedSSVMessage.FullData = nil
 
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
 	})
 
-	// Send message root hash that doesnt match the expected root hash should receive an error
+	// Send message root hash that doesn't match the expected root hash should receive an error
 	t.Run("wrong root hash", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-		validSignedMessage.FullData = []byte{1}
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.FullData = []byte{1}
 
-		encodedValidSignedMessage, err := validSignedMessage.Encode()
-		require.NoError(t, err)
-
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedValidSignedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 
 		expectedErr := ErrInvalidHash
 		require.ErrorIs(t, err, expectedErr)
@@ -1398,633 +1349,691 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Receive proposal from same operator twice with different messages (same round) should receive an error
 	t.Run("double proposal with different data", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signed1 := spectestingutils.TestingProposalMessageWithRound(ks.Shares[1], 1, 1)
-		encodedSigned1, err := signed1.Encode()
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		message1 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned1,
-		}
+		anotherFullData := []byte{1}
+		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Root, err = specqbft.HashDataRoot(anotherFullData)
+			require.NoError(t, err)
+		})
+		signedSSVMessage.FullData = anotherFullData
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
-		require.NoError(t, err)
-
-		signed2 := spectestingutils.TestingProposalMessageWithRound(ks.Shares[1], 1, 1)
-		signed2.FullData = []byte{1}
-		signed2.Message.Root, err = specqbft.HashDataRoot(signed2.FullData)
-		require.NoError(t, err)
-
-		encodedSigned2, err := signed2.Encode()
-		require.NoError(t, err)
-
-		message2 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned2,
-		}
-
-		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
-		expectedErr := ErrDuplicatedProposalWithDifferentData
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		expectedErr := ErrDifferentProposalData
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Receive prepare from same operator twice with different messages (same round) should receive an error
 	t.Run("double prepare", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signed1 := spectestingutils.TestingPrepareMessage(ks.Shares[1], 1)
-		encodedSigned1, err := signed1.Encode()
+		identifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), spectypes.RoleProposer)
+		signedSSVMessage := generateSignedMessage(ks, identifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.PrepareMsgType
+		})
+		signedSSVMessage.FullData = nil
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		message1 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned1,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
-		require.NoError(t, err)
-
-		signed2 := spectestingutils.TestingPrepareMessage(ks.Shares[1], 1)
-		require.NoError(t, err)
-
-		encodedSigned2, err := signed2.Encode()
-		require.NoError(t, err)
-
-		message2 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned2,
-		}
-
-		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
-		expectedErr := ErrTooManySameTypeMessagesPerRound
-		expectedErr.got = "prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, decided: 0, round change: 0, post-consensus: 0"
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		expectedErr := ErrDuplicatedMessage
+		expectedErr.got = "prepare, having prepare"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Receive commit from same operator twice with different messages (same round) should receive an error
 	t.Run("double commit", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signed1 := spectestingutils.TestingCommitMessage(ks.Shares[1], 1)
-		encodedSigned1, err := signed1.Encode()
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.CommitMsgType
+		})
+		signedSSVMessage.FullData = nil
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		message1 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned1,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
-		require.NoError(t, err)
-
-		signed2 := spectestingutils.TestingCommitMessage(ks.Shares[1], 1)
-		encodedSigned2, err := signed2.Encode()
-		require.NoError(t, err)
-
-		message2 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned2,
-		}
-
-		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
-		expectedErr := ErrTooManySameTypeMessagesPerRound
-		expectedErr.got = "commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 1, decided: 0, round change: 0, post-consensus: 0"
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		expectedErr := ErrDuplicatedMessage
+		expectedErr.got = "commit, having commit"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
 	// Receive round change from same operator twice with different messages (same round) should receive an error
 	t.Run("double round change", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		signed1 := spectestingutils.TestingRoundChangeMessage(ks.Shares[1], 1)
-		encodedSigned1, err := signed1.Encode()
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+		})
+		signedSSVMessage.FullData = nil
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		message1 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned1,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
-		require.NoError(t, err)
-
-		signed2 := spectestingutils.TestingRoundChangeMessage(ks.Shares[1], 1)
-		encodedSigned2, err := signed2.Encode()
-		require.NoError(t, err)
-
-		message2 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned2,
-		}
-
-		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
-		expectedErr := ErrTooManySameTypeMessagesPerRound
-		expectedErr.got = "round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, decided: 0, round change: 1, post-consensus: 0"
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		expectedErr := ErrDuplicatedMessage
+		expectedErr.got = "round change, having round change"
 		require.ErrorIs(t, err, expectedErr)
 	})
 
-	// Receive too many decided messages should receive an error
-	t.Run("too many decided", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+	// Decided with same signers should receive an error
+	t.Run("decided with same signers", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
+		signedSSVMessage := generateMultiSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.CommitMsgType
+		})
+		signedSSVMessage.FullData = nil
 
-		signed := spectestingutils.TestingCommitMultiSignerMessageWithRound(
-			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, 1)
-		encodedSigned, err := signed.Encode()
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		message := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   msgID,
-			Data:    encodedSigned,
-		}
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrDecidedWithSameSigners)
+	})
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+	// Send message with a slot lower than in the previous message
+	t.Run("slot already advanced", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		for i := 0; i < maxDecidedCount(len(share.Committee)); i++ {
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-			require.NoError(t, err)
-		}
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		expectedErr := ErrTooManySameTypeMessagesPerRound
-		expectedErr.got = "decided, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, decided: 8, round change: 0, post-consensus: 0"
-		require.ErrorIs(t, err, expectedErr)
+		signedSSVMessage := generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
+			message.Height = 8
+		})
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+
+		signedSSVMessage = generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
+			message.Height = 4
+		})
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
+	})
+
+	// Send message with a round lower than in the previous message
+	t.Run("round already advanced", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Round = 5
+		})
+
+		receivedAt := netCfg.GetSlotStartTime(slot).Add(5 * roundtimer.QuickTimeout)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+
+		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Round = 1
+		})
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrRoundAlreadyAdvanced.Error())
 	})
 
 	// Receive message from a round that is too high for that epoch should receive an error
 	t.Run("round too high", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		const epoch = 1
+		slot := netCfg.FirstSlotAtEpoch(epoch)
 
-		tests := map[spectypes.BeaconRole]specqbft.Round{
-			spectypes.BNRoleAttester:                  13,
-			spectypes.BNRoleAggregator:                13,
-			spectypes.BNRoleProposer:                  7,
-			spectypes.BNRoleSyncCommittee:             7,
-			spectypes.BNRoleSyncCommitteeContribution: 7,
+		ds := dutystore.New()
+		ds.Proposer.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			{Slot: slot, ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.ProposerDuty{}, InCommittee: true},
+		})
+		ds.SyncCommittee.Set(0, []dutystore.StoreSyncCommitteeDuty{
+			{ValidatorIndex: shares.active.ValidatorIndex, Duty: &eth2apiv1.SyncCommitteeDuty{}, InCommittee: true},
+		})
+
+		validator := New(netCfg, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		tests := map[spectypes.RunnerRole]specqbft.Round{
+			spectypes.RoleCommittee:                 13,
+			spectypes.RoleAggregator:                13,
+			spectypes.RoleProposer:                  7,
+			spectypes.RoleSyncCommitteeContribution: 7,
 		}
 
 		for role, round := range tests {
-			role, round := role, round
-			t.Run(role.String(), func(t *testing.T) {
-				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
-
-				signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, round)
-				encodedMessage, err := signedMessage.Encode()
-				require.NoError(t, err)
-
-				ssvMessage := &spectypes.SSVMessage{
-					MsgType: spectypes.SSVConsensusMsgType,
-					MsgID:   msgID,
-					Data:    encodedMessage,
+			t.Run(message.RunnerRoleToString(role), func(t *testing.T) {
+				dutyExecutorID := shares.active.ValidatorPubKey[:]
+				if validator.committeeRole(role) {
+					dutyExecutorID = encodedCommitteeID
 				}
 
-				receivedAt := netCfg.Beacon.GetSlotStartTime(0).Add(validator.waitAfterSlotStart(role))
-				_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
+				msgID := spectypes.NewMsgID(netCfg.DomainType, dutyExecutorID, role)
+				signedSSVMessage := generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
+					message.MsgType = specqbft.PrepareMsgType
+					message.Round = round
+				})
+				signedSSVMessage.FullData = nil
+
+				topicID := commons.CommitteeTopicID(committeeID)[0]
+
+				sinceSlotStart := time.Duration(0)
+				for {
+					currentRound, err := validator.currentEstimatedRound(sinceSlotStart)
+					require.NoError(t, err)
+					if currentRound == round {
+						break
+					}
+					sinceSlotStart += roundtimer.QuickTimeout
+				}
+
+				receivedAt := netCfg.GetSlotStartTime(slot).Add(sinceSlotStart)
+				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 				require.ErrorContains(t, err, ErrRoundTooHigh.Error())
 			})
 		}
 	})
 
-	// Receive message from a round that is incorrect for current epoch should receive an error
-	t.Run("round already advanced", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, 2)
-		encodedMessage, err := signedMessage.Encode()
-		require.NoError(t, err)
-
-		ssvMessage := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   msgID,
-			Data:    encodedMessage,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
-		require.NoError(t, err)
-
-		signedMessage = spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, 1)
-		encodedMessage, err = signedMessage.Encode()
-		require.NoError(t, err)
-
-		ssvMessage.Data = encodedMessage
-		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
-		require.ErrorContains(t, err, ErrRoundAlreadyAdvanced.Error())
-	})
-
-	// Initialize tests for testing when sending a message with a slot before the current one
-	t.Run("slot already advanced", func(t *testing.T) {
-		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
-
-		// Send a consensus message with a slot before the current one should cause an error
-		t.Run("consensus message", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			signedMessage := spectestingutils.TestingPrepareMessageWithHeight(ks.Shares[1], 1, height+1)
-			encodedMessage, err := signedMessage.Encode()
-			require.NoError(t, err)
-
-			ssvMessage := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   msgID,
-				Data:    encodedMessage,
-			}
-
-			_, _, err = validator.validateSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(roleAttester)), nil)
-			require.NoError(t, err)
-
-			signedMessage = spectestingutils.TestingPrepareMessageWithHeight(ks.Shares[1], 1, height)
-			encodedMessage, err = signedMessage.Encode()
-			require.NoError(t, err)
-
-			ssvMessage.Data = encodedMessage
-			_, _, err = validator.validateSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
-			require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
-		})
-
-		// Send a partial signature message with a slot before the current one should cause an error
-		t.Run("partial signature message", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			message := spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height+1)
-			message.Message.Slot = phase0.Slot(height) + 1
-			sig, err := spectestingutils.NewTestingKeyManager().SignRoot(message.Message, spectypes.PartialSignatureType, ks.Shares[2].GetPublicKey().Serialize())
-			require.NoError(t, err)
-			message.Signature = sig
-
-			encodedMessage, err := message.Encode()
-			require.NoError(t, err)
-
-			ssvMessage := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVPartialSignatureMsgType,
-				MsgID:   msgID,
-				Data:    encodedMessage,
-			}
-
-			_, _, err = validator.validateSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(roleAttester)), nil)
-			require.NoError(t, err)
-
-			message = spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height)
-			message.Message.Slot = phase0.Slot(height)
-			sig, err = spectestingutils.NewTestingKeyManager().SignRoot(message.Message, spectypes.PartialSignatureType, ks.Shares[2].GetPublicKey().Serialize())
-			require.NoError(t, err)
-			message.Signature = sig
-
-			encodedMessage, err = message.Encode()
-			require.NoError(t, err)
-
-			ssvMessage.Data = encodedMessage
-			_, _, err = validator.validateSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
-			require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
-		})
-	})
-
 	// Receive an event message from an operator that is not myself should receive an error
 	t.Run("event message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-		eventMsg := &ssvtypes.EventMsg{}
-		encoded, err := eventMsg.Encode()
-		require.NoError(t, err)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.MsgType = message.SSVEventMsgType
 
-		ssvMessage := &spectypes.SSVMessage{
-			MsgType: ssvmessage.SSVEventMsgType,
-			MsgID:   msgID,
-			Data:    encoded,
-		}
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
 
-	// Get error when receiving an SSV message with an invalid signature.
-	t.Run("signature verification", func(t *testing.T) {
-		var afterFork = netCfg.PermissionlessActivationEpoch + 1000
+	// Receive a unknown message type from an operator that is not myself should receive an error
+	t.Run("unknown type message", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		t.Run("unsigned message before fork", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+		slot := netCfg.FirstSlotAtEpoch(1)
 
-			validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		unknownType := spectypes.MsgType(12345)
+		signedSSVMessage.SSVMessage.MsgType = unknownType
 
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			encodedMsg, err := commons.EncodeNetworkMsg(message)
-			require.NoError(t, err)
-
-			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
-			pMsg := &pubsub.Message{
-				Message: &pspb.Message{
-					Topic: &topicID[0],
-					Data:  encodedMsg,
-				},
-			}
-
-			slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.NoError(t, err)
-		})
-
-		t.Run("unsigned message after fork", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[4], 4, specqbft.Height(afterFork))
-
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			encodedMsg, err := commons.EncodeNetworkMsg(message)
-			require.NoError(t, err)
-
-			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
-			pMsg := &pubsub.Message{
-				Message: &pspb.Message{
-					Topic: &topicID[0],
-					Data:  encodedMsg,
-				},
-			}
-
-			slot := netCfg.Beacon.FirstSlotAtEpoch(afterFork)
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
-		})
-
-		t.Run("signed message before fork", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
-
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			encodedMsg, err := commons.EncodeNetworkMsg(message)
-			require.NoError(t, err)
-
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
-			require.NoError(t, err)
-
-			const operatorID = spectypes.OperatorID(1)
-
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
-			od := &registrystorage.OperatorData{
-				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
-				OwnerAddress: common.Address{},
-			}
-
-			found, err := ns.SaveOperatorData(nil, od)
-			require.NoError(t, err)
-			require.False(t, found)
-
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
-			require.NoError(t, err)
-
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
-
-			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
-			pMsg := &pubsub.Message{
-				Message: &pspb.Message{
-					Topic: &topicID[0],
-					Data:  encodedMsg,
-				},
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
-
-			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
-		})
-
-		t.Run("signed message after fork", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			slot := netCfg.Beacon.FirstSlotAtEpoch(afterFork)
-
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
-
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			encodedMsg, err := commons.EncodeNetworkMsg(message)
-			require.NoError(t, err)
-
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
-			require.NoError(t, err)
-
-			const operatorID = spectypes.OperatorID(1)
-
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
-			od := &registrystorage.OperatorData{
-				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
-				OwnerAddress: common.Address{},
-			}
-
-			found, err := ns.SaveOperatorData(nil, od)
-			require.NoError(t, err)
-			require.False(t, found)
-
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
-			require.NoError(t, err)
-
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
-
-			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
-			pMsg := &pubsub.Message{
-				Message: &pspb.Message{
-					Topic: &topicID[0],
-					Data:  encodedMsg,
-				},
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.NoError(t, err)
-
-			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
-		})
-
-		t.Run("unexpected operator ID", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			slot := netCfg.Beacon.FirstSlotAtEpoch(afterFork)
-
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
-
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			encodedMsg, err := commons.EncodeNetworkMsg(message)
-			require.NoError(t, err)
-
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
-			require.NoError(t, err)
-
-			const operatorID = spectypes.OperatorID(1)
-
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
-			od := &registrystorage.OperatorData{
-				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
-				OwnerAddress: common.Address{},
-			}
-
-			found, err := ns.SaveOperatorData(nil, od)
-			require.NoError(t, err)
-			require.False(t, found)
-
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
-			require.NoError(t, err)
-
-			const unexpectedOperatorID = 2
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, unexpectedOperatorID, signature)
-
-			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
-			pMsg := &pubsub.Message{
-				Message: &pspb.Message{
-					Topic: &topicID[0],
-					Data:  encodedMsg,
-				},
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.ErrorContains(t, err, ErrOperatorNotFound.Error())
-
-			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
-		})
-
-		t.Run("malformed signature", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			slot := netCfg.Beacon.FirstSlotAtEpoch(afterFork)
-
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
-
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			encodedMsg, err := commons.EncodeNetworkMsg(message)
-			require.NoError(t, err)
-
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
-			require.NoError(t, err)
-
-			const operatorID = spectypes.OperatorID(1)
-
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
-			od := &registrystorage.OperatorData{
-				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
-				OwnerAddress: common.Address{},
-			}
-
-			found, err := ns.SaveOperatorData(nil, od)
-			require.NoError(t, err)
-			require.False(t, found)
-
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, bytes.Repeat([]byte{1}, 256))
-
-			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
-			pMsg := &pubsub.Message{
-				Message: &pspb.Message{
-					Topic: &topicID[0],
-					Data:  encodedMsg,
-				},
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.ErrorContains(t, err, ErrRSADecryption.Error())
-
-			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
-		})
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, fmt.Sprintf("%s, got %d", ErrUnknownSSVMessageType.Error(), unknownType))
 	})
+
+	// Receive a message with a wrong signature
+	t.Run("wrong signature", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, wrongSignatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrSignatureVerification.Error())
+	})
+
+	// Receive a message with an incorrect topic
+	t.Run("incorrect topic", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := "incorrect"
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrIncorrectTopic.Error())
+	})
+
+	// Receive nil signed ssv message
+	t.Run("nil signed ssv message", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+
+		_, err = validator.handleSignedSSVMessage(nil, "", peerID, receivedAt)
+		require.ErrorContains(t, err, ErrNilSignedSSVMessage.Error())
+	})
+
+	// Receive nil ssv message
+	t.Run("nil ssv message", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage = nil
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, "", peerID, receivedAt)
+		require.ErrorContains(t, err, ErrNilSSVMessage.Error())
+	})
+
+	// Receive zero round
+	t.Run("zero round", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Round = specqbft.NoRound
+		})
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrZeroRound.Error())
+	})
+
+	// Receive a message with no signatures
+	t.Run("no signatures", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.Signatures = [][]byte{}
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrNoSignatures.Error())
+	})
+
+	// Receive a message with mismatched identifier
+	t.Run("mismatched identifier", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			wrongID := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID[:], nonCommitteeRole)
+			message.Identifier = wrongID[:]
+		})
+		signedSSVMessage.SSVMessage.MsgID = committeeIdentifier
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrMismatchedIdentifier.Error())
+	})
+
+	// Receive a prepare/commit message with FullData
+	t.Run("prepare/commit with FullData", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.PrepareMsgType
+		})
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrPrepareOrCommitWithFullData.Error())
+
+		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.CommitMsgType
+		})
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrPrepareOrCommitWithFullData.Error())
+	})
+
+	// Receive a non-consensus message with FullData
+	t.Run("non-consensus with FullData", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
+		ssvMessage.MsgID = committeeIdentifier
+		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
+		signedSSVMessage.FullData = []byte{1}
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrFullDataNotInConsensusMessage)
+	})
+
+	// Receive a partial signature message with multiple signers
+	t.Run("partial signature with multiple signers", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		ssvMessage := spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0))
+		ssvMessage.MsgID = committeeIdentifier
+		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2}
+		signedSSVMessage.Signatures = append(signedSSVMessage.Signatures, signedSSVMessage.Signatures[0])
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrPartialSigOneSigner)
+	})
+
+	// Receive a partial signature message with too many signers
+	t.Run("partial signature with too many messages", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		for i := 0; i < 12; i++ {
+			messages.Messages = append(messages.Messages, messages.Messages[0])
+		}
+
+		data, err := messages.Encode()
+		require.NoError(t, err)
+
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   committeeIdentifier,
+			Data:    data,
+		}
+
+		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrTooManyPartialSignatureMessages.Error())
+	})
+
+	// Receive a partial signature message with triple validator index
+	t.Run("partial signature with triple validator index", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		for i := 0; i < 3; i++ {
+			messages.Messages = append(messages.Messages, messages.Messages[0])
+		}
+
+		data, err := messages.Encode()
+		require.NoError(t, err)
+
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   committeeIdentifier,
+			Data:    data,
+		}
+
+		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrTripleValidatorIndexInPartialSignatures.Error())
+	})
+
+	// Receive a partial signature message with validator index mismatch
+	t.Run("partial signature with validator index mismatch", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		messages := spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1, spec.DataVersionPhase0)
+		messages.Messages[0].ValidatorIndex = math.MaxUint64
+
+		data, err := messages.Encode()
+		require.NoError(t, err)
+
+		ssvMessage := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   nonCommitteeIdentifier,
+			Data:    data,
+		}
+
+		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID)[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.ErrorContains(t, err, ErrValidatorIndexMismatch.Error())
+	})
+}
+
+// Deep copy helper function for testing purposes only
+func cloneSSVShare(t *testing.T, original *ssvtypes.SSVShare) *ssvtypes.SSVShare {
+	// json encode original
+	originalJSON, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	// json decode original
+	cloned := new(ssvtypes.SSVShare)
+	require.NoError(t, json.Unmarshal(originalJSON, cloned))
+
+	return cloned
+}
+
+type shareSet struct {
+	active                      *ssvtypes.SSVShare
+	liquidated                  *ssvtypes.SSVShare
+	inactive                    *ssvtypes.SSVShare
+	nonUpdatedMetadata          *ssvtypes.SSVShare
+	nonUpdatedMetadataNextEpoch *ssvtypes.SSVShare
+	noMetadata                  *ssvtypes.SSVShare
+}
+
+func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg networkconfig.NetworkConfig) shareSet {
+	activeShare := &ssvtypes.SSVShare{
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateActiveOngoing,
+		Liquidated: false,
+	}
+
+	require.NoError(t, ns.Shares().Save(nil, activeShare))
+
+	liquidatedShare := &ssvtypes.SSVShare{
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateActiveOngoing,
+		Liquidated: true,
+	}
+
+	liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(liquidatedShare.ValidatorPubKey[:], liquidatedSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
+
+	inactiveShare := &ssvtypes.SSVShare{
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:     eth2apiv1.ValidatorStateUnknown,
+		Liquidated: false,
+	}
+
+	inactiveSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(inactiveShare.ValidatorPubKey[:], inactiveSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, inactiveShare))
+
+	slot := netCfg.EstimatedCurrentSlot()
+	activationEpoch := netCfg.EstimatedEpochAtSlot(slot)
+	exitEpoch := goclient.FarFutureEpoch
+
+	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
+		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:          eth2apiv1.ValidatorStatePendingQueued,
+		ActivationEpoch: activationEpoch,
+		ExitEpoch:       exitEpoch,
+		Liquidated:      false,
+	}
+
+	nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(nonUpdatedMetadataShare.ValidatorPubKey[:], nonUpdatedMetadataSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
+
+	nonUpdatedMetadataNextEpochShare := &ssvtypes.SSVShare{
+		Share:           *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Status:          eth2apiv1.ValidatorStatePendingQueued,
+		ActivationEpoch: activationEpoch + 1,
+		ExitEpoch:       exitEpoch,
+		Liquidated:      false,
+	}
+
+	nonUpdatedMetadataNextEpochSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(nonUpdatedMetadataNextEpochShare.ValidatorPubKey[:], nonUpdatedMetadataNextEpochSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataNextEpochShare))
+
+	noMetadataShare := &ssvtypes.SSVShare{
+		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
+		Liquidated: false,
+	}
+
+	noMetadataShareSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(noMetadataShare.ValidatorPubKey[:], noMetadataShareSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, noMetadataShare))
+
+	return shareSet{
+		active:                      activeShare,
+		liquidated:                  liquidatedShare,
+		inactive:                    inactiveShare,
+		nonUpdatedMetadata:          nonUpdatedMetadataShare,
+		nonUpdatedMetadataNextEpoch: nonUpdatedMetadataNextEpochShare,
+		noMetadata:                  noMetadataShare,
+	}
+}
+
+func generateSignedMessage(
+	ks *spectestingutils.TestKeySet,
+	identifier spectypes.MessageID,
+	slot phase0.Slot,
+	opts ...func(message *specqbft.Message),
+) *spectypes.SignedSSVMessage {
+	fullData := spectestingutils.TestingQBFTFullData
+	height := specqbft.Height(slot)
+
+	qbftMessage := &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
+		Height:     height,
+		Round:      specqbft.FirstRound,
+		Identifier: identifier[:],
+		Root:       sha256.Sum256(fullData),
+
+		RoundChangeJustification: [][]byte{},
+		PrepareJustification:     [][]byte{},
+	}
+
+	for _, opt := range opts {
+		opt(qbftMessage)
+	}
+
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 1, qbftMessage)
+	signedSSVMessage.FullData = fullData
+
+	return signedSSVMessage
+}
+
+func generateMultiSignedMessage(
+	ks *spectestingutils.TestKeySet,
+	identifier spectypes.MessageID,
+	slot phase0.Slot,
+	opts ...func(message *specqbft.Message),
+) *spectypes.SignedSSVMessage {
+	fullData := spectestingutils.TestingQBFTFullData
+	height := specqbft.Height(slot)
+
+	qbftMessage := &specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
+		Height:     height,
+		Round:      specqbft.FirstRound,
+		Identifier: identifier[:],
+		Root:       sha256.Sum256(fullData),
+
+		RoundChangeJustification: [][]byte{},
+		PrepareJustification:     [][]byte{},
+	}
+
+	for _, opt := range opts {
+		opt(qbftMessage)
+	}
+
+	signedSSVMessage := spectestingutils.MultiSignQBFTMsg(
+		[]*rsa.PrivateKey{ks.OperatorKeys[1], ks.OperatorKeys[2], ks.OperatorKeys[3]},
+		[]spectypes.OperatorID{1, 2, 3},
+		qbftMessage,
+	)
+	signedSSVMessage.FullData = fullData
+
+	return signedSSVMessage
+}
+
+var generateRandaoMsg = func(
+	sk *bls.SecretKey,
+	id spectypes.OperatorID,
+	epoch phase0.Epoch,
+	slot phase0.Slot,
+) *spectypes.PartialSignatureMessages {
+	signer := spectestingutils.NewTestingKeyManager()
+	beacon := spectestingutils.NewTestingBeaconNode()
+	d, _ := beacon.DomainData(epoch, spectypes.DomainRandao)
+	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(epoch), d, sk.GetPublicKey().Serialize(), spectypes.DomainRandao)
+
+	msgs := spectypes.PartialSignatureMessages{
+		Type:     spectypes.RandaoPartialSig,
+		Slot:     slot,
+		Messages: []*spectypes.PartialSignatureMessage{},
+	}
+	msgs.Messages = append(msgs.Messages, &spectypes.PartialSignatureMessage{
+		PartialSignature: signed[:],
+		SigningRoot:      root,
+		Signer:           id,
+		ValidatorIndex:   spectestingutils.TestingValidatorIndex,
+	})
+
+	return &msgs
 }

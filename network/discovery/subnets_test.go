@@ -10,7 +10,7 @@ func TestNsToSubnet(t *testing.T) {
 	tests := []struct {
 		name        string
 		ns          string
-		expected    int
+		expected    uint64
 		expectedErr string
 		isSubnet    bool
 	}{
@@ -59,7 +59,6 @@ func TestNsToSubnet(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.isSubnet, isSubnet(test.ns))
 

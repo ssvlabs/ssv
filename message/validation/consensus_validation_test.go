@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
 func TestMessageValidator_currentEstimatedRound(t *testing.T) {
@@ -94,10 +94,10 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			mv := &messageValidator{}
-			got := mv.currentEstimatedRound(tc.sinceSlotStart)
+			got, err := mv.currentEstimatedRound(tc.sinceSlotStart)
+			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
 	}

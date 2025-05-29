@@ -3,20 +3,28 @@ package duties
 import (
 	"context"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
-//go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
-
-// ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
-type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
+//go:generate go tool -modfile=../../tool.mod mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
+	Setup(
+		name string,
+		logger *zap.Logger,
+		beaconNode BeaconNode,
+		executionClient ExecutionClient,
+		beaconConfig networkconfig.Beacon,
+		validatorProvider ValidatorProvider,
+		validatorController ValidatorController,
+		dutiesExecutor DutiesExecutor,
+		slotTickerProvider slotticker.Provider,
+		reorgEvents chan ReorgEvent,
+		indicesChange chan struct{},
+	)
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
@@ -25,15 +33,16 @@ type dutyHandler interface {
 type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
-	network             networkconfig.NetworkConfig
+	executionClient     ExecutionClient
+	beaconConfig        networkconfig.Beacon
+	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
-	executeDuties       ExecuteDutiesFunc
+	dutiesExecutor      DutiesExecutor
 	ticker              slotticker.SlotTicker
 
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
 
-	fetchFirst     bool
 	indicesChanged bool
 }
 
@@ -41,18 +50,22 @@ func (h *baseHandler) Setup(
 	name string,
 	logger *zap.Logger,
 	beaconNode BeaconNode,
-	network networkconfig.NetworkConfig,
+	executionClient ExecutionClient,
+	beaconConfig networkconfig.Beacon,
+	validatorProvider ValidatorProvider,
 	validatorController ValidatorController,
-	executeDuties ExecuteDutiesFunc,
+	dutiesExecutor DutiesExecutor,
 	slotTickerProvider slotticker.Provider,
 	reorgEvents chan ReorgEvent,
 	indicesChange chan struct{},
 ) {
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
-	h.network = network
+	h.executionClient = executionClient
+	h.beaconConfig = beaconConfig
+	h.validatorProvider = validatorProvider
 	h.validatorController = validatorController
-	h.executeDuties = executeDuties
+	h.dutiesExecutor = dutiesExecutor
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
@@ -63,6 +76,6 @@ func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
 		"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", dutyType))
 }
 
-func (b *baseHandler) HandleInitialDuties(context.Context) {
+func (h *baseHandler) HandleInitialDuties(context.Context) {
 	// Do nothing
 }
