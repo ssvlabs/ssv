@@ -189,7 +189,7 @@ type controller struct {
 	syncCommRoots   *ttlcache.Cache[phase0.Root, struct{}]
 	beaconVoteRoots *ttlcache.Cache[validator.BeaconVoteCacheKey, struct{}]
 
-	domainCache *validator.DomainProvider
+	domainProvider *validator.DomainProvider
 
 	indicesChange   chan struct{}
 	validatorExitCh chan duties.ExitDescriptor
@@ -271,7 +271,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		syncCommRoots: ttlcache.New(
 			ttlcache.WithTTL[phase0.Root, struct{}](cacheTTL),
 		),
-		domainCache: validator.NewDomainCache(options.Beacon, cacheTTL),
+		domainProvider: validator.NewDomainProvider(options.Beacon, cacheTTL),
 		beaconVoteRoots: ttlcache.New(
 			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
 		),
@@ -286,7 +286,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	// Delete old root and domain entries.
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
-	go ctrl.domainCache.Start()
+	go ctrl.domainProvider.Start()
 	go ctrl.beaconVoteRoots.Start()
 
 	return &ctrl
@@ -407,7 +407,7 @@ func (c *controller) getCommitteeObserver(msgID spectypes.MessageID) *committeeO
 		NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
 		AttesterRoots:     c.attesterRoots,
 		SyncCommRoots:     c.syncCommRoots,
-		DomainCache:       c.domainCache,
+		DomainCache:       c.domainProvider,
 		BeaconVoteRoots:   c.beaconVoteRoots,
 	}
 	newObserver := &committeeObserver{

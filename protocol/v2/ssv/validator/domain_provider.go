@@ -20,8 +20,8 @@ type domainCacheKey struct {
 	DomainType phase0.DomainType
 }
 
-// NewDomainCache must be Start()-ed the same way as ttlcache.
-func NewDomainCache(beaconNode beacon.BeaconNode, ttl time.Duration) *DomainProvider {
+// NewDomainProvider must be Start()-ed the same way as ttlcache.
+func NewDomainProvider(beaconNode beacon.BeaconNode, ttl time.Duration) *DomainProvider {
 	return &DomainProvider{
 		beaconNode: beaconNode,
 		cache: ttlcache.New(
