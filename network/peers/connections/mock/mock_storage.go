@@ -1,14 +1,13 @@
 package mock
 
 import (
-	"bytes"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/operator/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -50,9 +49,9 @@ func (m NodeStorage) DropRegistryData() error {
 	panic("unexpected DropRegistryData call")
 }
 
-func (m NodeStorage) GetOperatorDataByPubKey(txn basedb.Reader, operatorPublicKeyPEM []byte) (*registrystorage.OperatorData, bool, error) {
+func (m NodeStorage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
 	for _, current := range m.RegisteredOperatorPublicKeyPEMs {
-		if bytes.Equal([]byte(current), operatorPublicKeyPEM) {
+		if current == operatorPubKey {
 			return &registrystorage.OperatorData{}, true, nil
 		}
 	}

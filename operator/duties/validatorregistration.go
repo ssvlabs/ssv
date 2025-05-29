@@ -5,12 +5,13 @@ import (
 	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // frequencyEpochs defines how frequently we want to submit validator-registrations.
-const frequencyEpochs = uint64(10)
+const frequencyEpochs = 10
 
 type ValidatorRegistrationHandler struct {
 	baseHandler
@@ -38,7 +39,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	defer h.logger.Info("duty handler exited")
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
-	registrationSlots := h.network.SlotsPerEpoch() * frequencyEpochs
+	registrationSlots := h.beaconConfig.GetSlotsPerEpoch() * frequencyEpochs
 
 	next := h.ticker.Next()
 	for {
@@ -49,7 +50,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			shares := h.validatorProvider.SelfValidators()
 
 			var vrs []ValidatorRegistration

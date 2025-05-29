@@ -97,7 +97,7 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, err)
 
 	pkstr := base64.StdEncoding.EncodeToString(opPubKey)
-	pckd, err := eventparser.PackOperatorPublicKey([]byte(pkstr))
+	pckd, err := eventparser.PackOperatorPublicKey(pkstr)
 	require.NoError(t, err)
 
 	// Generate test chain after a connection to the server.
@@ -221,13 +221,13 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.O
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, []byte(encodedPubKey))
+	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: []byte(encodedPubKey),
+			PublicKey: encodedPubKey,
 		}
 	}
 

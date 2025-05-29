@@ -16,12 +16,10 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -34,8 +32,7 @@ type CommitteeObserver struct {
 	msgID             spectypes.MessageID
 	logger            *zap.Logger
 	Storage           *storage.ParticipantStores
-	beaconNetwork     beacon.BeaconNetwork
-	networkConfig     networkconfig.NetworkConfig
+	beaconConfig      networkconfig.Beacon
 	ValidatorStore    registrystorage.ValidatorStore
 	newDecidedHandler qbftcontroller.NewDecidedHandler
 	rootsMtx          sync.RWMutex
@@ -62,7 +59,7 @@ type BeaconVoteCacheKey struct {
 type CommitteeObserverOptions struct {
 	FullNode          bool
 	Logger            *zap.Logger
-	NetworkConfig     networkconfig.NetworkConfig
+	BeaconConfig      networkconfig.Beacon
 	Network           specqbft.Network
 	Storage           *storage.ParticipantStores
 	Operator          *spectypes.CommitteeMember
@@ -82,8 +79,7 @@ func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptio
 		msgID:             msgID,
 		logger:            opts.Logger,
 		Storage:           opts.Storage,
-		beaconNetwork:     opts.NetworkConfig.Beacon,
-		networkConfig:     opts.NetworkConfig,
+		beaconConfig:      opts.BeaconConfig,
 		ValidatorStore:    opts.ValidatorStore,
 		newDecidedHandler: opts.NewDecidedHandler,
 		attesterRoots:     opts.AttesterRoots,
@@ -359,7 +355,7 @@ func (o *CommitteeObserver) OnProposalMsg(ctx context.Context, msg *queue.SSVMes
 		return nil
 	}
 
-	epoch := o.beaconNetwork.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
+	epoch := o.beaconConfig.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
 	o.rootsMtx.Lock()
 	defer o.rootsMtx.Unlock()
@@ -420,7 +416,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 
 func (o *CommitteeObserver) postConsensusContainerCapacity() int {
 	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
-	return int(o.networkConfig.SlotsPerEpoch()) + int(validation.LateSlotAllowance)
+	return int(o.beaconConfig.GetSlotsPerEpoch()) + int(validation.LateSlotAllowance)
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {

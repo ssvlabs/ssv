@@ -3,14 +3,12 @@ package ekm
 import (
 	"context"
 
-	eth2api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/stretchr/testify/mock"
 
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -51,26 +49,6 @@ func (m *MockRemoteSigner) OperatorSign(ctx context.Context, payload []byte) ([]
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]byte), args.Error(1)
-}
-
-type MockConsensusClient struct {
-	mock.Mock
-}
-
-func (m *MockConsensusClient) ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) {
-	args := m.Called(ctx, epoch)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*phase0.Fork), args.Error(1)
-}
-
-func (m *MockConsensusClient) Genesis(ctx context.Context) (*eth2api.Genesis, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*eth2api.Genesis), args.Error(1)
 }
 
 type MockBeaconNetwork struct {
