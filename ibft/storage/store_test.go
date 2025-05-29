@@ -42,7 +42,7 @@ func TestRemoveSlot(t *testing.T) {
 	slotTickerProvider := func() slotticker.SlotTicker { return ticker }
 
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -131,7 +131,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	ticker.EXPECT().Next().Return(nil).MaxTimes(1)
 
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -392,7 +392,7 @@ func Test_saveParticipantsJob(t *testing.T) {
 		return phase0.Slot(1)
 	}).AnyTimes()
 
-	st := New(zap.NewNop(), db, role, networkconfig.HoleskyStage, slotTickerProvider)
+	st := New(zap.NewNop(), db, role, networkconfig.TestNetwork, slotTickerProvider)
 
 	ps := st.(*participantStorage)
 	ps.cachedParticipants.participants[spectypes.ValidatorPK{1}] = []spectypes.OperatorID{1}

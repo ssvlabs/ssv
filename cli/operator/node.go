@@ -413,18 +413,18 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.BNRoleVoluntaryExit,
 		}
 
-		storageMap := ibftstorage.NewStores()
-
-		for _, storageRole := range storageRoles {
-			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole, networkConfig, slotTickerProvider)
-			storageMap.Add(storageRole, s)
-		}
-
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
 				SlotDuration: networkConfig.SlotDuration,
 				GenesisTime:  networkConfig.GenesisTime,
 			})
+		}
+
+		storageMap := ibftstorage.NewStores()
+
+		for _, storageRole := range storageRoles {
+			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole, networkConfig, slotTickerProvider)
+			storageMap.Add(storageRole, s)
 		}
 
 		if cfg.SSVOptions.ValidatorOptions.Exporter {

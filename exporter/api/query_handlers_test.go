@@ -223,7 +223,7 @@ func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectype
 
 	storageMap := qbftstorage.NewStores()
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(logger, db, role, networkconfig.HoleskyStage, slotTickerProvider))
+		storageMap.Add(role, qbftstorage.New(logger, db, role, networkconfig.TestNetwork, slotTickerProvider))
 	}
 
 	return sExporter, storageMap

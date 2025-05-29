@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
@@ -48,5 +48,5 @@ func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
 			GenesisTime:  time.Now(),
 		})
 	}
-	return qbftstorage.NewStoresFromRoles(logger, networkconfig.HoleskyStage, getDB(logger), slotTickerProvider, allRoles...)
+	return qbftstorage.NewStoresFromRoles(logger, networkconfig.TestNetwork, getDB(logger), slotTickerProvider, allRoles...)
 }

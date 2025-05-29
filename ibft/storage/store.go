@@ -49,7 +49,7 @@ func New(logger *zap.Logger, db basedb.Database, prefix spectypes.BeaconRole, ne
 		prefix: []byte{role},
 		db:     db,
 		cachedParticipants: CachedParticipants{
-			slot:         netCfg.Beacon.EstimatedCurrentSlot(),
+			slot:         netCfg.EstimatedCurrentSlot(),
 			participants: make(map[spectypes.ValidatorPK][]spectypes.OperatorID),
 		},
 	}
