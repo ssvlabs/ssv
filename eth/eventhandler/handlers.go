@@ -1,7 +1,6 @@
 package eventhandler
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -12,12 +11,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -47,12 +47,12 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		fields.TxHash(event.Raw.TxHash),
 		fields.OperatorID(event.OperatorId),
 		fields.Owner(event.Owner),
-		fields.OperatorPubKey(event.PublicKey),
+		fields.OperatorPubKey(string(event.PublicKey)),
 	)
 	logger.Debug("processing event")
 
 	od := &registrystorage.OperatorData{
-		PublicKey:    event.PublicKey,
+		PublicKey:    string(event.PublicKey),
 		OwnerAddress: event.Owner,
 		ID:           event.OperatorId,
 	}
@@ -69,7 +69,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	}
 
 	// throw an error if there is an existing operator with the same public key
-	operatorData, pubkeyExists, err := eh.nodeStorage.GetOperatorDataByPubKey(txn, event.PublicKey)
+	operatorData, pubkeyExists, err := eh.nodeStorage.GetOperatorDataByPubKey(txn, string(event.PublicKey))
 	if err != nil {
 		return fmt.Errorf("could not get operator data by public key: %w", err)
 	}
@@ -88,7 +88,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return nil
 	}
 
-	if bytes.Equal(event.PublicKey, eh.operatorDataStore.GetOperatorData().PublicKey) {
+	if string(event.PublicKey) == eh.operatorDataStore.GetOperatorData().PublicKey {
 		eh.operatorDataStore.SetOperatorData(od)
 		logger = logger.With(zap.Bool("own_operator", true))
 	}
@@ -257,7 +257,7 @@ func (eh *EventHandler) handleShareCreation(
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
-		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
+		share.SetMinParticipationEpoch(eh.networkConfig.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	// Save share to DB.
@@ -320,7 +320,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		encryptedKey = encryptedKeys[i]
 	}
 
-	validatorShare.DomainType = eh.networkConfig.DomainType
+	validatorShare.DomainType = eh.networkConfig.GetDomainType()
 	validatorShare.Committee = shareMembers
 
 	return &validatorShare, encryptedKey, nil
@@ -434,7 +434,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
-		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
+		share.SetMinParticipationEpoch(eh.networkConfig.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
 	if len(enabledPubKeys) > 0 {

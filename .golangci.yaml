@@ -103,7 +103,6 @@ linters:
     govet:
       enable:
         - atomicalign
-      disable:
         - shadow
       enable-all: false
       disable-all: false

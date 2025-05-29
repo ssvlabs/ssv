@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -129,7 +128,7 @@ func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
-	ctx := context.Background()
+	ctx := r.Context()
 	var resp healthCheckJSON
 
 	// Retrieve P2P listen addresses.

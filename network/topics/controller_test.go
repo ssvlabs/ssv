@@ -56,7 +56,7 @@ func TestTopicManager(t *testing.T) {
 			"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 			"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		validator := &DummyMessageValidator{}
@@ -75,7 +75,7 @@ func TestTopicManager(t *testing.T) {
 			"a5abb232568fc869765da01688387738153f3ad6cc4e635ab282c5d5cfce2bba2351f03367103090804c5243dc8e229b",
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		ctrl := gomock.NewController(t)
@@ -385,7 +385,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	var p *P
 	var midHandler topics.MsgIDHandler
 	if msgID {
-		midHandler = topics.NewMsgIDHandler(ctx, networkconfig.TestNetwork, 2*time.Minute)
+		midHandler = topics.NewMsgIDHandler(ctx, 2*time.Minute)
 		go midHandler.Start()
 	}
 	cfg := &topics.PubSubConfig{
@@ -399,7 +399,6 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		Scoring: &topics.ScoringConfig{
 			IPWhitelist:        nil,
 			IPColocationWeight: 0,
-			OneEpochDuration:   time.Minute,
 		},
 		MsgValidator:           msgValidator,
 		ScoreInspector:         scoreInspector,
