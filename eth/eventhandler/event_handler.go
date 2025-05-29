@@ -66,7 +66,7 @@ type EventHandler struct {
 	nodeStorage         nodestorage.Storage
 	taskExecutor        taskExecutor
 	eventParser         eventparser.Parser
-	networkConfig       networkconfig.NetworkConfig
+	networkConfig       networkconfig.Network
 	operatorDataStore   operatordatastore.OperatorDataStore
 	operatorDecrypter   keys.OperatorDecrypter
 	keyManager          ekm.KeyManager
@@ -80,7 +80,7 @@ func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
-	networkConfig networkconfig.NetworkConfig,
+	networkConfig networkconfig.Network,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,

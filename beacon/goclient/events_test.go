@@ -8,13 +8,11 @@ import (
 	"time"
 
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSubscribeToHeadEvents(t *testing.T) {
@@ -85,10 +83,8 @@ func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 		zap.NewNop(),
 		Options{
 			BeaconNodeAddr: serverURL,
-			Network:        beacon.NewNetwork(types.MainNetwork),
 		},
 		mocks.NewValidatorStore(),
-		mocks.NewSlotTickerProvider,
 	)
 
 	require.NoError(t, err)

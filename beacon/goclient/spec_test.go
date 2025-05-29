@@ -1,20 +1,18 @@
 package goclient
 
 import (
-	"context"
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-func TestSpec(t *testing.T) {
-	ctx := context.Background()
+func Test_specForClient(t *testing.T) {
+	ctx := t.Context()
 
 	t.Run("success", func(t *testing.T) {
 		mockServer := mocks.MockServer(nil)
@@ -24,17 +22,16 @@ func TestSpec(t *testing.T) {
 			ctx,
 			zap.NewNop(),
 			Options{
-				Network:        beacon.NewNetwork(types.MainNetwork),
+				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
 			mocks.NewValidatorStore(),
-			mocks.NewSlotTickerProvider,
 		)
 		require.NoError(t, err)
 
-		spec, err := client.Spec(ctx)
+		spec, err := specForClient(ctx, client.log, client.multiClient)
 		require.NoError(t, err)
 		require.NotNil(t, spec)
 

@@ -1,7 +1,6 @@
 package topics
 
 import (
-	"context"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -61,7 +60,7 @@ func TestMsgValidator(t *testing.T) {
 
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
+	slot := networkconfig.TestNetwork.EstimatedCurrentSlot()
 
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]
@@ -70,7 +69,7 @@ func TestMsgValidator(t *testing.T) {
 	require.NoError(t, err)
 
 	od := &storage.OperatorData{
-		PublicKey:    []byte(operatorPubKey),
+		PublicKey:    operatorPubKey,
 		OwnerAddress: common.Address{},
 		ID:           operatorID,
 	}
@@ -105,7 +104,7 @@ func TestMsgValidator(t *testing.T) {
 				Data:  encodedMsg,
 			},
 		}
-		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(t.Context(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})
 
@@ -133,13 +132,13 @@ func TestMsgValidator(t *testing.T) {
 				Data:  encodedMsg,
 			},
 		}
-		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(t.Context(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationIgnore, res)
 	})
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
-		res := mv.Validate(context.Background(), "xxxx", pmsg)
+		res := mv.Validate(t.Context(), "xxxx", pmsg)
 		require.Equal(t, pubsub.ValidationReject, res)
 	})
 
@@ -167,7 +166,7 @@ func TestMsgValidator(t *testing.T) {
 				Data:  encodedMsg,
 			},
 		}
-		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(t.Context(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationIgnore, res)
 	})
 }

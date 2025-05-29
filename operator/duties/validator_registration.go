@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -12,7 +13,7 @@ import (
 )
 
 // frequencyEpochs defines how frequently we want to submit validator-registrations.
-const frequencyEpochs = uint64(10)
+const frequencyEpochs = 10
 
 type RegistrationDescriptor struct {
 	ValidatorIndex  phase0.ValidatorIndex
@@ -47,7 +48,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	defer h.logger.Info("duty handler exited")
 
 	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
-	registrationSlots := h.network.SlotsPerEpoch() * frequencyEpochs
+	registrationSlots := h.beaconConfig.GetSlotsPerEpoch() * frequencyEpochs
 
 	next := h.ticker.Next()
 	for {
@@ -58,7 +59,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			shares := h.validatorProvider.SelfValidators()
 
 			for _, share := range shares {
@@ -140,7 +141,7 @@ func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumbe
 		return 0, fmt.Errorf("request block %d from execution client: %w", blockNumber, err)
 	}
 
-	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time())) // #nosec G115
+	blockSlot = h.beaconConfig.EstimatedSlotAtTime(time.Unix(int64(block.Time()), 0)) // #nosec G115
 
 	h.blockSlots[blockNumber] = blockSlot
 

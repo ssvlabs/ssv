@@ -156,17 +156,20 @@ func (n *p2pNetwork) SetupHost() error {
 	return nil
 }
 
-// SetupServices configures the required services
+// SetupServices configures the required services.
+// IMPORTANT: setupPeerServices must be invoked before setupPubsub to ensure n.idx is correctly initialized.
 func (n *p2pNetwork) SetupServices() error {
 	if err := n.setupStreamCtrl(); err != nil {
 		return errors.Wrap(err, "could not setup stream controller")
 	}
-	_, err := n.setupPubsub()
-	if err != nil {
-		return errors.Wrap(err, "could not setup topic controller")
-	}
+
 	if err := n.setupPeerServices(); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
+	}
+	_, err := n.setupPubsub()
+
+	if err != nil {
+		return errors.Wrap(err, "could not setup topic controller")
 	}
 	if err := n.setupDiscovery(); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
@@ -186,7 +189,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	if err != nil {
 		return err
 	}
-	d := n.cfg.Network.DomainType
+	d := n.cfg.NetworkConfig.DomainType
 	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
@@ -215,7 +218,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
-		newDomain := n.cfg.Network.DomainType
+		newDomain := n.cfg.NetworkConfig.DomainType
 		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(newDomainString),
@@ -234,7 +237,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			SubnetsIdx:      n.idx,
 			IDService:       ids,
 			Network:         n.host.Network(),
-			DomainType:      n.cfg.Network.DomainType,
+			DomainType:      n.cfg.NetworkConfig.DomainType,
 			SubnetsProvider: n.ActiveSubnets,
 		}, filters)
 
@@ -291,7 +294,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		SubnetsIdx:          n.idx,
 		HostAddress:         n.cfg.HostAddress,
 		HostDNS:             n.cfg.HostDNS,
-		NetworkConfig:       n.cfg.Network,
+		SSVConfig:           n.cfg.NetworkConfig.SSVConfig,
 		DiscoveredPeersPool: n.discoveredPeersPool,
 		TrimmedRecently:     n.trimmedRecently,
 	}
@@ -308,7 +311,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	cfg := &topics.PubSubConfig{
-		NetworkConfig: n.cfg.Network,
+		NetworkConfig: n.cfg.NetworkConfig,
 		Host:          n.host,
 		TraceLog:      n.cfg.PubSubTrace,
 		MsgValidator:  n.msgValidator,
@@ -332,7 +335,7 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 		cfg.ScoreIndex = nil
 	}
 
-	midHandler := topics.NewMsgIDHandler(n.ctx, n.cfg.Network, time.Minute*2)
+	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
 	n.msgResolver = midHandler
 	cfg.MsgIDHandler = midHandler
 	go cfg.MsgIDHandler.Start()

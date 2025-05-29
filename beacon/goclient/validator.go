@@ -87,27 +87,29 @@ func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvide
 		case <-ctx.Done():
 			return
 		case <-ticker.Next():
+			config := gc.getBeaconConfig()
+
 			currentSlot := ticker.Slot()
-			currentEpoch := gc.network.EstimatedEpochAtSlot(currentSlot)
-			slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
+			currentEpoch := config.EstimatedEpochAtSlot(currentSlot)
+			slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch
 
 			// Select registrations to submit.
 			targetRegs := make(map[phase0.BLSPubKey]*validatorRegistration, 0)
 			gc.registrationMu.Lock()
-			// 1. find & add validators participating in 10th epoch from now
+			// 1. find and add validators participating in the 10th epoch from now
 			shares := gc.validatorStore.SelfParticipatingValidators(currentEpoch + 10)
 			for _, share := range shares {
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey[:])
 				r, ok := gc.registrations[pk]
 				if !ok {
-					// we haven't constructed corresponding validator registration for submission yet,
+					// we haven't constructed the corresponding validator registration for submission yet,
 					// so just skip it for now
 					continue
 				}
 				targetRegs[pk] = r
 			}
-			// 2. find & add newly created validator registrations
+			// 2. find and add newly created validator registrations
 			for pk, r := range gc.registrations {
 				if r.new {
 					targetRegs[pk] = r
@@ -125,7 +127,7 @@ func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvide
 
 				// Distribute the registrations evenly across the epoch based on the pubkeys.
 				validatorDescriptor := xxhash.Sum64(validatorPk[:])
-				shouldSubmit := validatorDescriptor%gc.network.SlotsPerEpoch() == slotInEpoch
+				shouldSubmit := validatorDescriptor%config.SlotsPerEpoch == slotInEpoch
 
 				if r.new || shouldSubmit {
 					r.new = false

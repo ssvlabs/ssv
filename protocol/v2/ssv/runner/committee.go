@@ -19,12 +19,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var (
@@ -51,7 +52,7 @@ type CommitteeRunner struct {
 }
 
 func NewCommitteeRunner(
-	networkConfig networkconfig.NetworkConfig,
+	networkConfig networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
@@ -68,8 +69,7 @@ func NewCommitteeRunner(
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
-			DomainType:     networkConfig.DomainType,
-			BeaconNetwork:  networkConfig.Beacon.GetBeaconNetwork(),
+			NetworkConfig:  networkConfig,
 			Share:          share,
 			QBFTController: qbftController,
 		},
@@ -231,8 +231,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	totalSyncCommitteeDuties := 0
 	blockedAttesterDuties := 0
 
-	epoch := cr.beacon.GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
-	version := cr.beacon.DataVersion(epoch)
+	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	version, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
@@ -321,7 +321,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID: spectypes.NewMsgID(
-			cr.BaseRunner.DomainType,
+			cr.BaseRunner.NetworkConfig.GetDomainType(),
 			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),
@@ -517,7 +517,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if attestationsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
 				uint32(attestationsCount),
-				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
 				spectypes.BNRoleAttester)
 		}
 
@@ -527,7 +527,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			// TODO return error?
 		}
 		logger.Info("✅ successfully submitted attestations",
-			fields.Epoch(cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
+			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
@@ -562,7 +562,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if syncMsgsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
 				uint32(syncMsgsCount),
-				cr.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
 				spectypes.BNRoleSyncCommittee)
 		}
 
@@ -686,9 +686,9 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 	}
 
 	slot := duty.DutySlot()
-	epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
+	epoch := cr.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
 
-	dataVersion := cr.beacon.DataVersion(epoch)
+	dataVersion, _ := cr.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {
@@ -700,7 +700,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 		}
 		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
 		slot := validatorDuty.DutySlot()
-		epoch := cr.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
+		epoch := cr.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			// Attestation object
