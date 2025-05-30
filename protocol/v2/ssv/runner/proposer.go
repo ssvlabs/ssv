@@ -67,11 +67,12 @@ func NewProposerRunner(
 		return nil, errors.New("must have one share")
 	}
 
-	// Validate proposerDelay value, for details on how this value should be chosen see:
+	// Cap proposerDelay value to make sure we don't miss block proposals, for details
+	// on how this value should be chosen see:
 	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration
 	const maxReasonableProposerDelay = 1650 * time.Millisecond
 	if proposerDelay > maxReasonableProposerDelay {
-		return nil, fmt.Errorf("chosen ProposerDelay value is too high: %s, max reasonable allowed value: %s", proposerDelay, maxReasonableProposerDelay)
+		proposerDelay = maxReasonableProposerDelay
 	}
 
 	return &ProposerRunner{
