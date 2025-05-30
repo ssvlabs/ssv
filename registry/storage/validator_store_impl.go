@@ -330,27 +330,27 @@ func (s *validatorStoreImpl) GetCommittee(id spectypes.CommitteeID) (*CommitteeS
 	panic("implement me")
 }
 
-func (s *validatorStoreImpl) GetAllValidators() []ValidatorSnapshot {
+func (s *validatorStoreImpl) GetAllValidators() []*ValidatorSnapshot {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *validatorStoreImpl) GetOperatorValidators(operatorID spectypes.OperatorID) []ValidatorSnapshot {
+func (s *validatorStoreImpl) GetOperatorValidators(operatorID spectypes.OperatorID) []*ValidatorSnapshot {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *validatorStoreImpl) GetParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []ValidatorSnapshot {
+func (s *validatorStoreImpl) GetParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *validatorStoreImpl) GetCommittees() []CommitteeSnapshot {
+func (s *validatorStoreImpl) GetCommittees() []*CommitteeSnapshot {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (s *validatorStoreImpl) GetOperatorCommittees(operatorID spectypes.OperatorID) []CommitteeSnapshot {
+func (s *validatorStoreImpl) GetOperatorCommittees(operatorID spectypes.OperatorID) []*CommitteeSnapshot {
 	//TODO implement me
 	panic("implement me")
 }
@@ -360,7 +360,7 @@ func (s *validatorStoreImpl) RegisterSyncCommitteeInfo(info []SyncCommitteeInfo)
 	panic("implement me")
 }
 
-func (s *validatorStoreImpl) GetSyncCommitteeValidators(period uint64) []ValidatorSnapshot {
+func (s *validatorStoreImpl) GetSyncCommitteeValidators(period uint64) []*ValidatorSnapshot {
 	//TODO implement me
 	panic("implement me")
 }

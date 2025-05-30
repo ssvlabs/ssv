@@ -72,7 +72,7 @@ type ParticipationStatus struct {
 type CommitteeSnapshot struct {
 	ID         spectypes.CommitteeID
 	Operators  []spectypes.OperatorID
-	Validators []ValidatorSnapshot
+	Validators []*ValidatorSnapshot
 }
 
 // SyncCommitteeInfo tracks sync committee participation.

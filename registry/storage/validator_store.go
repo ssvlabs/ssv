@@ -26,14 +26,14 @@ type ValidatorStore interface {
 
 	GetValidator(id ValidatorID) (*ValidatorSnapshot, bool)
 	GetCommittee(id spectypes.CommitteeID) (*CommitteeSnapshot, bool)
-	GetAllValidators() []ValidatorSnapshot
-	GetOperatorValidators(operatorID spectypes.OperatorID) []ValidatorSnapshot
-	GetParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []ValidatorSnapshot
-	GetCommittees() []CommitteeSnapshot
-	GetOperatorCommittees(operatorID spectypes.OperatorID) []CommitteeSnapshot
+	GetAllValidators() []*ValidatorSnapshot
+	GetOperatorValidators(operatorID spectypes.OperatorID) []*ValidatorSnapshot
+	GetParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot
+	GetCommittees() []*CommitteeSnapshot
+	GetOperatorCommittees(operatorID spectypes.OperatorID) []*CommitteeSnapshot
 
 	RegisterSyncCommitteeInfo(info []SyncCommitteeInfo) error
-	GetSyncCommitteeValidators(period uint64) []ValidatorSnapshot
+	GetSyncCommitteeValidators(period uint64) []*ValidatorSnapshot
 }
 
 // ParticipationOptions filters participating validators.
