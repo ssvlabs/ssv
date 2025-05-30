@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -22,9 +24,10 @@ import (
 const DefaultRequestTimeout = 10 * time.Second
 
 type Client struct {
-	logger     *zap.Logger
-	baseURL    string
-	httpClient *http.Client
+	logger                *zap.Logger
+	baseURL               string
+	httpClient            *http.Client
+	processedFirstRequest atomic.Bool
 }
 
 // ClientOption is used to handle client options.
@@ -136,8 +139,27 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(shares))
 	}
 
+	defer func() {
+		c.processedFirstRequest.Store(true)
+	}()
+
 	for _, data := range resp.Data {
-		if data.Status != web3signer.StatusImported {
+		allowedStatuses := []web3signer.Status{
+			web3signer.StatusImported,
+		}
+
+		if !c.processedFirstRequest.Load() {
+			// A failed request does not guarantee that the keys were not added.
+			// It's possible that the ssv-signer successfully added the keys,
+			// but a network error occurred before a response could be received.
+			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
+			// In such cases, the node would crash and, upon restarting, encounter a duplicate key error.
+			// To handle this gracefully,
+			// we allow the first request to return a duplicate key error without treating it as a failure.
+			allowedStatuses = append(allowedStatuses, web3signer.StatusDuplicated)
+		}
+
+		if !slices.Contains(allowedStatuses, data.Status) {
 			return fmt.Errorf("unexpected status %s", data.Status)
 		}
 	}
@@ -173,9 +195,28 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(pubKeys))
 	}
 
+	defer func() {
+		c.processedFirstRequest.Store(true)
+	}()
+
 	for _, data := range resp.Data {
-		if data.Status != web3signer.StatusDeleted {
-			return fmt.Errorf("received status %s", data.Status)
+		allowedStatuses := []web3signer.Status{
+			web3signer.StatusDeleted,
+		}
+
+		if !c.processedFirstRequest.Load() {
+			// A failed request does not guarantee that the keys were not deleted.
+			// It's possible that the ssv-signer successfully deleted the keys,
+			// but a network error occurred before a response could be received.
+			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
+			// In such cases, the node would crash and, upon restarting, encounter a not found key error.
+			// To handle this gracefully,
+			// we allow the first request to return a not found key error without treating it as a failure.
+			allowedStatuses = append(allowedStatuses, web3signer.StatusNotFound)
+		}
+
+		if !slices.Contains(allowedStatuses, data.Status) {
+			return fmt.Errorf("unexpected status %s", data.Status)
 		}
 	}
 
