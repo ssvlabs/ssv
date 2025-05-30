@@ -7,7 +7,7 @@ import (
 )
 
 // AppName is the application name
-var AppName = "SSV-Noxdeaxxxxx"
+var AppName = "SSV-Noxdeaxxxxxx"
 
 // Version is the app version
 var Version = "latest"
