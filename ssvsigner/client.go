@@ -141,6 +141,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 
 	defer func() {
 		c.processedFirstRequest.Store(true)
+		c.logger.Debug("processed first request", zap.Bool("processedFirstRequest", c.processedFirstRequest.Load()))
 	}()
 
 	for _, data := range resp.Data {
@@ -148,6 +149,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 			web3signer.StatusImported,
 		}
 
+		c.logger.Debug("checking response status", zap.Bool("processedFirstRequest", c.processedFirstRequest.Load()))
 		if !c.processedFirstRequest.Load() {
 			// A failed request does not guarantee that the keys were not added.
 			// It's possible that the ssv-signer successfully added the keys,
