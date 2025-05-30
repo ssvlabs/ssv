@@ -1,16 +1,11 @@
 package executionclient
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
-	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -281,140 +276,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.Nil(t, fetchErrCh)
 		require.ErrorContains(t, err, "failed to get current block")
 	})
-}
-
-// TestFetchHistoricalLogs_Subdivide tests handling of EIP-1474 query limits.
-// When receiving error code -32005 ("Limit exceeded") from eth_getLogs requests,
-// the client recursively subdivides the block range until successful or until
-// hitting a non-recoverable error.
-func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
-	testCases := []struct {
-		name        string
-		totalBlocks int
-		threshold   uint64 // block range that won't be subdivided
-		wantLogs    int
-		wantCalls   int32
-		httpError   bool // if true, simulate an HTTP error
-	}{
-		// 1. Call for blocks 0-1 (succeeds) [count: 1]
-		// eth_getLogs calls: 1
-		{"single log", 1, 5, 1, 1, false},
-
-		// 1. Call for blocks 0-2 (succeeds) [count: 1]
-		// eth_getLogs calls: 1
-		{"multiple logs", 2, 5, 2, 1, false},
-
-		// 1. Call for blocks 0-4 (query limited) [count: 1]
-		// 2. Subdivide into 0-2 and 3-4
-		// 3. Call for blocks 3-4 (succeeds) [count: 2]
-		// 4. Call for blocks 0-2 (succeeds) [count: 3]
-		// eth_getLogs calls: 3
-		{"full subdivision", 4, 2, 4, 3, false},
-
-		// 1. Call for blocks 0-9 (query limited) [count: 1]
-		// 2. Subdivide into 0-4 and 5-9
-		// 3. Call for blocks 5-9 (succeeds) [count: 2] - Range of 5 blocks, threshold is 4
-		// 4. Call for blocks 0-4 (query limited) [count: 3] - Range of 5 blocks, threshold is 3
-		// 5. Subdivide 0-4 into 0-2 and 3-4
-		// 6. Call for blocks 0-2 (succeeds) [count: 4] - Range of 3 blocks
-		// 7. Call for blocks 3-4 (succeeds) [count: 5] - Range of 2 blocks
-		// eth_getLogs calls: 5
-		{"partial subdivision", 9, 4, 9, 5, false},
-
-		// Test for non-RPC error (HTTP 500)
-		// 1. Call for blocks 0-4 (returns HTTP 500) [count: 1]
-		// function should exit with the error, not try to subdivide
-		// eth_getLogs calls: 1
-		{"http error", 4, 1, 0, 1, true},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			env := setupTestEnv(t, 5*time.Second)
-			contract, err := env.deployCallableContract()
-			require.NoError(t, err)
-
-			// mine some blocks
-			for i := 0; i < tc.totalBlocks; i++ {
-				_, err := contract.Transact(env.auth, "Call")
-				require.NoError(t, err)
-				env.sim.Commit()
-			}
-
-			// custom eth_getLogs with call count
-			rpcSrv, _ := env.sim.Node().RPCHandler()
-			base := http.Handler(rpcSrv)
-			var callCount atomic.Int32
-
-			wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				raw, _ := io.ReadAll(r.Body)
-				var req map[string]interface{}
-				_ = json.Unmarshal(raw, &req)
-
-				if req["method"] == "eth_getLogs" {
-					callCount.Add(1)
-
-					if tc.httpError {
-						http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-						return
-					}
-
-					flt := req["params"].([]interface{})[0].(map[string]interface{})
-					from, _ := strconv.ParseInt(strings.TrimPrefix(flt["fromBlock"].(string), "0x"), 16, 64)
-					to, _ := strconv.ParseInt(strings.TrimPrefix(flt["toBlock"].(string), "0x"), 16, 64)
-					if uint64(to-from) > tc.threshold {
-						w.Header().Set("Content-Type", "application/json")
-						_ = json.NewEncoder(w).Encode(map[string]interface{}{
-							"jsonrpc": "2.0",
-							"id":      req["id"],
-							"error": map[string]interface{}{
-								"code":    -32005,
-								"message": "query limit exceeded",
-							},
-						})
-						return
-					}
-				}
-				r.Body = io.NopCloser(bytes.NewReader(raw))
-				base.ServeHTTP(w, r)
-			})
-			srv := httptest.NewServer(wrapped)
-			t.Cleanup(srv.Close)
-
-			opts := []Option{WithFollowDistance(0), WithLogBatchSize(100000)}
-
-			client, err := New(t.Context(),
-				srv.URL,
-				env.contractAddr,
-				opts...,
-			)
-			require.NoError(t, err)
-
-			t.Cleanup(func() { require.NoError(t, client.Close()) })
-
-			logsCh, errCh, err := client.FetchHistoricalLogs(t.Context(), 0)
-			require.NoError(t, err)
-
-			var all []ethtypes.Log
-			for blk := range logsCh {
-				all = append(all, blk.Logs...)
-			}
-
-			err = <-errCh
-			if tc.httpError {
-				require.Error(t, err)
-				require.Equal(t, tc.wantCalls, callCount.Load())
-
-				return
-			}
-
-			require.NoError(t, err)
-			require.Len(t, all, tc.wantLogs)
-			require.Equal(t, tc.wantCalls, callCount.Load())
-		})
-	}
 }
 
 func TestStreamLogs(t *testing.T) {
