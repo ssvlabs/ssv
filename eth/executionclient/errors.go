@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/gorilla/websocket"
 )
 
 var (
@@ -26,11 +27,15 @@ const (
 	errCodeQueryLimit = -32005
 )
 
-// isRPCQueryLimitError checks if the provided error is a query limit error.
-func isRPCQueryLimitError(err error) bool {
+// isQueryLimitError checks if the provided error is a query limit error.
+func isQueryLimitError(err error) bool {
 	var rpcErr rpc.Error
 	if errors.As(err, &rpcErr) {
 		return rpcErr.ErrorCode() == errCodeQueryLimit
+	}
+
+	if errors.Is(err, websocket.ErrReadLimit) {
+		return true
 	}
 
 	return false
