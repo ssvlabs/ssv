@@ -2,16 +2,12 @@ package p2pv1
 
 import (
 	"context"
-	"crypto"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"strconv"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -63,55 +59,6 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		}
 		topics = commons.CommitteeTopicID(val.CommitteeID())
 	}
-
-	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.logger.Debug("could not broadcast msg", fields.Topic(topic), zap.Error(err))
-			return fmt.Errorf("could not broadcast msg: %w", err)
-		}
-	}
-	return nil
-}
-
-// Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.PrivateKey, id spectypes.OperatorID) error {
-	if !n.isReady() {
-		return p2pprotocol.ErrNetworkIsNotReady
-	}
-
-	if !n.operatorDataStore.OperatorIDReady() {
-		return fmt.Errorf("operator ID is not ready")
-	}
-
-	encodedMsg, err := msg.Encode()
-	if err != nil {
-		return fmt.Errorf("could not encode signed ssv message: %w", err)
-	}
-
-	var permActiveEpoch phase0.Epoch
-
-	// permActiveEpoch = n.cfg.NetworkConfig.PermissionlessActivationEpoch
-
-	if n.cfg.NetworkConfig.EstimatedCurrentEpoch() > permActiveEpoch {
-
-		if pk == nil {
-			signature := [128]byte{1}
-
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, id, signature[:])
-		} else {
-			hash := sha256.Sum256(encodedMsg)
-
-			signature, err := rsa.SignPKCS1v15(nil, pk, crypto.SHA256, hash[:])
-			if err != nil {
-				return err
-			}
-
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, id, signature)
-		}
-	}
-
-	vpk := msg.GetID().GetPubKey()
-	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
