@@ -156,7 +156,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 			// In such cases, the node would crash and, upon restarting, encounter a duplicate key error.
 			// To handle this gracefully,
 			// we allow the first request to return a duplicate key error without treating it as a failure.
-			allowedStatuses = append(allowedStatuses, web3signer.StatusDuplicated)
+			allowedStatuses = append(allowedStatuses, web3signer.StatusDuplicate)
 		}
 
 		if !slices.Contains(allowedStatuses, data.Status) {

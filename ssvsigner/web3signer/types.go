@@ -19,12 +19,12 @@ type KeyManagerResponseData struct {
 type Status string
 
 const (
-	StatusImported   Status = "imported"
-	StatusDuplicated Status = "duplicate"
-	StatusDeleted    Status = "deleted"
-	StatusNotActive  Status = "not_active"
-	StatusNotFound   Status = "not_found"
-	StatusError      Status = "error"
+	StatusImported  Status = "imported"
+	StatusDuplicate Status = "duplicate"
+	StatusDeleted   Status = "deleted"
+	StatusNotActive Status = "not_active"
+	StatusNotFound  Status = "not_found"
+	StatusError     Status = "error"
 )
 
 type ForkInfo struct {
