@@ -10,7 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// ValidatorIndices is the authoritative source for all validator state management.
+// ValidatorStore is the authoritative source for all validator state management.
 // It handles all state transitions and provides thread-safe access to validator data.
 type ValidatorStore interface {
 	OnShareAdded(ctx context.Context, share *types.SSVShare) error

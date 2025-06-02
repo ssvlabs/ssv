@@ -135,6 +135,111 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 	return nil
 }
 
+func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SSVShare) error {
+	if share == nil {
+		return fmt.Errorf("nil share")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := hex.EncodeToString(share.ValidatorPubKey[:])
+	state, exists := s.validators[key]
+	if !exists {
+		return fmt.Errorf("validator not found: %s", key)
+	}
+
+	wasParticipating := s.shouldStart(state)
+
+	shareCopy := s.copyShare(share)
+
+	state.share = shareCopy
+	state.lastUpdated = time.Now()
+	state.participationStatus = s.calculateParticipationStatus(shareCopy)
+
+	// Update indices if beacon metadata changed
+	if share.HasBeaconMetadata() {
+		s.indices[share.ValidatorIndex] = share.ValidatorPubKey
+	}
+
+	// Update committee if needed
+	if err := s.updateShareInCommittee(shareCopy); err != nil {
+		return fmt.Errorf("update committee: %w", err)
+	}
+
+	// Capture new participation state after update
+	isParticipating := s.shouldStart(state)
+	newSnapshot := s.createSnapshot(state)
+
+	if s.callbacks.OnValidatorUpdated != nil {
+		go func() {
+			if err := s.callbacks.OnValidatorUpdated(ctx, newSnapshot); err != nil {
+				s.logger.Error("validator updated callback failed", zap.Error(err))
+			}
+		}()
+	}
+
+	if !wasParticipating && isParticipating && s.callbacks.OnValidatorStarted != nil {
+		go func() {
+			if err := s.callbacks.OnValidatorStarted(ctx, newSnapshot); err != nil {
+				s.logger.Error("validator started callback failed", zap.Error(err))
+			}
+		}()
+	} else if wasParticipating && !isParticipating && s.callbacks.OnValidatorStopped != nil {
+		go func() {
+			if err := s.callbacks.OnValidatorStopped(ctx, share.ValidatorPubKey); err != nil {
+				s.logger.Error("validator stopped callback failed", zap.Error(err))
+			}
+		}()
+	}
+
+	return nil
+}
+
+func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectypes.ValidatorPK) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := hex.EncodeToString(pubKey[:])
+	state, exists := s.validators[key]
+	if !exists {
+		return fmt.Errorf("validator not found: %s", key)
+	}
+
+	// Remove from indices
+	if state.share.HasBeaconMetadata() {
+		delete(s.indices, state.share.ValidatorIndex)
+	}
+
+	// Remove from committee
+	if err := s.removeShareFromCommittee(state.share); err != nil {
+		return fmt.Errorf("remove from committee: %w", err)
+	}
+
+	// Remove from validators map
+	delete(s.validators, key)
+
+	// Call callbacks
+	if s.callbacks.OnValidatorRemoved != nil {
+		go func() {
+			if err := s.callbacks.OnValidatorRemoved(ctx, pubKey); err != nil {
+				s.logger.Error("validator removed callback failed", zap.Error(err))
+			}
+		}()
+	}
+
+	// If was participating, also call stop callback
+	if s.shouldStart(state) && s.callbacks.OnValidatorStopped != nil {
+		go func() {
+			if err := s.callbacks.OnValidatorStopped(ctx, pubKey); err != nil {
+				s.logger.Error("validator stopped callback failed", zap.Error(err))
+			}
+		}()
+	}
+
+	return nil
+}
+
 // addShareToCommittee adds a share to its committee.
 // Requires: caller must hold write lock.
 func (s *validatorStoreImpl) addShareToCommittee(share *types.SSVShare) error {
@@ -163,6 +268,25 @@ func (s *validatorStoreImpl) addShareToCommittee(share *types.SSVShare) error {
 	}
 
 	committee.validators[share.ValidatorPubKey] = struct{}{}
+	return nil
+}
+
+// updateShareInCommittee updates a share in its committee.
+// Requires: caller must hold write lock.
+func (s *validatorStoreImpl) updateShareInCommittee(share *types.SSVShare) error {
+	committeeID := share.CommitteeID()
+
+	committee, exists := s.committees[committeeID]
+	if !exists {
+		return fmt.Errorf("committee not found: %x", committeeID)
+	}
+
+	// Validator should already be in the committee, just update reference
+	_, exists = committee.validators[share.ValidatorPubKey]
+	if !exists {
+		return fmt.Errorf("validator not in committee: %x", share.ValidatorPubKey)
+	}
+
 	return nil
 }
 
@@ -283,16 +407,6 @@ func (s *validatorStoreImpl) createSnapshot(state *validatorState) *ValidatorSna
 		IsOwnValidator:      state.share.BelongsToOperator(s.operatorID),
 		ParticipationStatus: state.participationStatus,
 	}
-}
-
-func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SSVShare) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectypes.ValidatorPK) error {
-	//TODO implement me
-	panic("implement me")
 }
 
 func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
