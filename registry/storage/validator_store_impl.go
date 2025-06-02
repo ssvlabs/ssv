@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -410,8 +411,65 @@ func (s *validatorStoreImpl) createSnapshot(state *validatorState) *ValidatorSna
 }
 
 func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
-	//TODO implement me
-	panic("implement me")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Compute cluster ID to find affected validators
+	clusterID := types.ComputeClusterIDHash(owner, operatorIDs)
+
+	// Find all shares in this cluster
+	var affectedValidators []*validatorState
+	for _, state := range s.validators {
+		shareClusterID := types.ComputeClusterIDHash(state.share.OwnerAddress, state.share.OperatorIDs())
+		if bytes.Equal(shareClusterID, clusterID) {
+			affectedValidators = append(affectedValidators, state)
+		}
+	}
+
+	if len(affectedValidators) == 0 {
+		s.logger.Debug("no validators found for liquidated cluster",
+			zap.String("owner", owner.Hex()),
+			zap.Any("operators", operatorIDs))
+		return nil
+	}
+
+	for _, state := range affectedValidators {
+		wasParticipating := s.shouldStart(state)
+
+		// Mark as liquidated
+		state.share.Liquidated = true
+		state.lastUpdated = time.Now()
+		state.participationStatus = s.calculateParticipationStatus(state.share)
+
+		pubKey := state.share.ValidatorPubKey
+
+		// Trigger stop callback if was participating
+		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
+			go func(pk spectypes.ValidatorPK) {
+				if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
+					s.logger.Error("validator stopped callback failed",
+						zap.String("pubkey", hex.EncodeToString(pk[:])),
+						zap.Error(err))
+				}
+			}(pubKey)
+		}
+
+		if s.callbacks.OnValidatorUpdated != nil {
+			snapshot := s.createSnapshot(state)
+			go func(snap *ValidatorSnapshot) {
+				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
+					s.logger.Error("validator updated callback failed", zap.Error(err))
+				}
+			}(snapshot)
+		}
+	}
+
+	s.logger.Info("cluster liquidated",
+		zap.String("owner", owner.Hex()),
+		zap.Any("operators", operatorIDs),
+		zap.Int("affected_validators", len(affectedValidators)))
+
+	return nil
 }
 
 func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
