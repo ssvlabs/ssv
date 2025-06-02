@@ -346,7 +346,6 @@ func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	resp, err := s.remoteSigner.Sign(ctx, blsPubKey, req)
 	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
 	if err != nil {
-		logger = logger.With(zap.String("req", string(ctx.PostBody())))
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
 	}
