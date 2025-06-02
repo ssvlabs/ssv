@@ -15,12 +15,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -61,17 +58,28 @@ var (
 		}`),
 		"/eth/v1/beacon/genesis": []byte(`{
 			"data": {
-				"genesis_time": "1695902400",
-				"genesis_validators_root": "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1",
+				"genesis_time": "1606824023",
+				"genesis_validators_root": "0x4b363db94e28612020049ce3795b0252c16c4241df2bc9ef221abde47527c0d0",
 				"genesis_fork_version": "0x00000000"
 			}
 		}`),
 		"/eth/v1/config/spec": []byte(`{
 			"data": {
-				"CONFIG_NAME": "holesky",
+				"CONFIG_NAME": "mainnet",
 				"GENESIS_FORK_VERSION": "0x00000000",
-				"CAPELLA_FORK_VERSION": "0x04017000", 
-				"MIN_GENESIS_TIME": "1695902100",
+				"ALTAIR_FORK_VERSION": "0x01000000",
+				"ALTAIR_FORK_EPOCH": "74240",
+				"BELLATRIX_FORK_VERSION": "0x02000000",
+				"BELLATRIX_FORK_EPOCH": "144896",
+				"CAPELLA_FORK_VERSION": "0x03000000",
+				"CAPELLA_FORK_EPOCH": "194048",
+				"DENEB_FORK_VERSION": "0x04000000",
+				"DENEB_FORK_EPOCH": "269568",
+				"ELECTRA_FORK_VERSION": "0x05000000",
+				"ELECTRA_FORK_EPOCH": "364032",
+				"FULU_FORK_VERSION": "0x06000000",
+				"FULU_FORK_EPOCH": "18446744073709551615",
+				"MIN_GENESIS_TIME": "1606824000",
 				"SECONDS_PER_SLOT": "12",
 				"SLOTS_PER_EPOCH": "32",
 				"EPOCHS_PER_SYNC_COMMITTEE_PERIOD": "256",
@@ -79,12 +87,7 @@ var (
 				"SYNC_COMMITTEE_SUBNET_COUNT": "4",
 				"TARGET_AGGREGATORS_PER_COMMITTEE": "16",
 				"TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE": "16",
-				"INTERVALS_PER_SLOT": "3",
-				"ALTAIR_FORK_EPOCH": "74240",
-				"BELLATRIX_FORK_EPOCH": "144896",
-				"CAPELLA_FORK_EPOCH": "194048",
-				"DENEB_FORK_EPOCH": "269568",
-				"ELECTRA_FORK_EPOCH": "18446744073709551615"
+				"INTERVALS_PER_SLOT": "3"
 			}
 		}`),
 	}
@@ -205,16 +208,9 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 			t.Context(),
 			zap.NewNop(),
 			Options{
-				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: server.URL,
 				CommonTimeout:  1 * time.Second,
 				LongTimeout:    1 * time.Second,
-			},
-			func() slotticker.SlotTicker {
-				return slotticker.New(zap.NewNop(), slotticker.Config{
-					SlotDuration: 12 * time.Second,
-					GenesisTime:  time.Now(),
-				})
 			},
 		)
 		require.NoError(t, err)
@@ -501,17 +497,10 @@ func createClient(
 		ctx,
 		zap.NewNop(),
 		Options{
-			Network:                     beacon.NewNetwork(types.MainNetwork),
 			BeaconNodeAddr:              beaconServerURL,
 			CommonTimeout:               defaultHardTimeout,
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
-		},
-		func() slotticker.SlotTicker {
-			return slotticker.New(zap.NewNop(), slotticker.Config{
-				SlotDuration: 12 * time.Second,
-				GenesisTime:  time.Now(),
-			})
 		},
 	)
 	return client, err

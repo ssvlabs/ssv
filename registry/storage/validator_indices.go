@@ -31,7 +31,6 @@ type BaseValidatorIndices interface {
 	// TODO: save recipient address
 }
 
-// DEPRECATED: Will be replaced by the new ValidatorIndices.
 type ValidatorIndices interface {
 	BaseValidatorIndices
 
@@ -56,9 +55,9 @@ type IndexedCommittee struct {
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
-func (c *IndexedCommittee) IsParticipating(cfg networkconfig.NetworkConfig, epoch phase0.Epoch) bool {
+func (c *IndexedCommittee) IsParticipating(beaconCfg networkconfig.Beacon, epoch phase0.Epoch) bool {
 	for _, validator := range c.Validators {
-		if validator.IsParticipating(cfg, epoch) {
+		if validator.IsParticipating(beaconCfg, epoch) {
 			return true
 		}
 	}
@@ -79,7 +78,7 @@ type validatorIndices struct {
 	byCommitteeID    map[spectypes.CommitteeID]*IndexedCommittee
 	byOperatorID     map[spectypes.OperatorID]*sharesAndCommittees
 
-	networkConfig networkconfig.NetworkConfig
+	beaconCfg networkconfig.Beacon
 
 	mu sync.RWMutex
 }
@@ -87,7 +86,7 @@ type validatorIndices struct {
 func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
-	networkConfig networkconfig.NetworkConfig,
+	beaconCfg networkconfig.Beacon,
 ) *validatorIndices {
 	return &validatorIndices{
 		shares:           shares,
@@ -95,7 +94,7 @@ func newValidatorStore(
 		byValidatorIndex: make(map[phase0.ValidatorIndex]*types.SSVShare),
 		byCommitteeID:    make(map[spectypes.CommitteeID]*IndexedCommittee),
 		byOperatorID:     make(map[spectypes.OperatorID]*sharesAndCommittees),
-		networkConfig:    networkConfig,
+		beaconCfg:        beaconCfg,
 	}
 }
 
@@ -122,7 +121,7 @@ func (c *validatorIndices) Validators() []*types.SSVShare {
 func (c *validatorIndices) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	var validators []*types.SSVShare
 	for _, share := range c.shares() {
-		if share.IsParticipating(c.networkConfig, epoch) {
+		if share.IsParticipating(c.beaconCfg, epoch) {
 			validators = append(validators, share)
 		}
 	}
@@ -164,7 +163,7 @@ func (c *validatorIndices) ParticipatingCommittees(epoch phase0.Epoch) []*Indexe
 
 	var committees []*IndexedCommittee
 	for _, committee := range c.byCommitteeID {
-		if committee.IsParticipating(c.networkConfig, epoch) {
+		if committee.IsParticipating(c.beaconCfg, epoch) {
 			committees = append(committees, committee)
 		}
 	}
@@ -200,7 +199,7 @@ func (c *validatorIndices) SelfParticipatingValidators(epoch phase0.Epoch) []*ty
 	shares := c.OperatorValidators(c.operatorID())
 	var participating []*types.SSVShare
 	for _, share := range shares {
-		if share.IsParticipating(c.networkConfig, epoch) {
+		if share.IsParticipating(c.beaconCfg, epoch) {
 			participating = append(participating, share)
 		}
 	}
@@ -222,7 +221,7 @@ func (c *validatorIndices) SelfParticipatingCommittees(epoch phase0.Epoch) []*In
 	committees := c.OperatorCommittees(c.operatorID())
 	var participating []*IndexedCommittee
 	for _, committee := range committees {
-		if committee.IsParticipating(c.networkConfig, epoch) {
+		if committee.IsParticipating(c.beaconCfg, epoch) {
 			participating = append(participating, committee)
 		}
 	}

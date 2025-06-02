@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -32,7 +31,6 @@ import (
 
 var (
 	testLogger    = zap.NewNop()
-	testCtx       = context.Background()
 	testNetConfig = networkconfig.TestNetwork
 
 	testIP             = "127.0.0.1"
@@ -42,7 +40,7 @@ var (
 )
 
 // Options for the discovery service
-func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkConfig) *Options {
+func testingDiscoveryOptions(t *testing.T, ssvConfig networkconfig.SSVConfig) *Options {
 	// Generate key
 	privKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
@@ -56,7 +54,7 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 		Port:          testPort,
 		TCPPort:       testTCPPort,
 		NetworkKey:    privKey,
-		Bootnodes:     networkConfig.Bootnodes,
+		Bootnodes:     ssvConfig.Bootnodes,
 		Subnets:       mockSubnets(1),
 		EnableLogging: false,
 	}
@@ -69,16 +67,16 @@ func testingDiscoveryOptions(t *testing.T, networkConfig networkconfig.NetworkCo
 		DiscV5Opts:          discV5Opts,
 		ConnIndex:           connectionIndex,
 		SubnetsIdx:          subnetsIndex,
-		NetworkConfig:       networkConfig,
+		SSVConfig:           ssvConfig,
 		DiscoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
 		TrimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),
 	}
 }
 
 // Testing discovery with a given NetworkConfig
-func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.NetworkConfig) *DiscV5Service {
-	opts := testingDiscoveryOptions(t, netConfig)
-	dvs, err := newDiscV5Service(testCtx, testLogger, opts)
+func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig networkconfig.SSVConfig) *DiscV5Service {
+	opts := testingDiscoveryOptions(t, ssvConfig)
+	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 	require.NotNil(t, dvs)
 	return dvs
@@ -86,7 +84,7 @@ func testingDiscoveryWithNetworkConfig(t *testing.T, netConfig networkconfig.Net
 
 // Testing discovery service
 func testingDiscovery(t *testing.T) *DiscV5Service {
-	return testingDiscoveryWithNetworkConfig(t, testNetConfig)
+	return testingDiscoveryWithNetworkConfig(t, testNetConfig.SSVConfig)
 }
 
 // Testing LocalNode

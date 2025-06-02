@@ -17,13 +17,13 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// validatorStoreImpl is the concrete implementation of ValidatorStore.
+// validatorStoreImpl is the concrete implementation of ValidatorIndices.
 // It manages all validator state transitions in a thread-safe manner.
 type validatorStoreImpl struct {
-	logger        *zap.Logger
-	db            basedb.Database
-	networkConfig networkconfig.NetworkConfig
-	operatorID    spectypes.OperatorID
+	logger     *zap.Logger
+	db         basedb.Database
+	beaconCfg  networkconfig.BeaconConfig
+	operatorID spectypes.OperatorID
 
 	mu         sync.RWMutex
 	validators map[string]*validatorState
@@ -50,17 +50,17 @@ type committeeState struct {
 	validators map[spectypes.ValidatorPK]struct{}
 }
 
-// NewValidatorStore creates a new ValidatorStore instance.
+// NewValidatorStore creates a new ValidatorIndices instance.
 func NewValidatorStore(
 	logger *zap.Logger,
 	db basedb.Database,
-	networkConfig networkconfig.NetworkConfig,
+	beaconCfg networkconfig.BeaconConfig,
 	operatorID spectypes.OperatorID,
 ) ValidatorStore {
 	return &validatorStoreImpl{
 		logger:         logger.Named("validator_store"),
 		db:             db,
-		networkConfig:  networkConfig,
+		beaconCfg:      beaconCfg,
 		operatorID:     operatorID,
 		validators:     make(map[string]*validatorState),
 		committees:     make(map[spectypes.CommitteeID]*committeeState),
@@ -246,10 +246,10 @@ func (s *validatorStoreImpl) calculateParticipationStatus(share *types.SSVShare)
 		return status
 	}
 
-	epoch := s.networkConfig.Beacon.EstimatedCurrentEpoch()
+	epoch := s.beaconCfg.EstimatedCurrentEpoch()
 
 	status.IsAttesting = share.IsAttesting(epoch)
-	status.IsSyncCommittee = share.IsSyncCommitteeEligible(s.networkConfig, epoch)
+	status.IsSyncCommittee = share.IsSyncCommitteeEligible(s.beaconCfg, epoch)
 	status.MinParticipationMet = share.MinParticipationEpoch() <= epoch
 
 	if !status.MinParticipationMet {
@@ -257,7 +257,7 @@ func (s *validatorStoreImpl) calculateParticipationStatus(share *types.SSVShare)
 		return status
 	}
 
-	status.IsParticipating = share.IsParticipating(s.networkConfig, epoch)
+	status.IsParticipating = share.IsParticipating(s.beaconCfg, epoch)
 
 	if status.IsParticipating {
 		status.Reason = "active"

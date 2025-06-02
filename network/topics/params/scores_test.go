@@ -9,6 +9,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -22,7 +23,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 0 validators",
 			func() *Options {
 				validators := uint64(0)
-				opts := NewSubnetTopicOpts(validators, 128, []*storage.IndexedCommittee{})
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, []*storage.IndexedCommittee{})
 				return opts
 			},
 			nil,
@@ -31,7 +32,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 1k validators",
 			func() *Options {
 				validators := uint64(1000)
-				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -40,7 +41,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 10k validators",
 			func() *Options {
 				validators := uint64(10_000)
-				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -49,7 +50,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 51k validators",
 			func() *Options {
 				validators := uint64(51_000)
-				opts := NewSubnetTopicOpts(validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -76,7 +77,7 @@ func TestTopicScoreParams(t *testing.T) {
 }
 
 func TestPeerScoreParams(t *testing.T) {
-	peerScoreParams := PeerScoreParams(oneEpochDuration, 550*(time.Millisecond*700), false)
+	peerScoreParams := PeerScoreParams(networkconfig.TestNetwork, 550*(time.Millisecond*700), false)
 	raw, err := peerScoreParamsString(peerScoreParams)
 	require.NoError(t, err)
 	require.NotNil(t, raw)

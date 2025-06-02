@@ -7,6 +7,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -96,7 +97,7 @@ type Options struct {
 func (o *Options) defaults() {
 	// Network
 	if o.Network.OneEpochDuration == 0 {
-		o.Network.OneEpochDuration = oneEpochDuration
+		o.Network.OneEpochDuration = 12 * time.Second * 32
 	}
 	if o.Network.TotalTopicsWeight == 0 {
 		o.Network.TotalTopicsWeight = totalTopicsWeight
@@ -150,35 +151,38 @@ func (o *Options) maxScore() float64 {
 }
 
 // NewOpts creates new TopicOpts instance
-func NewOpts(activeValidators uint64, subnets int) *Options {
+func NewOpts(epochDuration time.Duration, activeValidators uint64, subnets int) *Options {
 	return &Options{
 		Network: NetworkOpts{
 			ActiveValidators: activeValidators,
 			Subnets:          subnets,
+			OneEpochDuration: epochDuration,
 		},
 		Topic: TopicOpts{},
 	}
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(activeValidators uint64, subnets int, committees []*storage.IndexedCommittee) *Options {
+func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.IndexedCommittee) *Options {
 	// Create options with default values
-	opts := NewOpts(activeValidators, subnets)
+	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
 	opts.defaults()
 
 	// Set topic weight with equal weights
 	opts.Topic.TopicWeight = opts.Network.TotalTopicsWeight / float64(opts.Network.Subnets)
 
+	rc := newRateCalculator(netCfg)
+
 	// Set the expected message rate for the topic
-	opts.Topic.ExpectedMsgRate = calculateMessageRateForTopic(committees)
+	opts.Topic.ExpectedMsgRate = rc.calculateMessageRateForTopic(committees)
 
 	return opts
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOptsValidators(activeValidators uint64, subnets int) *Options {
+func NewSubnetTopicOptsValidators(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int) *Options {
 	// Create options with default values
-	opts := NewOpts(activeValidators, subnets)
+	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
 	opts.defaults()
 
 	// Set topic weight with equal weights
@@ -201,6 +205,7 @@ func TopicParams(opts *Options) (*pubsub.TopicScoreParams, error) {
 	// Set to default if not set
 	opts.defaults()
 
+	decayInterval := opts.Network.OneEpochDuration
 	expectedMessagesPerDecayInterval := opts.Topic.ExpectedMsgRate * decayInterval.Seconds()
 
 	// P1
