@@ -260,6 +260,268 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 	return nil
 }
 
+// OnClusterLiquidated handles the event of a cluster being liquidated.
+// It identifies all validators belonging to the specified cluster (by owner and operator IDs),
+// marks them as liquidated, updates their participation status, and triggers relevant
+// OnValidatorStopped and OnValidatorUpdated callbacks.
+func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Compute cluster ID to find affected validators
+	clusterID := types.ComputeClusterIDHash(owner, operatorIDs)
+
+	// Find all shares in this cluster
+	var affectedValidators []*validatorState
+	for _, state := range s.validators {
+		shareClusterID := types.ComputeClusterIDHash(state.share.OwnerAddress, state.share.OperatorIDs())
+		if bytes.Equal(shareClusterID, clusterID) {
+			affectedValidators = append(affectedValidators, state)
+		}
+	}
+
+	if len(affectedValidators) == 0 {
+		s.logger.Debug("no validators found for liquidated cluster",
+			zap.String("owner", owner.Hex()),
+			zap.Any("operators", operatorIDs))
+		return nil
+	}
+
+	for _, state := range affectedValidators {
+		wasParticipating := s.shouldStart(state)
+
+		// Mark as liquidated
+		state.share.Liquidated = true
+		state.lastUpdated = time.Now()
+		state.participationStatus = s.calculateParticipationStatus(state.share)
+
+		pubKey := state.share.ValidatorPubKey
+
+		// Trigger stop callback if was participating
+		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
+			go func(pk spectypes.ValidatorPK) {
+				if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
+					s.logger.Error("validator stopped callback failed",
+						zap.String("pubkey", hex.EncodeToString(pk[:])),
+						zap.Error(err))
+				}
+			}(pubKey)
+		}
+
+		// Trigger updated callback
+		if s.callbacks.OnValidatorUpdated != nil {
+			snapshot := s.createSnapshot(state)
+			go func(snap *ValidatorSnapshot) {
+				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
+					s.logger.Error("validator updated callback failed", zap.Error(err))
+				}
+			}(snapshot)
+		}
+	}
+
+	s.logger.Info("cluster liquidated",
+		zap.String("owner", owner.Hex()),
+		zap.Any("operators", operatorIDs),
+		zap.Int("affected_validators", len(affectedValidators)))
+
+	return nil
+}
+
+// OnClusterReactivated handles the event of a cluster being reactivated.
+// It identifies all validators belonging to the specified cluster, unmarks them
+// as liquidated, updates their participation status, and triggers relevant
+// OnValidatorStarted and OnValidatorUpdated callbacks.
+func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	clusterID := types.ComputeClusterIDHash(owner, operatorIDs)
+
+	// Find all shares in this cluster
+	var affectedValidators []*validatorState
+	for _, state := range s.validators {
+		shareClusterID := types.ComputeClusterIDHash(state.share.OwnerAddress, state.share.OperatorIDs())
+		if bytes.Equal(shareClusterID, clusterID) {
+			affectedValidators = append(affectedValidators, state)
+		}
+	}
+
+	if len(affectedValidators) == 0 {
+		s.logger.Debug("no validators found for reactivated cluster",
+			zap.String("owner", owner.Hex()),
+			zap.Any("operators", operatorIDs))
+		return nil
+	}
+
+	for _, state := range affectedValidators {
+		wasParticipating := s.shouldStart(state)
+
+		state.share.Liquidated = false
+		state.lastUpdated = time.Now()
+		state.participationStatus = s.calculateParticipationStatus(state.share)
+
+		isParticipating := s.shouldStart(state)
+
+		// Trigger start callback if now participating
+		if !wasParticipating && isParticipating && s.callbacks.OnValidatorStarted != nil {
+			snapshot := s.createSnapshot(state)
+			go func(snap *ValidatorSnapshot) {
+				if err := s.callbacks.OnValidatorStarted(ctx, snap); err != nil {
+					s.logger.Error("validator started callback failed", zap.Error(err))
+				}
+			}(snapshot)
+		}
+
+		// Trigger updated callback
+		if s.callbacks.OnValidatorUpdated != nil {
+			snapshot := s.createSnapshot(state)
+			go func(snap *ValidatorSnapshot) {
+				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
+					s.logger.Error("validator updated callback failed", zap.Error(err))
+				}
+			}(snapshot)
+		}
+	}
+
+	s.logger.Info("cluster reactivated",
+		zap.String("owner", owner.Hex()),
+		zap.Any("operators", operatorIDs),
+		zap.Int("affected_validators", len(affectedValidators)))
+
+	return nil
+}
+
+// OnOperatorRemoved handles the removal of an operator from the system.
+// It identifies all validators associated with the removed operator, removes them
+// from the store, and triggers OnValidatorRemoved and OnValidatorStopped callbacks.
+func (s *validatorStoreImpl) OnOperatorRemoved(ctx context.Context, operatorID spectypes.OperatorID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var affectedValidators []*validatorState
+	var affectedKeys []string
+
+	for key, state := range s.validators {
+		for _, member := range state.share.Committee {
+			if member.Signer == operatorID {
+				affectedValidators = append(affectedValidators, state)
+				affectedKeys = append(affectedKeys, key)
+				break
+			}
+		}
+	}
+
+	if len(affectedValidators) == 0 {
+		s.logger.Debug("no validators affected by operator removal",
+			zap.Uint64("operator_id", operatorID))
+		return nil
+	}
+
+	for i, state := range affectedValidators {
+		key := affectedKeys[i]
+		wasParticipating := s.shouldStart(state)
+		pubKey := state.share.ValidatorPubKey
+
+		// Remove from indices
+		if state.share.HasBeaconMetadata() {
+			delete(s.indices, state.share.ValidatorIndex)
+		}
+
+		// Remove from committee
+		if err := s.removeShareFromCommittee(state.share); err != nil {
+			s.logger.Warn("failed to remove share from committee",
+				zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+				zap.Error(err))
+		}
+
+		// Remove from validators map
+		delete(s.validators, key)
+
+		// Trigger callbacks
+		if s.callbacks.OnValidatorRemoved != nil {
+			go func(pk spectypes.ValidatorPK) {
+				if err := s.callbacks.OnValidatorRemoved(ctx, pk); err != nil {
+					s.logger.Error("validator removed callback failed",
+						zap.String("pubkey", hex.EncodeToString(pk[:])),
+						zap.Error(err))
+				}
+			}(pubKey)
+		}
+
+		// If was participating, also call stop callback
+		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
+			go func(pk spectypes.ValidatorPK) {
+				if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
+					s.logger.Error("validator stopped callback failed",
+						zap.String("pubkey", hex.EncodeToString(pk[:])),
+						zap.Error(err))
+				}
+			}(pubKey)
+		}
+	}
+
+	s.logger.Info("operator removed, validators affected",
+		zap.Uint64("operator_id", operatorID),
+		zap.Int("affected_validators", len(affectedValidators)))
+
+	return nil
+}
+
+func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner common.Address, recipient common.Address) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) OnValidatorExited(ctx context.Context, pubKey spectypes.ValidatorPK, blockNumber uint64) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) GetValidator(id ValidatorID) (*ValidatorSnapshot, bool) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) GetCommittee(id spectypes.CommitteeID) (*CommitteeSnapshot, bool) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) GetAllValidators() []*ValidatorSnapshot {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) GetOperatorValidators(operatorID spectypes.OperatorID) []*ValidatorSnapshot {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) GetParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) GetCommittees() []*CommitteeSnapshot {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) GetOperatorCommittees(operatorID spectypes.OperatorID) []*CommitteeSnapshot {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) RegisterSyncCommitteeInfo(info []SyncCommitteeInfo) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *validatorStoreImpl) GetSyncCommitteeValidators(period uint64) []*ValidatorSnapshot {
+	//TODO implement me
+	panic("implement me")
+}
+
 // addShareToCommittee adds a share to its corresponding committee structure.
 // If the committee does not exist, it is created.
 // An OnCommitteeChanged callback is triggered if a new committee is created.
@@ -443,266 +705,4 @@ func (s *validatorStoreImpl) createSnapshot(state *validatorState) *ValidatorSna
 		IsOwnValidator:      state.share.BelongsToOperator(s.operatorID),
 		ParticipationStatus: state.participationStatus,
 	}
-}
-
-// OnClusterLiquidated handles the event of a cluster being liquidated.
-// It identifies all validators belonging to the specified cluster (by owner and operator IDs),
-// marks them as liquidated, updates their participation status, and triggers relevant
-// OnValidatorStopped and OnValidatorUpdated callbacks.
-func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Compute cluster ID to find affected validators
-	clusterID := types.ComputeClusterIDHash(owner, operatorIDs)
-
-	// Find all shares in this cluster
-	var affectedValidators []*validatorState
-	for _, state := range s.validators {
-		shareClusterID := types.ComputeClusterIDHash(state.share.OwnerAddress, state.share.OperatorIDs())
-		if bytes.Equal(shareClusterID, clusterID) {
-			affectedValidators = append(affectedValidators, state)
-		}
-	}
-
-	if len(affectedValidators) == 0 {
-		s.logger.Debug("no validators found for liquidated cluster",
-			zap.String("owner", owner.Hex()),
-			zap.Any("operators", operatorIDs))
-		return nil
-	}
-
-	for _, state := range affectedValidators {
-		wasParticipating := s.shouldStart(state)
-
-		// Mark as liquidated
-		state.share.Liquidated = true
-		state.lastUpdated = time.Now()
-		state.participationStatus = s.calculateParticipationStatus(state.share)
-
-		pubKey := state.share.ValidatorPubKey
-
-		// Trigger stop callback if was participating
-		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
-			go func(pk spectypes.ValidatorPK) {
-				if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
-					s.logger.Error("validator stopped callback failed",
-						zap.String("pubkey", hex.EncodeToString(pk[:])),
-						zap.Error(err))
-				}
-			}(pubKey)
-		}
-
-		// Trigger updated callback
-		if s.callbacks.OnValidatorUpdated != nil {
-			snapshot := s.createSnapshot(state)
-			go func(snap *ValidatorSnapshot) {
-				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
-					s.logger.Error("validator updated callback failed", zap.Error(err))
-				}
-			}(snapshot)
-		}
-	}
-
-	s.logger.Info("cluster liquidated",
-		zap.String("owner", owner.Hex()),
-		zap.Any("operators", operatorIDs),
-		zap.Int("affected_validators", len(affectedValidators)))
-
-	return nil
-}
-
-// OnClusterReactivated handles the event of a cluster being reactivated.
-// It identifies all validators belonging to the specified cluster, unmarks them
-// as liquidated, updates their participation status, and triggers relevant
-// OnValidatorStarted and OnValidatorUpdated callbacks.
-func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	clusterID := types.ComputeClusterIDHash(owner, operatorIDs)
-
-	// Find all shares in this cluster
-	var affectedValidators []*validatorState
-	for _, state := range s.validators {
-		shareClusterID := types.ComputeClusterIDHash(state.share.OwnerAddress, state.share.OperatorIDs())
-		if bytes.Equal(shareClusterID, clusterID) {
-			affectedValidators = append(affectedValidators, state)
-		}
-	}
-
-	if len(affectedValidators) == 0 {
-		s.logger.Debug("no validators found for reactivated cluster",
-			zap.String("owner", owner.Hex()),
-			zap.Any("operators", operatorIDs))
-		return nil
-	}
-
-	for _, state := range affectedValidators {
-		wasParticipating := s.shouldStart(state)
-
-		state.share.Liquidated = false
-		state.lastUpdated = time.Now()
-		state.participationStatus = s.calculateParticipationStatus(state.share)
-
-		isParticipating := s.shouldStart(state)
-
-		// Trigger start callback if now participating
-		if !wasParticipating && isParticipating && s.callbacks.OnValidatorStarted != nil {
-			snapshot := s.createSnapshot(state)
-			go func(snap *ValidatorSnapshot) {
-				if err := s.callbacks.OnValidatorStarted(ctx, snap); err != nil {
-					s.logger.Error("validator started callback failed", zap.Error(err))
-				}
-			}(snapshot)
-		}
-
-		// Trigger updated callback
-		if s.callbacks.OnValidatorUpdated != nil {
-			snapshot := s.createSnapshot(state)
-			go func(snap *ValidatorSnapshot) {
-				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
-					s.logger.Error("validator updated callback failed", zap.Error(err))
-				}
-			}(snapshot)
-		}
-	}
-
-	s.logger.Info("cluster reactivated",
-		zap.String("owner", owner.Hex()),
-		zap.Any("operators", operatorIDs),
-		zap.Int("affected_validators", len(affectedValidators)))
-
-	return nil
-}
-
-func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner common.Address, recipient common.Address) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) OnValidatorExited(ctx context.Context, pubKey spectypes.ValidatorPK, blockNumber uint64) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-// OnOperatorRemoved handles the removal of an operator from the system.
-// It identifies all validators associated with the removed operator, removes them
-// from the store, and triggers OnValidatorRemoved and OnValidatorStopped callbacks.
-func (s *validatorStoreImpl) OnOperatorRemoved(ctx context.Context, operatorID spectypes.OperatorID) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var affectedValidators []*validatorState
-	var affectedKeys []string
-
-	for key, state := range s.validators {
-		for _, member := range state.share.Committee {
-			if member.Signer == operatorID {
-				affectedValidators = append(affectedValidators, state)
-				affectedKeys = append(affectedKeys, key)
-				break
-			}
-		}
-	}
-
-	if len(affectedValidators) == 0 {
-		s.logger.Debug("no validators affected by operator removal",
-			zap.Uint64("operator_id", operatorID))
-		return nil
-	}
-
-	for i, state := range affectedValidators {
-		key := affectedKeys[i]
-		wasParticipating := s.shouldStart(state)
-		pubKey := state.share.ValidatorPubKey
-
-		// Remove from indices
-		if state.share.HasBeaconMetadata() {
-			delete(s.indices, state.share.ValidatorIndex)
-		}
-
-		// Remove from committee
-		if err := s.removeShareFromCommittee(state.share); err != nil {
-			s.logger.Warn("failed to remove share from committee",
-				zap.String("pubkey", hex.EncodeToString(pubKey[:])),
-				zap.Error(err))
-		}
-
-		// Remove from validators map
-		delete(s.validators, key)
-
-		// Trigger callbacks
-		if s.callbacks.OnValidatorRemoved != nil {
-			go func(pk spectypes.ValidatorPK) {
-				if err := s.callbacks.OnValidatorRemoved(ctx, pk); err != nil {
-					s.logger.Error("validator removed callback failed",
-						zap.String("pubkey", hex.EncodeToString(pk[:])),
-						zap.Error(err))
-				}
-			}(pubKey)
-		}
-
-		// If was participating, also call stop callback
-		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
-			go func(pk spectypes.ValidatorPK) {
-				if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
-					s.logger.Error("validator stopped callback failed",
-						zap.String("pubkey", hex.EncodeToString(pk[:])),
-						zap.Error(err))
-				}
-			}(pubKey)
-		}
-	}
-
-	s.logger.Info("operator removed, validators affected",
-		zap.Uint64("operator_id", operatorID),
-		zap.Int("affected_validators", len(affectedValidators)))
-
-	return nil
-}
-
-func (s *validatorStoreImpl) GetValidator(id ValidatorID) (*ValidatorSnapshot, bool) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) GetCommittee(id spectypes.CommitteeID) (*CommitteeSnapshot, bool) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) GetAllValidators() []*ValidatorSnapshot {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) GetOperatorValidators(operatorID spectypes.OperatorID) []*ValidatorSnapshot {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) GetParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) GetCommittees() []*CommitteeSnapshot {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) GetOperatorCommittees(operatorID spectypes.OperatorID) []*CommitteeSnapshot {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) RegisterSyncCommitteeInfo(info []SyncCommitteeInfo) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (s *validatorStoreImpl) GetSyncCommitteeValidators(period uint64) []*ValidatorSnapshot {
-	//TODO implement me
-	panic("implement me")
 }
