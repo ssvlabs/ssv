@@ -1,7 +1,6 @@
 package eventhandler
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -47,12 +46,12 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		fields.TxHash(event.Raw.TxHash),
 		fields.OperatorID(event.OperatorId),
 		fields.Owner(event.Owner),
-		fields.OperatorPubKey(event.PublicKey),
+		fields.OperatorPubKey(string(event.PublicKey)),
 	)
 	logger.Debug("processing event")
 
 	od := &registrystorage.OperatorData{
-		PublicKey:    event.PublicKey,
+		PublicKey:    string(event.PublicKey),
 		OwnerAddress: event.Owner,
 		ID:           event.OperatorId,
 	}
@@ -69,7 +68,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	}
 
 	// throw an error if there is an existing operator with the same public key
-	operatorData, pubkeyExists, err := eh.nodeStorage.GetOperatorDataByPubKey(txn, event.PublicKey)
+	operatorData, pubkeyExists, err := eh.nodeStorage.GetOperatorDataByPubKey(txn, string(event.PublicKey))
 	if err != nil {
 		return fmt.Errorf("could not get operator data by public key: %w", err)
 	}
@@ -88,7 +87,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return nil
 	}
 
-	if bytes.Equal(event.PublicKey, eh.operatorDataStore.GetOperatorData().PublicKey) {
+	if string(event.PublicKey) == eh.operatorDataStore.GetOperatorData().PublicKey {
 		eh.operatorDataStore.SetOperatorData(od)
 		logger = logger.With(zap.Bool("own_operator", true))
 	}

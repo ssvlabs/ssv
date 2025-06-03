@@ -69,7 +69,7 @@ func TestMsgValidator(t *testing.T) {
 	require.NoError(t, err)
 
 	od := &storage.OperatorData{
-		PublicKey:    []byte(operatorPubKey),
+		PublicKey:    operatorPubKey,
 		OwnerAddress: common.Address{},
 		ID:           operatorID,
 	}

@@ -16,6 +16,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (
@@ -64,6 +65,29 @@ func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
 	})
 }
 
+// BeaconMetadata creates and returns a new ValidatorMetadata instance from SSVShare.
+func (s *SSVShare) BeaconMetadata() *beacon.ValidatorMetadata {
+	return &beacon.ValidatorMetadata{
+		Status:          s.Status,
+		Index:           s.ValidatorIndex,
+		ActivationEpoch: s.ActivationEpoch,
+		ExitEpoch:       s.ExitEpoch,
+	}
+}
+
+// SetBeaconMetadata updates the share's metadata fields and sets the update timestamp.
+func (s *SSVShare) SetBeaconMetadata(metadata *beacon.ValidatorMetadata) {
+	if metadata == nil {
+		return
+	}
+
+	s.ValidatorIndex = metadata.Index
+	s.Status = metadata.Status
+	s.ActivationEpoch = metadata.ActivationEpoch
+	s.ExitEpoch = metadata.ExitEpoch
+	s.BeaconMetadataLastUpdated = time.Now()
+}
+
 // HasBeaconMetadata checks whether SSVShare has been enriched with respective Beacon metadata.
 func (s *SSVShare) HasBeaconMetadata() bool {
 	return s != nil && s.Status != eth2apiv1.ValidatorStateUnknown
@@ -89,8 +113,8 @@ func (s *SSVShare) IsActive() bool {
 	return s.Status == eth2apiv1.ValidatorStateActiveOngoing
 }
 
-// Exiting returns true if the validator is exiting or exited
-func (s *SSVShare) Exiting() bool {
+// Exited returns true if the validator is exited
+func (s *SSVShare) Exited() bool {
 	return s.Status.IsExited() || s.Status.HasExited()
 }
 
