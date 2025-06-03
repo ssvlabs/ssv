@@ -25,6 +25,9 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/contract"
@@ -40,8 +43,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
@@ -69,9 +70,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	operatorsCount += uint64(len(ops))
 
 	currentSlot := &utils.SlotValue{}
-	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
-	mockNetworkConfig := &networkconfig.NetworkConfig{}
-	mockNetworkConfig.Beacon = mockBeaconNetwork
+	mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
 
 	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
 	if err != nil {
@@ -156,7 +155,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -207,7 +206,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			encodedPubKey, err := ops[i].privateKey.Public().Base64()
 			require.NoError(t, err)
 
-			require.Equal(t, encodedPubKey, string(data.PublicKey))
+			require.Equal(t, encodedPubKey, data.PublicKey)
 		}
 	})
 
@@ -943,8 +942,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 
-		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
@@ -997,8 +996,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
@@ -1096,8 +1095,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Greater(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
-		require.Greater(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+		require.Greater(t, highestAttestation.Source.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Greater(t, highestAttestation.Target.Epoch, mockNetworkConfig.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
 		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
@@ -1162,7 +1161,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			// Call the RegisterOperator contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -1393,7 +1392,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 
 			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -1470,7 +1469,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network *networkconfig.NetworkConfig, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network networkconfig.Network, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -1482,11 +1481,10 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	operatorDataStore := operatordatastore.New(operatorData)
 
 	if network == nil {
-		network = &networkconfig.NetworkConfig{}
-		network.Beacon = utils.SetupMockBeaconNetwork(t, &utils.SlotValue{})
+		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, &utils.SlotValue{})
 	}
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, *network, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, network, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1508,7 +1506,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			nodeStorage,
 			parser,
 			validatorCtrl,
-			*network,
+			network,
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
@@ -1525,7 +1523,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
-		NetworkConfig:     *network,
+		NetworkConfig:     network,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		BeaconSigner:      keyManager,
@@ -1543,7 +1541,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		*network,
+		network,
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
@@ -1580,14 +1578,14 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(encodedPubKey))
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey:    []byte(encodedPubKey),
+			PublicKey:    encodedPubKey,
 			ID:           operator.id,
 			OwnerAddress: testAddr,
 		}

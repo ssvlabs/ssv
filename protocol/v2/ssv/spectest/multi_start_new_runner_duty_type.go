@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
@@ -162,6 +163,8 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 	require.NoError(t, err)
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
+
+	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
 
 	// override
 	test.PostDutyRunnerState = r

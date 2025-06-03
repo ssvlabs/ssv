@@ -55,8 +55,8 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
@@ -182,15 +182,15 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 		return false
 	}
 
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 
 	if participates := h.canParticipate(share, currentSlot); !participates {
 		return false
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
-	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
+	var attestationPropagationSlotRange = h.beaconConfig.GetSlotsPerEpoch()
+	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= attestationPropagationSlotRange {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
@@ -203,11 +203,11 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 
 func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, epoch phase0.Epoch) bool {
 	share, found := h.validatorProvider.Validator(duty.PubKey[:])
-	if !found || !share.IsParticipating(h.network, epoch) {
+	if !found || !share.IsParticipating(h.beaconConfig, epoch) {
 		return false
 	}
 
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 
 	if participates := h.canParticipate(share, currentSlot); !participates {
 		return false
@@ -226,7 +226,7 @@ func (h *CommitteeHandler) shouldExecuteSync(duty *eth2apiv1.SyncCommitteeDuty, 
 }
 
 func (h *CommitteeHandler) canParticipate(share *types.SSVShare, currentSlot phase0.Slot) bool {
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
 	if share.MinParticipationEpoch() > currentEpoch {
 		h.logger.Debug("validator not yet participating",

@@ -27,8 +27,8 @@ type Config struct {
 // and default values for other parameters.
 func NewConfigFromNetworkConfig(networkCfg networkconfig.NetworkConfig) Config {
 	return Config{
-		SlotsPerEpoch:          networkCfg.SlotsPerEpoch(),
-		FinalityConsensusEpoch: networkCfg.Forks.GetFinalityConsensusEpoch(),
+		SlotsPerEpoch:          networkCfg.SlotsPerEpoch,
+		FinalityConsensusEpoch: networkCfg.SSVConfig.Forks.GetFinalityConsensusEpoch(),
 		FollowDistance:         DefaultFollowDistance,
 	}
 }

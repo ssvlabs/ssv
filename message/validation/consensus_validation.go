@@ -195,7 +195,7 @@ func (mv *messageValidator) validateQBFTLogic(
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
-		signerState := signerStateBySlot.Get(msgSlot)
+		signerState := signerStateBySlot.GetSignerState(msgSlot)
 		if signerState == nil {
 			continue
 		}
@@ -306,14 +306,14 @@ func (mv *messageValidator) updateConsensusState(
 	consensusState *ValidatorState,
 ) error {
 	msgSlot := phase0.Slot(consensusMessage.Height)
-	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
+	msgEpoch := mv.netCfg.EstimatedEpochAtSlot(msgSlot)
 
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		stateBySlot := consensusState.Signer(committeeInfo.signerIndex(signer))
-		signerState := stateBySlot.Get(msgSlot)
+		signerState := stateBySlot.GetSignerState(msgSlot)
 		if signerState == nil {
 			signerState = newSignerState(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
-			stateBySlot.Set(msgSlot, msgEpoch, signerState)
+			stateBySlot.SetSignerState(msgSlot, msgEpoch, signerState)
 		} else {
 			if consensusMessage.Round > signerState.Round {
 				signerState.Reset(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
@@ -430,7 +430,7 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 	consensusMessage *specqbft.Message,
 	receivedAt time.Time,
 ) error {
-	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(phase0.Slot(consensusMessage.Height)) /*.
+	slotStartTime := mv.netCfg.GetSlotStartTime(phase0.Slot(consensusMessage.Height)) /*.
 	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
 
 	sinceSlotStart := time.Duration(0)

@@ -44,19 +44,10 @@ type Provider interface {
 type SingleClientProvider interface {
 	Provider
 	SyncProgress(ctx context.Context) (*ethereum.SyncProgress, error)
-	streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error)
+	streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (nextBlockToProcess uint64, err error)
 }
 
 var _ Provider = &ExecutionClient{}
-
-var (
-	ErrClosed        = fmt.Errorf("closed")
-	ErrBadInput      = fmt.Errorf("bad input")
-	ErrNothingToSync = errors.New("nothing to sync")
-	errSyncing       = fmt.Errorf("syncing")
-)
-
-const elResponseErrMsg = "Execution client returned an error"
 
 // ExecutionClient represents a client for interacting with Ethereum execution client.
 type ExecutionClient struct {
@@ -208,15 +199,14 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 
 			start := time.Now()
-			results, err := ec.client.FilterLogs(ctx, ethereum.FilterQuery{
+			query := ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   new(big.Int).SetUint64(toBlock),
-			})
+			}
+
+			results, err := ec.subdivideLogFetch(ctx, query)
 			if err != nil {
-				ec.logger.Error(elResponseErrMsg,
-					zap.String("method", "eth_getLogs"),
-					zap.Error(err))
 				errCh <- err
 				return
 			}
@@ -270,12 +260,88 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 	return logCh, errCh
 }
 
+// subdivideLogFetch handles log fetching with automatic subdivision on query limit errors.
+// It first attempts a direct fetch, and if that fails with a query limit error, it subdivides
+// the block range and tries again with smaller chunks.
+func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.FilterQuery) ([]ethtypes.Log, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-ec.closed:
+		return nil, ErrClosed
+	default:
+	}
+
+	logs, err := ec.client.FilterLogs(ctx, q)
+	if err == nil {
+		return logs, nil
+	}
+
+	if isRPCQueryLimitError(err) {
+		if q.FromBlock == nil || q.ToBlock == nil {
+			return nil, err
+		}
+
+		fromBlock := q.FromBlock.Uint64()
+		toBlock := q.ToBlock.Uint64()
+
+		// require at least 2 blocks to subdivide (fromBlock must be less than toBlock)
+		if fromBlock >= toBlock {
+			return nil, fmt.Errorf("insufficient blocks to subdivide (fromBlock: %d, toBlock: %d): %w", fromBlock, toBlock, err)
+		}
+
+		ec.logger.Warn("execution client query limit exceeded, subdividing query",
+			zap.String("method", "eth_getLogs"),
+			fields.FromBlock(fromBlock),
+			fields.ToBlock(toBlock),
+			zap.Error(err))
+
+		midBlock := fromBlock + (toBlock-fromBlock)/2
+
+		leftQuery := q
+		leftQuery.FromBlock = new(big.Int).SetUint64(fromBlock)
+		leftQuery.ToBlock = new(big.Int).SetUint64(midBlock)
+
+		rightQuery := q
+		rightQuery.FromBlock = new(big.Int).SetUint64(midBlock + 1)
+		rightQuery.ToBlock = new(big.Int).SetUint64(toBlock)
+
+		leftLogs, leftErr := ec.subdivideLogFetch(ctx, leftQuery)
+		if leftErr != nil {
+			return nil, leftErr
+		}
+
+		rightLogs, rightErr := ec.subdivideLogFetch(ctx, rightQuery)
+		if rightErr != nil {
+			return nil, rightErr
+		}
+
+		totalLogs := len(leftLogs) + len(rightLogs)
+		combinedLogs := make([]ethtypes.Log, 0, totalLogs)
+		combinedLogs = append(combinedLogs, leftLogs...)
+		combinedLogs = append(combinedLogs, rightLogs...)
+
+		ec.logger.Info("successfully fetched logs after subdivision",
+			fields.FromBlock(fromBlock),
+			fields.ToBlock(toBlock),
+			zap.Int("total_logs", totalLogs))
+
+		return combinedLogs, nil
+	}
+
+	ec.logger.Error(elResponseErrMsg,
+		zap.String("method", "eth_getLogs"),
+		zap.Error(err))
+
+	return nil, err
+}
+
 // StreamLogs subscribes to events emitted by the contract.
 func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
-	logsCh := make(chan BlockLogs)
+	logs := make(chan BlockLogs)
 
 	go func() {
-		defer close(logsCh)
+		defer close(logs)
 		tries := 0
 		for {
 			select {
@@ -284,7 +350,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 			case <-ec.closed:
 				return
 			default:
-				lastBlock, err := ec.streamLogsToChan(ctx, logsCh, fromBlock)
+				nextBlockToProcess, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
 					// Closed gracefully.
 					return
@@ -301,18 +367,18 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
 				}
 
-				if lastBlock > fromBlock {
+				if nextBlockToProcess > fromBlock {
 					// Successfully streamed some logs, reset tries.
 					tries = 0
 				}
 
-				ec.logger.Error("failed to stream registry events, resubscribing", zap.Error(err))
-				fromBlock = lastBlock + 1
+				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
+				fromBlock = nextBlockToProcess
 			}
 		}
 	}()
 
-	return logsCh
+	return logs
 }
 
 // Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
@@ -466,8 +532,9 @@ func (ec *ExecutionClient) FilterLogs(ctx context.Context, q ethereum.FilterQuer
 }
 
 // streamLogsToChan streams ongoing logs from the given block to the given channel.
-// *Always* returns the last block it fetched, even if it errored.
-func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+// streamLogsToChan *always* returns the next block to process.
+// TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
+func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 	headersCh := make(chan *ethtypes.Header)
 
 	// Generally, execution client can stream logs using SubscribeFilterLogs, but we chose to use SubscribeNewHead + FilterLogs.
@@ -567,12 +634,13 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			// Process logs for this block range
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
-				logs <- block
-				lastBlock = block.BlockNumber
+				logCh <- block
+				fromBlock = block.BlockNumber + 1
 			}
 
 			if err := <-fetchErrors; err != nil {
-				return lastBlock, fmt.Errorf("fetch logs: %w", err)
+				// If we get an error while fetching, we return the last block we fetched.
+				return fromBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 
 			fromBlock = toBlock + 1
