@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
@@ -18,16 +19,16 @@ import (
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // validatorStoreImpl is the concrete implementation of ValidatorIndices.
 // It manages all validator state transitions in a thread-safe manner.
 type validatorStoreImpl struct {
-	logger     *zap.Logger
-	db         basedb.Database
-	beaconCfg  networkconfig.BeaconConfig
-	operatorID spectypes.OperatorID
+	logger           *zap.Logger
+	sharesStorage    Shares
+	operatorsStorage Operators
+	beaconCfg        networkconfig.BeaconConfig
+	operatorID       spectypes.OperatorID
 
 	mu         sync.RWMutex
 	validators map[string]*validatorState
@@ -36,7 +37,6 @@ type validatorStoreImpl struct {
 
 	callbacks ValidatorLifecycleCallbacks
 
-	// syncCommittees holds the sync committee information. period -> validator -> indices
 	syncCommittees map[uint64]map[phase0.ValidatorIndex][]phase0.CommitteeIndex
 }
 
@@ -59,20 +59,48 @@ type committeeState struct {
 // committees, and indices.
 func NewValidatorStore(
 	logger *zap.Logger,
-	db basedb.Database,
+	sharesStorage Shares,
+	operatorsStorage Operators,
 	beaconCfg networkconfig.BeaconConfig,
 	operatorID spectypes.OperatorID,
-) ValidatorStore {
-	return &validatorStoreImpl{
-		logger:         logger.Named("validator_store"),
-		db:             db,
-		beaconCfg:      beaconCfg,
-		operatorID:     operatorID,
-		validators:     make(map[string]*validatorState),
-		committees:     make(map[spectypes.CommitteeID]*committeeState),
-		indices:        make(map[phase0.ValidatorIndex]spectypes.ValidatorPK),
-		syncCommittees: make(map[uint64]map[phase0.ValidatorIndex][]phase0.CommitteeIndex),
+) (ValidatorStore, error) {
+	s := &validatorStoreImpl{
+		logger:           logger.Named("validator_store"),
+		sharesStorage:    sharesStorage,
+		operatorsStorage: operatorsStorage,
+		beaconCfg:        beaconCfg,
+		operatorID:       operatorID,
+		validators:       make(map[string]*validatorState),
+		committees:       make(map[spectypes.CommitteeID]*committeeState),
+		indices:          make(map[phase0.ValidatorIndex]spectypes.ValidatorPK),
+		syncCommittees:   make(map[uint64]map[phase0.ValidatorIndex][]phase0.CommitteeIndex),
 	}
+
+	shares := sharesStorage.List(nil)
+	for _, share := range shares {
+		state := &validatorState{
+			share:               s.copyShare(share),
+			lastUpdated:         time.Now(),
+			participationStatus: s.calculateParticipationStatus(share),
+		}
+
+		key := hex.EncodeToString(share.ValidatorPubKey[:])
+		s.validators[key] = state
+
+		if share.HasBeaconMetadata() {
+			s.indices[share.ValidatorIndex] = share.ValidatorPubKey
+		}
+
+		if err := s.addShareToCommittee(share); err != nil {
+			return nil, fmt.Errorf("add share to committee: %w", err)
+		}
+	}
+
+	logger.Info("validator store initialized",
+		zap.Int("validators", len(s.validators)),
+		zap.Int("committees", len(s.committees)))
+
+	return s, nil
 }
 
 // RegisterLifecycleCallbacks sets the callbacks that will be invoked upon
@@ -85,14 +113,24 @@ func (s *validatorStoreImpl) RegisterLifecycleCallbacks(callbacks ValidatorLifec
 }
 
 // OnShareAdded handles the addition of a new validator share to the store.
-// It creates an immutable copy of the share, updates internal state including
-// validator maps, indices, and committee memberships.
+// It validates operators exist, creates an immutable copy of the share, updates internal state
+// including validator maps, indices, and committee memberships, and persists to storage.
 // If registered, OnValidatorAdded and OnValidatorStarted (if applicable) callbacks
 // are triggered asynchronously.
-// Returns an error if the share is nil or if the validator already exists.
+// Returns an error if the share is nil, operators don't exist, or if the validator already exists.
 func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVShare) error {
 	if share == nil {
 		return fmt.Errorf("nil share")
+	}
+
+	// Validate operators exist before acquiring lock
+	operatorIDs := share.OperatorIDs()
+	exist, err := s.operatorsStorage.OperatorsExist(nil, operatorIDs)
+	if err != nil {
+		return fmt.Errorf("check operators exist: %w", err)
+	}
+	if !exist {
+		return fmt.Errorf("one or more operators don't exist")
 	}
 
 	s.mu.Lock()
@@ -103,10 +141,8 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 		return fmt.Errorf("validator already exists: %s", key)
 	}
 
-	// Create immutable copy
 	shareCopy := s.copyShare(share)
 
-	// Create validator state
 	state := &validatorState{
 		share:               shareCopy,
 		lastUpdated:         time.Now(),
@@ -115,16 +151,30 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 
 	s.validators[key] = state
 
-	// Update indices
 	if share.HasBeaconMetadata() {
 		s.indices[share.ValidatorIndex] = share.ValidatorPubKey
 	}
 
 	if err := s.addShareToCommittee(shareCopy); err != nil {
+		delete(s.validators, key)
+		if share.HasBeaconMetadata() {
+			delete(s.indices, share.ValidatorIndex)
+		}
 		return fmt.Errorf("add to committee: %w", err)
 	}
 
-	// Create snapshot for callback
+	// Persist to storage
+	if err := s.sharesStorage.Save(nil, shareCopy); err != nil {
+		delete(s.validators, key)
+		if share.HasBeaconMetadata() {
+			delete(s.indices, share.ValidatorIndex)
+		}
+
+		_ = s.removeShareFromCommittee(shareCopy)
+		return fmt.Errorf("persist share: %w", err)
+	}
+
+	// Create snapshot for callbacks
 	snapshot := s.createSnapshot(state)
 
 	// Call lifecycle callback
@@ -149,7 +199,8 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 }
 
 // OnShareUpdated handles updates to an existing validator share.
-// It updates the validator's state, including its participation status and beacon metadata.
+// It updates the validator's state, including its participation status and beacon metadata,
+// and persists changes to storage.
 // Relevant lifecycle callbacks (OnValidatorUpdated, OnValidatorStarted, or OnValidatorStopped)
 // are triggered based on the change in participation status.
 // Returns an error if the share is nil or if the validator is not found.
@@ -168,7 +219,6 @@ func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SS
 	}
 
 	wasParticipating := s.shouldStart(state)
-
 	shareCopy := s.copyShare(share)
 
 	state.share = shareCopy
@@ -185,10 +235,16 @@ func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SS
 		return fmt.Errorf("update committee: %w", err)
 	}
 
+	// Persist to storage
+	if err := s.sharesStorage.Save(nil, shareCopy); err != nil {
+		return fmt.Errorf("persist share: %w", err)
+	}
+
 	// Capture new participation state after update
 	isParticipating := s.shouldStart(state)
 	newSnapshot := s.createSnapshot(state)
 
+	// Always trigger update callback
 	if s.callbacks.OnValidatorUpdated != nil {
 		go func() {
 			if err := s.callbacks.OnValidatorUpdated(ctx, newSnapshot); err != nil {
@@ -197,6 +253,7 @@ func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SS
 		}()
 	}
 
+	// Handle participation state changes
 	if !wasParticipating && isParticipating && s.callbacks.OnValidatorStarted != nil {
 		go func() {
 			if err := s.callbacks.OnValidatorStarted(ctx, newSnapshot); err != nil {
@@ -215,7 +272,8 @@ func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SS
 }
 
 // OnShareRemoved handles the removal of a validator share from the store.
-// It cleans up the validator's state from internal maps, indices, and committees.
+// It cleans up the validator's state from internal maps, indices, and committees,
+// and removes it from storage.
 // If registered, OnValidatorRemoved and OnValidatorStopped (if the validator was active)
 // callbacks are triggered asynchronously.
 // Returns an error if the validator is not found.
@@ -229,6 +287,8 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 		return fmt.Errorf("validator not found: %s", key)
 	}
 
+	wasParticipating := s.shouldStart(state)
+
 	// Remove from indices
 	if state.share.HasBeaconMetadata() {
 		delete(s.indices, state.share.ValidatorIndex)
@@ -236,11 +296,21 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 
 	// Remove from committee
 	if err := s.removeShareFromCommittee(state.share); err != nil {
-		return fmt.Errorf("remove from committee: %w", err)
+		s.logger.Warn("failed to remove share from committee",
+			zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+			zap.Error(err))
 	}
 
 	// Remove from validators map
 	delete(s.validators, key)
+
+	// Remove from storage
+	if err := s.sharesStorage.Delete(nil, pubKey[:]); err != nil {
+		// Log but don't fail - internal state already updated
+		s.logger.Error("failed to delete share from storage",
+			zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+			zap.Error(err))
+	}
 
 	// Call callbacks
 	if s.callbacks.OnValidatorRemoved != nil {
@@ -252,7 +322,7 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 	}
 
 	// If was participating, also call stop callback
-	if s.shouldStart(state) && s.callbacks.OnValidatorStopped != nil {
+	if wasParticipating && s.callbacks.OnValidatorStopped != nil {
 		go func() {
 			if err := s.callbacks.OnValidatorStopped(ctx, pubKey); err != nil {
 				s.logger.Error("validator stopped callback failed", zap.Error(err))
@@ -265,17 +335,16 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 
 // OnClusterLiquidated handles the event of a cluster being liquidated.
 // It identifies all validators belonging to the specified cluster (by owner and operator IDs),
-// marks them as liquidated, updates their participation status, and triggers relevant
-// OnValidatorStopped and OnValidatorUpdated callbacks.
+// marks them as liquidated, updates their participation status, persists changes to storage,
+// and triggers relevant OnValidatorStopped and OnValidatorUpdated callbacks.
 func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Compute cluster ID to find affected validators
 	clusterID := types.ComputeClusterIDHash(owner, operatorIDs)
 
-	// Find all shares in this cluster
 	var affectedValidators []*validatorState
+	var affectedShares []*types.SSVShare
 	for _, state := range s.validators {
 		shareClusterID := types.ComputeClusterIDHash(state.share.OwnerAddress, state.share.OperatorIDs())
 		if bytes.Equal(shareClusterID, clusterID) {
@@ -297,6 +366,8 @@ func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner comm
 		state.share.Liquidated = true
 		state.lastUpdated = time.Now()
 		state.participationStatus = s.calculateParticipationStatus(state.share)
+
+		affectedShares = append(affectedShares, state.share)
 
 		pubKey := state.share.ValidatorPubKey
 
@@ -320,6 +391,11 @@ func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner comm
 				}
 			}(snapshot)
 		}
+	}
+
+	// Persist all changes
+	if err := s.sharesStorage.Save(nil, affectedShares...); err != nil {
+		return fmt.Errorf("persist liquidated shares: %w", err)
 	}
 
 	s.logger.Info("cluster liquidated",
@@ -883,12 +959,15 @@ func (s *validatorStoreImpl) updateShareInCommittee(share *types.SSVShare) error
 // If the committee becomes empty after the removal, the committee itself is deleted.
 // An OnCommitteeChanged callback is triggered if a committee is removed.
 // This method requires the caller to hold the write lock.
-func (s *validatorStoreImpl) removeShareFromCommittee(share *types.SSVShare) error { //nolint:unused
+func (s *validatorStoreImpl) removeShareFromCommittee(share *types.SSVShare) error {
 	committeeID := share.CommitteeID()
 
 	committee, exists := s.committees[committeeID]
 	if !exists {
-		return fmt.Errorf("committee not found: %x", committeeID)
+		s.logger.Debug("committee not found during share removal",
+			zap.String("committee_id", hex.EncodeToString(committeeID[:])),
+			zap.String("validator", hex.EncodeToString(share.ValidatorPubKey[:])))
+		return nil
 	}
 
 	delete(committee.validators, share.ValidatorPubKey)
@@ -967,21 +1046,35 @@ func (s *validatorStoreImpl) calculateParticipationStatus(share *types.SSVShare)
 
 	epoch := s.beaconCfg.EstimatedCurrentEpoch()
 
-	status.IsAttesting = share.IsAttesting(epoch)
-	status.IsSyncCommittee = share.IsSyncCommitteeEligible(s.beaconCfg, epoch)
+	// Check minimum participation epoch
 	status.MinParticipationMet = share.MinParticipationEpoch() <= epoch
-
 	if !status.MinParticipationMet {
-		status.Reason = fmt.Sprintf("waiting for min participation epoch %d", share.MinParticipationEpoch())
+		status.Reason = fmt.Sprintf("waiting for min participation epoch %d (current: %d)",
+			share.MinParticipationEpoch(), epoch)
 		return status
 	}
+
+	status.IsAttesting = share.IsAttesting(epoch)
+	status.IsSyncCommittee = share.IsSyncCommitteeEligible(s.beaconCfg, epoch)
 
 	status.IsParticipating = share.IsParticipating(s.beaconCfg, epoch)
 
 	if status.IsParticipating {
-		status.Reason = "active"
+		if status.IsAttesting {
+			status.Reason = "active and attesting"
+		} else if status.IsSyncCommittee {
+			status.Reason = "sync committee eligible (post-exit)"
+		} else {
+			status.Reason = "active"
+		}
 	} else {
-		status.Reason = "not eligible"
+		if share.Status.IsExited() || share.Status.HasExited() {
+			status.Reason = "exited"
+		} else if share.Status == eth2apiv1.ValidatorStatePendingQueued {
+			status.Reason = "pending activation"
+		} else {
+			status.Reason = "not eligible"
+		}
 	}
 
 	return status
