@@ -110,37 +110,13 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
 // GetSubnetsDistributionScores calculates distribution scores for subnets
 func GetSubnetsDistributionScores(stats *SubnetsStats, minPeers int, mySubnets commons.Subnets, maxPeers int) []float64 {
 	scores := make([]float64, commons.SubnetsCount)
-	for i := 0; i < commons.SubnetsCount; i++ {
-		if !mySubnets.IsSet(uint64(i)) {
+	for i := uint64(0); i < commons.SubnetsCount; i++ {
+		if !mySubnets.IsSet(i) {
 			continue
 		}
 		scores[i] = ScoreSubnet(stats.Connected[i], minPeers, maxPeers)
 	}
 	return scores
-}
-
-func scoreSubnet(connected, min, max int) float64 {
-	// scarcityFactor is the factor by which the score is increased for
-	// subnets with fewer than the desired minimum number of peers.
-	const scarcityFactor = 2.0
-
-	if connected <= 0 {
-		return 2.0 * scarcityFactor
-	}
-
-	if connected > max {
-		// Linear scaling when connected is above the desired maximum.
-		return -1.0 * (float64(connected-max) / float64(2*(max-min)))
-	}
-
-	if connected < min {
-		// Proportional scaling when connected is less than the desired minimum.
-		return 1.0 + (float64(min-connected)/float64(min))*scarcityFactor
-	}
-
-	// Linear scaling when connected is between min and max.
-	proportion := float64(connected-min) / float64(max-min)
-	return 1 - proportion
 }
 
 // ScoreSubnet calculates a score for a subnet based on the number of connected peers

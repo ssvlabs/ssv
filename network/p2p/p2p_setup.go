@@ -206,6 +206,9 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	n.logger.Debug("peers index is ready")
 
+	n.six = s.NewScoreIndex()
+	n.gsix = s.NewGossipScoreIndex()
+
 	var ids identify.IDService
 	if bh, ok := n.host.(*basichost.BasicHost); ok {
 		ids = bh.IDService()
@@ -317,7 +320,8 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 		TraceLog:      n.cfg.PubSubTrace,
 		MsgValidator:  n.msgValidator,
 		MsgHandler:    n.handlePubsubMessages(),
-		ScoreIndex:    n.idx,
+		PeersIndex:    n.idx,
+		ScoreIndex:    n.six,
 		//Discovery: n.disc,
 		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,

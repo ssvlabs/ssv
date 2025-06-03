@@ -16,6 +16,7 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/peers"
 	s "github.com/ssvlabs/ssv/network/peers/scores"
 	"github.com/ssvlabs/ssv/network/topics/params"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -55,6 +56,7 @@ type PubSubConfig struct {
 	// in case we need different validators for specific topics,
 	// this should be the place to map a validator to topic
 	MsgValidator messageValidator
+	PeersIndex   peers.Index
 	ScoreIndex   s.ScoreIndex
 	Scoring      *ScoringConfig
 	MsgIDHandler MsgIDHandler

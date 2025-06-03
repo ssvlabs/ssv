@@ -83,6 +83,7 @@ type p2pNetwork struct {
 	host         host.Host
 	streamCtrl   streams.StreamController
 	gsix         s.GossipScoreIndex
+	six          s.ScoreIndex
 	idx          peers.Index
 	isIdxSet     atomic.Bool
 	disc         discovery.Service

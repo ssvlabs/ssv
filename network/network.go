@@ -2,13 +2,11 @@ package network
 
 import (
 	"context"
-	"crypto/rsa"
 	"io"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
 	discovery "github.com/ssvlabs/ssv/network/discovery"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
@@ -61,8 +59,6 @@ type P2PNetwork interface {
 	GetPubSub() *pubsub.PubSub
 	// Get discovery service
 	GetDiscoveryService() discovery.Service
-	// Just for simulator
-	BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.PrivateKey, id spectypes.OperatorID) error
 }
 
 // GetValidatorStats returns stats of validators, including the following:
