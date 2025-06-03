@@ -921,7 +921,7 @@ func decodeHex(t *testing.T, hexStr string, errMsg string) []byte {
 func buildOperatorData(id uint64, ownerAddress string) *registrystorage.OperatorData {
 	return &registrystorage.OperatorData{
 		ID:           id,
-		PublicKey:    []byte(base64.StdEncoding.EncodeToString([]byte("samplePublicKey"))),
+		PublicKey:    base64.StdEncoding.EncodeToString([]byte("samplePublicKey")),
 		OwnerAddress: common.BytesToAddress([]byte(ownerAddress)),
 	}
 }
