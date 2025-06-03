@@ -15,3 +15,11 @@ For a complete list of supported environment variables, refer to the [OpenTeleme
   - **YAML:** `EnableTraces`  
   - **Type:** `boolean`  
   - **Default:** `false`
+
+### Example configuration
+
+```bash
+ENABLE_TRACES=true
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://alloy.observability.svc:4317
+OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
+```
