@@ -15,10 +15,10 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -27,6 +27,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -51,8 +52,10 @@ type peerIDWithMessageID struct {
 	messageID spectypes.MessageID
 }
 
-var PeerIDtoSignerMtx sync.Mutex
-var PeerIDtoSigner map[peer.ID]spectypes.OperatorID = make(map[peer.ID]spectypes.OperatorID)
+var (
+	PeerIDtoSigner hashmap.Map[peer.ID, []spectypes.OperatorID]
+	peerIDmu       sync.Mutex
+)
 
 type messageValidator struct {
 	logger          *zap.Logger
@@ -159,11 +162,24 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 	}
 
 	pid := pMsg.GetFrom()
-	operator := signedSSVMessage.OperatorIDs[0]
 
-	PeerIDtoSignerMtx.Lock()
-	PeerIDtoSigner[pid] = operator
-	PeerIDtoSignerMtx.Unlock()
+	func() {
+		ops := slices.Clone(signedSSVMessage.OperatorIDs)
+
+		peerIDmu.Lock()
+		defer peerIDmu.Unlock()
+
+		existing, found := PeerIDtoSigner.Get(pid)
+		if found {
+			ops = append(ops, existing...)
+		}
+
+		slices.Sort(ops)
+
+		ops = slices.Compact(ops)
+
+		PeerIDtoSigner.Set(pid, ops)
+	}()
 
 	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
 }
