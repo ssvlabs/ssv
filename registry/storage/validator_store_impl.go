@@ -8,10 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/operator/duties"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -467,59 +470,358 @@ func (s *validatorStoreImpl) OnOperatorRemoved(ctx context.Context, operatorID s
 	return nil
 }
 
+// OnFeeRecipientUpdated handles updates to a validator's fee recipient.
 func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner common.Address, recipient common.Address) error {
-	//TODO implement me
-	panic("implement me")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var affectedValidators []*validatorState
+	for _, state := range s.validators {
+		if state.share.OwnerAddress == owner {
+			affectedValidators = append(affectedValidators, state)
+		}
+	}
+
+	if len(affectedValidators) == 0 {
+		s.logger.Debug("no validators found for fee recipient update",
+			zap.String("owner", owner.Hex()))
+		return nil
+	}
+
+	for _, state := range affectedValidators {
+		// Update the fee recipient
+		state.share.SetFeeRecipient(bellatrix.ExecutionAddress(recipient))
+		state.lastUpdated = time.Now()
+
+		// Trigger updated callback
+		if s.callbacks.OnValidatorUpdated != nil {
+			snapshot := s.createSnapshot(state)
+			go func(snap *ValidatorSnapshot) {
+				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
+					s.logger.Error("validator updated callback failed", zap.Error(err))
+				}
+			}(snapshot)
+		}
+	}
+
+	s.logger.Info("fee recipient updated",
+		zap.String("owner", owner.Hex()),
+		zap.String("recipient", recipient.Hex()),
+		zap.Int("affected_validators", len(affectedValidators)))
+
+	return nil
 }
 
+// OnValidatorExited handles the event of a validator initiating a voluntary exit.
+// TODO: rethink it
 func (s *validatorStoreImpl) OnValidatorExited(ctx context.Context, pubKey spectypes.ValidatorPK, blockNumber uint64) error {
-	//TODO implement me
-	panic("implement me")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := hex.EncodeToString(pubKey[:])
+	state, exists := s.validators[key]
+	if !exists {
+		return fmt.Errorf("validator not found: %s", key)
+	}
+
+	// Trigger validator exited callback if exists
+	if s.callbacks.OnValidatorExited != nil {
+		exitDescriptor := duties.ExitDescriptor{
+			PubKey:         phase0.BLSPubKey(pubKey),
+			ValidatorIndex: state.share.ValidatorIndex,
+			BlockNumber:    blockNumber,
+			OwnValidator:   state.share.BelongsToOperator(s.operatorID),
+		}
+		go func(desc duties.ExitDescriptor) {
+			if err := s.callbacks.OnValidatorExited(ctx, desc); err != nil {
+				s.logger.Error("validator exited callback failed", zap.Error(err))
+			}
+		}(exitDescriptor)
+	}
+
+	s.logger.Info("validator exit initiated",
+		zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+		zap.Uint64("block_number", blockNumber))
+
+	return nil
 }
 
+// GetValidator returns a validator by either public key or index.
 func (s *validatorStoreImpl) GetValidator(id ValidatorID) (*ValidatorSnapshot, bool) {
-	//TODO implement me
-	panic("implement me")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var key string
+
+	switch v := id.(type) {
+	case ValidatorPubKey:
+		key = hex.EncodeToString(v[:])
+	case ValidatorIndex:
+		pubKey, exists := s.indices[phase0.ValidatorIndex(v)]
+		if !exists {
+			return nil, false
+		}
+		key = hex.EncodeToString(pubKey[:])
+	default:
+		return nil, false
+	}
+
+	state, exists := s.validators[key]
+	if !exists {
+		return nil, false
+	}
+
+	return s.createSnapshot(state), true
 }
 
+// GetCommittee returns a committee snapshot by ID.
 func (s *validatorStoreImpl) GetCommittee(id spectypes.CommitteeID) (*CommitteeSnapshot, bool) {
-	//TODO implement me
-	panic("implement me")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	committee, exists := s.committees[id]
+	if !exists {
+		return nil, false
+	}
+
+	return s.createCommitteeSnapshot(committee), true
 }
 
+// GetAllValidators returns snapshots of all validators.
 func (s *validatorStoreImpl) GetAllValidators() []*ValidatorSnapshot {
-	//TODO implement me
-	panic("implement me")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	snapshots := make([]*ValidatorSnapshot, 0, len(s.validators))
+	for _, state := range s.validators {
+		snapshots = append(snapshots, s.createSnapshot(state))
+	}
+
+	return snapshots
 }
 
+// GetOperatorValidators returns validators belonging to a specific operator.
 func (s *validatorStoreImpl) GetOperatorValidators(operatorID spectypes.OperatorID) []*ValidatorSnapshot {
-	//TODO implement me
-	panic("implement me")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var snapshots []*ValidatorSnapshot
+	for _, state := range s.validators {
+		if state.share.BelongsToOperator(operatorID) {
+			snapshots = append(snapshots, s.createSnapshot(state))
+		}
+	}
+
+	return snapshots
 }
 
+// GetParticipatingValidators returns validators that are participating based on options.
 func (s *validatorStoreImpl) GetParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot {
-	//TODO implement me
-	panic("implement me")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var snapshots []*ValidatorSnapshot
+	for _, state := range s.validators {
+		// Check liquidation filter
+		if state.share.Liquidated && !opts.IncludeLiquidated {
+			continue
+		}
+
+		// Check exit filter
+		if state.share.Exited() && !opts.IncludeExited {
+			continue
+		}
+
+		// Check attesting filter
+		if opts.OnlyAttesting && !state.share.IsAttesting(epoch) {
+			continue
+		}
+
+		// Check sync committee filter
+		if opts.OnlySyncCommittee {
+			period := s.beaconCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			if !s.isInSyncCommittee(state.share.ValidatorIndex, period) {
+				continue
+			}
+		}
+
+		// Check if participating (unless filtered out above)
+		if state.participationStatus.IsParticipating || opts.IncludeLiquidated || opts.IncludeExited {
+			snapshots = append(snapshots, s.createSnapshot(state))
+		}
+	}
+
+	return snapshots
 }
 
+// GetCommittees returns all committees.
 func (s *validatorStoreImpl) GetCommittees() []*CommitteeSnapshot {
-	//TODO implement me
-	panic("implement me")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	snapshots := make([]*CommitteeSnapshot, 0, len(s.committees))
+	for _, committee := range s.committees {
+		snapshots = append(snapshots, s.createCommitteeSnapshot(committee))
+	}
+
+	return snapshots
 }
 
+// GetOperatorCommittees returns committees that include a specific operator.
 func (s *validatorStoreImpl) GetOperatorCommittees(operatorID spectypes.OperatorID) []*CommitteeSnapshot {
-	//TODO implement me
-	panic("implement me")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var snapshots []*CommitteeSnapshot
+	for _, committee := range s.committees {
+		for _, op := range committee.operators {
+			if op == operatorID {
+				snapshots = append(snapshots, s.createCommitteeSnapshot(committee))
+				break
+			}
+		}
+	}
+
+	return snapshots
 }
 
+// RegisterSyncCommitteeInfo registers sync committee assignments.
 func (s *validatorStoreImpl) RegisterSyncCommitteeInfo(info []SyncCommitteeInfo) error {
-	//TODO implement me
-	panic("implement me")
+	if len(info) == 0 {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, sci := range info {
+		if len(sci.Indices) == 0 {
+			continue
+		}
+
+		// Ensure the period map exists
+		if _, exists := s.syncCommittees[sci.Period]; !exists {
+			s.syncCommittees[sci.Period] = make(map[phase0.ValidatorIndex][]phase0.CommitteeIndex)
+		}
+
+		// Store the committee indices for this validator
+		s.syncCommittees[sci.Period][sci.ValidatorIndex] = sci.Indices
+
+		// Update participation status for affected validator
+		for _, state := range s.validators {
+			if state.share.ValidatorIndex == sci.ValidatorIndex {
+				oldStatus := state.participationStatus
+				state.participationStatus = s.calculateParticipationStatus(state.share)
+
+				// If participation changed, trigger callbacks
+				if oldStatus.IsParticipating != state.participationStatus.IsParticipating {
+					if state.participationStatus.IsParticipating && s.callbacks.OnValidatorStarted != nil {
+						snapshot := s.createSnapshot(state)
+						go func(snap *ValidatorSnapshot) {
+							ctx := context.Background()
+							if err := s.callbacks.OnValidatorStarted(ctx, snap); err != nil {
+								s.logger.Error("validator started callback failed", zap.Error(err))
+							}
+						}(snapshot)
+					} else if !state.participationStatus.IsParticipating && s.callbacks.OnValidatorStopped != nil {
+						go func(pk spectypes.ValidatorPK) {
+							ctx := context.Background()
+							if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
+								s.logger.Error("validator stopped callback failed", zap.Error(err))
+							}
+						}(state.share.ValidatorPubKey)
+					}
+				}
+				break
+			}
+		}
+	}
+
+	// Clean up old periods (keep only current and next period)
+	currentEpoch := s.beaconCfg.EstimatedCurrentEpoch()
+	currentPeriod := s.beaconCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
+
+	for period := range s.syncCommittees {
+		if period < currentPeriod-1 {
+			delete(s.syncCommittees, period)
+		}
+	}
+
+	s.logger.Debug("registered sync committee info",
+		zap.Int("info_count", len(info)),
+		zap.Int("periods_tracked", len(s.syncCommittees)))
+
+	return nil
 }
 
+// GetSyncCommitteeValidators returns validators in the sync committee for a period.
 func (s *validatorStoreImpl) GetSyncCommitteeValidators(period uint64) []*ValidatorSnapshot {
-	//TODO implement me
-	panic("implement me")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	periodCommittees, exists := s.syncCommittees[period]
+	if !exists {
+		return nil
+	}
+
+	var snapshots []*ValidatorSnapshot
+	processedValidators := make(map[phase0.ValidatorIndex]bool)
+
+	for validatorIndex := range periodCommittees {
+		if processedValidators[validatorIndex] {
+			continue
+		}
+		processedValidators[validatorIndex] = true
+
+		pubKey, validatorExists := s.indices[validatorIndex]
+		if !validatorExists {
+			continue
+		}
+
+		key := hex.EncodeToString(pubKey[:])
+		state, validatorExists := s.validators[key]
+		if !validatorExists {
+			continue
+		}
+
+		snapshots = append(snapshots, s.createSnapshot(state))
+	}
+
+	return snapshots
+}
+
+// createCommitteeSnapshot creates an immutable snapshot of committee state.
+// Requires: caller must hold read lock.
+func (s *validatorStoreImpl) createCommitteeSnapshot(committee *committeeState) *CommitteeSnapshot {
+	snapshot := &CommitteeSnapshot{
+		ID:         committee.id,
+		Operators:  make([]spectypes.OperatorID, len(committee.operators)),
+		Validators: make([]*ValidatorSnapshot, 0, len(committee.validators)),
+	}
+
+	copy(snapshot.Operators, committee.operators)
+
+	// Add validator snapshots
+	for pubKey := range committee.validators {
+		key := hex.EncodeToString(pubKey[:])
+		if state, exists := s.validators[key]; exists {
+			snapshot.Validators = append(snapshot.Validators, s.createSnapshot(state))
+		}
+	}
+
+	return snapshot
+}
+
+// isInSyncCommittee checks if a validator is in the sync committee for a period.
+// Requires: caller must hold read lock.
+func (s *validatorStoreImpl) isInSyncCommittee(validatorIndex phase0.ValidatorIndex, period uint64) bool {
+	periodCommittees, exists := s.syncCommittees[period]
+	if !exists {
+		return false
+	}
+
+	_, exists = periodCommittees[validatorIndex]
+	return exists
 }
 
 // addShareToCommittee adds a share to its corresponding committee structure.
