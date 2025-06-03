@@ -142,10 +142,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
 	)
 
-	// Wait out Proposer delay if any is configured, instead of sleeping exactly r.proposerDelay
-	// duration take slot start time as the sleep starting point and adjust the amount to sleep
-	// accordingly - this is done to make sure block-proposal is still made on time even if
-	// Proposer duty started a bit late (eg. due to node being under load).
+// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
 	slotStartTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
 	timeIntoSlot := max(time.Since(slotStartTime), 0)
 	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
