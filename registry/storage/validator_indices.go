@@ -14,7 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validator_indices.go
 
 type BaseValidatorIndices interface {
 	Validator(pubKey []byte) (*types.SSVShare, bool)

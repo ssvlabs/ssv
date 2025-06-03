@@ -212,7 +212,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
-			mockValidatorStore := registrystoragemocks.NewMockValidatorStore(ctrl)
+			mockValidatorStore := registrystoragemocks.NewMockValidatorIndices(ctrl)
 			mockValidatorStore.EXPECT().OperatorValidators(gomock.Any()).Return(sharesWithMetadata).AnyTimes()
 
 			validatorStartFunc := func(validator *validator.Validator) (bool, error) {

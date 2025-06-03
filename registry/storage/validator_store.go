@@ -10,6 +10,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/validator_store.go -source=./validator_store.go
+
 // ValidatorStore is the authoritative source for all validator state management.
 // It handles all state transitions and provides thread-safe access to validator data.
 type ValidatorStore interface {

@@ -61,7 +61,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	shares := generateShares(t, ks, ns, netCfg)
 
 	dutyStore := dutystore.New()
-	validatorStore := mocks.NewMockValidatorStore(ctrl)
+	validatorStore := mocks.NewMockValidatorIndices(ctrl)
 	operators := mocks.NewMockOperators(ctrl)
 
 	committee := slices.Collect(maps.Keys(ks.Shares))
