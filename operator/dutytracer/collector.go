@@ -573,30 +573,20 @@ func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySi
 			}
 
 			var qbftMsg = new(specqbft.Message)
-			if err = qbftMsg.Decode(msg.Data); err != nil {
-				c.logger.Error("decode validator consensus data", zap.Error(err), fields.Slot(slot), fields.Validator(validatorPK[:]))
-				return err
-			}
-
-			if qbftMsg.MsgType == specqbft.ProposalMsgType {
-				var data = new(spectypes.ValidatorConsensusData)
-				err := data.Decode(msg.SignedSSVMessage.FullData)
-				if err != nil {
-					c.logger.Error("decode validator proposal data", zap.Error(err), fields.Slot(slot), fields.Validator(validatorPK[:]))
-					return err
-				}
-
-				_ = trace.update(func() error {
-
-					if roleDutyTrace.Validator == 0 {
-						roleDutyTrace.Validator = data.Duty.ValidatorIndex
+			if err = qbftMsg.Decode(msg.Data); err == nil {
+				if qbftMsg.MsgType == specqbft.ProposalMsgType {
+					var data = new(spectypes.ValidatorConsensusData)
+					if err := data.Decode(msg.SignedSSVMessage.FullData); err == nil {
+						_ = trace.update(func() error {
+							if roleDutyTrace.Validator == 0 {
+								roleDutyTrace.Validator = data.Duty.ValidatorIndex
+							}
+							// non-committee duty will contain the proposal data
+							roleDutyTrace.ProposalData = data.DataSSZ
+							return nil
+						})
 					}
-
-					// non-committee duty will contain the proposal data
-					roleDutyTrace.ProposalData = data.DataSSZ
-
-					return nil
-				})
+				}
 			}
 
 			return trace.update(func() error {

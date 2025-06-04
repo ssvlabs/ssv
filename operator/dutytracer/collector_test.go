@@ -140,7 +140,6 @@ func TestValidatorDuty(t *testing.T) {
 		require.NotNil(t, round)
 		require.Len(t, duty.Rounds, 1)
 
-		// require.Equal(t, uint64(1), round.Proposer) // populate proposer?
 		require.NotNil(t, round.ProposalTrace)
 		require.NotNil(t, round.ProposalTrace.QBFTTrace)
 
