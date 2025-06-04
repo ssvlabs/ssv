@@ -101,7 +101,6 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 		// propose if this node is the proposer
 		if proposerID == i.State.CommitteeMember.OperatorID {
 			proposal, err := CreateProposal(i.State, i.signer, i.StartValue, nil, nil)
-			// nolint
 			if err != nil {
 				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				span.SetStatus(codes.Error, err.Error())
@@ -114,7 +113,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 					span.SetStatus(codes.Error, err.Error())
 					return
 				}
-				// nolint
+
 				logger = logger.With(fields.Root(r))
 				const eventMsg = "📢 leader broadcasting proposal message"
 				logger.Debug(eventMsg)
@@ -122,12 +121,11 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
-					span.SetStatus(codes.Error, err.Error())
+					span.RecordError(err)
 				}
-
-				span.SetStatus(codes.Ok, "")
 			}
 		}
+
 		span.SetStatus(codes.Ok, "")
 	})
 }
