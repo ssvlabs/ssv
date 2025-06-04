@@ -52,8 +52,7 @@ var migration_7_populate_validator_index_mapping = Migration{
 			return fmt.Errorf("get validator pubkey and index: %w", err)
 		}
 
-		logger.Info("tracer-migration: shares with 0 index", zap.Int("count", shares0))
-		logger.Info("tracer-migration: validator index mappings", zap.Int("count", len(mappings)))
+		logger.Info("tracer-migration", zap.Int("shares with 0 index", shares0), zap.Int("validator index mappings", len(mappings)))
 
 		err = opt.Db.SetMany(storage.PubkeyToIndexMappingDBKey(opstorage.OperatorStoragePrefix), len(mappings), func(i int) (basedb.Obj, error) {
 			m := mappings[i]
