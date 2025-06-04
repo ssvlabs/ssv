@@ -240,7 +240,7 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 
 	sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
 	if err != nil {
-		return "", fmt.Errorf("decode share private key from hex %s: %w", string(sharePrivKeyHex), err)
+		return "", fmt.Errorf("decode share private key from hex for pubkey %s: %w", sharePubKey.String(), err)
 	}
 
 	sharePrivBLS := &bls.SecretKey{}
