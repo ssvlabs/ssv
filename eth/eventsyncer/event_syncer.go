@@ -24,8 +24,7 @@ import (
 // https://github.com/ssvlabs/ssv/pull/1053
 
 const (
-	defaultStalenessThreshold          = 300 * time.Second
-	defaultFinalizedStalenessThreshold = 3 * 32 * 12 * time.Second // 3 epochs // TODO: set a proper value?
+	defaultStalenessThreshold = 300 * time.Second
 )
 
 type ExecutionClient interface {
@@ -48,8 +47,7 @@ type EventSyncer struct {
 
 	logger *zap.Logger
 
-	stalenessThreshold          time.Duration
-	finalizedStalenessThreshold time.Duration
+	stalenessThreshold time.Duration
 
 	lastProcessedBlock       uint64
 	lastProcessedBlockChange time.Time
@@ -61,9 +59,8 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 		executionClient: executionClient,
 		eventHandler:    eventHandler,
 
-		logger:                      zap.NewNop(),
-		stalenessThreshold:          defaultStalenessThreshold,
-		finalizedStalenessThreshold: defaultFinalizedStalenessThreshold,
+		logger:             zap.NewNop(),
+		stalenessThreshold: defaultStalenessThreshold,
 	}
 
 	for _, opt := range opts {
@@ -91,13 +88,8 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	}
 
 	staleness := time.Since(es.lastProcessedBlockChange)
-	threshold := es.stalenessThreshold
 
-	if es.executionClient.IsFinalizedFork(ctx) {
-		threshold = es.finalizedStalenessThreshold
-	}
-
-	if staleness > threshold {
+	if staleness > es.stalenessThreshold {
 		return fmt.Errorf("syncing is stuck at block %d", lastBlockNum)
 	}
 
@@ -106,38 +98,29 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 
 // blockBelowThreshold checks if the specified block is recent enough.
 func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) error {
-	usingFinalized := es.executionClient.IsFinalizedFork(ctx)
+	header, err := es.executionClient.HeaderByNumber(ctx, block)
+	if err != nil {
+		return fmt.Errorf("failed to get header for block %d: %w", block, err)
+	}
 
-	if usingFinalized {
-		// When using finalized blocks, only check if the finalized block is fresh
+	// #nosec G115
+	blockTime := time.Unix(int64(header.Time), 0)
+	latestBlockTime := time.Now()
+
+	if es.executionClient.IsFinalizedFork(ctx) {
 		finalizedHeader, err := es.executionClient.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
 			return fmt.Errorf("failed to get finalized block header: %w", err)
 		}
-
 		// #nosec G115
-		blockTime := time.Unix(int64(finalizedHeader.Time), 0)
-		staleness := time.Since(blockTime)
+		latestBlockTime = time.Unix(int64(finalizedHeader.Time), 0)
+	}
 
-		if staleness > es.finalizedStalenessThreshold {
-			return fmt.Errorf("finalized block %d is too old (age: %s)",
-				finalizedHeader.Number.Uint64(), staleness.Round(time.Second))
-		}
-	} else {
-		// When using safety distance, check the specific block
-		header, err := es.executionClient.HeaderByNumber(ctx, block)
-		if err != nil {
-			return fmt.Errorf("failed to get header for block %d: %w", block, err)
-		}
+	staleness := latestBlockTime.Sub(blockTime)
 
-		// #nosec G115
-		blockTime := time.Unix(int64(header.Time), 0)
-		staleness := time.Since(blockTime)
-
-		if staleness > es.stalenessThreshold {
-			return fmt.Errorf("block %d is too old (age: %s)",
-				block.Uint64(), staleness.Round(time.Second))
-		}
+	if staleness > es.stalenessThreshold {
+		return fmt.Errorf("block %d is too old (age: %s)",
+			block.Uint64(), staleness.Round(time.Second))
 	}
 
 	return nil
