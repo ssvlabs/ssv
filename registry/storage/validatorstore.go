@@ -333,7 +333,7 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Update byValidatorIndex
+	// Delete byValidatorIndex and mapping
 	if share.HasBeaconMetadata() {
 		delete(c.byValidatorIndex, share.ValidatorIndex)
 		delete(c.byValidatorPubkey, share.ValidatorPubKey)
@@ -406,7 +406,7 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 			return fmt.Errorf("nil share")
 		}
 
-		// Update byValidatorIndex
+		// Update byValidatorIndex and mapping
 		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.ValidatorIndex] = share
 			c.byValidatorPubkey[share.ValidatorPubKey] = share.ValidatorIndex

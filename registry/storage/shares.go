@@ -27,7 +27,9 @@ import (
 // which is why the version evolves over time.
 var sharesPrefix = []byte("shares_v2/")
 
-var pubkeyIndexMapping = []byte("val_pki") // append only, NO DELETIONS
+// pubkeyIndexMapping is a prefix for the pubkey to index mapping.
+// since the churn of validators is low, we can use an append only mapping
+var pubkeyIndexMapping = []byte("val_pki")
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
@@ -152,9 +154,7 @@ func NewSharesStorage(beaconCfg networkconfig.Beacon, db basedb.Database, prefix
 	return storage, storage.validatorStore, nil
 }
 
-// loadFromDB reads all shares from db.
 func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]phase0.ValidatorIndex, error) {
-	// not locking since at this point nobody has the reference to this object
 	m := make(map[spectypes.ValidatorPK]phase0.ValidatorIndex)
 
 	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
@@ -172,9 +172,7 @@ func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]p
 	return m, err
 }
 
-// loadFromDB reads all shares from db.
 func (s *sharesStorage) loadFromDB() error {
-	// not locking since at this point nobody has the reference to this object
 	return s.db.GetAll(SharesDBPrefix(s.storagePrefix), func(i int, obj basedb.Obj) error {
 		val := &Share{}
 		if err := val.Decode(obj.Value); err != nil {
@@ -300,7 +298,6 @@ func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.Validator
 		out = append(out, phase0.ValidatorIndex(index))
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("get validator index by pubkey: %w", err)
 	}
@@ -321,7 +318,6 @@ func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare
 
 		return basedb.Obj{Key: pubkey[:], Value: b}, nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("save validator pubkey to index mapping: %w", err)
 	}
