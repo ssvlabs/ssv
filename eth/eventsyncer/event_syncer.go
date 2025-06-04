@@ -70,7 +70,10 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 	return es
 }
 
-// Healthy returns nil if the syncer is syncing ongoing events.
+// Healthy determines if the EventSyncer is functioning correctly. It returns nil if healthy.
+// It checks if the syncer has processed new blocks, hasn't been "stuck" without progress for too long
+// (this check is skipped if in finalized mode and already caught up), and if its last processed block
+// is sufficiently close to the relevant chain head (current time or EL finalized block time).
 func (es *EventSyncer) Healthy(ctx context.Context) error {
 	lastProcessedBlock, found, err := es.nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
@@ -87,40 +90,54 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 		return nil
 	}
 
-	staleness := time.Since(es.lastProcessedBlockChange)
-
-	if staleness > es.stalenessThreshold {
-		return fmt.Errorf("syncing is stuck at block %d", lastBlockNum)
+	// Check if we're making progress (only relevant for follow-distance approach)
+	if !es.executionClient.IsFinalizedFork(ctx) {
+		if time.Since(es.lastProcessedBlockChange) > es.stalenessThreshold {
+			return fmt.Errorf("syncing is stuck at block %d", lastBlockNum)
+		}
 	}
 
+	// Check if our current position is too far behind
 	return es.blockBelowThreshold(ctx, lastProcessedBlock)
 }
 
-// blockBelowThreshold checks if the specified block is recent enough.
+// blockBelowThreshold checks if the given block is acceptably recent. Returns nil if fresh.
+// Pre-finality, it compares the block's time against `time.Now()` using `es.stalenessThreshold`.
+// Post-finality, it compares against the EL's finalized block time. If the given block is newer
+// than the EL's finalized block, it's considered fresh (waiting for EL finality).
 func (es *EventSyncer) blockBelowThreshold(ctx context.Context, block *big.Int) error {
 	header, err := es.executionClient.HeaderByNumber(ctx, block)
 	if err != nil {
-		return fmt.Errorf("failed to get header for block %d: %w", block, err)
+		// Ensure block number is used in error message if that's the intent for %d
+		return fmt.Errorf("failed to get header for block %d: %w", block.Uint64(), err)
 	}
 
-	// #nosec G115
-	blockTime := time.Unix(int64(header.Time), 0)
-	latestBlockTime := time.Now()
-
+	var referenceTime time.Time
 	if es.executionClient.IsFinalizedFork(ctx) {
+		// Post-fork: Compare against finalized block time
 		finalizedHeader, err := es.executionClient.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
 			return fmt.Errorf("failed to get finalized block header: %w", err)
 		}
+
+		// If we're ahead of finalized, we're not behind - just waiting
+		if finalizedHeader.Number.Uint64() < block.Uint64() {
+			return nil
+		}
+
 		// #nosec G115
-		latestBlockTime = time.Unix(int64(finalizedHeader.Time), 0)
+		referenceTime = time.Unix(int64(finalizedHeader.Time), 0)
+	} else {
+		// Pre-fork: Compare against current time
+		referenceTime = time.Now()
 	}
 
-	staleness := latestBlockTime.Sub(blockTime)
-
-	if staleness > es.stalenessThreshold {
-		return fmt.Errorf("block %d is too old (age: %s)",
-			block.Uint64(), staleness.Round(time.Second))
+	// Check if block is older than threshold from reference time
+	// #nosec G115
+	blockTime := time.Unix(int64(header.Time), 0)
+	if blockTime.Before(referenceTime.Add(-es.stalenessThreshold)) {
+		return fmt.Errorf("block %d is too old (age: %s behind reference)",
+			block.Uint64(), referenceTime.Sub(blockTime).Round(time.Second))
 	}
 
 	return nil
