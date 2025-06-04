@@ -24,10 +24,10 @@ var migration_7_populate_validator_index_mapping = Migration{
 			}
 			// complete migration, this makes sure migration applies only once
 			if err = completed(opt.Db); err != nil {
-				err = fmt.Errorf("complete transaction: %w", err)
+				err = fmt.Errorf("complete migration: %w", err)
 				return
 			}
-			logger.Info("migration completed", zap.Int("validator_mapped", validatorsMapped))
+			logger.Info("migration completed", zap.Int("validators mapped", validatorsMapped))
 		}()
 
 		var (
@@ -52,7 +52,7 @@ var migration_7_populate_validator_index_mapping = Migration{
 			return fmt.Errorf("get validator pubkey and index: %w", err)
 		}
 
-		logger.Info("tracer-migration", zap.Int("shares with 0 index", shares0), zap.Int("validator index mappings", len(mappings)))
+		logger.Info("tracer migration", zap.Int("shares with 0 index", shares0), zap.Int("validator index mappings", len(mappings)))
 
 		err = opt.Db.SetMany(storage.PubkeyToIndexMappingDBKey(opstorage.OperatorStoragePrefix), len(mappings), func(i int) (basedb.Obj, error) {
 			m := mappings[i]
@@ -71,7 +71,7 @@ var migration_7_populate_validator_index_mapping = Migration{
 			return fmt.Errorf("get all validator pubkey and index: %w", err)
 		}
 
-		logger.Info("tracer-migration: inserted", zap.Int("count", insertedCount))
+		logger.Info("tracer migration", zap.Int("inserted", insertedCount))
 
 		return nil
 	},
