@@ -72,10 +72,9 @@ func NewRemoteKeyManager(
 	signerClient signerClient,
 	consensusClient consensusClient,
 	db basedb.Database,
-	networkConfig networkconfig.NetworkConfig,
 	getOperatorId func() spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
-	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
+	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
 	operatorPubKeyString, err := signerClient.OperatorIdentity(context.Background()) // TODO: use context
