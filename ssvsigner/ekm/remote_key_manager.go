@@ -47,6 +47,7 @@ type RemoteKeyManager struct {
 	operatorPubKey  keys.OperatorPublicKey
 	signLocksMu     sync.RWMutex
 	signLocks       map[signKey]*sync.RWMutex
+	spMu            sync.Mutex
 	slashingProtector
 }
 
@@ -117,6 +118,9 @@ func (km *RemoteKeyManager) AddShare(
 		return fmt.Errorf("add validator: %w", err)
 	}
 
+	km.spMu.Lock()
+	defer km.spMu.Unlock()
+
 	if err := km.BumpSlashingProtection(pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
@@ -131,6 +135,9 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPu
 	if err := km.signerClient.RemoveValidators(ctx, pubKey); err != nil {
 		return fmt.Errorf("remove validator: %w", err)
 	}
+
+	km.spMu.Lock()
+	defer km.spMu.Unlock()
 
 	if err := km.RemoveHighestAttestation(pubKey); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
@@ -324,6 +331,9 @@ func (km *RemoteKeyManager) handleDomainAttester(
 		return nil, fmt.Errorf("source epoch too far into the future")
 	}
 
+	km.spMu.Lock()
+	defer km.spMu.Unlock()
+
 	if err := km.IsAttestationSlashable(sharePubkey, data); err != nil {
 		return nil, err
 	}
@@ -453,6 +463,9 @@ func (km *RemoteKeyManager) handleDomainProposer(
 	if !signer.IsValidFarFutureSlot(network, blockSlot) {
 		return nil, fmt.Errorf("proposed block slot too far into the future")
 	}
+
+	km.spMu.Lock()
+	defer km.spMu.Unlock()
 
 	if err := km.IsBeaconBlockSlashable(sharePubkey, blockSlot); err != nil {
 		return nil, err
