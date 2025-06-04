@@ -208,7 +208,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	}
 	ctr := setupController(t, logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
-	ctr.indicesChange = make(chan struct{})
+	ctr.indicesChangeCh = make(chan struct{})
 
 	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
@@ -260,7 +260,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 
 	indiciesUpdate := make(chan struct{})
 	go func() {
-		<-ctr.indicesChange
+		<-ctr.indicesChangeCh
 		indiciesUpdate <- struct{}{}
 	}()
 	err = ctr.ReactivateCluster(common.HexToAddress("0x1231231"), []uint64{1, 2, 3, 4}, toReactivate)

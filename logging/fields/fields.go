@@ -124,8 +124,8 @@ func PubKey(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldPubKey, stringer.HexStringer{Val: pubKey})
 }
 
-func OperatorPubKey(pubKey []byte) zapcore.Field {
-	return zap.String(FieldOperatorPubKey, string(pubKey))
+func OperatorPubKey(pubKey string) zapcore.Field {
+	return zap.String(FieldOperatorPubKey, pubKey)
 }
 
 func Validator(pubKey []byte) zapcore.Field {

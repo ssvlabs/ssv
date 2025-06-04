@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -14,8 +15,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"math/rand"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -96,7 +95,7 @@ func TestSharesStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	for operatorID := range splitKeys {
-		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: []byte(strconv.FormatUint(operatorID, 10))})
+		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: strconv.FormatUint(operatorID, 10)})
 		require.NoError(t, err)
 	}
 
@@ -136,7 +135,7 @@ func TestSharesStorage(t *testing.T) {
 			updatedActivationEpoch, updatedExitEpoch := phase0.Epoch(5), phase0.Epoch(6)
 			updatedStatus := v1.ValidatorStateActiveOngoing
 
-			err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+			updatedShares, err := storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
 				share.ValidatorPubKey: {
 					Index:           updatedIndex,
 					Status:          updatedStatus,
@@ -144,6 +143,7 @@ func TestSharesStorage(t *testing.T) {
 					ExitEpoch:       updatedExitEpoch,
 				}})
 			require.NoError(t, err)
+			require.NotNil(t, updatedShares)
 
 			fetchedShare, exists := storage.Shares.Get(nil, share.ValidatorPubKey[:])
 			require.True(t, exists)
@@ -313,16 +313,19 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 
 		// Now update the share
 		updatedMetadata := &beaconprotocol.ValidatorMetadata{
-			Status:          v1.ValidatorStateActiveOngoing,
-			Index:           3,
-			ActivationEpoch: 5,
+			Status:          v1.ValidatorStateActiveExiting,
+			Index:           1,
+			ActivationEpoch: 4,
 			ExitEpoch:       goclient.FarFutureEpoch,
 		}
 
 		// Update the share with new metadata
-		require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-			testShare.ValidatorPubKey: updatedMetadata,
-		}))
+		updatedShares, err := storage.Shares.UpdateValidatorsMetadata(
+			map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+				testShare.ValidatorPubKey: updatedMetadata,
+			})
+		require.NoError(t, err)
+		require.NotNil(t, updatedShares)
 		reopen(t)
 
 		// Ensure the updated share is reflected in validatorStore
@@ -424,14 +427,15 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 					case "add":
 						require.NoError(t, storage.Shares.Save(nil, share1, share2, share3, share4))
 					case "update":
-						require.NoError(t, storage.Shares.UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
-							share2.ValidatorPubKey: {
-								Status:          updatedShare2.Status,
-								Index:           updatedShare2.ValidatorIndex,
-								ActivationEpoch: updatedShare2.ActivationEpoch,
-								ExitEpoch:       updatedShare2.ExitEpoch,
-							},
-						}))
+						_, err := storage.Shares.UpdateValidatorsMetadata(
+							map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata{
+								share2.ValidatorPubKey: {
+									Status:          updatedShare2.Status,
+									Index:           updatedShare2.ValidatorIndex,
+									ActivationEpoch: updatedShare2.ActivationEpoch,
+									ExitEpoch:       updatedShare2.ExitEpoch},
+							})
+						require.NoError(t, err)
 					case "remove1":
 						require.NoError(t, storage.Shares.Delete(nil, share1.ValidatorPubKey[:]))
 					case "remove4":
