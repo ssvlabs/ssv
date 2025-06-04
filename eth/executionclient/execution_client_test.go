@@ -66,6 +66,18 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 	)
 }
 
+// copyNetworkConfig creates a deep copy of the provided network configuration.
+func copyNetworkConfig(cfg networkconfig.NetworkConfig) networkconfig.NetworkConfig {
+	result := cfg
+
+	if cfg.SSVConfig.Forks.Forks != nil {
+		result.SSVConfig.Forks.Forks = make(networkconfig.SSVForks, len(cfg.SSVConfig.Forks.Forks))
+		copy(result.SSVConfig.Forks.Forks, cfg.SSVConfig.Forks.Forks)
+	}
+
+	return result
+}
+
 // testEnv is a helper struct to set up and manage test environment.
 type testEnv struct {
 	t            *testing.T
@@ -222,7 +234,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		const followDistance = 8
 
 		// Create a test network config with recent genesis time and high finality fork epoch
-		testNetwork := networkconfig.TestNetwork
+		testNetwork := copyNetworkConfig(networkconfig.TestNetwork)
 		testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
 		testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
 
@@ -268,7 +280,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		const followDistance = 100 // Much larger than the current block number
 
 		// Create a test network config with recent genesis time and high finality fork epoch
-		testNetwork := networkconfig.TestNetwork
+		testNetwork := copyNetworkConfig(networkconfig.TestNetwork)
 		testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
 		testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
 
@@ -450,7 +462,7 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			}
 
 			// Create a test network config with recent genesis time and high finality fork epoch
-			testNetwork := networkconfig.TestNetwork
+			testNetwork := copyNetworkConfig(networkconfig.TestNetwork)
 			testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
 			testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
 
@@ -552,7 +564,7 @@ func TestStreamLogs(t *testing.T) {
 		const followDistance = 2
 
 		// Create a test network config with recent genesis time and high finality fork epoch
-		testNetwork := networkconfig.TestNetwork
+		testNetwork := copyNetworkConfig(networkconfig.TestNetwork)
 		testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
 		testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
 
@@ -1090,7 +1102,7 @@ func TestSimSSV(t *testing.T) {
 		const followDistance = 2
 
 		// Create a test network config with recent genesis time and high finality fork epoch
-		testNetwork := networkconfig.TestNetwork
+		testNetwork := copyNetworkConfig(networkconfig.TestNetwork)
 		testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
 		testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
 
