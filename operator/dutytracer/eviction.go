@@ -86,6 +86,8 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 				c.logger.Error("save validator duties to disk", zap.Error(err))
 				return true
 			}
+
+			totalSaved++
 		}
 
 		slotToTraceMap.Delete(slot)

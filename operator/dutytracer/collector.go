@@ -149,7 +149,8 @@ func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.B
 				roles: []*model.ValidatorDutyTrace{roleDutyTrace},
 			}
 			return wrappedTrace, roleDutyTrace, true, nil
-		} else if err != nil {
+		}
+		if err != nil {
 			_ = c.inFlightValidator.Delete(vPubKey)
 			return nil, nil, false, err
 		}
@@ -192,8 +193,7 @@ var errInFlight = errors.New("in flight")
 func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spectypes.CommitteeID) (*committeeDutyTrace, bool, error) {
 	// check late arrival
 	if uint64(slot) <= c.lastEvictedSlot.Load() {
-		_, found := c.inFlightCommittee.GetOrSet(committeeID, struct{}{})
-		if found {
+		if _, found := c.inFlightCommittee.GetOrSet(committeeID, struct{}{}); found {
 			return nil, false, errInFlight
 		}
 
@@ -206,7 +206,8 @@ func (c *Collector) getOrCreateCommitteeTrace(slot phase0.Slot, committeeID spec
 				},
 			}
 			return trace, true, nil
-		} else if err != nil {
+		}
+		if err != nil {
 			_ = c.inFlightCommittee.Delete(committeeID)
 			return nil, false, fmt.Errorf("get late committee duty data: %w", err)
 		}
@@ -475,29 +476,40 @@ func (c *Collector) getSyncCommitteeRoot(ctx context.Context, slot phase0.Slot, 
 }
 
 func (c *Collector) Collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
+	err := c.collect(ctx, msg, verifySig)
+
+	if errors.Is(err, errInFlight) {
+		go c.collectLateMessage(ctx, msg, verifySig)
+		return nil
+	}
+
+	return err
+}
+
+const maxRetryCount = 3
+
+func (c *Collector) collectLateMessage(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) {
 	var (
 		err   error
 		tries int
 	)
 
-	const maxTries = 3
-
-	// if another late message is in flight (for the same ID) - try `maxTries` times before giving up
-	for tries < maxTries {
-		err = c.collect(ctx, msg, verifySig)
-
-		if !errors.Is(err, errInFlight) {
-			break
+	defer func() {
+		if err != nil {
+			c.logger.Error("collect late message", zap.Error(err), fields.MessageID(msg.MsgID))
 		}
-		time.Sleep(20 * time.Millisecond)
+	}()
+
+	// if another late message is in flight (for the same ID) - try `maxRetryCount` times before giving up
+	for tries < maxRetryCount {
+		err = c.collect(ctx, msg, verifySig)
+		if !errors.Is(err, errInFlight) {
+			return
+		}
 		tries++
+		time.Sleep(time.Second)
 	}
-
-	if tries >= maxTries {
-		c.logger.Warn("exhausted retries for late message", fields.MessageID(msg.MsgID))
-	}
-
-	return err
+	c.logger.Warn("exhausted retries for late message", fields.MessageID(msg.MsgID), zap.Int("tries", tries))
 }
 
 func (c *Collector) collect(ctx context.Context, msg *queue.SSVMessage, verifySig func(*spectypes.PartialSignatureMessages) error) error {
