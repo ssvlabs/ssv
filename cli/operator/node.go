@@ -327,7 +327,6 @@ var StartNodeCmd = &cobra.Command{
 				ssvSignerClient,
 				consensusClient,
 				db,
-				networkConfig,
 				operatorDataStore.GetOperatorID,
 			)
 			if err != nil {
