@@ -22,12 +22,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ProposerRunner struct {
@@ -41,6 +42,11 @@ type ProposerRunner struct {
 	valCheck            specqbft.ProposedValueCheckF
 	measurements        measurementsStore
 	graffiti            []byte
+
+	// proposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
+	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
+	// higher MEV.
+	proposerDelay time.Duration
 }
 
 func NewProposerRunner(
@@ -55,9 +61,18 @@ func NewProposerRunner(
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
+	proposerDelay time.Duration,
 ) (Runner, error) {
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
+	}
+
+	// Cap proposerDelay value to make sure we don't miss block proposals, for details
+	// on how this value should be chosen see:
+	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration
+	const maxReasonableProposerDelay = 1650 * time.Millisecond
+	if proposerDelay > maxReasonableProposerDelay {
+		proposerDelay = maxReasonableProposerDelay
 	}
 
 	return &ProposerRunner{
@@ -75,8 +90,10 @@ func NewProposerRunner(
 		operatorSigner:      operatorSigner,
 		doppelgangerHandler: doppelgangerHandler,
 		valCheck:            valCheck,
-		graffiti:            graffiti,
 		measurements:        NewMeasurementsStore(),
+		graffiti:            graffiti,
+
+		proposerDelay: proposerDelay,
 	}, nil
 }
 
@@ -122,6 +139,15 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()))
 
+	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
+	slotStartTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
+	timeIntoSlot := max(time.Since(slotStartTime), 0)
+	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
+	time.Sleep(proposerDelayAdjusted)
+
+	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
+	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
+	// we are always fetching Ethereum block here just in case we need to propose it).
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
@@ -138,6 +164,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
+		zap.Duration("proposer_delay", r.proposerDelay),
 		zap.Duration("took", time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
 
