@@ -648,9 +648,6 @@ func (ec *ExecutionClient) IsFinalizedFork(ctx context.Context) bool {
 
 	// Check if we've passed the fork point
 	if currentEpoch > ec.networkConfig.SSVConfig.Forks.GetFinalityConsensusEpoch() {
-		ec.logger.Info("finality fork threshold passed, using finalized blocks",
-			zap.Uint64("current_epoch", uint64(currentEpoch)),
-			zap.Uint64("finality_fork_epoch", uint64(ec.networkConfig.SSVConfig.Forks.GetFinalityConsensusEpoch())))
 		return true
 	}
 
