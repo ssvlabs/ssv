@@ -62,6 +62,7 @@ type marshaledConfig struct {
 	Bootnodes               []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
 	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
+	Forks                   SSVForkConfig     `json:"Forks,omitempty" yaml:"Forks,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
@@ -73,6 +74,7 @@ func (s SSVConfig) marshal() marshaledConfig {
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
+		Forks:                   s.Forks,
 	}
 
 	return aux
@@ -103,6 +105,7 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 		Bootnodes:               aux.Bootnodes,
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
 		TotalEthereumValidators: aux.TotalEthereumValidators,
+		Forks:                   aux.Forks,
 	}
 
 	return nil
