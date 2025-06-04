@@ -117,6 +117,14 @@ func (km *RemoteKeyManager) AddShare(
 		return fmt.Errorf("add validator: %w", err)
 	}
 
+	attLock := km.lock(pubKey, lockAttestation)
+	attLock.Lock()
+	defer attLock.Unlock()
+
+	propLock := km.lock(pubKey, lockProposal)
+	propLock.Lock()
+	defer propLock.Unlock()
+
 	if err := km.BumpSlashingProtection(pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
@@ -167,7 +175,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	switch signatureDomain {
 	case spectypes.DomainAttester:
-		val := km.lock(sharePubkey, "attestation")
+		val := km.lock(sharePubkey, lockAttestation)
 		val.Lock()
 		defer val.Unlock()
 
@@ -180,7 +188,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		req.Attestation = data
 
 	case spectypes.DomainProposer:
-		val := km.lock(sharePubkey, "proposal")
+		val := km.lock(sharePubkey, lockProposal)
 		val.Lock()
 		defer val.Unlock()
 
@@ -236,7 +244,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		req.RandaoReveal = &web3signer.RandaoReveal{Epoch: phase0.Epoch(data)}
 
 	case spectypes.DomainSyncCommittee:
-		val := km.lock(sharePubkey, "sync_committee")
+		val := km.lock(sharePubkey, lockSyncCommittee)
 		val.Lock()
 		defer val.Unlock()
 
@@ -252,7 +260,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		}
 
 	case spectypes.DomainSyncCommitteeSelectionProof:
-		val := km.lock(sharePubkey, "sync_committee_selection_data")
+		val := km.lock(sharePubkey, lockSyncCommitteeSelectionData)
 		val.Lock()
 		defer val.Unlock()
 
@@ -268,7 +276,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		}
 
 	case spectypes.DomainContributionAndProof:
-		val := km.lock(sharePubkey, "sync_committee_selection_and_proof")
+		val := km.lock(sharePubkey, lockSyncCommitteeSelectionAndProof)
 		val.Lock()
 		defer val.Unlock()
 
@@ -503,12 +511,22 @@ func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {
 	return km.getOperatorId()
 }
 
+type lockOperation string
+
+const (
+	lockAttestation                    lockOperation = "attestation"
+	lockProposal                       lockOperation = "proposal"
+	lockSyncCommittee                  lockOperation = "sync_committee"
+	lockSyncCommitteeSelectionData     lockOperation = "sync_committee_selection_data"
+	lockSyncCommitteeSelectionAndProof lockOperation = "sync_committee_selection_and_proof"
+)
+
 type signKey struct {
 	pubkey    phase0.BLSPubKey
-	operation string
+	operation lockOperation
 }
 
-func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation string) *sync.RWMutex {
+func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation lockOperation) *sync.RWMutex {
 	km.signLocksMu.Lock()
 	defer km.signLocksMu.Unlock()
 
