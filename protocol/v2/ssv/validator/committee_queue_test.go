@@ -15,9 +15,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	qbfttests "github.com/ssvlabs/ssv/integration/qbft/tests"
+	"github.com/ssvlabs/ssv/networkconfig"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -166,15 +167,18 @@ func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.
 // 4. Verify that a new queue was created for the message's slot
 // 5. Confirm the queue has the correct properties (non-nil and proper slot)
 func TestHandleMessageCreatesQueue(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:          ctx,
+		Queues:       make(map[phase0.Slot]queueContainer),
+		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
+		beaconConfig: networkconfig.NewMockBeacon(ctrl),
 	}
 
 	slot := phase0.Slot(123)
@@ -214,15 +218,18 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 // 7. Verify both messages were received by the handler
 // 8. Confirm messages were processed in the expected order
 func TestConsumeQueueBasic(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:          ctx,
+		Queues:       make(map[phase0.Slot]queueContainer),
+		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
+		beaconConfig: networkconfig.NewMockBeacon(ctrl),
 	}
 
 	slot := phase0.Slot(123)
@@ -295,15 +302,21 @@ func TestConsumeQueueBasic(t *testing.T) {
 // 3. Test scenario 2: Delete runner and call StartConsumeQueue for the existing slot (should error)
 // 4. Test scenario 3: Restore runner and call StartConsumeQueue for the valid slot (should succeed)
 func TestStartConsumeQueue(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	logger, _ := zap.NewDevelopment()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
+	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
+	mockBeaconConfig.EXPECT().EstimatedTimeAtSlot(gomock.Any())
+
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:          ctx,
+		Queues:       make(map[phase0.Slot]queueContainer),
+		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
+		beaconConfig: mockBeaconConfig,
 	}
 
 	slot := phase0.Slot(123)
@@ -362,10 +375,9 @@ func TestFilterNoProposalAccepted(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:     ctx,
+		Queues:  make(map[phase0.Slot]queueContainer),
+		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -482,10 +494,9 @@ func TestFilterNotDecidedSkipsPartialSignatures(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:     ctx,
+		Queues:  make(map[phase0.Slot]queueContainer),
+		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -562,10 +573,9 @@ func TestFilterDecidedAllowsAll(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:     ctx,
+		Queues:  make(map[phase0.Slot]queueContainer),
+		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -792,10 +802,9 @@ func TestCommitteeQueueFilteringScenarios(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				ctx:           ctx,
-				Queues:        make(map[phase0.Slot]queueContainer),
-				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-				BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+				ctx:     ctx,
+				Queues:  make(map[phase0.Slot]queueContainer),
+				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
 
 			slot := phase0.Slot(123)
@@ -954,10 +963,9 @@ func TestFilterPartialSignatureMessages(t *testing.T) {
 			defer cancel()
 
 			committee := &Committee{
-				ctx:           ctx,
-				Queues:        make(map[phase0.Slot]queueContainer),
-				Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-				BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+				ctx:     ctx,
+				Queues:  make(map[phase0.Slot]queueContainer),
+				Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 			}
 
 			slot := phase0.Slot(123)
@@ -1041,10 +1049,9 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:     ctx,
+		Queues:  make(map[phase0.Slot]queueContainer),
+		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 
 	slot := phase0.Slot(123)
@@ -1162,9 +1169,8 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 
 	queueCapacity := 2
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:    ctx,
+		Queues: make(map[phase0.Slot]queueContainer),
 	}
 
 	slot := phase0.Slot(123)
@@ -1264,8 +1270,7 @@ func TestConsumeQueueStopsOnErrNoValidDuties(t *testing.T) {
 	defer cancel()
 
 	committee := &Committee{
-		ctx:           ctx,
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx: ctx,
 	}
 
 	slot := phase0.Slot(123)
@@ -1332,10 +1337,9 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 	// --- Setup a single-slot committee and its queue ---
 	slot := phase0.Slot(42)
 	committee := &Committee{
-		ctx:           ctx,
-		Queues:        make(map[phase0.Slot]queueContainer),
-		Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-		BeaconNetwork: qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		ctx:     ctx,
+		Queues:  make(map[phase0.Slot]queueContainer),
+		Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 	}
 	qc := queueContainer{
 		Q: queue.New(1000),
@@ -1537,7 +1541,6 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 // in GitHub issue #1680 (https://github.com/ssvlabs/ssv/issues/1680).
 func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 	mainLogger, _ := zap.NewDevelopment()
-	mainBeaconNetwork := qbfttests.NewTestingBeaconNodeWrapped().GetBeaconNetwork()
 
 	t.Run("drop when inbox strictly full", func(t *testing.T) {
 		logger := mainLogger.Named("DropWhenInboxStrictlyFull")
@@ -1545,10 +1548,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		defer cancel()
 
 		committee := &Committee{
-			ctx:           ctx,
-			Queues:        make(map[phase0.Slot]queueContainer),
-			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-			BeaconNetwork: mainBeaconNetwork,
+			ctx:     ctx,
+			Queues:  make(map[phase0.Slot]queueContainer),
+			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
 
 		slot := phase0.Slot(123)
@@ -1618,10 +1620,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		defer cancel()
 
 		committee := &Committee{
-			ctx:           ctx,
-			Queues:        make(map[phase0.Slot]queueContainer),
-			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-			BeaconNetwork: mainBeaconNetwork,
+			ctx:     ctx,
+			Queues:  make(map[phase0.Slot]queueContainer),
+			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
 
 		slot := phase0.Slot(789)
@@ -1712,10 +1713,9 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		defer cancel()
 
 		committee := &Committee{
-			ctx:           ctx,
-			Queues:        make(map[phase0.Slot]queueContainer),
-			Runners:       make(map[phase0.Slot]*runner.CommitteeRunner),
-			BeaconNetwork: mainBeaconNetwork,
+			ctx:     ctx,
+			Queues:  make(map[phase0.Slot]queueContainer),
+			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
 
 		slot := phase0.Slot(456)
