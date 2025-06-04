@@ -1,6 +1,8 @@
 package validator
 
 import (
+	"time"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -36,6 +38,7 @@ type Options struct {
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
 	Graffiti            []byte
+	ProposerDelay       time.Duration
 }
 
 func (o *Options) defaults() {
