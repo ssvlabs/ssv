@@ -246,9 +246,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		err := fmt.Errorf("failed to fetch attester duties: %w", err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "failed to fetch attester duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))

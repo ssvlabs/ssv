@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -107,16 +106,12 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 
 	vDuty, ok := duty.(*spectypes.ValidatorDuty)
 	if !ok {
-		err := fmt.Errorf("expected ValidatorDuty, got %T", duty)
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "expected ValidatorDuty, got %T", duty)
 	}
 
 	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(vDuty.Type)]
 	if dutyRunner == nil {
-		err := errors.Errorf("no runner for duty type %s", vDuty.Type.String())
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "no duty runner for role %s", vDuty.Type.String())
 	}
 
 	// Log with duty ID.
@@ -134,8 +129,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	span.AddEvent(eventMsg)
 
 	if err := dutyRunner.StartNewDuty(ctx, logger, vDuty, v.Operator.GetQuorum()); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not start duty: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -159,16 +153,12 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	if msgType != message.SSVEventMsgType {
 		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			err = errors.Wrap(err, "invalid SignedSSVMessage")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "invalid SignedSSVMessage: %w", err)
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
-			err = errors.Wrap(err, "SignedSSVMessage has an invalid signature")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
 		}
 	}
 
@@ -177,30 +167,22 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	// Get runner
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
-		err := fmt.Errorf("could not get duty runner for msg ID %v", messageID)
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not get duty runner for msg ID %v", messageID)
 	}
 
 	// Validate message for runner
 	if err := validateMessage(v.Share.Share, msg); err != nil {
-		err := fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "message invalid for msg ID %v: %w", messageID, err)
 	}
 	switch msgType {
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
-			err := errors.New("could not decode consensus message from network message")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "could not decode consensus message from network message")
 		}
 
 		if err := qbftMsg.Validate(); err != nil {
-			err := errors.Wrap(err, "invalid qbft Message")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "invalid QBFT Message: %w", err)
 		}
 
 		if dutyID, ok := v.dutyIDs.Get(messageID.GetRoleType()); ok {
@@ -213,17 +195,14 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			With(fields.Slot(phase0.Slot(qbftMsg.Height)))
 
 		if err := dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage); err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Error(span, err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
-			err := errors.New("could not decode post consensus message from network message")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "could not decode post consensus message from network message")
 		}
 
 		if dutyID, ok := v.dutyIDs.Get(messageID.GetRoleType()); ok {
@@ -234,44 +213,35 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		logger = logger.With(fields.Slot(signedMsg.Slot))
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			err := errors.New("PartialSignatureMessage has more than 1 signer")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "PartialSignatureMessage has more than 1 signer")
 		}
 
 		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			err := errors.Wrap(err, "invalid PartialSignatureMessages")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "invalid PartialSignatureMessages: %w", err)
 		}
 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
 			span.AddEvent("processing post-consensus message")
 			if err := dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg); err != nil {
-				span.SetStatus(codes.Error, err.Error())
-				return err
+				return observability.Error(span, err)
 			}
 			span.SetStatus(codes.Ok, "")
 			return nil
 		}
 		span.AddEvent("processing pre-consensus message")
 		if err := dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg); err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Error(span, err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case message.SSVEventMsgType:
 		if err := v.handleEventMessage(ctx, logger, msg, dutyRunner); err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "could not handle event message: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	default:
-		err := errors.New("unknown msg")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "unknown message type %d", msgType)
 	}
 }
 

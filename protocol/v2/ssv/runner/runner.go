@@ -159,16 +159,13 @@ func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, r
 	defer span.End()
 
 	if err := b.ShouldProcessDuty(duty); err != nil {
-		err := errors.Wrap(err, "can't start duty")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "can't start duty: %w", err)
 	}
 
 	b.baseSetupForNewDuty(duty, quorum)
 
 	if err := runner.executeDuty(ctx, logger, duty); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "failed to execute duty: %w", err)
 	}
 	span.SetStatus(codes.Ok, "")
 	return nil
@@ -327,15 +324,11 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 
 	byts, err := input.Encode()
 	if err != nil {
-		err = errors.Wrap(err, "could not encode input data for consensus")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not encode input data for consensus: %w", err)
 	}
 
 	if err := runner.GetValCheckF()(byts); err != nil {
-		err = errors.Wrap(err, "input data invalid")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "input data invalid: %w", err)
 	}
 
 	span.AddEvent("start new instance")
@@ -345,16 +338,12 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		specqbft.Height(slot),
 		byts,
 	); err != nil {
-		err = errors.Wrap(err, "could not start new QBFT instance")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not start new QBFT instance: %w", err)
 	}
 
 	newInstance := runner.GetBaseRunner().QBFTController.StoredInstances.FindInstance(runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
-		err = errors.New("could not find newly created QBFT instance")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not find newly created QBFT instance")
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance

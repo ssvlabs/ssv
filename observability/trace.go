@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
@@ -27,4 +29,16 @@ func TraceContext(ctx context.Context, str string) context.Context {
 	return trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID: traceID,
 	}))
+}
+
+// Errorf sets the status of the span to error and returns an error with the formatted message.
+func Errorf(span trace.Span, f string, args ...any) error {
+	err := fmt.Errorf(f, args...)
+	span.SetStatus(codes.Error, err.Error())
+	return err
+}
+
+func Error(span trace.Span, err error) error {
+	span.SetStatus(codes.Error, err.Error())
+	return err
 }

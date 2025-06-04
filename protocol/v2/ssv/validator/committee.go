@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -108,16 +107,13 @@ func (c *Committee) StartDuty(ctx context.Context, logger *zap.Logger, duty *spe
 	span.AddEvent("prepare duty and runner")
 	r, runnableDuty, err := c.prepareDutyAndRunner(ctx, logger, duty)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Error(span, err)
 	}
 
 	logger.Info("ℹ️ starting duty processing")
 	err = r.StartNewDuty(ctx, logger, runnableDuty, c.CommitteeMember.GetQuorum())
 	if err != nil {
-		err = errors.Wrap(err, "runner failed to start duty")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "runner failed to start duty: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -141,22 +137,17 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	defer span.End()
 
 	if _, exists := c.Runners[duty.Slot]; exists {
-		err = fmt.Errorf("CommitteeRunner for slot %d already exists", duty.Slot)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, nil, err
+		return nil, nil, observability.Errorf(span, "CommitteeRunner for slot %d already exists", duty.Slot)
 	}
 
 	shares, attesters, runnableDuty, err := c.prepareDuty(logger, duty)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return nil, nil, err
+		return nil, nil, observability.Error(span, err)
 	}
 
 	r, err = c.CreateRunnerFn(duty.Slot, shares, attesters, c.dutyGuard)
 	if err != nil {
-		err = errors.Wrap(err, "could not create CommitteeRunner")
-		span.SetStatus(codes.Error, err.Error())
-		return nil, nil, err
+		return nil, nil, observability.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
 
 	// Set timeout function.
@@ -246,22 +237,16 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	if msgType != message.SSVEventMsgType {
 		span.AddEvent("validating message and signature")
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			err := errors.Wrap(err, "invalid SignedSSVMessage")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "invalid SignedSSVMessage: %w", err)
 		}
 
 		// Verify SignedSSVMessage's signature
 		if err := spectypes.Verify(msg.SignedSSVMessage, c.CommitteeMember.Committee); err != nil {
-			err := errors.Wrap(err, "SignedSSVMessage has an invalid signature")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "SignedSSVMessage has an invalid signature: %w", err)
 		}
 
 		if err := c.validateMessage(msg.SignedSSVMessage.SSVMessage); err != nil {
-			err := errors.Wrap(err, "Message invalid")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "Message invalid: %w", err)
 		}
 	}
 
@@ -269,43 +254,31 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &qbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			err := errors.Wrap(err, "could not get consensus Message from network Message")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "could not decode consensus Message: %w", err)
 		}
 		if err := qbftMsg.Validate(); err != nil {
-			err := errors.Wrap(err, "invalid qbft Message")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "invalid QBFT Message: %w", err)
 		}
 		c.mtx.RLock()
 		r, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.RUnlock()
 		if !exists {
-			err := fmt.Errorf("no runner found for message's slot")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "no runner found for message's slot")
 		}
 		return r.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
-			err := errors.Wrap(err, "could not get post consensus Message from network Message")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "could not decode PartialSignatureMessages: %w", err)
 		}
 
 		// Validate
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
-			err := errors.New("PartialSignatureMessage has more than 1 signer")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "PartialSignatureMessage has more than 1 signer")
 		}
 
 		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
-			err := errors.Wrap(err, "invalid PartialSignatureMessages")
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "invalid PartialSignatureMessages: %w", err)
 		}
 
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
@@ -313,28 +286,22 @@ func (c *Committee) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 			r, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.RUnlock()
 			if !exists {
-				err := fmt.Errorf("no runner found for message's slot")
-				span.SetStatus(codes.Error, err.Error())
-				return err
+				return observability.Errorf(span, "no runner found for message's slot")
 			}
 			if err := r.ProcessPostConsensus(ctx, logger, pSigMessages); err != nil {
-				span.SetStatus(codes.Error, err.Error())
-				return err
+				return observability.Error(span, err)
 			}
 			span.SetStatus(codes.Ok, "")
 			return nil
 		}
 	case message.SSVEventMsgType:
 		if err := c.handleEventMessage(ctx, logger, msg); err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "could not handle event message: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	default:
-		err := errors.New("unknown msg")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "unknown message type: %d", msgType)
 	}
 
 	span.SetStatus(codes.Ok, "")

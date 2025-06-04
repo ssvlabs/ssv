@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"fmt"
 
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
@@ -20,9 +19,7 @@ func (v *Validator) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 
 	eventMsg, ok := msg.Body.(*types.EventMsg)
 	if !ok {
-		err := fmt.Errorf("could not decode event message")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not decode event message")
 	}
 
 	span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
@@ -30,24 +27,18 @@ func (v *Validator) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 	switch eventMsg.Type {
 	case types.Timeout:
 		if err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(ctx, logger, *eventMsg); err != nil {
-			err := fmt.Errorf("timeout event: %w", err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "timeout event: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case types.ExecuteDuty:
 		if err := v.OnExecuteDuty(ctx, logger, eventMsg); err != nil {
-			err := fmt.Errorf("execute duty event: %w", err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "execute duty event: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	default:
-		err := fmt.Errorf("unknown event msg - %s", eventMsg.Type.String())
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "unknown event msg - %s", eventMsg.Type.String())
 	}
 }
 
@@ -57,9 +48,7 @@ func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 
 	eventMsg, ok := msg.Body.(*types.EventMsg)
 	if !ok {
-		err := fmt.Errorf("could not decode event message")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not decode event message")
 	}
 
 	span.SetAttributes(observability.ValidatorEventTypeAttribute(eventMsg.Type))
@@ -68,8 +57,7 @@ func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 	case types.Timeout:
 		slot, err := msg.Slot()
 		if err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "could not get slot from message: %w", err)
 		}
 		c.mtx.RLock()
 		dutyRunner, found := c.Runners[slot]
@@ -83,23 +71,17 @@ func (c *Committee) handleEventMessage(ctx context.Context, logger *zap.Logger, 
 		}
 
 		if err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(ctx, logger, *eventMsg); err != nil {
-			err := fmt.Errorf("timeout event: %w", err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "timeout event: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	case types.ExecuteDuty:
 		if err := c.OnExecuteDuty(ctx, logger, eventMsg); err != nil {
-			err := fmt.Errorf("execute duty event: %w", err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
+			return observability.Errorf(span, "execute duty event: %w", err)
 		}
 		span.SetStatus(codes.Ok, "")
 		return nil
 	default:
-		err := fmt.Errorf("unknown event msg - %s", eventMsg.Type.String())
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "unknown event msg - %s", eventMsg.Type.String())
 	}
 }

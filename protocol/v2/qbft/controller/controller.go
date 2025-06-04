@@ -66,21 +66,15 @@ func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, h
 	defer span.End()
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		err = errors.Wrap(err, "value invalid")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "value invalid: %w", err)
 	}
 
 	if height < c.Height {
-		err := errors.New("attempting to start an instance with a past height")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		err := errors.New("instance already running")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "instance already running")
 	}
 
 	c.Height = height

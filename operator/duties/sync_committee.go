@@ -244,9 +244,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		err := fmt.Errorf("failed to fetch sync committee duties: %w", err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "failed to fetch sync committee duties: %w", err)
 	}
 
 	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)

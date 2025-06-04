@@ -3,9 +3,7 @@ package instance
 import (
 	"context"
 
-	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
@@ -18,9 +16,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	defer span.End()
 
 	if !i.CanProcessMessages() {
-		err := errors.New("instance stopped processing timeouts")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "instance stopped processing timeouts")
 	}
 
 	newRound := i.State.Round + 1
@@ -37,15 +33,12 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 
 	roundChange, err := CreateRoundChange(i.State, i.signer, newRound, i.StartValue)
 	if err != nil {
-		err := errors.Wrap(err, "could not generate round change msg")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not generate round change msg: %w", err)
 	}
 
 	root, err := specqbft.HashDataRoot(i.StartValue)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not calculate root for round change: %w", err)
 	}
 
 	i.metrics.RecordRoundChange(ctx, newRound, reasonTimeout)
@@ -65,9 +58,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		zap.String("reason", "timeout"))
 
 	if err := i.Broadcast(logger, roundChange); err != nil {
-		err := errors.Wrap(err, "failed to broadcast round change message")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "failed to broadcast round change message: %w", err)
 	}
 
 	return nil

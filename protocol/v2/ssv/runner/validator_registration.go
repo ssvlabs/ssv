@@ -88,9 +88,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 
 	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		err := errors.Wrap(err, "failed processing validator registration message")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "failed processing validator registration message: %w", err)
 	}
 
 	// TODO: (Alan) revert
@@ -112,18 +110,14 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-		err := errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
 	share := r.GetShare()
 	if share == nil {
-		err := errors.New("no share to get validator public key")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "no share to get validator public key: %w", err)
 	}
 
 	registration, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
@@ -141,9 +135,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 
 	span.AddEvent("submitting validator registration")
 	if err := r.beacon.SubmitValidatorRegistration(signedRegistration); err != nil {
-		err := errors.Wrap(err, "could not submit validator registration")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not submit validator registration: %w", err)
 	}
 
 	const eventMsg = "validator registration submitted successfully"
@@ -192,9 +184,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 
 	vr, err := r.calculateValidatorRegistration(duty.DutySlot())
 	if err != nil {
-		err := errors.Wrap(err, "could not calculate validator registration")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not calculate validator registration: %w", err)
 	}
 
 	// sign partial randao
@@ -208,9 +198,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 		spectypes.DomainApplicationBuilder,
 	)
 	if err != nil {
-		err := errors.Wrap(err, "could not sign validator registration")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not sign validator registration: %w", err)
 	}
 
 	msgs := &spectypes.PartialSignatureMessages{
@@ -222,8 +210,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return errors.Wrap(err, "could not encode validator registration partial sig message")
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
@@ -235,9 +222,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	span.AddEvent("signing SSV message")
 	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
 	if err != nil {
-		err := errors.Wrap(err, "could not sign SSVMessage")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "could not sign SSVMessage: %w", err)
 	}
 
 	msgToBroadcast := &spectypes.SignedSSVMessage{
@@ -253,9 +238,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	)
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
-		err := errors.Wrap(err, "can't broadcast partial randao sig")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "can't broadcast partial randao sig: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")

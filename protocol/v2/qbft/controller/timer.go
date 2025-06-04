@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 
@@ -20,9 +19,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg type
 
 	timeoutData, err := msg.GetTimeoutData()
 	if err != nil {
-		err := errors.Wrap(err, "failed to get timeout data")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "failed to get timeout data: %w", err)
 	}
 
 	span.SetAttributes(
@@ -32,9 +29,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg type
 
 	instance := c.StoredInstances.FindInstance(timeoutData.Height)
 	if instance == nil {
-		err := errors.New("instance is nil")
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "instance is nil")
 	}
 
 	if timeoutData.Round < instance.State.Round {
@@ -52,8 +47,7 @@ func (c *Controller) OnTimeout(ctx context.Context, logger *zap.Logger, msg type
 	}
 
 	if err := instance.UponRoundTimeout(ctx, logger); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
+		return observability.Errorf(span, "failed to handle round timeout: %w", err)
 	}
 
 	span.SetStatus(codes.Ok, "")
