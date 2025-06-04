@@ -1,7 +1,6 @@
 package keystore
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +21,8 @@ const (
 
 // DecryptKeystore decrypts a keystore JSON file using the provided password.
 func DecryptKeystore(encryptedJSONData []byte, password string) ([]byte, error) {
-	if strings.TrimSpace(password) == "" {
+	trimmedPassword := strings.TrimSpace(password)
+	if trimmedPassword == "" {
 		return nil, errors.New("password required for decrypting keystore")
 	}
 
@@ -33,7 +33,7 @@ func DecryptKeystore(encryptedJSONData []byte, password string) ([]byte, error) 
 	}
 
 	// Decrypt the private key using keystorev4
-	decryptedBytes, err := keystorev4.New().Decrypt(data, password)
+	decryptedBytes, err := keystorev4.New().Decrypt(data, trimmedPassword)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt private key: %w", err)
 	}
@@ -76,11 +76,12 @@ func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.Op
 		return nil, fmt.Errorf("read password file: %w", err)
 	}
 
-	if len(bytes.TrimSpace(keyStorePassword)) == 0 {
+	trimmedPassword := strings.TrimSpace(string(keyStorePassword))
+	if len(trimmedPassword) == 0 {
 		return nil, errors.New("password file is empty")
 	}
 
-	decryptedKeystore, err := DecryptKeystore(encryptedJSON, string(keyStorePassword))
+	decryptedKeystore, err := DecryptKeystore(encryptedJSON, trimmedPassword)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt operator private key keystore: %w", err)
 	}
