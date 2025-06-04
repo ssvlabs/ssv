@@ -65,7 +65,7 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 		defer traces.Unlock()
 
 		// find the trace for the role
-		for _, trace := range traces.Roles {
+		for _, trace := range traces.roles {
 			if trace.Role == role {
 				return &ValidatorDutyTrace{
 					ValidatorDutyTrace: *deepCopyValidatorDutyTrace(trace),
@@ -103,7 +103,7 @@ func (c *Collector) GetCommitteeDuties(wantSlot phase0.Slot, roles ...spectypes.
 			return true
 		}
 
-		duties = append(duties, dt.Clone())
+		duties = append(duties, dt.trace())
 
 		return true
 	})
@@ -154,7 +154,7 @@ func (c *Collector) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.Com
 		return nil, ErrNotFound
 	}
 
-	clone := trace.Clone()
+	clone := trace.trace()
 
 	if !hasSignersForRoles(clone, roles...) {
 		return nil, ErrNotFound

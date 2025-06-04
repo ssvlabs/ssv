@@ -47,7 +47,7 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 			return true
 		}
 
-		if err := c.store.SaveCommitteeDuty(trace.Clone()); err != nil {
+		if err := c.store.SaveCommitteeDuty(trace.trace()); err != nil {
 			c.logger.Error("save committee duty to disk", zap.Error(err))
 			return true
 		}
@@ -69,9 +69,7 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 			return true
 		}
 
-		roles := trace.Clone()
-
-		for _, role := range roles {
+		for _, role := range trace.roleTraces() {
 			// TODO(me): confirm it makes sense
 			// in case some duties do not have the validator index set
 			if role.Validator == 0 {
@@ -79,9 +77,9 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 				index, found := c.validators.ValidatorIndex(pk)
 				if !found {
 					continue
-				} else {
-					role.Validator = index
 				}
+
+				role.Validator = index
 			}
 
 			if err := c.store.SaveValidatorDuty(role); err != nil {

@@ -144,6 +144,8 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 		case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
 			for s := request.From; s <= request.To; s++ {
 				slot := phase0.Slot(s)
+
+				// if no pubkeys are provided, get all decideds for the role
 				if len(pubkeys) == 0 {
 					participantsByPK, err := e.TraceStore.GetAllCommitteeDecideds(slot, role)
 					if err != nil {
@@ -158,7 +160,8 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 						response.Data = append(response.Data, transformToParticipantResponse(role, pr))
 					}
 				}
-				// otherwise iterate over the pubkeys
+
+				// otherwise iterate over the providedpubkeys
 				for _, pubkey := range pubkeys {
 					participantsByPK, err := e.TraceStore.GetCommitteeDecideds(slot, pubkey, role)
 					if err != nil {

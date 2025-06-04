@@ -12,6 +12,8 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+var ErrNotFound = errors.New("duty not found")
+
 const (
 	validatorDutyTraceKey      = "vd"
 	committeeDutyTraceKey      = "cd"
@@ -37,15 +39,8 @@ func (s *DutyTraceStore) SaveValidatorDuty(dto *model.ValidatorDutyTrace) error 
 		return fmt.Errorf("marshall validator duty: %w", err)
 	}
 
-	tx := s.db.Begin()
-	defer tx.Discard()
-
-	if err = s.db.Using(tx).Set(prefix, nil, value); err != nil {
+	if err = s.db.Set(prefix, nil, value); err != nil {
 		return fmt.Errorf("save validator duty: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
@@ -119,7 +114,6 @@ func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.Val
 	return spectypes.CommitteeID(obj.Value), nil
 }
 
-// TODO(Moshe): in the same slot we can have a validator in multiple roles?
 func (s *DutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) (links []*model.CommitteeDutyLink, err error) {
 	prefix := s.makeValidatorCommitteePrefix(slot)
 	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
@@ -172,15 +166,8 @@ func (s *DutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
 		return fmt.Errorf("marshall committee duty: %w", err)
 	}
 
-	tx := s.db.Begin()
-	defer tx.Discard()
-
-	if err = s.db.Using(tx).Set(prefix, nil, value); err != nil {
+	if err = s.db.Set(prefix, nil, value); err != nil {
 		return fmt.Errorf("save committee duty: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
@@ -206,8 +193,6 @@ func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.Committe
 	return duties, nil
 }
 
-var ErrNotFound = errors.New("duty not found")
-
 func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (duty *model.CommitteeDutyTrace, err error) {
 	prefix := s.makeCommitteePrefix(slot, committeeID)
 	obj, found, err := s.db.Get(prefix, nil)
@@ -226,7 +211,6 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 	return
 }
 
-// role + slot + ?index
 func (s *DutyTraceStore) makeValidatorPrefix(slot phase0.Slot, role spectypes.BeaconRole, index ...phase0.ValidatorIndex) []byte {
 	prefix := make([]byte, 0, len(validatorDutyTraceKey)+4+1)
 	prefix = append(prefix, []byte(validatorDutyTraceKey)...)
@@ -238,7 +222,6 @@ func (s *DutyTraceStore) makeValidatorPrefix(slot phase0.Slot, role spectypes.Be
 	return prefix
 }
 
-// slot only
 func (s *DutyTraceStore) makeCommitteeSlotPrefix(slot phase0.Slot) []byte {
 	prefix := make([]byte, 0, len(committeeDutyTraceKey)+4)
 	prefix = append(prefix, []byte(committeeDutyTraceKey)...)
@@ -246,7 +229,6 @@ func (s *DutyTraceStore) makeCommitteeSlotPrefix(slot phase0.Slot) []byte {
 	return prefix
 }
 
-// slot + role
 func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.CommitteeID) []byte {
 	prefix := make([]byte, 0, len(committeeDutyTraceKey)+4+32)
 	prefix = append(prefix, []byte(committeeDutyTraceKey)...)
@@ -255,7 +237,6 @@ func (s *DutyTraceStore) makeCommitteePrefix(slot phase0.Slot, id spectypes.Comm
 	return prefix
 }
 
-// slot + index
 func (s *DutyTraceStore) makeValidatorCommitteePrefix(slot phase0.Slot) []byte {
 	prefix := make([]byte, 0, len(validatorCommitteeIndexKey)+4)
 	prefix = append(prefix, []byte(validatorCommitteeIndexKey)...)

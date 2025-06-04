@@ -472,7 +472,6 @@ var StartNodeCmd = &cobra.Command{
 
 			go collector.DumpDataToDBPeriodically(cmd.Context(), slotTickerProvider)
 		}
-
 		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
 
 		var doppelgangerHandler doppelganger.Provider

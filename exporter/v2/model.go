@@ -23,23 +23,24 @@ type ValidatorDutyTrace struct {
 
 type ConsensusTrace struct {
 	Rounds   []*RoundTrace   `ssz-max:"15"`
-	Decideds []*DecidedTrace `ssz-max:"256"` // TODO max
+	Decideds []*DecidedTrace `ssz-max:"256"`
 }
 
 type DecidedTrace struct {
-	Round        uint64                 // same for
+	Round        uint64
 	BeaconRoot   phase0.Root            `ssz-size:"32"`
 	Signers      []spectypes.OperatorID `ssz-max:"13"`
 	ReceivedTime uint64
 }
 
 type RoundTrace struct {
-	Proposer spectypes.OperatorID // can be computed or saved
-	// ProposalData
+	Proposer spectypes.OperatorID
+
 	ProposalTrace *ProposalTrace
-	Prepares      []*QBFTTrace        `ssz-max:"13"` // Only recorded if root matches proposal.
-	Commits       []*QBFTTrace        `ssz-max:"13"` // Only recorded if root matches proposal.
-	RoundChanges  []*RoundChangeTrace `ssz-max:"13"`
+
+	Prepares     []*QBFTTrace        `ssz-max:"13"`
+	Commits      []*QBFTTrace        `ssz-max:"13"`
+	RoundChanges []*RoundChangeTrace `ssz-max:"13"`
 }
 
 type RoundChangeTrace struct {
@@ -89,6 +90,11 @@ type SignerData struct {
 	ReceivedTime uint64
 }
 
+type CommitteeDutyLink struct {
+	ValidatorIndex phase0.ValidatorIndex
+	CommitteeID    spectypes.CommitteeID
+}
+
 // used in benchmarks
 type DiskMsg struct {
 	Signed spectypes.SignedSSVMessage
@@ -96,9 +102,4 @@ type DiskMsg struct {
 	Kind   uint8 // 0 - qbft, 1 - sig
 	Qbft   specqbft.Message
 	Sig    spectypes.PartialSignatureMessages
-}
-
-type CommitteeDutyLink struct {
-	ValidatorIndex phase0.ValidatorIndex
-	CommitteeID    spectypes.CommitteeID
 }

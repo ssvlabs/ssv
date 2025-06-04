@@ -30,9 +30,10 @@ var migration_7_populate_validator_index_mapping = Migration{
 			logger.Info("migration completed", zap.Int("validator_mapped", validatorsMapped))
 		}()
 
-		var mappings []mapping
-
-		var shares0 int
+		var (
+			mappings []mapping
+			shares0  int
+		)
 
 		if err = opt.Db.GetAll(storage.SharesDBPrefix(opstorage.OperatorStoragePrefix), func(i int, obj basedb.Obj) error {
 			shareSSZ := &storage.Share{}
@@ -58,7 +59,6 @@ var migration_7_populate_validator_index_mapping = Migration{
 			m := mappings[i]
 			return basedb.Obj{Key: m.pubkey, Value: uint64ToBytes(m.index)}, nil
 		})
-
 		if err != nil {
 			return fmt.Errorf("set validator pubkey and index: %w", err)
 		}
@@ -68,7 +68,6 @@ var migration_7_populate_validator_index_mapping = Migration{
 			insertedCount++
 			return nil
 		})
-
 		if err != nil {
 			return fmt.Errorf("get all validator pubkey and index: %w", err)
 		}
