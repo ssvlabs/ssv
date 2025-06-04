@@ -121,12 +121,15 @@ func runTestEthExecLayer(t *testing.T, useFinalityFork bool) {
 			} else {
 				// When using follow distance, the last handled block is the current block minus follow distance
 				currentBlock, err := testEnv.sim.Client().BlockNumber(ctx)
+				t.Logf("Current block number: %d", currentBlock)
 				require.NoError(t, err)
-				expectedLastHandledBlock = currentBlock - testEnv.execClientConfig.FollowDistance
+				expectedLastHandledBlock = currentBlock - testEnv.followDistance
+				t.Logf("Expected last handled block: %d", expectedLastHandledBlock)
 			}
 
 			// Run SyncHistory
 			lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
+			t.Logf("Last handled block number after SyncHistory: %d", lastHandledBlockNum)
 			require.NoError(t, err)
 
 			// Check that the last handled block number matches our expectation

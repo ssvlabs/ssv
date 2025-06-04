@@ -22,6 +22,7 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 )
 
@@ -52,7 +53,7 @@ var _ Provider = &ExecutionClient{}
 // ExecutionClient represents a client for interacting with Ethereum execution client.
 type ExecutionClient struct {
 	// mandatory
-	config          Config
+	networkConfig   networkconfig.NetworkConfig
 	nodeAddr        string
 	contractAddress ethcommon.Address
 
@@ -61,32 +62,33 @@ type ExecutionClient struct {
 	connectionTimeout          time.Duration
 	healthInvalidationInterval time.Duration
 	logBatchSize               uint64
+	followDistance             uint64
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
 
 	// variables
-	client          *ethclient.Client
-	closed          chan struct{}
-	lastSyncedTime  atomic.Int64
-	isPostForkState atomic.Bool // TODO: use a fork name
+	client         *ethclient.Client
+	closed         chan struct{}
+	lastSyncedTime atomic.Int64
 }
 
 // New creates a new instance of ExecutionClient.
 func New(ctx context.Context,
-	config Config,
+	networkConfig networkconfig.NetworkConfig,
 	nodeAddr string,
 	contractAddr ethcommon.Address,
 	opts ...Option,
 ) (*ExecutionClient, error) {
 	client := &ExecutionClient{
-		config:                     config,
+		networkConfig:              networkConfig,
 		nodeAddr:                   nodeAddr,
 		contractAddress:            contractAddr,
 		logger:                     zap.NewNop(),
 		connectionTimeout:          DefaultConnectionTimeout,
 		healthInvalidationInterval: DefaultHealthInvalidationInterval,
 		logBatchSize:               DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		followDistance:             DefaultFollowDistance,
 		closed:                     make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -125,7 +127,19 @@ func (ec *ExecutionClient) Close() error {
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
 	var toBlock uint64
 
-	if ec.isPostForkState.Load() {
+	header, err := ec.client.HeaderByNumber(ctx, nil)
+	if err != nil {
+		ec.logger.Error(elResponseErrMsg,
+			zap.String("method", "eth_getBlockByNumber"),
+			zap.Error(err))
+		return nil, nil, fmt.Errorf("failed to get block header: %w", err)
+	}
+
+	currentBlock := header.Number.Uint64()
+	currentEpoch := ec.epochFromBlockHeader(header)
+
+	if currentEpoch > ec.networkConfig.SSVConfig.Forks.GetFinalityConsensusEpoch() {
+		// Post-fork: use finalized block
 		toBlock, err = ec.getFinalizedBlock(ctx)
 		if err != nil {
 			ec.logger.Error(elResponseErrMsg,
@@ -135,35 +149,11 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 			return nil, nil, err
 		}
 	} else {
-		currentBlock, err := ec.client.BlockNumber(ctx)
-		if err != nil {
-			ec.logger.Error(elResponseErrMsg,
-				zap.String("method", "eth_blockNumber"),
-				zap.Error(err))
-			return nil, nil, fmt.Errorf("failed to get current block: %w", err)
+		// Pre-fork: use follow distance
+		if currentBlock < ec.followDistance {
+			return nil, nil, ErrNothingToSync
 		}
-
-		// Check if we're past the fork
-		currentEpoch := phase0.Epoch(currentBlock / ec.config.SlotsPerEpoch)
-
-		if currentEpoch > ec.config.FinalityConsensusEpoch {
-			// Just passed the fork threshold
-			ec.isPostForkState.Store(true)
-			toBlock, err = ec.getFinalizedBlock(ctx)
-			if err != nil {
-				ec.logger.Error(elResponseErrMsg,
-					zap.String("method", "eth_getBlockByNumber"),
-					zap.String("tag", "finalized"),
-					zap.Error(err))
-				return nil, nil, err
-			}
-		} else {
-			// Pre-fork: use follow distance
-			if currentBlock < ec.config.FollowDistance {
-				return nil, nil, ErrNothingToSync
-			}
-			toBlock = currentBlock - ec.config.FollowDistance
-		}
+		toBlock = currentBlock - ec.followDistance
 	}
 
 	if toBlock < fromBlock {
@@ -451,28 +441,19 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	}
 
 	// 3. Check finalized block availability (post-fork only)
-	if ec.isPostForkState.Load() {
+	header, err := ec.client.HeaderByNumber(ctx, nil)
+	if err != nil {
+		recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
+		return err
+	}
+
+	currentEpoch := ec.epochFromBlockHeader(header)
+
+	if currentEpoch > ec.networkConfig.SSVConfig.Forks.GetFinalityConsensusEpoch() {
 		_, err := ec.getFinalizedBlock(ctx)
 		if err != nil {
 			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
 			return err
-		}
-	} else {
-		// Check if we've just passed the fork point
-		currentBlock, err := ec.client.BlockNumber(ctx)
-		if err != nil {
-			recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
-			return err
-		}
-
-		currentEpoch := phase0.Epoch(currentBlock / ec.config.SlotsPerEpoch)
-		if currentEpoch > ec.config.FinalityConsensusEpoch {
-			ec.isPostForkState.Store(true)
-			_, err := ec.getFinalizedBlock(ctx)
-			if err != nil {
-				recordExecutionClientStatus(ctx, statusFailure, ec.nodeAddr)
-				return err
-			}
 		}
 	}
 
@@ -585,7 +566,9 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 			var toBlock uint64
 
 			// Determine target block based on fork state
-			if ec.isPostForkState.Load() {
+			currentEpoch := ec.epochFromBlockHeader(header)
+
+			if currentEpoch > ec.networkConfig.SSVConfig.Forks.GetFinalityConsensusEpoch() {
 				// Post-fork: use finalized block
 				finalizedBlock, err := ec.getFinalizedBlock(ctx)
 				if err != nil {
@@ -594,40 +577,31 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logCh chan<- Bl
 				toBlock = finalizedBlock
 
 				if toBlock != lastFinalized {
-					finalizedEpoch := phase0.Epoch(toBlock / ec.config.SlotsPerEpoch)
-					ec.logger.Info("⏱ finalized block changed",
-						zap.Uint64("new_finalized", toBlock),
-						zap.Uint64("estimated_epoch", uint64(finalizedEpoch)),
-						zap.Uint64("previous_finalized", lastFinalized))
+					finalizedHeader, err := ec.client.HeaderByNumber(ctx, new(big.Int).SetUint64(toBlock))
+					if err == nil {
+						finalizedEpoch := ec.epochFromBlockHeader(finalizedHeader)
+						ec.logger.Info("⏱ finalized block changed",
+							zap.Uint64("new_finalized", toBlock),
+							zap.Uint64("estimated_epoch", uint64(finalizedEpoch)),
+							zap.Uint64("previous_finalized", lastFinalized))
+					}
 					lastFinalized = toBlock
 				}
 			} else {
-				// Check if we need to transition to post-fork
-				currentEpoch := phase0.Epoch(headerNum / ec.config.SlotsPerEpoch)
-
-				if currentEpoch > ec.config.FinalityConsensusEpoch {
-					ec.isPostForkState.Store(true)
-					finalizedBlock, err := ec.getFinalizedBlock(ctx)
-					if err != nil {
-						return fromBlock, err
-					}
-
-					toBlock = finalizedBlock
-				} else {
-					// Pre-fork: follow distance approach
-					if headerNum < ec.config.FollowDistance {
-						continue
-					}
-					toBlock = headerNum - ec.config.FollowDistance
+				// Pre-fork: follow distance approach
+				if headerNum < ec.followDistance {
+					continue
 				}
+				toBlock = headerNum - ec.followDistance
 			}
 
 			// Skip if toBlock is less than fromBlock
 			if toBlock < fromBlock {
+				isUsingFinalized := currentEpoch > ec.networkConfig.SSVConfig.Forks.GetFinalityConsensusEpoch()
 				ec.logger.Info("waiting for target block to reach fromBlock",
 					fields.FromBlock(fromBlock),
 					fields.ToBlock(toBlock),
-					zap.Bool("finalized_fork", ec.isPostForkState.Load()))
+					zap.Bool("finalized_fork", isUsingFinalized))
 				continue
 			}
 
@@ -662,27 +636,21 @@ func (ec *ExecutionClient) ChainID(ctx context.Context) (*big.Int, error) {
 // IsFinalizedFork returns whether finalized blocks should be used instead of follow distance.
 // Returns true if we've passed the finality fork epoch threshold.
 func (ec *ExecutionClient) IsFinalizedFork(ctx context.Context) bool {
-	if ec.isPostForkState.Load() {
-		return true
-	}
-
-	// Only make this RPC call if we don't know our fork state yet
-	currentBlock, err := ec.client.BlockNumber(ctx)
+	header, err := ec.client.HeaderByNumber(ctx, nil)
 	if err != nil {
 		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_blockNumber"),
+			zap.String("method", "eth_getBlockByNumber"),
 			zap.Error(err))
 		return false
 	}
 
-	currentEpoch := phase0.Epoch(currentBlock / ec.config.SlotsPerEpoch)
+	currentEpoch := ec.epochFromBlockHeader(header)
 
 	// Check if we've passed the fork point
-	if currentEpoch > ec.config.FinalityConsensusEpoch {
-		ec.isPostForkState.Store(true)
+	if currentEpoch > ec.networkConfig.SSVConfig.Forks.GetFinalityConsensusEpoch() {
 		ec.logger.Info("finality fork threshold passed, using finalized blocks",
 			zap.Uint64("current_epoch", uint64(currentEpoch)),
-			zap.Uint64("finality_fork_epoch", uint64(ec.config.FinalityConsensusEpoch)))
+			zap.Uint64("finality_fork_epoch", uint64(ec.networkConfig.SSVConfig.Forks.GetFinalityConsensusEpoch())))
 		return true
 	}
 
@@ -695,6 +663,14 @@ func (ec *ExecutionClient) getFinalizedBlock(ctx context.Context) (uint64, error
 		return 0, fmt.Errorf("get finalized block: %w", err)
 	}
 	return finalizedBlock.Number.Uint64(), nil
+}
+
+// epochFromBlockHeader calculates the epoch from a block header
+func (ec *ExecutionClient) epochFromBlockHeader(header *ethtypes.Header) phase0.Epoch {
+	blockTime := time.Unix(int64(header.Time), 0) // #nosec G115
+
+	slot := ec.networkConfig.EstimatedSlotAtTime(blockTime)
+	return ec.networkConfig.EstimatedEpochAtSlot(slot)
 }
 
 // connect connects to Ethereum execution client.

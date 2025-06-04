@@ -81,3 +81,17 @@ func WithSyncDistanceToleranceMulti(count uint64) OptionMulti {
 		c.syncDistanceTolerance = count
 	}
 }
+
+// WithFollowDistance sets the follow distance for pre-fork block processing.
+func WithFollowDistance(distance uint64) Option {
+	return func(c *ExecutionClient) {
+		c.followDistance = distance
+	}
+}
+
+// WithFollowDistanceMulti sets the follow distance for pre-fork block processing.
+func WithFollowDistanceMulti(distance uint64) OptionMulti {
+	return func(c *MultiClient) {
+		c.followDistance = distance
+	}
+}

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -27,7 +26,7 @@ func TestNewMulti(t *testing.T) {
 	t.Run("no node addresses", func(t *testing.T) {
 		ctx := t.Context()
 
-		mc, err := NewMulti(ctx, NewConfigFromNetworkConfig(networkconfig.TestNetwork), []string{}, ethcommon.Address{})
+		mc, err := NewMulti(ctx, networkconfig.TestNetwork, []string{}, ethcommon.Address{})
 
 		require.Nil(t, mc, "MultiClient should be nil on error")
 		require.Error(t, err, "expected an error due to no node addresses")
@@ -39,7 +38,7 @@ func TestNewMulti(t *testing.T) {
 		addr := "invalid-addr"
 		addresses := []string{addr}
 
-		mc, err := NewMulti(ctx, NewConfigFromNetworkConfig(networkconfig.TestNetwork), addresses, ethcommon.Address{})
+		mc, err := NewMulti(ctx, networkconfig.TestNetwork, addresses, ethcommon.Address{})
 
 		require.Nil(t, mc, "MultiClient should be nil on error")
 		require.Error(t, err)
@@ -71,7 +70,7 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	t.Run("pre-fork (follow distance)", func(t *testing.T) {
 		mc, err := NewMulti(
 			ctx,
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(customFollowDistance),
+			networkconfig.TestNetwork,
 			addresses,
 			contractAddr,
 			WithLoggerMulti(customLogger),
@@ -79,11 +78,12 @@ func TestNewMulti_WithOptions(t *testing.T) {
 			WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
 			WithLogBatchSizeMulti(customLogBatchSize),
 			WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
+			WithFollowDistanceMulti(customFollowDistance),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, mc)
 		require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
-		require.EqualValues(t, customFollowDistance, mc.config.FollowDistance)
+		require.EqualValues(t, customFollowDistance, mc.followDistance)
 		require.EqualValues(t, customTimeout, mc.connectionTimeout)
 		require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
 		require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
@@ -91,11 +91,9 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	})
 
 	t.Run("post-fork (finality)", func(t *testing.T) {
-		const customFinalityForkEpoch = phase0.Epoch(5)
-
 		mc, err := NewMulti(
 			ctx,
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFinalityConsensusEpoch(customFinalityForkEpoch),
+			networkconfig.TestNetwork,
 			addresses,
 			contractAddr,
 			WithLoggerMulti(customLogger),
@@ -111,7 +109,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
 		require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
 		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
-		require.EqualValues(t, customFinalityForkEpoch, mc.config.FinalityConsensusEpoch)
 	})
 }
 

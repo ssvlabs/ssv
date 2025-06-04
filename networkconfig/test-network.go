@@ -77,7 +77,7 @@ var TestNetwork = NetworkConfig{
 				},
 				{
 					Name:  "Finality Consensus",
-					Epoch: 1, // TODO: use a different name when we have a better one, value as well
+					Epoch: 100, // TODO: use a different name when we have a better one, value as well
 				},
 			},
 		},

@@ -129,16 +129,16 @@ func (env *testEnv) deployCallableContract() (*bind.BoundContract, error) {
 }
 
 // createClient creates and validates a new execution client with given options.
-func (env *testEnv) createClient(cfg Config, options ...Option) error {
-	return env.createClientWithCleanup(true, cfg, options...)
+func (env *testEnv) createClient(networkCfg networkconfig.NetworkConfig, options ...Option) error {
+	return env.createClientWithCleanup(true, networkCfg, options...)
 }
 
 // createClientWithCleanup creates and initializes an execution client, optionally registering it for cleanup.
 // If registerCleanup is false, the caller is responsible for closing the client.
-func (env *testEnv) createClientWithCleanup(registerCleanup bool, cfg Config, options ...Option) error {
+func (env *testEnv) createClientWithCleanup(registerCleanup bool, networkCfg networkconfig.NetworkConfig, options ...Option) error {
 	allOptions := append([]Option{}, options...)
 	var err error
-	env.client, err = New(env.ctx, cfg, env.wsURL, env.contractAddr, allOptions...)
+	env.client, err = New(env.ctx, networkCfg, env.wsURL, env.contractAddr, allOptions...)
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 		// Create a client and connect to the simulator with finality fork enabled
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(2*time.Second),
 		)
@@ -220,10 +220,17 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 		// Create a client with finality fork disabled (using follow distance)
 		const followDistance = 8
+
+		// Create a test network config with recent genesis time and high finality fork epoch
+		testNetwork := networkconfig.TestNetwork
+		testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
+		testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
+
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(followDistance),
+			testNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(2*time.Second),
+			WithFollowDistance(followDistance),
 		)
 		require.NoError(t, err)
 
@@ -259,10 +266,17 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 		// Create a client with a large followDistance and finality fork disabled
 		const followDistance = 100 // Much larger than the current block number
+
+		// Create a test network config with recent genesis time and high finality fork epoch
+		testNetwork := networkconfig.TestNetwork
+		testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
+		testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
+
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(followDistance),
+			testNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(2*time.Second),
+			WithFollowDistance(followDistance),
 		)
 		require.NoError(t, err)
 
@@ -281,9 +295,10 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		// Create a client with finality fork disabled
 		const followDistance = 8
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(followDistance),
+			networkconfig.TestNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(2*time.Second),
+			WithFollowDistance(followDistance),
 		)
 		require.NoError(t, err)
 
@@ -304,14 +319,14 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		require.Nil(t, fetchErrCh)
 	})
 
-	t.Run("error when BlockNumber fails", func(t *testing.T) {
+	t.Run("error when HeaderByNumber fails", func(t *testing.T) {
 		env := setupTestEnv(t, 1*time.Second)
 		_, err := env.deployCallableContract()
 		require.NoError(t, err)
 
 		// Create a client - connection should succeed initially
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(100*time.Millisecond),
 		)
@@ -321,12 +336,12 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		blockNumCtx, blockNumCancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
 		defer blockNumCancel()
 
-		// Fetch logs - should fail because BlockNumber returns an error
+		// Fetch logs - should fail because HeaderByNumber will timeout
 		logs, fetchErrCh, err := env.client.FetchHistoricalLogs(blockNumCtx, 0)
 		require.Error(t, err)
 		require.Nil(t, logs)
 		require.Nil(t, fetchErrCh)
-		require.ErrorContains(t, err, "failed to get current block")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 }
 
@@ -430,11 +445,17 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			srv := httptest.NewServer(wrapped)
 			t.Cleanup(srv.Close)
 
-			opts := []Option{WithLogBatchSize(100000)}
+			opts := []Option{WithLogBatchSize(100000),
+				WithFollowDistance(0),
+			}
 
-			cfg := NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(0)
+			// Create a test network config with recent genesis time and high finality fork epoch
+			testNetwork := networkconfig.TestNetwork
+			testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
+			testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
+
 			client, err := New(t.Context(),
-				cfg,
+				testNetwork,
 				srv.URL,
 				env.contractAddr,
 				opts...,
@@ -479,7 +500,7 @@ func TestStreamLogs(t *testing.T) {
 
 		// Create a client and connect to the simulator with finality fork enabled
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -529,9 +550,17 @@ func TestStreamLogs(t *testing.T) {
 
 		// Create a client with explicit follow distance and disabled finality fork
 		const followDistance = 2
+
+		// Create a test network config with recent genesis time and high finality fork epoch
+		testNetwork := networkconfig.TestNetwork
+		testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
+		testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
+
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(followDistance),
-			WithLogger(logger))
+			testNetwork,
+			WithLogger(logger),
+			WithFollowDistance(followDistance),
+		)
 		require.NoError(t, err)
 
 		logsCh := env.client.StreamLogs(env.ctx, 0)
@@ -591,7 +620,7 @@ func TestStreamLogs(t *testing.T) {
 
 		// Create a client and connect to the simulator
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -628,7 +657,7 @@ func TestStreamLogs(t *testing.T) {
 
 		// Create a client without automatic cleanup
 		err = env.createClientWithCleanup(false,
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -661,7 +690,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	require.NoError(t, err)
 
 	err = env.createClient(
-		NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+		networkconfig.TestNetwork,
 		WithLogger(logger), WithLogBatchSize(2))
 	require.NoError(t, err)
 
@@ -755,7 +784,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 
 		// 2. Create a client and set up subscription with finality fork enabled
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -857,8 +886,9 @@ func TestChainReorganizationLogs(t *testing.T) {
 		// 2. Create a client with follow distance mechanism (finality fork disabled)
 		const followDistance = 5
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(followDistance),
+			networkconfig.TestNetwork,
 			WithLogger(logger),
+			WithFollowDistance(followDistance),
 		)
 		require.NoError(t, err)
 
@@ -989,7 +1019,7 @@ func TestSimSSV(t *testing.T) {
 
 		// Create a client and connect to the simulator with finality fork enabled
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -1058,9 +1088,16 @@ func TestSimSSV(t *testing.T) {
 
 		// Create a client and connect to the simulator with follow distance
 		const followDistance = 2
+
+		// Create a test network config with recent genesis time and high finality fork epoch
+		testNetwork := networkconfig.TestNetwork
+		testNetwork.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
+		testNetwork.SSVConfig.Forks.Forks[1].Epoch = 10000         // High epoch to ensure pre-fork
+
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork).WithFollowDistance(followDistance),
+			testNetwork,
 			WithLogger(logger),
+			WithFollowDistance(followDistance),
 		)
 		require.NoError(t, err)
 
@@ -1142,7 +1179,7 @@ func TestFilterLogs(t *testing.T) {
 
 		// Create a client and connect to the simulator
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -1177,7 +1214,7 @@ func TestFilterLogs(t *testing.T) {
 
 		// Create a client - connection should succeed initially
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(100*time.Millisecond),
 		)
@@ -1211,7 +1248,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 
 		// Create a client and connect to the simulator
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -1273,7 +1310,7 @@ func TestSubscribeFilterLogs(t *testing.T) {
 
 		// Create a client - connection should succeed initially
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(100*time.Millisecond),
 		)
@@ -1309,7 +1346,7 @@ func TestBlockByNumber(t *testing.T) {
 
 		// Create a client and connect to the simulator
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -1340,7 +1377,7 @@ func TestBlockByNumber(t *testing.T) {
 
 		// Create a client - connection should succeed initially
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(100*time.Millisecond),
 		)
@@ -1370,7 +1407,7 @@ func TestHeaderByNumber(t *testing.T) {
 
 		// Create a client and connect to the simulator
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger))
 		require.NoError(t, err)
 
@@ -1401,7 +1438,7 @@ func TestHeaderByNumber(t *testing.T) {
 
 		// Create a client - connection should succeed initially
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithLogger(logger),
 			WithConnectionTimeout(100*time.Millisecond),
 		)
@@ -1429,7 +1466,7 @@ func TestFilterer(t *testing.T) {
 
 	// Create a client and connect to the simulator
 	err = env.createClient(
-		NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+		networkconfig.TestNetwork,
 		WithLogger(logger))
 	require.NoError(t, err)
 
@@ -1449,7 +1486,7 @@ func TestSyncProgress(t *testing.T) {
 
 	// Create a client and connect to the simulator
 	err = env.createClient(
-		NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+		networkconfig.TestNetwork,
 		WithHealthInvalidationInterval(0))
 	require.NoError(t, err)
 
@@ -1470,7 +1507,7 @@ func TestSyncProgress(t *testing.T) {
 	t.Run("within tolerable limits", func(t *testing.T) {
 		client, err := New(
 			env.ctx,
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			env.wsURL,
 			env.contractAddr,
 			WithSyncDistanceTolerance(2),
@@ -1498,7 +1535,7 @@ func TestHealthy(t *testing.T) {
 
 		// Create a client and connect to the simulator
 		err = env.createClientWithCleanup(false,
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 		)
 		require.NoError(t, err)
 
@@ -1517,7 +1554,7 @@ func TestHealthy(t *testing.T) {
 
 		// Create a client with a health invalidation interval
 		err = env.createClient(
-			NewConfigFromNetworkConfig(networkconfig.TestNetwork),
+			networkconfig.TestNetwork,
 			WithHealthInvalidationInterval(10*time.Second))
 		require.NoError(t, err)
 

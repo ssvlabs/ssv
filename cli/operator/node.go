@@ -286,7 +286,7 @@ var StartNodeCmd = &cobra.Command{
 		if len(executionAddrList) == 1 {
 			ec, err := executionclient.New(
 				cmd.Context(),
-				executionclient.NewConfigFromNetworkConfig(networkConfig),
+				networkConfig,
 				executionAddrList[0],
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
@@ -302,7 +302,7 @@ var StartNodeCmd = &cobra.Command{
 		} else {
 			ec, err := executionclient.NewMulti(
 				cmd.Context(),
-				executionclient.NewConfigFromNetworkConfig(networkConfig),
+				networkConfig,
 				executionAddrList,
 				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
