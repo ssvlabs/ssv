@@ -157,7 +157,7 @@ This section details the steps to run a local network of operator nodes.
 In order to run a local environment, install the following:
 
 - git
-- go (1.22)
+- go (>=1.24)
 - docker
 - make
 - yq
@@ -279,7 +279,7 @@ $ make docker-debug
 Please make sure your contributions adhere to our coding guidelines:
 
 - Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting)
-  guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
+  guidelines (i.e. see how to set up code formatting with [your IDE](./IDE_INTEGRATION.md)).
 - Code must be documented adhering to the official Go [commentary](https://golang.org/doc/effective_go.html#commentary)
   guidelines.
 - Pull requests need to be based on and opened against the `stage` branch, and its commits should be squashed on merge.

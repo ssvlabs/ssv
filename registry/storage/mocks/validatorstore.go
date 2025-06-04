@@ -23,6 +23,7 @@ import (
 type MockBaseValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockBaseValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockBaseValidatorStoreMockRecorder is the mock recorder for MockBaseValidatorStore.
@@ -175,6 +176,7 @@ func (mr *MockBaseValidatorStoreMockRecorder) Validators() *gomock.Call {
 type MockValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockValidatorStoreMockRecorder is the mock recorder for MockValidatorStore.
@@ -341,6 +343,7 @@ func (mr *MockValidatorStoreMockRecorder) WithOperatorID(operatorID any) *gomock
 type MockSelfValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockSelfValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockSelfValidatorStoreMockRecorder is the mock recorder for MockSelfValidatorStore.

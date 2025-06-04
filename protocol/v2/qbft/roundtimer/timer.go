@@ -9,10 +9,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
+//go:generate go tool -modfile=../../../../tool.mod mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
 
 type OnRoundTimeoutF func(round specqbft.Round)
 

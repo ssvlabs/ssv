@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ssvlabs/ssv/logging"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
 )
 
 type MultiMsgProcessingSpecTest struct {

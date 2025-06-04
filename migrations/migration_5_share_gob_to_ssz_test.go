@@ -2,11 +2,13 @@ package migrations
 
 import (
 	"encoding/hex"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestMigration5_shareGOB_Decode(t *testing.T) {
@@ -32,7 +34,6 @@ func TestMigration5_shareGOB_Decode(t *testing.T) {
 			},
 			Metadata: Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         32344747760,
 					Status:          3,
 					Index:           1680836,
 					ActivationEpoch: 47275,
@@ -67,7 +68,6 @@ func TestMigration5_shareGOB_Decode(t *testing.T) {
 			},
 			Metadata: Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         32267015779,
 					Status:          3,
 					Index:           1668022,
 					ActivationEpoch: 45673,

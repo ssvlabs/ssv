@@ -44,7 +44,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.SignedMessage.FullData
 	i.State.LastPreparedRound = i.State.Round
 
-	i.metrics.EndStagePrepare(ctx, i.State.Round)
+	i.metrics.EndStage(ctx, i.State.Round, stagePrepare)
 
 	logger.Debug("🎯 got prepare quorum",
 		fields.Round(i.State.Round),
@@ -100,7 +100,7 @@ func getRoundChangeJustification(state *specqbft.State, prepareMsgContainer *spe
 	return ret, nil
 }
 
-// validSignedPrepareForHeightRoundAndRoot known in dafny spec as validSignedPrepareForHeightRoundAndDigest
+// validSignedPrepareForHeightRoundAndRootIgnoreSignature known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
 func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	msg *specqbft.ProcessingMessage,

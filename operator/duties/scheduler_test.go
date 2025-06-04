@@ -86,9 +86,8 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockValidatorController := NewMockValidatorController(ctrl)
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
-	mockNetworkConfig := networkconfig.NetworkConfig{
-		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
-	}
+	mockNetworkConfig := networkconfig.NetworkConfig{}
+	mockNetworkConfig.Beacon = mocknetwork.NewMockBeaconNetwork(ctrl)
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,

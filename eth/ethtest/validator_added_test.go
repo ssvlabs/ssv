@@ -111,7 +111,7 @@ func (input *testValidatorRegisteredInput) produce() {
 		require.Nil(input.t, shares)
 
 		// Call the contract method
-		_, err := input.boundContract.SimcontractTransactor.RegisterValidator(
+		_, err := input.boundContract.RegisterValidator(
 			event.auth,
 			val.masterPubKey.Serialize(),
 			event.opsIds,

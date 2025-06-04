@@ -3,14 +3,14 @@ package peers
 import (
 	"io"
 
-	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
-	"go.uber.org/zap"
 )
 
 const (
@@ -77,7 +77,7 @@ type PeerInfoIndex interface {
 	PeerInfo(peer.ID) *PeerInfo
 
 	// AddPeerInfo adds/updates the record for the given peer.
-	AddPeerInfo(id peer.ID, address ma.Multiaddr, direction network.Direction)
+	AddPeerInfo(id peer.ID, address ma.Multiaddr, direction libp2pnetwork.Direction)
 
 	// UpdatePeerInfo calls the given function to update the PeerInfo of the given peer.
 	UpdatePeerInfo(id peer.ID, update func(*PeerInfo))

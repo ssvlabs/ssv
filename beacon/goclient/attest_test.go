@@ -19,10 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -206,14 +204,13 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 
 		client, err := New(
 			zap.NewNop(),
-			beacon.Options{
+			Options{
 				Context:        ctx,
 				Network:        beacon.NewNetwork(types.MainNetwork),
 				BeaconNodeAddr: server.URL,
 				CommonTimeout:  1 * time.Second,
 				LongTimeout:    1 * time.Second,
 			},
-			operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
 			func() slotticker.SlotTicker {
 				return slotticker.New(zap.NewNop(), slotticker.Config{
 					SlotDuration: 12 * time.Second,
@@ -456,9 +453,9 @@ func TestGoClient_GetAttestationData_Weighted(t *testing.T) {
 		const numberOfBeaconServers = 3
 		var (
 			beaconServersURLs []string
-			sourceEpoch       phase0.Epoch = testEpoch
-			bestSourceEpoch   phase0.Epoch = testEpoch + 1 // epoch number has a lot of weight, increasing its value  makes it 'best'
-			targetEpoch       phase0.Epoch = testEpoch
+			sourceEpoch       = testEpoch
+			bestSourceEpoch   = testEpoch + 1 // epoch number has a lot of weight, increasing its value  makes it 'best'
+			targetEpoch       = testEpoch
 		)
 		for i := 0; i < numberOfBeaconServers; i++ {
 			lastServer := i == numberOfBeaconServers-1
@@ -502,7 +499,7 @@ func createClient(
 	beaconServerURL string,
 	withWeightedAttestationData bool) (*GoClient, error) {
 	client, err := New(zap.NewNop(),
-		beacon.Options{
+		Options{
 			Context:                     ctx,
 			Network:                     beacon.NewNetwork(types.MainNetwork),
 			BeaconNodeAddr:              beaconServerURL,
@@ -510,7 +507,6 @@ func createClient(
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
 		},
-		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
 		func() slotticker.SlotTicker {
 			return slotticker.New(zap.NewNop(), slotticker.Config{
 				SlotDuration: 12 * time.Second,

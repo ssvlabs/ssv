@@ -17,12 +17,14 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var (
@@ -38,7 +40,7 @@ type CommitteeRunner struct {
 	BaseRunner          *BaseRunner
 	network             specqbft.Network
 	beacon              beacon.BeaconNode
-	signer              spectypes.BeaconSigner
+	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	valCheck            specqbft.ProposedValueCheckF
 	DutyGuard           CommitteeDutyGuard
@@ -54,7 +56,7 @@ func NewCommitteeRunner(
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	dutyGuard CommitteeDutyGuard,
@@ -126,7 +128,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
-		signer         spectypes.BeaconSigner
+		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       specqbft.ProposedValueCheckF
 	}
@@ -151,7 +153,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		BaseRunner     *BaseRunner
 		beacon         beacon.BeaconNode
 		network        specqbft.Network
-		signer         spectypes.BeaconSigner
+		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
 		valCheck       specqbft.ProposedValueCheckF
 	}
@@ -188,7 +190,7 @@ func (cr *CommitteeRunner) GetNetwork() specqbft.Network {
 	return cr.network
 }
 
-func (cr *CommitteeRunner) GetBeaconSigner() spectypes.BeaconSigner {
+func (cr *CommitteeRunner) GetBeaconSigner() ekm.BeaconSigner {
 	return cr.signer
 }
 
@@ -251,8 +253,14 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			}
 
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, attestationData, validatorDuty.DutySlot(),
-				spectypes.DomainAttester)
+			partialMsg, err := cr.BaseRunner.signBeaconObject(
+				ctx,
+				cr,
+				validatorDuty,
+				attestationData,
+				validatorDuty.DutySlot(),
+				spectypes.DomainAttester,
+			)
 			if err != nil {
 				return errors.Wrap(err, "failed signing attestation data")
 			}
@@ -275,12 +283,19 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			totalSyncCommitteeDuties++
 
 			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, validatorDuty, spectypes.SSZBytes(blockRoot[:]), validatorDuty.DutySlot(),
-				spectypes.DomainSyncCommittee)
+			partialMsg, err := cr.BaseRunner.signBeaconObject(
+				ctx,
+				cr,
+				validatorDuty,
+				spectypes.SSZBytes(blockRoot[:]),
+				validatorDuty.DutySlot(),
+				spectypes.DomainSyncCommittee,
+			)
 			if err != nil {
 				return errors.Wrap(err, "failed signing sync committee message")
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+
 		default:
 			return fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 		}
@@ -518,7 +533,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.measurements.consensusStart)))
+			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
+			fields.Count(attestationsCount),
+		)
 
 		// Record successful submissions
 		for validator := range attestationsToSubmit {
@@ -555,7 +572,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
-			fields.TotalConsensusTime(time.Since(cr.measurements.consensusStart)))
+			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
+			fields.Count(syncMsgsCount),
+		)
 
 		// Record successful submissions
 		for validator := range syncCommitteeMessagesToSubmit {
@@ -776,7 +795,7 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 	return nil
 }
 
-func (cr *CommitteeRunner) GetSigner() spectypes.BeaconSigner {
+func (cr *CommitteeRunner) GetSigner() ekm.BeaconSigner {
 	return cr.signer
 }
 

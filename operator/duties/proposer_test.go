@@ -6,15 +6,13 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/utils/hashmap"
-
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.ProposerDuty]) (chan struct{}, chan []*spectypes.ValidatorDuty) {
@@ -28,29 +26,34 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			return duties, nil
 		}).AnyTimes()
 
-	getShares := func(epoch phase0.Epoch) []*types.SSVShare {
-		uniqueIndices := make(map[phase0.ValidatorIndex]bool)
+	getShares := func() []*types.SSVShare {
+		var proposerShares []*types.SSVShare
+		dutiesMap.Range(func(epoch phase0.Epoch, duties []*eth2apiv1.ProposerDuty) bool {
+			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
-		duties, _ := dutiesMap.Get(epoch)
-		for _, d := range duties {
-			uniqueIndices[d.ValidatorIndex] = true
-		}
-
-		shares := make([]*types.SSVShare, 0, len(uniqueIndices))
-		for index := range uniqueIndices {
-			share := &types.SSVShare{
-				Share: spectypes.Share{
-					ValidatorIndex: index,
-				},
+			for _, d := range duties {
+				uniqueIndices[d.ValidatorIndex] = true
 			}
-			shares = append(shares, share)
-		}
 
-		return shares
+			for index := range uniqueIndices {
+				attestingShare := &types.SSVShare{
+					Share: spectypes.Share{
+						ValidatorIndex: index,
+					},
+					ActivationEpoch: 0,
+					Liquidated:      false,
+					Status:          eth2apiv1.ValidatorStateActiveOngoing,
+				}
+				proposerShares = append(proposerShares, attestingShare)
+			}
+			return true
+		})
+
+		return proposerShares
 	}
 
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().ParticipatingValidators(gomock.Any()).DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validators().DoAndReturn(getShares).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }

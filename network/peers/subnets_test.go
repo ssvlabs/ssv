@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/require"
+
 	"github.com/ssvlabs/ssv/network/commons"
 	nettesting "github.com/ssvlabs/ssv/network/testing"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSubnetsIndex(t *testing.T) {

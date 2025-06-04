@@ -10,16 +10,18 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"go.uber.org/zap"
 )
 
 const (
@@ -40,7 +42,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		committee[i] = &spectypes.ShareMember{Signer: id, SharePubKey: operatorKey}
 	}
 
-	validatorMetadata := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
+	validatorMetadata := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, ExitEpoch: goclient.FarFutureEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
 
 	pubKey := spectypes.ValidatorPK{0x1}
 
@@ -82,9 +84,8 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				result := make(map[phase0.ValidatorIndex]*eth2apiv1.Validator)
 				for i, pk := range pubKeys {
 					result[phase0.ValidatorIndex(i)] = &eth2apiv1.Validator{
-						Index:   tc.metadata.Index,
-						Balance: tc.metadata.Balance,
-						Status:  tc.metadata.Status,
+						Index:  tc.metadata.Index,
+						Status: tc.metadata.Status,
 						Validator: &phase0.Validator{
 							ActivationEpoch: tc.metadata.ActivationEpoch,
 							PublicKey:       pk,
@@ -97,7 +98,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			noSubnets, err := commons.FromString("0x00000000000000000000000000000000")
 			require.NoError(t, err)
 
-			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork.Beacon, beaconNode, noSubnets)
+			syncer := NewSyncer(logger, sharesStorage, validatorStore, networkconfig.TestNetwork, beaconNode, noSubnets)
 			_, err = syncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
@@ -331,8 +332,8 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 
 		// Mock fetcher.Fetch and shareStorage.UpdateValidatorsMetadata
 		metadata := ValidatorMap{
-			share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
-			share2.Share.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			share1.ValidatorPubKey: &beacon.ValidatorMetadata{},
+			share2.ValidatorPubKey: &beacon.ValidatorMetadata{},
 		}
 
 		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil)
@@ -424,7 +425,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
-			beaconNetwork:     networkconfig.TestNetwork.Beacon,
+			networkConfig:     networkconfig.TestNetwork,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -442,6 +443,7 @@ func TestSyncer_Stream(t *testing.T) {
 			},
 			Status:          eth2apiv1.ValidatorStateActiveOngoing,
 			ActivationEpoch: 0,
+			ExitEpoch:       0,
 			Liquidated:      false,
 		}
 
@@ -471,10 +473,11 @@ func TestSyncer_Stream(t *testing.T) {
 			}
 
 			expected := ValidatorMap{
-				share1.Share.ValidatorPubKey: &beacon.ValidatorMetadata{
+				share1.ValidatorPubKey: &beacon.ValidatorMetadata{
 					Index:           1,
 					Status:          eth2apiv1.ValidatorStateActiveOngoing,
 					ActivationEpoch: 0,
+					ExitEpoch:       0,
 				},
 			}
 
@@ -521,7 +524,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        errMockBeaconNode,
-			beaconNetwork:     networkconfig.TestNetwork.Beacon,
+			networkConfig:     networkconfig.TestNetwork,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -595,7 +598,7 @@ func TestSyncer_Stream(t *testing.T) {
 			shareStorage:      mockShareStorage,
 			validatorStore:    mockValidatorStore,
 			beaconNode:        defaultMockBeaconNode,
-			beaconNetwork:     networkconfig.TestNetwork.Beacon,
+			networkConfig:     networkconfig.TestNetwork,
 			syncInterval:      testSyncInterval,
 			streamInterval:    testStreamInterval,
 			updateSendTimeout: testUpdateSendTimeout,
@@ -670,7 +673,7 @@ func TestWithUpdateInterval(t *testing.T) {
 		logger,
 		mockShareStorage,
 		mockValidatorStore,
-		networkconfig.TestNetwork.Beacon,
+		networkconfig.TestNetwork,
 		mockBeaconNode,
 		noSubnets,
 		WithSyncInterval(interval),

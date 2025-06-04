@@ -8,12 +8,13 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/network/records"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig networkconfig.NetworkConfig) {
@@ -285,43 +286,128 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 }
 
 func TestDiscV5ServiceListenerType(t *testing.T) {
+	dvs := testingDiscovery(t)
 
-	t.Run("Post-Fork", func(t *testing.T) {
-		netConfig := PostForkNetworkConfig()
-		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
+	// Check listener type
+	_, ok := dvs.dv5Listener.(*discover.UDPv5)
+	require.False(t, ok)
 
-		// Check listener type
-		_, ok := dvs.dv5Listener.(*forkingDV5Listener)
-		require.True(t, ok)
+	_, ok = dvs.dv5Listener.(*forkingDV5Listener)
+	require.True(t, ok)
 
-		_, ok = dvs.dv5Listener.(*discover.UDPv5)
-		require.False(t, ok)
+	// Check bootnodes
+	CheckBootnodes(t, dvs, testNetConfig)
 
-		// Check bootnodes
-		CheckBootnodes(t, dvs, netConfig)
+	// Close
+	err := dvs.Close()
+	require.NoError(t, err)
+}
 
-		// Close
-		err := dvs.Close()
-		require.NoError(t, err)
-	})
+// TestServiceAddressConfiguration tests the address configuration logic in the discovery service.
+// It verifies that host addresses and DNS names are correctly resolved and applied
+// to the local node, including fallback behavior when DNS resolution fails.
+func TestServiceAddressConfiguration(t *testing.T) {
+	t.Parallel()
 
-	t.Run("Pre-Fork", func(t *testing.T) {
+	testCases := []struct {
+		name           string
+		hostAddress    string
+		hostDNS        string
+		expectedResult string // if result is deterministic; for "localhost" we can't always predict exact string
+		expectError    bool
+		checkLoopback  bool // if true, result should be a loopback address
+	}{
+		{
+			name:           "only HostAddress",
+			hostAddress:    "192.168.1.100",
+			hostDNS:        "",
+			expectedResult: "192.168.1.100",
+			expectError:    false,
+		},
+		{
+			name:          "only HostDNS",
+			hostAddress:   "",
+			hostDNS:       "localhost",
+			expectError:   false,
+			checkLoopback: true, // expect "localhost" to resolve to a loopback address
+		},
+		{
+			name:          "both HostAddress and HostDNS",
+			hostAddress:   "192.168.1.100",
+			hostDNS:       "localhost",
+			expectError:   false,
+			checkLoopback: true, // DNS takes precedence over static address
+		},
+		{
+			name:        "non-resolvable HostDNS with fallback to HostAddress",
+			hostAddress: "192.168.1.100",
+			hostDNS:     "nonexistent-domain-qwerty.local",
+			expectError: true,
+		},
+		{
+			name:           "both empty",
+			hostAddress:    "",
+			hostDNS:        "",
+			expectedResult: "",
+			expectError:    false,
+		},
+		{
+			name:        "invalid host address format",
+			hostAddress: "not-an-ip-address",
+			hostDNS:     "",
+			expectError: true,
+		},
+	}
 
-		netConfig := PreForkNetworkConfig()
-		dvs := testingDiscoveryWithNetworkConfig(t, netConfig)
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-		// Check listener type
-		_, ok := dvs.dv5Listener.(*discover.UDPv5)
-		require.False(t, ok)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-		_, ok = dvs.dv5Listener.(*forkingDV5Listener)
-		require.True(t, ok)
+			// create options with unique ports for parallel testing
+			opts := testingDiscoveryOptions(t, testNetConfig)
+			opts.DiscV5Opts.Port = uint16(13000 + i*10)
+			opts.DiscV5Opts.TCPPort = uint16(14000 + i*10)
+			opts.HostAddress = tc.hostAddress
+			opts.HostDNS = tc.hostDNS
 
-		// Check bootnodes
-		CheckBootnodes(t, dvs, netConfig)
+			service, err := NewService(ctx, zap.NewNop(), *opts)
+			if tc.expectError {
+				require.Error(t, err)
 
-		// Close
-		err := dvs.Close()
-		require.NoError(t, err)
-	})
+				// for invalid address test case, check for the specific error message
+				if tc.name == "invalid host address format" {
+					require.ErrorContains(t, err, "invalid host address given")
+				}
+				return
+			}
+			require.NoError(t, err)
+
+			t.Cleanup(func() {
+				if service != nil {
+					service.Close()
+				}
+			})
+
+			// verify we got the expected service type
+			dv5Service, ok := service.(*DiscV5Service)
+			require.True(t, ok)
+
+			// check that the node has the expected IP configuration
+			localNode := dv5Service.Self()
+			ip := localNode.Node().IP()
+
+			if tc.expectedResult != "" {
+				require.Equal(t, tc.expectedResult, ip.String())
+			}
+
+			// for "localhost" we can't always predict the exact string
+			// but we can check if it's a loopback address
+			if tc.checkLoopback {
+				require.True(t, ip.IsLoopback())
+			}
+		})
+	}
 }

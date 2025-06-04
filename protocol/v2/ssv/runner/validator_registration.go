@@ -5,20 +5,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec"
 
+	"github.com/attestantio/go-eth2-client/api"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -26,7 +27,7 @@ type ValidatorRegistrationRunner struct {
 
 	beacon         beacon.BeaconNode
 	network        specqbft.Network
-	signer         spectypes.BeaconSigner
+	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
@@ -39,7 +40,7 @@ func NewValidatorRegistrationRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,
-	signer spectypes.BeaconSigner,
+	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	gasLimit uint64,
 ) (Runner, error) {
@@ -110,7 +111,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		return errors.Wrap(err, "could not calculate validator registration")
 	}
 
-	signed := &api.VersionedSignedValidatorRegistration{
+	signedRegistration := &api.VersionedSignedValidatorRegistration{
 		Version: spec.BuilderVersionV1,
 		V1: &v1.SignedValidatorRegistration{
 			Message:   registration,
@@ -118,7 +119,8 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		},
 	}
 
-	if err := r.beacon.SubmitValidatorRegistration(signed); err != nil {
+	err = r.beacon.SubmitValidatorRegistration(signedRegistration)
+	if err != nil {
 		return errors.Wrap(err, "could not submit validator registration")
 	}
 
@@ -161,8 +163,14 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	}
 
 	// sign partial randao
-	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.ValidatorDuty), vr, duty.DutySlot(),
-		spectypes.DomainApplicationBuilder)
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		duty.(*spectypes.ValidatorDuty),
+		vr,
+		duty.DutySlot(),
+		spectypes.DomainApplicationBuilder,
+	)
 	if err != nil {
 		return errors.Wrap(err, "could not sign validator registration")
 	}
@@ -252,7 +260,7 @@ func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheck
 	return r.valCheck
 }
 
-func (r *ValidatorRegistrationRunner) GetSigner() spectypes.BeaconSigner {
+func (r *ValidatorRegistrationRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
 }
 func (r *ValidatorRegistrationRunner) GetOperatorSigner() ssvtypes.OperatorSigner {

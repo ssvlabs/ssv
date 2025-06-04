@@ -3,11 +3,11 @@ package streams
 import (
 	"fmt"
 
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/ssvlabs/ssv/observability"
 )
 

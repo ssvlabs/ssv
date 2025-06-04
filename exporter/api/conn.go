@@ -180,7 +180,7 @@ func (c *conn) ReadLoop(logger *zap.Logger) {
 			break
 		}
 		if mt == websocket.TextMessage {
-			msg = bytes.TrimSpace(bytes.Replace(msg, newline, space, -1))
+			msg = bytes.TrimSpace(bytes.ReplaceAll(msg, newline, space))
 			c.read <- msg
 		}
 	}

@@ -9,10 +9,11 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/ssvlabs/ssv/network/commons"
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 var (

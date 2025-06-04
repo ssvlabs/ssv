@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -13,12 +15,11 @@ import (
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/rs/zerolog"
-	"github.com/ssvlabs/ssv/networkconfig"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	beaconproxy "github.com/ssvlabs/ssv/e2e/beacon_proxy"
 	"github.com/ssvlabs/ssv/e2e/beacon_proxy/intercept/slashinginterceptor"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 type BeaconProxyCmd struct {
@@ -97,7 +98,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 		return fmt.Errorf("error parsing json file: %s, %w", globals.ValidatorsFile, err)
 	}
 
-	validatorsData, err := GetValidators(ctx, cmd.BeaconNodeUrl, maps.Keys(beaconProxyJSON.Validators))
+	validatorsData, err := GetValidators(ctx, cmd.BeaconNodeUrl, slices.Collect(maps.Keys(beaconProxyJSON.Validators)))
 	if err != nil {
 		return fmt.Errorf("failed to get validators data from beacon node err:%v", err)
 	}
@@ -113,7 +114,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	gateways := make([]beaconproxy.Gateway, len(cmd.Gateways))
 
 	// TODO: implement ability to select what test to run
-	//interceptor := intercept.NewHappyInterceptor(maps.Values(validatorsData))
+	//interceptor := intercept.NewHappyInterceptor(slices.Collect(maps.Values(validatorsData)))
 	//var validatorsRunningSlashing []*v1.Validator
 	//for _, valData := range validatorsData {
 	//	if validators[valData.Index] == "slashing" {
@@ -126,7 +127,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	const startEpochDelay = 1 // TODO: change to 2 after debugging is done
 	startEpoch := networkCfg.Beacon.EstimatedCurrentEpoch() + startEpochDelay
 
-	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, true, maps.Values(validatorsData))
+	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, true, slices.Collect(maps.Values(validatorsData)))
 	go interceptor.WatchSubmissions()
 
 	for i, gw := range cmd.Gateways {
