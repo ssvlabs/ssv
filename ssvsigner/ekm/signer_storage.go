@@ -40,6 +40,10 @@ const (
 	highestProposalPrefix = prefix + "highest_prop-"
 )
 
+var (
+	ErrWalletNotFound = errors.New("could not find wallet")
+)
+
 // Storage represents the interface for ssv node storage
 // TODO: review if we need all of them
 type Storage interface {
@@ -137,7 +141,7 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(walletPrefix), []byte(walletPath))
 	if !found {
-		return nil, errors.New("could not find wallet")
+		return nil, ErrWalletNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("open wallet: %w", err)
