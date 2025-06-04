@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -17,7 +18,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
 )
 
