@@ -22,12 +22,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ProposerRunner struct {
@@ -109,8 +110,9 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleProposer)
 
-	// only 1 root, verified in basePreConsensusMsgProcessing
+	// only 1 root, verified in expectedPreConsensusRootsAndDomain
 	root := roots[0]
+
 	// randao is relevant only for block proposals, no need to check type
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
@@ -118,9 +120,11 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
-	logger.Debug("🧩 reconstructed partial RANDAO signatures",
+	logger.Debug(
+		"🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		fields.PreConsensusTime(r.measurements.PreConsensusTime()))
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+	)
 
 	start := time.Now()
 	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
@@ -246,108 +250,107 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		return nil
 	}
 
-	var successfullySubmittedProposals uint8
-	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	// only 1 root, verified by expectedPostConsensusRootsAndDomain
+	root := roots[0]
+
+	sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	if err != nil {
+		// If the reconstructed signature verification failed, fall back to verifying each partial signature
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+	}
+	specSig := phase0.BLSSignature{}
+	copy(specSig[:], sig)
+
+	r.measurements.EndPostConsensus()
+	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
+
+	logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
+		zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
+		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+		fields.Round(r.GetState().RunningInstance.State.Round))
+
+	r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
+
+	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	err = validatorConsensusData.Decode(r.GetState().DecidedValue)
+	if err != nil {
+		return errors.Wrap(err, "could not create consensus data")
+	}
+
+	logger = logger.With(
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+		fields.ConsensusTime(r.measurements.ConsensusTime()),
+		fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+		fields.Height(r.BaseRunner.QBFTController.Height),
+		fields.Round(r.GetState().RunningInstance.State.Round),
+		zap.Bool("blinded", r.decidedBlindedBlock()),
+	)
+
+	var (
+		bSummary     blockSummary
+		summarizeErr error
+	)
+	start := time.Now()
+	if r.decidedBlindedBlock() {
+		vBlindedBlk, _, err := validatorConsensusData.GetBlindedBlockData()
 		if err != nil {
-			// If the reconstructed signature verification failed, fall back to verifying each partial signature
-			for _, root := range roots {
-				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-			}
-			return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+			return errors.Wrap(err, "could not get blinded block")
 		}
-		specSig := phase0.BLSSignature{}
-		copy(specSig[:], sig)
-
-		r.measurements.EndPostConsensus()
-		recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
-
-		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
-			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
-			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
-			fields.Round(r.GetState().RunningInstance.State.Round))
-
-		r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
-
-		validatorConsensusData := &spectypes.ValidatorConsensusData{}
-		err = validatorConsensusData.Decode(r.GetState().DecidedValue)
-		if err != nil {
-			return errors.Wrap(err, "could not create consensus data")
-		}
-
-		start := time.Now()
-
+		bSummary, summarizeErr = summarizeBlock(vBlindedBlk)
 		logger = logger.With(
-			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
-			fields.ConsensusTime(r.measurements.ConsensusTime()),
-			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
-			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round),
-			zap.Bool("blinded", r.decidedBlindedBlock()),
-		)
-		var (
-			blockSummary blockSummary
-			summarizeErr error
-		)
-		if r.decidedBlindedBlock() {
-			vBlindedBlk, _, err := validatorConsensusData.GetBlindedBlockData()
-			if err != nil {
-				return errors.Wrap(err, "could not get blinded block")
-			}
-			blockSummary, summarizeErr = summarizeBlock(vBlindedBlk)
-			logger = logger.With(
-				zap.String("block_hash", blockSummary.Hash.String()),
-				zap.NamedError("summarize_err", summarizeErr),
-			)
-
-			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(ctx, vBlindedBlk, specSig); err != nil {
-				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
-				logger.Error("❌ could not submit blinded Beacon block",
-					fields.SubmissionTime(time.Since(start)),
-					zap.Error(err))
-				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
-			}
-		} else {
-			vBlk, _, err := validatorConsensusData.GetBlockData()
-			if err != nil {
-				return errors.Wrap(err, "could not get block")
-			}
-			blockSummary, summarizeErr = summarizeBlock(vBlk)
-			logger = logger.With(
-				zap.String("block_hash", blockSummary.Hash.String()),
-				zap.NamedError("summarize_err", summarizeErr),
-			)
-
-			if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
-				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
-				logger.Error("❌ could not submit Beacon block",
-					fields.SubmissionTime(time.Since(start)),
-					zap.Error(err))
-				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
-			}
-		}
-
-		successfullySubmittedProposals++
-		logger.Info("✅ successfully submitted block proposal",
-			fields.Slot(validatorConsensusData.Duty.Slot),
-			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round),
-			zap.String("block_hash", blockSummary.Hash.String()),
-			zap.Bool("blinded", blockSummary.Blinded),
-			zap.Duration("took", time.Since(start)),
+			zap.String("block_hash", bSummary.Hash.String()),
 			zap.NamedError("summarize_err", summarizeErr),
-			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
+		)
+
+		if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(ctx, vBlindedBlk, specSig); err != nil {
+			recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+			logger.Error("❌ could not submit blinded Beacon block",
+				fields.SubmissionTime(time.Since(start)),
+				zap.Error(err))
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
+		}
+	} else {
+		vBlk, _, err := validatorConsensusData.GetBlockData()
+		if err != nil {
+			return errors.Wrap(err, "could not get block")
+		}
+		bSummary, summarizeErr = summarizeBlock(vBlk)
+		logger = logger.With(
+			zap.String("block_hash", bSummary.Hash.String()),
+			zap.NamedError("summarize_err", summarizeErr),
+		)
+
+		if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
+			recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+			logger.Error("❌ could not submit Beacon block",
+				fields.SubmissionTime(time.Since(start)),
+				zap.Error(err))
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
+		}
 	}
 
 	r.GetState().Finished = true
-
 	r.measurements.EndDutyFlow()
 
-	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx,
-		uint32(successfullySubmittedProposals),
+	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(
+		ctx,
+		1,
 		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleProposer)
+		spectypes.BNRoleProposer,
+	)
+
+	logger.Info("✅ successfully submitted block proposal",
+		fields.Slot(r.GetState().StartingDuty.DutySlot()),
+		fields.Height(r.BaseRunner.QBFTController.Height),
+		fields.Round(r.GetState().RunningInstance.State.Round),
+		zap.String("block_hash", bSummary.Hash.String()),
+		zap.Bool("blinded", bSummary.Blinded),
+		zap.Duration("took", time.Since(start)),
+		zap.NamedError("summarize_err", summarizeErr),
+		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+		fields.TotalDutyTime(r.measurements.TotalDutyTime()))
 
 	return nil
 }
