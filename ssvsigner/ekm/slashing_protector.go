@@ -1,6 +1,7 @@
 package ekm
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -134,7 +135,10 @@ func (sp *SlashingProtector) updateHighestAttestation(pubKey phase0.BLSPubKey, s
 	}
 
 	currentEpoch := sp.signerStore.BeaconNetwork().EstimatedEpochAtSlot(slot)
-	minimalSP := sp.computeMinimalAttestationSP(currentEpoch)
+	minimalSP, err := sp.computeMinimalAttestationSP(currentEpoch)
+	if err != nil {
+		return fmt.Errorf("could not compute minimal attestation data: %w", err)
+	}
 
 	// Check if the retrieved highest attestation data is valid and not outdated.
 	if found && retrievedHighAtt != nil {
@@ -160,7 +164,10 @@ func (sp *SlashingProtector) updateHighestProposal(pubKey phase0.BLSPubKey, slot
 		return fmt.Errorf("could not retrieve highest proposal: %w", err)
 	}
 
-	minimalSPSlot := sp.computeMinimalProposerSP(slot)
+	minimalSPSlot, err := sp.computeMinimalProposerSP(slot)
+	if err != nil {
+		return fmt.Errorf("could not compute minimal proposal slot: %w", err)
+	}
 
 	// Check if the retrieved highest proposal slot is valid and not outdated.
 	if found && retrievedHighProp != 0 {
@@ -180,7 +187,11 @@ func (sp *SlashingProtector) updateHighestProposal(pubKey phase0.BLSPubKey, slot
 
 // computeMinimalAttestationSP calculates the minimal safe attestation data for slashing protection.
 // It takes the current epoch as an argument and returns an AttestationData object with the minimal safe source and target epochs.
-func (sp *SlashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) *phase0.AttestationData {
+func (sp *SlashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) (*phase0.AttestationData, error) {
+	if epoch == 0 {
+		return nil, errors.New("invalid attestation epoch, epoch could not be 0")
+	}
+
 	// Calculate the highest safe target epoch based on the current epoch and a predefined minimum distance.
 	highestTarget := epoch + minSPAttestationEpochGap
 	// The highest safe source epoch is one less than the highest target epoch.
@@ -194,12 +205,16 @@ func (sp *SlashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) *ph
 		Target: &phase0.Checkpoint{
 			Epoch: highestTarget,
 		},
-	}
+	}, nil
 }
 
 // computeMinimalProposerSP calculates the minimal safe slot for a block proposal to avoid slashing.
 // It takes the current slot as an argument and returns the minimal safe slot.
-func (sp *SlashingProtector) computeMinimalProposerSP(slot phase0.Slot) phase0.Slot {
+func (sp *SlashingProtector) computeMinimalProposerSP(slot phase0.Slot) (phase0.Slot, error) {
+	if slot == 0 {
+		return 0, errors.New("invalid proposal slot, slot could not be 0")
+	}
+
 	// Calculate the highest safe proposal slot based on the current slot and a predefined minimum distance.
-	return slot + minSPProposalSlotGap
+	return slot + minSPProposalSlotGap, nil
 }
