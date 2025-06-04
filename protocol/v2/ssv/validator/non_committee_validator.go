@@ -236,7 +236,6 @@ func (ncv *CommitteeObserver) VerifySig(partialMsgs *spectypes.PartialSignatureM
 
 	currentSlot := partialMsgs.Slot
 	slotValidators, exist := ncv.postConsensusContainer[currentSlot]
-
 	if !exist {
 		slotValidators = make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer)
 		ncv.postConsensusContainer[partialMsgs.Slot] = slotValidators
@@ -329,15 +328,15 @@ func (ncv *CommitteeObserver) pruneOldSlots(currentSlot phase0.Slot) {
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 // copied from BaseRunner
-func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) (err error) {
+func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
 	// Check previous signature validity
 	var previousSignature spectypes.Signature
-	previousSignature, err = container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
+	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
 		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot, share)
 		if err == nil {
 			// Keep the previous signature since it's correct
-			return
+			return nil
 		}
 	}
 
@@ -350,7 +349,7 @@ func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSi
 		container.AddSignature(msg)
 	}
 
-	return
+	return err
 }
 
 // copied from BaseRunner

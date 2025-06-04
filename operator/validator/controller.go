@@ -288,6 +288,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.attesterRoots.Start()
 	go ctrl.syncCommRoots.Start()
 	go ctrl.domainCache.Start()
+	go ctrl.beaconVoteRoots.Start()
 
 	return &ctrl
 }
@@ -341,7 +342,7 @@ func (c *controller) handleRouterMessages() {
 					v.HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(ctx, c.logger, m)
-				} else if c.validatorOptions.Exporter || c.validatorOptions.ExporterFull {
+				} else if isExporterMode(c.validatorOptions) {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
@@ -356,6 +357,10 @@ func (c *controller) handleRouterMessages() {
 			}
 		}
 	}
+}
+
+func isExporterMode(options validator.Options) bool {
+	return options.Exporter || options.ExporterFull
 }
 
 var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
@@ -400,14 +405,12 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 	}
 
 	if c.validatorOptions.ExporterFull {
+		// use new exporter functionality
 		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
+	} else {
+		// use old exporter functionality
+		return c.handleNonCommitteeMessages(ctx, ssvMsg, ncv)
 	}
-
-	if err := c.handleNonCommitteeMessages(ctx, ssvMsg, ncv); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (c *controller) handleNonCommitteeMessages(
@@ -462,7 +465,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		}
 	}
 
-	if c.validatorOptions.Exporter || c.validatorOptions.ExporterFull {
+	if isExporterMode(c.validatorOptions) {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
 	} else {

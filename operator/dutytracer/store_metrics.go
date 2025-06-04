@@ -69,6 +69,14 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDuty(slot phase0.Slot, id spectypes.
 	return d.Store.GetCommitteeDuty(slot, id)
 }
 
+func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
+	start := time.Now()
+	defer func() {
+		record("committee", "get_all", start)
+	}()
+	return d.Store.GetCommitteeDuties(slot)
+}
+
 func (d *DutyTraceStoreMetrics) SaveValidatorDuty(duty *model.ValidatorDutyTrace) error {
 	start := time.Now()
 	defer func() {
@@ -91,12 +99,4 @@ func (d *DutyTraceStoreMetrics) GetValidatorDuties(role spectypes.BeaconRole, sl
 		record("validator", "get_all", start)
 	}()
 	return d.Store.GetValidatorDuties(role, slot)
-}
-
-func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
-	start := time.Now()
-	defer func() {
-		record("committee", "get_all", start)
-	}()
-	return d.Store.GetCommitteeDuties(slot)
 }
