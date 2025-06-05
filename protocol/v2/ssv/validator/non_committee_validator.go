@@ -38,7 +38,7 @@ type CommitteeObserver struct {
 	rootsMtx          sync.RWMutex
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
-	domainCache       *DomainProvider
+	domainCache       *DomainCache
 
 	// cache to identify and skip duplicate computations of attester/sync committee roots
 	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
@@ -69,7 +69,7 @@ type CommitteeObserverOptions struct {
 	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	BeaconVoteRoots   *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
-	DomainCache       *DomainProvider
+	DomainCache       *DomainCache
 }
 
 func NewCommitteeObserver(msgID spectypes.MessageID, opts CommitteeObserverOptions) *CommitteeObserver {

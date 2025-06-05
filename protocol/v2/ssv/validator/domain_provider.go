@@ -10,7 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
-type DomainProvider struct {
+type DomainCache struct {
 	beaconNode beacon.BeaconNode
 	cache      *ttlcache.Cache[domainCacheKey, phase0.Domain]
 }
@@ -20,9 +20,9 @@ type domainCacheKey struct {
 	DomainType phase0.DomainType
 }
 
-// NewDomainProvider must be Start()-ed the same way as ttlcache.
-func NewDomainProvider(beaconNode beacon.BeaconNode, ttl time.Duration) *DomainProvider {
-	return &DomainProvider{
+// NewDomainCache must be Start()-ed the same way as ttlcache.
+func NewDomainCache(beaconNode beacon.BeaconNode, ttl time.Duration) *DomainCache {
+	return &DomainCache{
 		beaconNode: beaconNode,
 		cache: ttlcache.New(
 			ttlcache.WithTTL[domainCacheKey, phase0.Domain](ttl),
@@ -30,11 +30,11 @@ func NewDomainProvider(beaconNode beacon.BeaconNode, ttl time.Duration) *DomainP
 	}
 }
 
-func (dc *DomainProvider) Start() {
+func (dc *DomainCache) Start() {
 	dc.cache.Start()
 }
 
-func (dc *DomainProvider) Fetch(
+func (dc *DomainCache) Fetch(
 	ctx context.Context,
 	epoch phase0.Epoch,
 	domainType phase0.DomainType,
