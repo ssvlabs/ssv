@@ -22,11 +22,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ProposerRunner struct {
@@ -48,6 +49,7 @@ type ProposerRunner struct {
 }
 
 func NewProposerRunner(
+	logger *zap.Logger,
 	domainType spectypes.DomainType,
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
@@ -71,6 +73,11 @@ func NewProposerRunner(
 	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration
 	const maxReasonableProposerDelay = 1650 * time.Millisecond
 	if proposerDelay > maxReasonableProposerDelay {
+		logger.Warn(
+			"ProposerDelay value set is too high, capping it at max reasonable proposer delay value",
+			zap.Duration("proposer_delay", proposerDelay),
+			zap.Duration("max_reasonable_proposer_delay", maxReasonableProposerDelay),
+		)
 		proposerDelay = maxReasonableProposerDelay
 	}
 
