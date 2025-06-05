@@ -306,15 +306,13 @@ WEB3SIGNER_SERVER_CERT_FILE=/path/to/server.pem \
 
 **Server TLS Validation Rules** (SSV-Signer accepting connections from SSV node):
 
-| Configuration   | `KEYSTORE_FILE` | `KEYSTORE_PASSWORD_FILE` | `KNOWN_CLIENTS_FILE` | `CA_FILE` | Validity  | Description                                                      |
-|-----------------|-----------------|--------------------------|----------------------|-----------|-----------|------------------------------------------------------------------|
-| ❌ No TLS        | ❌               | ❌                        | ❌                    | ❌         | ❌ Invalid | HTTP is no longer supported                                      |
-| ❌ Basic TLS     | ✅               | ✅                        | ❌                    | ❌         | ❌ Invalid | TLS requires mTLS: CA and known clients file are both mandatory  |
-| ⚠️ Partial mTLS | ✅               | ✅                        | ✅                    | ❌         | ❌ Invalid | Cannot verify client certificate chain without CA                |
-| ⚠️ Partial mTLS | ✅               | ✅                        | ❌                    | ✅         | ❌ Invalid | Cannot verify client identity without fingerprint whitelist      |
-| ✅ Full mTLS     | ✅               | ✅                        | ✅                    | ✅         | ✅ Valid   | Strict mutual TLS + fingerprint pinning; required for production |
-| ❌ Invalid       | ✅               | ❌                        | ✅                    | ✅         | ❌ Invalid | Keystore password file missing                                   |
-| ❌ Invalid       | ❌               | ❌                        | ✅                    | ✅         | ❌ Invalid | Cannot authenticate without server certificate                   |
+| Configuration | `KEYSTORE_FILE` | `KEYSTORE_PASSWORD_FILE` | `KNOWN_CLIENTS_FILE` | Validity  | Description                                              |
+|---------------|-----------------|--------------------------|----------------------|-----------|----------------------------------------------------------|
+| ❌ No TLS      | ❌               | ❌                        | ❌                    | ❌ Invalid | HTTP is no longer supported                              |
+| ❌ Basic TLS   | ✅               | ✅                        | ❌                    | ❌ Invalid | Known clients file is required for client authentication |
+| ✅ Full mTLS   | ✅               | ✅                        | ✅                    | ✅ Valid   | Certificate required + fingerprint verification          |
+| ❌ Invalid     | ✅               | ❌                        | ✅                    | ❌ Invalid | Keystore password file missing                           |
+| ❌ Invalid     | ❌               | ❌                        | ✅                    | ❌ Invalid | Cannot authenticate without server certificate           |
 
 
 **Client TLS Validation Rules** (SSV-Signer connecting to Web3Signer):
@@ -335,7 +333,6 @@ WEB3SIGNER_SERVER_CERT_FILE=/path/to/server.pem \
 - The **SSV-Signer server** (accepting connections from the SSV node) requires:
     - A PKCS12 keystore file with the server certificate (`KEYSTORE_FILE`)
     - A password file to decrypt the keystore (`KEYSTORE_PASSWORD_FILE`)
-    - A CA file to validate incoming client certificate chains (`CA_FILE`)
     - A known clients file with SHA-256 fingerprints mapped by Common Name (`KNOWN_CLIENTS_FILE`)
 
 - The **SSV-Signer client** (connecting to **Web3Signer**) requires:
