@@ -253,7 +253,6 @@ func TestValidatorPubkeysToIndicesMapping(t *testing.T) {
 	indices, err := storage.Shares.(*sharesStorage).GetValidatorIndicesByPubkeys(pubkeys)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(indices))
-	// should maintain order
 	assert.Equal(t, validatorShare.ValidatorIndex, indices[0])
 	assert.Equal(t, validatorShare2.ValidatorIndex, indices[1])
 }

@@ -99,7 +99,6 @@ func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phas
 	return
 }
 
-// TODO(Moshe): in the same slot we can have a validator in multiple roles?
 func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (id spectypes.CommitteeID, err error) {
 	prefix := s.makeValidatorCommitteePrefix(slot)
 	key := uInt64ToByteSlice(uint64(index))
