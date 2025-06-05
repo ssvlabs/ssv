@@ -31,6 +31,7 @@ type CLI struct {
 	KeystoreFile         string `env:"KEYSTORE_FILE" required:"" env-description:"Path to PKCS12 keystore file for server TLS connections"`
 	KeystorePasswordFile string `env:"KEYSTORE_PASSWORD_FILE" required:"" env-description:"Path to file containing the password for server keystore file"`
 	KnownClientsFile     string `env:"KNOWN_CLIENTS_FILE" required:"" env-description:"Path to known clients file for authenticating clients"`
+	CAFile               string `env:"CA_FILE" env-description:"Path to CA certificate file for verifying client certificates"`
 
 	// Client TLS configuration (for connecting to Web3Signer)
 	Web3SignerKeystoreFile         string `env:"WEB3SIGNER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
@@ -86,6 +87,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		ServerKeystoreFile:         cli.KeystoreFile,
 		ServerKeystorePasswordFile: cli.KeystorePasswordFile,
 		ServerKnownClientsFile:     cli.KnownClientsFile,
+		ServerCAFile:               cli.CAFile,
 
 		ClientKeystoreFile:         cli.Web3SignerKeystoreFile,
 		ClientKeystorePasswordFile: cli.Web3SignerKeystorePasswordFile,
@@ -135,6 +137,9 @@ func validateConfig(cli CLI) error {
 	}
 	if cli.KnownClientsFile == "" {
 		return fmt.Errorf("known clients file is required for client authentication")
+	}
+	if cli.CAFile == "" {
+		return fmt.Errorf("client certificates file is required")
 	}
 
 	return nil

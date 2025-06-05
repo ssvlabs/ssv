@@ -25,6 +25,7 @@ type Config struct {
 	ServerKeystoreFile         string
 	ServerKeystorePasswordFile string
 	ServerKnownClientsFile     string
+	ServerCAFile               string
 
 	// Client TLS configuration (for connecting to Web3Signer)
 	ClientKeystoreFile         string
@@ -35,43 +36,23 @@ type Config struct {
 // LoadClientTLSConfig creates a TLS configuration for client connections.
 // This is a complete solution for connecting to Web3Signer with TLS.
 //
-// Configuration scenarios:
-// 1. No TLS configuration - Returns minimal TLS config with modern TLS version
-// 2. Client certificate only - Mutual TLS where client identifies itself to server
-// 3. Server certificate only - Trust specific server certificate based on fingerprint
-// 4. Both certificates - Mutual TLS with specific server trust (most secure)
-//
 // Parameters used from Config:
 // - ClientKeystoreFile: PKCS12 file containing client certificate and private key
 // - ClientKeystorePasswordFile: File containing password for the keystore
-// - ClientServerCertFile: PEM file with trusted server certificate
+// - ClientServerCertFile: PEM file with trusted server certificate (used for fingerprint pinning)
 func (c *Config) LoadClientTLSConfig() (*tls.Config, error) {
 	if err := c.validateClientTLS(); err != nil {
 		return nil, fmt.Errorf("invalid client TLS config: %w", err)
 	}
 
-	// Case 1: No TLS configuration - use minimum TLS 1.3
-	if c.ClientKeystoreFile == "" && c.ClientServerCertFile == "" {
-		return &tls.Config{MinVersion: MinTLSVersion}, nil
+	certificate, err := c.loadClientCertificate()
+	if err != nil {
+		return nil, err
 	}
 
-	// Load client certificate if provided
-	var certificate tls.Certificate
-	var err error
-	if c.ClientKeystoreFile != "" {
-		certificate, err = c.loadClientCertificate()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Load server fingerprints if provided
-	var trustedFingerprints map[string]string
-	if c.ClientServerCertFile != "" {
-		trustedFingerprints, err = c.loadServerFingerprints()
-		if err != nil {
-			return nil, err
-		}
+	trustedFingerprints, err := c.loadServerFingerprints()
+	if err != nil {
+		return nil, err
 	}
 
 	return createClientTLSConfig(certificate, trustedFingerprints), nil
@@ -87,66 +68,58 @@ func (c *Config) LoadClientTLSConfig() (*tls.Config, error) {
 // - ServerKeystoreFile: PKCS12 file containing server certificate and private key
 // - ServerKeystorePasswordFile: File containing password for the keystore
 // - ServerKnownClientsFile: File with list of trusted client fingerprints
+// - ServerCAFile: PEM file with CA certificate used to verify client certificate chains
 func (c *Config) LoadServerTLSConfig() (*tls.Config, error) {
 	if err := c.validateServerTLS(); err != nil {
 		return nil, fmt.Errorf("invalid server TLS config: %w", err)
 	}
 
-	// Server certificate is required
 	certificate, err := c.loadServerCertificate()
 	if err != nil {
 		return nil, err
 	}
 
-	// Load client fingerprints - required for mutual TLS
 	trustedFingerprints, err := loadFingerprintsFile(c.ServerKnownClientsFile)
 	if err != nil {
 		return nil, fmt.Errorf("load known clients: %w", err)
 	}
 
-	return createServerTLSConfig(certificate, trustedFingerprints)
+	caCertPool, err := c.loadCA()
+	if err != nil {
+		return nil, fmt.Errorf("load CA certificate: %w", err)
+	}
+
+	return createServerTLSConfig(certificate, trustedFingerprints, caCertPool)
 }
 
 // validateServerTLS validates the server TLS configuration.
 // It verifies that TLS configuration is consistent based on multiple valid use cases.
 func (c *Config) validateServerTLS() error {
-	// Server keystore file and password are required
 	if c.ServerKeystoreFile == "" {
 		return fmt.Errorf("server keystore file is required")
 	}
 	if c.ServerKeystorePasswordFile == "" {
 		return fmt.Errorf("server keystore password file is required")
 	}
-
-	// Known clients file is required for mutual TLS
+	if c.ServerCAFile == "" {
+		return fmt.Errorf("server CA file is required for mutual TLS")
+	}
 	if c.ServerKnownClientsFile == "" {
 		return fmt.Errorf("known clients file is required for client authentication")
 	}
-
 	return nil
 }
 
-// validateClientTLS validates the client TLS configuration.
-// It verifies that TLS configuration is consistent based on multiple valid use cases.
 func (c *Config) validateClientTLS() error {
-	// Case 1: No client TLS config provided - TLS is optional
-	if c.ClientKeystoreFile == "" && c.ClientServerCertFile == "" {
-		return nil
+	if c.ClientKeystoreFile == "" {
+		return fmt.Errorf("client keystore file is required")
 	}
-
-	// Case 2: Only trusted server certificate file provided without client certificate
-	// This is valid - the client can verify server certificates without presenting its own
-	if c.ClientKeystoreFile == "" && c.ClientServerCertFile != "" {
-		return nil
+	if c.ClientKeystorePasswordFile == "" {
+		return fmt.Errorf("client keystore password file is required")
 	}
-
-	// Case 3: Client keystore file provided but no password file
-	if c.ClientKeystoreFile != "" && c.ClientKeystorePasswordFile == "" {
-		return fmt.Errorf("client keystore password file is required when using a client keystore file")
+	if c.ClientServerCertFile == "" {
+		return fmt.Errorf("trusted server certificate file is required for TLS")
 	}
-
-	// Case 4: Client keystore and password file provided (with or without server certificate)
-	// This is a valid configuration for mutual TLS
 	return nil
 }
 
@@ -215,7 +188,10 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 
 	// Set up certificate verification if fingerprints provided
 	if len(trustedFingerprints) > 0 {
-		tlsConfig.InsecureSkipVerify = true // We're doing manual verification
+		// InsecureSkipVerify is deliberately enabled to bypass Go's default certificate validation.
+		// This allows us to perform strict manual verification via VerifyConnection using pinned SHA-256 fingerprints.
+		// This does NOT disable security — instead, it replaces the default trust model (CA + hostname) with explicit fingerprint pinning.
+		tlsConfig.InsecureSkipVerify = true
 		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
 			return verifyServerCertificate(state, trustedFingerprints)
 		}
@@ -231,23 +207,36 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 // Parameters:
 // - certificate: server certificate to present to clients (required)
 // - trustedFingerprints: map of client common names to expected certificate fingerprints (required)
-func createServerTLSConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
+// - caCertPool: pool of CA certificates for verifying client certificates (optional)
+func createServerTLSConfig(
+	certificate tls.Certificate,
+	trustedFingerprints map[string]string,
+	caCertPool *x509.CertPool,
+) (*tls.Config, error) {
 	if certificate.Certificate == nil {
 		return nil, fmt.Errorf("server certificate is required")
 	}
-
 	if len(trustedFingerprints) == 0 {
 		return nil, fmt.Errorf("trusted client fingerprints are required")
 	}
+	if caCertPool == nil {
+		return nil, fmt.Errorf("CA pool is required for client verification")
+	}
 
-	return &tls.Config{
+	tlsConfig := &tls.Config{
 		MinVersion:   MinTLSVersion,
 		Certificates: []tls.Certificate{certificate},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    caCertPool,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			if len(verifiedChains) == 0 {
+				return fmt.Errorf("no valid certificate chain found")
+			}
 			return verifyClientCertificate(rawCerts, trustedFingerprints)
 		},
-	}, nil
+	}
+
+	return tlsConfig, nil
 }
 
 // verifyServerCertificate verifies a server certificate using fingerprints.
@@ -471,4 +460,16 @@ func formatFingerprint(fingerprint string) string {
 // - fingerprint: the fingerprint string to normalize
 func normalizeFingerprint(fingerprint string) string {
 	return strings.ToLower(strings.ReplaceAll(fingerprint, ":", ""))
+}
+
+// loadCA loads the CA certificate from a file.
+func (c *Config) loadCA() (*x509.CertPool, error) {
+	caCert, err := loadPEMCertificate(c.ServerCAFile)
+	if err != nil {
+		return nil, fmt.Errorf("load CA certificate: %w", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AddCert(caCert)
+	return caCertPool, nil
 }
