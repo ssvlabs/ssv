@@ -153,6 +153,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	select {
 	case <-time.After(proposerDelayAdjusted):
 	case <-ctx.Done():
+		return ctx.Err()
 	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
