@@ -180,7 +180,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		stateBySlot := state.Signer(0)
 		require.NotNil(t, stateBySlot)
 
-		storedState := stateBySlot.Get(slot)
+		storedState := stateBySlot.GetSignerState(slot)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 1, storedState.Round)
@@ -198,7 +198,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
 
-		storedState = stateBySlot.Get(slot)
+		storedState = stateBySlot.GetSignerState(slot)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 2, storedState.Round)
@@ -214,7 +214,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.NoError(t, err)
 
-		storedState = stateBySlot.Get(phase0.Slot(height) + 1)
+		storedState = stateBySlot.GetSignerState(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, 1, storedState.Round)
 		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
