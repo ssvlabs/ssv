@@ -151,8 +151,8 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	timeIntoSlot := max(time.Since(time.Unix(slotStartTime, 0)), 0)
 	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
 	select {
-		case <-time.After(proposerDelayAdjusted):
-		case <-ctx.Done():
+	case <-time.After(proposerDelayAdjusted):
+	case <-ctx.Done():
 	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
