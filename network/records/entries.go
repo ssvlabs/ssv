@@ -8,8 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
 )
 
