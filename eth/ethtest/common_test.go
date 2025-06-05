@@ -7,13 +7,17 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rpc"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
 	"github.com/ssvlabs/ssv/eth/executionclient"
@@ -64,7 +68,8 @@ type TestEnv struct {
 	httpSrv        *httptest.Server
 	validatorCtrl  *mocks.MockController
 	mockCtrl       *gomock.Controller
-	followDistance *uint64
+	networkConfig  networkconfig.NetworkConfig
+	followDistance uint64
 }
 
 func (e *TestEnv) shutdown() {
@@ -88,11 +93,23 @@ func (e *TestEnv) setup(
 	testAddresses []*ethcommon.Address,
 	validatorsCount uint64,
 	operatorsCount uint64,
+	useFinalityFork bool,
 ) error {
-	if e.followDistance == nil {
-		e.SetDefaultFollowDistance()
-	}
 	logger := zaptest.NewLogger(t)
+
+	// Set up network config with recent genesis time to avoid high epoch calculations
+	e.networkConfig = networkconfig.TestNetwork
+	e.networkConfig.GenesisTime = time.Now().Add(-1 * time.Minute) // Recent genesis
+
+	if useFinalityFork {
+		e.followDistance = 0
+		e.networkConfig.SSVConfig.Forks.Forks[1].Epoch = phase0.Epoch(1)
+		e.networkConfig.GenesisTime = time.Now().Add(-10 * time.Hour) // A bit earlier genesis time
+	} else {
+		e.followDistance = executionclient.DefaultFollowDistance
+		e.networkConfig.SSVConfig.Forks.Forks[1].Epoch = phase0.Epoch(1000000)
+
+	}
 
 	// Create operators RSA keys
 	ops, err := createOperators(operatorsCount, 0)
@@ -167,13 +184,13 @@ func (e *TestEnv) setup(
 		return fmt.Errorf("contractCode is empty")
 	}
 
-	// Create a client and connect to the simulator
 	e.execClient, err = executionclient.New(
 		ctx,
+		e.networkConfig,
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
-		executionclient.WithFollowDistance(*e.followDistance),
+		executionclient.WithFollowDistance(e.followDistance),
 	)
 	if err != nil {
 		return err
@@ -206,18 +223,14 @@ func (e *TestEnv) setup(
 	return nil
 }
 
-func (e *TestEnv) SetDefaultFollowDistance() {
-	// 8 is current production offset
-	value := uint64(8)
-	e.followDistance = &value
-}
-
-func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
-	for i := uint64(0); i < *e.followDistance; i++ {
+// MineAndFinalize mines enough blocks to ensure finality.
+func (e *TestEnv) MineAndFinalize(blockNum *uint64) {
+	for i := uint64(0); i < e.networkConfig.SlotsPerEpoch*2; i++ {
 		commitBlock(e.sim, blockNum)
 	}
 }
 
+// commitBlock creates a new block and increments block counter.
 func commitBlock(sim *simulator.Backend, blockNum *uint64) {
 	sim.Commit()
 	*blockNum++
