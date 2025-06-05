@@ -8,9 +8,12 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -119,36 +122,63 @@ func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
 }
 
 func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "proposer.fetch"),
+		trace.WithAttributes(observability.BeaconEpochAttribute(epoch)))
+	defer span.End()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	span.AddEvent("fetching duties")
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
 		// Set empty duties to inform DutyStore that fetch for this epoch is done.
 		h.duties.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{})
-
 		h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
 		return
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "proposer.execute"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconSlotAttribute(slot),
+		))
+	defer span.End()
+
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
+		span.AddEvent("no duties available")
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
 	// range over duties and execute
+	span.AddEvent("duties fetched", trace.WithAttributes(observability.DutyCountAttribute(len(duties))))
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
 		}
 	}
+	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
+
 	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "proposer.fetch_and_store"),
+		trace.WithAttributes(observability.BeaconEpochAttribute(epoch)))
+	defer span.End()
 
 	var allEligibleIndices []phase0.ValidatorIndex
 	for _, share := range h.validatorProvider.Validators() {
@@ -157,7 +187,10 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		}
 	}
 	if len(allEligibleIndices) == 0 {
-		h.logger.Debug("no eligible validators for epoch", fields.Epoch(epoch))
+		const eventMsg = "no eligible validators for epoch"
+		h.logger.Debug(eventMsg, fields.Epoch(epoch))
+		span.AddEvent(eventMsg)
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
@@ -168,9 +201,10 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		}
 	}
 
+	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(allEligibleIndices))))
 	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allEligibleIndices)
 	if err != nil {
-		return fmt.Errorf("failed to fetch proposer duties: %w", err)
+		return observability.Errorf(span, "failed to fetch proposer duties: %w", err)
 	}
 
 	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
@@ -185,6 +219,8 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		})
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
+
+	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(epoch, storeDuties)
 
 	h.logger.Debug("📚 got duties",
@@ -193,6 +229,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		fields.Duties(epoch, specDuties),
 		fields.Duration(start))
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
