@@ -1,8 +1,6 @@
 package topics
 
 import (
-	"fmt"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -20,20 +18,16 @@ var (
 
 	inboundMessageCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("in"),
+			observability.InstrumentName(observabilityNamespace, "in"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of inbound messages")))
 
 	outboundMessageCounter = observability.NewMetric(
 		meter.Int64Counter(
-			metricName("out"),
+			observability.InstrumentName(observabilityNamespace, "out"),
 			metric.WithUnit("{message}"),
 			metric.WithDescription("total number of outbound(broadcasted) messages")))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func messageTypeAttribute(value uint64) attribute.KeyValue {
 	return attribute.KeyValue{
