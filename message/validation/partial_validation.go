@@ -164,7 +164,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	if signerState := signerStateBySlot.Get(messageSlot); signerState != nil && signerState.Slot == messageSlot {
+	if signerState := signerStateBySlot.GetSignerState(messageSlot); signerState != nil {
 		// Rule: peer must send only:
 		// - 1 PostConsensusPartialSig, for Committee duty
 		// - 1 RandaoPartialSig and 1 PostConsensusPartialSig for Proposer
@@ -239,10 +239,10 @@ func (mv *messageValidator) updatePartialSignatureState(
 	messageSlot := partialSignatureMessages.Slot
 	messageEpoch := mv.netCfg.EstimatedEpochAtSlot(messageSlot)
 
-	signerState := stateBySlot.Get(messageSlot)
-	if signerState == nil || signerState.Slot != messageSlot {
+	signerState := stateBySlot.GetSignerState(messageSlot)
+	if signerState == nil {
 		signerState = newSignerState(messageSlot, specqbft.FirstRound)
-		stateBySlot.Set(messageSlot, messageEpoch, signerState)
+		stateBySlot.SetSignerState(messageSlot, messageEpoch, signerState)
 	}
 
 	return signerState.SeenMsgTypes.RecordPartialSignatureMessage(partialSignatureMessages)

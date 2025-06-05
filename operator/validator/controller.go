@@ -14,8 +14,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -28,6 +31,7 @@ import (
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
@@ -81,13 +85,14 @@ type ControllerOptions struct {
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.ParticipantStores
-	ValidatorStore             registrystorage.ValidatorIndices
+	ValidatorStore             registrystorage.ValidatorStore
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	DoppelgangerHandler        doppelganger.Provider
 	NetworkConfig              networkconfig.Network
 	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte
+	ProposerDelay              time.Duration
 
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
@@ -164,7 +169,7 @@ type controller struct {
 	operatorDataStore operatordatastore.OperatorDataStore
 
 	validatorOptions        validator.Options
-	validatorStore          registrystorage.ValidatorIndices
+	validatorStore          registrystorage.ValidatorStore
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validator.Validator) (bool, error)
 	committeeValidatorSetup chan struct{}
@@ -222,6 +227,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GasLimit:            options.GasLimit,
 		MessageValidator:    options.MessageValidator,
 		Graffiti:            options.Graffiti,
+		ProposerDelay:       options.ProposerDelay,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -624,6 +630,21 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 }
 
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
+	dutyID := fields.FormatDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type, duty.ValidatorIndex)
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "execute_duty"),
+		trace.WithAttributes(
+			observability.CommitteeIndexAttribute(duty.CommitteeIndex),
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.BeaconRoleAttribute(duty.Type),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.ValidatorPublicKeyAttribute(duty.PubKey),
+			observability.ValidatorIndexAttribute(duty.ValidatorIndex),
+			observability.DutyIDAttribute(dutyID),
+		),
+		trace.WithLinks(trace.LinkFromContext(ctx)))
+	defer span.End()
+
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 	pk := make([]byte, 48)
@@ -633,40 +654,74 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, c.networkConfig.GetDomainType())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(ssvMsg)
 		if err != nil {
 			logger.Error("could not decode duty execute msg", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
+		dec.TraceContext = ctx
+		span.AddEvent("pushing message to the queue")
 		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping ExecuteDuty message because the queue is full")
+			const eventMsg = "dropping ExecuteDuty message because the queue is full"
+			logger.Warn(eventMsg)
+			span.AddEvent(eventMsg)
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
-		logger.Warn("could not find validator")
+		const eventMsg = "could not find validator"
+		logger.Warn(eventMsg)
+		span.AddEvent(eventMsg)
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (c *controller) ExecuteCommitteeDuty(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
-	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
-		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.GetDomainType())
-		if err != nil {
-			logger.Error("could not create duty execute msg", zap.Error(err))
-			return
-		}
-		dec, err := queue.DecodeSSVMessage(ssvMsg)
-		if err != nil {
-			logger.Error("could not decode duty execute msg", zap.Error(err))
-			return
-		}
-		if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
-			logger.Error("could not execute committee duty", zap.Error(err))
-		}
-	} else {
-		logger.Warn("could not find committee", fields.CommitteeID(committeeID))
+	cm, ok := c.validatorsMap.GetCommittee(committeeID)
+	if !ok {
+		const eventMsg = "could not find committee"
+		logger.Warn(eventMsg, fields.CommitteeID(committeeID))
+		return
 	}
+
+	var committee []spectypes.OperatorID
+	for _, operator := range cm.CommitteeMember.Committee {
+		committee = append(committee, operator.OperatorID)
+	}
+
+	dutyID := fields.FormatCommitteeDutyID(committee, c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot)
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "execute_committee_duty"),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(duty.Slot),
+			observability.CommitteeIDAttribute(committeeID),
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.DutyIDAttribute(dutyID),
+		),
+		trace.WithLinks(trace.LinkFromContext(ctx)))
+	defer span.End()
+
+	ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, c.networkConfig.GetDomainType())
+	if err != nil {
+		logger.Error("could not create duty execute msg", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	dec, err := queue.DecodeSSVMessage(ssvMsg)
+	if err != nil {
+		logger.Error("could not decode duty execute msg", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	if err := cm.OnExecuteDuty(ctx, logger, dec.Body.(*ssvtypes.EventMsg)); err != nil {
+		logger.Error("could not execute committee duty", zap.Error(err))
+		span.RecordError(err)
+	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
@@ -1113,7 +1168,6 @@ func SetupRunners(
 	logger *zap.Logger,
 	options validator.Options,
 ) (runner.ValidatorDutyRunners, error) {
-
 	if options.SSVShare == nil || !options.SSVShare.HasBeaconMetadata() {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it
@@ -1159,7 +1213,7 @@ func SetupRunners(
 		case spectypes.RoleProposer:
 			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig, options.SSVShare.ValidatorPubKey, options.SSVShare.ValidatorIndex, phase0.BLSPubKey(options.SSVShare.SharePubKey))
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
-			runners[role], err = runner.NewProposerRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti)
+			runners[role], err = runner.NewProposerRunner(logger, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti, options.ProposerDelay)
 		case spectypes.RoleAggregator:
 			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig, options.SSVShare.ValidatorPubKey, options.SSVShare.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
