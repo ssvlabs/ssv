@@ -203,7 +203,7 @@ func TestSharesStorage(t *testing.T) {
 	})
 
 	t.Run("KV_reuse_works", func(t *testing.T) {
-		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork, storage.db, []byte("test"))
+		storageDuplicate, err := NewSharesStorage(networkconfig.TestNetwork, storage.db, []byte("test"))
 		require.NoError(t, err)
 		existingValidators := storageDuplicate.List(nil)
 
@@ -670,7 +670,7 @@ func newTestStorage(logger *zap.Logger) (*testStorage, error) {
 
 func (t *testStorage) open(logger *zap.Logger) error {
 	var err error
-	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.TestNetwork, t.db, []byte("test"))
+	t.Shares, err = NewSharesStorage(networkconfig.TestNetwork, t.db, []byte("test"))
 	if err != nil {
 		return err
 	}

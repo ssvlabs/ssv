@@ -15,6 +15,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+
 	"github.com/ssvlabs/ssv/operator/duties"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -864,6 +866,111 @@ func (s *validatorStoreImpl) GetSyncCommitteeValidators(period uint64) []*Valida
 	}
 
 	return snapshots
+}
+
+// UpdateValidatorsMetadata updates the metadata for multiple validators.
+// It returns only metadata entries that actually changed the stored shares.
+// The returned map is nil if no changes occurred.
+func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metadata beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	if len(metadata) == 0 {
+		return nil, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var (
+		changedShares   []*types.SSVShare
+		changedMetadata beacon.ValidatorMetadataMap
+	)
+
+	for pk, newMetadata := range metadata {
+		if newMetadata == nil {
+			continue
+		}
+
+		key := hex.EncodeToString(pk[:])
+		state, exists := s.validators[key]
+		if !exists {
+			// Validator not found, skip
+			continue
+		}
+
+		// Check if metadata actually changed
+		currentMetadata := state.share.BeaconMetadata()
+		if newMetadata.Equals(currentMetadata) {
+			continue
+		}
+
+		// Update the share with new metadata
+		state.share.SetBeaconMetadata(newMetadata)
+		state.lastUpdated = time.Now()
+
+		// Recalculate participation status as it may have changed
+		oldParticipationStatus := state.participationStatus
+		state.participationStatus = s.calculateParticipationStatus(state.share)
+
+		// Collect changed shares for batch save
+		changedShares = append(changedShares, state.share)
+
+		// Track changed metadata
+		if changedMetadata == nil {
+			changedMetadata = make(beacon.ValidatorMetadataMap)
+		}
+		changedMetadata[pk] = newMetadata
+
+		// Check if participation status changed
+		if oldParticipationStatus.IsParticipating != state.participationStatus.IsParticipating {
+			snapshot := s.createSnapshot(state)
+
+			if state.participationStatus.IsParticipating && s.shouldStart(state) {
+				// Validator became eligible to participate
+				if s.callbacks.OnValidatorStarted != nil {
+					go func(snap *ValidatorSnapshot) {
+						if err := s.callbacks.OnValidatorStarted(ctx, snap); err != nil {
+							s.logger.Error("validator started callback failed",
+								zap.String("pubkey", hex.EncodeToString(snap.Share.ValidatorPubKey[:])),
+								zap.Error(err))
+						}
+					}(snapshot)
+				}
+			} else if !state.participationStatus.IsParticipating && oldParticipationStatus.IsParticipating {
+				// Validator became ineligible
+				if s.callbacks.OnValidatorStopped != nil {
+					go func(pk spectypes.ValidatorPK) {
+						if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
+							s.logger.Error("validator stopped callback failed",
+								zap.String("pubkey", hex.EncodeToString(pk[:])),
+								zap.Error(err))
+						}
+					}(state.share.ValidatorPubKey)
+				}
+			}
+		}
+
+		// Always trigger update callback for metadata changes
+		if s.callbacks.OnValidatorUpdated != nil {
+			snapshot := s.createSnapshot(state)
+			go func(snap *ValidatorSnapshot) {
+				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
+					s.logger.Error("validator updated callback failed", zap.Error(err))
+				}
+			}(snapshot)
+		}
+	}
+
+	// Persist all changes
+	if len(changedShares) > 0 {
+		if err := s.sharesStorage.Save(nil, changedShares...); err != nil {
+			return nil, fmt.Errorf("persist metadata updates: %w", err)
+		}
+
+		s.logger.Debug("metadata updated",
+			zap.Int("total_validators", len(metadata)),
+			zap.Int("changed_validators", len(changedShares)))
+	}
+
+	return changedMetadata, nil
 }
 
 // createCommitteeSnapshot creates an immutable snapshot of committee state.

@@ -7,6 +7,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -36,6 +38,10 @@ type ValidatorStore interface {
 
 	RegisterSyncCommitteeInfo(info []SyncCommitteeInfo) error
 	GetSyncCommitteeValidators(period uint64) []*ValidatorSnapshot
+
+	// UpdateValidatorsMetadata updates the metadata for multiple validators.
+	// Returns only the metadata that actually changed the stored shares.
+	UpdateValidatorsMetadata(ctx context.Context, metadata beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error)
 }
 
 // ParticipationOptions filters participating validators.
