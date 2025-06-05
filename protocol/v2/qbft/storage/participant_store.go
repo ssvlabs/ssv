@@ -42,9 +42,6 @@ type ParticipantsRangeEntry struct {
 
 // ParticipantStore is the store used by QBFT components
 type ParticipantStore interface {
-	// CleanAllInstances removes all records in old format.
-	CleanAllInstances() error
-
 	// SaveParticipants updates participants in quorum.
 	SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (bool, error)
 

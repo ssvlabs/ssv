@@ -20,17 +20,9 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
-
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -68,6 +60,12 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -426,18 +424,18 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.BNRoleVoluntaryExit,
 		}
 
-		storageMap := ibftstorage.NewStores()
-
-		for _, storageRole := range storageRoles {
-			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole)
-			storageMap.Add(storageRole, s)
-		}
-
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
 				SlotDuration: networkConfig.SlotDuration,
 				GenesisTime:  networkConfig.GenesisTime,
 			})
+		}
+
+		storageMap := ibftstorage.NewStores()
+
+		for _, storageRole := range storageRoles {
+			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole, networkConfig, slotTickerProvider)
+			storageMap.Add(storageRole, s)
 		}
 
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
@@ -771,13 +769,6 @@ func setupDB(ctx context.Context, logger *zap.Logger, beaconConfig networkconfig
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
-	reopenDb := func() error {
-		if err := db.Close(); err != nil {
-			return errors.Wrap(err, "failed to close db")
-		}
-		db, err = kv.New(logger, cfg.DBOptions)
-		return errors.Wrap(err, "failed to reopen db")
-	}
 
 	migrationOpts := migrations.Options{
 		Db:           db,
@@ -794,13 +785,7 @@ func setupDB(ctx context.Context, logger *zap.Logger, beaconConfig networkconfig
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	// Close & reopen the database to trigger any unknown internal
-	// startup/shutdown procedures that the storage engine may have.
 	start := time.Now()
-	if err := reopenDb(); err != nil {
-		return nil, err
-	}
-
 	// Run a long garbage collection cycle with a timeout.
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
@@ -808,10 +793,6 @@ func setupDB(ctx context.Context, logger *zap.Logger, beaconConfig networkconfig
 		return nil, errors.Wrap(err, "failed to collect garbage")
 	}
 
-	// Close & reopen again.
-	if err := reopenDb(); err != nil {
-		return nil, err
-	}
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil

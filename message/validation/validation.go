@@ -15,10 +15,10 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -107,7 +107,7 @@ func New(
 		opt(mv)
 	}
 
-	// Start automatic expired item deletion for validationLockCache.
+	// Start automatic expired item deletion for validationLockCache and state.
 	go mv.validationLockCache.Start()
 	// Start automatic expired item deletion for state.
 	go mv.state.Start()
