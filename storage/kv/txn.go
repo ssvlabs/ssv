@@ -5,7 +5,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 type badgerTxn struct {

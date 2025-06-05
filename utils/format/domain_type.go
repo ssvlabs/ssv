@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type DomainType spectypes.DomainType

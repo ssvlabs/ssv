@@ -8,22 +8,24 @@ import (
 )
 
 type Duty interface {
-	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty | eth2apiv1.SyncCommitteeDuty
+	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty
 }
 
-type dutyDescriptor[D Duty] struct {
-	duty        *D
-	inCommittee bool
+type StoreDuty[D Duty] struct {
+	Slot           phase0.Slot
+	ValidatorIndex phase0.ValidatorIndex
+	Duty           *D
+	InCommittee    bool
 }
 
 type Duties[D Duty] struct {
 	mu sync.RWMutex
-	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]dutyDescriptor[D]
+	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D]
 }
 
 func NewDuties[D Duty]() *Duties[D] {
 	return &Duties[D]{
-		m: make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]dutyDescriptor[D]),
+		m: make(map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D]),
 	}
 }
 
@@ -43,8 +45,8 @@ func (d *Duties[D]) CommitteeSlotDuties(epoch phase0.Epoch, slot phase0.Slot) []
 
 	var duties []*D
 	for _, descriptor := range descriptorMap {
-		if descriptor.inCommittee {
-			duties = append(duties, descriptor.duty)
+		if descriptor.InCommittee {
+			duties = append(duties, descriptor.Duty)
 		}
 	}
 
@@ -70,23 +72,22 @@ func (d *Duties[D]) ValidatorDuty(epoch phase0.Epoch, slot phase0.Slot, validato
 		return nil
 	}
 
-	return descriptor.duty
+	return descriptor.Duty
 }
 
-func (d *Duties[D]) Add(epoch phase0.Epoch, slot phase0.Slot, validatorIndex phase0.ValidatorIndex, duty *D, inCommittee bool) {
+func (d *Duties[D]) Set(epoch phase0.Epoch, duties []StoreDuty[D]) {
+	mapped := make(map[phase0.Slot]map[phase0.ValidatorIndex]StoreDuty[D])
+	for _, duty := range duties {
+		if _, ok := mapped[duty.Slot]; !ok {
+			mapped[duty.Slot] = make(map[phase0.ValidatorIndex]StoreDuty[D])
+		}
+		mapped[duty.Slot][duty.ValidatorIndex] = duty
+	}
+
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if _, ok := d.m[epoch]; !ok {
-		d.m[epoch] = make(map[phase0.Slot]map[phase0.ValidatorIndex]dutyDescriptor[D])
-	}
-	if _, ok := d.m[epoch][slot]; !ok {
-		d.m[epoch][slot] = make(map[phase0.ValidatorIndex]dutyDescriptor[D])
-	}
-	d.m[epoch][slot][validatorIndex] = dutyDescriptor[D]{
-		duty:        duty,
-		inCommittee: inCommittee,
-	}
+	d.m[epoch] = mapped
 }
 
 func (d *Duties[D]) ResetEpoch(epoch phase0.Epoch) {
@@ -94,4 +95,12 @@ func (d *Duties[D]) ResetEpoch(epoch phase0.Epoch) {
 	defer d.mu.Unlock()
 
 	delete(d.m, epoch)
+}
+
+func (d *Duties[D]) IsEpochSet(epoch phase0.Epoch) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	_, exists := d.m[epoch]
+	return exists
 }

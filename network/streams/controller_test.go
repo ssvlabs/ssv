@@ -2,16 +2,15 @@ package streams
 
 import (
 	"bytes"
-	"context"
 	"testing"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/logging"
 )
 
 func TestStreamCtrl(t *testing.T) {
@@ -20,8 +19,8 @@ func TestStreamCtrl(t *testing.T) {
 	prot := protocol.ID("/test/protocol")
 
 	logger := logging.TestLogger(t)
-	ctrl0 := NewStreamController(context.Background(), hosts[0], time.Second, time.Second)
-	ctrl1 := NewStreamController(context.Background(), hosts[1], time.Second, time.Second)
+	ctrl0 := NewStreamController(t.Context(), hosts[0], time.Second, time.Second)
+	ctrl1 := NewStreamController(t.Context(), hosts[1], time.Second, time.Second)
 
 	t.Run("handle request", func(t *testing.T) {
 		hosts[0].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {

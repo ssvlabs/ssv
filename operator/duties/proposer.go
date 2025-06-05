@@ -7,25 +7,27 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 type ProposerHandler struct {
 	baseHandler
 
-	duties *dutystore.Duties[eth2apiv1.ProposerDuty]
+	duties     *dutystore.Duties[eth2apiv1.ProposerDuty]
+	fetchFirst bool
 }
 
 func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
 	return &ProposerHandler{
-		duties: duties,
-		baseHandler: baseHandler{
-			fetchFirst: true,
-		},
+		duties:     duties,
+		fetchFirst: true,
 	}
 }
 
@@ -53,43 +55,46 @@ func (h *ProposerHandler) Name() string {
 //  2. If necessary, fetch duties for the current epoch.
 func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			next = h.ticker.Next()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
+			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+			ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.indicesChanged = false
-				h.processFetching(ctx, currentEpoch, slot)
-				h.processExecution(currentEpoch, slot)
+				h.processFetching(ctx, currentEpoch)
+				h.processExecution(ctx, currentEpoch, slot)
 			} else {
-				h.processExecution(currentEpoch, slot)
+				h.processExecution(ctx, currentEpoch, slot)
 				if h.indicesChanged {
 					h.indicesChanged = false
-					h.processFetching(ctx, currentEpoch, slot)
+					h.processFetching(ctx, currentEpoch)
 				}
 			}
 			cancel()
 
 			// last slot of epoch
-			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
+			if uint64(slot)%h.beaconConfig.GetSlotsPerEpoch() == h.beaconConfig.GetSlotsPerEpoch()-1 {
 				h.duties.ResetEpoch(currentEpoch - 1)
 				h.fetchFirst = true
 			}
 
 		case reorgEvent := <-h.reorg:
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_seq", buildStr), zap.Any("event", reorgEvent))
+			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
 			if reorgEvent.Current {
@@ -98,10 +103,10 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case <-h.indicesChange:
-			slot := h.network.Beacon.EstimatedCurrentSlot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			slot := h.beaconConfig.EstimatedCurrentSlot()
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_seq", buildStr))
+			h.logger.Info("🔁 indices change received", zap.String("epoch_slot_pos", buildStr))
 
 			h.indicesChanged = true
 		}
@@ -109,67 +114,114 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.GetSlotDuration()/2)
 	defer cancel()
 
-	slot := h.network.Beacon.EstimatedCurrentSlot()
-	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-	h.processFetching(ctx, epoch, slot)
+	epoch := h.beaconConfig.EstimatedCurrentEpoch()
+	h.processFetching(ctx, epoch)
 }
 
-func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "proposer.fetch"),
+		trace.WithAttributes(observability.BeaconEpochAttribute(epoch)))
+	defer span.End()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	span.AddEvent("fetching duties")
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
+		// Set empty duties to inform DutyStore that fetch for this epoch is done.
+		h.duties.Set(epoch, []dutystore.StoreDuty[eth2apiv1.ProposerDuty]{})
 		h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
+		span.SetStatus(codes.Error, err.Error())
 		return
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
-func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
+func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "proposer.execute"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconSlotAttribute(slot),
+		))
+	defer span.End()
+
 	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
+		span.AddEvent("no duties available")
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
 	// range over duties and execute
-	toExecute := make([]*spectypes.Duty, 0, len(duties))
+	span.AddEvent("duties fetched", trace.WithAttributes(observability.DutyCountAttribute(len(duties))))
+	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
 		}
 	}
-	h.executeDuties(h.logger, toExecute)
+	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
+
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "proposer.fetch_and_store"),
+		trace.WithAttributes(observability.BeaconEpochAttribute(epoch)))
+	defer span.End()
 
-	allIndices := h.validatorController.AllActiveIndices(epoch)
-	if len(allIndices) == 0 {
+	var allEligibleIndices []phase0.ValidatorIndex
+	for _, share := range h.validatorProvider.Validators() {
+		if share.IsParticipatingAndAttesting(epoch) {
+			allEligibleIndices = append(allEligibleIndices, share.ValidatorIndex)
+		}
+	}
+	if len(allEligibleIndices) == 0 {
+		const eventMsg = "no eligible validators for epoch"
+		h.logger.Debug(eventMsg, fields.Epoch(epoch))
+		span.AddEvent(eventMsg)
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
-	inCommitteeIndices := h.validatorController.CommitteeActiveIndices(epoch)
-	inCommitteeIndicesSet := map[phase0.ValidatorIndex]struct{}{}
-	for _, idx := range inCommitteeIndices {
-		inCommitteeIndicesSet[idx] = struct{}{}
+	selfEligibleIndices := map[phase0.ValidatorIndex]struct{}{}
+	for _, share := range h.validatorProvider.SelfValidators() {
+		if share.IsParticipatingAndAttesting(epoch) {
+			selfEligibleIndices[share.ValidatorIndex] = struct{}{}
+		}
 	}
 
-	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allIndices)
+	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(allEligibleIndices))))
+	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allEligibleIndices)
 	if err != nil {
-		return fmt.Errorf("failed to fetch proposer duties: %w", err)
+		return observability.Errorf(span, "failed to fetch proposer duties: %w", err)
 	}
 
-	h.duties.ResetEpoch(epoch)
-
-	specDuties := make([]*spectypes.Duty, 0, len(duties))
+	specDuties := make([]*spectypes.ValidatorDuty, 0, len(duties))
+	storeDuties := make([]dutystore.StoreDuty[eth2apiv1.ProposerDuty], 0, len(duties))
 	for _, d := range duties {
-		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
-		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, inCommitteeDuty)
+		_, inCommitteeDuty := selfEligibleIndices[d.ValidatorIndex]
+		storeDuties = append(storeDuties, dutystore.StoreDuty[eth2apiv1.ProposerDuty]{
+			Slot:           d.Slot,
+			ValidatorIndex: d.ValidatorIndex,
+			Duty:           d,
+			InCommittee:    inCommitteeDuty,
+		})
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
+
+	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
+	h.duties.Set(epoch, storeDuties)
 
 	h.logger.Debug("📚 got duties",
 		fields.Count(len(duties)),
@@ -177,11 +229,12 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		fields.Duties(epoch, specDuties),
 		fields.Duration(start))
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
-func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.Duty {
-	return &spectypes.Duty{
+func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.ValidatorDuty {
+	return &spectypes.ValidatorDuty{
 		Type:           role,
 		PubKey:         duty.PubKey,
 		Slot:           duty.Slot,
@@ -190,7 +243,7 @@ func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectype
 }
 
 func (h *ProposerHandler) shouldExecute(duty *eth2apiv1.ProposerDuty) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 	// execute task if slot already began and not pass 1 slot
 	if currentSlot == duty.Slot {
 		return true

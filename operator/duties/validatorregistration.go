@@ -2,16 +2,23 @@ package duties
 
 import (
 	"context"
+	"encoding/hex"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
 
-const validatorRegistrationEpochInterval = uint64(10)
+// frequencyEpochs defines how frequently we want to submit validator-registrations.
+const frequencyEpochs = 10
 
 type ValidatorRegistrationHandler struct {
 	baseHandler
+}
+
+type ValidatorRegistration struct {
+	ValidatorIndex phase0.ValidatorIndex
+	FeeRecipient   string
 }
 
 func NewValidatorRegistrationHandler() *ValidatorRegistrationHandler {
@@ -22,53 +29,63 @@ func (h *ValidatorRegistrationHandler) Name() string {
 	return spectypes.BNRoleValidatorRegistration.String()
 }
 
+// HandleDuties generates registration duties every N epochs for every participating validator, then
+// validator-registrations are aggregated into batches and sent periodically to Beacon node by
+// ValidatorRegistrationRunner (sending validator-registrations periodically ensures various
+// entities in Ethereum network, such as Relays, are aware of participating validators).
 func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
+	// validator should be registered within frequencyEpochs epochs time in a corresponding slot
+	registrationSlots := h.beaconConfig.GetSlotsPerEpoch() * frequencyEpochs
+
+	next := h.ticker.Next()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-h.ticker.Next():
+		case <-next:
 			slot := h.ticker.Slot()
-			shares := h.validatorController.GetOperatorShares()
+			next = h.ticker.Next()
+			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			shares := h.validatorProvider.SelfValidators()
 
-			validators := []phase0.ValidatorIndex{}
+			var vrs []ValidatorRegistration
 			for _, share := range shares {
-				if !share.HasBeaconMetadata() || !share.BeaconMetadata.IsAttesting() {
+				if !share.IsParticipatingAndAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
+					// Only attesting validators are eligible for registration duties.
 					continue
 				}
-
-				// if not passed first registration, should be registered within one epoch time in a corresponding slot
-				// if passed first registration, should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
-				registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
-
-				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
+				if uint64(share.ValidatorIndex)%registrationSlots != uint64(slot)%registrationSlots {
 					continue
 				}
 
 				pk := phase0.BLSPubKey{}
-				copy(pk[:], share.ValidatorPubKey)
-
-				h.executeDuties(h.logger, []*spectypes.Duty{{
-					Type:   spectypes.BNRoleValidatorRegistration,
-					PubKey: pk,
-					Slot:   slot,
+				copy(pk[:], share.ValidatorPubKey[:])
+				h.dutiesExecutor.ExecuteDuties(ctx, []*spectypes.ValidatorDuty{{
+					Type:           spectypes.BNRoleValidatorRegistration,
+					ValidatorIndex: share.ValidatorIndex,
+					PubKey:         pk,
+					Slot:           slot,
 					// no need for other params
 				}})
 
-				validators = append(validators, share.BeaconMetadata.Index)
+				vrs = append(vrs, ValidatorRegistration{
+					ValidatorIndex: share.ValidatorIndex,
+					FeeRecipient:   hex.EncodeToString(share.FeeRecipientAddress[:]),
+				})
 			}
 			h.logger.Debug("validator registration duties sent",
 				zap.Uint64("slot", uint64(slot)),
-				zap.Any("validators", validators))
+				zap.Any("validator_registrations", vrs))
 
 		case <-h.indicesChange:
-			continue
+			h.logger.Debug("🛠 indicesChange event")
 
 		case <-h.reorg:
-			continue
+			h.logger.Debug("🛠 reorg event")
 		}
 	}
 }

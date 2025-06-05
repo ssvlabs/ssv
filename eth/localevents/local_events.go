@@ -10,7 +10,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"gopkg.in/yaml.v3"
 
-	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/contract"
 )
 
 // Event represents an eth1 event log in the system
@@ -83,6 +83,11 @@ type FeeRecipientAddressUpdatedEventYAML struct {
 	RecipientAddress string `yaml:"RecipientAddress"`
 }
 
+type ValidatorExitedEventYAML struct {
+	PublicKey   string   `yaml:"PublicKey"`
+	OperatorIds []uint64 `yaml:"OperatorIds"`
+}
+
 func (e *OperatorAddedEventYAML) toEventData() (interface{}, error) {
 	return contract.ContractOperatorAdded{
 		OperatorId: e.ID,
@@ -145,6 +150,13 @@ func (e *FeeRecipientAddressUpdatedEventYAML) toEventData() (interface{}, error)
 	}, nil
 }
 
+func (e *ValidatorExitedEventYAML) toEventData() (interface{}, error) {
+	return contract.ContractValidatorExited{
+		PublicKey:   []byte(strings.TrimPrefix(e.PublicKey, "0x")),
+		OperatorIds: e.OperatorIds,
+	}, nil
+}
+
 func (u *eventDataUnmarshaler) UnmarshalYAML(value *yaml.Node) error {
 	var err error
 	switch u.name {
@@ -174,6 +186,10 @@ func (u *eventDataUnmarshaler) UnmarshalYAML(value *yaml.Node) error {
 		u.data = &v
 	case "FeeRecipientAddressUpdated":
 		var v FeeRecipientAddressUpdatedEventYAML
+		err = value.Decode(&v)
+		u.data = &v
+	case "ValidatorExited":
+		var v ValidatorExitedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
 	default:

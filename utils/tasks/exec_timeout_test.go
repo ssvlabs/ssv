@@ -2,71 +2,61 @@ package tasks
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 )
 
 func TestExecWithTimeout(t *testing.T) {
-	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 10*time.Millisecond)
-	defer cancel()
-	tests := []struct {
-		name          string
-		ctx           context.Context
-		t             time.Duration
-		expectedCount uint32
-	}{
-		{
-			"Cancelled_context",
-			ctxWithTimeout,
-			20 * time.Millisecond,
-			3,
-		},
-		{
-			"Long_function",
-			context.TODO(),
-			8 * time.Millisecond,
-			3,
-		},
-	}
+	t.Run("success", func(t *testing.T) {
+		longExec := func(stopper Stopper) (interface{}, error) {
+			time.Sleep(2 * time.Millisecond)
+			return true, nil
+		}
+		completed, res, err := ExecWithTimeout(context.TODO(), longExec, 1*time.Minute)
+		require.True(t, completed)
+		require.True(t, res.(bool))
+		require.NoError(t, err)
+	})
+	t.Run("ctx timed out", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+		defer cancel()
 
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			var count uint32
-			var stopped sync.WaitGroup
+		var started atomic.Bool
 
-			stopped.Add(1)
-			fn := func(stopper Stopper) (interface{}, error) {
-				for {
-					if stopper.IsStopped() {
-						stopped.Done()
-						return true, nil
-					}
-					atomic.AddUint32(&count, 1)
-					time.Sleep(2 * time.Millisecond)
+		fn := func(stopper Stopper) (interface{}, error) {
+			started.Store(true)
+			for {
+				if stopper.IsStopped() {
+					return true, nil
 				}
+				time.Sleep(time.Millisecond)
 			}
-			completed, _, err := ExecWithTimeout(test.ctx, logging.TestLogger(t), fn, test.t)
-			stopped.Wait()
-			require.False(t, completed)
-			require.NoError(t, err)
-			require.GreaterOrEqual(t, count, test.expectedCount)
-		})
-	}
-}
+		}
+		completed, _, err := ExecWithTimeout(ctx, fn, 1*time.Hour)
+		require.True(t, started.Load())
+		require.False(t, completed)
+		require.NoError(t, err)
+	})
+	t.Run("timed out", func(t *testing.T) {
+		ctx := t.Context()
 
-func TestExecWithTimeout_ShortFunc(t *testing.T) {
-	longExec := func(stopper Stopper) (interface{}, error) {
-		time.Sleep(2 * time.Millisecond)
-		return true, nil
-	}
-	completed, res, err := ExecWithTimeout(context.TODO(), logging.TestLogger(t), longExec, 10*time.Millisecond)
-	require.True(t, completed)
-	require.True(t, res.(bool))
-	require.NoError(t, err)
+		var started atomic.Bool
+
+		fn := func(stopper Stopper) (interface{}, error) {
+			started.Store(true)
+			for {
+				if stopper.IsStopped() {
+					return true, nil
+				}
+				time.Sleep(time.Millisecond)
+			}
+		}
+		completed, _, err := ExecWithTimeout(ctx, fn, 10*time.Millisecond)
+		require.True(t, started.Load())
+		require.False(t, completed)
+		require.NoError(t, err)
+	})
 }

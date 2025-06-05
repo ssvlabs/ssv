@@ -8,6 +8,9 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestTopicScoreParams(t *testing.T) {
@@ -17,40 +20,51 @@ func TestTopicScoreParams(t *testing.T) {
 		expectedErr error
 	}{
 		{
+			"subnet topic 0 validators",
+			func() *Options {
+				validators := uint64(0)
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, []*storage.Committee{})
+				return opts
+			},
+			nil,
+		},
+		{
 			"subnet topic 1k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(1000, 128)
-				return &opts
+				validators := uint64(1000)
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
+				return opts
 			},
 			nil,
 		},
 		{
 			"subnet topic 10k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(10000, 128)
-				return &opts
+				validators := uint64(10_000)
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
+				return opts
 			},
 			nil,
 		},
 		{
 			"subnet topic 51k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(51000, 128)
-				return &opts
+				validators := uint64(51_000)
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
+				return opts
 			},
 			nil,
 		},
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			opts := test.opts()
 			// raw, err := json.MarshalIndent(&opts, "", "\t")
 			raw, err := json.Marshal(&opts)
 			require.NoError(t, err)
 			t.Logf("[%s] using opts:\n%s", test.name, string(raw))
-			topicScoreParams, err := TopicParams(*opts)
+			topicScoreParams, err := TopicParams(opts)
 			require.NoError(t, err)
 			require.NotNil(t, topicScoreParams)
 			// raw, err = json.MarshalIndent(topicScoreParams, "", "\t")
@@ -63,7 +77,7 @@ func TestTopicScoreParams(t *testing.T) {
 }
 
 func TestPeerScoreParams(t *testing.T) {
-	peerScoreParams := PeerScoreParams(oneEpochDuration, 550*(time.Millisecond*700))
+	peerScoreParams := PeerScoreParams(networkconfig.TestNetwork, 550*(time.Millisecond*700), false)
 	raw, err := peerScoreParamsString(peerScoreParams)
 	require.NoError(t, err)
 	require.NotNil(t, raw)

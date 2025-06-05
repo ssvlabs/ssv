@@ -124,3 +124,10 @@ func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 
 	return nil
 }
+
+func (ni *NodeInfo) Clone() *NodeInfo {
+	return &NodeInfo{
+		NetworkID: ni.NetworkID,
+		Metadata:  ni.Metadata.Clone(),
+	}
+}

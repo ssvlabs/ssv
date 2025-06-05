@@ -3,11 +3,11 @@ package testing
 import (
 	"context"
 
-	"github.com/bloxapp/ssv/network"
+	"github.com/ssvlabs/ssv/network"
 )
 
 // NetworkFactory is a generic factory for network instances
-type NetworkFactory func(pctx context.Context, nodeIndex int, keys NodeKeys) network.P2PNetwork
+type NetworkFactory func(pctx context.Context, nodeIndex uint64, keys NodeKeys) network.P2PNetwork
 
 // NewLocalTestnet creates a new local network
 func NewLocalTestnet(ctx context.Context, n int, factory NetworkFactory) ([]network.P2PNetwork, []NodeKeys, error) {
@@ -17,8 +17,10 @@ func NewLocalTestnet(ctx context.Context, n int, factory NetworkFactory) ([]netw
 		return nil, nil, err
 	}
 
-	for i, k := range keys {
+	i := uint64(0)
+	for _, k := range keys {
 		nodes[i] = factory(ctx, i, k)
+		i++
 	}
 
 	return nodes, keys, nil

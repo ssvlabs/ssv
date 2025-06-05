@@ -5,10 +5,11 @@ package eventparser
 import (
 	"fmt"
 
-	"github.com/bloxapp/ssv/eth/contract"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+
+	"github.com/ssvlabs/ssv/eth/contract"
 )
 
 type EventParser struct {
@@ -30,6 +31,7 @@ type eventFilterer interface {
 	ParseClusterLiquidated(log ethtypes.Log) (*contract.ContractClusterLiquidated, error)
 	ParseClusterReactivated(log ethtypes.Log) (*contract.ContractClusterReactivated, error)
 	ParseFeeRecipientAddressUpdated(log ethtypes.Log) (*contract.ContractFeeRecipientAddressUpdated, error)
+	ParseValidatorExited(log ethtypes.Log) (*contract.ContractValidatorExited, error)
 }
 
 type eventByIDGetter interface {
@@ -87,7 +89,7 @@ func (e *EventParser) unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error)
 }
 
 // PackOperatorPublicKey is used for testing only, packing the operator pubkey bytes into an event.
-func PackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
+func PackOperatorPublicKey(pubKey string) ([]byte, error) {
 	byts, err := ethabi.NewType("bytes", "bytes", nil)
 	if err != nil {
 		return nil, err
@@ -100,7 +102,7 @@ func PackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
 		},
 	}
 
-	outField, err := args.Pack(fieldBytes)
+	outField, err := args.Pack([]byte(pubKey))
 	if err != nil {
 		return nil, fmt.Errorf("pack: %w", err)
 	}

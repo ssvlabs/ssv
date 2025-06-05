@@ -7,10 +7,10 @@ import (
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var (
@@ -49,14 +49,14 @@ func TestSetupPrivateKey(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
-			db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{})
+			db, err := kv.NewInMemory(logger, basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 
 			p2pStorage := identityStore{
-				db: db,
+				db:     db,
+				logger: logger,
 			}
 
 			if test.existKey != "" { // mock exist key
@@ -75,7 +75,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, test.existKey, hex.EncodeToString(b))
 			}
 
-			_, err = p2pStorage.SetupNetworkKey(logger, test.passedKey)
+			_, err = p2pStorage.SetupNetworkKey(test.passedKey)
 			require.NoError(t, err)
 			privateKey, found, err := p2pStorage.GetNetworkKey()
 			require.NoError(t, err)
@@ -102,4 +102,14 @@ func TestSetupPrivateKey(t *testing.T) {
 			require.Equal(t, test.passedKey, hex.EncodeToString(b))
 		})
 	}
+
+	t.Run("NewIdentityStore", func(t *testing.T) {
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		p2pStorage := NewIdentityStore(logger, db)
+
+		require.NotNil(t, p2pStorage)
+	})
 }

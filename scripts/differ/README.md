@@ -19,7 +19,7 @@ _\* symbol: the name of a function, struct or method (symbol for methods are `<t
 Just `go install` and you're good to go!
 
 ```bash
-go install github.com/bloxapp/ssv/scripts/differ@latest
+go install github.com/ssvlabs/ssv/scripts/differ@latest
 ```
 
 _Tip: you can replace `@latest` with `@any-git-branch`._

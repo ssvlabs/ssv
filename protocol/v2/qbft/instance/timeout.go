@@ -1,17 +1,22 @@
 package instance
 
 import (
-	"github.com/pkg/errors"
+	"context"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 )
 
-var CutoffRound = 15 // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
+func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) error {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "qbft.instance.round_timeout"))
+	defer span.End()
 
-func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	if !i.CanProcessMessages() {
-		return errors.New("instance stopped processing timeouts")
+		return observability.Errorf(span, "instance stopped processing timeouts")
 	}
 
 	newRound := i.State.Round + 1
@@ -21,25 +26,39 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	// round to be bumped before the round change message was created & broadcasted.
 	// Remember to track the impact of this change and revert/modify if necessary.
 	defer func() {
-		i.bumpToRound(newRound)
+		i.bumpToRound(ctx, newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
-	roundChange, err := CreateRoundChange(i.State, i.config, newRound, i.StartValue)
+	roundChange, err := CreateRoundChange(i.State, i.signer, newRound, i.StartValue)
 	if err != nil {
-		return errors.Wrap(err, "could not generate round change msg")
+		return observability.Errorf(span, "could not generate round change msg: %w", err)
 	}
 
-	logger.Debug("📢 broadcasting round change message",
+	root, err := specqbft.HashDataRoot(i.StartValue)
+	if err != nil {
+		return observability.Errorf(span, "could not calculate root for round change: %w", err)
+	}
+
+	i.metrics.RecordRoundChange(ctx, newRound, reasonTimeout)
+
+	const eventMsg = "📢 broadcasting round change message"
+	span.AddEvent(eventMsg,
+		trace.WithAttributes(
+			observability.BeaconBlockRootAttribute(root),
+			observability.DutyRoundAttribute(i.State.Round),
+		))
+
+	logger.Debug(eventMsg,
 		fields.Round(i.State.Round),
-		fields.Root(roundChange.Message.Root),
-		zap.Any("round-change-signers", roundChange.Signers),
+		fields.Root(root),
+		zap.Any("round_change_signers", roundChange.OperatorIDs),
 		fields.Height(i.State.Height),
 		zap.String("reason", "timeout"))
 
 	if err := i.Broadcast(logger, roundChange); err != nil {
-		return errors.Wrap(err, "failed to broadcast round change message")
+		return observability.Errorf(span, "failed to broadcast round change message: %w", err)
 	}
 
 	return nil

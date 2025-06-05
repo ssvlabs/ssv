@@ -1,0 +1,166 @@
+version: "3.8"
+services:
+  beacon_proxy:
+    container_name: beacon_proxy
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: beacon_proxy:latest
+    command: beacon-proxy
+    environment:
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - BEACON_NODE_URL=${BEACON_NODE_URL}
+      - VALIDATORS_FILE=validators.json
+      - GATEWAYS=ssv-node-1,ssv-node-2,ssv-node-3,ssv-node-4
+      - BASE_PORT=6631
+    ports:
+      - 6631:6631
+      - 6632:6632
+      - 6633:6633
+      - 6634:6634
+    networks:
+      - blox-docker
+    volumes:
+      - ${PWD}/validators.json:/app/validators.json
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://beacon_proxy:6634/eth/v1/node/version"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 0s
+
+  logs_catcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: logs_catcher:latest
+    command: logs-catcher
+    environment:
+      - VALIDATORS_FILE=validators.json
+      - GATEWAYS=ssv-node-1,ssv-node-2,ssv-node-3,ssv-node-4
+      - BASE_PORT=6631
+    networks:
+      - blox-docker
+    volumes:
+      - ${PWD}/validators.json:/app/validators.json
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  share_update:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: share_update:latest
+    command: share-update
+    volumes:
+      - ${PWD}/validators.json:/app/validators.json
+      - ssv-node-1-data:/ssv-node-1-data
+      - ssv-node-2-data:/ssv-node-2-data
+      - ssv-node-3-data:/ssv-node-3-data
+      - ssv-node-4-data:/ssv-node-4-data
+      - ${PWD}/config/share1.yaml:/tconfig/share1.yaml
+      - ${PWD}/config/share2.yaml:/tconfig/share2.yaml
+      - ${PWD}/config/share3.yaml:/tconfig/share3.yaml
+      - ${PWD}/config/share4.yaml:/tconfig/share4.yaml
+    networks:
+      - blox-docker
+
+  x-base: &default-base
+    depends_on:
+      beacon_proxy:
+        condition: service_healthy
+
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    image: ssvnode:latest
+    command: make BUILD_PATH=/go/bin/ssvnode start-node
+    environment:
+      - HOST_ADDRESS=
+    networks:
+      - blox-docker
+  #    restart: never
+  #    environment:
+  #      CONFIG_PATH: ./config/config.yaml
+
+  ssv-node-1:
+    <<: *default-base
+    container_name: ssv-node-1
+    environment:
+      LOG_FORMAT: json
+      BEACON_NODE_ADDR:  http://beacon_proxy:6631
+      ETH_1_ADDR: ${EXECUTION_NODE_URL}
+      CONFIG_PATH: ./tconfig/config.yaml
+      SHARE_CONFIG: ./tconfig/share1.yaml
+    ports:
+      - 16001:16000
+      - 15001:15000
+    volumes:
+      - ssv-node-1-data:/data
+      - ${PWD}/config/config.yaml:/tconfig/config.yaml
+      - ${PWD}/config/share1.yaml:/tconfig/share1.yaml
+
+  ssv-node-2:
+    <<: *default-base
+    container_name: ssv-node-2
+    environment:
+      LOG_FORMAT: json
+      BEACON_NODE_ADDR: http://beacon_proxy:6632
+      ETH_1_ADDR: ${EXECUTION_NODE_URL}
+      CONFIG_PATH: ./tconfig/config.yaml
+      SHARE_CONFIG: ./tconfig/share2.yaml
+    ports:
+      - 16002:16000
+      - 15002:15000
+    volumes:
+      - ssv-node-2-data:/data
+      - ${PWD}/config/config.yaml:/tconfig/config.yaml
+      - ${PWD}/config/share2.yaml:/tconfig/share2.yaml
+
+  ssv-node-3:
+    <<: *default-base
+    container_name: ssv-node-3
+    environment:
+      LOG_FORMAT: json
+      BEACON_NODE_ADDR: http://beacon_proxy:6633
+      ETH_1_ADDR: ${EXECUTION_NODE_URL}
+      CONFIG_PATH: ./tconfig/config.yaml
+      SHARE_CONFIG: ./tconfig/share3.yaml
+    ports:
+      - 16003:16000
+      - 15003:15000
+    volumes:
+      - ssv-node-3-data:/data
+      - ${PWD}/config/config.yaml:/tconfig/config.yaml
+      - ${PWD}/config/share3.yaml:/tconfig/share3.yaml
+
+  ssv-node-4:
+    <<: *default-base
+    container_name: ssv-node-4
+    environment:
+      LOG_FORMAT: json
+      BEACON_NODE_ADDR: http://beacon_proxy:6634
+      ETH_1_ADDR: ${EXECUTION_NODE_URL}
+      CONFIG_PATH: ./tconfig/config.yaml
+      SHARE_CONFIG: ./tconfig/share4.yaml
+    ports:
+      - 16004:16000
+      - 15004:15000
+    volumes:
+      - ssv-node-4-data:/data
+      - ${PWD}/config/config.yaml:/tconfig/config.yaml
+      - ${PWD}/config/share4.yaml:/tconfig/share4.yaml
+
+volumes:
+  ssv-node-1-data:
+    driver: local
+  ssv-node-2-data:
+    driver: local
+  ssv-node-3-data:
+    driver: local
+  ssv-node-4-data:
+    driver: local
+
+networks:
+  blox-docker:
+    driver: bridge

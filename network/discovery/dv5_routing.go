@@ -9,8 +9,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 // implementing discovery.Discovery
@@ -32,15 +32,18 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 		return opts.Ttl, nil
 	}
 
-	if err := dvs.RegisterSubnets(logger, subnet); err != nil {
+	updated, err := dvs.RegisterSubnets(subnet)
+	if err != nil {
 		return 0, err
+	}
+	if updated {
+		go dvs.PublishENR()
 	}
 
 	return opts.Ttl, nil
 }
 
-// FindPeers discovers peers providing a service
-// implementation of discovery.Discoverer
+// FindPeers discovers peers providing a service implementation of discovery.Discoverer
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
 	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
 	subnet, err := dvs.nsToSubnet(ns)
@@ -52,7 +55,7 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 
 	dvs.discover(ctx, func(e PeerEvent) {
 		cn <- e.AddrInfo
-	}, time.Millisecond, dvs.badNodeFilter(logger), dvs.subnetFilter(uint64(subnet)))
+	}, time.Millisecond, dvs.ssvNodeFilter(), dvs.badNodeFilter(), dvs.subnetFilter(subnet), dvs.alreadyConnectedFilter(), dvs.recentlyTrimmedFilter())
 
 	return cn, nil
 }

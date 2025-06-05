@@ -8,21 +8,32 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ssvlabs/ssv/network/commons"
+)
+
+type ENRKey string
+
+const (
+	KeyDomainType     = "domaintype"
+	KeyNextDomainType = "next_domaintype"
 )
 
 var ErrEntryNotFound = errors.New("not found")
 
 // DomainTypeEntry holds the domain type of the node
-type DomainTypeEntry spectypes.DomainType
+type DomainTypeEntry struct {
+	Key        ENRKey
+	DomainType spectypes.DomainType
+}
 
 // ENRKey implements enr.Entry, returns the entry key
-func (dt DomainTypeEntry) ENRKey() string { return "domaintype" }
+func (dt DomainTypeEntry) ENRKey() string { return string(dt.Key) }
 
 // EncodeRLP implements rlp.Encoder, encodes domain type as bytes
 func (dt DomainTypeEntry) EncodeRLP(w io.Writer) error {
-	return rlp.Encode(w, dt[:])
+	return rlp.Encode(w, dt.DomainType[:])
 }
 
 // DecodeRLP implements rlp.Decoder, decodes domain type from bytes
@@ -31,54 +42,60 @@ func (dt *DomainTypeEntry) DecodeRLP(s *rlp.Stream) error {
 	if err := s.Decode(&buf); err != nil {
 		return err
 	}
-	*dt = DomainTypeEntry(buf)
+	dt.DomainType = spectypes.DomainType(buf)
 	return nil
 }
 
 // SetDomainTypeEntry adds domain type entry to the node
-func SetDomainTypeEntry(node *enode.LocalNode, domainType spectypes.DomainType) error {
-	node.Set(DomainTypeEntry(domainType))
+func SetDomainTypeEntry(node *enode.LocalNode, key ENRKey, domainType spectypes.DomainType) error {
+	node.Set(DomainTypeEntry{
+		Key:        key,
+		DomainType: domainType,
+	})
 	return nil
 }
 
 // GetDomainTypeEntry extracts the value of domain type entry
-func GetDomainTypeEntry(record *enr.Record) (spectypes.DomainType, error) {
-	dt := new(DomainTypeEntry)
-	if err := record.Load(dt); err != nil {
+func GetDomainTypeEntry(record *enr.Record, key ENRKey) (spectypes.DomainType, error) {
+	dt := DomainTypeEntry{
+		Key: key,
+	}
+	if err := record.Load(&dt); err != nil {
 		if enr.IsNotFound(err) {
 			return spectypes.DomainType{}, ErrEntryNotFound
 		}
 		return spectypes.DomainType{}, err
 	}
-	return spectypes.DomainType(*dt), nil
+	return dt.DomainType, nil
 }
 
 // SetSubnetsEntry adds subnets entry to our enode.LocalNode
-func SetSubnetsEntry(node *enode.LocalNode, subnets []byte) error {
+func SetSubnetsEntry(node *enode.LocalNode, subnets commons.Subnets) error {
 	subnetsVec := bitfield.NewBitvector128()
-	for i, subnet := range subnets {
-		subnetsVec.SetBitAt(uint64(i), subnet > 0)
+
+	for i := uint64(0); i < commons.SubnetsCount; i++ {
+		subnetsVec.SetBitAt(i, subnets.IsSet(i))
 	}
 	node.Set(enr.WithEntry("subnets", &subnetsVec))
 	return nil
 }
 
 // GetSubnetsEntry extracts the value of subnets entry from some record
-func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
+func GetSubnetsEntry(record *enr.Record) (commons.Subnets, error) {
 	subnetsVec := bitfield.NewBitvector128()
 	if err := record.Load(enr.WithEntry("subnets", &subnetsVec)); err != nil {
 		if enr.IsNotFound(err) {
-			return nil, ErrEntryNotFound
+			return commons.Subnets{}, ErrEntryNotFound
 		}
-		return nil, err
+		return commons.Subnets{}, err
 	}
-	res := make([]byte, 0, subnetsVec.Len())
-	for i := uint64(0); i < subnetsVec.Len(); i++ {
-		val := byte(0)
+	res := commons.Subnets{}
+	for i := uint64(0); i < commons.SubnetsCount; i++ {
 		if subnetsVec.BitAt(i) {
-			val = 1
+			res.Set(i)
+		} else {
+			res.Clear(i)
 		}
-		res = append(res, val)
 	}
 	return res, nil
 }

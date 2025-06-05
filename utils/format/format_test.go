@@ -3,7 +3,7 @@ package format
 import (
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +40,6 @@ func TestDomainTypeFromString(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := DomainTypeFromString(tt.input)
 			if tt.wantErr {

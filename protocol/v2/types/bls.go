@@ -23,8 +23,13 @@ func DeserializeBLSPublicKey(b []byte) (bls.PublicKey, error) {
 		return pk, nil
 	}
 
+	// This copy is required to avoid the "cgo argument has Go pointer to Go pointer" panic.
+	// TODO: (Alan) should we do this here or at the source? (wherever the bytes are coming from)
+	pkCpy := make([]byte, len(b))
+	copy(pkCpy, b)
+
 	pk := bls.PublicKey{}
-	if err := pk.Deserialize(b); err != nil {
+	if err := pk.Deserialize(pkCpy); err != nil {
 		return bls.PublicKey{}, err
 	}
 	blsPublicKeyCache.Add(pkStr, pk)

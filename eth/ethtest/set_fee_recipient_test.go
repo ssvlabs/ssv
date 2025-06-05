@@ -64,7 +64,7 @@ func (input *SetFeeRecipientAddressInput) produce() {
 
 	for _, event := range input.events {
 		// Call the contract method
-		_, err = input.boundContract.SimcontractTransactor.SetFeeRecipientAddress(
+		_, err = input.boundContract.SetFeeRecipientAddress(
 			event.auth,
 			*event.address,
 		)

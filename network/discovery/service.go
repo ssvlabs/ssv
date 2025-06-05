@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -10,8 +11,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/utils/ttl"
 )
 
 const (
@@ -34,25 +36,26 @@ type HandleNewPeer func(e PeerEvent)
 
 // Options represents the options passed to create a service
 type Options struct {
-	Host        host.Host
-	DiscV5Opts  *DiscV5Options
-	ConnIndex   peers.ConnectionIndex
-	SubnetsIdx  peers.SubnetsIndex
-	HostAddress string
-	HostDNS     string
-
-	// DomainType is the SSV network domain of the node
-	DomainType spectypes.DomainType
+	Host                host.Host
+	DiscV5Opts          *DiscV5Options
+	ConnIndex           peers.ConnectionIndex
+	SubnetsIdx          peers.SubnetsIndex
+	HostAddress         string
+	HostDNS             string
+	SSVConfig           networkconfig.SSVConfig
+	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
+	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
 }
 
 // Service is the interface for discovery
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(logger *zap.Logger, subnets ...int) error
-	DeregisterSubnets(logger *zap.Logger, subnets ...int) error
-	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
+	RegisterSubnets(subnets ...uint64) (updated bool, err error)
+	DeregisterSubnets(subnets ...uint64) (updated bool, err error)
+	Bootstrap(handler HandleNewPeer) error
 	Node(logger *zap.Logger, info peer.AddrInfo) (*enode.Node, error)
+	PublishENR()
 }
 
 // NewService creates new discovery.Service
@@ -61,4 +64,13 @@ func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service,
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}
 	return newDiscV5Service(ctx, logger, &opts)
+}
+
+type DiscoveredPeer struct {
+	peer.AddrInfo
+
+	// Tries keeps track of how many times we tried to connect to this peer.
+	Tries int
+	// LastTry is the last time we tried to connect to this peer.
+	LastTry time.Time
 }

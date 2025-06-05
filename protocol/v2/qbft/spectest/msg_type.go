@@ -1,24 +1,26 @@
 package qbft
 
 import (
-	"errors"
 	"testing"
 
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
 )
 
 func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec struct so this test can be imported
 	var lastErr error
-
 	for i, msg := range test.Messages {
 		if err := msg.Validate(); err != nil {
 			lastErr = err
 			continue
 		}
 
-		if msg.Message.RoundChangePrepared() && len(msg.Message.RoundChangeJustification) == 0 {
-			lastErr = errors.New("round change justification invalid")
+		qbftMessage := &specqbft.Message{}
+		require.NoError(t, qbftMessage.Decode(msg.SSVMessage.Data))
+		if err := qbftMessage.Validate(); err != nil {
+			lastErr = err
+			continue
 		}
 
 		if len(test.EncodedMessages) > 0 {
@@ -33,9 +35,7 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 			require.EqualValues(t, test.ExpectedRoots[i], r)
 		}
 	}
-
-	// check error
-	if len(test.ExpectedError) != 0 {
+	if test.ExpectedError != "" {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)

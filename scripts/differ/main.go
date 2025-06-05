@@ -4,18 +4,17 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/alecthomas/kong"
 	"github.com/aquasecurity/table"
-	"github.com/aymanbagabas/go-udiff"
-	"github.com/aymanbagabas/go-udiff/myers"
 	"github.com/cespare/xxhash/v2"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 )
 
@@ -69,7 +68,7 @@ func run() (changes int, err error) {
 	}
 
 	// Prepare the transformers.
-	transformers := []Transformer{
+	transformers := Transformers{
 		NoComments(),
 		NoPackageNames(config.ReducedPackageNames),
 		NoEmptyLines(),
@@ -104,7 +103,7 @@ func run() (changes int, err error) {
 
 		// For each element in the left package, find the corresponding element
 		// in the right package and compare.
-		sortedNames := maps.Keys(lefts)
+		sortedNames := slices.Collect(maps.Keys(lefts))
 		sort.Strings(sortedNames)
 		for _, name := range sortedNames {
 			left := lefts[name]
@@ -120,9 +119,7 @@ func run() (changes int, err error) {
 
 			// Apply transformations to the code before comparing.
 			for _, e := range []*Element{&left, &right} {
-				for _, transformer := range transformers {
-					e.Code = transformer(e.Code)
-				}
+				e.Code = transformers.Transform(e.Code)
 			}
 
 			// Compute a unique ID of the change.
@@ -137,16 +134,14 @@ func run() (changes int, err error) {
 			if !approved {
 				leftName := fmt.Sprintf("a/%s@%s", left.Path, left.Name)
 				rightName := fmt.Sprintf("b/%s@%s", right.Path, right.Name)
-				edits := myers.ComputeEdits(left.Code, right.Code)
-				udiff.SortEdits(edits)
-				if len(edits) == 0 {
+				diff, err := Diff(leftName, rightName, []byte(left.Code), []byte(right.Code), 100)
+				if err != nil {
+					return 0, errors.Wrap(err, "failed to generate diff")
+				}
+				if len(diff) == 0 {
 					// No changes.
 					approved = true
 				} else {
-					diff, err := udiff.ToUnifiedDiff(leftName, rightName, left.Code, edits)
-					if err != nil {
-						return 0, errors.Wrap(err, "failed to generate unified diff")
-					}
 					fmt.Fprintf(diffFile, "diff --git %s %s\nindex %s..2222222\n%s",
 						leftName, rightName, diffID, diff)
 				}

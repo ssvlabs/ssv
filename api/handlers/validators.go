@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/api"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/api"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type Validators struct {
@@ -78,7 +78,7 @@ func byOperators(operators []uint64) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
 		for _, a := range operators {
 			for _, b := range share.Committee {
-				if a == b.OperatorID {
+				if a == b.Signer {
 					return true
 				}
 			}
@@ -92,7 +92,7 @@ func byClusters(clusters requestClusters, contains bool) registrystorage.SharesF
 	return func(share *types.SSVShare) bool {
 		shareCommittee := make([]string, len(share.Committee))
 		for i, c := range share.Committee {
-			shareCommittee[i] = strconv.FormatUint(c.OperatorID, 10)
+			shareCommittee[i] = strconv.FormatUint(c.Signer, 10)
 		}
 		shareStr := strings.Join(shareCommittee, ",")
 
@@ -117,7 +117,7 @@ func byClusters(clusters requestClusters, contains bool) registrystorage.SharesF
 func byPubKeys(pubkeys []api.Hex) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
 		for _, pubKey := range pubkeys {
-			if bytes.Equal(pubKey, share.ValidatorPubKey) {
+			if bytes.Equal(pubKey, share.ValidatorPubKey[:]) {
 				return true
 			}
 		}
@@ -128,7 +128,7 @@ func byPubKeys(pubkeys []api.Hex) registrystorage.SharesFilter {
 func byIndices(indices []uint64) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
 		for _, index := range indices {
-			if share.Metadata.BeaconMetadata.Index == phase0.ValidatorIndex(index) {
+			if share.ValidatorIndex == phase0.ValidatorIndex(index) {
 				return true
 			}
 		}
@@ -162,6 +162,7 @@ type validatorJSON struct {
 	Index           phase0.ValidatorIndex  `json:"index"`
 	Status          string                 `json:"status"`
 	ActivationEpoch phase0.Epoch           `json:"activation_epoch"`
+	ExitEpoch       phase0.Epoch           `json:"exit_epoch"`
 	Owner           api.Hex                `json:"owner"`
 	Committee       []spectypes.OperatorID `json:"committee"`
 	Quorum          uint64                 `json:"quorum"`
@@ -172,24 +173,23 @@ type validatorJSON struct {
 
 func validatorFromShare(share *types.SSVShare) *validatorJSON {
 	v := &validatorJSON{
-		PubKey: api.Hex(share.ValidatorPubKey),
+		PubKey: api.Hex(share.ValidatorPubKey[:]),
 		Owner:  api.Hex(share.OwnerAddress[:]),
 		Committee: func() []spectypes.OperatorID {
 			committee := make([]spectypes.OperatorID, len(share.Committee))
 			for i, op := range share.Committee {
-				committee[i] = op.OperatorID
+				committee[i] = op.Signer
 			}
 			return committee
 		}(),
-		Quorum:        share.Quorum,
-		PartialQuorum: share.PartialQuorum,
-		Graffiti:      string(share.Graffiti),
-		Liquidated:    share.Liquidated,
+		Graffiti:   string(share.Graffiti),
+		Liquidated: share.Liquidated,
 	}
 	if share.HasBeaconMetadata() {
-		v.Index = share.Metadata.BeaconMetadata.Index
-		v.Status = share.Metadata.BeaconMetadata.Status.String()
-		v.ActivationEpoch = share.Metadata.BeaconMetadata.ActivationEpoch
+		v.Index = share.ValidatorIndex
+		v.Status = share.Status.String()
+		v.ActivationEpoch = share.ActivationEpoch
+		v.ExitEpoch = share.ExitEpoch
 	}
 	return v
 }

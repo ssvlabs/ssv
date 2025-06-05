@@ -1,7 +1,6 @@
-version: '3.5'
+version: "3.5"
 
-x-base:
-  &default-base
+x-base: &default-base
   build:
     context: .
     dockerfile: Dockerfile
@@ -14,8 +13,7 @@ x-base:
   environment:
     CONFIG_PATH: ./config/config.yaml
 
-x-base-dev:
-  &default-dev
+x-base-dev: &default-dev
   <<: *default-base
   image: ssvnode-debug:latest
   build:
@@ -29,7 +27,7 @@ x-base-dev:
   cap_add:
     - SYS_PTRACE
   volumes:
-    - ./:/go/src/github.com/bloxapp/ssv
+    - ./:/go/src/github.com/ssvlabs/ssv
 
 services:
   ssv-node-1:
@@ -152,40 +150,7 @@ services:
       DEBUG_PORT: 40009
       CONFIG_PATH: ./config/config.exporter.yaml
 
-  # monitoring services
-
-  prometheus:
-    container_name: prometheus
-    image: prom/prometheus:v2.24.0
-    volumes:
-      - ./monitoring/prometheus/:/etc/prometheus/
-      - data_prometheus:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yaml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    ports:
-      - 9090:9090
-    restart: always
-    networks:
-      - blox-docker
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    networks:
-      - blox-docker
-    ports:
-      - "3000:3000"
-    volumes:
-      - data_grafana:/var/lib/grafana
-
 networks:
   blox-docker:
     driver: bridge
     name: blox-docker
-
-volumes:
-  data_prometheus:
-  data_grafana:

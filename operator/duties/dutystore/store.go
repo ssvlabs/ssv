@@ -8,6 +8,7 @@ type Store struct {
 	Attester      *Duties[eth2apiv1.AttesterDuty]
 	Proposer      *Duties[eth2apiv1.ProposerDuty]
 	SyncCommittee *SyncCommitteeDuties
+	VoluntaryExit *VoluntaryExitDuties
 }
 
 func New() *Store {
@@ -15,5 +16,6 @@ func New() *Store {
 		Attester:      NewDuties[eth2apiv1.AttesterDuty](),
 		Proposer:      NewDuties[eth2apiv1.ProposerDuty](),
 		SyncCommittee: NewSyncCommitteeDuties(),
+		VoluntaryExit: NewVoluntaryExit(),
 	}
 }

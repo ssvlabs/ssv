@@ -3,34 +3,19 @@ package worker
 import (
 	"context"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
-
-var (
-	metricsMsgProcessing = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:worker:msg:process",
-		Help: "Count decided messages",
-	}, []string{"prefix"})
-)
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(metricsMsgProcessing); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
 
 // MsgHandler func that receive message.SSVMessage to handle
-type MsgHandler func(msg *queue.DecodedSSVMessage) error
+type MsgHandler func(ctx context.Context, msg network.DecodedSSVMessage) error
 
 // ErrorHandler func that handles an error for a specific message
-type ErrorHandler func(msg *queue.DecodedSSVMessage, err error) error
+type ErrorHandler func(msg *queue.SSVMessage, err error) error
 
-func defaultErrHandler(msg *queue.DecodedSSVMessage, err error) error {
+func defaultErrHandler(msg *queue.SSVMessage, err error) error {
 	return err
 }
 
@@ -47,7 +32,7 @@ type Worker struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	workersCount  int
-	queue         chan *queue.DecodedSSVMessage
+	queue         chan *queue.SSVMessage
 	handler       MsgHandler
 	errHandler    ErrorHandler
 	metricsPrefix string
@@ -61,7 +46,7 @@ func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
 		ctx:           ctx,
 		cancel:        cancel,
 		workersCount:  cfg.WorkersCount,
-		queue:         make(chan *queue.DecodedSSVMessage, cfg.Buffer),
+		queue:         make(chan *queue.SSVMessage, cfg.Buffer),
 		errHandler:    defaultErrHandler,
 		metricsPrefix: cfg.MetrixPrefix,
 	}
@@ -79,7 +64,7 @@ func (w *Worker) init(logger *zap.Logger) {
 }
 
 // startWorker process functionality
-func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *queue.DecodedSSVMessage) {
+func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *queue.SSVMessage) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	defer cancel()
 	for {
@@ -87,7 +72,7 @@ func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *queue.DecodedSSVMess
 		case <-ctx.Done():
 			return
 		case msg := <-ch:
-			w.process(logger, msg)
+			w.process(ctx, logger, msg)
 		}
 	}
 }
@@ -105,7 +90,7 @@ func (w *Worker) UseErrorHandler(errHandler ErrorHandler) {
 // TryEnqueue tries to enqueue a job to the given job channel. Returns true if
 // the operation was successful, and false if enqueuing would not have been
 // possible without blocking. Job is not enqueued in the latter case.
-func (w *Worker) TryEnqueue(msg *queue.DecodedSSVMessage) bool {
+func (w *Worker) TryEnqueue(msg *queue.SSVMessage) bool {
 	select {
 	case w.queue <- msg:
 		return true
@@ -126,16 +111,15 @@ func (w *Worker) Size() int {
 }
 
 // process the msg's from queue
-func (w *Worker) process(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
+func (w *Worker) process(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	if w.handler == nil {
 		logger.Warn("❗ no handler for worker")
 		return
 	}
-	if err := w.handler(msg); err != nil {
+	if err := w.handler(ctx, msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
 			logger.Debug("❌ failed to handle message", zap.Error(handlerErr))
 			return
 		}
 	}
-	metricsMsgProcessing.WithLabelValues(w.metricsPrefix).Inc()
 }

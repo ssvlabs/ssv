@@ -10,7 +10,7 @@ import (
 )
 
 // CreateLocalNode create a new enode.LocalNode instance
-func CreateLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.IP, udpPort, tcpPort int) (*enode.LocalNode, error) {
+func CreateLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.IP, udpPort, tcpPort uint16) (*enode.LocalNode, error) {
 	db, err := enode.OpenDB(storagePath)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not open node's peer database")
@@ -21,7 +21,7 @@ func CreateLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.I
 	localNode.Set(enr.UDP(udpPort))
 	localNode.Set(enr.TCP(tcpPort))
 	localNode.SetFallbackIP(ipAddr)
-	localNode.SetFallbackUDP(udpPort)
+	localNode.SetFallbackUDP(int(udpPort))
 
 	return localNode, nil
 }

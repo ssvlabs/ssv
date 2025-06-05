@@ -2,17 +2,19 @@ package tests
 
 import (
 	"context"
+	"os"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network"
+	p2pv1 "github.com/ssvlabs/ssv/network/p2p"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -33,19 +35,26 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 }
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
+	ctx := context.TODO()
 	if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
 		panic(err)
 	}
 
 	logger := zap.L().Named("integration-tests")
 
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
+	shares := []*ssvtypes.SSVShare{
+		{
+			Share:      *spectestingutils.TestingShare(spectestingutils.Testing4SharesSet(), spectestingutils.TestingValidatorIndex),
+			Status:     eth2apiv1.ValidatorStateActiveOngoing,
+			Liquidated: false,
+		},
+	}
 
 	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, p2pv1.LocalNetOptions{
 		Nodes:        maxSupportedCommittee,
 		MinConnected: maxSupportedQuorum,
 		UseDiscv5:    false,
+		Shares:       shares,
 	})
 	if err != nil {
 		logger.Fatal("error creating and start local net", zap.Error(err))
@@ -61,10 +70,13 @@ func TestMain(m *testing.M) {
 		Nodes: nodes,
 	}
 
-	m.Run()
+	// exitCode required here only for linter
+	exitCode := m.Run()
 
 	//teardown
 	for i := 0; i < len(ln.Nodes); i++ {
 		_ = ln.Nodes[i].Close()
 	}
+
+	os.Exit(exitCode)
 }

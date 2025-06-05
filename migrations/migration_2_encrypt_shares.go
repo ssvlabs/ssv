@@ -6,11 +6,10 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-
-	"github.com/bloxapp/ssv/storage/basedb"
-
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var migration_2_encrypt_shares = Migration{
@@ -28,7 +27,7 @@ var migration_2_encrypt_shares = Migration{
 			if !found {
 				return completed(txn)
 			}
-			operatorKey, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
+			operatorKey, err := rsaencryption.PEMToPrivateKey(obj.Value)
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
 			}

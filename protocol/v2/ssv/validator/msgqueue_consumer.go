@@ -4,21 +4,23 @@ import (
 	"context"
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(logger *zap.Logger, msg *queue.DecodedSSVMessage) error
+type MessageHandler func(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -29,24 +31,36 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
+func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+	traceCtx, dutyID := v.fetchTraceContext(ctx, msg.GetID())
+	ctx, span := tracer.Start(traceCtx,
+		observability.InstrumentName(observabilityNamespace, "handle_message"),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.ValidatorMsgTypeAttribute(msg.GetType()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.DutyIDAttribute(dutyID),
+		))
+	defer span.End()
+
+	msg.TraceContext = ctx
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
-
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
-
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
+		span.AddEvent("pushing message to queue")
 		if pushed := q.Q.TryPush(msg); !pushed {
-			msgID := msg.MsgID.String()
-			logger.Warn("❗ dropping message because the queue is full",
+			const eventMsg = "❗ dropping message because the queue is full"
+			logger.Warn(eventMsg,
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msg_id", msgID))
+				zap.String("msg_id", msg.MsgID.String()))
+
+			span.AddEvent(eventMsg)
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		span.SetStatus(codes.Ok, "")
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
+		const errMsg = "❌ missing queue for role type"
+		logger.Error(errMsg, fields.Role(msg.MsgID.GetRoleType()))
+		span.SetStatus(codes.Error, errMsg)
 	}
 }
 
@@ -105,12 +119,12 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 		state.Height = v.GetLastHeight(msgID)
 		state.Round = v.GetLastRound(msgID)
-		state.Quorum = v.Share.Quorum
+		state.Quorum = v.Operator.GetQuorum()
 
 		filter := queue.FilterAny
 		if !runner.HasRunningDuty() {
 			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.DecodedSSVMessage) bool {
+			filter = func(m *queue.SSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
 					return false
@@ -120,15 +134,16 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
-			filter = func(m *queue.DecodedSSVMessage) bool {
-				sm, ok := m.Body.(*specqbft.SignedMessage)
+			filter = func(m *queue.SSVMessage) bool {
+				qbftMsg, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return true
 				}
-				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
+
+				if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
 					return true
 				}
-				return sm.Message.MsgType != specqbft.PrepareMsgType && sm.Message.MsgType != specqbft.CommitMsgType
+				return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
 			}
 		}
 
@@ -150,9 +165,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 
 		// Handle the message.
-		if err := handler(logger, msg); err != nil {
+		if err := handler(ctx, logger, msg); err != nil {
 			v.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.SSVMessage.MsgType),
+				fields.MessageType(msg.MsgType),
 				zap.Error(err))
 		}
 	}
@@ -161,22 +176,23 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	return nil
 }
 
-func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, withFields ...zap.Field) {
+func (v *Validator) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.SSVMessage.MsgType {
+	switch msg.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		sm := msg.Body.(*specqbft.SignedMessage)
+		qbftMsg := msg.Body.(*specqbft.Message)
+
 		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(sm.Message.Height)),
-			zap.Int64("msg_round", int64(sm.Message.Round)),
-			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-			zap.Any("signers", sm.Signers),
+			zap.Uint64("msg_height", uint64(qbftMsg.Height)),
+			zap.Uint64("msg_round", uint64(qbftMsg.Round)),
+			zap.Uint64("consensus_msg_type", uint64(qbftMsg.MsgType)),
+			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
-		psm := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(psm.Signer)),
-			fields.Slot(psm.Message.Slot),
+			zap.Uint64("signer", psm.Messages[0].Signer), // TODO: only one signer?
+			fields.Slot(psm.Slot),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)
@@ -200,7 +216,7 @@ func (v *Validator) GetLastRound(identifier spectypes.MessageID) specqbft.Round 
 	if r == nil {
 		return specqbft.Round(1)
 	}
-	if r != nil && r.HasRunningDuty() {
+	if r.HasRunningDuty() {
 		inst := r.GetBaseRunner().State.RunningInstance
 		if inst != nil {
 			return inst.State.Round

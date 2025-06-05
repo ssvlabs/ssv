@@ -1,0 +1,39 @@
+global:
+  LogLevel: debug
+
+db:
+  Path: ./data/db
+
+eth2:
+  Network: holesky
+# KeyStore:
+#   PrivateKeyFile: /Users/mosherevah/Downloads/encrypted_private_key.json
+#   PasswordFile: /Users/mosherevah/Downloads/password.pass
+# KeyStore:
+#   PrivateKeyFile: /privkey.json
+#   PasswordFile: /password.pass
+
+p2p:
+  Discovery: mdns
+
+  ### replace with your ip and ports
+### otherwise, the default ports (TCP 13001, UDP 12001) are used
+  # HostAddress: 209.35.77.243
+#  TcpPort:
+#  UdpPort:
+### mdns for local network setup
+#  Bootnodes: enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g
+
+ssv:
+  Network: holesky-e2e
+  ValidatorOptions:
+
+#bootnode:
+#  PrivateKey: 3b503a31004ae799fe93e547a96a27630d74f2555892e6c5190135e50d8f3bf1
+#  ExternalIP: 182.168.1.1
+#  DbPath: ./data/bootnode
+#  Network: e2e-holesky
+
+MetricsAPIPort: 15000
+EnableProfile: true
+SSVAPIPort: 16000

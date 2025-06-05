@@ -1,0 +1,27 @@
+// SSV Node Coding Rules
+
+// SSV is a decentralized ETH staking protocol that distributes validator key shares across a threshold network of operators.
+// Users: Operators who run the SSV node, and stakers who register their validators to the SSV contract on Ethereum.
+// Priorities: Security, reliability, decentralization and protocol correctness are paramount. We prioritize robust error handling,
+// comprehensive testing, and clear logging to ensure the protocol operates correctly under all conditions.
+
+// Error handling
+
+- Lowercase and concise
+- Prefer fmt.Errorf over errors.Wrap
+
+// Logging
+
+- Lowercase and concise
+- Use zap
+- Prefer the logger with most context (method logger > struct logger > global logger)
+- Prefer DEBUG level, unless it's an error the node operator should be aware of and can potentially fix
+- Prefer `fields.FieldName` over `zap.String("fieldName", value)` for common fields such as Validator and Slot
+
+// Testing
+
+- Use github.com/stretchr/testify
+
+// Conventions
+
+- Argument order for funcs and methods: (ctx, logger, deps..., args...)

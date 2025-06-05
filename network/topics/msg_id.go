@@ -3,16 +3,16 @@ package topics
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-
+	"github.com/cespare/xxhash/v2"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 const (
@@ -54,23 +54,21 @@ type msgIDEntry struct {
 
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
-	ctx           context.Context
-	added         chan addedEvent
-	ids           map[string]*msgIDEntry
-	locker        sync.Locker
-	ttl           time.Duration
-	networkConfig networkconfig.NetworkConfig
+	ctx    context.Context
+	added  chan addedEvent
+	ids    map[string]*msgIDEntry
+	locker sync.Locker
+	ttl    time.Duration
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, ttl time.Duration, networkConfig networkconfig.NetworkConfig) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, ttl time.Duration) MsgIDHandler {
 	handler := &msgIDHandler{
-		ctx:           ctx,
-		added:         make(chan addedEvent, msgIDHandlerBufferSize),
-		ids:           make(map[string]*msgIDEntry),
-		locker:        &sync.Mutex{},
-		ttl:           ttl,
-		networkConfig: networkConfig,
+		ctx:    ctx,
+		added:  make(chan addedEvent, msgIDHandlerBufferSize),
+		ids:    make(map[string]*msgIDEntry),
+		locker: &sync.Mutex{},
+		ttl:    ttl,
 	}
 	return handler
 }
@@ -125,16 +123,18 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 }
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
-	currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
-	if currentEpoch > handler.networkConfig.PermissionlessActivationEpoch {
-		decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			// todo: should err here or just log and let the decode function err?
-		} else {
-			return commons.MsgID()(decodedMsg)
-		}
+	// TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
+
+	// In Alan message structure the message body can be identical for all 4 operators
+	// whereas before it included a BLS signature which made it unique
+	// so we hash full message (including signer) to make it unique
+
+	if len(msg) == 0 {
+		return ""
 	}
-	return commons.MsgID()(msg)
+	b := make([]byte, 12)
+	binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
+	return string(b)
 }
 
 // GetPeers returns the peers that are related to the given msg

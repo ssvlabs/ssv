@@ -1,71 +1,107 @@
 package runner
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
+	apiv1electra "github.com/attestantio/go-eth2-client/api/v1/electra"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
-	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
-	// ProducesBlindedBlocks is true when the runner will only produce blinded blocks
-	ProducesBlindedBlocks bool
 
-	beacon   specssv.BeaconNode
-	network  specssv.Network
-	signer   spectypes.KeyManager
-	valCheck specqbft.ProposedValueCheckF
+	beacon              beacon.BeaconNode
+	network             specqbft.Network
+	signer              ekm.BeaconSigner
+	operatorSigner      ssvtypes.OperatorSigner
+	doppelgangerHandler DoppelgangerProvider
+	valCheck            specqbft.ProposedValueCheckF
+	measurements        measurementsStore
+	graffiti            []byte
 
-	metrics metrics.ConsensusMetrics
+	// proposerDelay allows Operator to configure a delay to wait out before requesting Ethereum
+	// block to propose if this Operator is proposer-duty Leader. This allows Operator to extract
+	// higher MEV.
+	proposerDelay time.Duration
 }
 
 func NewProposerRunner(
-	beaconNetwork spectypes.BeaconNetwork,
-	share *spectypes.Share,
+	networkConfig networkconfig.Network,
+	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
-	beacon specssv.BeaconNode,
-	network specssv.Network,
-	signer spectypes.KeyManager,
+	beacon beacon.BeaconNode,
+	network specqbft.Network,
+	signer ekm.BeaconSigner,
+	operatorSigner ssvtypes.OperatorSigner,
+	doppelgangerHandler DoppelgangerProvider,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
-) Runner {
+	graffiti []byte,
+	proposerDelay time.Duration,
+) (Runner, error) {
+	if len(share) != 1 {
+		return nil, errors.New("must have one share")
+	}
+
+	// Cap proposerDelay value to make sure we don't miss block proposals, for details
+	// on how this value should be chosen see:
+	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration
+	const maxReasonableProposerDelay = 1650 * time.Millisecond
+	if proposerDelay > maxReasonableProposerDelay {
+		proposerDelay = maxReasonableProposerDelay
+	}
+
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType:     spectypes.BNRoleProposer,
-			BeaconNetwork:      beaconNetwork,
+			RunnerRoleType:     spectypes.RoleProposer,
+			NetworkConfig:      networkConfig,
 			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
 
-		beacon:   beacon,
-		network:  network,
-		signer:   signer,
-		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleProposer),
-	}
+		beacon:              beacon,
+		network:             network,
+		signer:              signer,
+		operatorSigner:      operatorSigner,
+		doppelgangerHandler: doppelgangerHandler,
+		valCheck:            valCheck,
+		measurements:        NewMeasurementsStore(),
+		graffiti:            graffiti,
+
+		proposerDelay: proposerDelay,
+	}, nil
 }
 
-func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
+func (r *ProposerRunner) StartNewDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty, quorum uint64) error {
+	return r.BaseRunner.baseStartNewDuty(ctx, logger, r, duty, quorum)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -73,242 +109,378 @@ func (r *ProposerRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "runner.process_pre_consensus"),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(signedMsg.Slot),
+			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
+		))
+	defer span.End()
+
+	hasQuorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(ctx, r, signedMsg)
 	if err != nil {
-		return errors.Wrap(err, "failed processing randao message")
+		return observability.Errorf(span, "failed processing randao message: %w", err)
 	}
 
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
+	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+
+	logger = logger.With(fields.Slot(duty.DutySlot()))
 	logger.Debug("🧩 got partial RANDAO signatures",
-		zap.Uint64("signer", signedMsg.Signer))
+		zap.Uint64("signer", signedMsg.Messages[0].Signer)) // TODO: more than one? check index arr boundries
 
 	// quorum returns true only once (first time quorum achieved)
-	if !quorum {
+	if !hasQuorum {
+		span.AddEvent("no quorum")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
-	r.metrics.EndPreConsensus()
+	r.measurements.EndPreConsensus()
+	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleProposer)
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	// randao is relevant only for block proposals, no need to check type
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
-		return errors.Wrap(err, "could not reconstruct randao sig")
+		// If the reconstructed signature verification failed, fall back to verifying each partial signature
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		return observability.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
-
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		fields.PreConsensusTime(r.measurements.PreConsensusTime()))
 
-	var ver spec.DataVersion
-	var obj ssz.Marshaler
-	var start = time.Now()
-	if r.ProducesBlindedBlocks {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			// Prysm workaround: when Prysm can't retrieve an MEV block, it responds with an error
-			// saying the block isn't blinded, implying to request a standard block instead.
-			// https://github.com/prysmaticlabs/prysm/issues/12103
-			if nodeClientProvider, ok := r.GetBeaconNode().(goclient.NodeClientProvider); ok &&
-				nodeClientProvider.NodeClient() == goclient.NodePrysm {
-				logger.Debug("failed to get blinded beacon block, falling back to standard block")
-				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-				if err != nil {
-					return errors.Wrap(err, "failed falling back from blinded to standard beacon block")
-				}
-			} else {
-				return errors.Wrap(err, "failed to get blinded beacon block")
-			}
-		}
-	} else {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			return errors.Wrap(err, "failed to get beacon block")
-		}
+	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
+	slotStartTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
+	timeIntoSlot := max(time.Since(slotStartTime), 0)
+	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
+	time.Sleep(proposerDelayAdjusted)
+
+	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
+	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
+	// we are always fetching Ethereum block here just in case we need to propose it).
+	start := time.Now()
+	duty = r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
+	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(ctx, duty.Slot, r.graffiti, fullSig)
+	if err != nil {
+		const errMsg = "failed to get beacon block"
+
+		logger.Error(errMsg,
+			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+			fields.BlockTime(time.Since(start)),
+			zap.Error(err))
+		return observability.Errorf(span, "%s: %w", errMsg, err)
 	}
 
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
-	logger.Info("🧊 got beacon block proposal",
+	const eventMsg = "🧊 got beacon block proposal"
+	logger.Info(eventMsg,
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
+		zap.Duration("proposer_delay", r.proposerDelay),
 		zap.Duration("took", time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
+	span.AddEvent(eventMsg, trace.WithAttributes(
+		observability.BeaconBlockHashAttribute(blockSummary.Hash),
+		observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
+	))
 
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
-		return errors.Wrap(err, "could not marshal beacon block")
+		return observability.Errorf(span, "could not marshal beacon block: %w", err)
 	}
-
-	input := &spectypes.ConsensusData{
+	input := &spectypes.ValidatorConsensusData{
 		Duty:    *duty,
 		Version: ver,
 		DataSSZ: byts,
 	}
 
-	r.metrics.StartConsensus()
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
+	r.measurements.StartConsensus()
+
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
+		return observability.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
-func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg)
+func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.SignedSSVMessage) error {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "runner.process_consensus"),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(signedMsg.SSVMessage.GetID()),
+			observability.ValidatorMsgTypeAttribute(signedMsg.SSVMessage.GetType()),
+			observability.RunnerRoleAttribute(signedMsg.SSVMessage.GetID().GetRoleType()),
+		))
+	defer span.End()
+
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
-		return errors.Wrap(err, "failed processing consensus message")
+		return observability.Errorf(span, "failed processing consensus message: %w", err)
 	}
+
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
+		span.AddEvent("instance is not decided")
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
-	r.metrics.EndConsensus()
-	r.metrics.StartPostConsensus()
+	r.measurements.EndConsensus()
+	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleProposer)
+
+	r.measurements.StartPostConsensus()
 
 	// specific duty sig
 	var blkToSign ssz.HashRoot
+
+	cd := decidedValue.(*spectypes.ValidatorConsensusData)
+	span.SetAttributes(
+		observability.BeaconSlotAttribute(cd.Duty.Slot),
+		observability.ValidatorPublicKeyAttribute(cd.Duty.PubKey),
+	)
+
 	if r.decidedBlindedBlock() {
-		_, blkToSign, err = decidedValue.GetBlindedBlockData()
+		span.AddEvent("decided has a blinded block")
+		_, blkToSign, err = cd.GetBlindedBlockData()
 		if err != nil {
-			return errors.Wrap(err, "could not get blinded block data")
+			return observability.Errorf(span, "could not get blinded block data: %w", err)
 		}
 	} else {
-		_, blkToSign, err = decidedValue.GetBlockData()
+		span.AddEvent("decided does not have a blinded block. Getting block data")
+		_, blkToSign, err = cd.GetBlockData()
 		if err != nil {
-			return errors.Wrap(err, "could not get block data")
+			return observability.Errorf(span, "could not get block data: %w", err)
 		}
 	}
 
-	msg, err := r.BaseRunner.signBeaconObject(
-		r,
-		blkToSign,
-		decidedValue.Duty.Slot,
-		spectypes.DomainProposer,
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed signing attestation data")
-	}
-	postConsensusMsg := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     decidedValue.Duty.Slot,
-		Messages: []*spectypes.PartialSignatureMessage{msg},
-	}
-
-	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
-	if err != nil {
-		return errors.Wrap(err, "could not sign post consensus msg")
-	}
-	data, err := postSignedMsg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode post consensus signature msg")
-	}
-	msgToBroadcast := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-		Data:    data,
-	}
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial post consensus sig")
-	}
-	return nil
-}
-
-func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
-	if err != nil {
-		return errors.Wrap(err, "failed processing post consensus message")
-	}
-	if !quorum {
+	duty := r.BaseRunner.State.StartingDuty.(*spectypes.ValidatorDuty)
+	if !r.doppelgangerHandler.CanSign(duty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(duty.ValidatorIndex))
 		return nil
 	}
 
-	r.metrics.EndPostConsensus()
+	span.AddEvent("signing beacon object")
+	msg, err := r.BaseRunner.signBeaconObject(ctx, r, duty, blkToSign, cd.Duty.Slot, spectypes.DomainProposer)
+	if err != nil {
+		return observability.Errorf(span, "failed signing block: %w", err)
+	}
 
+	postConsensusMsg := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
+		Slot:     cd.Duty.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
+	}
+
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	encodedMsg, err := postConsensusMsg.Encode()
+	if err != nil {
+		return observability.Errorf(span, "could not encode post consensus partial signature message: %w", err)
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   msgID,
+		Data:    encodedMsg,
+	}
+
+	span.AddEvent("signing SSV partial signature message")
+	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return fmt.Errorf("could not sign SSV partial signature message: %w", err)
+	}
+
+	msgToBroadcast := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
+	}
+
+	span.AddEvent("broadcasting post consensus partial signature message")
+	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+		return fmt.Errorf("can't broadcast partial post consensus sig: %w", err)
+	}
+
+	span.SetStatus(codes.Ok, "")
+	return nil
+}
+
+func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.Logger, signedMsg *spectypes.PartialSignatureMessages) error {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "runner.process_post_consensus"),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(signedMsg.Slot),
+			observability.ValidatorPartialSigMsgTypeAttribute(signedMsg.Type),
+		))
+	defer span.End()
+
+	hasQuorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(ctx, r, signedMsg)
+	if err != nil {
+		return observability.Errorf(span, "failed processing post consensus message: %w", err)
+	}
+	if !hasQuorum {
+		span.AddEvent("no quorum")
+		span.SetStatus(codes.Ok, "")
+		return nil
+	}
+
+	var successfullySubmittedProposals uint8
 	for _, root := range roots {
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
+		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
+		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 		if err != nil {
-			return errors.Wrap(err, "could not reconstruct post consensus signature")
+			// If the reconstructed signature verification failed, fall back to verifying each partial signature
+			for _, root := range roots {
+				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+			}
+			return observability.Errorf(span, "got post-consensus quorum but it has invalid signatures: %w", err)
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
-		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
+		r.measurements.EndPostConsensus()
+		recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleProposer)
+
+		logger.Debug("🧩 reconstructed partial post consensus signatures proposer",
+			zap.Uint64s("signers", getPostConsensusProposerSigners(r.GetState(), root)),
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+			fields.Round(r.GetState().RunningInstance.State.Round))
+
+		r.doppelgangerHandler.ReportQuorum(r.GetShare().ValidatorIndex)
+
+		validatorConsensusData := &spectypes.ValidatorConsensusData{}
+		err = validatorConsensusData.Decode(r.GetState().DecidedValue)
+		if err != nil {
+			return observability.Errorf(span, "could not decode consensus data: %w", err)
+		}
 
 		start := time.Now()
-		var blk any
+
+		logger = logger.With(
+			fields.PreConsensusTime(r.measurements.PreConsensusTime()),
+			fields.ConsensusTime(r.measurements.ConsensusTime()),
+			fields.PostConsensusTime(r.measurements.PostConsensusTime()),
+			fields.Height(r.BaseRunner.QBFTController.Height),
+			fields.Round(r.GetState().RunningInstance.State.Round),
+			zap.Bool("blinded", r.decidedBlindedBlock()),
+		)
+		var (
+			blockSummary blockSummary
+			summarizeErr error
+		)
 		if r.decidedBlindedBlock() {
-			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
+			vBlindedBlk, _, err := validatorConsensusData.GetBlindedBlockData()
 			if err != nil {
-				return errors.Wrap(err, "could not get blinded block")
+				return observability.Errorf(span, "could not get blinded block: %w", err)
 			}
-			blk = vBlindedBlk
 
-			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
-				r.metrics.RoleSubmissionFailed()
+			blockSummary, summarizeErr = summarizeBlock(vBlindedBlk)
+			logger = logger.With(
+				zap.String("block_hash", blockSummary.Hash.String()),
+				zap.NamedError("summarize_err", summarizeErr),
+			)
 
-				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
+			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(ctx, vBlindedBlk, specSig); err != nil {
+				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
+
+				const errMsg = "could not submit blinded Beacon block"
+				logger.Error(errMsg, fields.SubmissionTime(time.Since(start)), zap.Error(err))
+				return observability.Errorf(span, "%s: %w", errMsg, err)
 			}
 		} else {
-			vBlk, _, err := r.GetState().DecidedValue.GetBlockData()
+			vBlk, _, err := validatorConsensusData.GetBlockData()
 			if err != nil {
-				return errors.Wrap(err, "could not get block")
+				return observability.Errorf(span, "could not get block: %w", err)
 			}
-			blk = vBlk
+			blockSummary, summarizeErr = summarizeBlock(vBlk)
+			logger = logger.With(
+				zap.String("block_hash", blockSummary.Hash.String()),
+				zap.NamedError("summarize_err", summarizeErr),
+			)
 
-			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
-				r.metrics.RoleSubmissionFailed()
+			if err := r.GetBeaconNode().SubmitBeaconBlock(ctx, vBlk, specSig); err != nil {
+				recordFailedSubmission(ctx, spectypes.BNRoleProposer)
 
-				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
+				const errMsg = "could not submit Beacon block"
+				logger.Error(errMsg,
+					fields.SubmissionTime(time.Since(start)),
+					zap.Error(err))
+				return observability.Errorf(span, "%s: %w", errMsg, err)
 			}
 		}
 
-		blockSubmissionEnd()
-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
-		r.metrics.RoleSubmitted()
-
-		blockSummary, summarizeErr := summarizeBlock(blk)
-		logger.Info("✅ successfully submitted block proposal",
-			fields.Slot(signedMsg.Message.Slot),
+		successfullySubmittedProposals++
+		const eventMsg = "✅ successfully submitted block proposal"
+		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.BeaconSlotAttribute(r.BaseRunner.State.StartingDuty.DutySlot()),
+			observability.DutyRoundAttribute(r.BaseRunner.State.RunningInstance.State.Round),
+			observability.BeaconBlockHashAttribute(blockSummary.Hash),
+			observability.BeaconBlockIsBlindedAttribute(blockSummary.Blinded),
+		))
+		logger.Info(eventMsg,
+			fields.Slot(validatorConsensusData.Duty.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
 			zap.String("block_hash", blockSummary.Hash.String()),
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),
-			zap.NamedError("summarize_err", summarizeErr))
+			zap.NamedError("summarize_err", summarizeErr),
+			fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
 	}
+
 	r.GetState().Finished = true
+
+	r.measurements.EndDutyFlow()
+
+	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleProposer, r.GetState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(ctx,
+		uint32(successfullySubmittedProposals),
+		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
+		spectypes.BNRoleProposer)
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 // decidedBlindedBlock returns true if decided value has a blinded block, false if regular block
 // WARNING!! should be called after decided only
 func (r *ProposerRunner) decidedBlindedBlock() bool {
-	_, _, err := r.BaseRunner.State.DecidedValue.GetBlindedBlockData()
+	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
+	if err != nil {
+		return false
+	}
+	_, _, err = validatorConsensusData.GetBlindedBlockData()
 	return err == nil
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().StartingDuty.Slot)
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (r *ProposerRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+	validatorConsensusData := &spectypes.ValidatorConsensusData{}
+	err := validatorConsensusData.Decode(r.GetState().DecidedValue)
+	if err != nil {
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not create consensus data")
+	}
+
 	if r.decidedBlindedBlock() {
-		_, data, err := r.GetState().DecidedValue.GetBlindedBlockData()
+		_, data, err := validatorConsensusData.GetBlindedBlockData()
 		if err != nil {
 			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block data")
 		}
 		return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 	}
 
-	_, data, err := r.GetState().DecidedValue.GetBlockData()
+	_, data, err := validatorConsensusData.GetBlockData()
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get block data")
 	}
@@ -321,49 +493,76 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 3) start consensus on duty + block data
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
-func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartPreConsensus()
+func (r *ProposerRunner) executeDuty(ctx context.Context, logger *zap.Logger, duty spectypes.Duty) error {
+	_, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "runner.execute_duty"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
+	defer span.End()
+
+	r.measurements.StartDutyFlow()
+	r.measurements.StartPreConsensus()
+
+	proposerDuty := duty.(*spectypes.ValidatorDuty)
+	if !r.doppelgangerHandler.CanSign(proposerDuty.ValidatorIndex) {
+		logger.Warn("Signing not permitted due to Doppelganger protection", fields.ValidatorIndex(proposerDuty.ValidatorIndex))
+		return nil
+	}
 
 	// sign partial randao
-	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
-	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
+	span.AddEvent("signing beacon object")
+	epoch := r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
+	msg, err := r.BaseRunner.signBeaconObject(
+		ctx,
+		r,
+		proposerDuty,
+		spectypes.SSZUint64(epoch),
+		duty.DutySlot(),
+		spectypes.DomainRandao,
+	)
 	if err != nil {
-		return errors.Wrap(err, "could not sign randao")
+		return observability.Errorf(span, "could not sign randao: %w", err)
 	}
-	msgs := spectypes.PartialSignatureMessages{
+
+	msgs := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.RandaoPartialSig,
-		Slot:     duty.Slot,
+		Slot:     duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	// sign msg
-	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
+	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not sign randao msg")
-	}
-	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
-		Message:   msgs,
-		Signature: signature,
-		Signer:    r.GetShare().OperatorID,
+		return observability.Errorf(span, "could not encode randao partial signature message: %w", err)
 	}
 
-	// broadcast
-	data, err := signedPartialMsg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode randao pre-consensus signature msg")
-	}
-	msgToBroadcast := &spectypes.SSVMessage{
+	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-		Data:    data,
+		MsgID:   msgID,
+		Data:    encodedMsg,
 	}
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial randao sig")
+
+	span.AddEvent("signing SSV message")
+	sig, err := r.operatorSigner.SignSSVMessage(ssvMsg)
+	if err != nil {
+		return observability.Errorf(span, "could not sign SSVMessage: %w", err)
+	}
+
+	msgToBroadcast := &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{sig},
+		OperatorIDs: []spectypes.OperatorID{r.operatorSigner.GetOperatorID()},
+		SSVMessage:  ssvMsg,
+	}
+
+	span.AddEvent("broadcasting signed SSV message")
+	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
+		return observability.Errorf(span, "can't broadcast partial randao sig: %w", err)
 	}
 
 	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -371,16 +570,20 @@ func (r *ProposerRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ProposerRunner) GetNetwork() specssv.Network {
+func (r *ProposerRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetBeaconNode() specssv.BeaconNode {
+func (r *ProposerRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 
 func (r *ProposerRunner) GetShare() *spectypes.Share {
-	return r.BaseRunner.Share
+	// TODO better solution for this
+	for _, share := range r.BaseRunner.Share {
+		return share
+	}
+	return nil
 }
 
 func (r *ProposerRunner) GetState() *State {
@@ -391,8 +594,12 @@ func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ProposerRunner) GetSigner() spectypes.KeyManager {
+func (r *ProposerRunner) GetSigner() ekm.BeaconSigner {
 	return r.signer
+}
+
+func (r *ProposerRunner) GetOperatorSigner() ssvtypes.OperatorSigner {
+	return r.operatorSigner
 }
 
 // Encode returns the encoded struct in bytes or error
@@ -409,7 +616,7 @@ func (r *ProposerRunner) Decode(data []byte) error {
 func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode ProposerRunner")
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
@@ -425,34 +632,102 @@ type blockSummary struct {
 // summarizeBlock returns a blockSummary for the given block.
 func summarizeBlock(block any) (summary blockSummary, err error) {
 	if block == nil {
-		return summary, errors.New("block is nil")
+		return summary, fmt.Errorf("block is nil")
 	}
 	switch b := block.(type) {
-	case *api.VersionedBlindedBeaconBlock:
-		switch b.Version {
-		case spec.DataVersionCapella:
-			return summarizeBlock(b.Capella)
+	case *api.VersionedProposal:
+		if b.Blinded {
+			switch b.Version {
+			case spec.DataVersionCapella:
+				return summarizeBlock(b.CapellaBlinded)
+			case spec.DataVersionDeneb:
+				return summarizeBlock(b.DenebBlinded)
+			case spec.DataVersionElectra:
+				return summarizeBlock(b.ElectraBlinded)
+			default:
+				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
+			}
 		}
-	case *spec.VersionedBeaconBlock:
 		switch b.Version {
 		case spec.DataVersionCapella:
 			return summarizeBlock(b.Capella)
+		case spec.DataVersionDeneb:
+			if b.Deneb == nil {
+				return summary, fmt.Errorf("deneb block contents is nil")
+			}
+			return summarizeBlock(b.Deneb.Block)
+		case spec.DataVersionElectra:
+			if b.Electra == nil {
+				return summary, fmt.Errorf("electra block contents is nil")
+			}
+			return summarizeBlock(b.Electra.Block)
+		default:
+			return summary, fmt.Errorf("unsupported block version %d", b.Version)
+		}
+
+	case *api.VersionedBlindedProposal:
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return summarizeBlock(b.Capella)
+		case spec.DataVersionDeneb:
+			return summarizeBlock(b.Deneb)
+		case spec.DataVersionElectra:
+			return summarizeBlock(b.Electra)
+		default:
+			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 		}
 
 	case *capella.BeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return summary, errors.New("block, body or execution payload is nil")
+			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
 		summary.Version = spec.DataVersionCapella
 
+	case *deneb.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return summary, fmt.Errorf("block, body or execution payload is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.Version = spec.DataVersionDeneb
+
+	case *electra.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return summary, fmt.Errorf("block, body or execution payload is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.Version = spec.DataVersionElectra
+
+	case *apiv1electra.BlockContents:
+		return summarizeBlock(b.Block)
+
+	case *apiv1deneb.BlockContents:
+		return summarizeBlock(b.Block)
+
 	case *apiv1capella.BlindedBeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return summary, errors.New("block, body or execution payload header is nil")
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
 		summary.Blinded = true
 		summary.Version = spec.DataVersionCapella
+
+	case *apiv1deneb.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.Blinded = true
+		summary.Version = spec.DataVersionDeneb
+
+	case *apiv1electra.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.Blinded = true
+		summary.Version = spec.DataVersionElectra
 	}
+
 	return
 }

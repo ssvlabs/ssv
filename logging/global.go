@@ -7,10 +7,9 @@ import (
 	"runtime/debug"
 	"time"
 
-	"gopkg.in/natefinch/lumberjack.v2"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func parseConfigLevel(levelName string) (zapcore.Level, error) {
@@ -57,7 +56,7 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 		Level:       zap.NewAtomicLevelAt(level),
 		OutputPaths: []string{"stdout"},
 		EncoderConfig: zapcore.EncoderConfig{
-			MessageKey:  "message",
+			MessageKey:  "msg",
 			LevelKey:    "level",
 			EncodeLevel: levelEncoder,
 			TimeKey:     "time",
@@ -72,10 +71,17 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 		},
 	}
 
-	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
+	var usedcore zapcore.Core
+
+	switch logFormat {
+	case "console":
+		usedcore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
+	case "json":
+		usedcore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
+	}
 
 	if fileOptions == nil {
-		zap.ReplaceGlobals(zap.New(consoleCore))
+		zap.ReplaceGlobals(zap.New(usedcore))
 		return nil
 	}
 
@@ -87,19 +93,19 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 	fileWriter := fileOptions.writer(fileOptions)
 	fileCore := zapcore.NewCore(dev, zapcore.AddSync(fileWriter), lv2)
 
-	zap.ReplaceGlobals(zap.New(zapcore.NewTee(consoleCore, fileCore)))
+	zap.ReplaceGlobals(zap.New(zapcore.NewTee(usedcore, fileCore)))
 	return nil
 }
 
 type LogFileOptions struct {
-	FileName   string
+	FilePath   string
 	MaxSize    int
 	MaxBackups int
 }
 
 func (o LogFileOptions) writer(options *LogFileOptions) io.Writer {
 	return &lumberjack.Logger{
-		Filename:   options.FileName,
+		Filename:   options.FilePath,
 		MaxSize:    options.MaxSize, // megabytes
 		MaxBackups: options.MaxBackups,
 		MaxAge:     28, // days

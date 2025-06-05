@@ -5,19 +5,19 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
+	"github.com/ssvlabs/eth2-key-manager/core"
 	util "github.com/wealdtech/go-eth2-util"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/cli/flags"
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/cli/flags"
+	"github.com/ssvlabs/ssv/logging"
 )
 
 // exportKeysCmd is the command to export private/public keys based on given mnemonic
 var exportKeysCmd = &cobra.Command{
 	Use:   "export-keys",
-	Short: "exports private/public keys based on given mnemonic",
+	Short: "exports private/public keys based on given mnemonic. For testing usage only",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := logging.SetGlobalLogger("dpanic", "capital", "console", nil); err != nil {
 			log.Fatal(err)

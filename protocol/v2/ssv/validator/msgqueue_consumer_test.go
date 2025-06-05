@@ -2,12 +2,12 @@ package validator
 
 //
 //import (
-//	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+//	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 //	"testing"
 //
-//	"github.com/bloxapp/ssv-spec/qbft"
-//	spectypes "github.com/bloxapp/ssv-spec/types"
-//	"github.com/bloxapp/ssv-spec/types/testingutils"
+//	"github.com/ssvlabs/ssv-spec/qbft"
+//	spectypes "github.com/ssvlabs/ssv-spec/types"
+//	"github.com/ssvlabs/ssv-spec/types/testingutils"
 //	"github.com/stretchr/testify/require"
 //)
 //

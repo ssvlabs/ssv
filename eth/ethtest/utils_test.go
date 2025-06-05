@@ -2,38 +2,38 @@ package ethtest
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
 	"testing"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/golang/mock/gomock"
+	"github.com/ethereum/go-ethereum/ethclient/simulated"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/eventhandler"
-	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/simulator"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
+	"github.com/ssvlabs/ssv/doppelganger"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/eventhandler"
+	"github.com/ssvlabs/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/simulator"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator"
+	"github.com/ssvlabs/ssv/operator/validator/mocks"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/blskeygen"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 type testValidatorData struct {
@@ -44,9 +44,8 @@ type testValidatorData struct {
 }
 
 type testOperator struct {
-	id      uint64
-	rsaPub  []byte
-	rsaPriv []byte
+	id         uint64
+	privateKey keys.OperatorPrivateKey
 }
 
 type testShare struct {
@@ -90,14 +89,14 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 	testOps := make([]*testOperator, num)
 
 	for i := uint64(1); i <= num; i++ {
-		pb, sk, err := rsaencryption.GenerateKeys()
+		privateKey, err := keys.GeneratePrivateKey()
 		if err != nil {
 			return nil, err
 		}
+
 		testOps[i-1] = &testOperator{
-			id:      idOffset + i,
-			rsaPub:  pb,
-			rsaPriv: sk,
+			id:         idOffset + i,
+			privateKey: privateKey,
 		}
 	}
 
@@ -109,25 +108,16 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	var encryptedShares []byte
 
 	for i, op := range operators {
-		rsaKey, err := rsaencryption.ConvertPemToPublicKey(op.rsaPub)
-		if err != nil {
-			return nil, fmt.Errorf("can't convert public key: %w", err)
-		}
-
 		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
-		cipherText, err := rsa.EncryptPKCS1v15(rand.Reader, rsaKey, []byte(rawShare))
+
+		cipherText, err := op.privateKey.Public().Encrypt([]byte(rawShare))
 		if err != nil {
 			return nil, fmt.Errorf("can't encrypt share: %w", err)
 		}
 
-		rsaPriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.rsaPriv))
-		if err != nil {
-			return nil, fmt.Errorf("can't convert secret key to a private key share: %w", err)
-		}
-
 		// check that we encrypt right
 		shareSecret := &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsaPriv, cipherText)
+		decryptedSharePrivateKey, err := op.privateKey.Decrypt(cipherText)
 		if err != nil {
 			return nil, err
 		}
@@ -172,20 +162,22 @@ func setupEventHandler(
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
+	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig, operator.privateKey)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
 	ctrl := gomock.NewController(t)
-	bc := beacon.NewMockBeaconNode(ctrl)
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
+
+	dgHandler := doppelganger.NoOpHandler{}
 
 	if useMockCtrl {
 		validatorCtrl := mocks.NewMockController(ctrl)
@@ -196,12 +188,11 @@ func setupEventHandler(
 			nodeStorage,
 			parser,
 			validatorCtrl,
-			testNetworkConfig.Domain,
-			validatorCtrl,
-			nodeStorage.GetPrivateKey,
+			testNetworkConfig,
+			operatorDataStore,
+			operator.privateKey,
 			keyManager,
-			bc,
-			storageMap,
+			dgHandler,
 			eventhandler.WithFullNode(),
 			eventhandler.WithLogger(logger),
 		)
@@ -210,18 +201,16 @@ func setupEventHandler(
 			return nil, nil, nil, nil, err
 		}
 
-		validatorCtrl.EXPECT().GetOperatorData().Return(operatorData).AnyTimes()
-
 		return eh, validatorCtrl, ctrl, nodeStorage, nil
 	}
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:         ctx,
-		DB:              db,
-		RegistryStorage: nodeStorage,
-		KeyManager:      keyManager,
-		StorageMap:      storageMap,
-		OperatorData:    operatorData,
+		Context:           ctx,
+		DB:                db,
+		RegistryStorage:   nodeStorage,
+		BeaconSigner:      keyManager,
+		StorageMap:        storageMap,
+		OperatorDataStore: operatorDataStore,
 	})
 
 	parser := eventparser.New(contractFilterer)
@@ -230,12 +219,11 @@ func setupEventHandler(
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		testNetworkConfig.Domain,
-		validatorCtrl,
-		nodeStorage.GetPrivateKey,
+		testNetworkConfig,
+		operatorDataStore,
+		operator.privateKey,
 		keyManager,
-		bc,
-		storageMap,
+		dgHandler,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)
@@ -256,29 +244,32 @@ func setupOperatorStorage(
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(operator.rsaPriv))
+	encodedPubKey, err := operator.privateKey.Public().Base64()
 	if err != nil {
+		logger.Fatal("failed to encode operator public key", zap.Error(err))
+	}
+
+	if err := nodeStorage.SavePrivateKeyHash(operator.privateKey.StorageHash()); err != nil {
 		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 
-	_, found, err := nodeStorage.GetPrivateKey()
+	_, found, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil || !found {
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
-	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
 
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey:    operatorPubKey,
+			PublicKey:    encodedPubKey,
 			ID:           operator.id,
 			OwnerAddress: *ownerAddress,
 		}
@@ -287,14 +278,14 @@ func setupOperatorStorage(
 	return nodeStorage, operatorData
 }
 
-func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
-	genesis := core.GenesisAlloc{}
+func simTestBackend(testAddresses []*ethcommon.Address) *simulator.Backend {
+	genesis := types.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
-		genesis[*testAddr] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
+		genesis[*testAddr] = types.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
-	return simulator.NewSimulatedBackend(
-		genesis, 50_000_000,
+	return simulator.NewBackend(genesis,
+		simulated.WithBlockGasLimit(50_000_000),
 	)
 }

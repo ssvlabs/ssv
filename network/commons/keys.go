@@ -5,28 +5,25 @@ import (
 	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"math/big"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
-
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"
 )
 
 // ECDSAPrivFromInterface converts crypto.PrivKey back to ecdsa.PrivateKey
 func ECDSAPrivFromInterface(privkey crypto.PrivKey) (*ecdsa.PrivateKey, error) {
-	secpKey := (privkey.(*crypto.Secp256k1PrivateKey))
+	secpKey := privkey.(*crypto.Secp256k1PrivateKey)
 	rawKey, err := secpKey.Raw()
 	if err != nil {
-		return nil, errors.Wrap(err, "could mot convert ecdsa.PrivateKey")
+		return nil, errors.Wrap(err, "could not convert ecdsa.PrivateKey")
 	}
-	privKey := new(ecdsa.PrivateKey)
-	k := new(big.Int).SetBytes(rawKey)
-	privKey.D = k
-	privKey.Curve = gcrypto.S256() // Temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1.
-	privKey.X, privKey.Y = gcrypto.S256().ScalarBaseMult(rawKey)
-	return privKey, nil
+
+	privKey, _ := btcec.PrivKeyFromBytes(rawKey)
+	ecdsaKey := privKey.ToECDSA()
+	ecdsaKey.Curve = gcrypto.S256() // temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1
+	return ecdsaKey, nil
 }
 
 // ECDSAPrivToInterface converts ecdsa.PrivateKey to crypto.PrivKey
@@ -56,6 +53,7 @@ func ECDSAPubToInterface(pubkey *ecdsa.PublicKey) (crypto.PubKey, error) {
 	if yVal.SetByteSlice(pubkey.Y.Bytes()) {
 		return nil, errors.Errorf("Y value overflows")
 	}
+
 	newKey := crypto.PubKey((*crypto.Secp256k1PublicKey)(btcec.NewPublicKey(xVal, yVal)))
 	// Zero out temporary values.
 	xVal.Zero()
@@ -63,7 +61,7 @@ func ECDSAPubToInterface(pubkey *ecdsa.PublicKey) (crypto.PubKey, error) {
 	return newKey, nil
 }
 
-// RSAPrivToInterface converts ecdsa.PrivateKey to crypto.PrivKey
+// RSAPrivToInterface converts rsa.PrivateKey to crypto.PrivKey
 func RSAPrivToInterface(privkey *rsa.PrivateKey) (crypto.PrivKey, error) {
 	rsaPrivDER := x509.MarshalPKCS1PrivateKey(privkey)
 	return crypto.UnmarshalRsaPrivateKey(rsaPrivDER)

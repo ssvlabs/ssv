@@ -5,18 +5,18 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-
-	"github.com/bloxapp/ssv/logging"
-
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging"
 )
 
 const (
@@ -67,7 +67,7 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 	return func(e PeerEvent) {
 		ctns := host.Network().Connectedness(e.AddrInfo.ID)
 		switch ctns {
-		case libp2pnetwork.CannotConnect, libp2pnetwork.Connected:
+		case libp2pnetwork.Connected:
 		default:
 			go handler(e)
 		}
@@ -75,7 +75,7 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 }
 
 // Bootstrap starts to listen to new nodes
-func (md *localDiscovery) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
+func (md *localDiscovery) Bootstrap(handler HandleNewPeer) error {
 	err := md.svc.Start()
 	if err != nil {
 		return errors.Wrap(err, "could not start mdns service")
@@ -94,15 +94,19 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...int) error {
+func (md *localDiscovery) RegisterSubnets(subnets ...uint64) (updated bool, err error) {
 	// TODO
-	return nil
+	return false, nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...int) error {
+func (md *localDiscovery) DeregisterSubnets(subnets ...uint64) (updated bool, err error) {
 	// TODO
-	return nil
+	return false, nil
+}
+
+func (md *localDiscovery) PublishENR() {
+	// TODO
 }
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -127,4 +131,9 @@ func (md *localDiscovery) Close() error {
 // Mock method to follow interface.
 func (md *localDiscovery) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.Node, error) {
 	return nil, nil
+}
+
+func (dvs *localDiscovery) UpdateDomainType(domain spectypes.DomainType) error {
+	// TODO
+	return nil
 }
