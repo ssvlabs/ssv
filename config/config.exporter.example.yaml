@@ -35,6 +35,9 @@ bootnode:
 LocalEventsPath: # path to local events. used for running the node with custom local events
 WebSocketAPIPort: 16000
 
+# This enables Open Telemetry traces
+EnableTraces: false
+
 # This enables the SSV API at the specified port. Refer to the documentation at https://bloxapp.github.io/ssv/
 # It's recommended to keep this port private to prevent potential resource-intensive attacks.
 # SSVAPIPort: 16000

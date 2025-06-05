@@ -167,6 +167,7 @@ func setupMessageCollection(capacity int) (chan *queue.SSVMessage, func(context.
 // 4. Verify that a new queue was created for the message's slot
 // 5. Confirm the queue has the correct properties (non-nil and proper slot)
 func TestHandleMessageCreatesQueue(t *testing.T) {
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -174,14 +175,18 @@ func TestHandleMessageCreatesQueue(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
+	slot := phase0.Slot(123)
+	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
+	mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot)
+
 	committee := &Committee{
-		ctx:          ctx,
-		Queues:       make(map[phase0.Slot]queueContainer),
-		Runners:      make(map[phase0.Slot]*runner.CommitteeRunner),
-		beaconConfig: networkconfig.NewMockBeacon(ctrl),
+		ctx:             ctx,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+		beaconConfig:    mockBeaconConfig,
+		CommitteeMember: &spectypes.CommitteeMember{},
 	}
 
-	slot := phase0.Slot(123)
 	msgID := spectypes.MessageID{1, 2, 3, 4}
 	qbftMsg := &specqbft.Message{
 		Height:  specqbft.Height(slot),
@@ -341,16 +346,16 @@ func TestStartConsumeQueue(t *testing.T) {
 	duty := &spectypes.CommitteeDuty{
 		Slot: phase0.Slot(124),
 	}
-	err := committee.StartConsumeQueue(logger, duty)
+	err := committee.StartConsumeQueue(t.Context(), logger, duty)
 	assert.Error(t, err)
 
 	duty.Slot = slot
 	delete(committee.Runners, slot)
-	err = committee.StartConsumeQueue(logger, duty)
+	err = committee.StartConsumeQueue(t.Context(), logger, duty)
 	assert.Error(t, err)
 
 	committee.Runners[slot] = committeeRunner
-	err = committee.StartConsumeQueue(logger, duty)
+	err = committee.StartConsumeQueue(t.Context(), logger, duty)
 	assert.NoError(t, err)
 }
 
@@ -1162,18 +1167,26 @@ func TestConsumeQueuePrioritization(t *testing.T) {
 //     b. All initial messages ARE present and are of the correct type.
 //  8. Verify the queue is empty after all messages have been popped.
 func TestHandleMessageQueueFullAndDropping(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	logger, _ := zap.NewDevelopment()
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
+	slot := phase0.Slot(123)
+
+	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
+	mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).Times(3)
+
 	queueCapacity := 2
 	committee := &Committee{
-		ctx:    ctx,
-		Queues: make(map[phase0.Slot]queueContainer),
+		ctx:             ctx,
+		Queues:          make(map[phase0.Slot]queueContainer),
+		CommitteeMember: &spectypes.CommitteeMember{},
+		beaconConfig:    mockBeaconConfig,
 	}
-
-	slot := phase0.Slot(123)
 
 	// Step 0: Create the queue container with the desired small capacity and add it to the committee
 	qContainer := queueContainer{
@@ -1189,7 +1202,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	// Step 1: Fill the pre-made queue to its capacity by calling HandleMessage
 	// HandleMessage will find and use the qContainer we just set up.
 	msgIDBase := spectypes.MessageID{1, 2, 3, 0}
-	for i := 0; i < queueCapacity; i++ { // Push exactly queueCapacity items
+	for i := range queueCapacity { // Push exactly queueCapacity items
 		msgID := msgIDBase
 		msgID[3] = byte(i) // Unique ID
 		qbftMsg := &specqbft.Message{Height: specqbft.Height(slot), Round: 1, MsgType: specqbft.ProposalMsgType}
@@ -1215,7 +1228,7 @@ func TestHandleMessageQueueFullAndDropping(t *testing.T) {
 	// All `queueCapacity` messages found should be Proposal messages from Step 1.
 	foundDroppedMessage := false
 	proposalMessageCount := 0
-	for i := 0; i < queueCapacity; i++ {
+	for range queueCapacity {
 		popCtx, popCancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 		// Use FilterAny since we are just checking the contents, not a live consumption scenario.
 		// The prioritizer does not matter here as we drain the queue completely.
@@ -1540,20 +1553,28 @@ func TestConsumeQueueBurstTraffic(t *testing.T) {
 // This behavior and potential improvements are tracked
 // in GitHub issue #1680 (https://github.com/ssvlabs/ssv/issues/1680).
 func TestQueueLoadAndSaturationScenarios(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	mainLogger, _ := zap.NewDevelopment()
+	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
 
 	t.Run("drop when inbox strictly full", func(t *testing.T) {
 		logger := mainLogger.Named("DropWhenInboxStrictlyFull")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
+		slot := phase0.Slot(123)
+		mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).AnyTimes()
+
 		committee := &Committee{
-			ctx:     ctx,
-			Queues:  make(map[phase0.Slot]queueContainer),
-			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+			ctx:             ctx,
+			Queues:          make(map[phase0.Slot]queueContainer),
+			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+			CommitteeMember: &spectypes.CommitteeMember{},
+			beaconConfig:    mockBeaconConfig,
 		}
 
-		slot := phase0.Slot(123)
 		currentRound := specqbft.Round(1)
 		nextRound := specqbft.Round(2)
 		queueCapacity := 3
@@ -1570,7 +1591,7 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		committee.Queues[slot] = qContainer
 
 		// 1. Fill the queue's inbox channel to capacity using HandleMessage.
-		for i := 0; i < queueCapacity; i++ {
+		for i := range queueCapacity {
 			msgID := spectypes.MessageID{byte(i + 1)}
 			prepareMsgBody := &specqbft.Message{Height: specqbft.Height(slot), Round: currentRound, MsgType: specqbft.PrepareMsgType}
 			testMsg := makeTestSSVMessage(t, spectypes.SSVConsensusMsgType, msgID, prepareMsgBody)
@@ -1619,13 +1640,17 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
+		slot := phase0.Slot(789)
+		mockBeaconConfig.EXPECT().EstimatedEpochAtSlot(slot).AnyTimes()
+
 		committee := &Committee{
-			ctx:     ctx,
-			Queues:  make(map[phase0.Slot]queueContainer),
-			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
+			ctx:             ctx,
+			Queues:          make(map[phase0.Slot]queueContainer),
+			Runners:         make(map[phase0.Slot]*runner.CommitteeRunner),
+			CommitteeMember: &spectypes.CommitteeMember{},
+			beaconConfig:    mockBeaconConfig,
 		}
 
-		slot := phase0.Slot(789)
 		currentRound := specqbft.Round(1)
 		queueCapacity := 3
 
@@ -1718,7 +1743,6 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 			Runners: make(map[phase0.Slot]*runner.CommitteeRunner),
 		}
 
-		slot := phase0.Slot(456)
 		queueCapacity := 5
 		currentRound := specqbft.Round(1)
 
@@ -1735,6 +1759,8 @@ func TestQueueLoadAndSaturationScenarios(t *testing.T) {
 				},
 			},
 		}
+
+		slot := phase0.Slot(456)
 
 		q := queueContainer{
 			Q: queue.New(queueCapacity),

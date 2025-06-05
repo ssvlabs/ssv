@@ -8,11 +8,15 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
@@ -147,13 +151,24 @@ func NewBaseRunner(
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(ctx context.Context, logger *zap.Logger, runner Runner, duty spectypes.Duty, quorum uint64) error {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "base_runner.start_duty"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(duty.RunnerRole()),
+			observability.BeaconSlotAttribute(duty.DutySlot())))
+	defer span.End()
+
 	if err := b.ShouldProcessDuty(duty); err != nil {
-		return errors.Wrap(err, "can't start duty")
+		return observability.Errorf(span, "can't start duty: %w", err)
 	}
 
 	b.baseSetupForNewDuty(duty, quorum)
 
-	return runner.executeDuty(ctx, logger, duty)
+	if err := runner.executeDuty(ctx, logger, duty); err != nil {
+		return observability.Errorf(span, "failed to execute duty: %w", err)
+	}
+	span.SetStatus(codes.Ok, "")
+	return nil
 }
 
 // baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
@@ -300,32 +315,43 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 }
 
 func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "base_runner.decide"),
+		trace.WithAttributes(
+			observability.RunnerRoleAttribute(runner.GetBaseRunner().RunnerRoleType),
+			observability.BeaconSlotAttribute(slot)))
+	defer span.End()
+
 	byts, err := input.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not encode input data for consensus")
+		return observability.Errorf(span, "could not encode input data for consensus: %w", err)
 	}
 
 	if err := runner.GetValCheckF()(byts); err != nil {
-		return errors.Wrap(err, "input data invalid")
+		return observability.Errorf(span, "input data invalid: %w", err)
 	}
 
+	span.AddEvent("start new instance")
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
 		ctx,
 		logger,
 		specqbft.Height(slot),
 		byts,
 	); err != nil {
-		return errors.Wrap(err, "could not start new QBFT instance")
+		return observability.Errorf(span, "could not start new QBFT instance: %w", err)
 	}
+
 	newInstance := runner.GetBaseRunner().QBFTController.StoredInstances.FindInstance(runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
-		return errors.New("could not find newly created QBFT instance")
+		return observability.Errorf(span, "could not find newly created QBFT instance")
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
-	b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
+	span.AddEvent("register timeout handler")
+	b.registerTimeoutHandler(ctx, logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
 
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
