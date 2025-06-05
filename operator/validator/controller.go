@@ -479,7 +479,7 @@ func (c *controller) StartValidators(ctx context.Context) error {
 		// Setup committee validators.
 		validators, committees := c.setupValidators(ownShares)
 		if len(validators) == 0 {
-			return nil, nil, fmt.Errorf("none of %d validators were successfully set up", len(ownShares))
+			return nil, nil, fmt.Errorf("none of %d validators were successfully initialized", len(ownShares))
 		}
 
 		return validators, committees, nil
@@ -496,10 +496,14 @@ func (c *controller) StartValidators(ctx context.Context) error {
 		if err := c.network.SubscribeRandoms(1); err != nil {
 			c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
 		}
+		return nil
 	}
 
 	// Start validators.
-	_ = c.startValidators(validators, committees)
+	started := c.startValidators(validators, committees)
+	if started == 0 {
+		return fmt.Errorf("none of %d validators were successfully started", len(validators))
+	}
 	return nil
 }
 
