@@ -1,7 +1,6 @@
 package pebble
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -250,10 +249,9 @@ func TestPebbleDB_SetMany(t *testing.T) {
 
 func TestPebbleDB_GC(t *testing.T) {
 	db := setupTestDB(t)
-	ctx := context.Background()
 
 	// Test QuickGC
-	err := db.QuickGC(ctx)
+	err := db.QuickGC(t.Context())
 	require.NoError(t, err)
 
 	// Test FullGC
@@ -264,7 +262,7 @@ func TestPebbleDB_GC(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = db.FullGC(ctx)
+	err = db.FullGC(t.Context())
 	require.NoError(t, err)
 }
 
