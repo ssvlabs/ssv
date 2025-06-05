@@ -27,7 +27,7 @@ var HoodiSSV = SSVConfig{
 			},
 			{
 				Name:  "Finality Consensus",
-				Epoch: MaxEpoch,
+				Epoch: 100, // TODO: MaxEpoch
 			},
 		},
 	},
