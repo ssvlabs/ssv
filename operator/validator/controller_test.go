@@ -233,7 +233,8 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
-			ctr.StartValidators(context.TODO())
+			err = ctr.StartValidators(context.TODO())
+			require.NoError(t, err)
 		})
 	}
 }
