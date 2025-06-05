@@ -100,6 +100,7 @@ type config struct {
 	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
+	EnableTraces                 bool                    `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
 	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
 	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
 	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
@@ -129,10 +130,19 @@ var StartNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
+		var observabilityOptions []observability.Option
+		if cfg.MetricsAPIPort > 0 {
+			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
+		}
+		if cfg.EnableTraces {
+			observabilityOptions = append(observabilityOptions, observability.WithTraces())
+		}
+
 		observabilityShutdown, err := observability.Initialize(
+			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
-			observability.WithMetrics())
+			observabilityOptions...)
 		if err != nil {
 			logger.Fatal("could not initialize observability configuration", zap.Error(err))
 		}
