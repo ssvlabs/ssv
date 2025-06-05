@@ -77,8 +77,6 @@ func TestSubnetsDistributionScores(t *testing.T) {
 		}
 	}
 
-	t.Logf("my subnets: %v", mySubnets.String())
-
 	stats := &peers.SubnetsStats{}
 	for sub := 0; sub < commons.SubnetsCount; sub++ {
 		stats.Connected[sub] = 1 + rand.Intn(20)

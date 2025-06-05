@@ -107,25 +107,45 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
 	return subnets, true
 }
 
-// GetSubnetsDistributionScores calculates distribution scores for subnets
-func GetSubnetsDistributionScores(stats *SubnetsStats, minPeers int, mySubnets commons.Subnets, maxPeers int) []float64 {
-	scores := make([]float64, commons.SubnetsCount)
-	for i := uint64(0); i < commons.SubnetsCount; i++ {
-		if !mySubnets.IsSet(i) {
-			continue
+// GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
+// subnets with low peer count would get higher score, and overloaded subnets gets a lower score (possibly negative).
+// Subnets in which the node doesn't participate receive a score of 0.
+func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets commons.Subnets, topicMaxPeers int) [commons.SubnetsCount]float64 {
+	const activeSubnetBoost = 0.2
+
+	activeSubnets := commons.AllSubnets.SharedSubnets(mySubnets)
+
+	var scores [commons.SubnetsCount]float64
+	for _, s := range activeSubnets {
+		var connected int
+		if s < uint64(len(stats.Connected)) {
+			connected = stats.Connected[s]
 		}
-		scores[i] = ScoreSubnet(stats.Connected[i], minPeers, maxPeers)
+		scores[s] = activeSubnetBoost + ScoreSubnet(connected, minPerSubnet, topicMaxPeers)
 	}
 	return scores
 }
 
-// ScoreSubnet calculates a score for a subnet based on the number of connected peers
 func ScoreSubnet(connected, min, max int) float64 {
-	if connected >= max {
-		return 0
+	// scarcityFactor is the factor by which the score is increased for
+	// subnets with fewer than the desired minimum number of peers.
+	const scarcityFactor = 2.0
+
+	if connected <= 0 {
+		return 2.0 * scarcityFactor
 	}
-	if connected <= min {
-		return float64(max-min) / float64(min)
+
+	if connected > max {
+		// Linear scaling when connected is above the desired maximum.
+		return -1.0 * (float64(connected-max) / float64(2*(max-min)))
 	}
-	return float64(max-connected) / float64(max-min)
+
+	if connected < min {
+		// Proportional scaling when connected is less than the desired minimum.
+		return 1.0 + (float64(min-connected)/float64(min))*scarcityFactor
+	}
+
+	// Linear scaling when connected is between min and max.
+	proportion := float64(connected-min) / float64(max-min)
+	return 1 - proportion
 }
