@@ -147,6 +147,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
+			logger,
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
@@ -398,6 +399,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
+			logger,
 			networkconfig.TestNetwork,
 			shareMap,
 			contr,
