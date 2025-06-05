@@ -38,7 +38,7 @@ type Config struct {
 // Parameters used from Config:
 // - ClientKeystoreFile: PKCS12 file containing client certificate and private key
 // - ClientKeystorePasswordFile: File containing password for the keystore
-// - ClientServerCertFile: PEM file with trusted server certificate (used for fingerprint pinning)
+// - ClientServerCertFile: PEM file with trusted server certificate
 func (c *Config) LoadClientTLSConfig() (*tls.Config, error) {
 	if err := c.validateClientTLS(); err != nil {
 		return nil, fmt.Errorf("invalid client TLS config: %w", err)
@@ -202,7 +202,6 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 // Parameters:
 // - certificate: server certificate to present to clients (required)
 // - trustedFingerprints: map of client common names to expected certificate fingerprints (required)
-// - caCertPool: pool of CA certificates for verifying client certificates (optional)
 func createServerTLSConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
 	if certificate.Certificate == nil {
 		return nil, fmt.Errorf("server certificate is required")

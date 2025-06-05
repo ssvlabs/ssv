@@ -155,7 +155,7 @@ SSV-Signer requires TLS to secure connections in two ways:
 1. **Server TLS** - Secures incoming connections from SSV nodes to SSV-Signer
 2. **Client TLS** - Secures outgoing connections from SSV-Signer to Web3Signer
 
-The TLS implementation is designed to be close to Web3Signer's TLS approach, ensuring compatibility and simplifying
+The TLS implementation is designed to match Web3Signer's TLS approach exactly, ensuring compatibility and simplifying
 configuration for users who are already familiar with Web3Signer.
 
 #### Using PKCS12 Keystores
@@ -308,7 +308,7 @@ WEB3SIGNER_SERVER_CERT_FILE=/path/to/server.pem \
 
 | Configuration | `KEYSTORE_FILE` | `KEYSTORE_PASSWORD_FILE` | `KNOWN_CLIENTS_FILE` | Validity  | Description                                              |
 |---------------|-----------------|--------------------------|----------------------|-----------|----------------------------------------------------------|
-| ❌ No TLS      | ❌               | ❌                        | ❌                    | ❌ Invalid | HTTP is no longer supported                              |
+| ❌ No TLS      | ❌               | ❌                        | ❌                    | ❌ Invalid | Plain HTTP is not supported                              |
 | ❌ Basic TLS   | ✅               | ✅                        | ❌                    | ❌ Invalid | Known clients file is required for client authentication |
 | ✅ Full mTLS   | ✅               | ✅                        | ✅                    | ✅ Valid   | Certificate required + fingerprint verification          |
 | ❌ Invalid     | ✅               | ❌                        | ✅                    | ❌ Invalid | Keystore password file missing                           |
