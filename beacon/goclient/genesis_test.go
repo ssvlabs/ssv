@@ -76,7 +76,6 @@ func Test_genesisForClient(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			mocks.NewValidatorStore(),
 		)
 		require.NoError(t, err)
 
@@ -106,7 +105,6 @@ func Test_genesisForClient(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			mocks.NewValidatorStore(),
 		)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "timed out awaiting config initialization") // node cannot initialize if it cannot get genesis
@@ -131,7 +129,6 @@ func Test_genesisForClient(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			mocks.NewValidatorStore(),
 		)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "timed out awaiting config initialization") // node cannot initialize if it cannot get genesis

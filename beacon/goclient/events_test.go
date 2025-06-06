@@ -84,7 +84,6 @@ func eventsTestClient(t *testing.T, serverURL string) *GoClient {
 		Options{
 			BeaconNodeAddr: serverURL,
 		},
-		mocks.NewValidatorStore(),
 	)
 
 	require.NoError(t, err)

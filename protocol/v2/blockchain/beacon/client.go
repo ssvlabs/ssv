@@ -65,8 +65,8 @@ type SyncCommitteeContributionCalls interface {
 
 // ValidatorRegistrationCalls interface has all validator registration duty specific calls
 type ValidatorRegistrationCalls interface {
-	// SubmitValidatorRegistration submits a validator registration
-	SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error
+	// SubmitValidatorRegistrations submits validator registrations, chunking it if necessary.
+	SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error
 }
 
 // VoluntaryExitCalls interface has all validator voluntary exit duty specific calls

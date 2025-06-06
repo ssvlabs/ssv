@@ -24,8 +24,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/slotticker"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -111,10 +109,6 @@ type MultiClient interface {
 	eth2client.ForkScheduleProvider
 }
 
-type validatorStore interface {
-	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
-}
-
 type EventTopic string
 
 const (
@@ -135,15 +129,6 @@ type GoClient struct {
 
 	syncDistanceTolerance phase0.Slot
 	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
-
-	validatorStore validatorStore
-
-	// registrationMu synchronises access to registrations
-	registrationMu sync.Mutex
-	// registrations is a set of validator-registrations (their latest versions) to be sent to
-	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
-	// participating validators
-	registrations map[phase0.BLSPubKey]*validatorRegistration
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
@@ -185,7 +170,6 @@ func New(
 	ctx context.Context,
 	logger *zap.Logger,
 	opt Options,
-	validatorStore validatorStore,
 ) (*GoClient, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
 
@@ -202,8 +186,6 @@ func New(
 		log:                                logger.Named("consensus_client"),
 		beaconConfigInit:                   make(chan struct{}),
 		syncDistanceTolerance:              phase0.Slot(opt.SyncDistanceTolerance),
-		validatorStore:                     validatorStore,
-		registrations:                      map[phase0.BLSPubKey]*validatorRegistration{},
 		commonTimeout:                      commonTimeout,
 		longTimeout:                        longTimeout,
 		withWeightedAttestationData:        opt.WithWeightedAttestationData,
@@ -263,15 +245,6 @@ func New(
 		// hence caching it for 2 slots is sufficient
 		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * config.SlotDuration),
 	)
-
-	slotTickerProvider := func() slotticker.SlotTicker {
-		return slotticker.New(logger, slotticker.Config{
-			SlotDuration: config.SlotDuration,
-			GenesisTime:  config.GenesisTime,
-		})
-	}
-
-	go client.registrationSubmitter(ctx, slotTickerProvider)
 
 	// Start automatic expired item deletion for attestationDataCache.
 	go client.attestationDataCache.Start()

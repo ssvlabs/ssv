@@ -165,6 +165,5 @@ func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeou
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		},
-		mocks.NewValidatorStore(),
 	)
 }

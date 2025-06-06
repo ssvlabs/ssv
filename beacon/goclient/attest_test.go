@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -213,7 +212,6 @@ func TestGoClient_GetAttestationData_Simple(t *testing.T) {
 				CommonTimeout:  1 * time.Second,
 				LongTimeout:    1 * time.Second,
 			},
-			mocks.NewValidatorStore(),
 		)
 		require.NoError(t, err)
 
@@ -504,7 +502,6 @@ func createClient(
 			LongTimeout:                 time.Second,
 			WithWeightedAttestationData: withWeightedAttestationData,
 		},
-		mocks.NewValidatorStore(),
 	)
 	return client, err
 }

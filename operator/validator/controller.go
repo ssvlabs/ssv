@@ -18,6 +18,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -44,7 +46,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -61,32 +62,33 @@ type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
-	Context                    context.Context
-	DB                         basedb.Database
-	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
-	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating validator metadata"` // used outside of validator controller, left for compatibility
-	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
-	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"Minimum number of peers required for sync"`
-	Network                    P2PNetwork
-	Beacon                     beaconprotocol.BeaconNode
-	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
-	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:"Enable data export functionality"`
-	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"Number of slots to retain in export data"`
-	BeaconSigner               ekm.BeaconSigner
-	OperatorSigner             ssvtypes.OperatorSigner
-	OperatorDataStore          operatordatastore.OperatorDataStore
-	RegistryStorage            nodestorage.Storage
-	RecipientsStorage          Recipients
-	NewDecidedHandler          qbftcontroller.NewDecidedHandler
-	DutyRoles                  []spectypes.BeaconRole
-	StorageMap                 *storage.ParticipantStores
-	ValidatorStore             registrystorage.ValidatorStore
-	MessageValidator           validation.MessageValidator
-	ValidatorsMap              *validators.ValidatorsMap
-	DoppelgangerHandler        doppelganger.Provider
-	NetworkConfig              networkconfig.Network
-	ValidatorSyncer            *metadata.Syncer
-	Graffiti                   []byte
+	Context                        context.Context
+	DB                             basedb.Database
+	SignatureCollectionTimeout     time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
+	MetadataUpdateInterval         time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating validator metadata"` // used outside of validator controller, left for compatibility
+	HistorySyncBatchSize           int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
+	MinPeers                       int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"Minimum number of peers required for sync"`
+	Network                        P2PNetwork
+	Beacon                         beaconprotocol.BeaconNode
+	FullNode                       bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
+	Exporter                       bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:"Enable data export functionality"`
+	ExporterRetainSlots            uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"Number of slots to retain in export data"`
+	BeaconSigner                   ekm.BeaconSigner
+	OperatorSigner                 ssvtypes.OperatorSigner
+	OperatorDataStore              operatordatastore.OperatorDataStore
+	RegistryStorage                nodestorage.Storage
+	ValidatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
+	RecipientsStorage              Recipients
+	NewDecidedHandler              qbftcontroller.NewDecidedHandler
+	DutyRoles                      []spectypes.BeaconRole
+	StorageMap                     *storage.ParticipantStores
+	ValidatorStore                 registrystorage.ValidatorStore
+	MessageValidator               validation.MessageValidator
+	ValidatorsMap                  *validators.ValidatorsMap
+	DoppelgangerHandler            doppelganger.Provider
+	NetworkConfig                  networkconfig.Network
+	ValidatorSyncer                *metadata.Syncer
+	Graffiti                       []byte
 
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
@@ -151,11 +153,12 @@ type controller struct {
 
 	logger *zap.Logger
 
-	networkConfig     networkconfig.Network
-	sharesStorage     SharesStorage
-	operatorsStorage  registrystorage.Operators
-	recipientsStorage Recipients
-	ibftStorageMap    *storage.ParticipantStores
+	networkConfig                  networkconfig.Network
+	sharesStorage                  SharesStorage
+	operatorsStorage               registrystorage.Operators
+	recipientsStorage              Recipients
+	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
+	ibftStorageMap                 *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
 	beaconSigner   ekm.BeaconSigner
@@ -237,19 +240,20 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
 	ctrl := controller{
-		logger:            logger.Named(logging.NameController),
-		networkConfig:     options.NetworkConfig,
-		sharesStorage:     options.RegistryStorage.Shares(),
-		operatorsStorage:  options.RegistryStorage,
-		recipientsStorage: options.RegistryStorage,
-		ibftStorageMap:    options.StorageMap,
-		validatorStore:    options.ValidatorStore,
-		ctx:               options.Context,
-		beacon:            options.Beacon,
-		operatorDataStore: options.OperatorDataStore,
-		beaconSigner:      options.BeaconSigner,
-		operatorSigner:    options.OperatorSigner,
-		network:           options.Network,
+		logger:                         logger.Named(logging.NameController),
+		networkConfig:                  options.NetworkConfig,
+		sharesStorage:                  options.RegistryStorage.Shares(),
+		operatorsStorage:               options.RegistryStorage,
+		recipientsStorage:              options.RegistryStorage,
+		validatorRegistrationSubmitter: options.ValidatorRegistrationSubmitter,
+		ibftStorageMap:                 options.StorageMap,
+		validatorStore:                 options.ValidatorStore,
+		ctx:                            options.Context,
+		beacon:                         options.Beacon,
+		operatorDataStore:              options.OperatorDataStore,
+		beaconSigner:                   options.BeaconSigner,
+		operatorSigner:                 options.OperatorSigner,
+		network:                        options.Network,
 
 		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
@@ -792,7 +796,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts := c.validatorOptions
 		opts.SSVShare = share
 		opts.Operator = operator
-		opts.DutyRunners, err = SetupRunners(validatorCtx, c.logger, c.recipientsStorage, opts)
+		opts.DutyRunners, err = SetupRunners(validatorCtx, c.logger, c.recipientsStorage, c.validatorRegistrationSubmitter, opts)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
@@ -1122,9 +1126,9 @@ func SetupRunners(
 	ctx context.Context,
 	logger *zap.Logger,
 	recipientsStorage Recipients,
+	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
 	options validator.Options,
 ) (runner.ValidatorDutyRunners, error) {
-
 	if options.SSVShare == nil || !options.SSVShare.HasBeaconMetadata() {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it
@@ -1180,7 +1184,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.SSVShare.OwnerAddress, options.Beacon, options.Network, options.Signer, options.OperatorSigner, recipientsStorage, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.SSVShare.OwnerAddress, options.Beacon, options.Network, options.Signer, options.OperatorSigner, recipientsStorage, validatorRegistrationSubmitter, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		}

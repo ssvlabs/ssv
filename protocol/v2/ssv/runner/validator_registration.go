@@ -6,11 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/cespare/xxhash/v2"
 	"github.com/ethereum/go-ethereum/common"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -18,25 +20,28 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon                beacon.BeaconNode
-	network               specqbft.Network
-	signer                ekm.BeaconSigner
-	operatorSigner        ssvtypes.OperatorSigner
-	valCheck              specqbft.ProposedValueCheckF
-	recipientsStorage     recipientsStorage
-	validatorOwnerAddress common.Address
+	beacon                         beacon.BeaconNode
+	network                        specqbft.Network
+	signer                         ekm.BeaconSigner
+	operatorSigner                 ssvtypes.OperatorSigner
+	valCheck                       specqbft.ProposedValueCheckF
+	recipientsStorage              recipientsStorage
+	validatorRegistrationSubmitter ValidatorRegistrationSubmitter
+	validatorOwnerAddress          common.Address
 
 	gasLimit uint64
 }
@@ -50,6 +55,7 @@ func NewValidatorRegistrationRunner(
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	recipientsStorage recipientsStorage,
+	ValidatorRegistrationSubmitter ValidatorRegistrationSubmitter,
 	gasLimit uint64,
 ) (Runner, error) {
 	if len(share) != 1 {
@@ -63,12 +69,13 @@ func NewValidatorRegistrationRunner(
 			Share:          share,
 		},
 
-		beacon:                beacon,
-		network:               network,
-		signer:                signer,
-		operatorSigner:        operatorSigner,
-		recipientsStorage:     recipientsStorage,
-		validatorOwnerAddress: validatorOwnerAddress,
+		beacon:                         beacon,
+		network:                        network,
+		signer:                         signer,
+		operatorSigner:                 operatorSigner,
+		recipientsStorage:              recipientsStorage,
+		validatorRegistrationSubmitter: ValidatorRegistrationSubmitter,
+		validatorOwnerAddress:          validatorOwnerAddress,
 
 		gasLimit: gasLimit,
 	}, nil
@@ -123,7 +130,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 		},
 	}
 
-	err = r.beacon.SubmitValidatorRegistration(signedRegistration)
+	err = r.validatorRegistrationSubmitter.Enqueue(signedRegistration)
 	if err != nil {
 		return errors.Wrap(err, "could not submit validator registration")
 	}
@@ -296,4 +303,150 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 
 type recipientsStorage interface {
 	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
+}
+
+type ValidatorRegistrationSubmitter interface {
+	Enqueue(registration *api.VersionedSignedValidatorRegistration) error
+}
+
+type VRSubmitter struct {
+	logger *zap.Logger
+
+	beaconConfig   networkconfig.BeaconConfig
+	beacon         beacon.BeaconNode
+	validatorStore validatorStore
+
+	// registrationMu synchronises access to registrations
+	registrationMu sync.Mutex
+	// registrations is a set of validator-registrations (their latest versions) to be sent to
+	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
+	// participating validators
+	registrations map[phase0.BLSPubKey]*validatorRegistration
+}
+
+func NewVRSubmitter(
+	ctx context.Context,
+	logger *zap.Logger,
+	beaconConfig networkconfig.BeaconConfig,
+	beacon beacon.BeaconNode,
+	validatorStore validatorStore,
+) *VRSubmitter {
+	submitter := &VRSubmitter{
+		logger:         logger,
+		beaconConfig:   beaconConfig,
+		beacon:         beacon,
+		validatorStore: validatorStore,
+		registrations:  map[phase0.BLSPubKey]*validatorRegistration{},
+	}
+
+	slotTicker := slotticker.New(logger, slotticker.Config{
+		SlotDuration: beaconConfig.SlotDuration,
+		GenesisTime:  beaconConfig.GenesisTime,
+	})
+	go submitter.start(ctx, slotTicker)
+
+	return submitter
+}
+
+// start periodically submits validator registrations of 2 types (in batches, 1 batch per slot):
+// - new validator registrations
+// - validator registrations that are relevant for the near future (targeting 10th epoch from now)
+// This allows us to keep the amount of registration submissions small and not having to worry
+// about pruning gc.registrations "cache" (since it might contain registrations for validators that
+// are no longer operating) while still submitting all validator-registrations that matter asap.
+func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.Next():
+			config := s.beaconConfig
+
+			currentSlot := ticker.Slot()
+			currentEpoch := config.EstimatedEpochAtSlot(currentSlot)
+			slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch
+
+			// Select registrations to submit.
+			targetRegs := make(map[phase0.BLSPubKey]*validatorRegistration, 0)
+			s.registrationMu.Lock()
+			// 1. find and add validators participating in the 10th epoch from now
+			shares := s.validatorStore.SelfParticipatingValidators(currentEpoch + 10)
+			for _, share := range shares {
+				pk := phase0.BLSPubKey{}
+				copy(pk[:], share.ValidatorPubKey[:])
+				r, ok := s.registrations[pk]
+				if !ok {
+					// we haven't constructed the corresponding validator registration for submission yet,
+					// so just skip it for now
+					continue
+				}
+				targetRegs[pk] = r
+			}
+			// 2. find and add newly created validator registrations
+			for pk, r := range s.registrations {
+				if r.new {
+					targetRegs[pk] = r
+				}
+			}
+			s.registrationMu.Unlock()
+
+			registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
+			for _, r := range targetRegs {
+				validatorPk, err := r.PubKey()
+				if err != nil {
+					s.logger.Error("Failed to get validator pubkey", zap.Error(err), fields.Slot(currentSlot))
+					continue
+				}
+
+				// Distribute the registrations evenly across the epoch based on the pubkeys.
+				validatorDescriptor := xxhash.Sum64(validatorPk[:])
+				shouldSubmit := validatorDescriptor%config.SlotsPerEpoch == slotInEpoch
+
+				if r.new || shouldSubmit {
+					r.new = false
+					registrations = append(registrations, r.VersionedSignedValidatorRegistration)
+				}
+			}
+
+			err := s.beacon.SubmitValidatorRegistrations(ctx, registrations)
+			if err != nil {
+				s.logger.Error(
+					"Failed to submit validator registrations",
+					zap.Int("registrations", len(registrations)),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+}
+
+// Enqueue enqueues new validator registration for submission, the submission happens asynchronously
+// in a batch with other validator registrations. If validator registration already exists it is
+// replaced by this new one.
+func (s *VRSubmitter) Enqueue(registration *api.VersionedSignedValidatorRegistration) error {
+	pk, err := registration.PubKey()
+	if err != nil {
+		return err
+	}
+
+	s.registrationMu.Lock()
+	defer s.registrationMu.Unlock()
+
+	s.registrations[pk] = &validatorRegistration{
+		VersionedSignedValidatorRegistration: registration,
+		new:                                  true,
+	}
+
+	return nil
+}
+
+type validatorRegistration struct {
+	*api.VersionedSignedValidatorRegistration
+
+	// new signifies whether this validator registration has already been submitted previously.
+	new bool
+}
+
+type validatorStore interface {
+	SelfParticipatingValidators(epoch phase0.Epoch) []*ssvtypes.SSVShare
 }

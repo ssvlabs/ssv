@@ -30,7 +30,6 @@ func Test_computeVoluntaryExitDomain(t *testing.T) {
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,
 			},
-			mocks.NewValidatorStore(),
 		)
 		require.NoError(t, err)
 
