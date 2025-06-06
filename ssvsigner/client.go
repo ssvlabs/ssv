@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -137,7 +138,19 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 	}
 
 	for _, data := range resp.Data {
-		if data.Status != web3signer.StatusImported {
+		allowedStatuses := []web3signer.Status{
+			web3signer.StatusImported,
+
+			// A failed request does not guarantee that the keys were not added.
+			// It's possible that the ssv-signer successfully added the keys,
+			// but a network error occurred before a response could be received.
+			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
+			// In such cases, the node would crash and, upon restarting, encounter a duplicate key error.
+			// To handle this gracefully, we allow returning a duplicate key error without treating it as a failure.
+			web3signer.StatusDuplicated,
+		}
+
+		if !slices.Contains(allowedStatuses, data.Status) {
 			return fmt.Errorf("unexpected status %s", data.Status)
 		}
 	}
@@ -174,8 +187,20 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 	}
 
 	for _, data := range resp.Data {
-		if data.Status != web3signer.StatusDeleted {
-			return fmt.Errorf("received status %s", data.Status)
+		allowedStatuses := []web3signer.Status{
+			web3signer.StatusDeleted,
+
+			// A failed request does not guarantee that the keys were not deleted.
+			// It's possible that the ssv-signer successfully deleted the keys,
+			// but a network error occurred before a response could be received.
+			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
+			// In such cases, the node would crash and, upon restarting, encounter a not found key error.
+			// To handle this gracefully, we allow returning a not found key error without treating it as a failure.
+			web3signer.StatusNotFound,
+		}
+
+		if !slices.Contains(allowedStatuses, data.Status) {
+			return fmt.Errorf("unexpected status %s", data.Status)
 		}
 	}
 
