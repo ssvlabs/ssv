@@ -21,6 +21,7 @@ import (
 type MockSlotTicker struct {
 	ctrl     *gomock.Controller
 	recorder *MockSlotTickerMockRecorder
+	isgomock struct{}
 }
 
 // MockSlotTickerMockRecorder is the mock recorder for MockSlotTicker.

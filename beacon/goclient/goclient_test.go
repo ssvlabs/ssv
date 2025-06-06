@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -24,7 +24,7 @@ func TestHealthy(t *testing.T) {
 		longTimeout   = 500 * time.Millisecond
 	)
 
-	undialableServer := tests.MockServer(nil)
+	undialableServer := mocks.MockServer(nil)
 	c, err := mockClient(t.Context(), undialableServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
 
@@ -75,7 +75,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to dial.
 	{
-		undialableServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		undialableServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
@@ -85,7 +85,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to the Validators request.
 	{
-		unresponsiveServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		unresponsiveServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v2/debug/beacon/states/head":
 				time.Sleep(longTimeout / 2)
@@ -115,7 +115,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Too slow to respond to proposer duties request.
 	{
-		unresponsiveServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		unresponsiveServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			switch r.URL.Path {
 			case "/eth/v1/validator/duties/proposer/" + fmt.Sprint(mockServerEpoch):
 				time.Sleep(longTimeout * 2)
@@ -131,7 +131,7 @@ func TestTimeouts(t *testing.T) {
 
 	// Fast enough.
 	{
-		fastServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		fastServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			time.Sleep(commonTimeout / 2)
 			switch r.URL.Path {
 			case "/eth/v1/config/spec":
