@@ -8,9 +8,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -109,6 +112,11 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "voluntary_exit.execute"),
+		trace.WithAttributes(observability.BeaconSlotAttribute(slot)))
+	defer span.End()
+
 	var dutiesForExecution, pendingDuties []*spectypes.ValidatorDuty
 
 	for _, duty := range h.dutyQueue {
@@ -122,12 +130,15 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	h.dutyQueue = pendingDuties
 	h.duties.RemoveSlot(slot - phase0.Slot(h.beaconConfig.GetSlotsPerEpoch()))
 
+	span.SetAttributes(observability.DutyCountAttribute(len(dutiesForExecution)))
 	if dutyCount := len(dutiesForExecution); dutyCount != 0 {
 		h.dutiesExecutor.ExecuteDuties(ctx, dutiesForExecution)
 		h.logger.Debug("executed voluntary exit duties",
 			fields.Slot(slot),
 			fields.Count(dutyCount))
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // blockSlot gets slots happened at the same time as block,
