@@ -35,6 +35,7 @@ type Beacon interface {
 	GetSlotsPerEpoch() uint64
 	GetGenesisTime() time.Time
 	GetSyncCommitteeSize() uint64
+	GetTargetAggregatorsPerCommittee() uint64
 	GetGenesisValidatorsRoot() phase0.Root
 	GetNetworkName() string
 	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
@@ -184,6 +185,10 @@ func (b BeaconConfig) GetGenesisTime() time.Time {
 
 func (b BeaconConfig) GetSyncCommitteeSize() uint64 {
 	return b.SyncCommitteeSize
+}
+
+func (b BeaconConfig) GetTargetAggregatorsPerCommittee() uint64 {
+	return b.TargetAggregatorsPerCommittee
 }
 
 func (b BeaconConfig) GetGenesisValidatorsRoot() phase0.Root {
