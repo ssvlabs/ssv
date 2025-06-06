@@ -611,11 +611,7 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				&handlers.Exporter{
-					ParticipantStores: storageMap,
-					TraceStore:        collector,
-					Validators:        nodeStorage.ValidatorStore(),
-				},
+				handlers.NewExporter(storageMap, collector, nodeStorage.ValidatorStore()),
 				cfg.SSVOptions.ValidatorOptions.ExporterFull,
 			)
 			go func() {
