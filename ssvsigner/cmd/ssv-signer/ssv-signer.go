@@ -181,7 +181,6 @@ func setupWeb3SignerClient(endpoint string, timeout time.Duration, tlsConfig tls
 func startServer(logger *zap.Logger, listenAddr string, operatorKey keys.OperatorPrivateKey, web3SignerClient *web3signer.Web3Signer, tlsConfig tls.Config) error {
 	logger.Info("starting ssv-signer server",
 		zap.String("addr", listenAddr),
-		zap.Bool("tls_enabled", true),
 	)
 
 	config, err := tlsConfig.LoadServerTLSConfig()

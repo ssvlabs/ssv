@@ -214,7 +214,6 @@ func createServerTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 		MinVersion:   MinTLSVersion,
 		Certificates: []tls.Certificate{certificate},
 		ClientAuth:   tls.RequireAnyClientCert,
-		// Removed ClientCAs
 		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 			return verifyClientCertificate(rawCerts, trustedFingerprints)
 		},
