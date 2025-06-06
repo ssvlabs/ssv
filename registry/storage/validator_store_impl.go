@@ -29,7 +29,7 @@ type validatorStoreImpl struct {
 	logger           *zap.Logger
 	sharesStorage    Shares
 	operatorsStorage Operators
-	beaconCfg        networkconfig.BeaconConfig
+	beaconCfg        networkconfig.Beacon
 	operatorID       spectypes.OperatorID
 
 	mu         sync.RWMutex
@@ -63,7 +63,7 @@ func NewValidatorStore(
 	logger *zap.Logger,
 	sharesStorage Shares,
 	operatorsStorage Operators,
-	beaconCfg networkconfig.BeaconConfig,
+	beaconCfg networkconfig.Beacon,
 	operatorID spectypes.OperatorID,
 ) (ValidatorStore, error) {
 	s := &validatorStoreImpl{
