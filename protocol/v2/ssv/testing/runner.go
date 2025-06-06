@@ -177,16 +177,17 @@ var ConstructBaseRunner = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
+		beaconNode := tests.NewTestingBeaconNodeWrapped()
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			common.Address{},
-			tests.NewTestingBeaconNodeWrapped(),
+			beaconNode,
 			net,
 			km,
 			opSigner,
 			rStorage,
-			nil,
+			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			spectypes.DefaultGasLimit,
 		)
 	case spectypes.RoleVoluntaryExit:
@@ -430,16 +431,17 @@ var ConstructBaseRunnerWithShareMap = func(
 			TestingHighestDecidedSlot,
 		)
 	case spectypes.RoleValidatorRegistration:
+		beaconNode := tests.NewTestingBeaconNodeWrapped()
 		r, err = runner.NewValidatorRegistrationRunner(
 			networkconfig.TestNetwork,
 			shareMap,
 			common.Address{},
-			tests.NewTestingBeaconNodeWrapped(),
+			beaconNode,
 			net,
 			km,
 			opSigner,
 			nil, // recipientStorage is unused in these tests
-			nil,
+			mocks.NewValidatorRegistrationSubmitter(beaconNode),
 			spectypes.DefaultGasLimit,
 		)
 	case spectypes.RoleVoluntaryExit:
