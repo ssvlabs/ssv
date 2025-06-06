@@ -35,6 +35,9 @@ type AggregatorRunner struct {
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
+
+	// IsAggregator is a struct field, so it can be mocked out for easy testing
+	IsAggregator func(committeeCount uint64, slotSig []byte) bool `json:"-"`
 }
 
 var _ Runner = &AggregatorRunner{}
@@ -50,7 +53,7 @@ func NewAggregatorRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
-) (Runner, error) {
+) (*AggregatorRunner, error) {
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
 	}
@@ -71,6 +74,8 @@ func NewAggregatorRunner(
 		operatorSigner: operatorSigner,
 		valCheck:       valCheck,
 		measurements:   NewMeasurementsStore(),
+
+		IsAggregator: isAggregator,
 	}, nil
 }
 
@@ -117,7 +122,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 
 	// this is the earliest in aggregator runner flow where we get to know whether we are meant
 	// to perform this aggregation duty or not
-	ok := isAggregator(duty.CommitteeLength, fullSig)
+	ok := r.IsAggregator(duty.CommitteeLength, fullSig)
 	if !ok {
 		logger.Debug("aggregation duty won't be needed from this validator for this slot",
 			zap.Any("signer", signer),

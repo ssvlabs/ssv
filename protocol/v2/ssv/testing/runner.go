@@ -10,6 +10,8 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -18,7 +20,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
@@ -133,7 +134,7 @@ var ConstructBaseRunner = func(
 			dgHandler,
 		)
 	case spectypes.RoleAggregator:
-		r, err = runner.NewAggregatorRunner(
+		rnr, err := runner.NewAggregatorRunner(
 			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -145,6 +146,13 @@ var ConstructBaseRunner = func(
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
+		if err != nil {
+			return nil, err
+		}
+		rnr.IsAggregator = func(_ uint64, _ []byte) bool {
+			return true
+		}
+		r = rnr
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
 			networkconfig.TestNetwork.DomainType,
@@ -388,7 +396,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			dgHandler,
 		)
 	case spectypes.RoleAggregator:
-		r, err = runner.NewAggregatorRunner(
+		rnr, err := runner.NewAggregatorRunner(
 			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -400,6 +408,13 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
+		if err != nil {
+			return nil, err
+		}
+		rnr.IsAggregator = func(_ uint64, _ []byte) bool {
+			return true
+		}
+		r = rnr
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
 			networkconfig.TestNetwork.DomainType,
