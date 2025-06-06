@@ -481,10 +481,10 @@ func TestSlashingProtection(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				err := signerStorage.SaveHighestAttestation(tc.account.ValidatorPublicKey(), tc.att)
+				err := signerStorage.SaveHighestAttestation(nil, tc.account.ValidatorPublicKey(), tc.att)
 				require.NoError(t, err)
 
-				att, found, err := signerStorage.RetrieveHighestAttestation(tc.account.ValidatorPublicKey())
+				att, found, err := signerStorage.RetrieveHighestAttestation(nil, tc.account.ValidatorPublicKey())
 				require.NoError(t, err)
 				require.True(t, found)
 				require.NotNil(t, att)
@@ -502,11 +502,11 @@ func TestSlashingProtection(t *testing.T) {
 				Slot:  30,
 				Index: 1,
 			}
-			err := signerStorage.SaveHighestAttestation(nil, att)
+			err := signerStorage.SaveHighestAttestation(nil, nil, att)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "pubKey must not be nil")
 
-			_, found, err := signerStorage.RetrieveHighestAttestation(nil)
+			_, found, err := signerStorage.RetrieveHighestAttestation(nil, nil)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "public key could not be nil")
 			require.False(t, found)
@@ -514,7 +514,7 @@ func TestSlashingProtection(t *testing.T) {
 
 		t.Run("error_nil_attestation", func(t *testing.T) {
 			pubKey := []byte("test_pubkey")
-			err := signerStorage.SaveHighestAttestation(pubKey, nil)
+			err := signerStorage.SaveHighestAttestation(nil, pubKey, nil)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "attestation data could not be nil")
 		})
@@ -529,7 +529,7 @@ func TestSlashingProtection(t *testing.T) {
 			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte("invalid-ssz-data"))
 			require.NoError(t, err)
 
-			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
+			att, found, err := signerStorage.RetrieveHighestAttestation(nil, pubKey)
 			require.Error(t, err)
 			require.True(t, found)
 			require.Contains(t, err.Error(), "could not unmarshal attestation data")
@@ -546,7 +546,7 @@ func TestSlashingProtection(t *testing.T) {
 			err := s.db.Set(s.objPrefix(highestAttPrefix), pubKey, []byte{})
 			require.NoError(t, err)
 
-			att, found, err := signerStorage.RetrieveHighestAttestation(pubKey)
+			att, found, err := signerStorage.RetrieveHighestAttestation(nil, pubKey)
 			require.Error(t, err)
 			require.True(t, found)
 			require.Contains(t, err.Error(), "highest attestation value is empty")
@@ -573,18 +573,18 @@ func TestSlashingProtection(t *testing.T) {
 				},
 			}
 
-			err := signerStorage.SaveHighestAttestation(account.ValidatorPublicKey(), att)
+			err := signerStorage.SaveHighestAttestation(nil, account.ValidatorPublicKey(), att)
 			require.NoError(t, err)
 
-			retrieved, found, err := signerStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+			retrieved, found, err := signerStorage.RetrieveHighestAttestation(nil, account.ValidatorPublicKey())
 			require.NoError(t, err)
 			require.True(t, found)
 			require.NotNil(t, retrieved)
 
-			err = signerStorage.RemoveHighestAttestation(account.ValidatorPublicKey())
+			err = signerStorage.RemoveHighestAttestation(nil, account.ValidatorPublicKey())
 			require.NoError(t, err)
 
-			retrieved, found, err = signerStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+			retrieved, found, err = signerStorage.RetrieveHighestAttestation(nil, account.ValidatorPublicKey())
 			require.NoError(t, err)
 			require.False(t, found)
 			require.Nil(t, retrieved)
@@ -621,11 +621,11 @@ func TestSlashingProtection(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// save proposal
-				err := signerStorage.SaveHighestProposal(tc.account.ValidatorPublicKey(), tc.proposal)
+				err := signerStorage.SaveHighestProposal(nil, tc.account.ValidatorPublicKey(), tc.proposal)
 				require.NoError(t, err)
 
 				// retrieve proposal
-				proposal, found, err := signerStorage.RetrieveHighestProposal(tc.account.ValidatorPublicKey())
+				proposal, found, err := signerStorage.RetrieveHighestProposal(nil, tc.account.ValidatorPublicKey())
 				require.NoError(t, err)
 				require.True(t, found)
 				require.Equal(t, tc.proposal, proposal)
@@ -634,11 +634,11 @@ func TestSlashingProtection(t *testing.T) {
 
 		t.Run("error_nil_pubkey", func(t *testing.T) {
 			proposal := phase0.Slot(42)
-			err := signerStorage.SaveHighestProposal(nil, proposal)
+			err := signerStorage.SaveHighestProposal(nil, nil, proposal)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "pubKey must not be nil")
 
-			_, found, err := signerStorage.RetrieveHighestProposal(nil)
+			_, found, err := signerStorage.RetrieveHighestProposal(nil, nil)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "public key could not be nil")
 			require.False(t, found)
@@ -646,7 +646,7 @@ func TestSlashingProtection(t *testing.T) {
 
 		t.Run("error_zero_slot", func(t *testing.T) {
 			pubKey := []byte("test_pubkey")
-			err := signerStorage.SaveHighestProposal(pubKey, 0)
+			err := signerStorage.SaveHighestProposal(nil, pubKey, 0)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "invalid proposal slot, slot could not be 0")
 		})
@@ -661,7 +661,7 @@ func TestSlashingProtection(t *testing.T) {
 			err := s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, []byte{})
 			require.NoError(t, err)
 
-			slot, found, err := signerStorage.RetrieveHighestProposal(pubKey)
+			slot, found, err := signerStorage.RetrieveHighestProposal(nil, pubKey)
 			require.Error(t, err)
 			require.True(t, found)
 			require.Contains(t, err.Error(), "highest proposal value is empty")
@@ -676,18 +676,18 @@ func TestSlashingProtection(t *testing.T) {
 
 			proposal := phase0.Slot(42)
 
-			err := signerStorage.SaveHighestProposal(account.ValidatorPublicKey(), proposal)
+			err := signerStorage.SaveHighestProposal(nil, account.ValidatorPublicKey(), proposal)
 			require.NoError(t, err)
 
-			retrieved, found, err := signerStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+			retrieved, found, err := signerStorage.RetrieveHighestProposal(nil, account.ValidatorPublicKey())
 			require.NoError(t, err)
 			require.True(t, found)
 			require.Equal(t, proposal, retrieved)
 
-			err = signerStorage.RemoveHighestProposal(account.ValidatorPublicKey())
+			err = signerStorage.RemoveHighestProposal(nil, account.ValidatorPublicKey())
 			require.NoError(t, err)
 
-			retrieved, found, err = signerStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+			retrieved, found, err = signerStorage.RetrieveHighestProposal(nil, account.ValidatorPublicKey())
 			require.NoError(t, err)
 			require.False(t, found)
 			require.Equal(t, phase0.Slot(0), retrieved)

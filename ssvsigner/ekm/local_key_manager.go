@@ -24,12 +24,12 @@ import (
 	eth2keymanager "github.com/ssvlabs/eth2-key-manager"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/signer"
-	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	slashingprotection "github.com/ssvlabs/ssv/ssvsigner/ekm/slashing_protection"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -245,7 +245,12 @@ func (km *LocalKeyManager) signBeaconObject(
 // using the operatorDecrypter, verifies that it matches sharePubKey, and
 // saves it to the local wallet. It also calls BumpSlashingProtection to
 // ensure slashing records for this share are up to date.
-func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error {
+func (km *LocalKeyManager) AddShare(
+	_ context.Context,
+	txn basedb.Txn,
+	encryptedPrivKey []byte,
+	pubKey phase0.BLSPubKey,
+) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
@@ -268,9 +273,10 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc == nil {
-		if err := km.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
+		if err := km.BumpSlashingProtection(txn, phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
+		// TODO: make sure rolled back txn isn't an issue
 		if err := km.saveShare(sharePrivKey); err != nil {
 			return fmt.Errorf("could not save share: %w", err)
 		}
@@ -282,7 +288,7 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 // RemoveShare removes the share from the local wallet, clears the associated
 // slashing-protection records (highest attestation/proposal) for the given
 // public key, and returns an error on any storage issue.
-func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKey) error {
+func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
@@ -293,12 +299,13 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKe
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc != nil {
-		if err := km.RemoveHighestAttestation(pubKey); err != nil {
+		if err := km.RemoveHighestAttestation(txn, pubKey); err != nil {
 			return fmt.Errorf("could not remove highest attestation: %w", err)
 		}
-		if err := km.RemoveHighestProposal(pubKey); err != nil {
+		if err := km.RemoveHighestProposal(txn, pubKey); err != nil {
 			return fmt.Errorf("could not remove highest proposal: %w", err)
 		}
+		// TODO: make sure rolled back txn isn't an issue
 		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {
 			return fmt.Errorf("could not delete share: %w", err)
 		}
