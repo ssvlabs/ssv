@@ -23,6 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
+	slashingprotection "github.com/ssvlabs/ssv/ssvsigner/ekm/slashing_protection"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -45,11 +46,12 @@ const (
 type Storage interface {
 	registry.RegistryStore
 	core.Storage
-	core.SlashingStore
+	slashingprotection.SlashingStore
 
-	RemoveHighestAttestation(pubKey []byte) error
-	RemoveHighestProposal(pubKey []byte) error
+	RemoveHighestAttestation(rw basedb.ReadWriter, pubKey []byte) error
+	RemoveHighestProposal(rw basedb.ReadWriter, pubKey []byte) error
 	SetEncryptionKey(hexKey string) error
+	// TODO: modify signature of original methods
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 
@@ -258,7 +260,7 @@ func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {
 
 // SaveHighestAttestation persists the highest known AttestationData for the
 // given public key. Used to ensure we do not sign slashable attestations.
-func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.AttestationData) error {
+func (s *storage) SaveHighestAttestation(rw basedb.ReadWriter, pubKey []byte, attestation *phase0.AttestationData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -275,12 +277,12 @@ func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.Atte
 		return fmt.Errorf("marshal attestation: %w", err)
 	}
 
-	return s.db.Set(s.objPrefix(highestAttPrefix), pubKey, data)
+	return s.db.Using(rw).Set(s.objPrefix(highestAttPrefix), pubKey, data)
 }
 
 // RetrieveHighestAttestation fetches the stored highest attestation data.
 // Returns attestation data, whether it was found, and error.
-func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+func (s *storage) RetrieveHighestAttestation(r basedb.Reader, pubKey []byte) (*phase0.AttestationData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -289,7 +291,7 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.Attestation
 	}
 
 	// get wallet bytes
-	obj, found, err := s.db.Get(s.objPrefix(highestAttPrefix), pubKey)
+	obj, found, err := s.db.UsingReader(r).Get(s.objPrefix(highestAttPrefix), pubKey)
 	if err != nil {
 		return nil, found, fmt.Errorf("could not get highest attestation from db: %w", err)
 	}
@@ -308,16 +310,16 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.Attestation
 	return ret, found, nil
 }
 
-func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
+func (s *storage) RemoveHighestAttestation(rw basedb.ReadWriter, pubKey []byte) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.db.Delete(s.objPrefix(highestAttPrefix), pubKey)
+	return s.db.Using(rw).Delete(s.objPrefix(highestAttPrefix), pubKey)
 }
 
 // SaveHighestProposal stores the highest known proposal slot for the given
 // public key to prevent slashable block proposals.
-func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
+func (s *storage) SaveHighestProposal(rw basedb.ReadWriter, pubKey []byte, slot phase0.Slot) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -332,12 +334,12 @@ func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	var data []byte
 	data = ssz.MarshalUint64(data, uint64(slot))
 
-	return s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, data)
+	return s.db.Using(rw).Set(s.objPrefix(highestProposalPrefix), pubKey, data)
 }
 
 // RetrieveHighestProposal loads the highest proposal slot from storage.
 // Returns attestation data, whether it was found, and error.
-func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+func (s *storage) RetrieveHighestProposal(r basedb.Reader, pubKey []byte) (phase0.Slot, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -346,7 +348,7 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, err
 	}
 
 	// get wallet bytes
-	obj, found, err := s.db.Get(s.objPrefix(highestProposalPrefix), pubKey)
+	obj, found, err := s.db.UsingReader(r).Get(s.objPrefix(highestProposalPrefix), pubKey)
 	if err != nil {
 		return 0, found, fmt.Errorf("could not get highest proposal from db: %w", err)
 	}
@@ -362,11 +364,11 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, err
 	return slot, found, nil
 }
 
-func (s *storage) RemoveHighestProposal(pubKey []byte) error {
+func (s *storage) RemoveHighestProposal(rw basedb.ReadWriter, pubKey []byte) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.db.Delete(s.objPrefix(highestProposalPrefix), pubKey)
+	return s.db.Using(rw).Delete(s.objPrefix(highestProposalPrefix), pubKey)
 }
 
 func (s *storage) decryptData(objectValue []byte) ([]byte, error) {

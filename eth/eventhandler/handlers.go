@@ -244,7 +244,8 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if err := eh.keyManager.AddShare(ctx, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		// TODO: consider moving this to the end of the method to handle the case when txn is canceled after share is added remotely
+		if err := eh.keyManager.AddShare(ctx, txn, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			var shareDecryptionEKMError ekm.ShareDecryptionError
 			if errors.As(err, &shareDecryptionEKMError) {
 				return nil, &MalformedEventError{Err: err}
@@ -256,6 +257,7 @@ func (eh *EventHandler) handleShareCreation(
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
+		// TODO: make sure rolled back txn isn't an issue
 		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
@@ -366,12 +368,14 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey))
+		// TODO: can txn be canceled after share is removed remotely?
+		err := eh.keyManager.RemoveShare(ctx, txn, phase0.BLSPubKey(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
 		// Remove validator from doppelganger service
+		// TODO: make sure rolled back txn isn't an issue
 		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
 
 		logger.Debug("processed event")
@@ -425,7 +429,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 
 	// bump slashing protection for operator reactivated validators
 	for _, share := range toReactivate {
-		if err := eh.keyManager.BumpSlashingProtection(phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		if err := eh.keyManager.BumpSlashingProtection(txn, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 
@@ -433,6 +437,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
+		// TODO: what if txn gets discarded?
 		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 

@@ -235,7 +235,7 @@ func (m *MockSlashingProtector) ListAccounts() ([]core.ValidatorAccount, error) 
 	return args.Get(0).([]core.ValidatorAccount), args.Error(1)
 }
 
-func (m *MockSlashingProtector) RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error) {
+func (m *MockSlashingProtector) RetrieveHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error) {
 	args := m.Called(pubKey)
 	if args.Get(0) == nil {
 		return nil, args.Bool(1), args.Error(2)
@@ -243,7 +243,7 @@ func (m *MockSlashingProtector) RetrieveHighestAttestation(pubKey phase0.BLSPubK
 	return args.Get(0).(*phase0.AttestationData), args.Bool(1), args.Error(2)
 }
 
-func (m *MockSlashingProtector) RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error) {
+func (m *MockSlashingProtector) RetrieveHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) (phase0.Slot, bool, error) {
 	args := m.Called(pubKey)
 	return args.Get(0).(phase0.Slot), args.Bool(1), args.Error(2)
 }
@@ -268,17 +268,17 @@ func (m *MockSlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, s
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
+func (m *MockSlashingProtector) BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	args := m.Called(txn, pubKey)
+	return args.Error(0)
+}
+
+func (m *MockSlashingProtector) RemoveHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
 	args := m.Called(pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestAttestation(pubKey phase0.BLSPubKey) error {
-	args := m.Called(pubKey)
-	return args.Error(0)
-}
-
-func (m *MockSlashingProtector) RemoveHighestProposal(pubKey phase0.BLSPubKey) error {
+func (m *MockSlashingProtector) RemoveHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
 	args := m.Called(pubKey)
 	return args.Error(0)
 }

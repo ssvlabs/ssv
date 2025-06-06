@@ -6,6 +6,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 type ShareDecryptionError struct {
@@ -36,13 +38,13 @@ type KeyManager interface {
 	// updating them only if they are missing or fall below a minimal safe threshold.
 	// This prevents the validator from signing messages that could be considered slashable
 	// due to absent or outdated protection data.
-	AddShare(ctx context.Context, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
+	AddShare(ctx context.Context, txn basedb.Txn, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
 	// RemoveShare unregisters a validator share from the key manager and deletes its associated
 	// slashing protection records (attestation and proposal) from the store.
 	// Implementations are expected to perform this cleanup to prevent stale protection data
 	// from persisting after the validator is no longer active, and to support safe re-adding later.
-	RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error
+	RemoveShare(ctx context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error
 }
 
 // BeaconSigner provides methods for signing beacon-chain objects.
