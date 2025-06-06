@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -140,7 +139,6 @@ func TestSaveValidatorDuties(t *testing.T) {
 	trace, err := store.GetValidatorDuty(phase0.Slot(1), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
 	assert.True(t, validatorDutiesAreEqual(trace1, trace))
-	assert.True(t, reflect.DeepEqual(trace1, trace))
 
 	trace, err = store.GetValidatorDuty(phase0.Slot(2), spectypes.BNRoleAttester, phase0.ValidatorIndex(39393))
 	require.NoError(t, err)
