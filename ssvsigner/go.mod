@@ -24,9 +24,10 @@ require (
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/holiman/uint256 v1.3.2
 	github.com/microsoft/go-crypto-openssl v0.2.9
+	github.com/pkg/errors v0.9.1
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.2
-	github.com/ssvlabs/ssv v1.2.1-0.20250422001600-57842541ad25
+	github.com/ssvlabs/ssv v1.2.1-0.20250606231454-ed992855eef1
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0
@@ -90,7 +91,6 @@ require (
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/onsi/gomega v1.36.2 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.20.5 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
