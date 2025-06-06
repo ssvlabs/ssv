@@ -597,6 +597,9 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Exporter{
 					ParticipantStores: storageMap,
 				},
+				&handlers.Operators{
+					PeersIndex: p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+				},
 			)
 			go func() {
 				err := apiServer.Run()
