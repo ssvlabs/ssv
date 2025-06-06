@@ -28,7 +28,7 @@ func TestQuickGC_EmptyDB(t *testing.T) {
 
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-	require.NoError(t, db.QuickGC(context.Background()))
+	require.NoError(t, db.QuickGC(t.Context()))
 }
 
 // TestQuickGC_WithGarbage verifies that QuickGC reclaims garbage after data deletion.
@@ -53,7 +53,7 @@ func TestQuickGC_WithGarbage(t *testing.T) {
 		require.NoError(t, db.Delete(prefix, key))
 	}
 
-	require.NoError(t, db.QuickGC(context.Background()))
+	require.NoError(t, db.QuickGC(t.Context()))
 }
 
 // TestQuickGC_ErrorWhenClosed verifies that QuickGC returns an error when the database is closed.
@@ -66,7 +66,7 @@ func TestQuickGC_ErrorWhenClosed(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NoError(t, db.Close())
-	require.Error(t, db.QuickGC(context.Background()))
+	require.Error(t, db.QuickGC(t.Context()))
 }
 
 // TestFullGC_EmptyDB verifies that FullGC succeeds on an empty database.
@@ -81,7 +81,7 @@ func TestFullGC_EmptyDB(t *testing.T) {
 
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-	require.NoError(t, db.FullGC(context.Background()))
+	require.NoError(t, db.FullGC(t.Context()))
 }
 
 // TestFullGC_WithGarbage verifies that FullGC reclaims garbage after data deletion.
@@ -106,7 +106,7 @@ func TestFullGC_WithGarbage(t *testing.T) {
 		require.NoError(t, db.Delete(prefix, key))
 	}
 
-	require.NoError(t, db.FullGC(context.Background()))
+	require.NoError(t, db.FullGC(t.Context()))
 }
 
 // TestFullGC_ErrorWhenClosed verifies that FullGC returns a wrapped error when the database is closed.
@@ -120,7 +120,7 @@ func TestFullGC_ErrorWhenClosed(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, db.Close())
 
-	err = db.FullGC(context.Background())
+	err = db.FullGC(t.Context())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to collect garbage")
@@ -138,7 +138,7 @@ func TestFullGC_ContextCancellation(t *testing.T) {
 
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	require.NoError(t, db.FullGC(ctx))
@@ -199,7 +199,7 @@ func TestPeriodicGC(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
 	logger := zap.New(core)
 	dir := setupTempDir(t, "badger-periodic-gc")
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	defer cancel()
 
@@ -216,7 +216,7 @@ func TestPeriodicGC(t *testing.T) {
 	})
 
 	db.wg.Add(1)
-	go db.periodicallyCollectGarbage(logger, 20*time.Millisecond)
+	go db.periodicallyCollectGarbage(20 * time.Millisecond)
 
 	prefix := []byte("periodic")
 
@@ -254,7 +254,7 @@ func TestPeriodicGC_Cancellation(t *testing.T) {
 
 	logger := logging.TestLogger(t)
 	dir := setupTempDir(t, "badger-periodic-gc-cancel")
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	db, err := New(logger, basedb.Options{
 		Path: dir,
 		Ctx:  ctx,
@@ -265,7 +265,7 @@ func TestPeriodicGC_Cancellation(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
 	db.wg.Add(1)
-	go db.periodicallyCollectGarbage(logger, 10*time.Hour)
+	go db.periodicallyCollectGarbage(10 * time.Hour)
 
 	cancel()
 	done := make(chan struct{})

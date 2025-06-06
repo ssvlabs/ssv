@@ -57,7 +57,8 @@ func (ods *operatorDataStore) GetOperatorID() spectypes.OperatorID {
 	return ods.operatorData.ID
 }
 
-// OperatorIDReady checks if the operator ID is ready.
+// OperatorIDReady returns true when the node has processed its own OperatorAdded event.
+// If false, the node is either still syncing or running as a full node (exporter).
 func (ods *operatorDataStore) OperatorIDReady() bool {
 	ods.operatorDataMu.RLock()
 	defer ods.operatorDataMu.RUnlock()

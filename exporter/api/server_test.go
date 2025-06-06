@@ -19,11 +19,11 @@ import (
 
 func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx, cancelServerCtx := context.WithCancel(context.Background())
+	ctx, cancelServerCtx := context.WithCancel(t.Context())
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, func(logger *zap.Logger, nm *NetworkMessage) {
+	ws := NewWsServer(ctx, zap.NewNop(), func(nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
-			{PublicKey: []byte(fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From))},
+			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
 	}, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
@@ -35,12 +35,12 @@ func TestHandleQuery(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 			wg.Done()
 		}()
-		require.NoError(t, ws.Start(logger, addr))
+		require.NoError(t, ws.Start(addr))
 	}()
 	wg.Wait()
 
 	clientCtx, cancelClientCtx := context.WithCancel(ctx)
-	client := NewWSClient(clientCtx)
+	client := NewWSClient(clientCtx, logger)
 	wg.Add(1)
 	go func() {
 		// sleep so client setup will be finished
@@ -61,7 +61,7 @@ func TestHandleQuery(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}()
-		require.NoError(t, client.StartQuery(logger, addr, "/query"))
+		require.NoError(t, client.StartQuery(addr, "/query"))
 	}()
 
 	wg.Wait()
@@ -73,21 +73,22 @@ func TestHandleQuery(t *testing.T) {
 
 func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx := context.Background()
+	ctx := context.Background() // t.Context() breaks the test
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, nil, mux, false).(*wsServer)
+	ws := NewWsServer(ctx, zap.NewNop(), nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
 	go func() {
-		require.NoError(t, ws.Start(logger, addr))
+		require.NoError(t, ws.Start(addr))
 	}()
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
-	client := NewWSClient(testCtx)
+
+	client := NewWSClient(testCtx, logger)
 	go func() {
 		// sleep so setup will be finished
 		time.Sleep(100 * time.Millisecond)
-		require.NoError(t, client.StartStream(logger, addr, "/stream"))
+		require.NoError(t, client.StartStream(addr, "/stream"))
 	}()
 
 	go func() {
@@ -98,7 +99,7 @@ func TestHandleStream(t *testing.T) {
 
 		msg2 := newTestMessage()
 		msg2.Data = []registrystorage.OperatorData{
-			{PublicKey: []byte("pubkey-operator")},
+			{PublicKey: "pubkey-operator"},
 		}
 		ws.out.Send(msg2)
 

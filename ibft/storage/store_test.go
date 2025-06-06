@@ -35,7 +35,7 @@ func TestRemoveSlot(t *testing.T) {
 	role := spectypes.BNRoleAttester
 
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(db, role))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -78,7 +78,7 @@ func TestRemoveSlot(t *testing.T) {
 	t.Run("remove slot older than", func(t *testing.T) {
 		threshold := phase0.Slot(100)
 
-		count := storage.removeSlotsOlderThan(zap.NewNop(), threshold)
+		count := storage.removeSlotsOlderThan(threshold)
 		require.Equal(t, 100, count)
 
 		pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(250))
@@ -116,7 +116,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	role := spectypes.BNRoleAttester
 
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(db, role))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -174,7 +174,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	}
 
 	// test
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	ctrl := gomock.NewController(t)
 	ticker := mockslotticker.NewMockSlotTicker(ctrl)
@@ -196,7 +196,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	}
 
 	// initial cleanup removes ALL slots below 3
-	storage.Prune(ctx, zap.NewNop(), 3)
+	storage.Prune(ctx, 3)
 
 	pp, err := storage.GetAllParticipantsInRange(phase0.Slot(0), phase0.Slot(10))
 	require.Nil(t, err)
@@ -214,7 +214,7 @@ func TestSlotCleanupJob(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		storage.PruneContinously(ctx, zap.NewNop(), tickerProv, 1)
+		storage.PruneContinously(ctx, tickerProv, 1)
 	}()
 
 	mockTimeChan <- time.Now()

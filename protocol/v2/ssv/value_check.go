@@ -10,16 +10,18 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func dutyValueCheck(
 	duty *spectypes.ValidatorDuty,
-	network spectypes.BeaconNetwork,
+	beaconConfig networkconfig.Beacon,
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 ) error {
-	if network.EstimatedEpochAtSlot(duty.Slot) > network.EstimatedCurrentEpoch()+1 {
+	if beaconConfig.EstimatedEpochAtSlot(duty.Slot) > beaconConfig.EstimatedCurrentEpoch()+1 {
 		return errors.New("duty epoch is into far future")
 	}
 
@@ -80,7 +82,7 @@ func BeaconVoteValueCheckF(
 
 func ProposerValueCheckF(
 	signer ekm.BeaconSigner,
-	network spectypes.BeaconNetwork,
+	beaconConfig networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 	sharePublicKey phase0.BLSPubKey,
@@ -94,7 +96,7 @@ func ProposerValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if err := dutyValueCheck(&cd.Duty, network, spectypes.BNRoleProposer, validatorPK, validatorIndex); err != nil {
+		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleProposer, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
 
@@ -119,7 +121,7 @@ func ProposerValueCheckF(
 
 func AggregatorValueCheckF(
 	signer ekm.BeaconSigner,
-	network spectypes.BeaconNetwork,
+	beaconConfig networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 ) specqbft.ProposedValueCheckF {
@@ -132,7 +134,7 @@ func AggregatorValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if err := dutyValueCheck(&cd.Duty, network, spectypes.BNRoleAggregator, validatorPK, validatorIndex); err != nil {
+		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleAggregator, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
 		return nil
@@ -141,7 +143,7 @@ func AggregatorValueCheckF(
 
 func SyncCommitteeContributionValueCheckF(
 	signer ekm.BeaconSigner,
-	network spectypes.BeaconNetwork,
+	beaconConfig networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 ) specqbft.ProposedValueCheckF {
@@ -154,7 +156,7 @@ func SyncCommitteeContributionValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if err := dutyValueCheck(&cd.Duty, network, spectypes.BNRoleSyncCommitteeContribution, validatorPK, validatorIndex); err != nil {
+		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleSyncCommitteeContribution, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
 

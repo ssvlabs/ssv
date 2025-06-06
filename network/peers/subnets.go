@@ -10,15 +10,14 @@ import (
 
 // subnetsIndex implements SubnetsIndex
 type subnetsIndex struct {
-	subnets     [][]peer.ID
+	subnets     [commons.SubnetsCount][]peer.ID
 	peerSubnets map[peer.ID]commons.Subnets
 
 	lock *sync.RWMutex
 }
 
-func NewSubnetsIndex(count int) SubnetsIndex {
+func NewSubnetsIndex() SubnetsIndex {
 	return &subnetsIndex{
-		subnets:     make([][]peer.ID, count),
 		peerSubnets: map[peer.ID]commons.Subnets{},
 		lock:        &sync.RWMutex{},
 	}
@@ -29,48 +28,42 @@ func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s commons.Subnets) bool {
 	defer si.lock.Unlock()
 
 	existing, ok := si.peerSubnets[id]
+	var addedSubnets, removedSubnets commons.Subnets
 	if !ok {
-		existing = make([]byte, 0)
+		// New peer: all subnets in 's' are additions
+		addedSubnets = s
+		// No subnets were previously set, so no removals
+		removedSubnets = commons.ZeroSubnets
+	} else {
+		// Existing peer: compute diffs
+		addedSubnets, removedSubnets = existing.DiffSubnets(s)
 	}
-	diff := commons.DiffSubnets(existing, s)
-	if len(diff) == 0 {
+
+	// Determine if any changes occurred (additions or removals)
+	hasChanges := !ok || addedSubnets.ActiveCount() > 0 || removedSubnets.ActiveCount() > 0
+	if !hasChanges {
 		return false
 	}
+
+	// Update the peer's subnets
 	si.peerSubnets[id] = s
 
-diffLoop:
-	for subnet, val := range diff {
-		if subnet >= len(si.subnets) { // out of range
-			continue
+	// Update subnet-peer mappings
+	for subnet := uint64(0); subnet < commons.SubnetsCount; subnet++ {
+		if addedSubnets.IsSet(subnet) {
+			// Add peer to the subnet
+			si.subnets[subnet] = append(si.subnets[subnet], id)
 		}
-		peers := si.subnets[subnet]
-		if len(peers) == 0 {
-			peers = make([]peer.ID, 0)
-		}
-		for i, p := range peers {
-			if p == id {
-				// skip if peer is already listed in a subnet to be added
-				if val > byte(0) {
-					continue diffLoop
+		if removedSubnets.IsSet(subnet) {
+			// Remove peer from the subnet
+			peers := si.subnets[subnet]
+			for i, p := range peers {
+				if p == id {
+					// Remove peer from slice
+					si.subnets[subnet] = append(peers[:i], peers[i+1:]...)
+					break
 				}
-				// otherwise, remove peer from the subnet
-				if i == 0 {
-					if len(peers) == 1 {
-						si.subnets[subnet] = make([]peer.ID, 0)
-					} else {
-						// #nosec
-						// False positive by the linter, it says potential out of bounds,
-						// but it can't be because we're inside a for on `peers`.
-						si.subnets[subnet] = peers[1:]
-					}
-					continue diffLoop
-				}
-				si.subnets[subnet] = append(peers[:i], peers[i+1:]...)
-				continue diffLoop
 			}
-		}
-		if val > byte(0) {
-			si.subnets[subnet] = append(peers, id)
 		}
 	}
 	return true
@@ -94,9 +87,7 @@ func (si *subnetsIndex) GetSubnetsStats() *SubnetsStats {
 	si.lock.RLock()
 	defer si.lock.RUnlock()
 
-	stats := &SubnetsStats{
-		PeersCount: make([]int, len(si.subnets)),
-	}
+	stats := &SubnetsStats{}
 	for subnet, peers := range si.subnets {
 		stats.PeersCount[subnet] = len(peers)
 	}
@@ -104,32 +95,30 @@ func (si *subnetsIndex) GetSubnetsStats() *SubnetsStats {
 	return stats
 }
 
-func (si *subnetsIndex) GetPeerSubnets(id peer.ID) commons.Subnets {
+func (si *subnetsIndex) GetPeerSubnets(id peer.ID) (commons.Subnets, bool) {
 	si.lock.RLock()
 	defer si.lock.RUnlock()
 
 	subnets, ok := si.peerSubnets[id]
 	if !ok {
-		return make(commons.Subnets, commons.SubnetsCount)
+		return commons.ZeroSubnets, false
 	}
-	cp := make(commons.Subnets, len(subnets))
-	copy(cp, subnets)
-	return cp
+
+	return subnets, true
 }
 
 // GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
 // subnets with low peer count would get higher score, and overloaded subnets gets a lower score (possibly negative).
 // Subnets in which the node doesn't participate receive a score of 0.
-func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets commons.Subnets, topicMaxPeers int) []float64 {
+func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets commons.Subnets, topicMaxPeers int) [commons.SubnetsCount]float64 {
 	const activeSubnetBoost = 0.2
 
-	allSubs, _ := commons.FromString(commons.AllSubnets)
-	activeSubnets := commons.SharedSubnets(allSubs, mySubnets, 0)
+	activeSubnets := commons.AllSubnets.SharedSubnets(mySubnets)
 
-	scores := make([]float64, len(allSubs))
+	var scores [commons.SubnetsCount]float64
 	for _, s := range activeSubnets {
 		var connected int
-		if s < len(stats.Connected) {
+		if s < uint64(len(stats.Connected)) {
 			connected = stats.Connected[s]
 		}
 		scores[s] = activeSubnetBoost + scoreSubnet(connected, minPerSubnet, topicMaxPeers)

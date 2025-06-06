@@ -2,6 +2,7 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
@@ -43,7 +44,7 @@ const rawValidatorAdded = `{
 
 func TestExecuteTask(t *testing.T) {
 	logger, _ := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	// Create operators rsa keys
 
@@ -101,7 +102,7 @@ func TestExecuteTask(t *testing.T) {
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	logger, observedLogs := setupLogsCapture()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	// Create operators rsa keys
@@ -115,7 +116,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 
 	for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 		od := &storage.OperatorData{
-			PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
+			PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, id)),
 			OwnerAddress: ethcommon.Address{},
 			ID:           id,
 		}

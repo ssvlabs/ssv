@@ -1,7 +1,6 @@
 package connections
 
 import (
-	"context"
 	"testing"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -49,7 +48,7 @@ func getTestingData(t *testing.T) TestData {
 			NodeVersion:   "some-node-version",
 			ExecutionNode: "some-execution-node",
 			ConsensusNode: "some-consensus-node",
-			Subnets:       commons.AllSubnets,
+			Subnets:       commons.AllSubnets.String(),
 		},
 	}
 
@@ -60,7 +59,7 @@ func getTestingData(t *testing.T) TestData {
 				NodeVersion:   "test-node-version",
 				ExecutionNode: "test-execution-node",
 				ConsensusNode: "test-consensus-node",
-				Subnets:       commons.AllSubnets,
+				Subnets:       commons.AllSubnets.String(),
 			},
 		},
 		MockSelfSealed: []byte("something"),
@@ -90,10 +89,10 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:        context.Background(),
+		ctx:        t.Context(),
 		nodeInfos:  nii,
 		peerInfos:  ns,
-		subnetsIdx: peers.NewSubnetsIndex(commons.SubnetsCount),
+		subnetsIdx: peers.NewSubnetsIndex(),
 		ids:        ids,
 		net:        net,
 		streams:    sc,

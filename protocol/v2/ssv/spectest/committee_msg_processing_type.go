@@ -19,6 +19,7 @@ import (
 
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
@@ -186,9 +187,9 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
-	//for _, r := range committee.Runners {
-	//	r.BaseRunner.BeaconNetwork = spectypes.BeaconTestNetwork
-	//}
+	for _, r := range committee.Runners {
+		r.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	}
 
 	root, err := committee.GetRoot()
 	require.NoError(t, err)

@@ -39,11 +39,12 @@ type SubnetsProvider func() commons.Subnets
 // we accept nodes with user agent as a fallback when the new protocol is not supported.
 type Handshaker interface {
 	Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error
-	Handler(logger *zap.Logger) libp2pnetwork.StreamHandler
+	Handler() libp2pnetwork.StreamHandler
 }
 
 type handshaker struct {
-	ctx context.Context
+	ctx    context.Context
+	logger *zap.Logger
 
 	filters func() []HandshakeFilter
 
@@ -74,9 +75,10 @@ type HandshakerCfg struct {
 }
 
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []HandshakeFilter) Handshaker {
+func NewHandshaker(ctx context.Context, logger *zap.Logger, cfg *HandshakerCfg, filters func() []HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:             ctx,
+		logger:          logger,
 		streams:         cfg.Streams,
 		nodeInfos:       cfg.NodeInfos,
 		connIdx:         cfg.ConnIdx,
@@ -92,7 +94,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []Han
 }
 
 // Handler returns the handshake handler
-func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
+func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 	handleHandshake := func(logger *zap.Logger, h *handshaker, stream libp2pnetwork.Stream) error {
 		pid := stream.Conn().RemotePeer()
 		request, respond, done, err := h.streams.HandleStream(logger, stream)
@@ -127,7 +129,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 
 	return func(stream libp2pnetwork.Stream) {
 		pid := stream.Conn().RemotePeer()
-		logger := logger.With(fields.PeerID(pid))
+		logger := h.logger.With(fields.PeerID(pid))
 
 		// Update PeerInfo with the result of this handshake.
 		var err error
@@ -198,7 +200,7 @@ func (h *handshaker) updatePeerInfo(pid peer.ID, handshakeErr error) {
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
 	if ni.Metadata != nil {
-		subnets, err := commons.FromString(ni.Metadata.Subnets)
+		subnets, err := commons.SubnetsFromString(ni.Metadata.Subnets)
 		if err == nil {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {

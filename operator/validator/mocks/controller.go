@@ -444,17 +444,17 @@ func (mr *MockP2PNetworkMockRecorder) FixedSubnets() *gomock.Call {
 }
 
 // SubscribeRandoms mocks base method.
-func (m *MockP2PNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+func (m *MockP2PNetwork) SubscribeRandoms(numSubnets int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeRandoms", logger, numSubnets)
+	ret := m.ctrl.Call(m, "SubscribeRandoms", numSubnets)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubscribeRandoms indicates an expected call of SubscribeRandoms.
-func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(logger, numSubnets any) *gomock.Call {
+func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(numSubnets any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeRandoms", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeRandoms), logger, numSubnets)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeRandoms", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeRandoms), numSubnets)
 }
 
 // UseMessageRouter mocks base method.

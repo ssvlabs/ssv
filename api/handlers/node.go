@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -129,7 +128,7 @@ func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
-	ctx := context.Background()
+	ctx := r.Context()
 	var resp healthCheckJSON
 
 	// Retrieve P2P listen addresses.
@@ -170,10 +169,12 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) peers(peers []peer.ID) []peerJSON {
 	resp := make([]peerJSON, len(peers))
 	for i, id := range peers {
+		subnets, _ := h.PeersIndex.GetPeerSubnets(id)
+
 		resp[i] = peerJSON{
 			ID:            id,
 			Connectedness: h.Network.Connectedness(id).String(),
-			Subnets:       h.PeersIndex.GetPeerSubnets(id).String(),
+			Subnets:       subnets.String(),
 		}
 
 		for _, addr := range h.Network.Peerstore().Addrs(id) {

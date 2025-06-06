@@ -42,7 +42,7 @@ type Options struct {
 	SubnetsIdx          peers.SubnetsIndex
 	HostAddress         string
 	HostDNS             string
-	NetworkConfig       networkconfig.NetworkConfig
+	SSVConfig           networkconfig.SSVConfig
 	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
 	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
 }
@@ -51,10 +51,10 @@ type Options struct {
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
-	DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
-	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
-	PublishENR(logger *zap.Logger)
+	RegisterSubnets(subnets ...uint64) (updated bool, err error)
+	DeregisterSubnets(subnets ...uint64) (updated bool, err error)
+	Bootstrap(handler HandleNewPeer) error
+	PublishENR()
 }
 
 // NewService creates new discovery.Service

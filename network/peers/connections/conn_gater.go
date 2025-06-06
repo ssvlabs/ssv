@@ -24,7 +24,7 @@ const (
 	ipLimitPeriod = 30 * time.Second
 )
 
-type IsBadPeerF func(logger *zap.Logger, peerID peer.ID) bool
+type IsBadPeerF func(peerID peer.ID) bool
 type AtInboundLimitF func() bool
 
 // connGater implements ConnectionGater interface:
@@ -70,7 +70,7 @@ func (n *connGater) InterceptPeerDial(id peer.ID) bool {
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
 func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
-	if n.isBadPeer(n.logger, id) {
+	if n.isBadPeer(id) {
 		n.logger.Debug("preventing outbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}
@@ -111,7 +111,7 @@ func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.
 		return false
 	}
 
-	if n.isBadPeer(n.logger, id) {
+	if n.isBadPeer(id) {
 		n.logger.Debug("rejecting inbound connection due to bad peer", fields.PeerID(id))
 		return false
 	}

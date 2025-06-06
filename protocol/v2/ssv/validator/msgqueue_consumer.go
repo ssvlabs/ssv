@@ -7,9 +7,12 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
@@ -28,24 +31,36 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (v *Validator) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+func (v *Validator) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+	traceCtx, dutyID := v.fetchTraceContext(ctx, msg.GetID())
+	ctx, span := tracer.Start(traceCtx,
+		observability.InstrumentName(observabilityNamespace, "handle_message"),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.ValidatorMsgTypeAttribute(msg.GetType()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.DutyIDAttribute(dutyID),
+		))
+	defer span.End()
+
+	msg.TraceContext = ctx
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
-
-	// logger.Debug("📬 handling SSV message",
-	// 	zap.Uint64("type", uint64(msg.MsgType)),
-	// 	fields.Role(msg.MsgID.GetRoleType()))
-
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
+		span.AddEvent("pushing message to queue")
 		if pushed := q.Q.TryPush(msg); !pushed {
-			msgID := msg.MsgID.String()
-			logger.Warn("❗ dropping message because the queue is full",
+			const eventMsg = "❗ dropping message because the queue is full"
+			logger.Warn(eventMsg,
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msg_id", msgID))
+				zap.String("msg_id", msg.MsgID.String()))
+
+			span.AddEvent(eventMsg)
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		span.SetStatus(codes.Ok, "")
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
+		const errMsg = "❌ missing queue for role type"
+		logger.Error(errMsg, fields.Role(msg.MsgID.GetRoleType()))
+		span.SetStatus(codes.Error, errMsg)
 	}
 }
 

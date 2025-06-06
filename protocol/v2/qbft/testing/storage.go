@@ -39,5 +39,5 @@ var allRoles = []spectypes.BeaconRole{
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.ParticipantStores {
-	return qbftstorage.NewStoresFromRoles(getDB(logger), allRoles...)
+	return qbftstorage.NewStoresFromRoles(logger, getDB(logger), allRoles...)
 }
