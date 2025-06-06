@@ -79,7 +79,7 @@ func NewRemoteKeyManager(
 	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx) // TODO: use context
+	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
 	}
