@@ -19,17 +19,16 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/networkconfig"
-
 	"github.com/ssvlabs/ssv/ssvsigner"
 )
 
-var testNetCfg = networkconfig.TestRealNetwork.BeaconConfig // using a real network config because https://github.com/ssvlabs/eth2-key-manager doesn't support min genesis time for networkconfig.TestNetwork
+var testNetCfg = networkconfig.TestNetwork.BeaconConfig
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite

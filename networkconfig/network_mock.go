@@ -15,8 +15,9 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/ssvlabs/ssv-spec/types"
 	gomock "go.uber.org/mock/gomock"
+
+	types "github.com/ssvlabs/ssv-spec/types"
 )
 
 // MockNetwork is a mock of Network interface.

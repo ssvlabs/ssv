@@ -7,8 +7,8 @@ import (
 	"slices"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 

@@ -11,10 +11,11 @@ import (
 	"testing"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {

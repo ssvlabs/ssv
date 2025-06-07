@@ -6,8 +6,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -15,6 +13,7 @@ import (
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 const (
@@ -36,6 +35,7 @@ type Options struct {
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
 	Exporter            bool
+	ExporterFull        bool // enables duty tracing
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
