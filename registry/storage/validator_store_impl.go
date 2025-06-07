@@ -1208,3 +1208,62 @@ func (s *validatorStoreImpl) createSnapshot(state *validatorState) *ValidatorSna
 		ParticipationStatus: state.participationStatus,
 	}
 }
+
+// GetSelfValidators returns snapshots of all validators belonging to the current operator.
+func (s *validatorStoreImpl) GetSelfValidators() []*ValidatorSnapshot {
+	return s.GetOperatorValidators(s.operatorID)
+}
+
+// GetSelfParticipatingValidators returns validators belonging to the current operator that are participating.
+func (s *validatorStoreImpl) GetSelfParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var snapshots []*ValidatorSnapshot
+	operatorID := s.operatorID
+
+	for _, state := range s.validators {
+		// Quick check for operator ID
+		if !state.share.BelongsToOperator(operatorID) {
+			continue
+		}
+
+		// Check liquidation filter
+		if state.share.Liquidated && !opts.IncludeLiquidated {
+			continue
+		}
+
+		// Check exit filter
+		if state.share.Exited() && !opts.IncludeExited {
+			continue
+		}
+
+		// Check attesting filter
+		if opts.OnlyAttesting && !state.share.IsAttesting(epoch) {
+			continue
+		}
+
+		// Check sync committee filter
+		if opts.OnlySyncCommittee {
+			period := s.beaconCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			if !s.isInSyncCommittee(state.share.ValidatorIndex, period) {
+				continue
+			}
+		}
+
+		// Check if participating (unless filtered out above)
+		if state.participationStatus.IsParticipating || opts.IncludeLiquidated || opts.IncludeExited {
+			snapshots = append(snapshots, s.createSnapshot(state))
+		}
+	}
+	return snapshots
+}
+
+// WithOperatorID returns a legacy adapter that provides backward compatibility
+// for existing consumers that expect SSVShare pointers instead of ValidatorSnapshots.
+func (s *validatorStoreImpl) WithOperatorID(operatorIDFn func() spectypes.OperatorID) LegacyValidatorProvider {
+	return &legacyValidatorAdapter{
+		store:        s,
+		operatorIDFn: operatorIDFn,
+	}
+}

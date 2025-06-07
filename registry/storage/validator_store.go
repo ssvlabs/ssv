@@ -42,6 +42,20 @@ type ValidatorStore interface {
 	// UpdateValidatorsMetadata updates the metadata for multiple validators.
 	// Returns only the metadata that actually changed the stored shares.
 	UpdateValidatorsMetadata(ctx context.Context, metadata beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error)
+
+	GetSelfValidators() []*ValidatorSnapshot
+	GetSelfParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot
+
+	// TODO: this shit is for legacy compatibility, will be removed later
+	WithOperatorID(operatorID func() spectypes.OperatorID) LegacyValidatorProvider
+}
+
+// LegacyValidatorProvider provides backward compatibility for existing consumers
+// that expect the old interface with SSVShare pointers instead of ValidatorSnapshots
+type LegacyValidatorProvider interface {
+	OperatorValidators(operatorID spectypes.OperatorID) []*types.SSVShare
+	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	Validator(pubKey []byte) (*types.SSVShare, bool)
 }
 
 // ParticipationOptions filters participating validators.
