@@ -53,6 +53,7 @@ type ProposerRunner struct {
 }
 
 func NewProposerRunner(
+	logger *zap.Logger,
 	networkConfig networkconfig.Network,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
@@ -75,6 +76,11 @@ func NewProposerRunner(
 	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration
 	const maxReasonableProposerDelay = 1650 * time.Millisecond
 	if proposerDelay > maxReasonableProposerDelay {
+		logger.Warn(
+			"ProposerDelay value set is too high, capping it at max reasonable proposer delay value",
+			zap.Duration("proposer_delay", proposerDelay),
+			zap.Duration("max_reasonable_proposer_delay", maxReasonableProposerDelay),
+		)
 		proposerDelay = maxReasonableProposerDelay
 	}
 
@@ -157,7 +163,11 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	slotStartTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
 	timeIntoSlot := max(time.Since(slotStartTime), 0)
 	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
-	time.Sleep(proposerDelayAdjusted)
+	select {
+	case <-time.After(proposerDelayAdjusted):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
