@@ -33,7 +33,7 @@ type CommitteeObserver struct {
 	logger            *zap.Logger
 	Storage           *storage.ParticipantStores
 	beaconConfig      networkconfig.Beacon
-	ValidatorStore    registrystorage.ValidatorStore
+	ValidatorStore    registrystorage.ValidatorIndices
 	newDecidedHandler qbftcontroller.NewDecidedHandler
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
@@ -62,7 +62,7 @@ type CommitteeObserverOptions struct {
 	Operator          *spectypes.CommitteeMember
 	OperatorSigner    ssvtypes.OperatorSigner
 	NewDecidedHandler qbftcontroller.NewDecidedHandler
-	ValidatorStore    registrystorage.ValidatorStore
+	ValidatorStore    registrystorage.ValidatorIndices
 	AttesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	SyncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	BeaconVoteRoots   *ttlcache.Cache[BeaconVoteCacheKey, struct{}]

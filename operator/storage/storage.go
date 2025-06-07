@@ -18,14 +18,15 @@ import (
 )
 
 var (
-	OperatorStoragePrefix = []byte("operator/")
+	// OperatorStoragePrefix defines the prefix for operator related data.
+	OperatorStoragePrefix = []byte("operator_")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
 	configKey             = []byte("config")
 	hashedPrivkeyDBKey    = "hashed-private-key"
 	pubkeyDBKey           = "public-key"
 )
 
-// Storage represents the interface for ssv node storage
+// Storage defines the minimal interface for node storage
 type Storage interface {
 	// TODO: de-anonymize the sub-storages, like Shares() below
 
@@ -64,17 +65,21 @@ type storage struct {
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db basedb.Database) (Storage, error) {
+func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db basedb.Database, operatorID spectypes.OperatorID) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,
 		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, OperatorStoragePrefix),
 		recipientStore: registrystorage.NewRecipientsStorage(logger, db, OperatorStoragePrefix),
 	}
-
 	var err error
 
-	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(beaconCfg, db, OperatorStoragePrefix)
+	stg.shareStore, err = registrystorage.NewSharesStorage(db, OperatorStoragePrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	stg.validatorStore, err = registrystorage.NewValidatorStore(logger, stg.shareStore, stg.operatorStore, beaconCfg, operatorID)
 	if err != nil {
 		return nil, err
 	}
