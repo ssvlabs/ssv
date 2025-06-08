@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"context"
 	"encoding/binary"
 	"testing"
 
@@ -29,7 +28,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	dutyStore := store.New(db)
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
-	collector := New(context.TODO(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -136,7 +135,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
-	collector := New(context.TODO(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -313,7 +312,7 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
 
-	collector := New(context.TODO(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
 	slot4 := phase0.Slot(4)
 

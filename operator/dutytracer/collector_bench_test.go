@@ -54,7 +54,7 @@ func BenchmarkTracer(b *testing.B) {
 
 			b.ResetTimer()
 			for b.Loop() {
-				ctx, cancel := context.WithCancel(context.Background())
+				ctx, cancel := context.WithCancel(b.Context())
 				collector := New(ctx, zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
 				var wg sync.WaitGroup
@@ -62,7 +62,7 @@ func BenchmarkTracer(b *testing.B) {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
-						_ = collector.Collect(context.Background(), msg, dummyVerify)
+						_ = collector.Collect(b.Context(), msg, dummyVerify)
 					}()
 				}
 				wg.Wait()
