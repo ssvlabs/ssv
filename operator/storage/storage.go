@@ -11,7 +11,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -45,7 +44,6 @@ type Storage interface {
 	registrystorage.Operators
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
-	ValidatorStore() registrystorage.ValidatorStore
 
 	GetPrivateKeyHash() (string, bool, error)
 	SavePrivateKeyHash(privKeyHash string) error
@@ -61,11 +59,11 @@ type storage struct {
 	operatorStore  registrystorage.Operators
 	recipientStore registrystorage.Recipients
 	shareStore     registrystorage.Shares
-	validatorStore registrystorage.ValidatorStore
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db basedb.Database, operatorID spectypes.OperatorID) (Storage, error) {
+// TODO: inject registrystorage
+func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,
@@ -75,11 +73,6 @@ func NewNodeStorage(beaconCfg networkconfig.Beacon, logger *zap.Logger, db based
 	var err error
 
 	stg.shareStore, err = registrystorage.NewSharesStorage(db, OperatorStoragePrefix)
-	if err != nil {
-		return nil, err
-	}
-
-	stg.validatorStore, err = registrystorage.NewValidatorStore(logger, stg.shareStore, stg.operatorStore, beaconCfg, operatorID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,10 +90,6 @@ func (s *storage) BeginRead() basedb.ReadTxn {
 
 func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
-}
-
-func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
-	return s.validatorStore
 }
 
 func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {

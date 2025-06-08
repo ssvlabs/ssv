@@ -45,9 +45,6 @@ type ValidatorStore interface {
 
 	GetSelfValidators() []*ValidatorSnapshot
 	GetSelfParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot
-
-	// TODO: this shit is for legacy compatibility, will be removed later
-	WithOperatorID(operatorID func() spectypes.OperatorID) LegacyValidatorProvider
 }
 
 // LegacyValidatorProvider provides backward compatibility for existing consumers

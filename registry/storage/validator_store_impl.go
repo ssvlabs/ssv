@@ -30,7 +30,7 @@ type validatorStoreImpl struct {
 	sharesStorage    Shares
 	operatorsStorage Operators
 	beaconCfg        networkconfig.Beacon
-	operatorID       spectypes.OperatorID
+	operatorIDFn     func() spectypes.OperatorID
 
 	mu         sync.RWMutex
 	validators map[string]*validatorState
@@ -64,14 +64,14 @@ func NewValidatorStore(
 	sharesStorage Shares,
 	operatorsStorage Operators,
 	beaconCfg networkconfig.Beacon,
-	operatorID spectypes.OperatorID,
+	operatorIDFn func() spectypes.OperatorID,
 ) (ValidatorStore, error) {
 	s := &validatorStoreImpl{
 		logger:           logger.Named("validator_store"),
 		sharesStorage:    sharesStorage,
 		operatorsStorage: operatorsStorage,
 		beaconCfg:        beaconCfg,
-		operatorID:       operatorID,
+		operatorIDFn:     operatorIDFn,
 		validators:       make(map[string]*validatorState),
 		committees:       make(map[spectypes.CommitteeID]*committeeState),
 		indices:          make(map[phase0.ValidatorIndex]spectypes.ValidatorPK),
@@ -608,7 +608,7 @@ func (s *validatorStoreImpl) OnValidatorExited(ctx context.Context, pubKey spect
 			PubKey:         phase0.BLSPubKey(pubKey),
 			ValidatorIndex: state.share.ValidatorIndex,
 			BlockNumber:    blockNumber,
-			OwnValidator:   state.share.BelongsToOperator(s.operatorID),
+			OwnValidator:   state.share.BelongsToOperator(s.operatorIDFn()),
 		}
 		go func(desc duties.ExitDescriptor) {
 			if err := s.callbacks.OnValidatorExited(ctx, desc); err != nil {
@@ -1192,7 +1192,7 @@ func (s *validatorStoreImpl) calculateParticipationStatus(share *types.SSVShare)
 // Criteria include belonging to the operator, being in a participating state,
 // and having met its minimum participation epoch.
 func (s *validatorStoreImpl) shouldStart(state *validatorState) bool {
-	return state.share.BelongsToOperator(s.operatorID) &&
+	return state.share.BelongsToOperator(s.operatorIDFn()) &&
 		state.participationStatus.IsParticipating &&
 		state.participationStatus.MinParticipationMet
 }
@@ -1204,14 +1204,14 @@ func (s *validatorStoreImpl) createSnapshot(state *validatorState) *ValidatorSna
 	return &ValidatorSnapshot{
 		Share:               *s.copyShare(state.share),
 		LastUpdated:         state.lastUpdated,
-		IsOwnValidator:      state.share.BelongsToOperator(s.operatorID),
+		IsOwnValidator:      state.share.BelongsToOperator(s.operatorIDFn()),
 		ParticipationStatus: state.participationStatus,
 	}
 }
 
 // GetSelfValidators returns snapshots of all validators belonging to the current operator.
 func (s *validatorStoreImpl) GetSelfValidators() []*ValidatorSnapshot {
-	return s.GetOperatorValidators(s.operatorID)
+	return s.GetOperatorValidators(s.operatorIDFn())
 }
 
 // GetSelfParticipatingValidators returns validators belonging to the current operator that are participating.
@@ -1220,7 +1220,7 @@ func (s *validatorStoreImpl) GetSelfParticipatingValidators(epoch phase0.Epoch, 
 	defer s.mu.RUnlock()
 
 	var snapshots []*ValidatorSnapshot
-	operatorID := s.operatorID
+	operatorID := s.operatorIDFn()
 
 	for _, state := range s.validators {
 		// Quick check for operator ID
@@ -1257,13 +1257,4 @@ func (s *validatorStoreImpl) GetSelfParticipatingValidators(epoch phase0.Epoch, 
 		}
 	}
 	return snapshots
-}
-
-// WithOperatorID returns a legacy adapter that provides backward compatibility
-// for existing consumers that expect SSVShare pointers instead of ValidatorSnapshots.
-func (s *validatorStoreImpl) WithOperatorID(operatorIDFn func() spectypes.OperatorID) LegacyValidatorProvider {
-	return &legacyValidatorAdapter{
-		store:        s,
-		operatorIDFn: operatorIDFn,
-	}
 }

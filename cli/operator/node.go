@@ -178,7 +178,10 @@ var StartNodeCmd = &cobra.Command{
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
 
-		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
+		operaStorage := registrystorage.NewOperatorsStorage(logger, db, operatorstorage.OperatorStoragePrefix)
+		sharesStorage, err := registrystorage.NewSharesStorage(db, operatorstorage.OperatorStoragePrefix)
+
+		nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 		if err != nil {
 			logger.Fatal("failed to create node storage", zap.Error(err))
 		}
@@ -286,6 +289,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
+		validatorStore, err := registrystorage.NewValidatorStore(logger, sharesStorage, operaStorage, networkConfig.BeaconConfig, operatorDataStore.GetOperatorID)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -376,7 +380,7 @@ var StartNodeCmd = &cobra.Command{
 
 		messageValidator := validation.New(
 			networkConfig,
-			nodeStorage.ValidatorStore(),
+			validatorStore, // TODO: update interface
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
@@ -449,7 +453,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
 		cfg.SSVOptions.ValidatorOptions.ProposerDelay = cfg.ProposerDelay
-		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
+		cfg.SSVOptions.ValidatorOptions.ValidatorStore = validatorStore
 
 		fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
 		if err != nil {
@@ -461,8 +465,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metadataSyncer := metadata.NewSyncer(
 			logger,
-			nodeStorage.Shares(),
-			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+			validatorStore, //TODO: selfvalidators
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -474,7 +477,7 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
 				BeaconConfig:       networkConfig.BeaconConfig,
 				BeaconNode:         consensusClient,
-				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
+				ValidatorProvider:  validatorStore, //TODO: SelfParticipatingValidators
 				SlotTickerProvider: slotTickerProvider,
 				Logger:             logger,
 			})
@@ -487,7 +490,7 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
+		cfg.SSVOptions.ValidatorStore = validatorStore
 
 		operatorNode := operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
 
@@ -547,11 +550,11 @@ var StartNodeCmd = &cobra.Command{
 				idealPeersPerSubnet = 3
 			)
 			start := time.Now()
-			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID())
+			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID()) // TODO: how to adjust this line
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
-				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
+				subnet := networkcommons.CommitteeSubnet(v.CommitteeID()) // TODO: it was in the old one?
 				if !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)
 					myActiveSubnets++
