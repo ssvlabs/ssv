@@ -700,18 +700,18 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 }
 
 func validateProposerDelayConfig(logger *zap.Logger) error {
-	const maxReasonableProposerDelay = 1000 * time.Millisecond
+	const maxSafeProposerDelay = 1000 * time.Millisecond
 
-	if cfg.ProposerDelay > maxReasonableProposerDelay {
+	if cfg.ProposerDelay > maxSafeProposerDelay {
 		if !cfg.AllowDangerousProposerDelay {
-			return fmt.Errorf("ProposerDelay value %v exceeds maximum reasonable delay of %v. "+
+			return fmt.Errorf("ProposerDelay value %v exceeds maximum safe delay of %v. "+
 				"This may cause missed block proposals. "+
 				"If you understand the risks and want to proceed, set AllowDangerousProposerDelay to true or use the ALLOW_DANGEROUS_PROPOSER_DELAY environment variable",
-				cfg.ProposerDelay, maxReasonableProposerDelay)
+				cfg.ProposerDelay, maxSafeProposerDelay)
 		}
 		logger.Warn("Using dangerous ProposerDelay value that may cause missed block proposals",
 			zap.Duration("proposer_delay", cfg.ProposerDelay),
-			zap.Duration("max_reasonable_proposer_delay", maxReasonableProposerDelay))
+			zap.Duration("max_safe_proposer_delay", maxSafeProposerDelay))
 	}
 
 	return nil

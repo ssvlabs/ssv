@@ -201,12 +201,17 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 				cfg.ProposerDelay = delay
 				cfg.AllowDangerousProposerDelay = false
 
-				// Create logger
-				logger := zap.New(zapcore.NewNopCore())
+				// Create logger with observer
+				core, recorded := observer.New(zapcore.WarnLevel)
+				logger := zap.New(core)
 
 				// Should not return error
 				err := validateProposerDelayConfig(logger)
 				require.NoError(t, err)
+
+				// Should not have any warning logs
+				logs := recorded.All()
+				require.Len(t, logs, 0)
 			})
 		}
 	})
@@ -228,16 +233,21 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 				cfg.ProposerDelay = delay
 				cfg.AllowDangerousProposerDelay = false
 
-				// Create logger
-				logger := zap.New(zapcore.NewNopCore())
+				// Create logger with observer to capture logs
+				core, recorded := observer.New(zapcore.WarnLevel)
+				logger := zap.New(core)
 
 				// Should return error
 				err := validateProposerDelayConfig(logger)
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "ProposerDelay value")
-				require.Contains(t, err.Error(), "exceeds maximum reasonable delay")
+				require.Contains(t, err.Error(), "exceeds maximum safe delay")
 				require.Contains(t, err.Error(), "AllowDangerousProposerDelay")
 				require.Contains(t, err.Error(), "ALLOW_DANGEROUS_PROPOSER_DELAY")
+
+				// Should not have logged a warning
+				logs := recorded.All()
+				require.Len(t, logs, 0)
 			})
 		}
 	})
@@ -277,50 +287,10 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 				// Check log fields
 				fields := logs[0].ContextMap()
 				require.Contains(t, fields, "proposer_delay")
-				require.Contains(t, fields, "max_reasonable_proposer_delay")
+				require.Contains(t, fields, "max_safe_proposer_delay")
 				require.Equal(t, delay, fields["proposer_delay"])
-				require.Equal(t, 1000*time.Millisecond, fields["max_reasonable_proposer_delay"])
+				require.Equal(t, 1000*time.Millisecond, fields["max_safe_proposer_delay"])
 			})
 		}
-	})
-
-	t.Run("edge case - exactly at limit", func(t *testing.T) {
-		// Save original config
-		originalCfg := cfg
-		defer func() { cfg = originalCfg }()
-
-		// Setup test config with exactly 1s
-		cfg.ProposerDelay = 1000 * time.Millisecond
-		cfg.AllowDangerousProposerDelay = false
-
-		// Create logger with observer
-		core, recorded := observer.New(zapcore.WarnLevel)
-		logger := zap.New(core)
-
-		// Should not return error and should not log warning
-		err := validateProposerDelayConfig(logger)
-		require.NoError(t, err)
-
-		// Should not have any warning logs
-		logs := recorded.All()
-		require.Len(t, logs, 0)
-	})
-
-	t.Run("exactly over limit by 1ms", func(t *testing.T) {
-		// Save original config
-		originalCfg := cfg
-		defer func() { cfg = originalCfg }()
-
-		// Setup test config with 1001ms (1ms over limit)
-		cfg.ProposerDelay = 1001 * time.Millisecond
-		cfg.AllowDangerousProposerDelay = false
-
-		// Create logger
-		logger := zap.New(zapcore.NewNopCore())
-
-		// Should return error
-		err := validateProposerDelayConfig(logger)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "1.001s exceeds maximum reasonable delay of 1s")
 	})
 }
