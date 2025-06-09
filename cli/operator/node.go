@@ -550,16 +550,18 @@ var StartNodeCmd = &cobra.Command{
 				idealPeersPerSubnet = 3
 			)
 			start := time.Now()
-			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID()) // TODO: how to adjust this line
+			myValidators := validatorStore.GetSelfValidators()
 			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
-			for _, v := range myValidators {
-				subnet := networkcommons.CommitteeSubnet(v.CommitteeID()) // TODO: it was in the old one?
+
+			for _, snapshot := range myValidators {
+				subnet := networkcommons.CommitteeSubnet(snapshot.Share.CommitteeID())
 				if !mySubnets.IsSet(subnet) {
 					mySubnets.Set(subnet)
 					myActiveSubnets++
 				}
 			}
+
 			idealMaxPeers := min(baseMaxPeers+idealPeersPerSubnet*myActiveSubnets, maxPeersLimit)
 			if cfg.P2pNetworkConfig.MaxPeers < idealMaxPeers {
 				logger.Warn("increasing MaxPeers to match the operator's subscribed subnets",
@@ -574,9 +576,11 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 				return validatorCtrl.GetValidatorStats()
 			}
+
 			if err := p2pNetwork.Setup(); err != nil {
 				logger.Fatal("failed to setup network", zap.Error(err))
 			}
+
 			if err := p2pNetwork.Start(); err != nil {
 				logger.Fatal("failed to start network", zap.Error(err))
 			}
