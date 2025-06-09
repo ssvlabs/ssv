@@ -61,7 +61,7 @@ type Options struct {
 
 // nolint
 func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error) {
-	return operatorstorage.NewNodeStorage(o.BeaconConfig, logger, o.Db)
+	return operatorstorage.NewNodeStorage(logger, o.Db)
 }
 
 // nolint
