@@ -14,7 +14,7 @@ type txn struct {
 	logger *zap.Logger
 }
 
-func newTxn(logger *zap.Logger, batch *pebble.Batch) basedb.Txn {
+func newTxn(logger *zap.Logger, batch *pebble.Batch) *txn {
 	return &txn{
 		Batch:  batch,
 		logger: logger,
