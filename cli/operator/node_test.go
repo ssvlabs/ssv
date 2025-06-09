@@ -188,8 +188,7 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 			0 * time.Millisecond,    // Default value
 			100 * time.Millisecond,  // Small value
 			300 * time.Millisecond,  // Recommended starting value
-			1000 * time.Millisecond, // 1 second
-			1650 * time.Millisecond, // Exactly at the limit
+			1000 * time.Millisecond, // Exactly at the limit
 		}
 
 		for _, delay := range testCases {
@@ -214,7 +213,7 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 
 	t.Run("dangerous delay without flag - should error", func(t *testing.T) {
 		testCases := []time.Duration{
-			1651 * time.Millisecond, // Just over the limit
+			1001 * time.Millisecond, // Just over the limit
 			2000 * time.Millisecond, // 2 seconds
 			5000 * time.Millisecond, // 5 seconds
 		}
@@ -245,7 +244,7 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 
 	t.Run("dangerous delay with flag - should warn but pass", func(t *testing.T) {
 		testCases := []time.Duration{
-			1651 * time.Millisecond, // Just over the limit
+			1001 * time.Millisecond, // Just over the limit
 			2000 * time.Millisecond, // 2 seconds
 			5000 * time.Millisecond, // 5 seconds
 		}
@@ -280,7 +279,7 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 				require.Contains(t, fields, "proposer_delay")
 				require.Contains(t, fields, "max_reasonable_proposer_delay")
 				require.Equal(t, delay, fields["proposer_delay"])
-				require.Equal(t, 1650*time.Millisecond, fields["max_reasonable_proposer_delay"])
+				require.Equal(t, 1000*time.Millisecond, fields["max_reasonable_proposer_delay"])
 			})
 		}
 	})
@@ -290,8 +289,8 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 		originalCfg := cfg
 		defer func() { cfg = originalCfg }()
 
-		// Setup test config with exactly 1.65s
-		cfg.ProposerDelay = 1650 * time.Millisecond
+		// Setup test config with exactly 1s
+		cfg.ProposerDelay = 1000 * time.Millisecond
 		cfg.AllowDangerousProposerDelay = false
 
 		// Create logger with observer
@@ -312,8 +311,8 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 		originalCfg := cfg
 		defer func() { cfg = originalCfg }()
 
-		// Setup test config with 1651ms (1ms over limit)
-		cfg.ProposerDelay = 1651 * time.Millisecond
+		// Setup test config with 1001ms (1ms over limit)
+		cfg.ProposerDelay = 1001 * time.Millisecond
 		cfg.AllowDangerousProposerDelay = false
 
 		// Create logger
@@ -322,6 +321,6 @@ func Test_validateProposerDelayConfig(t *testing.T) {
 		// Should return error
 		err := validateProposerDelayConfig(logger)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "1.651s exceeds maximum reasonable delay of 1.65s")
+		require.Contains(t, err.Error(), "1.001s exceeds maximum reasonable delay of 1s")
 	})
 }

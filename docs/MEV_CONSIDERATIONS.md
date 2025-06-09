@@ -12,9 +12,9 @@ although we recommend starting with something like 300ms gradually increasing it
 
 ### Important Safety Limitation
 
-**The SSV node will refuse to start if ProposerDelay is set higher than 1.65s without explicit confirmation.**
+**The SSV node will refuse to start if ProposerDelay is set higher than 1s without explicit confirmation.**
 
-If you attempt to use a ProposerDelay value higher than 1.65s, the node will exit with an error message. 
+If you attempt to use a ProposerDelay value higher than 1s, the node will exit with an error message. 
 If you understand the risks and want to proceed anyway, you must also set the `AllowDangerousProposerDelay` flag:
 
 ```yaml
@@ -27,7 +27,7 @@ Or using environment variables:
 PROPOSER_DELAY=2000ms ALLOW_DANGEROUS_PROPOSER_DELAY=true ./bin/ssvnode start-node
 ```
 
-**Warning:** Using ProposerDelay values higher than 1.65s significantly increases the risk of missing block proposals, 
+**Warning:** Using ProposerDelay values higher than 1s significantly increases the risk of missing block proposals, 
 which can result in penalties and lost rewards.
 
 As per the notes in other sections of this document `ProposerDelay` depends on a number of things, to find
@@ -104,7 +104,8 @@ so it does not exceed that `QBFTConstrainingTime` - this would give us a rough e
 const qbftConstrainingTime = roundtimer.QuickTimeout - qbftTime
 ```
 
-Therefore, we consider ~1.65s to be the maximum reasonable value of `ProposerDelay` that an Operator should be able to use safely.
+Therefore, we consider ~1.65s to be the maximum reasonable value for `ProposerDelay`, going beyond that value will very 
+likely result in missed block proposal.
 
-**To enforce this safety limit, the SSV node will automatically prevent startup if ProposerDelay exceeds 1.65s 
-unless the operator explicitly acknowledges the risk by setting `AllowDangerousProposerDelay: true`.**
+**To enforce proposer safety limits, the SSV node will automatically prevent startup if ProposerDelay exceeds 1s 
+unless the Operator explicitly acknowledges the risk by setting `AllowDangerousProposerDelay: true`.**

@@ -42,8 +42,8 @@ OperatorPrivateKey:
 # Recommended starting value: 300ms. See docs/MEV_CONSIDERATIONS.md for details.
 # ProposerDelay: 300ms
 
-# Safety flag to allow ProposerDelay values higher than 1.65s.
-# WARNING: Values above 1.65s significantly increase the risk of missing block proposals!
+# Safety flag to allow ProposerDelay values higher than 1s.
+# WARNING: Values above 1s significantly increase the risk of missing block proposals!
 # Only set to true if you understand the risks and have carefully read the MEV documentation.
 # AllowDangerousProposerDelay: false
 
