@@ -19,12 +19,13 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -122,7 +123,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 
 	registration, err := r.calculateValidatorRegistration(r.BaseRunner.State.StartingDuty.DutySlot())
 	if err != nil {
-		return errors.Wrap(err, "could not calculate validator registration")
+		return observability.Errorf(span, "could not calculate validator registration: %w", err)
 	}
 
 	signedRegistration := &api.VersionedSignedValidatorRegistration{
@@ -210,7 +211,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(ctx context.Context, logger *z
 	msgID := spectypes.NewMsgID(r.BaseRunner.NetworkConfig.GetDomainType(), r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	encodedMsg, err := msgs.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not encode validator registration partial sig message")
+		return observability.Errorf(span, "could not encode validator registration partial sig message: %w", err)
 	}
 
 	ssvMsg := &spectypes.SSVMessage{
