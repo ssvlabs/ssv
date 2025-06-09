@@ -414,6 +414,7 @@ func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.Valid
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
+			recordDutyExecuted(ctx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
 		}(ctx)
 	}
@@ -451,6 +452,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committee
 
 		go func(ctx context.Context) {
 			s.waitOneThirdOrValidBlock(duty.Slot)
+			recordDutyExecuted(ctx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
 		}(ctx)
 	}
