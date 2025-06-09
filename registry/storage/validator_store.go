@@ -47,14 +47,6 @@ type ValidatorStore interface {
 	GetSelfParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot
 }
 
-// LegacyValidatorProvider provides backward compatibility for existing consumers
-// that expect the old interface with SSVShare pointers instead of ValidatorSnapshots
-type LegacyValidatorProvider interface {
-	OperatorValidators(operatorID spectypes.OperatorID) []*types.SSVShare
-	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
-	Validator(pubKey []byte) (*types.SSVShare, bool)
-}
-
 // ParticipationOptions filters participating validators.
 type ParticipationOptions struct {
 	IncludeLiquidated bool
