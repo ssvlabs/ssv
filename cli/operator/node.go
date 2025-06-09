@@ -477,7 +477,7 @@ var StartNodeCmd = &cobra.Command{
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
 				BeaconConfig:       networkConfig.BeaconConfig,
 				BeaconNode:         consensusClient,
-				ValidatorProvider:  validatorStore, //TODO: SelfParticipatingValidators
+				ValidatorProvider:  validatorStore,
 				SlotTickerProvider: slotTickerProvider,
 				Logger:             logger,
 			})

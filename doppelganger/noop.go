@@ -8,18 +8,18 @@ import (
 
 type NoOpHandler struct{}
 
-func (NoOpHandler) Start(ctx context.Context) error {
+func (NoOpHandler) Start(context.Context) error {
 	return nil
 }
 
-func (NoOpHandler) CanSign(validatorIndex phase0.ValidatorIndex) bool {
+func (NoOpHandler) CanSign(phase0.ValidatorIndex) bool {
 	return true
 }
 
-func (NoOpHandler) ReportQuorum(validatorIndex phase0.ValidatorIndex) {
+func (NoOpHandler) ReportQuorum(phase0.ValidatorIndex) {
 	// No operation
 }
 
-func (NoOpHandler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
+func (NoOpHandler) RemoveValidatorState(phase0.ValidatorIndex) {
 	// No operation
 }
