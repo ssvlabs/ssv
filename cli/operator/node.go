@@ -98,6 +98,7 @@ type config struct {
 	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
 	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
 	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
+	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1.65s (dangerous, may cause missed block proposals)"`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
 	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
@@ -154,6 +155,10 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
+
+		if err := validateProposerDelayConfig(logger); err != nil {
+			logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
+		}
 
 		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
 		if err != nil {
@@ -692,6 +697,24 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 	}
 
 	return usingSSVSigner, usingKeystore, usingPrivKey
+}
+
+func validateProposerDelayConfig(logger *zap.Logger) error {
+	const maxReasonableProposerDelay = 1650 * time.Millisecond
+
+	if cfg.ProposerDelay > maxReasonableProposerDelay {
+		if !cfg.AllowDangerousProposerDelay {
+			return fmt.Errorf("ProposerDelay value %v exceeds maximum reasonable delay of %v. "+
+				"This may cause missed block proposals. "+
+				"If you understand the risks and want to proceed, set AllowDangerousProposerDelay to true or use the ALLOW_DANGEROUS_PROPOSER_DELAY environment variable",
+				cfg.ProposerDelay, maxReasonableProposerDelay)
+		}
+		logger.Warn("Using dangerous ProposerDelay value that may cause missed block proposals",
+			zap.Duration("proposer_delay", cfg.ProposerDelay),
+			zap.Duration("max_reasonable_proposer_delay", maxReasonableProposerDelay))
+	}
+
+	return nil
 }
 
 func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents, usingRemoteSigner bool) error {

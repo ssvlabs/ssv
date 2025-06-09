@@ -36,6 +36,17 @@ p2p:
 # Note: Operator private key can be generated with the `generate-operator-keys` command.
 OperatorPrivateKey:
 
+# MEV Configuration (Optional)
+# Duration to wait before requesting block proposal if this operator is proposer-duty Leader.
+# This allows extracting higher MEV by waiting for better bids. Default is 0 (no delay).
+# Recommended starting value: 300ms. See docs/MEV_CONSIDERATIONS.md for details.
+# ProposerDelay: 300ms
+
+# Safety flag to allow ProposerDelay values higher than 1.65s.
+# WARNING: Values above 1.65s significantly increase the risk of missing block proposals!
+# Only set to true if you understand the risks and have carefully read the MEV documentation.
+# AllowDangerousProposerDelay: false
+
 # This enables monitoring at the specified port, see https://github.com/ssvlabs/ssv/tree/main/monitoring
 MetricsAPIPort: 15000
 
