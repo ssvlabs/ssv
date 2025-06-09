@@ -141,7 +141,7 @@ func (h *VoluntaryExitHandler) processExecution(ctx context.Context, slot phase0
 	span.SetStatus(codes.Ok, "")
 }
 
-// blockSlot gets slots happened at the same time as block,
+// blockSlot returns slot that happens (corresponds to) at the same time as block,
 // it prevents calling execution client multiple times if there are several validator exit events on the same block
 func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
 	blockSlot, ok := h.blockSlots[blockNumber]

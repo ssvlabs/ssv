@@ -129,7 +129,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
-// blockSlot gets slots happened at the same time as block.
+// blockSlot returns slot that happens (corresponds to) at the same time as block.
 func (h *ValidatorRegistrationHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
 	blockSlot, ok := h.blockSlots[blockNumber]
 	if ok {

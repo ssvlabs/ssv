@@ -11,7 +11,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -453,13 +452,6 @@ func SharesDBKey(pk []byte) []byte {
 func ByOperatorID(operatorID spectypes.OperatorID) SharesFilter {
 	return func(share *types.SSVShare) bool {
 		return share.BelongsToOperator(operatorID)
-	}
-}
-
-// ByOwner filters by validator owner.
-func ByOwner(ownerAddress common.Address) SharesFilter {
-	return func(share *types.SSVShare) bool {
-		return share.OwnerAddress == ownerAddress
 	}
 }
 
