@@ -119,7 +119,12 @@ func (km *RemoteKeyManager) AddShare(
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
-	// TODO: what if it succeeds but txn gets canceled?
+	// If txn gets rolled back after share is saved,
+	// there will be some inconsistency between syncer state and remote signer.
+	// However, syncer crashes node on an error and restarts the sync process from the failing block,
+	// so it will attempt to save the same share again, which won't be an issue
+	// because AddValidators doesn't fail if the same share exists.
+	// TODO: The comment assumes that https://github.com/ssvlabs/ssv/pull/2246 has already been ported but it hasn't yet
 	if err := km.signerClient.AddValidators(ctx, shareKeys); err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
@@ -131,7 +136,11 @@ func (km *RemoteKeyManager) AddShare(
 // its highest attestation/proposal data locally. If the remote or local operations
 // fail, returns an error.
 func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error {
-	// TODO: what if it succeeds but txn gets canceled?
+	// Similarly to addition, if txn gets rolled back after share is removed,
+	// there will be some inconsistency between syncer state and remote signer.
+	// After restart, it will attempt to delete the same share again, which won't be an issue
+	// because RemoveValidators doesn't fail if the share doesn't exist.
+	// TODO: The comment assumes that https://github.com/ssvlabs/ssv/pull/2246 has already been ported but it hasn't yet
 	if err := km.signerClient.RemoveValidators(ctx, pubKey); err != nil {
 		return fmt.Errorf("remove validator: %w", err)
 	}
