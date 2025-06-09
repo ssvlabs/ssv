@@ -1,4 +1,4 @@
-package tests
+package mocks
 
 import (
 	"encoding/json"
@@ -6,27 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"time"
-
-	"github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/operator/slotticker"
 )
-
-type MockDataStore struct {
-	operatorID types.OperatorID
-}
-
-func (m MockDataStore) AwaitOperatorID() types.OperatorID {
-	return m.operatorID
-}
 
 type requestCallback = func(r *http.Request, resp json.RawMessage) (json.RawMessage, error)
 
 func MockServer(onRequestFn requestCallback) *httptest.Server {
 	var mockResponses map[string]json.RawMessage
-	f, err := os.Open("./tests/mock-beacon-responses.json")
+	f, err := os.Open("./mocks/mock-beacon-responses.json")
 	if err != nil {
 		panic(fmt.Sprintf("os.Open returned error: %v", err))
 	}
@@ -54,11 +40,4 @@ func MockServer(onRequestFn requestCallback) *httptest.Server {
 			panic(fmt.Sprintf("got error writing response: %v", err))
 		}
 	}))
-}
-
-func MockSlotTickerProvider() slotticker.SlotTicker {
-	return slotticker.New(zap.NewNop(), slotticker.Config{
-		SlotDuration: 12 * time.Second,
-		GenesisTime:  time.Now(),
-	})
 }

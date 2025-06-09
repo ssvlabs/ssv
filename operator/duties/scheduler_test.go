@@ -409,7 +409,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	s := NewScheduler(logger, opts)
 
 	// add multiple mock duty handlers
-	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
+	s.handlers = []dutyHandler{NewValidatorRegistrationHandler(nil)}
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
 	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 	err := s.Start(ctx)
@@ -422,5 +422,4 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Channel is jammed")
 	}
-
 }

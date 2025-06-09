@@ -27,7 +27,6 @@ import (
 type MockAttesterCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockAttesterCallsMockRecorder
-	isgomock struct{}
 }
 
 // MockAttesterCallsMockRecorder is the mock recorder for MockAttesterCalls.
@@ -81,7 +80,6 @@ func (mr *MockAttesterCallsMockRecorder) SubmitAttestations(ctx, attestations an
 type MockProposerCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockProposerCallsMockRecorder
-	isgomock struct{}
 }
 
 // MockProposerCallsMockRecorder is the mock recorder for MockProposerCalls.
@@ -149,7 +147,6 @@ func (mr *MockProposerCallsMockRecorder) SubmitBlindedBeaconBlock(ctx, block, si
 type MockAggregatorCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockAggregatorCallsMockRecorder
-	isgomock struct{}
 }
 
 // MockAggregatorCallsMockRecorder is the mock recorder for MockAggregatorCalls.
@@ -203,7 +200,6 @@ func (mr *MockAggregatorCallsMockRecorder) SubmitSignedAggregateSelectionProof(c
 type MockSyncCommitteeCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockSyncCommitteeCallsMockRecorder
-	isgomock struct{}
 }
 
 // MockSyncCommitteeCallsMockRecorder is the mock recorder for MockSyncCommitteeCalls.
@@ -257,7 +253,6 @@ func (mr *MockSyncCommitteeCallsMockRecorder) SubmitSyncMessages(ctx, msgs any) 
 type MockSyncCommitteeContributionCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockSyncCommitteeContributionCallsMockRecorder
-	isgomock struct{}
 }
 
 // MockSyncCommitteeContributionCallsMockRecorder is the mock recorder for MockSyncCommitteeContributionCalls.
@@ -339,7 +334,6 @@ func (mr *MockSyncCommitteeContributionCallsMockRecorder) SyncCommitteeSubnetID(
 type MockValidatorRegistrationCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockValidatorRegistrationCallsMockRecorder
-	isgomock struct{}
 }
 
 // MockValidatorRegistrationCallsMockRecorder is the mock recorder for MockValidatorRegistrationCalls.
@@ -359,25 +353,24 @@ func (m *MockValidatorRegistrationCalls) EXPECT() *MockValidatorRegistrationCall
 	return m.recorder
 }
 
-// SubmitValidatorRegistration mocks base method.
-func (m *MockValidatorRegistrationCalls) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
+// SubmitValidatorRegistrations mocks base method.
+func (m *MockValidatorRegistrationCalls) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitValidatorRegistration", registration)
+	ret := m.ctrl.Call(m, "SubmitValidatorRegistrations", ctx, registrations)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SubmitValidatorRegistration indicates an expected call of SubmitValidatorRegistration.
-func (mr *MockValidatorRegistrationCallsMockRecorder) SubmitValidatorRegistration(registration any) *gomock.Call {
+// SubmitValidatorRegistrations indicates an expected call of SubmitValidatorRegistrations.
+func (mr *MockValidatorRegistrationCallsMockRecorder) SubmitValidatorRegistrations(ctx, registrations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockValidatorRegistrationCalls)(nil).SubmitValidatorRegistration), registration)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistrations", reflect.TypeOf((*MockValidatorRegistrationCalls)(nil).SubmitValidatorRegistrations), ctx, registrations)
 }
 
 // MockVoluntaryExitCalls is a mock of VoluntaryExitCalls interface.
 type MockVoluntaryExitCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockVoluntaryExitCallsMockRecorder
-	isgomock struct{}
 }
 
 // MockVoluntaryExitCallsMockRecorder is the mock recorder for MockVoluntaryExitCalls.
@@ -415,7 +408,6 @@ func (mr *MockVoluntaryExitCallsMockRecorder) SubmitVoluntaryExit(ctx, voluntary
 type MockDomainCalls struct {
 	ctrl     *gomock.Controller
 	recorder *MockDomainCallsMockRecorder
-	isgomock struct{}
 }
 
 // MockDomainCallsMockRecorder is the mock recorder for MockDomainCalls.
@@ -454,7 +446,6 @@ func (mr *MockDomainCallsMockRecorder) DomainData(ctx, epoch, domain any) *gomoc
 type MockbeaconDuties struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconDutiesMockRecorder
-	isgomock struct{}
 }
 
 // MockbeaconDutiesMockRecorder is the mock recorder for MockbeaconDuties.
@@ -537,7 +528,6 @@ func (mr *MockbeaconDutiesMockRecorder) SyncCommitteeDuties(ctx, epoch, indices 
 type MockbeaconSubscriber struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconSubscriberMockRecorder
-	isgomock struct{}
 }
 
 // MockbeaconSubscriberMockRecorder is the mock recorder for MockbeaconSubscriber.
@@ -589,7 +579,6 @@ func (mr *MockbeaconSubscriberMockRecorder) SubmitSyncCommitteeSubscriptions(ctx
 type MockbeaconValidator struct {
 	ctrl     *gomock.Controller
 	recorder *MockbeaconValidatorMockRecorder
-	isgomock struct{}
 }
 
 // MockbeaconValidatorMockRecorder is the mock recorder for MockbeaconValidator.
@@ -628,7 +617,6 @@ func (mr *MockbeaconValidatorMockRecorder) GetValidatorData(ctx, validatorPubKey
 type Mockproposer struct {
 	ctrl     *gomock.Controller
 	recorder *MockproposerMockRecorder
-	isgomock struct{}
 }
 
 // MockproposerMockRecorder is the mock recorder for Mockproposer.
@@ -666,7 +654,6 @@ func (mr *MockproposerMockRecorder) SubmitProposalPreparation(ctx, feeRecipients
 type Mocksigner struct {
 	ctrl     *gomock.Controller
 	recorder *MocksignerMockRecorder
-	isgomock struct{}
 }
 
 // MocksignerMockRecorder is the mock recorder for Mocksigner.
@@ -705,7 +692,6 @@ func (mr *MocksignerMockRecorder) ComputeSigningRoot(object, domain any) *gomock
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNodeMockRecorder
-	isgomock struct{}
 }
 
 // MockBeaconNodeMockRecorder is the mock recorder for MockBeaconNode.
@@ -753,20 +739,6 @@ func (m *MockBeaconNode) ComputeSigningRoot(object any, domain phase0.Domain) ([
 func (mr *MockBeaconNodeMockRecorder) ComputeSigningRoot(object, domain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ComputeSigningRoot", reflect.TypeOf((*MockBeaconNode)(nil).ComputeSigningRoot), object, domain)
-}
-
-// DataVersion mocks base method.
-func (m *MockBeaconNode) DataVersion(epoch phase0.Epoch) spec.DataVersion {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DataVersion", epoch)
-	ret0, _ := ret[0].(spec.DataVersion)
-	return ret0
-}
-
-// DataVersion indicates an expected call of DataVersion.
-func (mr *MockBeaconNodeMockRecorder) DataVersion(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DataVersion", reflect.TypeOf((*MockBeaconNode)(nil).DataVersion), epoch)
 }
 
 // DomainData mocks base method.
@@ -1034,18 +1006,18 @@ func (mr *MockBeaconNodeMockRecorder) SubmitSyncMessages(ctx, msgs any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitSyncMessages", reflect.TypeOf((*MockBeaconNode)(nil).SubmitSyncMessages), ctx, msgs)
 }
 
-// SubmitValidatorRegistration mocks base method.
-func (m *MockBeaconNode) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
+// SubmitValidatorRegistrations mocks base method.
+func (m *MockBeaconNode) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitValidatorRegistration", registration)
+	ret := m.ctrl.Call(m, "SubmitValidatorRegistrations", ctx, registrations)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SubmitValidatorRegistration indicates an expected call of SubmitValidatorRegistration.
-func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistration(registration any) *gomock.Call {
+// SubmitValidatorRegistrations indicates an expected call of SubmitValidatorRegistrations.
+func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistrations(ctx, registrations any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeaconNode)(nil).SubmitValidatorRegistration), registration)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistrations", reflect.TypeOf((*MockBeaconNode)(nil).SubmitValidatorRegistrations), ctx, registrations)
 }
 
 // SubmitVoluntaryExit mocks base method.

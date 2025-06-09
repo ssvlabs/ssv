@@ -18,6 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
+const voluntaryExitSlotsToPostpone = phase0.Slot(4)
+
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh := make(chan ExitDescriptor)
 	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)

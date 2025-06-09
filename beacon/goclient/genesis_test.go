@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/beacon/goclient/tests"
+	"github.com/ssvlabs/ssv/beacon/goclient/mocks"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -24,7 +24,7 @@ func Test_genesisForClient(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{
 					"data": {
@@ -88,7 +88,7 @@ func Test_genesisForClient(t *testing.T) {
 	})
 
 	t.Run("nil_data", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{"data": null}`), nil
 			}
@@ -112,7 +112,7 @@ func Test_genesisForClient(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`malformed`), nil
 			}

@@ -22,6 +22,7 @@ import (
 type MockSignatureVerifier struct {
 	ctrl     *gomock.Controller
 	recorder *MockSignatureVerifierMockRecorder
+	isgomock struct{}
 }
 
 // MockSignatureVerifierMockRecorder is the mock recorder for MockSignatureVerifier.
@@ -59,6 +60,7 @@ func (mr *MockSignatureVerifierMockRecorder) VerifySignature(operatorID, message
 type MockOperatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockOperatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockOperatorStoreMockRecorder is the mock recorder for MockOperatorStore.
