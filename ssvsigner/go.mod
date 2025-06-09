@@ -27,7 +27,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.2
-	github.com/ssvlabs/ssv v1.2.1-0.20250606231454-ed992855eef1
+	github.com/ssvlabs/ssv v1.2.1-0.20250606232051-171b3e39358e
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0
