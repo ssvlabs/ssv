@@ -10,8 +10,8 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func getter(key []byte, pFunc func(key []byte) ([]byte, io.Closer, error)) (basedb.Obj, bool, error) {
-	value, closer, err := pFunc(key)
+func getter(key []byte, dbFetch func(key []byte) ([]byte, io.Closer, error)) (basedb.Obj, bool, error) {
+	value, closer, err := dbFetch(key)
 	if errors.Is(err, pebble.ErrNotFound) {
 		return basedb.Obj{}, false, nil
 	}
@@ -34,9 +34,9 @@ func getter(key []byte, pFunc func(key []byte) ([]byte, io.Closer, error)) (base
 	}, true, nil
 }
 
-func manyGetter(logger *zap.Logger, keys [][]byte, pFunc func(key []byte) ([]byte, io.Closer, error), fn func(basedb.Obj) error) error {
+func manyGetter(logger *zap.Logger, keys [][]byte, dbFetch func(key []byte) ([]byte, io.Closer, error), fn func(basedb.Obj) error) error {
 	for _, key := range keys {
-		value, closer, err := pFunc(key)
+		value, closer, err := dbFetch(key)
 		if err != nil {
 			// If the key isn't found, skip it.
 			if errors.Is(err, pebble.ErrNotFound) {
