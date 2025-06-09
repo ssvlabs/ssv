@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -47,6 +48,14 @@ type Options struct {
 	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
 }
 
+// Validate checks if the options are valid.
+func (o *Options) Validate() error {
+	if len(o.HostDNS) > 0 && len(o.HostAddress) > 0 {
+		return fmt.Errorf("HostDNS and HostAddress are mutually exclusive, please provide only one")
+	}
+	return nil
+}
+
 // Service is the interface for discovery
 type Service interface {
 	discovery.Discovery
@@ -59,6 +68,10 @@ type Service interface {
 
 // NewService creates new discovery.Service
 func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
+
 	if opts.DiscV5Opts == nil {
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}

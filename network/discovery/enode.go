@@ -33,11 +33,11 @@ func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.I
 	return localNode, nil
 }
 
-// addAddresses configures node addressing by prioritizing HostDNS over HostAddress.
-// Uses resolved DNS IP if available, otherwise falls back to HostAddress.
+// addAddresses configures node addressing using either HostDNS or HostAddress.
+// HostDNS and HostAddress are mutually exclusive and validated before this function is called.
 // Returns error if address resolution fails or addresses are invalid.
 func addAddresses(localNode *enode.LocalNode, hostAddr, hostDNS string) error {
-	// Try DNS first
+	// Use DNS if provided
 	if len(hostDNS) > 0 {
 		ips, err := net.LookupIP(hostDNS)
 		if err != nil {
@@ -51,9 +51,11 @@ func addAddresses(localNode *enode.LocalNode, hostAddr, hostDNS string) error {
 
 			return nil
 		}
+
+		return fmt.Errorf("no IPs found for host DNS: %s", hostDNS)
 	}
 
-	// Use HostAddress as fallback
+	// Use HostAddress if provided
 	if len(hostAddr) > 0 {
 		hostIP := net.ParseIP(hostAddr)
 		if hostIP == nil || (hostIP.To4() == nil && hostIP.To16() == nil) {

@@ -40,8 +40,8 @@ type Config struct {
 
 	TCPPort     uint16 `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for P2P transport"`
 	UDPPort     uint16 `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
-	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (can be overridden by HostDNS)"`
-	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (overrides HostAddress if both are specified)"`
+	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External IP address for discovery (mutually exclusive with HostDNS)"`
+	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS name for discovery (mutually exclusive with HostAddress)"`
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s" env-description:"Timeout for P2P requests"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of objects returned in a batch response"`
@@ -150,8 +150,7 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
-	// note, only one of (HostDNS, HostAddress) can be used with libp2p - if multiple of these
-	// are set we have to prioritize between them.
+	// HostDNS and HostAddress are mutually exclusive
 	if c.HostDNS != "" {
 		// AddrFactory for DNS address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
