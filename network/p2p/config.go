@@ -150,7 +150,7 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 	}
 	opts = append(opts, libp2p.ListenAddrs(addrs...))
 
-	// HostDNS and HostAddress are mutually exclusive
+	// NOTE: only one of (HostDNS, HostAddress) can be used with libp2p
 	if c.HostDNS != "" {
 		// AddrFactory for DNS address if provided
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {

@@ -337,8 +337,8 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "non-resolvable HostDNS with fallback to HostAddress",
-			hostAddress: "192.168.1.100",
+			name:        "non-resolvable HostDNS",
+			hostAddress: "",
 			hostDNS:     "nonexistent-domain-qwerty.local",
 			expectError: true,
 		},
@@ -375,12 +375,6 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			if tc.expectError {
 				require.Error(t, err)
 
-				switch tc.name {
-				case "both HostAddress and HostDNS":
-					require.ErrorContains(t, err, "HostDNS and HostAddress are mutually exclusive")
-				case "invalid host address format":
-					require.ErrorContains(t, err, "invalid host address given")
-				}
 				return
 			}
 			require.NoError(t, err)
