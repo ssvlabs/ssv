@@ -380,7 +380,7 @@ var StartNodeCmd = &cobra.Command{
 
 		messageValidator := validation.New(
 			networkConfig,
-			validatorStore, // TODO: update interface
+			validatorStore,
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,

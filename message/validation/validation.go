@@ -24,7 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -42,10 +41,9 @@ type operators interface {
 
 // validatorStore defines the minimal interface needed for validation
 type validatorStore interface {
-	Validator(pubKey []byte) (*ssvtypes.SSVShare, bool)
-	Committee(id spectypes.CommitteeID) (*registrystorage.IndexedCommittee, bool)
+	GetValidator(id registrystorage.ValidatorID) (*registrystorage.ValidatorSnapshot, bool)
+	GetCommittee(id spectypes.CommitteeID) (*registrystorage.CommitteeSnapshot, bool)
 }
-
 type peerIDWithMessageID struct {
 	peerID    peer.ID
 	messageID spectypes.MessageID
@@ -261,32 +259,46 @@ func (mv *messageValidator) getValidationLock(key peerIDWithMessageID) *sync.Mut
 	return lock
 }
 
+// TODO: add metrics and logs?
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeInfo, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
-		// TODO: add metrics and logs for committee role
 		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
 
 		// Rule: Cluster does not exist
-		committee, exists := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole duty executor ID
+		committeeSnapshot, exists := mv.validatorStore.GetCommittee(committeeID)
 		if !exists {
 			e := ErrNonExistentCommitteeID
 			e.got = hex.EncodeToString(committeeID[:])
 			return CommitteeInfo{}, e
 		}
 
-		if len(committee.Indices) == 0 {
+		// Extract indices from validator snapshots
+		indices := make([]phase0.ValidatorIndex, 0, len(committeeSnapshot.Validators))
+		for _, validatorSnapshot := range committeeSnapshot.Validators {
+			if validatorSnapshot.Share.HasBeaconMetadata() {
+				indices = append(indices, validatorSnapshot.Share.ValidatorIndex)
+			}
+		}
+
+		if len(indices) == 0 {
 			return CommitteeInfo{}, ErrNoValidators
 		}
 
-		return newCommitteeInfo(committeeID, committee.Operators, committee.Indices), nil
+		return newCommitteeInfo(committeeID, committeeSnapshot.Operators, indices), nil
 	}
 
-	share, exists := mv.validatorStore.Validator(msgID.GetDutyExecutorID())
+	// Single validator
+	var validatorPK spectypes.ValidatorPK
+	copy(validatorPK[:], msgID.GetDutyExecutorID())
+
+	validatorSnapshot, exists := mv.validatorStore.GetValidator(registrystorage.ValidatorPubKey(validatorPK))
 	if !exists {
 		e := ErrUnknownValidator
 		e.got = hex.EncodeToString(msgID.GetDutyExecutorID())
 		return CommitteeInfo{}, e
 	}
+
+	share := &validatorSnapshot.Share
 
 	// Rule: If validator is liquidated
 	if share.Liquidated {
