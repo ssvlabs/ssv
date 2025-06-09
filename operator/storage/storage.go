@@ -17,8 +17,7 @@ import (
 )
 
 var (
-	// OperatorStoragePrefix defines the prefix for operator related data.
-	OperatorStoragePrefix = []byte("operator_")
+	OperatorStoragePrefix = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
 	configKey             = []byte("config")
 	hashedPrivkeyDBKey    = "hashed-private-key"
