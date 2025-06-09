@@ -102,7 +102,7 @@ func (s *Server) Run() error {
 		// @Tags Exporter
 		// @Produce json
 		// @Success 200 {object} handlers.ValidatorTracesResponse
-		// @Router /v1/exporter/traces/validator [get]
+		// @Router /v1/exporter/traces/validator [post]
 		router.Post("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
 
 		// @Summary Get committee traces
@@ -110,7 +110,7 @@ func (s *Server) Run() error {
 		// @Tags Exporter
 		// @Produce json
 		// @Success 200 {object} handlers.CommitteeTracesResponse
-		// @Router /v1/exporter/traces/committee [get]
+		// @Router /v1/exporter/traces/committee [post]
 		router.Post("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
 
 		// @Summary Get decided messages traces

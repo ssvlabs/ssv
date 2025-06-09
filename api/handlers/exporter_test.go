@@ -320,7 +320,7 @@ func TestExporterDecideds(t *testing.T) {
 			stores.Add(spectypes.BNRoleProposer, proposerStore)
 
 			exporter := &Exporter{
-				ParticipantStores: stores,
+				participantStores: stores,
 			}
 
 			reqBody, err := json.Marshal(tt.request)
@@ -354,7 +354,7 @@ func TestExporterDecideds_InvalidJSON(t *testing.T) {
 	stores.Add(spectypes.BNRoleAttester, store)
 
 	exporter := &Exporter{
-		ParticipantStores: stores,
+		participantStores: stores,
 	}
 	req := httptest.NewRequest(http.MethodPost, "/decideds", strings.NewReader("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
@@ -388,7 +388,7 @@ func TestExporterDecideds_ErrorGetAllParticipantsInRange(t *testing.T) {
 	stores.Add(spectypes.BNRoleAttester, store)
 
 	exporter := &Exporter{
-		ParticipantStores: stores,
+		participantStores: stores,
 	}
 	reqData := map[string]interface{}{
 		"from":  100,
@@ -433,7 +433,7 @@ func TestExporterDecideds_ErrorGetParticipantsInRange(t *testing.T) {
 	stores.Add(spectypes.BNRoleAttester, store)
 
 	exporter := &Exporter{
-		ParticipantStores: stores,
+		participantStores: stores,
 	}
 
 	reqData := map[string]interface{}{
@@ -707,6 +707,24 @@ func TestExporterTraceDecideds(t *testing.T) {
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				assert.Equal(t, "invalid pubkey length", resp.Message)
 			},
+		}, {
+			name: "invalid request - invalid range",
+			request: map[string]any{
+				"from":    100,
+				"to":      99,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": api.HexSlice{api.Hex("0x123")},
+			},
+			setupMock:      func(store *mockTraceStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "'from' must be less than or equal to 'to'", resp.Message)
+			},
 		},
 	}
 
@@ -716,7 +734,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			tt.setupMock(store)
 
 			exporter := &Exporter{
-				TraceStore: store,
+				traceStore: store,
 			}
 
 			reqBody, err := json.Marshal(tt.request)
@@ -875,8 +893,8 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			}
 
 			exporter := &Exporter{
-				TraceStore: store,
-				Validators: validatorStore,
+				traceStore: store,
+				validators: validatorStore,
 			}
 
 			body, err := json.Marshal(tt.request)
@@ -1033,14 +1051,14 @@ func TestExporterValidatorTraces(t *testing.T) {
 			tt.setupMock(store, validatorStore)
 
 			exporter := &Exporter{
-				TraceStore: store,
-				Validators: validatorStore,
+				traceStore: store,
+				validators: validatorStore,
 			}
 
 			reqBody, err := json.Marshal(tt.request)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/validator/traces", strings.NewReader(string(reqBody)))
+			req := httptest.NewRequest(http.MethodPost, "/traces/validator", strings.NewReader(string(reqBody)))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 

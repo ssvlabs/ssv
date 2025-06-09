@@ -181,7 +181,7 @@ func partialSigTracesAreEqual(a []*model.PartialSigTrace, b []*model.PartialSigT
 	if len(a) == 0 && len(b) == 0 {
 		return true
 	}
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		if !partialSigTraceAreEqual(a[i], b[i]) {
 			return false
 		}
@@ -216,7 +216,7 @@ func qBFTTracesAreEqual(a []*model.QBFTTrace, b []*model.QBFTTrace) bool {
 	if len(a) == 0 && len(b) == 0 {
 		return true
 	}
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		if !qBFTTraceAreEqual(a[i], b[i]) {
 			return false
 		}
@@ -272,7 +272,7 @@ func roundChangeTracesAreEqual(a []*model.RoundChangeTrace, b []*model.RoundChan
 	if len(a) == 0 && len(b) == 0 {
 		return true
 	}
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		if !roundChangeTraceAreEqual(a[i], b[i]) {
 			return false
 		}
@@ -306,7 +306,7 @@ func roundTracesAreEqual(a []*model.RoundTrace, b []*model.RoundTrace) bool {
 	if len(a) == 0 && len(b) == 0 {
 		return true
 	}
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		if !roundTraceAreEqual(a[i], b[i]) {
 			return false
 		}
@@ -346,7 +346,7 @@ func decidedTracesAreEqual(a []*model.DecidedTrace, b []*model.DecidedTrace) boo
 	if len(a) == 0 && len(b) == 0 {
 		return true
 	}
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		if !decidedTraceAreEqual(a[i], b[i]) {
 			return false
 		}
@@ -370,7 +370,7 @@ func decidedTraceAreEqual(a *model.DecidedTrace, b *model.DecidedTrace) bool {
 	if len(a.Signers) != len(b.Signers) {
 		return false
 	}
-	for i := 0; i < len(a.Signers); i++ {
+	for i := range a.Signers {
 		if a.Signers[i] != b.Signers[i] {
 			return false
 		}
