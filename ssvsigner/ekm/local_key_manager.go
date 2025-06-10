@@ -267,10 +267,25 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
+
 	if acc == nil {
-		if err := km.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
-			return fmt.Errorf("could not bump slashing protection: %w", err)
+		// Check if we have existing slashing protection data
+		hasHistory := false
+		if att, found, _ := km.RetrieveHighestAttestation(pubKey); found && att != nil {
+			hasHistory = true
 		}
+		if slot, found, _ := km.RetrieveHighestProposal(pubKey); found && slot > 0 {
+			hasHistory = true
+		}
+
+		// Only bump slashing protection if there's no existing history
+		// This preserves protection for re-added shares
+		if !hasHistory {
+			if err := km.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
+				return fmt.Errorf("could not bump slashing protection: %w", err)
+			}
+		}
+
 		if err := km.saveShare(sharePrivKey); err != nil {
 			return fmt.Errorf("could not save share: %w", err)
 		}
@@ -280,7 +295,7 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 }
 
 // RemoveShare removes the share from the local wallet, clears the associated
-// slashing-protection records (highest attestation/proposal) for the given
+// slashing-protection records (attestation and proposal) for the given
 // public key, and returns an error on any storage issue.
 func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
@@ -292,13 +307,10 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKe
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
+
+	// We do not remove slashing protection history to prevent slashing if the share is re-added later
+	// Only remove the account from the wallet
 	if acc != nil {
-		if err := km.RemoveHighestAttestation(pubKey); err != nil {
-			return fmt.Errorf("could not remove highest attestation: %w", err)
-		}
-		if err := km.RemoveHighestProposal(pubKey); err != nil {
-			return fmt.Errorf("could not remove highest proposal: %w", err)
-		}
 		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {
 			return fmt.Errorf("could not delete share: %w", err)
 		}
