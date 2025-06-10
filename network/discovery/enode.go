@@ -37,33 +37,33 @@ func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.I
 // HostDNS and HostAddress are mutually exclusive and validated before this function is called.
 // Returns error if address resolution fails or addresses are invalid.
 func addAddresses(localNode *enode.LocalNode, hostAddr, hostDNS string) error {
-	// Use DNS if provided
-	if len(hostDNS) > 0 {
+	// Prefer DNS if supplied
+	if hostDNS != "" {
 		ips, err := net.LookupIP(hostDNS)
 		if err != nil {
 			return fmt.Errorf("could not resolve host DNS: %s, %w", hostDNS, err)
 		}
 
-		if len(ips) > 0 {
-			firstIP := ips[0]
-			localNode.SetStaticIP(firstIP)
-			localNode.SetFallbackIP(firstIP)
-
-			return nil
+		if len(ips) == 0 {
+			return fmt.Errorf("no IPs found for host DNS %q", hostDNS)
 		}
 
-		return fmt.Errorf("no IPs found for host DNS: %s", hostDNS)
+		ip := ips[0]
+		localNode.SetStaticIP(ip)
+		localNode.SetFallbackIP(ip)
+
+		return nil
 	}
 
-	// Use HostAddress if provided
-	if len(hostAddr) > 0 {
-		hostIP := net.ParseIP(hostAddr)
-		if hostIP == nil || (hostIP.To4() == nil && hostIP.To16() == nil) {
-			return fmt.Errorf("invalid host address given: %v", hostAddr)
+	// Fallback to explicit address
+	if hostAddr != "" {
+		ip := net.ParseIP(hostAddr)
+		if ip == nil {
+			return fmt.Errorf("invalid host address %q", hostAddr)
 		}
 
-		localNode.SetStaticIP(hostIP)
-		localNode.SetFallbackIP(hostIP)
+		localNode.SetStaticIP(ip)
+		localNode.SetFallbackIP(ip)
 	}
 
 	return nil
