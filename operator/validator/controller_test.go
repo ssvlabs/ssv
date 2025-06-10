@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -586,7 +587,6 @@ func TestGetValidatorStats(t *testing.T) {
 	// Common setup
 	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
-	sharesStorage := mocks.NewMockSharesStorage(ctrl)
 	bc := beacon.NewMockBeaconNode(ctrl)
 	activationEpoch, exitEpoch := phase0.Epoch(1), goclient.FarFutureEpoch
 
@@ -618,16 +618,13 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage:     sharesStorage,
+			sharesStorage:     mockShares(sharesSlice),
 			validatorsMap:     validators.New(context.TODO()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
 
 		ctr := setupController(t, logger, controllerOptions)
-
-		// Set mock expectations for this subtest
-		sharesStorage.EXPECT().List(nil).Return(sharesSlice).Times(1)
 
 		// Execute the function under test and validate results for this subtest
 		allShares, activeShares, operatorShares, err := ctr.GetValidatorStats()
@@ -655,12 +652,9 @@ func TestGetValidatorStats(t *testing.T) {
 			},
 		}
 
-		// Set mock expectations for this subtest
-		sharesStorage.EXPECT().List(nil).Return(sharesSlice).Times(1)
-
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage:     sharesStorage,
+			sharesStorage:     mockShares(sharesSlice),
 			validatorsMap:     validators.New(context.TODO()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
@@ -686,12 +680,9 @@ func TestGetValidatorStats(t *testing.T) {
 			},
 		}
 
-		// Set mock expectations for this subtest
-		sharesStorage.EXPECT().List(nil).Return(sharesSlice).Times(1)
-
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage:     sharesStorage,
+			sharesStorage:     mockShares(sharesSlice),
 			validatorsMap:     validators.New(context.TODO()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
@@ -730,12 +721,9 @@ func TestGetValidatorStats(t *testing.T) {
 			},
 		}
 
-		// Set mock expectations for this subtest
-		sharesStorage.EXPECT().List(nil).Return(sharesSlice).Times(1)
-
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage:     sharesStorage,
+			sharesStorage:     mockShares(sharesSlice),
 			validatorsMap:     validators.New(context.TODO()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
@@ -1230,4 +1218,33 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 	mockRecipientsStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(nil, false, nil).AnyTimes()
 
 	return validatorCtrl, mockSharesStorage
+}
+
+type mockShares []*types.SSVShare
+
+func (m mockShares) Range(_ basedb.Reader, fn func(*types.SSVShare) bool) {
+	for _, share := range m {
+		if !fn(share) {
+			break
+		}
+	}
+}
+
+func (m mockShares) Get(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
+	for _, share := range m {
+		if bytes.Equal(share.SharePubKey, pubKey) {
+			return share, true
+		}
+	}
+	return nil, false
+}
+
+func (m mockShares) List(_ basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare {
+	return m
+}
+func (m mockShares) Save(_ basedb.ReadWriter, shares ...*types.SSVShare) error { return nil }
+func (m mockShares) Delete(_ basedb.ReadWriter, pubKey []byte) error           { return nil }
+func (m mockShares) Drop() error                                               { return nil }
+func (m mockShares) UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	return nil, nil
 }
