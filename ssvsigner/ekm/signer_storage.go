@@ -41,7 +41,7 @@ const (
 )
 
 var (
-	ErrWalletNotFound = errors.New("could not find wallet")
+	errWalletNotFound = errors.New("could not find wallet")
 )
 
 // Storage represents the interface for ssv node storage
@@ -141,7 +141,7 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(walletPrefix), []byte(walletPath))
 	if !found {
-		return nil, ErrWalletNotFound
+		return nil, errWalletNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("open wallet: %w", err)
