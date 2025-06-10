@@ -308,18 +308,19 @@ func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
-	allShares := c.sharesStorage.List(nil)
 	operatorShares := uint64(0)
-	active := uint64(0)
-	for _, s := range allShares {
+	active, total := uint64(0), uint64(0)
+	c.sharesStorage.Range(nil, func(s *ssvtypes.SSVShare) bool {
 		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
 		if s.IsParticipating(c.networkConfig, c.networkConfig.EstimatedCurrentEpoch()) {
 			active++
 		}
-	}
-	return uint64(len(allShares)), active, operatorShares, nil
+		total++
+		return true
+	})
+	return total, active, operatorShares, nil
 }
 
 func (c *controller) handleRouterMessages() {
