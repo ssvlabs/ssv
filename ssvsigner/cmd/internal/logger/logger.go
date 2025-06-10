@@ -26,7 +26,7 @@ func SetupLogger(logLevel, logFormat string) (*zap.Logger, error) {
 	return cfg.Build()
 }
 
-// SetupDevelopmentLogger creates a development logger.
-func SetupDevelopmentLogger() (*zap.Logger, error) {
-	return zap.NewDevelopment()
+// SetupProductionLogger creates a production logger.
+func SetupProductionLogger() (*zap.Logger, error) {
+	return zap.NewProduction()
 }

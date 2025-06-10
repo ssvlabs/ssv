@@ -40,7 +40,7 @@ func main() {
 		kong.UsageOnError(),
 	)
 
-	log, err := logger.SetupDevelopmentLogger()
+	log, err := logger.SetupProductionLogger()
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "setup logger: %v\n", err)
 		os.Exit(1)
