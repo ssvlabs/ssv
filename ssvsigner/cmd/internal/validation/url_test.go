@@ -1,0 +1,112 @@
+package validation
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestValidateWeb3SignerEndpoint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		endpoint string
+		wantErr  string
+	}{
+		{
+			name:     "valid https endpoint",
+			endpoint: "https://web3signer.example.com",
+			wantErr:  "",
+		},
+		{
+			name:     "valid http endpoint",
+			endpoint: "http://web3signer.example.com:9000",
+			wantErr:  "",
+		},
+		{
+			name:     "invalid url format",
+			endpoint: "invalid-url",
+			wantErr:  "invalid url format",
+		},
+		{
+			name:     "localhost blocked",
+			endpoint: "http://localhost:9000",
+			wantErr:  "localhost/loopback addresses are not allowed",
+		},
+		{
+			name:     "127.0.0.1 blocked",
+			endpoint: "http://127.0.0.1:9000",
+			wantErr:  "localhost/loopback addresses are not allowed",
+		},
+		{
+			name:     "127.x.x.x blocked",
+			endpoint: "http://127.1.2.3:9000",
+			wantErr:  "localhost/loopback addresses are not allowed",
+		},
+		{
+			name:     "ipv6 loopback blocked",
+			endpoint: "http://[::1]:9000",
+			wantErr:  "localhost/loopback addresses are not allowed",
+		},
+		{
+			name:     "private ip 192.168.x.x blocked",
+			endpoint: "http://192.168.1.1:9000",
+			wantErr:  "private/local ip addresses are not allowed",
+		},
+		{
+			name:     "private ip 10.x.x.x blocked",
+			endpoint: "http://10.0.0.1:9000",
+			wantErr:  "private/local ip addresses are not allowed",
+		},
+		{
+			name:     "private ip 172.16.x.x blocked",
+			endpoint: "http://172.16.0.1:9000",
+			wantErr:  "private/local ip addresses are not allowed",
+		},
+		{
+			name:     "link local blocked",
+			endpoint: "http://169.254.1.1:9000",
+			wantErr:  "private/local ip addresses are not allowed",
+		},
+		{
+			name:     "file scheme blocked",
+			endpoint: "file:///etc/passwd",
+			wantErr:  "only http/https allowed",
+		},
+		{
+			name:     "ftp scheme blocked",
+			endpoint: "ftp://example.com",
+			wantErr:  "only http/https allowed",
+		},
+		{
+			name:     "missing hostname",
+			endpoint: "http://",
+			wantErr:  "missing hostname in url",
+		},
+		{
+			name:     "unspecified ipv4",
+			endpoint: "http://0.0.0.0:9000",
+			wantErr:  "invalid ip address type",
+		},
+		{
+			name:     "multicast ip blocked",
+			endpoint: "http://224.0.0.1:9000",
+			wantErr:  "invalid ip address type",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ValidateWeb3SignerEndpoint(tt.endpoint)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

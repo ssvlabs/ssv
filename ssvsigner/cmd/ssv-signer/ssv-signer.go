@@ -2,15 +2,17 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"net/url"
+	"os"
 	"time"
 
 	"github.com/alecthomas/kong"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
+
 	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/validation"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	"github.com/ssvlabs/ssv/ssvsigner/tls"
@@ -39,21 +41,23 @@ type CLI struct {
 }
 
 func main() {
-	cli := CLI{}
-	_ = kong.Parse(&cli)
+	var cli CLI
 
-	logger, err := setupLogger(cli.LogLevel, cli.LogFormat)
+	kong.Must(&cli,
+		kong.Name("ssv-signer"),
+		kong.UsageOnError(),
+	)
+
+	log, err := logger.SetupLogger(cli.LogLevel, cli.LogFormat)
 	if err != nil {
-		log.Fatal(err)
+		_, _ = fmt.Fprintf(os.Stderr, "setup logger: %v\n", err)
+		os.Exit(1)
 	}
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			log.Println("failed to sync logger: ", err)
-		}
-	}()
 
-	if err := run(logger, cli); err != nil {
-		logger.Fatal("application failed", zap.Error(err))
+	defer func() { _ = log.Sync() }()
+
+	if err := run(log, cli); err != nil {
+		log.Fatal("application failed", zap.Error(err))
 	}
 }
 
@@ -100,24 +104,6 @@ func run(logger *zap.Logger, cli CLI) error {
 	return startServer(logger, cli.ListenAddr, operatorPrivateKey, web3SignerClient, tlsConfig)
 }
 
-func setupLogger(logLevel, logFormat string) (*zap.Logger, error) {
-	cfg := zap.NewProductionConfig()
-	if logFormat == "console" {
-		cfg.Encoding = "console"
-		cfg.EncoderConfig = zap.NewDevelopmentEncoderConfig()
-	} else {
-		cfg.Encoding = "json"
-	}
-
-	level := zap.NewAtomicLevel()
-	if err := level.UnmarshalText([]byte(logLevel)); err != nil {
-		return nil, fmt.Errorf("parse log level: %w", err)
-	}
-	cfg.Level = level
-
-	return cfg.Build()
-}
-
 func validateConfig(cli CLI) error {
 	// Validate private key configuration
 	if cli.PrivateKey == "" && cli.PrivateKeyFile == "" {
@@ -125,8 +111,8 @@ func validateConfig(cli CLI) error {
 	}
 
 	// Validate Web3Signer endpoint
-	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
-		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
+	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint); err != nil {
+		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT: %w", err)
 	}
 
 	return nil
