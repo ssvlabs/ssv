@@ -75,6 +75,9 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 			return start
 		},
 	).AnyTimes()
+	mockNetwork.EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(func(timeVal time.Time) phase0.Slot {
+		return beaconNetwork.EstimatedSlotAtTime(timeVal.Unix())
+	}).AnyTimes()
 
 	mockNetwork.EXPECT().GetSlotDuration().DoAndReturn(
 		func() time.Duration {
