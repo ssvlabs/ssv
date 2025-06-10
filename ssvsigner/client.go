@@ -101,7 +101,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 	}()
 
 	if len(shares) > addShareLimit {
-		return fmt.Errorf("too many shares, max %d", addShareLimit)
+		return fmt.Errorf("too many shares, max allowed per request %d", addShareLimit)
 	}
 
 	encodedShares := make([]ShareKeys, 0, len(shares))
