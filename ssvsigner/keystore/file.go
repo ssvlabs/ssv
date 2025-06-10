@@ -77,7 +77,7 @@ func LoadOperatorKeystore(encryptedPrivateKeyFile, passwordFile string) (keys.Op
 	}
 
 	trimmedPassword := strings.TrimSpace(string(keyStorePassword))
-	if len(trimmedPassword) == 0 {
+	if trimmedPassword == "" {
 		return nil, errors.New("password file is empty")
 	}
 
