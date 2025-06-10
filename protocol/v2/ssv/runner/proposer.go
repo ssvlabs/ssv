@@ -134,13 +134,14 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()))
 
 	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
-	slotStartTime := r.BaseRunner.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot)
-	timeIntoSlot := max(time.Since(time.Unix(slotStartTime, 0)), 0)
-	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
-	select {
-	case <-time.After(proposerDelayAdjusted):
-	case <-ctx.Done():
-		return ctx.Err()
+	slotTime := r.BaseRunner.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot)
+	proposeTime := time.Unix(slotTime, 0).Add(r.proposerDelay)
+	if timeLeft := time.Until(proposeTime); timeLeft > 0 {
+		select {
+		case <-time.After(timeLeft):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
