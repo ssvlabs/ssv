@@ -51,7 +51,7 @@ type Options struct {
 // Validate checks if the options are valid.
 func (o *Options) Validate() error {
 	if len(o.HostDNS) > 0 && len(o.HostAddress) > 0 {
-		return fmt.Errorf("HostDNS and HostAddress are mutually exclusive, please provide only one")
+		return fmt.Errorf("only one of HostDNS or HostAddress may be set")
 	}
 	return nil
 }
