@@ -353,7 +353,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
-				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
+				return observability.Errorf(span, "could not submit to Beacon chain reconstructed contribution and proof: %w", err)
 			}
 
 			successfullySubmittedContributions++
