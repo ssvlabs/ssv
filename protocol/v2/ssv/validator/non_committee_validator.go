@@ -330,7 +330,6 @@ func (ncv *CommitteeObserver) pruneOldSlots(currentSlot phase0.Slot) {
 // copied from BaseRunner
 func (ncv *CommitteeObserver) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
 	// Check previous signature validity
-	var previousSignature spectypes.Signature
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {
 		err = ncv.verifyBeaconPartialSignature(msg.Signer, previousSignature, msg.SigningRoot, share)

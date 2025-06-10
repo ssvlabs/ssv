@@ -179,7 +179,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					}
 				}
 
-				// otherwise iterate over the providedpubkeys
+				// otherwise iterate over the provided pubkeys
 				for _, pubkey := range pubkeys {
 					participantsByPK, err := e.traceStore.GetCommitteeDecideds(slot, pubkey, role)
 					if err != nil {
