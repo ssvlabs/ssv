@@ -19,6 +19,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -49,7 +51,6 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go

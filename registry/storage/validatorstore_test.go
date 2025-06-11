@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/networkconfig"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"

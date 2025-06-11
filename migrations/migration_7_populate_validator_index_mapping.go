@@ -5,10 +5,11 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"go.uber.org/zap"
+
 	opstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 // This migration populates the mapping between validator pubkey -> index

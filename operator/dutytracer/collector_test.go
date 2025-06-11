@@ -12,6 +12,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"

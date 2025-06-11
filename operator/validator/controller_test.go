@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 

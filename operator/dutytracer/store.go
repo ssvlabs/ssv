@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/logging/fields"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"

@@ -24,6 +24,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"

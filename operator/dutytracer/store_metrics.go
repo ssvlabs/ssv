@@ -9,6 +9,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/exporter/v2/store"
 )

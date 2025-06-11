@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 

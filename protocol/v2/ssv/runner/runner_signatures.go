@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )

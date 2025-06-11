@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"

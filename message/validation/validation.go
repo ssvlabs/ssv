@@ -19,6 +19,7 @@ import (
 	"tailscale.com/util/singleflight"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
