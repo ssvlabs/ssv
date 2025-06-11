@@ -24,7 +24,7 @@ type Server struct {
 	exporter   *handlers.Exporter
 	httpServer *http.Server
 
-	full bool
+	fullExporter bool
 }
 
 // New creates a new Server instance.
