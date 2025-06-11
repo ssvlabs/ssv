@@ -149,10 +149,9 @@ func (c *Committee) prepareDutyAndRunner(ctx context.Context, logger *zap.Logger
 	if err != nil {
 		return nil, nil, observability.Errorf(span, "could not create CommitteeRunner: %w", err)
 	}
-
-	// Set timeout function.
-	r.GetBaseRunner().TimeoutF = c.onTimeout
+	r.SetTimeoutFunc(c.onTimeout)
 	c.Runners[duty.Slot] = r
+
 	_, queueExists := c.Queues[duty.Slot]
 	if !queueExists {
 		c.Queues[duty.Slot] = queueContainer{

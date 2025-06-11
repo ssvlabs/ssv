@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -13,6 +14,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -21,7 +24,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -29,12 +31,10 @@ import (
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
-	mtx    *sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	NetworkConfig networkconfig.Network
-	DutyRunners   runner.ValidatorDutyRunners
 	Network       specqbft.Network
 
 	Operator       *spectypes.CommitteeMember
@@ -42,12 +42,19 @@ type Validator struct {
 	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
-	Queues map[spectypes.RunnerRole]queueContainer
+	// mtx protects access to Queues
+	mtx    *sync.RWMutex
+	Queues map[spectypes.RunnerRole]queue.Queue
+
+	DutyRunners runner.ValidatorDutyRunners
 
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
 
-	state uint32
+	// started reflects whether this validator has already been started
+	started atomic.Bool
+	// startedMtx makes sure validator will be started only once
+	startedMtx sync.Mutex
 
 	messageValidator validation.MessageValidator
 }
@@ -67,28 +74,15 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
 		OperatorSigner:   options.OperatorSigner,
-		Queues:           make(map[spectypes.RunnerRole]queueContainer),
-		state:            uint32(NotStarted),
+		Queues:           make(map[spectypes.RunnerRole]queue.Queue),
 		dutyIDs:          hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
 		messageValidator: options.MessageValidator,
 	}
 
+	// some additional steps to prepare duty runners for handling duties
 	for _, dutyRunner := range options.DutyRunners {
-		// Set timeout function.
-		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
-
-		//Setup the queue.
-		role := dutyRunner.GetBaseRunner().RunnerRoleType
-
-		v.Queues[role] = queueContainer{
-			Q: queue.New(options.QueueSize),
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             0,
-				Slot:               0,
-				//Quorum:             options.SSVShare.Share,// TODO
-			},
-		}
+		dutyRunner.SetTimeoutFunc(v.onTimeout)
+		v.Queues[dutyRunner.GetRole()] = queue.New(options.QueueSize)
 	}
 
 	return v
@@ -115,13 +109,14 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	}
 
 	// Log with duty ID.
-	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.NetworkConfig.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type, vDuty.ValidatorIndex))
+	dutyID := fields.FormatDutyID(dutyRunner.GetNetworkConfig().EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type, vDuty.ValidatorIndex)
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), dutyID)
 	logger = v.withDutyID(logger, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.
-	if baseRunner.QBFTController != nil {
-		logger = logger.With(fields.Height(baseRunner.QBFTController.Height))
+	height := dutyRunner.GetLastHeight()
+	if height != 0 {
+		logger = logger.With(fields.Height(height))
 	}
 
 	const eventMsg = "ℹ️ starting duty processing"

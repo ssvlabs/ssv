@@ -193,8 +193,36 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (cr *CommitteeRunner) GetBaseRunner() *BaseRunner {
-	return cr.BaseRunner
+func (cr *CommitteeRunner) HasRunningQBFTInstance() bool {
+	return cr.BaseRunner.HasRunningQBFTInstance()
+}
+
+func (cr *CommitteeRunner) HasAcceptedProposalForCurrentRound() bool {
+	return cr.BaseRunner.HasAcceptedProposalForCurrentRound()
+}
+
+func (cr *CommitteeRunner) GetShares() map[phase0.ValidatorIndex]*spectypes.Share {
+	return cr.BaseRunner.GetShares()
+}
+
+func (cr *CommitteeRunner) GetRole() spectypes.RunnerRole {
+	return cr.BaseRunner.GetRole()
+}
+
+func (cr *CommitteeRunner) GetLastHeight() specqbft.Height {
+	return cr.BaseRunner.GetLastHeight()
+}
+
+func (cr *CommitteeRunner) GetLastRound() specqbft.Round {
+	return cr.BaseRunner.GetLastRound()
+}
+
+func (cr *CommitteeRunner) GetStateRoot() ([32]byte, error) {
+	return cr.BaseRunner.GetStateRoot()
+}
+
+func (cr *CommitteeRunner) SetTimeoutFunc(fn TimeoutF) {
+	cr.BaseRunner.SetTimeoutFunc(fn)
 }
 
 func (cr *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
@@ -207,6 +235,10 @@ func (cr *CommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 
 func (cr *CommitteeRunner) GetNetwork() specqbft.Network {
 	return cr.network
+}
+
+func (cr *CommitteeRunner) GetNetworkConfig() networkconfig.Network {
+	return cr.BaseRunner.NetworkConfig
 }
 
 func (cr *CommitteeRunner) GetBeaconSigner() ekm.BeaconSigner {
@@ -303,7 +335,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 
 			span.AddEvent("signing attestation data", attr)
-			partialMsg, err := cr.BaseRunner.signBeaconObject(
+			partialMsg, err := signBeaconObject(
 				ctx,
 				cr,
 				validatorDuty,
@@ -336,7 +368,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			totalSyncCommitteeDuties++
 
 			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := cr.BaseRunner.signBeaconObject(
+			partialMsg, err := signBeaconObject(
 				ctx,
 				cr,
 				validatorDuty,
@@ -380,7 +412,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID: spectypes.NewMsgID(
 			cr.BaseRunner.NetworkConfig.GetDomainType(),
-			cr.GetBaseRunner().QBFTController.CommitteeMember.CommitteeID[:],
+			cr.BaseRunner.QBFTController.CommitteeMember.CommitteeID[:],
 			cr.BaseRunner.RunnerRoleType,
 		),
 	}
@@ -408,6 +440,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (cr *CommitteeRunner) OnTimeoutQBFT(ctx context.Context, logger *zap.Logger, msg ssvtypes.EventMsg) error {
+	return cr.BaseRunner.OnTimeoutQBFT(ctx, logger, msg)
 }
 
 // TODO finish edge case where some roots may be missing
@@ -611,7 +647,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if attestationsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
 				uint32(attestationsCount),
-				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 				spectypes.BNRoleAttester)
 		}
 
@@ -627,7 +663,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		))
 
 		logger.Info(eventMsg,
-			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot())),
+			fields.Epoch(cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot())),
 			fields.Height(cr.BaseRunner.QBFTController.Height),
 			fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
 			fields.BlockRoot(attData.BeaconBlockRoot),
@@ -662,7 +698,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		if syncMsgsCount <= math.MaxUint32 {
 			recordSuccessfulSubmission(ctx,
 				uint32(syncMsgsCount),
-				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
+				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 				spectypes.BNRoleSyncCommittee)
 		}
 		const eventMsg = "✅ successfully submitted sync committee"
@@ -770,13 +806,13 @@ func findValidators(
 }
 
 // Unneeded since no preconsensus phase
-func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("no pre consensus root for committee runner")
+func (cr *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return nil, spectypes.DomainError, errors.New("no pre consensus roots for committee runner")
 }
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+func (cr *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("expected post consensus roots function is unused")
 }
 
@@ -797,9 +833,8 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 	}
 
 	slot := duty.DutySlot()
-	epoch := cr.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
-
-	dataVersion, _ := cr.GetBaseRunner().NetworkConfig.ForkAtEpoch(epoch)
+	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
+	dataVersion, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
 
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		if validatorDuty == nil {
@@ -811,7 +846,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx contex
 		}
 		logger := logger.With(fields.Validator(validatorDuty.PubKey[:]))
 		slot := validatorDuty.DutySlot()
-		epoch := cr.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
+		epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(slot)
 		switch validatorDuty.Type {
 		case spectypes.BNRoleAttester:
 			// Attestation object

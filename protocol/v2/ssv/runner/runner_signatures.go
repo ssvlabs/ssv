@@ -14,27 +14,40 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-func (b *BaseRunner) signBeaconObject(
+func signBeaconObject(
 	ctx context.Context,
 	runner Runner,
 	duty *spectypes.ValidatorDuty,
-	obj ssz.HashRoot,
+	root ssz.HashRoot,
 	slot spec.Slot,
 	signatureDomain spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetBaseRunner().NetworkConfig.EstimatedEpochAtSlot(slot)
+	epoch := runner.GetNetworkConfig().EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get beacon domain")
+		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}
-	if _, ok := runner.GetBaseRunner().Share[duty.ValidatorIndex]; !ok {
-		return nil, fmt.Errorf("unknown validator index %d", duty.ValidatorIndex)
+	return signAsValidator(ctx, runner, duty.ValidatorIndex, root, slot, signatureDomain, domain)
+}
+
+func signAsValidator(
+	ctx context.Context,
+	runner Runner,
+	validatorIndex spec.ValidatorIndex,
+	root ssz.HashRoot,
+	slot spec.Slot,
+	signatureDomain spec.DomainType,
+	domain spec.Domain,
+) (*spectypes.PartialSignatureMessage, error) {
+	share, ok := runner.GetShares()[validatorIndex]
+	if !ok {
+		return nil, fmt.Errorf("unknown validator index %d", validatorIndex)
 	}
 	sig, r, err := runner.GetSigner().SignBeaconObject(
 		ctx,
-		obj,
+		root,
 		domain,
-		spec.BLSPubKey(runner.GetBaseRunner().Share[duty.ValidatorIndex].SharePubKey),
+		spec.BLSPubKey(share.SharePubKey),
 		slot,
 		signatureDomain,
 	)
@@ -46,22 +59,9 @@ func (b *BaseRunner) signBeaconObject(
 		PartialSignature: sig,
 		SigningRoot:      r,
 		Signer:           runner.GetOperatorSigner().GetOperatorID(),
-		ValidatorIndex:   duty.ValidatorIndex,
+		ValidatorIndex:   validatorIndex,
 	}, nil
 }
-
-//func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
-//	signature, err := runner.GetSigner().SignBeaconObject(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
-//	if err != nil {
-//		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
-//	}
-//
-//	return &spectypes.SignedPartialSignatureMessage{
-//		Message:   *msg,
-//		Signature: signature,
-//		Signer:    b.Share.OperatorID,
-//	}, nil
-//}
 
 // Validate message content without verifying signatures
 func (b *BaseRunner) validatePartialSigMsgForSlot(
@@ -145,7 +145,6 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer spectypes.OperatorID, s
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
 func (b *BaseRunner) resolveDuplicateSignature(container *ssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
-
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.ValidatorIndex, msg.Signer, msg.SigningRoot)
 	if err == nil {

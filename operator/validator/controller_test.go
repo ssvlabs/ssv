@@ -302,12 +302,18 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
+	done := make(chan struct{})
 	go func() {
-		time.Sleep(time.Second * 4)
-		panic("time out!")
+		wg.Wait()
+		close(done)
 	}()
 
-	wg.Wait()
+	select {
+	case <-done:
+		return
+	case <-time.After(4 * time.Second):
+		panic("time out!")
+	}
 }
 
 func TestSetupValidators(t *testing.T) {

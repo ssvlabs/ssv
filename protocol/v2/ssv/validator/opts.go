@@ -51,13 +51,3 @@ func (o *Options) defaults() {
 		o.GasLimit = spectypes.DefaultGasLimit
 	}
 }
-
-// State of the validator
-type State uint32
-
-const (
-	// NotStarted the validator hasn't started
-	NotStarted State = iota
-	// Started validator is running
-	Started
-)

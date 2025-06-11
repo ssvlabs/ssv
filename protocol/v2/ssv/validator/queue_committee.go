@@ -14,11 +14,16 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
+
+// queueContainer wraps a queue with its corresponding state
+type queueContainer struct {
+	Q          queue.Queue
+	queueState *queue.State
+}
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
@@ -111,24 +116,17 @@ func (c *Committee) ConsumeQueue(
 	handler MessageHandler,
 	rnr *runner.CommitteeRunner,
 ) error {
+	// Construct a representation of the current state.
 	state := *q.queueState
 
 	logger.Debug("📬 queue consumer is running")
 	lens := make([]int, 0, 10)
 
 	for ctx.Err() == nil {
-		// Construct a representation of the current state.
-		var runningInstance *instance.Instance
-		if rnr.HasRunningDuty() {
-			runningInstance = rnr.GetBaseRunner().State.RunningInstance
-			if runningInstance != nil {
-				decided, _ := runningInstance.IsDecided()
-				state.HasRunningInstance = !decided
-			}
-		}
+		state.HasRunningInstance = rnr.HasRunningQBFTInstance()
 
 		filter := queue.FilterAny
-		if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		if state.HasRunningInstance && !rnr.HasAcceptedProposalForCurrentRound() {
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current round.
 			filter = func(m *queue.SSVMessage) bool {
@@ -143,7 +141,7 @@ func (c *Committee) ConsumeQueue(
 
 				return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 			}
-		} else if runningInstance != nil && !runningInstance.State.Decided {
+		} else if state.HasRunningInstance {
 			filter = func(ssvMessage *queue.SSVMessage) bool {
 				// don't read post consensus until decided
 				return ssvMessage.MsgType != spectypes.SSVPartialSignatureMsgType
@@ -204,31 +202,3 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
-
-//
-//// GetLastHeight returns the last height for the given identifier
-//func (v *Committee) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-//	if r == nil {
-//		return specqbft.Height(0)
-//	}
-//	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-//		return ctrl.Height
-//	}
-//	return specqbft.Height(0)
-//}
-//
-//// GetLastRound returns the last height for the given identifier
-//func (v *Committee) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
-//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-//	if r == nil {
-//		return specqbft.Round(1)
-//	}
-//	if r != nil && r.HasRunningDuty() {
-//		inst := r.GetBaseRunner().State.RunningInstance
-//		if inst != nil {
-//			return inst.State.Round
-//		}
-//	}
-//	return specqbft.Round(1)
-//}

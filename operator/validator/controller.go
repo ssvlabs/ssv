@@ -20,6 +20,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -47,7 +49,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -182,7 +183,7 @@ type controller struct {
 	historySyncBatchSize int
 	messageValidator     validation.MessageValidator
 
-	// nonCommittees is a cache of initialized committeeObserver instances
+	// committeesObservers is a cache of initialized committeeObserver instances
 	committeesObservers      *ttlcache.Cache[spectypes.MessageID, *committeeObserver]
 	committeesObserversMutex sync.Mutex
 
@@ -197,7 +198,7 @@ type controller struct {
 }
 
 // NewController creates a new validator controller instance
-func NewController(logger *zap.Logger, options ControllerOptions) Controller {
+func NewController(logger *zap.Logger, options ControllerOptions) *controller {
 	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
@@ -239,7 +240,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
-	ctrl := controller{
+	ctrl := &controller{
 		logger:            logger.Named(logging.NameController),
 		networkConfig:     options.NetworkConfig,
 		sharesStorage:     options.RegistryStorage.Shares(),
@@ -294,7 +295,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	go ctrl.domainCache.Start()
 	go ctrl.beaconVoteRoots.Start()
 
-	return &ctrl
+	return ctrl
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
@@ -627,6 +628,16 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
+// ListValidatorPubKeys returns a list of validator pubkeys for all validators controller manages
+func (c *controller) ListValidatorPubKeys() []phase0.BLSPubKey {
+	result := make([]phase0.BLSPubKey, 0, c.validatorsMap.SizeValidators())
+	c.validatorsMap.ForEachValidator(func(v *validator.Validator) bool {
+		result = append(result, phase0.BLSPubKey(v.Share.ValidatorPubKey))
+		return true
+	})
+	return result
+}
+
 func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) {
 	dutyID := fields.FormatDutyID(c.networkConfig.EstimatedEpochAtSlot(duty.Slot), duty.Slot, duty.Type, duty.ValidatorIndex)
 	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
@@ -663,7 +674,7 @@ func (c *controller) ExecuteDuty(ctx context.Context, logger *zap.Logger, duty *
 		}
 		dec.TraceContext = ctx
 		span.AddEvent("pushing message to the queue")
-		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+		if pushed := v.Queues[duty.RunnerRole()].TryPush(dec); !pushed {
 			const eventMsg = "dropping ExecuteDuty message because the queue is full"
 			logger.Warn(eventMsg)
 			span.AddEvent(eventMsg)
@@ -1201,7 +1212,7 @@ func SetupRunners(
 		return qbftCtrl
 	}
 
-	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share) // TODO: fill the map
+	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
 	shareMap[options.SSVShare.ValidatorIndex] = &options.SSVShare.Share
 
 	runners := runner.ValidatorDutyRunners{}
