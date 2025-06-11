@@ -37,17 +37,17 @@ func TestValidateWeb3SignerEndpoint(t *testing.T) {
 		{
 			name:     "127.0.0.1 allowed",
 			endpoint: "http://127.0.0.1:9000",
-			wantErr:  "are not allowed",
+			wantErr:  "",
 		},
 		{
 			name:     "127.x.x.x allowed",
 			endpoint: "http://127.1.2.3:9000",
-			wantErr:  "are not allowed",
+			wantErr:  "",
 		},
 		{
 			name:     "ipv6 loopback allowed",
 			endpoint: "http://[::1]:9000",
-			wantErr:  "are not allowed",
+			wantErr:  "",
 		},
 		{
 			name:     "private ip 192.168.x.x blocked",

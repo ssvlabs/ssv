@@ -33,8 +33,9 @@ func ValidateWeb3SignerEndpoint(endpoint string) error {
 			return fmt.Errorf("invalid ip address type (multicast): %s", ip)
 		}
 
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
-			return fmt.Errorf("local and private network ip addresses are not allowed: %s", ip)
+		// Only block non-loopback private IPs
+		if !ip.IsLoopback() && (ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()) {
+			return fmt.Errorf("private network ip addresses (excluding loopback) are not allowed: %s", ip)
 		}
 	}
 
