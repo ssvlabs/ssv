@@ -37,37 +37,37 @@ func TestValidateWeb3SignerEndpoint(t *testing.T) {
 		{
 			name:     "127.0.0.1 allowed",
 			endpoint: "http://127.0.0.1:9000",
-			wantErr:  "",
+			wantErr:  "are not allowed",
 		},
 		{
 			name:     "127.x.x.x allowed",
 			endpoint: "http://127.1.2.3:9000",
-			wantErr:  "",
+			wantErr:  "are not allowed",
 		},
 		{
 			name:     "ipv6 loopback allowed",
 			endpoint: "http://[::1]:9000",
-			wantErr:  "",
+			wantErr:  "are not allowed",
 		},
 		{
 			name:     "private ip 192.168.x.x blocked",
 			endpoint: "http://192.168.1.1:9000",
-			wantErr:  "private/local ip addresses are not allowed",
+			wantErr:  "are not allowed",
 		},
 		{
 			name:     "private ip 10.x.x.x blocked",
 			endpoint: "http://10.0.0.1:9000",
-			wantErr:  "private/local ip addresses are not allowed",
+			wantErr:  "are not allowed",
 		},
 		{
 			name:     "private ip 172.16.x.x blocked",
 			endpoint: "http://172.16.0.1:9000",
-			wantErr:  "private/local ip addresses are not allowed",
+			wantErr:  "are not allowed",
 		},
 		{
 			name:     "link local blocked",
 			endpoint: "http://169.254.1.1:9000",
-			wantErr:  "private/local ip addresses are not allowed",
+			wantErr:  "are not allowed",
 		},
 		{
 			name:     "file scheme blocked",
