@@ -3,7 +3,10 @@ package runner
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
+	"hash"
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -11,14 +14,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -26,6 +26,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type AggregatorRunner struct {
@@ -37,6 +38,9 @@ type AggregatorRunner struct {
 	operatorSigner ssvtypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
+
+	// IsAggregator is a struct field, so it can be mocked out for easy testing
+	IsAggregator func(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool `json:"-"`
 }
 
 var _ Runner = &AggregatorRunner{}
@@ -51,7 +55,7 @@ func NewAggregatorRunner(
 	operatorSigner ssvtypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
-) (Runner, error) {
+) (*AggregatorRunner, error) {
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
 	}
@@ -71,6 +75,8 @@ func NewAggregatorRunner(
 		operatorSigner: operatorSigner,
 		valCheck:       valCheck,
 		measurements:   NewMeasurementsStore(),
+
+		IsAggregator: isAggregator,
 	}, nil
 }
 
@@ -117,6 +123,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 		return observability.Errorf(span, "got pre-consensus quorum but it has invalid signatures: %w", err)
 	}
 
+	// signer must be same for all messages, at least 1 message must be present (this is validated prior)
+	signer := signedMsg.Messages[0].Signer
 	duty := r.GetState().StartingDuty.(*spectypes.ValidatorDuty)
 	span.SetAttributes(
 		observability.CommitteeIndexAttribute(duty.CommitteeIndex),
@@ -126,9 +134,20 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	const eventMsg = "🧩 got partial signature quorum"
 	span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorSignerAttribute(signedMsg.Messages[0].Signer)))
 	logger.Debug(eventMsg,
-		zap.Any("signer", signedMsg.Messages[0].Signer), // TODO: always 1?
+		zap.Any("signer", signer),
 		fields.Slot(duty.Slot),
 	)
+
+	// this is the earliest in aggregator runner flow where we get to know whether we are meant
+	// to perform this aggregation duty or not
+	ok := r.IsAggregator(r.BaseRunner.NetworkConfig.GetTargetAggregatorsPerCommittee(), duty.CommitteeLength, fullSig)
+	if !ok {
+		logger.Debug("aggregation duty won't be needed from this validator for this slot",
+			zap.Any("signer", signer),
+			fields.Slot(duty.Slot),
+		)
+		return nil
+	}
 
 	r.measurements.PauseDutyFlow()
 
@@ -475,7 +494,6 @@ func (r *AggregatorRunner) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-// GetRoot returns the root used for signing and verification
 func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
@@ -527,4 +545,52 @@ func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedA
 	}
 
 	return ret, nil
+}
+
+// isAggregator returns true if the signature is from the input validator. The committee
+// count is provided as an argument rather than imported implementation from spec. Having
+// committee count as an argument allows cheaper computation at run time.
+//
+// Spec pseudocode definition:
+//
+//	def is_aggregator(state: BeaconState, slot: Slot, index: CommitteeIndex, slot_signature: BLSSignature) -> bool:
+//	 committee = get_beacon_committee(state, slot, index)
+//	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
+//	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
+func isAggregator(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool {
+	modulo := committeeCount / targetAggregatorsPerCommittee
+	if modulo == 0 {
+		// Modulo must be at least 1.
+		modulo = 1
+	}
+
+	b := hashSha256(slotSig)
+	return binary.LittleEndian.Uint64(b[:8])%modulo == 0
+}
+
+var sha256Pool = sync.Pool{New: func() interface{} {
+	return sha256.New()
+}}
+
+// hashSha256 defines a function that returns the sha256 checksum of the data passed in.
+// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/core/0_beacon-chain.md#hash
+func hashSha256(data []byte) [32]byte {
+	h, ok := sha256Pool.Get().(hash.Hash)
+	if !ok {
+		h = sha256.New()
+	}
+	defer sha256Pool.Put(h)
+	h.Reset()
+
+	var b [32]byte
+
+	// The hash interface never returns an error, for that reason
+	// we are not handling the error below. For reference, it is
+	// stated here https://golang.org/pkg/hash/#Hash
+
+	// #nosec G104
+	h.Write(data)
+	h.Sum(b[:0])
+
+	return b
 }

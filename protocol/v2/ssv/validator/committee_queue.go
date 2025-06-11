@@ -186,8 +186,7 @@ func (c *Committee) ConsumeQueue(
 
 func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg string, withFields ...zap.Field) {
 	baseFields := []zap.Field{}
-	switch msg.MsgType {
-	case spectypes.SSVConsensusMsgType:
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
 		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
 			zap.Uint64("msg_height", uint64(sm.Height)),
@@ -195,40 +194,15 @@ func (c *Committee) logMsg(logger *zap.Logger, msg *queue.SSVMessage, logMsg str
 			zap.Uint64("consensus_msg_type", uint64(sm.MsgType)),
 			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
-	case spectypes.SSVPartialSignatureMsgType:
+	}
+	if msg.MsgType == spectypes.SSVPartialSignatureMsgType {
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
+		// signer must be same for all messages, at least 1 message must be present (this is validated prior)
+		signer := psm.Messages[0].Signer
 		baseFields = []zap.Field{
-			zap.Uint64("signer", psm.Messages[0].Signer),
+			zap.Uint64("signer", signer),
 			fields.Slot(psm.Slot),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
-
-//
-//// GetLastHeight returns the last height for the given identifier
-//func (v *Committee) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-//	if r == nil {
-//		return specqbft.Height(0)
-//	}
-//	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-//		return ctrl.Height
-//	}
-//	return specqbft.Height(0)
-//}
-//
-//// GetLastRound returns the last height for the given identifier
-//func (v *Committee) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
-//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-//	if r == nil {
-//		return specqbft.Round(1)
-//	}
-//	if r != nil && r.HasRunningDuty() {
-//		inst := r.GetBaseRunner().State.RunningInstance
-//		if inst != nil {
-//			return inst.State.Round
-//		}
-//	}
-//	return specqbft.Round(1)
-//}

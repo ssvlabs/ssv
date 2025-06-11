@@ -140,30 +140,6 @@ func isValidProposal(
 	return errors.New("proposal is not valid with current state")
 }
 
-func IsProposalJustification(
-	config qbft.IConfig,
-	committeeMember *spectypes.CommitteeMember,
-	roundChangeMsgs []*specqbft.ProcessingMessage,
-	prepareMsgs []*specqbft.ProcessingMessage,
-	height specqbft.Height,
-	round specqbft.Round,
-	fullData []byte,
-) error {
-	return isProposalJustification(
-		&specqbft.State{
-			CommitteeMember: committeeMember,
-			Height:          height,
-		},
-		config,
-		roundChangeMsgs,
-		prepareMsgs,
-		height,
-		round,
-		fullData,
-		func(data []byte) error { return nil },
-	)
-}
-
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
 func isProposalJustification(
 	state *specqbft.State,
@@ -212,7 +188,6 @@ func isProposalJustification(
 		if !previouslyPrepared {
 			return nil
 		} else {
-
 			// check prepare quorum
 			if !specqbft.HasQuorum(state.CommitteeMember, prepareMsgs) {
 				return errors.New("prepares has no quorum")
