@@ -318,42 +318,36 @@ func TestValidatorDutyStore(t *testing.T) {
 
 	dutyTrace, _, err := collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK1)
 	require.NoError(t, err)
-	dutyTrace.update(spectypes.BNRoleProposer, slot4, func(roleDutyTrace *model.ValidatorDutyTrace) error {
-		roleDutyTrace.Validator = index
-		roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
-			Signers: []spectypes.OperatorID{1},
-		})
-		return nil
+	roleDutyTrace := dutyTrace.getOrCreate(slot4, spectypes.BNRoleProposer)
+	roleDutyTrace.Validator = index
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
+		Signers: []spectypes.OperatorID{1},
 	})
+
 	require.NotNil(t, dutyTrace)
 
 	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot4, spectypes.BNRoleProposer, validatorPK2)
 	require.NoError(t, err)
-	dutyTrace.update(spectypes.BNRoleProposer, slot4, func(roleDutyTrace *model.ValidatorDutyTrace) error {
-		roleDutyTrace.Validator = phase0.ValidatorIndex(2)
-		return nil
-	})
+	roleDutyTrace = dutyTrace.getOrCreate(slot4, spectypes.BNRoleProposer)
+	roleDutyTrace.Validator = phase0.ValidatorIndex(2)
 	require.NotNil(t, dutyTrace)
 
 	slot7 := phase0.Slot(7)
 
 	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK1)
 	require.NoError(t, err)
-	dutyTrace.update(spectypes.BNRoleProposer, slot7, func(roleDutyTrace *model.ValidatorDutyTrace) error {
-		roleDutyTrace.Validator = index
-		roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
-			Signers: []spectypes.OperatorID{5},
-		})
-		return nil
+	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
+	roleDutyTrace.Validator = index
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
+		Signers: []spectypes.OperatorID{5},
 	})
+
 	require.NotNil(t, dutyTrace)
 
 	dutyTrace, _, err = collector.getOrCreateValidatorTrace(slot7, spectypes.BNRoleProposer, validatorPK2)
 	require.NoError(t, err)
-	dutyTrace.update(spectypes.BNRoleProposer, slot7, func(roleDutyTrace *model.ValidatorDutyTrace) error {
-		roleDutyTrace.Validator = phase0.ValidatorIndex(2)
-		return nil
-	})
+	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
+	roleDutyTrace.Validator = phase0.ValidatorIndex(2)
 	require.NotNil(t, dutyTrace)
 
 	dd, err := collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot4, []spectypes.ValidatorPK{validatorPK1})
@@ -369,13 +363,11 @@ func TestValidatorDutyStore(t *testing.T) {
 	require.Equal(t, []spectypes.OperatorID{5}, dd[0].Signers)
 
 	// test that decideds include signers in the 'Post' consensus messages
-	dutyTrace.update(spectypes.BNRoleProposer, slot7, func(roleDutyTrace *model.ValidatorDutyTrace) error {
-		roleDutyTrace.Post = append(roleDutyTrace.Post, &model.PartialSigTrace{Signer: 99})
-		roleDutyTrace.Post = append(roleDutyTrace.Post, &model.PartialSigTrace{Signer: 100})
-		roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
-			Signers: []spectypes.OperatorID{100},
-		})
-		return nil
+	roleDutyTrace = dutyTrace.getOrCreate(slot7, spectypes.BNRoleProposer)
+	roleDutyTrace.Post = append(roleDutyTrace.Post, &model.PartialSigTrace{Signer: 99})
+	roleDutyTrace.Post = append(roleDutyTrace.Post, &model.PartialSigTrace{Signer: 100})
+	roleDutyTrace.Decideds = append(roleDutyTrace.Decideds, &model.DecidedTrace{
+		Signers: []spectypes.OperatorID{100},
 	})
 	dd, err = collector.GetValidatorDecideds(spectypes.BNRoleProposer, slot7, []spectypes.ValidatorPK{validatorPK2})
 	require.NoError(t, err)
