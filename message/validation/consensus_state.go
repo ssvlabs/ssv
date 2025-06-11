@@ -32,7 +32,7 @@ func newOperatorState(size uint64) *OperatorState {
 	}
 }
 
-func (os *OperatorState) Get(slot phase0.Slot) *SignerState {
+func (os *OperatorState) GetSignerState(slot phase0.Slot) *SignerState {
 	s := os.signers[(uint64(slot) % uint64(len(os.signers)))]
 	if s == nil || s.Slot != slot {
 		return nil
@@ -41,7 +41,7 @@ func (os *OperatorState) Get(slot phase0.Slot) *SignerState {
 	return s
 }
 
-func (os *OperatorState) Set(slot phase0.Slot, epoch phase0.Epoch, state *SignerState) {
+func (os *OperatorState) SetSignerState(slot phase0.Slot, epoch phase0.Epoch, state *SignerState) {
 	os.signers[uint64(slot)%uint64(len(os.signers))] = state
 	if slot > os.maxSlot {
 		os.maxSlot = slot
