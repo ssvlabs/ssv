@@ -163,7 +163,11 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	slotStartTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
 	timeIntoSlot := max(time.Since(slotStartTime), 0)
 	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
-	time.Sleep(proposerDelayAdjusted)
+	select {
+	case <-time.After(proposerDelayAdjusted):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
