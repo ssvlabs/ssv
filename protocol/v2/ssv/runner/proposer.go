@@ -142,7 +142,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("took", time.Since(start)),
+		fields.Took(time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
@@ -299,7 +299,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		}
 		bSummary, summarizeErr = summarizeBlock(vBlindedBlk)
 		logger = logger.With(
-			zap.String("block_hash", bSummary.Hash.String()),
+			fields.BlockHash(bSummary.Hash),
 			zap.NamedError("summarize_err", summarizeErr),
 		)
 
@@ -317,7 +317,7 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		}
 		bSummary, summarizeErr = summarizeBlock(vBlk)
 		logger = logger.With(
-			zap.String("block_hash", bSummary.Hash.String()),
+			fields.BlockHash(bSummary.Hash),
 			zap.NamedError("summarize_err", summarizeErr),
 		)
 
@@ -345,9 +345,9 @@ func (r *ProposerRunner) ProcessPostConsensus(ctx context.Context, logger *zap.L
 		fields.Slot(r.GetState().StartingDuty.DutySlot()),
 		fields.Height(r.BaseRunner.QBFTController.Height),
 		fields.Round(r.GetState().RunningInstance.State.Round),
-		zap.String("block_hash", bSummary.Hash.String()),
+		fields.BlockHash(bSummary.Hash),
 		zap.Bool("blinded", bSummary.Blinded),
-		zap.Duration("took", time.Since(start)),
+		fields.Took(time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr),
 		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
 		fields.TotalDutyTime(r.measurements.TotalDutyTime()))
