@@ -24,11 +24,6 @@ func TestRun_InvalidWeb3SignerEndpoint(t *testing.T) {
 			wantErr:  "invalid WEB3SIGNER_ENDPOINT: invalid url format",
 		},
 		{
-			name:     "localhost blocked",
-			endpoint: "http://localhost:9000",
-			wantErr:  "invalid WEB3SIGNER_ENDPOINT: localhost/loopback addresses are not allowed",
-		},
-		{
 			name:     "private IP blocked",
 			endpoint: "http://192.168.1.1:9000",
 			wantErr:  "invalid WEB3SIGNER_ENDPOINT: private/local ip addresses are not allowed",

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strings"
 )
 
 // ValidateWeb3SignerEndpoint validates that the endpoint is safe from SSRF attacks.
@@ -24,24 +23,18 @@ func ValidateWeb3SignerEndpoint(endpoint string) error {
 		return fmt.Errorf("missing hostname in url")
 	}
 
-	// Check for localhost/loopback
-	if strings.EqualFold(hostname, "localhost") ||
-		strings.HasPrefix(hostname, "127.") ||
-		hostname == "::1" {
-		return fmt.Errorf("localhost/loopback addresses are not allowed")
-	}
-
 	// Parse IP if it's an IP address
 	if ip := net.ParseIP(hostname); ip != nil {
 		if ip.IsUnspecified() {
-			return fmt.Errorf("invalid ip address type: %s", ip)
+			return fmt.Errorf("invalid ip address type (unspecified): %s", ip)
 		}
 
 		if ip.IsMulticast() {
-			return fmt.Errorf("invalid ip address type: %s", ip)
+			return fmt.Errorf("invalid ip address type (multicast): %s", ip)
 		}
 
-		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		// Only block non-loopback private IPs
+		if !ip.IsLoopback() && (ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()) {
 			return fmt.Errorf("private/local ip addresses are not allowed: %s", ip)
 		}
 	}

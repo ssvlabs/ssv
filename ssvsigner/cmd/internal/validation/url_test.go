@@ -30,24 +30,24 @@ func TestValidateWeb3SignerEndpoint(t *testing.T) {
 			wantErr:  "invalid url format",
 		},
 		{
-			name:     "localhost blocked",
+			name:     "localhost allowed",
 			endpoint: "http://localhost:9000",
-			wantErr:  "localhost/loopback addresses are not allowed",
+			wantErr:  "",
 		},
 		{
-			name:     "127.0.0.1 blocked",
+			name:     "127.0.0.1 allowed",
 			endpoint: "http://127.0.0.1:9000",
-			wantErr:  "localhost/loopback addresses are not allowed",
+			wantErr:  "",
 		},
 		{
-			name:     "127.x.x.x blocked",
+			name:     "127.x.x.x allowed",
 			endpoint: "http://127.1.2.3:9000",
-			wantErr:  "localhost/loopback addresses are not allowed",
+			wantErr:  "",
 		},
 		{
-			name:     "ipv6 loopback blocked",
+			name:     "ipv6 loopback allowed",
 			endpoint: "http://[::1]:9000",
-			wantErr:  "localhost/loopback addresses are not allowed",
+			wantErr:  "",
 		},
 		{
 			name:     "private ip 192.168.x.x blocked",
@@ -87,12 +87,12 @@ func TestValidateWeb3SignerEndpoint(t *testing.T) {
 		{
 			name:     "unspecified ipv4",
 			endpoint: "http://0.0.0.0:9000",
-			wantErr:  "invalid ip address type",
+			wantErr:  "invalid ip address type (unspecified)",
 		},
 		{
 			name:     "multicast ip blocked",
 			endpoint: "http://224.0.0.1:9000",
-			wantErr:  "invalid ip address type",
+			wantErr:  "invalid ip address type (multicast)",
 		},
 	}
 
