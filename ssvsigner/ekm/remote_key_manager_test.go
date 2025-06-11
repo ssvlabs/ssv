@@ -69,7 +69,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 	encShare := []byte("encrypted_share_data")
 
-	mockSlashingProtector.On("BumpSlashingProtection", nil, pubKey).Return(nil)
+	mockSlashingProtector.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil)
 
 	s.client.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 		PubKey:           pubKey,
@@ -99,8 +99,8 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 
-	mockSlashingProtector.On("RemoveHighestAttestation", pubKey).Return(nil)
-	mockSlashingProtector.On("RemoveHighestProposal", pubKey).Return(nil)
+	mockSlashingProtector.On("RemoveHighestAttestationTxn", pubKey).Return(nil)
+	mockSlashingProtector.On("RemoveHighestProposalTxn", pubKey).Return(nil)
 
 	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(nil)
 
@@ -1507,6 +1507,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
+		mockSlashingProtector.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
@@ -1536,12 +1537,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
-			PubKey:           pubKey,
-			EncryptedPrivKey: encShare,
-		}).Return(nil).Once()
-
-		slashingMock.On("BumpSlashingProtection", pubKey).Return(errors.New("bump slashing protection error")).Once()
+		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(errors.New("bump slashing protection error")).Once()
 
 		err := rmTest.AddShare(context.Background(), nil, encShare, pubKey)
 
@@ -1595,7 +1591,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
 			Return(nil).Once()
 
-		slashingMock.On("RemoveHighestAttestation", pubKey).
+		slashingMock.On("RemoveHighestAttestationTxn", pubKey).
 			Return(errors.New("remove highest attestation error")).Once()
 
 		s.ErrorContains(rmTest.RemoveShare(context.Background(), nil, pubKey), "could not remove highest attestation")
@@ -1622,8 +1618,8 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(nil).Once()
 
-		slashingMock.On("RemoveHighestAttestation", pubKey).Return(nil).Once()
-		slashingMock.On("RemoveHighestProposal", pubKey).Return(errors.New("remove highest proposal error")).Once()
+		slashingMock.On("RemoveHighestAttestationTxn", pubKey).Return(nil).Once()
+		slashingMock.On("RemoveHighestProposalTxn", pubKey).Return(errors.New("remove highest proposal error")).Once()
 
 		s.ErrorContains(rmTest.RemoveShare(context.Background(), nil, pubKey), "could not remove highest proposal")
 		clientMock.AssertExpectations(s.T())

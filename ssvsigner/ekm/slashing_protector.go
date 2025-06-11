@@ -5,9 +5,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/eth2-key-manager/core"
+	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"go.uber.org/zap"
 
-	slashingprotection "github.com/ssvlabs/ssv/ssvsigner/ekm/slashing_protection"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -26,17 +26,19 @@ const (
 	minSPProposalSlotGap = phase0.Slot(0)
 )
 
+var _ slashingProtector = &SlashingProtector{}
+
 type slashingProtector interface {
 	ListAccounts() ([]core.ValidatorAccount, error)
-	RetrieveHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error)
-	RetrieveHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) (phase0.Slot, bool, error)
-	RemoveHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey) error
-	RemoveHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) error
+	RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error)
+	RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error)
+	RemoveHighestAttestationTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
+	RemoveHighestProposalTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 	UpdateHighestAttestation(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
-	BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error
+	BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 }
 
 // SlashingProtector manages both the local store for highest attestation/proposal
@@ -60,25 +62,24 @@ func NewSlashingProtector(
 	}
 }
 
-// TODO: can these methods be removed?
 func (sp *SlashingProtector) ListAccounts() ([]core.ValidatorAccount, error) {
 	return sp.signerStore.ListAccounts()
 }
 
-func (sp *SlashingProtector) RetrieveHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error) {
-	return sp.signerStore.RetrieveHighestAttestation(txn, pubKey[:])
+func (sp *SlashingProtector) RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error) {
+	return sp.signerStore.RetrieveHighestAttestation(pubKey[:])
 }
 
-func (sp *SlashingProtector) RetrieveHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) (phase0.Slot, bool, error) {
-	return sp.signerStore.RetrieveHighestProposal(txn, pubKey[:])
+func (sp *SlashingProtector) RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error) {
+	return sp.signerStore.RetrieveHighestProposal(pubKey[:])
 }
 
-func (sp *SlashingProtector) RemoveHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
-	return sp.signerStore.RemoveHighestAttestation(txn, pubKey[:])
+func (sp *SlashingProtector) RemoveHighestAttestationTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	return sp.signerStore.RemoveHighestAttestationTxn(txn, pubKey[:])
 }
 
-func (sp *SlashingProtector) RemoveHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
-	return sp.signerStore.RemoveHighestProposal(txn, pubKey[:])
+func (sp *SlashingProtector) RemoveHighestProposalTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	return sp.signerStore.RemoveHighestProposalTxn(txn, pubKey[:])
 }
 
 func (sp *SlashingProtector) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
@@ -111,8 +112,7 @@ func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot
 	return sp.protection.UpdateHighestProposal(pubKey[:], slot)
 }
 
-// BumpSlashingProtection updates the slashing protection data for a given public key.
-func (sp *SlashingProtector) BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+func (sp *SlashingProtector) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
 	currentSlot := sp.signerStore.BeaconNetwork().EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
@@ -131,7 +131,7 @@ func (sp *SlashingProtector) BumpSlashingProtection(txn basedb.Txn, pubKey phase
 // updateHighestAttestation updates the highest attestation data for slashing protection.
 func (sp *SlashingProtector) updateHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey, slot phase0.Slot) error {
 	// Retrieve the highest attestation data stored for the given public key.
-	retrievedHighAtt, found, err := sp.signerStore.RetrieveHighestAttestation(txn, pubKey[:])
+	retrievedHighAtt, found, err := sp.signerStore.RetrieveHighestAttestationTxn(txn, pubKey[:])
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
@@ -148,7 +148,7 @@ func (sp *SlashingProtector) updateHighestAttestation(txn basedb.Txn, pubKey pha
 
 	// At this point, either the retrieved attestation data was not found, or it was outdated.
 	// In either case, we update it to the minimal slashing protection data.
-	if err := sp.signerStore.SaveHighestAttestation(txn, pubKey[:], minimalSP); err != nil {
+	if err := sp.signerStore.SaveHighestAttestationTxn(txn, pubKey[:], minimalSP); err != nil {
 		return fmt.Errorf("could not save highest attestation: %w", err)
 	}
 
@@ -158,7 +158,7 @@ func (sp *SlashingProtector) updateHighestAttestation(txn basedb.Txn, pubKey pha
 // updateHighestProposal updates the highest proposal slot for slashing protection.
 func (sp *SlashingProtector) updateHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey, slot phase0.Slot) error {
 	// Retrieve the highest proposal slot stored for the given public key.
-	retrievedHighProp, found, err := sp.RetrieveHighestProposal(txn, pubKey)
+	retrievedHighProp, found, err := sp.signerStore.RetrieveHighestProposalTxn(txn, pubKey[:])
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest proposal: %w", err)
 	}
@@ -174,7 +174,7 @@ func (sp *SlashingProtector) updateHighestProposal(txn basedb.Txn, pubKey phase0
 
 	// At this point, either the retrieved proposal slot was not found, or it was outdated.
 	// In either case, we update it to the minimal slashing protection slot.
-	if err := sp.signerStore.SaveHighestProposal(txn, pubKey[:], minimalSPSlot); err != nil {
+	if err := sp.signerStore.SaveHighestProposalTxn(txn, pubKey[:], minimalSPSlot); err != nil {
 		return fmt.Errorf("could not save highest proposal: %w", err)
 	}
 

@@ -24,12 +24,12 @@ import (
 	eth2keymanager "github.com/ssvlabs/eth2-key-manager"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/signer"
+	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"github.com/ssvlabs/eth2-key-manager/wallets"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	slashingprotection "github.com/ssvlabs/ssv/ssvsigner/ekm/slashing_protection"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -243,7 +243,7 @@ func (km *LocalKeyManager) signBeaconObject(
 
 // AddShare decrypts the provided share private key (encryptedSharePrivKey)
 // using the operatorDecrypter, verifies that it matches sharePubKey, and
-// saves it to the local wallet. It also calls BumpSlashingProtection to
+// saves it to the local wallet. It also calls bumps slashing protection to
 // ensure slashing records for this share are up to date.
 func (km *LocalKeyManager) AddShare(
 	_ context.Context,
@@ -273,7 +273,7 @@ func (km *LocalKeyManager) AddShare(
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc == nil {
-		if err := km.BumpSlashingProtection(txn, phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
+		if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 		// TODO: make sure rolled back txn isn't an issue
@@ -299,10 +299,10 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc != nil {
-		if err := km.RemoveHighestAttestation(txn, pubKey); err != nil {
+		if err := km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey); err != nil {
 			return fmt.Errorf("could not remove highest attestation: %w", err)
 		}
-		if err := km.RemoveHighestProposal(txn, pubKey); err != nil {
+		if err := km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey); err != nil {
 			return fmt.Errorf("could not remove highest proposal: %w", err)
 		}
 		// TODO: make sure rolled back txn isn't an issue

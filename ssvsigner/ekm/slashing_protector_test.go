@@ -9,13 +9,12 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/networkconfig"
-	slashingprotection "github.com/ssvlabs/ssv/ssvsigner/ekm/slashing_protection"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
@@ -140,7 +139,7 @@ func TestSlashing_Attestation(t *testing.T) {
 		secretKeys[i].SetByCSPRNG()
 
 		// Equivalent to AddShare but with a custom slot for minimal slashing protection.
-		err := km.(*LocalKeyManager).BumpSlashingProtection(nil, phase0.BLSPubKey(secretKeys[i].GetPublicKey().Serialize()))
+		err := km.(*LocalKeyManager).BumpSlashingProtectionTxn(nil, phase0.BLSPubKey(secretKeys[i].GetPublicKey().Serialize()))
 		require.NoError(t, err)
 		err = km.(*LocalKeyManager).saveShare(secretKeys[i])
 		require.NoError(t, err)
@@ -181,7 +180,7 @@ func TestSlashing_Attestation(t *testing.T) {
 			require.NotZero(t, sig, "expected non-zero signature")
 			require.NotZero(t, root, "expected non-zero root")
 
-			highAtt, found, err := km.RetrieveHighestAttestation(nil, phase0.BLSPubKey(sk.GetPublicKey().Serialize()))
+			highAtt, found, err := km.(*LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sk.GetPublicKey().Serialize()))
 			require.NoError(t, err)
 			require.True(t, found)
 			require.Equal(t, attestation.Source.Epoch, highAtt.Source.Epoch)
@@ -704,7 +703,7 @@ func TestSlashableBlockDoubleProposal(t *testing.T) {
 	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
 	signerStore := NewSignerStorage(db, mockBeacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, networkconfig.TestNetwork.BeaconConfig, signerStore, protection)
+	protector := NewSlashingProtector(logger, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -713,7 +712,7 @@ func TestSlashableBlockDoubleProposal(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(nil, sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "Failed to bump slashing protection")
 
 	// --- First Block Proposal ---
@@ -760,7 +759,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
 	signerStore := NewSignerStorage(db, mockBeacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, networkconfig.TestNetwork.BeaconConfig, signerStore, protection)
+	protector := NewSlashingProtector(logger, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -769,7 +768,7 @@ func TestSlashableAttestationDoubleVote(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(nil, sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "Failed to bump slashing protection")
 
 	// --- First Attestation ---
@@ -836,7 +835,7 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
 	signerStore := NewSignerStorage(db, mockBeacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, networkconfig.TestNetwork.BeaconConfig, signerStore, protection)
+	protector := NewSlashingProtector(logger, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -845,7 +844,7 @@ func TestSlashableAttestationSurroundingVote(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(nil, sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "Failed to bump slashing protection")
 
 	// --- First Attestation (Inner) ---
@@ -915,7 +914,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
 	signerStore := NewSignerStorage(db, mockBeacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, networkconfig.TestNetwork.BeaconConfig, signerStore, protection)
+	protector := NewSlashingProtector(logger, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -924,7 +923,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(nil, sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "DB Integrity: Failed to bump slashing protection (Phase 1)")
 
 	// Sign a block
@@ -950,7 +949,7 @@ func TestSlashingDBIntegrity(t *testing.T) {
 
 	signerStore2 := NewSignerStorage(db2, mockBeacon, logger)
 	protection2 := slashingprotection.NewNormalProtection(signerStore2)
-	protector2 := NewSlashingProtector(logger, networkconfig.TestNetwork.BeaconConfig, signerStore2, protection2)
+	protector2 := NewSlashingProtector(logger, signerStore2, protection2)
 
 	// Attempt to sign the *same* block again - should fail due to persisted data
 	t.Log("Attempting to sign the same block again - should fail")
@@ -973,7 +972,7 @@ func TestSlashingConcurrency(t *testing.T) {
 	mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
 	signerStore := NewSignerStorage(db, mockBeacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
-	protector := NewSlashingProtector(logger, networkconfig.TestNetwork.BeaconConfig, signerStore, protection)
+	protector := NewSlashingProtector(logger, signerStore, protection)
 
 	// Initialize test share key
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -982,7 +981,7 @@ func TestSlashingConcurrency(t *testing.T) {
 	sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
 
 	// Setup for slashing protection
-	err = protector.BumpSlashingProtection(nil, sharePubKey)
+	err = protector.BumpSlashingProtectionTxn(nil, sharePubKey)
 	require.NoError(t, err, "Concurrency: Failed to bump slashing protection")
 
 	// Sign a valid block first to establish a baseline
@@ -1027,10 +1026,10 @@ func TestSlashingConcurrency(t *testing.T) {
 				}
 
 			case 2: // Add validation for second key
-				err := protector.BumpSlashingProtection(nil, sharePubKey2)
+				err := protector.BumpSlashingProtectionTxn(nil, sharePubKey2)
 				// This is an idempotent operation so should not error
 				if err != nil {
-					t.Logf("Goroutine %d: BumpSlashingProtection returned error: %v", routineID, err)
+					t.Logf("Goroutine %d: BumpSlashingProtectionTxn returned error: %v", routineID, err)
 				}
 
 			case 3: // Check a new attestation

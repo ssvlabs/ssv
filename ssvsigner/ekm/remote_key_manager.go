@@ -20,16 +20,15 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/signer"
+	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/storage/basedb"
-
 	"github.com/ssvlabs/ssv/ssvsigner"
-	slashingprotection "github.com/ssvlabs/ssv/ssvsigner/ekm/slashing_protection"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // RemoteKeyManager implements KeyManager by delegating signing operations to
@@ -102,7 +101,7 @@ func NewRemoteKeyManager(
 }
 
 // AddShare registers a validator share with the remote service via signerClient.AddValidators
-// and then calls BumpSlashingProtection on the local store. If remote or local operations
+// and then calls BumpSlashingProtectionTxn on the local store. If remote or local operations
 // fail, returns an error.
 func (km *RemoteKeyManager) AddShare(
 	ctx context.Context,
@@ -115,7 +114,7 @@ func (km *RemoteKeyManager) AddShare(
 		PubKey:           pubKey,
 	}
 
-	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
+	if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
@@ -145,11 +144,11 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn basedb.Txn, pub
 		return fmt.Errorf("remove validator: %w", err)
 	}
 
-	if err := km.RemoveHighestAttestation(txn, pubKey); err != nil {
+	if err := km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
 	}
 
-	if err := km.RemoveHighestProposal(txn, pubKey); err != nil {
+	if err := km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey); err != nil {
 		return fmt.Errorf("could not remove highest proposal: %w", err)
 	}
 
@@ -337,11 +336,11 @@ func (km *RemoteKeyManager) handleDomainAttester(
 		return nil, fmt.Errorf("source epoch too far into the future")
 	}
 
-	if err := km.IsAttestationSlashable(sharePubkey, data); err != nil {
+	if err := km.slashingProtector.IsAttestationSlashable(sharePubkey, data); err != nil {
 		return nil, err
 	}
 
-	if err := km.UpdateHighestAttestation(sharePubkey, data); err != nil {
+	if err := km.slashingProtector.UpdateHighestAttestation(sharePubkey, data); err != nil {
 		return nil, err
 	}
 
@@ -467,11 +466,11 @@ func (km *RemoteKeyManager) handleDomainProposer(
 		return nil, fmt.Errorf("proposed block slot too far into the future")
 	}
 
-	if err := km.IsBeaconBlockSlashable(sharePubkey, blockSlot); err != nil {
+	if err := km.slashingProtector.IsBeaconBlockSlashable(sharePubkey, blockSlot); err != nil {
 		return nil, err
 	}
 
-	if err := km.UpdateHighestProposal(sharePubkey, blockSlot); err != nil {
+	if err := km.slashingProtector.UpdateHighestProposal(sharePubkey, blockSlot); err != nil {
 		return nil, err
 	}
 
