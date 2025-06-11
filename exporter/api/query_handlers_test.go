@@ -207,7 +207,7 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, fu
 }
 
 func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.ParticipantStores) {
-	sExporter, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	sExporter, err := storage.NewNodeStorage(logger, db)
 	if err != nil {
 		panic(err)
 	}

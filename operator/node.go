@@ -36,7 +36,7 @@ type Options struct {
 	Context             context.Context
 	DB                  basedb.Database
 	ValidatorController validator.Controller
-	ValidatorStore      storage2.ValidatorStore
+	ValidatorStore      storage2.ValidatorIndices
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
 	WS                  api.WebSocketServer

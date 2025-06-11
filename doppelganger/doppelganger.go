@@ -11,12 +11,13 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/slotticker"
-	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 //go:generate mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
@@ -26,26 +27,26 @@ import (
 const initialRemainingDetectionEpochs phase0.Epoch = 2
 
 type Provider interface {
-	// Start begins the Doppelganger protection monitoring, periodically checking validator liveness.
+	// Start begins the Doppelgänger protection monitoring, periodically checking validator liveness.
 	// Returns an error if the process fails to start or encounters a critical issue.
 	Start(ctx context.Context) error
 
-	// CanSign determines whether a validator is safe to sign based on Doppelganger protection status.
+	// CanSign determines whether a validator is safe to sign based on Doppelgänger protection status.
 	// Returns true if the validator has passed all required safety checks, false otherwise.
 	CanSign(validatorIndex phase0.ValidatorIndex) bool
 
-	// ReportQuorum changes a validator's state to observed quorum, immediately bypassing further Doppelganger checks.
+	// ReportQuorum changes a validator's state to observed quorum, immediately bypassing further Doppelgänger checks.
 	// Typically used when a validator successfully completes post-consensus partial sig quorum (attester/proposer).
 	ReportQuorum(validatorIndex phase0.ValidatorIndex)
 
-	// RemoveValidatorState removes a validator from Doppelganger tracking, clearing its protection status.
+	// RemoveValidatorState removes a validator from Doppelgänger tracking, clearing its protection status.
 	// Useful when a validator is no longer managed (validator removed or liquidated).
 	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
 }
 
 // ValidatorProvider represents a provider of validator information.
 type ValidatorProvider interface {
-	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	GetSelfParticipatingValidators(epoch phase0.Epoch, opts registrystorage.ParticipationOptions) []*registrystorage.ValidatorSnapshot
 }
 
 // BeaconNode represents a provider of beacon node data.
@@ -155,7 +156,7 @@ func (h *handler) updateDoppelgangerState(epoch phase0.Epoch, validatorIndices [
 	}
 }
 
-// RemoveValidatorState removes the validator from the Doppelganger state.
+// RemoveValidatorState removes the validator from the Doppelgänger state.
 func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -169,7 +170,7 @@ func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	h.logger.Debug("Removed validator from Doppelganger state", fields.ValidatorIndex(validatorIndex))
 }
 
-// Start starts the Doppelganger monitoring.
+// Start starts the Doppelgänger monitoring.
 func (h *handler) Start(ctx context.Context) error {
 	h.logger.Info("Doppelganger monitoring started")
 
@@ -177,6 +178,12 @@ func (h *handler) Start(ctx context.Context) error {
 	firstRun := true
 	ticker := h.slotTickerProvider()
 	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+
+	participationOpts := registrystorage.ParticipationOptions{
+		IncludeLiquidated: false, // Liquidated validators don't sign
+		IncludeExited:     false, // Exited validators don't sign
+		OnlyAttesting:     true,  // DG protection is specifically for validators that are actively attesting
+	}
 
 	for {
 		select {
@@ -190,7 +197,8 @@ func (h *handler) Start(ctx context.Context) error {
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
 
 			// Update DG state with self participating validators from validator provider at the current epoch
-			validatorIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(currentEpoch))
+			validatorSnapshots := h.validatorProvider.GetSelfParticipatingValidators(currentEpoch, participationOpts)
+			validatorIndices := indicesFromSnapshots(validatorSnapshots)
 			h.updateDoppelgangerState(currentEpoch, validatorIndices)
 
 			// Perform liveness checks during the first run or at the last slot of the epoch.
@@ -206,14 +214,14 @@ func (h *handler) Start(ctx context.Context) error {
 			}
 
 			// Detect if an unexpected gap in epochs occurred (e.g., due to system sleep or clock drift).
-			// If we detect a skipped epoch, we reset all doppelganger states to avoid unsafe signing.
+			// If we detect a skipped epoch, we reset all doppelgänger states to avoid unsafe signing.
 			if previousEpoch > 0 && currentEpoch != previousEpoch+1 {
 				h.logger.Warn("Epoch skipped unexpectedly, resetting all Doppelganger states",
 					zap.Uint64("previous_epoch", uint64(previousEpoch)),
 					zap.Uint64("current_epoch", uint64(currentEpoch)),
 				)
 
-				// Resetting all Doppelganger states ensures safety, but it also means
+				// Resetting all Doppelgänger states ensures safety, but it also means
 				// our operator will likely skip signing for at least a few epochs
 				// or until there is a post-consensus partial sig quorum.
 				h.resetDoppelgangerStates()
@@ -280,7 +288,7 @@ func (h *handler) processLivenessData(epoch phase0.Epoch, livenessData []*eth2ap
 			)
 
 			// Reset the validator's remaining epochs to the initial detection period,
-			// ensuring it undergoes the full Doppelganger protection before being marked safe.
+			// ensuring it undergoes the full Doppelgänger protection before being marked safe.
 			state.resetRemainingEpochs()
 			continue
 		}
@@ -334,10 +342,10 @@ func (h *handler) recordValidatorStates(ctx context.Context) {
 	observability.RecordUint64Value(ctx, unsafe, validatorsStateGauge.Record, metric.WithAttributes(unsafeAttribute(true)))
 }
 
-func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {
-	indices := make([]phase0.ValidatorIndex, len(shares))
-	for i, share := range shares {
-		indices[i] = share.ValidatorIndex
+func indicesFromSnapshots(snapshots []*registrystorage.ValidatorSnapshot) []phase0.ValidatorIndex {
+	indices := make([]phase0.ValidatorIndex, len(snapshots))
+	for i, snapshot := range snapshots {
+		indices[i] = snapshot.Share.ValidatorIndex
 	}
 	return indices
 }

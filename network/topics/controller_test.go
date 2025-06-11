@@ -81,7 +81,7 @@ func TestTopicManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
 		dutyStore := dutystore.New()
-		validatorStore := mocks.NewMockValidatorStore(ctrl)
+		validatorStore := mocks.NewMockValidatorIndices(ctrl)
 		operators := mocks.NewMockOperators(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
