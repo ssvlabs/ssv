@@ -469,11 +469,13 @@ var StartNodeCmd = &cobra.Command{
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
+		if cfg.SSVOptions.ValidatorOptions.ExporterFull && !cfg.SSVOptions.ValidatorOptions.Exporter {
+			logger.Fatal("exporter full mode is enabled but exporter is disabled")
+		}
+
 		// Validator duty tracing
 		var collector *dutytracer.Collector
 		if cfg.SSVOptions.ValidatorOptions.ExporterFull {
-			cfg.SSVOptions.ValidatorOptions.Exporter = false // disable old decideds
-
 			logger.Info("exporter mode: full")
 			dstore := &dutytracer.DutyTraceStoreMetrics{
 				Store: dutytracestore.New(db),
@@ -482,7 +484,7 @@ var StartNodeCmd = &cobra.Command{
 				nodeStorage.ValidatorStore(), consensusClient,
 				dstore, networkConfig.BeaconConfig)
 
-			go collector.DumpDataToDBPeriodically(cmd.Context(), slotTickerProvider)
+			go collector.Start(cmd.Context(), slotTickerProvider)
 		}
 		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
 

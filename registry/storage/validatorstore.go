@@ -88,13 +88,13 @@ type validatorStore struct {
 func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
-	byActiveValidatorIndex map[spectypes.ValidatorPK]phase0.ValidatorIndex,
+	pubkeyIndexMapping map[spectypes.ValidatorPK]phase0.ValidatorIndex,
 	beaconCfg networkconfig.Beacon,
 ) *validatorStore {
 	return &validatorStore{
 		shares:            shares,
 		byPubKey:          shareByPubKey,
-		byValidatorPubkey: byActiveValidatorIndex,
+		byValidatorPubkey: pubkeyIndexMapping,
 		byValidatorIndex:  make(map[phase0.ValidatorIndex]*types.SSVShare),
 		byCommitteeID:     make(map[spectypes.CommitteeID]*Committee),
 		byOperatorID:      make(map[spectypes.OperatorID]*sharesAndCommittees),
@@ -333,10 +333,9 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Delete byValidatorIndex and mapping
+	// Delete byValidatorIndex
 	if share.HasBeaconMetadata() {
 		delete(c.byValidatorIndex, share.ValidatorIndex)
-		delete(c.byValidatorPubkey, share.ValidatorPubKey)
 	}
 
 	// Update byCommitteeID

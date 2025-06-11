@@ -37,12 +37,12 @@ func New(
 	full bool,
 ) *Server {
 	return &Server{
-		logger:     logger,
-		addr:       addr,
-		node:       node,
-		validators: validators,
-		exporter:   exporter,
-		full:       full,
+		logger:       logger,
+		addr:         addr,
+		node:         node,
+		validators:   validators,
+		exporter:     exporter,
+		fullExporter: full,
 	}
 }
 
@@ -96,7 +96,7 @@ func (s *Server) Run() error {
 	router.Get("/v1/validators", api.Handler(s.validators.List))
 
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
-	if s.full {
+	if s.fullExporter {
 		// @Summary Get validator traces
 		// @Description Returns traces for a specific validator
 		// @Tags Exporter

@@ -91,7 +91,7 @@ type scRootKey struct {
 	blockRoot phase0.Root
 }
 
-func (c *Collector) DumpDataToDBPeriodically(ctx context.Context, tickerProvider slotticker.Provider) {
+func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provider) {
 	c.logger.Info("start duty tracer cache to disk evictor")
 	ticker := tickerProvider()
 	for {
