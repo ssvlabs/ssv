@@ -439,7 +439,9 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
-		// TODO: what if txn gets discarded?
+		//
+		// If txn gets rolled back, the share will remain updated, however, it's not an issue,
+		// because the node will crash and attempt to sync events again updating the participation epoch.
 		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
