@@ -15,6 +15,8 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go
+
 var (
 	operatorsPrefix = []byte("operators")
 )

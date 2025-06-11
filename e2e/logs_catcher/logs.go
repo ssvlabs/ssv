@@ -3,10 +3,12 @@ package logs_catcher
 import (
 	"context"
 	"fmt"
+
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/parser"
-	"go.uber.org/zap"
 )
 
 const MessageKey = "msg" // todo: pass to struct/load from config

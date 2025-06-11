@@ -18,10 +18,10 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22.x"
+          go-version: "1.24.x"
 
-      - name: Run lint-prepare
-        run: make lint-prepare
+      - name: Run tools
+        run: make tools
 
       - name: Run make lint
         run: make lint

@@ -6,10 +6,11 @@ import (
 	"fmt"
 
 	"github.com/sanity-io/litter"
+	"go.uber.org/zap"
+
 	opstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 // This migration changes share format used for storing share in DB from gob to ssz.
@@ -144,12 +145,6 @@ func matchGOBvsSSZ(shareGOB *storageShareGOB, shareSSZ *storage.Share) bool {
 		if !bytes.Equal(committeeGOB.PubKey, committeeSSZ.PubKey) {
 			return false
 		}
-	}
-	if shareGOB.Quorum != shareSSZ.Quorum {
-		return false
-	}
-	if shareGOB.PartialQuorum != shareSSZ.PartialQuorum {
-		return false
 	}
 	if shareGOB.DomainType != shareSSZ.DomainType {
 		return false

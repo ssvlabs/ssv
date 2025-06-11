@@ -2,11 +2,11 @@ package compatible_logger
 
 import (
 	"context"
+	"log/slog"
 	"runtime"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/exp/slog"
 )
 
 type Option struct {

@@ -54,11 +54,11 @@ func TestUpdateDoppelgangerState(t *testing.T) {
 	dg := newTestDoppelgangerHandler(t)
 
 	// Update state with validator indices
-	dg.updateDoppelgangerState([]phase0.ValidatorIndex{1, 2})
+	dg.updateDoppelgangerState(0, []phase0.ValidatorIndex{1, 2})
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(1))
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(2))
 
-	dg.updateDoppelgangerState([]phase0.ValidatorIndex{1})
+	dg.updateDoppelgangerState(0, []phase0.ValidatorIndex{1})
 	require.Contains(t, dg.validatorsState, phase0.ValidatorIndex(1))
 	require.NotContains(t, dg.validatorsState, phase0.ValidatorIndex(2))
 	require.NotContains(t, dg.validatorsState, phase0.ValidatorIndex(3))

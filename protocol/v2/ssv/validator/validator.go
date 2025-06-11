@@ -7,10 +7,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -35,7 +36,7 @@ type Validator struct {
 
 	Operator       *spectypes.CommitteeMember
 	Share          *ssvtypes.SSVShare
-	Signer         spectypes.BeaconSigner
+	Signer         ekm.BeaconSigner
 	OperatorSigner ssvtypes.OperatorSigner
 
 	Queues map[spectypes.RunnerRole]queueContainer
@@ -105,7 +106,7 @@ func (v *Validator) StartDuty(ctx context.Context, logger *zap.Logger, duty spec
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
 	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(vDuty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(vDuty.Slot), vDuty.Slot, vDuty.Type.String(), vDuty.ValidatorIndex))
-	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(vDuty.Type))
+	logger = v.withDutyID(logger, spectypes.MapDutyToRunnerRole(vDuty.Type))
 
 	// Log with height.
 	if baseRunner.QBFTController != nil {
@@ -145,26 +146,28 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
+
 		if err := qbftMsg.Validate(); err != nil {
 			return errors.Wrap(err, "invalid qbft Message")
 		}
-		logger = v.loggerForDuty(logger, messageID.GetRoleType(), phase0.Slot(qbftMsg.Height))
-		logger = logger.With(fields.Height(qbftMsg.Height))
+
+		logger = v.withDutyID(logger, messageID.GetRoleType()).
+			With(fields.Slot(phase0.Slot(qbftMsg.Height))).
+			With(fields.Height(qbftMsg.Height))
+
 		return dutyRunner.ProcessConsensus(ctx, logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		logger = v.loggerForDuty(logger, messageID.GetRoleType(), signedMsg.Slot)
+
+		logger = v.withDutyID(logger, messageID.GetRoleType()).
+			With(fields.Slot(signedMsg.Slot))
 
 		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
 			return errors.New("PartialSignatureMessage has more than 1 signer")
@@ -177,6 +180,7 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(ctx, logger, signedMsg)
 		}
+
 		return dutyRunner.ProcessPreConsensus(ctx, logger, signedMsg)
 	case message.SSVEventMsgType:
 		return v.handleEventMessage(ctx, logger, msg, dutyRunner)
@@ -185,29 +189,23 @@ func (v *Validator) ProcessMessage(ctx context.Context, logger *zap.Logger, msg 
 	}
 }
 
-func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.RunnerRole, slot phase0.Slot) *zap.Logger {
-	logger = logger.With(fields.Slot(slot))
-	if dutyID, ok := v.dutyIDs.Get(role); ok {
-		return logger.With(fields.DutyID(dutyID))
-	}
-	return logger
-}
-
 func validateMessage(share spectypes.Share, msg *queue.SSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
-	if len(msg.SSVMessage.GetData()) == 0 {
+	if len(msg.GetData()) == 0 {
 		return errors.New("msg data is invalid")
 	}
 
 	return nil
 }
 
-func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.RunnerRole, string], role spectypes.RunnerRole) *zap.Logger {
-	if dutyID, ok := dutyIDs.Get(role); ok {
+// withDutyID returns a logger with the duty ID for the given role.
+func (v *Validator) withDutyID(logger *zap.Logger, role spectypes.RunnerRole) *zap.Logger {
+	if dutyID, ok := v.dutyIDs.Get(role); ok {
 		return logger.With(fields.DutyID(dutyID))
 	}
+
 	return logger
 }

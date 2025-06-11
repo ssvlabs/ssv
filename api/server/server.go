@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
+// Server represents the HTTP API server for SSV.
 type Server struct {
 	logger *zap.Logger
 	addr   string
@@ -21,8 +22,11 @@ type Server struct {
 	node       *handlers.Node
 	validators *handlers.Validators
 	exporter   *handlers.Exporter
+
+	httpServer *http.Server
 }
 
+// New creates a new Server instance.
 func New(
 	logger *zap.Logger,
 	addr string,
@@ -39,6 +43,7 @@ func New(
 	}
 }
 
+// Run starts the server and blocks until it's shut down.
 func (s *Server) Run() error {
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)
@@ -52,22 +57,24 @@ func (s *Server) Run() error {
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
 	router.Get("/v1/node/health", api.Handler(s.node.Health))
 	router.Get("/v1/validators", api.Handler(s.validators.List))
+
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
 	router.Get("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 	router.Post("/v1/exporter/decideds", api.Handler(s.exporter.Decideds))
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 
-	server := &http.Server{
+	s.httpServer = &http.Server{
 		Addr:              s.addr,
 		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       12 * time.Second,
 		WriteTimeout:      12 * time.Second,
 	}
-	return server.ListenAndServe()
+	return s.httpServer.ListenAndServe()
 }
 
+// middlewareLogger creates a middleware that logs API requests.
 func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +97,7 @@ func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
 	}
 }
 
+// middlewareNodeVersion adds the SSV node version as a response header.
 func middlewareNodeVersion(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-SSV-Node-Version", commons.GetNodeVersion())

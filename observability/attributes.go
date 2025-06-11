@@ -5,11 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	"go.opentelemetry.io/otel/attribute"
-
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -30,6 +29,10 @@ func DutyRoundAttribute(round qbft.Round) attribute.KeyValue {
 		Key:   "ssv.validator.duty.round",
 		Value: Uint64AttributeValue(uint64(round)),
 	}
+}
+
+func RoundChangeReasonAttribute(reason string) attribute.KeyValue {
+	return attribute.String("ssv.validator.duty.round.change_reason", reason)
 }
 
 func NetworkDirectionAttribute(direction network.Direction) attribute.KeyValue {

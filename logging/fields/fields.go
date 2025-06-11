@@ -17,20 +17,22 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields/stringer"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/utils/format"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 const (
 	FieldABI                 = "abi"
 	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
+	FieldAddresses           = "addresses"
 	FieldBeaconRole          = "beacon_role"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
@@ -143,6 +145,10 @@ func AddressURL(val url.URL) zapcore.Field {
 
 func Address(val string) zapcore.Field {
 	return zap.String(FieldAddress, val)
+}
+
+func Addresses(vals []string) zapcore.Field {
+	return zap.Strings(FieldAddresses, vals)
 }
 
 func ENR(val *enode.Node) zapcore.Field {

@@ -14,8 +14,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 type (

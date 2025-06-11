@@ -67,7 +67,7 @@ func (input *ProduceOperatorRemovedEventsInput) produce() {
 	require.NoError(input.t, err)
 
 	for _, event := range input.events {
-		_, err = input.boundContract.SimcontractTransactor.RemoveOperator(
+		_, err = input.boundContract.RemoveOperator(
 			event.auth,
 			event.opId,
 		)

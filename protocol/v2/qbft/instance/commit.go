@@ -50,7 +50,7 @@ func (i *Instance) UponCommit(ctx context.Context, logger *zap.Logger, msg *spec
 			zap.Any("agg_signers", agg.OperatorIDs),
 			fields.Root(msg.QBFTMessage.Root))
 
-		i.metrics.EndStageCommit(ctx, i.State.Round)
+		i.metrics.EndStage(ctx, i.State.Round, stageCommit)
 
 		return true, fullData, agg, nil
 	}

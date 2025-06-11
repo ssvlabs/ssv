@@ -5,12 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 
-	"github.com/ssvlabs/ssv/logging/fields"
-
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv/network/commons"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 // ECDSAPrivateKey extracts the ecdsa.PrivateKey from the given string or generate a new key

@@ -3,18 +3,19 @@ package discovery
 import (
 	"context"
 
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils"
-	"go.uber.org/zap"
 )
 
 // BootnodeOptions contains options to create the node
 type BootnodeOptions struct {
-	PrivateKey string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Bootnode private key (default will generate new)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
-	Port       uint16 `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
+	PrivateKey string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Private key for bootnode identity (generated if empty)"`
+	ExternalIP string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override bootnode's external IP address"`
+	Port       uint16 `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override bootnode's UDP port"`
 }
 
 // Bootnode represents a bootnode used for tests

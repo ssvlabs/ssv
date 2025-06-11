@@ -8,16 +8,18 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
-//go:generate mockgen -package=metadata -destination=./mocks.go -source=./syncer.go
+//go:generate go tool -modfile=../../../tool.mod mockgen -package=metadata -destination=./mocks.go -source=./syncer.go
 
 const (
 	defaultSyncInterval      = 12 * time.Minute
@@ -30,7 +32,7 @@ type Syncer struct {
 	logger            *zap.Logger
 	shareStorage      shareStorage
 	validatorStore    selfValidatorStore
-	beaconNetwork     beacon.BeaconNetwork
+	networkConfig     networkconfig.NetworkConfig
 	beaconNode        beacon.BeaconNode
 	fixedSubnets      networkcommons.Subnets
 	syncInterval      time.Duration
@@ -52,7 +54,7 @@ func NewSyncer(
 	logger *zap.Logger,
 	shareStorage shareStorage,
 	validatorStore selfValidatorStore,
-	beaconNetwork beacon.BeaconNetwork,
+	networkConfig networkconfig.NetworkConfig,
 	beaconNode beacon.BeaconNode,
 	fixedSubnets networkcommons.Subnets,
 	opts ...Option,
@@ -61,7 +63,7 @@ func NewSyncer(
 		logger:            logger,
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,
-		beaconNetwork:     beaconNetwork,
+		networkConfig:     networkConfig,
 		beaconNode:        beaconNode,
 		fixedSubnets:      fixedSubnets,
 		syncInterval:      defaultSyncInterval,
@@ -133,11 +135,8 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
 
-	s.logger.Debug("🆕 fetched validators metadata",
-		fields.Took(time.Since(fetchStart)),
-		zap.Int("metadatas", len(metadata)),
-		zap.Int("validators", len(pubKeys)),
-	)
+	logger := s.logger.With(zap.Int("metadatas", len(metadata)), zap.Int("validators", len(pubKeys)))
+	logger.Debug("🆕 fetched validators metadata", fields.Took(time.Since(fetchStart)))
 
 	updateStart := time.Now()
 	// TODO: Refactor share storage to support passing context.
@@ -145,11 +144,7 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (Val
 		return metadata, fmt.Errorf("update metadata: %w", err)
 	}
 
-	s.logger.Debug("🆕 saved validators metadata",
-		fields.Took(time.Since(updateStart)),
-		zap.Int("metadatas", len(metadata)),
-		zap.Int("validators", len(pubKeys)),
-	)
+	logger.Debug("🆕 saved validators metadata", fields.Took(time.Since(updateStart)))
 
 	return metadata, nil
 }
@@ -173,10 +168,10 @@ func (s *Syncer) Fetch(_ context.Context, pubKeys []spectypes.ValidatorPK) (Vali
 	results := make(map[spectypes.ValidatorPK]*beacon.ValidatorMetadata, len(validatorsIndexMap))
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
-			Balance:         v.Balance,
 			Status:          v.Status,
 			Index:           v.Index,
 			ActivationEpoch: v.Validator.ActivationEpoch,
+			ExitEpoch:       v.Validator.ExitEpoch,
 		}
 		results[spectypes.ValidatorPK(v.Validator.PublicKey)] = meta
 	}
@@ -259,14 +254,14 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 		pubKeys[i] = share.ValidatorPubKey
 	}
 
-	indicesBefore := s.allActiveIndices(ctx, s.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
+	indicesBefore := s.allActiveIndices(ctx, s.networkConfig.Beacon.GetBeaconNetwork().EstimatedCurrentEpoch())
 
 	validators, err := s.Sync(ctx, pubKeys)
 	if err != nil {
 		return SyncBatch{}, false, fmt.Errorf("sync: %w", err)
 	}
 
-	indicesAfter := s.allActiveIndices(ctx, s.beaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
+	indicesAfter := s.allActiveIndices(ctx, s.networkConfig.Beacon.GetBeaconNetwork().EstimatedCurrentEpoch())
 
 	update := SyncBatch{
 		IndicesBefore: indicesBefore,
@@ -330,7 +325,7 @@ func (s *Syncer) allActiveIndices(_ context.Context, epoch phase0.Epoch) []phase
 
 	// TODO: use context, return if it's done
 	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
-		if share.IsParticipating(epoch) {
+		if share.IsParticipating(s.networkConfig, epoch) {
 			indices = append(indices, share.ValidatorIndex)
 		}
 		return true

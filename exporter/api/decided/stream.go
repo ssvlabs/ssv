@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ssvlabs/ssv/exporter/api"
-	"github.com/ssvlabs/ssv/networkconfig"
-	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
-
 	"github.com/patrickmn/go-cache"
-	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/exporter/api"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // NewStreamPublisher handles incoming newly decided messages.

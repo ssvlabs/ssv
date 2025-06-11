@@ -21,7 +21,6 @@ p2p:
 #  Discovery: mdns
 
 ssv:
-  GenesisEpoch:
   ValidatorOptions:
     SignatureCollectionTimeout: 5s
     FullNode: true

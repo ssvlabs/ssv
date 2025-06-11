@@ -10,9 +10,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -163,6 +163,12 @@ func (i *participantStorage) CleanAllInstances() error {
 }
 
 func (i *participantStorage) SaveParticipants(pk spectypes.ValidatorPK, slot phase0.Slot, newParticipants []spectypes.OperatorID) (updated bool, err error) {
+	start := time.Now()
+	defer func() {
+		dur := time.Since(start)
+		recordSaveDuration(i.ID(), dur)
+	}()
+
 	i.participantsMu.Lock()
 	defer i.participantsMu.Unlock()
 
