@@ -244,7 +244,6 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		// TODO: consider moving this to the end of the method to handle the case when txn is canceled after share is added remotely
 		if err := eh.keyManager.AddShare(ctx, txn, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			var shareDecryptionEKMError ekm.ShareDecryptionError
 			if errors.As(err, &shareDecryptionEKMError) {
@@ -257,7 +256,9 @@ func (eh *EventHandler) handleShareCreation(
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
-		// TODO: make sure rolled back txn isn't an issue
+		//
+		// If txn gets rolled back, the share will remain updated, however, it's not an issue,
+		// because the node will crash and attempt to sync events again updating the participation epoch.
 		share.SetMinParticipationEpoch(eh.networkConfig.Beacon.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
@@ -368,14 +369,15 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		// TODO: can txn be canceled after share is removed remotely?
 		err := eh.keyManager.RemoveShare(ctx, txn, phase0.BLSPubKey(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
 		// Remove validator from doppelganger service
-		// TODO: make sure rolled back txn isn't an issue
+		//
+		// If txn gets rolled back, the validator state will remain removed, however, it's not an issue,
+		// because the node will crash and attempt to sync events again fixing the state inconsistency.
 		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
 
 		logger.Debug("processed event")

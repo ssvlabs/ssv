@@ -50,6 +50,7 @@ import (
 // All slashing checks are performed prior to any signing attempt. If a slashable
 // condition is detected, the signing method will return an error.
 type LocalKeyManager struct {
+	logger            *zap.Logger
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
@@ -94,6 +95,7 @@ func NewLocalKeyManager(
 	beaconSigner := signer.NewSimpleSigner(wallet, protection, core.Network(network.Beacon.GetBeaconNetwork()))
 
 	return &LocalKeyManager{
+		logger:            logger,
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
@@ -268,17 +270,21 @@ func (km *LocalKeyManager) AddShare(
 		return ShareDecryptionError{Err: errors.New("share private key does not match public key")}
 	}
 
+	if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
+		return fmt.Errorf("could not bump slashing protection: %w", err)
+	}
+
 	acc, err := km.wallet.AccountByPublicKey(sharePrivKey.GetPublicKey().SerializeToHexStr())
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
+
 	if acc == nil {
-		if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
-			return fmt.Errorf("could not bump slashing protection: %w", err)
-		}
-		// TODO: make sure rolled back txn isn't an issue
-		if err := km.saveShare(sharePrivKey); err != nil {
-			return fmt.Errorf("could not save share: %w", err)
+		// We don't pass txn because wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities).
+		// However, a rolled back transaction should not be an issue,
+		// because the node will crash in this case and then attempt to process the event again but acc won't be nil.
+		if err := km.saveAccount(sharePrivKey); err != nil {
+			return fmt.Errorf("save account: %w", err)
 		}
 	}
 
@@ -292,20 +298,22 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
-	pubKeyHex := hex.EncodeToString(pubKey[:]) // pubKey.String() would add the "0x" prefix so we cannot use it
+	if err := km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey); err != nil {
+		return fmt.Errorf("could not remove highest attestation: %w", err)
+	}
+	if err := km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey); err != nil {
+		return fmt.Errorf("could not remove highest proposal: %w", err)
+	}
 
+	pubKeyHex := hex.EncodeToString(pubKey[:]) // pubKey.String() would add the "0x" prefix so we cannot use it
 	acc, err := km.wallet.AccountByPublicKey(pubKeyHex)
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
 	if acc != nil {
-		if err := km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey); err != nil {
-			return fmt.Errorf("could not remove highest attestation: %w", err)
-		}
-		if err := km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey); err != nil {
-			return fmt.Errorf("could not remove highest proposal: %w", err)
-		}
-		// TODO: make sure rolled back txn isn't an issue
+		// We don't pass txn because wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities).
+		// However, a rolled back transaction should not be an issue,
+		// because the node will crash in this case and then attempt to process the event again but acc will be nil.
 		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {
 			return fmt.Errorf("could not delete share: %w", err)
 		}
@@ -313,14 +321,14 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey
 	return nil
 }
 
-func (km *LocalKeyManager) saveShare(privKey *bls.SecretKey) error {
+func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {
 	key, err := core.NewHDKeyFromPrivateKey(privKey.Serialize(), "")
 	if err != nil {
-		return fmt.Errorf("could not generate HDKey: %w", err)
+		return fmt.Errorf("generate HDKey: %w", err)
 	}
 	account := wallets.NewValidatorAccount("", key, nil, "", nil)
 	if err := km.wallet.AddValidatorAccount(account); err != nil {
-		return fmt.Errorf("could not save new account: %w", err)
+		return fmt.Errorf("add to wallet: %w", err)
 	}
 	return nil
 }

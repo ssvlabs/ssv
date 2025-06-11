@@ -141,7 +141,7 @@ func TestSlashing_Attestation(t *testing.T) {
 		// Equivalent to AddShare but with a custom slot for minimal slashing protection.
 		err := km.(*LocalKeyManager).BumpSlashingProtectionTxn(nil, phase0.BLSPubKey(secretKeys[i].GetPublicKey().Serialize()))
 		require.NoError(t, err)
-		err = km.(*LocalKeyManager).saveShare(secretKeys[i])
+		err = km.(*LocalKeyManager).saveAccount(secretKeys[i])
 		require.NoError(t, err)
 	}
 
