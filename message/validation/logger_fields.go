@@ -1,6 +1,8 @@
 package validation
 
 import (
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -92,13 +94,13 @@ func (mv *messageValidator) addDutyIDField(lf *LoggerFields) {
 	if lf.Role == spectypes.RoleCommittee {
 		c, ok := mv.validatorStore.Committee(spectypes.CommitteeID(lf.DutyExecutorID[16:]))
 		if ok {
-			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
+			lf.DutyID = fields.FormatCommitteeDutyID(c.Operators, mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot)
 		}
 	} else {
 		// get the validator index from the msgid
 		v, ok := mv.validatorStore.Validator(lf.DutyExecutorID)
 		if ok {
-			lf.DutyID = fields.FormatDutyID(mv.netCfg.Beacon.EstimatedEpochAtSlot(lf.Slot), lf.Slot, lf.Role.String(), v.ValidatorIndex)
+			lf.DutyID = fmt.Sprintf("%v-e%v-s%v-v%v", lf.Role.String(), mv.netCfg.EstimatedEpochAtSlot(lf.Slot), lf.Slot, v.ValidatorIndex)
 		}
 	}
 }

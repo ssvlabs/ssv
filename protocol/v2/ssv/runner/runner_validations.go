@@ -2,6 +2,7 @@ package runner
 
 import (
 	"bytes"
+	"context"
 	"sort"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -12,7 +13,11 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 )
 
-func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes.PartialSignatureMessages) error {
+func (b *BaseRunner) ValidatePreConsensusMsg(
+	ctx context.Context,
+	runner Runner,
+	signedMsg *spectypes.PartialSignatureMessages,
+) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
@@ -26,7 +31,7 @@ func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes
 		return err
 	}
 
-	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
+	return b.verifyExpectedRoot(ctx, runner, signedMsg, roots, domain)
 }
 
 // Verify each signature in container removing the invalid ones
@@ -41,7 +46,7 @@ func (b *BaseRunner) FallBackAndVerifyEachSignature(container *ssv.PartialSigCon
 	}
 }
 
-func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
+func (b *BaseRunner) ValidatePostConsensusMsg(ctx context.Context, runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
@@ -82,12 +87,12 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, psigMsgs *spectypes
 			return err
 		}
 
-		roots, domain, err := runner.expectedPostConsensusRootsAndDomain()
+		roots, domain, err := runner.expectedPostConsensusRootsAndDomain(ctx)
 		if err != nil {
 			return err
 		}
 
-		return b.verifyExpectedRoot(runner, psigMsgs, roots, domain)
+		return b.verifyExpectedRoot(ctx, runner, psigMsgs, roots, domain)
 	}
 }
 
@@ -103,15 +108,21 @@ func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val spectypes.E
 	return nil
 }
 
-func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *spectypes.PartialSignatureMessages, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
+func (b *BaseRunner) verifyExpectedRoot(
+	ctx context.Context,
+	runner Runner,
+	signedMsg *spectypes.PartialSignatureMessages,
+	expectedRootObjs []ssz.HashRoot,
+	domain spec.DomainType,
+) error {
 	if len(expectedRootObjs) != len(signedMsg.Messages) {
 		return errors.New("wrong expected roots count")
 	}
 
 	// convert expected roots to map and mark unique roots when verified
 	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
-		epoch := b.BeaconNetwork.EstimatedEpochAtSlot(b.State.StartingDuty.DutySlot())
-		d, err := runner.GetBeaconNode().DomainData(epoch, domain)
+		epoch := b.NetworkConfig.EstimatedEpochAtSlot(b.State.StartingDuty.DutySlot())
+		d, err := runner.GetBeaconNode().DomainData(ctx, epoch, domain)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get pre consensus root domain")
 		}

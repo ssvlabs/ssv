@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	tests2 "github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
@@ -55,7 +54,6 @@ func TestSSVMapping(t *testing.T) {
 	}
 
 	for name, test := range untypedTests {
-		name, test := name, test
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
@@ -368,7 +366,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	baseRunner := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &baseRunner))
-	baseRunner.DomainType = networkconfig.TestNetwork.DomainType
+	baseRunner.NetworkConfig = networkconfig.TestNetwork
 
 	ret := createRunnerWithBaseRunner(logger, baseRunner.RunnerRoleType, baseRunner, ks)
 
@@ -380,10 +378,6 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 				baseRunner.State.RunningInstance = fixInstanceForRun(t, ks, baseRunner.State.RunningInstance, baseRunner.QBFTController, operator)
 			}
 		}
-	}
-
-	if (baseRunner.DomainType == spectypes.DomainType{}) {
-		baseRunner.DomainType = networkconfig.TestNetwork.DomainType
 	}
 
 	return ret
@@ -530,7 +524,7 @@ func committeeSpecTestFromMap(t *testing.T, logger *zap.Logger, m map[string]int
 		}
 	}
 
-	ctx := context.Background() // TODO refactor this
+	ctx := t.Context() // TODO refactor this
 	c := fixCommitteeForRun(t, ctx, logger, committeeMap)
 
 	return &CommitteeSpecTest{
@@ -555,7 +549,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		ctx,
 		cancel,
 		logger,
-		tests2.NewTestingBeaconNodeWrapped().GetBeaconNetwork(),
+		networkconfig.TestNetwork,
 		&specCommittee.CommitteeMember,
 		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)

@@ -257,18 +257,15 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 					mc.logger.Fatal("no healthy clients", zap.Error(err))
 				}
 
+				// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
 				f := func(client SingleClientProvider) (any, error) {
-					lastBlock, err := client.streamLogsToChan(ctx, logs, fromBlock)
+					nextBlockToProcess, err := client.streamLogsToChan(ctx, logs, fromBlock)
 					if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-						return lastBlock, err
-					}
-					if err != nil {
-						// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
-						fromBlock = max(fromBlock, lastBlock+1)
 						return nil, err
 					}
 
-					return nil, nil
+					fromBlock = nextBlockToProcess
+					return nil, err
 				}
 
 				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
@@ -296,7 +293,6 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 	p := pool.New().WithErrors().WithContext(ctx)
 
 	for i := range mc.clients {
-		i := i
 		p.Go(func(ctx context.Context) error {
 			client, err := mc.getClient(ctx, i)
 			if err != nil {
@@ -447,7 +443,9 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.String("addr", mc.nodeAddrs[clientIndex]),
 				zap.Error(err))
 
-			allErrs = errors.Join(allErrs, err)
+			if maxTries != 0 {
+				allErrs = errors.Join(allErrs, err)
+			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
 			continue
@@ -464,7 +462,9 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 
-			allErrs = errors.Join(allErrs, err)
+			if maxTries != 0 {
+				allErrs = errors.Join(allErrs, err)
+			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
 			continue
@@ -482,7 +482,9 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 				zap.String("next_addr", mc.nodeAddrs[nextClientIndex]),
 				zap.Error(err))
 
-			allErrs = errors.Join(allErrs, err)
+			if maxTries != 0 {
+				allErrs = errors.Join(allErrs, err)
+			}
 			mc.currentClientIndex.Store(int64(nextClientIndex)) // Advance.
 			recordClientSwitch(ctx, mc.nodeAddrs[clientIndex], mc.nodeAddrs[nextClientIndex])
 			continue

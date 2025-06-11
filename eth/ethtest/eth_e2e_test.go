@@ -27,7 +27,7 @@ var (
 
 // E2E tests for ETH package
 func TestEthExecLayer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	testAddresses := make([]*ethcommon.Address, 2)

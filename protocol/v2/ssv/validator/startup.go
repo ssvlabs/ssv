@@ -36,7 +36,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			return false, err
 		}
 
-		identifier := spectypes.NewMsgID(v.NetworkConfig.DomainType, v.Share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(v.NetworkConfig.GetDomainType(), v.Share.ValidatorPubKey[:], role)
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)
 	}
 

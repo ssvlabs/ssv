@@ -9,9 +9,13 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -66,9 +70,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 	// Prepare relevant duties 1.5 epochs (48 slots) ahead of the sync committee period change.
 	// The 1.5 epochs timing helps ensure setup occurs when the beacon node is likely less busy.
-	h.preparationSlots = h.network.Beacon.SlotsPerEpoch() * 3 / 2
+	h.preparationSlots = h.beaconConfig.GetSlotsPerEpoch() * 3 / 2
 
-	if h.shouldFetchNextPeriod(h.network.Beacon.EstimatedCurrentSlot()) {
+	if h.shouldFetchNextPeriod(h.beaconConfig.EstimatedCurrentSlot()) {
 		h.fetchNextPeriod = true
 	}
 
@@ -81,12 +85,12 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-next:
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+			ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			h.processExecution(ctx, period, slot)
 			h.processFetching(ctx, epoch, period, true)
 			cancel()
@@ -98,13 +102,13 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			}
 
 			// last slot of period
-			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+			if slot == h.beaconConfig.LastSlotOfSyncPeriod(period) {
 				h.duties.Reset(period - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
-			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			epoch := h.beaconConfig.EstimatedEpochAtSlot(reorgEvent.Slot)
+			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_pos", buildStr), zap.Any("event", reorgEvent))
@@ -116,9 +120,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case <-h.indicesChange:
-			slot := h.network.Beacon.EstimatedCurrentSlot()
-			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			slot := h.beaconConfig.EstimatedCurrentSlot()
+			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
+			period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Info("🔁 indices change received", zap.String("period_epoch_slot_pos", buildStr))
 
@@ -133,50 +137,79 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.GetSlotDuration()/2)
 	defer cancel()
 
-	epoch := h.network.Beacon.EstimatedCurrentEpoch()
-	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+	epoch := h.beaconConfig.EstimatedCurrentEpoch()
+	period := h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 	h.processFetching(ctx, epoch, period, false)
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch"),
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconPeriodAttribute(period),
+		))
+	defer span.End()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if h.fetchCurrentPeriod {
+		span.AddEvent("fetching current period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		h.fetchCurrentPeriod = false
 	}
 
 	if h.fetchNextPeriod {
+		span.AddEvent("fetching next period duties")
 		if err := h.fetchAndProcessDuties(ctx, epoch, period+1, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
+			span.SetStatus(codes.Error, err.Error())
 			return
 		}
 		h.fetchNextPeriod = false
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint64, slot phase0.Slot) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "sync_committee.execute"),
+		trace.WithAttributes(
+			observability.BeaconSlotAttribute(slot),
+			observability.BeaconPeriodAttribute(period),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommitteeContribution),
+		))
+	defer span.End()
+
 	// range over duties and execute
 	duties := h.duties.CommitteePeriodDuties(period)
 	if duties == nil {
+		span.AddEvent("no duties available")
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
+	span.AddEvent("duties fetched", trace.WithAttributes(observability.DutyCountAttribute(len(duties))))
 	toExecute := make([]*spectypes.ValidatorDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
 			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 		}
 	}
+	span.AddEvent("executing duties", trace.WithAttributes(observability.DutyCountAttribute(len(toExecute))))
 
-	h.dutiesExecutor.ExecuteDuties(ctx, h.logger, toExecute)
+	h.dutiesExecutor.ExecuteDuties(ctx, toExecute)
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // Period can be current or future.
@@ -185,23 +218,33 @@ func (h *SyncCommitteeHandler) processExecution(ctx context.Context, period uint
 // The epoch passed is always the current epoch.
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch, period uint64, waitForInitial bool) error {
 	start := time.Now()
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch_and_store"),
+		trace.WithAttributes(observability.BeaconPeriodAttribute(period)))
+	defer span.End()
 
-	if period > h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
-		epoch = h.network.Beacon.FirstEpochOfSyncPeriod(period)
+	if period > h.beaconConfig.EstimatedSyncCommitteePeriodAtEpoch(epoch) {
+		epoch = h.beaconConfig.FirstEpochOfSyncPeriod(period)
 	}
 
+	span.SetAttributes(observability.BeaconEpochAttribute(epoch))
+
 	eligibleIndices := h.validatorController.FilterIndices(waitForInitial, func(s *types.SSVShare) bool {
-		return s.IsParticipating(h.network, epoch)
+		return s.IsParticipating(h.beaconConfig, epoch)
 	})
 
 	if len(eligibleIndices) == 0 {
-		h.logger.Debug("no eligible validators for period", fields.Epoch(epoch), zap.Uint64("period", period))
+		const eventMsg = "no eligible validators for period"
+		h.logger.Debug(eventMsg, fields.Epoch(epoch), zap.Uint64("period", period))
+		span.AddEvent(eventMsg)
+		span.SetStatus(codes.Ok, "")
 		return nil
 	}
 
+	span.AddEvent("fetching duties from beacon node", trace.WithAttributes(observability.ValidatorCountAttribute(len(eligibleIndices))))
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, epoch, eligibleIndices)
 	if err != nil {
-		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
+		return observability.Errorf(span, "failed to fetch sync committee duties: %w", err)
 	}
 
 	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)
@@ -219,28 +262,44 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 			InCommittee:    inCommittee,
 		})
 	}
+
+	span.AddEvent("storing duties", trace.WithAttributes(observability.DutyCountAttribute(len(storeDuties))))
 	h.duties.Set(period, storeDuties)
 
 	h.prepareDutiesResultLog(period, duties, start)
 
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
-	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
+	lastEpoch := h.beaconConfig.FirstEpochOfSyncPeriod(period+1) - 1
 	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
-	if len(subscriptions) > 0 {
-		if deadline, ok := ctx.Deadline(); ok {
-			go func(h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
-				// Create a new subscription context with a deadline from parent context.
-				subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
-				defer cancel()
-				if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
-					h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
-				}
-			}(h, subscriptions)
-		} else {
-			h.logger.Warn("failed to get context deadline")
-		}
+
+	if len(subscriptions) == 0 {
+		span.AddEvent("no subscriptions available")
+		span.SetStatus(codes.Ok, "")
+		return nil
 	}
 
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		const eventMsg = "failed to get context deadline"
+		span.AddEvent(eventMsg)
+		h.logger.Warn(eventMsg)
+		span.SetStatus(codes.Ok, "")
+		return nil
+	}
+
+	span.AddEvent("submitting beacon sync committee subscriptions", trace.WithAttributes(
+		attribute.Int("ssv.validator.duty.subscriptions", len(subscriptions)),
+	))
+	go func(ctx context.Context, h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
+		subscriptionCtx, cancel := context.WithDeadline(ctx, deadline)
+		defer cancel()
+
+		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
+			h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+		}
+	}(ctx, h, subscriptions)
+
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -275,8 +334,8 @@ func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 }
 
 func (h *SyncCommitteeHandler) shouldExecute(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
+	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
 	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
 	if !exists {
@@ -324,5 +383,5 @@ func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
 }
 
 func (h *SyncCommitteeHandler) slotsPerPeriod() uint64 {
-	return h.network.Beacon.EpochsPerSyncCommitteePeriod() * h.network.Beacon.SlotsPerEpoch()
+	return h.beaconConfig.GetEpochsPerSyncCommitteePeriod() * h.beaconConfig.GetSlotsPerEpoch()
 }

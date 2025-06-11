@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"context"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -61,8 +60,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spect
 	if startedValidators > 0 {
 		// Notify DutyScheduler about the changes in validator indices without blocking.
 		go func() {
-			ctx := context.Background() // TODO: pass context
-			if !c.reportIndicesChange(ctx, 2*c.beacon.GetBeaconNetwork().SlotDurationSec()) {
+			if !c.reportIndicesChange(c.ctx) {
 				logger.Error("failed to notify indices change")
 			}
 		}()
@@ -109,7 +107,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		select {
 		case c.validatorExitCh <- exitDesc:
 			logger.Debug("added voluntary exit task to pipeline")
-		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+		case <-time.After(2 * c.networkConfig.GetSlotDuration()):
 			logger.Error("failed to schedule ExitValidator duty!")
 		}
 	}()

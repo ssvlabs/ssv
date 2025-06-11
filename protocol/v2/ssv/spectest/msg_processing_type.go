@@ -240,6 +240,24 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
+	// override base-runner NetworkConfig now
+	switch test.Runner.(type) {
+	case *runner.CommitteeRunner:
+		r.(*runner.CommitteeRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.AggregatorRunner:
+		r.(*runner.AggregatorRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.ProposerRunner:
+		r.(*runner.ProposerRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.SyncCommitteeAggregatorRunner:
+		r.(*runner.SyncCommitteeAggregatorRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.ValidatorRegistrationRunner:
+		r.(*runner.ValidatorRegistrationRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	case *runner.VoluntaryExitRunner:
+		r.(*runner.VoluntaryExitRunner).BaseRunner.NetworkConfig = networkconfig.TestNetwork
+	default:
+		t.Fatalf("unknown runner type")
+	}
+
 	// override
 	test.PostDutyRunnerState = r
 
@@ -295,7 +313,7 @@ var baseCommitteeWithRunnerSample = func(
 		ctx,
 		cancel,
 		logger,
-		runnerSample.GetBeaconNode().GetBeaconNetwork(),
+		runnerSample.BaseRunner.NetworkConfig,
 		spectestingutils.TestingCommitteeMember(keySetSample),
 		createRunnerF,
 		shareMap,

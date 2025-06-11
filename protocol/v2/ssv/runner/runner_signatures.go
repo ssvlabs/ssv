@@ -22,8 +22,8 @@ func signBeaconObject(
 	slot spec.Slot,
 	signatureDomain spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
-	epoch := runner.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-	domain, err := runner.GetBeaconNode().DomainData(epoch, signatureDomain)
+	epoch := runner.GetNetworkConfig().EstimatedEpochAtSlot(slot)
+	domain, err := runner.GetBeaconNode().DomainData(ctx, epoch, signatureDomain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch beacon domain: %w", err)
 	}

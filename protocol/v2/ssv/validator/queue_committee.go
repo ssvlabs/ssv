@@ -4,16 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // queueContainer wraps a queue with its corresponding state
@@ -25,13 +28,25 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 // TODO: get rid of logger, add context
-func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
+func (c *Committee) HandleMessage(ctx context.Context, logger *zap.Logger, msg *queue.SSVMessage) {
 	slot, err := msg.Slot()
 	if err != nil {
 		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
 		return
 	}
+	dutyID := fields.FormatCommitteeDutyID(types.OperatorIDsFromOperators(c.CommitteeMember.Committee), c.beaconConfig.EstimatedEpochAtSlot(slot), slot)
+	ctx, span := tracer.Start(observability.TraceContext(ctx, dutyID),
+		observability.InstrumentName(observabilityNamespace, "handle_committee_message"),
+		trace.WithAttributes(
+			observability.ValidatorMsgIDAttribute(msg.GetID()),
+			observability.ValidatorMsgTypeAttribute(msg.GetType()),
+			observability.RunnerRoleAttribute(msg.GetID().GetRoleType()),
+			observability.DutyIDAttribute(dutyID),
+		))
+	defer span.End()
 
+	msg.TraceContext = ctx
+	span.SetAttributes(observability.BeaconSlotAttribute(slot))
 	// Retrieve or create the queue for the given slot.
 	c.mtx.Lock()
 	q, ok := c.Queues[slot]
@@ -46,20 +61,25 @@ func (c *Committee) HandleMessage(_ context.Context, logger *zap.Logger, msg *qu
 			},
 		}
 		c.Queues[slot] = q
-		logger.Debug("missing queue for slot created", fields.Slot(slot))
+		const eventMsg = "missing queue for slot created"
+		logger.Debug(eventMsg, fields.Slot(slot))
+		span.AddEvent(eventMsg)
 	}
 	c.mtx.Unlock()
 
-	// Push the message.
+	span.AddEvent("pushing message to the queue")
 	if pushed := q.Q.TryPush(msg); !pushed {
-		msgID := msg.MsgID.String()
-		logger.Warn("❗ dropping message because the queue is full",
+		const errMsg = "❗ dropping message because the queue is full"
+		logger.Warn(errMsg,
 			zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msg_id", msgID))
+			zap.String("msg_id", msg.MsgID.String()))
+		span.SetStatus(codes.Error, errMsg)
+	} else {
+		span.SetStatus(codes.Ok, "")
 	}
 }
 
-func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartConsumeQueue(ctx context.Context, logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -71,11 +91,11 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 
 	r := c.Runners[duty.Slot]
 	if r == nil {
-		return fmt.Errorf("no runner found for message's slot")
+		return fmt.Errorf("no runner found for slot %d", duty.Slot)
 	}
 
 	// required to stop the queue consumer when timeout message is received by handler
-	queueCtx, cancelF := context.WithDeadline(c.ctx, time.Unix(c.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots), 0))
+	queueCtx, cancelF := context.WithDeadline(c.ctx, c.beaconConfig.EstimatedTimeAtSlot(duty.Slot+runnerExpirySlots))
 
 	go func() {
 		defer cancelF()
@@ -83,6 +103,7 @@ func (c *Committee) StartConsumeQueue(logger *zap.Logger, duty *spectypes.Commit
 			logger.Error("❗failed consuming committee queue", zap.Error(err))
 		}
 	}()
+
 	return nil
 }
 
