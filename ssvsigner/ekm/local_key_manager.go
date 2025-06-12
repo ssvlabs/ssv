@@ -269,21 +269,8 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 	}
 
 	if acc == nil {
-		// Check if we have existing slashing protection data
-		hasHistory := false
-		if att, found, _ := km.RetrieveHighestAttestation(pubKey); found && att != nil {
-			hasHistory = true
-		}
-		if slot, found, _ := km.RetrieveHighestProposal(pubKey); found && slot > 0 {
-			hasHistory = true
-		}
-
-		// Only bump slashing protection if there's no existing history
-		// This preserves protection for re-added shares
-		if !hasHistory {
-			if err := km.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
-				return fmt.Errorf("could not bump slashing protection: %w", err)
-			}
+		if err := km.BumpSlashingProtection(pubKey); err != nil {
+			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 
 		if err := km.saveShare(sharePrivKey); err != nil {
