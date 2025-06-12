@@ -386,11 +386,10 @@ database, cleaning keys in Web3Signer is required to ensure all shares are prope
 2. **Key Protection**: Store operator keys securely restricting access to them.
 3. **Access Control**: Limit access to the SSV-Signer and Web3Signer endpoints to only the necessary services.
 4. **Slashing Protection Database Backup**: The slashing protection database is critical to prevent slashing. Its loss or
-   corruption erases the slashing history, which can lead to double-signing and severe penalties if operation
-   continues. It is **crucial** for operators to implement a robust backup and recovery strategy for their databases
-   (PostgreSQL for Web3Signer, or the node's local database for local signing setups). Failure to maintain database
-   backups can lead to significant financial loss. Operators are responsible for their own database management and
-   protection.
+   corruption can lead to double-signing and severe penalties if operation continues. It is **crucial** for operators
+   to implement a robust backup and recovery strategy for their databases (PostgreSQL for Web3Signer, or the node's
+   local database for local signing setups). Failure to maintain database backups can lead to significant financial
+   loss. Operators are responsible for their own database management and protection.
 
 ## Performance Considerations
 
