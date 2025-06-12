@@ -100,27 +100,32 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 			return
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
+			go func() {
+				start := time.Now()
 
-			// evict committee traces
-			committeThreshold := currentSlot - ttlCommittee
-			evicted := c.dumpCommitteeToDBPeriodically(committeThreshold)
-			c.logger.Info("evicted committee duty traces to disk", fields.Slot(committeThreshold), zap.Int("count", evicted))
+				// evict committee traces
+				committeThreshold := currentSlot - ttlCommittee
+				evicted := c.dumpCommitteeToDBPeriodically(committeThreshold)
+				c.logger.Info("evicted committee duty traces to disk", fields.Slot(committeThreshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
-			// evict validator traces
-			validatorThreshold := currentSlot - ttlValidator
-			evicted = c.dumpValidatorToDBPeriodically(validatorThreshold)
-			c.logger.Info("evicted validator duty traces to disk", fields.Slot(validatorThreshold), zap.Int("count", evicted))
+				// evict validator traces
+				validatorThreshold := currentSlot - ttlValidator
+				evicted = c.dumpValidatorToDBPeriodically(validatorThreshold)
+				c.logger.Info("evicted validator duty traces to disk", fields.Slot(validatorThreshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
-			// evict validator committee links
-			mappingThreshold := currentSlot - ttlMapping
-			evicted = c.dumpLinkToDBPeriodically(mappingThreshold)
-			c.logger.Info("evicted validator mappings to disk", fields.Slot(mappingThreshold), zap.Int("count", evicted))
+				// evict validator committee links
+				mappingThreshold := currentSlot - ttlMapping
+				evicted = c.dumpLinkToDBPeriodically(mappingThreshold)
+				c.logger.Info("evicted validator mappings to disk", fields.Slot(mappingThreshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
-			// remove old SC roots
-			c.syncCommitteeRootsCache.DeleteExpired()
+				// remove old SC roots
+				c.syncCommitteeRootsCache.DeleteExpired()
 
-			// update last evicted slot
-			c.lastEvictedSlot.Store(uint64(validatorThreshold))
+				// update last evicted slot
+				c.lastEvictedSlot.Store(uint64(validatorThreshold))
+
+				c.logger.Info("eviction completed", fields.Slot(currentSlot), fields.Took(time.Since(start)))
+			}()
 		}
 	}
 }
