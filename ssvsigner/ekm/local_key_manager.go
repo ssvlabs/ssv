@@ -269,7 +269,7 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 	}
 
 	if acc == nil {
-		if err := km.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
+		if err := km.BumpSlashingProtection(pubKey); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 
