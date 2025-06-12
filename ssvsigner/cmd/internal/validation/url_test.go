@@ -15,13 +15,13 @@ func TestValidateWeb3SignerEndpoint(t *testing.T) {
 		wantErr  string
 	}{
 		{
-			name:     "valid https endpoint",
-			endpoint: "https://web3signer.example.com",
+			name:     "valid https endpoint with real domain",
+			endpoint: "https://google.com:443",
 			wantErr:  "",
 		},
 		{
-			name:     "valid http endpoint",
-			endpoint: "http://web3signer.example.com:9000",
+			name:     "valid http endpoint with public IP",
+			endpoint: "http://8.8.8.8:9000",
 			wantErr:  "",
 		},
 		{
@@ -52,22 +52,22 @@ func TestValidateWeb3SignerEndpoint(t *testing.T) {
 		{
 			name:     "private ip 192.168.x.x blocked",
 			endpoint: "http://192.168.1.1:9000",
-			wantErr:  "are not allowed",
+			wantErr:  "private/internal ip addresses are not allowed",
 		},
 		{
 			name:     "private ip 10.x.x.x blocked",
 			endpoint: "http://10.0.0.1:9000",
-			wantErr:  "are not allowed",
+			wantErr:  "private/internal ip addresses are not allowed",
 		},
 		{
 			name:     "private ip 172.16.x.x blocked",
 			endpoint: "http://172.16.0.1:9000",
-			wantErr:  "are not allowed",
+			wantErr:  "private/internal ip addresses are not allowed",
 		},
 		{
 			name:     "link local blocked",
 			endpoint: "http://169.254.1.1:9000",
-			wantErr:  "are not allowed",
+			wantErr:  "private/internal ip addresses are not allowed",
 		},
 		{
 			name:     "file scheme blocked",
@@ -93,6 +93,21 @@ func TestValidateWeb3SignerEndpoint(t *testing.T) {
 			name:     "multicast ip blocked",
 			endpoint: "http://224.0.0.1:9000",
 			wantErr:  "invalid ip address type (multicast)",
+		},
+		{
+			name:     "non-existent domain",
+			endpoint: "https://this-domain-definitely-does-not-exist-12345.com",
+			wantErr:  "hostname not found",
+		},
+		{
+			name:     "ipv6 unique local blocked",
+			endpoint: "http://[fd00::1]:9000",
+			wantErr:  "private/internal ip addresses are not allowed",
+		},
+		{
+			name:     "broadcast address blocked",
+			endpoint: "http://255.255.255.255:9000",
+			wantErr:  "ip address in blocked range",
 		},
 	}
 
