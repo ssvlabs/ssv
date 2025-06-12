@@ -154,11 +154,32 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, phase0.Root, error) {
+	req, root, err := km.prepareSignRequest(ctx, obj, domain, sharePubkey, slot, signatureDomain)
+	if err != nil {
+		return spectypes.Signature{}, phase0.Root{}, err
+	}
+
+	sig, err := km.signerClient.Sign(ctx, sharePubkey, req)
+	if err != nil {
+		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("remote signer: %w", err)
+	}
+
+	return sig[:], root, nil
+}
+
+func (km *RemoteKeyManager) prepareSignRequest(
+	ctx context.Context,
+	obj ssz.HashRoot,
+	domain phase0.Domain,
+	sharePubkey phase0.BLSPubKey,
+	slot phase0.Slot,
+	signatureDomain phase0.DomainType,
+) (web3signer.SignRequest, phase0.Root, error) {
 	epoch := km.netCfg.Beacon.EstimatedEpochAtSlot(slot)
 
 	forkInfo, err := km.getForkInfo(ctx, epoch)
 	if err != nil {
-		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("get fork info: %w", err)
+		return web3signer.SignRequest{}, phase0.Root{}, fmt.Errorf("get fork info: %w", err)
 	}
 
 	req := web3signer.SignRequest{
@@ -167,26 +188,26 @@ func (km *RemoteKeyManager) SignBeaconObject(
 
 	switch signatureDomain {
 	case spectypes.DomainAttester:
-		val := km.lock(sharePubkey, "attestation")
+		val := km.lock(sharePubkey, lockAttestation)
 		val.Lock()
 		defer val.Unlock()
 
 		data, err := km.handleDomainAttester(obj, sharePubkey)
 		if err != nil {
-			return spectypes.Signature{}, phase0.Root{}, err
+			return web3signer.SignRequest{}, phase0.Root{}, err
 		}
 
 		req.Type = web3signer.TypeAttestation
 		req.Attestation = data
 
 	case spectypes.DomainProposer:
-		val := km.lock(sharePubkey, "proposal")
+		val := km.lock(sharePubkey, lockProposal)
 		val.Lock()
 		defer val.Unlock()
 
 		block, err := km.handleDomainProposer(obj, sharePubkey)
 		if err != nil {
-			return spectypes.Signature{}, phase0.Root{}, err
+			return web3signer.SignRequest{}, phase0.Root{}, err
 		}
 
 		req.Type = web3signer.TypeBlockV2
@@ -195,7 +216,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainVoluntaryExit:
 		data, ok := obj.(*phase0.VoluntaryExit)
 		if !ok {
-			return nil, phase0.Root{}, errors.New("could not cast obj to VoluntaryExit")
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to VoluntaryExit")
 		}
 
 		req.Type = web3signer.TypeVoluntaryExit
@@ -214,13 +235,13 @@ func (km *RemoteKeyManager) SignBeaconObject(
 				Electra: v,
 			}
 		default:
-			return nil, phase0.Root{}, fmt.Errorf("obj type is unknown: %T", obj)
+			return web3signer.SignRequest{}, phase0.Root{}, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 
 	case spectypes.DomainSelectionProof:
 		data, ok := obj.(spectypes.SSZUint64)
 		if !ok {
-			return nil, phase0.Root{}, errors.New("could not cast obj to SSZUint64")
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to SSZUint64")
 		}
 
 		req.Type = web3signer.TypeAggregationSlot
@@ -229,20 +250,20 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainRandao:
 		data, ok := obj.(spectypes.SSZUint64)
 		if !ok {
-			return nil, phase0.Root{}, errors.New("could not cast obj to SSZUint64")
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to SSZUint64")
 		}
 
 		req.Type = web3signer.TypeRandaoReveal
 		req.RandaoReveal = &web3signer.RandaoReveal{Epoch: phase0.Epoch(data)}
 
 	case spectypes.DomainSyncCommittee:
-		val := km.lock(sharePubkey, "sync_committee")
+		val := km.lock(sharePubkey, lockSyncCommittee)
 		val.Lock()
 		defer val.Unlock()
 
 		data, ok := obj.(spectypes.SSZBytes)
 		if !ok {
-			return nil, phase0.Root{}, errors.New("could not cast obj to SSZBytes")
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to SSZBytes")
 		}
 
 		req.Type = web3signer.TypeSyncCommitteeMessage
@@ -252,13 +273,13 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		}
 
 	case spectypes.DomainSyncCommitteeSelectionProof:
-		val := km.lock(sharePubkey, "sync_committee_selection_data")
+		val := km.lock(sharePubkey, lockSyncCommitteeSelectionData)
 		val.Lock()
 		defer val.Unlock()
 
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
 		if !ok {
-			return nil, phase0.Root{}, errors.New("could not cast obj to SyncAggregatorSelectionData")
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to SyncAggregatorSelectionData")
 		}
 
 		req.Type = web3signer.TypeSyncCommitteeSelectionProof
@@ -268,13 +289,13 @@ func (km *RemoteKeyManager) SignBeaconObject(
 		}
 
 	case spectypes.DomainContributionAndProof:
-		val := km.lock(sharePubkey, "sync_committee_selection_and_proof")
+		val := km.lock(sharePubkey, lockSyncCommitteeSelectionAndProof)
 		val.Lock()
 		defer val.Unlock()
 
 		data, ok := obj.(*altair.ContributionAndProof)
 		if !ok {
-			return nil, phase0.Root{}, errors.New("could not cast obj to ContributionAndProof")
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to ContributionAndProof")
 		}
 
 		req.Type = web3signer.TypeSyncCommitteeContributionAndProof
@@ -283,28 +304,22 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	case spectypes.DomainApplicationBuilder:
 		data, ok := obj.(*eth2apiv1.ValidatorRegistration)
 		if !ok {
-			return nil, phase0.Root{}, errors.New("could not cast obj to ValidatorRegistration")
+			return web3signer.SignRequest{}, phase0.Root{}, errors.New("could not cast obj to ValidatorRegistration")
 		}
 
 		req.Type = web3signer.TypeValidatorRegistration
 		req.ValidatorRegistration = data
 	default:
-		return nil, phase0.Root{}, errors.New("domain unknown")
+		return web3signer.SignRequest{}, phase0.Root{}, errors.New("domain unknown")
 	}
 
 	root, err := spectypes.ComputeETHSigningRoot(obj, domain)
 	if err != nil {
-		return nil, phase0.Root{}, fmt.Errorf("compute root: %w", err)
+		return web3signer.SignRequest{}, phase0.Root{}, fmt.Errorf("compute root: %w", err)
 	}
-
 	req.SigningRoot = root
 
-	sig, err := km.signerClient.Sign(ctx, sharePubkey, req)
-	if err != nil {
-		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("remote signer: %w", err)
-	}
-
-	return sig[:], root, nil
+	return req, root, nil
 }
 
 func (km *RemoteKeyManager) handleDomainAttester(
@@ -503,12 +518,22 @@ func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {
 	return km.getOperatorId()
 }
 
+type lockOperation string
+
+const (
+	lockAttestation                    lockOperation = "attestation"
+	lockProposal                       lockOperation = "proposal"
+	lockSyncCommittee                  lockOperation = "sync_committee"
+	lockSyncCommitteeSelectionData     lockOperation = "sync_committee_selection_data"
+	lockSyncCommitteeSelectionAndProof lockOperation = "sync_committee_selection_and_proof"
+)
+
 type signKey struct {
 	pubkey    phase0.BLSPubKey
-	operation string
+	operation lockOperation
 }
 
-func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation string) *sync.RWMutex {
+func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation lockOperation) *sync.RWMutex {
 	km.signLocksMu.Lock()
 	defer km.signLocksMu.Unlock()
 
@@ -522,4 +547,16 @@ func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation string)
 
 	km.signLocks[key] = &sync.RWMutex{}
 	return km.signLocks[key]
+}
+
+func (km *RemoteKeyManager) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
+	attLock := km.lock(pubKey, lockAttestation)
+	attLock.Lock()
+	defer attLock.Unlock()
+
+	propLock := km.lock(pubKey, lockProposal)
+	propLock.Lock()
+	defer propLock.Unlock()
+
+	return km.slashingProtector.BumpSlashingProtection(pubKey)
 }
