@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/codes"
@@ -415,10 +414,10 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 	if c.validatorOptions.ExporterFull {
 		// use new exporter functionality
 		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
-	} else {
-		// use old exporter functionality
-		return c.handleNonCommitteeMessages(ctx, ssvMsg, ncv)
 	}
+
+	// use old exporter functionality
+	return c.handleNonCommitteeMessages(ctx, ssvMsg, ncv)
 }
 
 func (c *controller) handleNonCommitteeMessages(

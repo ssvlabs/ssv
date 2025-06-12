@@ -70,8 +70,6 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 		}
 
 		for _, role := range trace.roleTraces() {
-			// TODO(me): confirm it makes sense
-			// in case some duties do not have the validator index set
 			if role.Validator == 0 {
 				c.logger.Info("got trace with missing validator index", fields.Validator(pk[:]), fields.Slot(slot))
 				index, found := c.validators.ValidatorIndex(pk)
