@@ -18,8 +18,9 @@ const (
 	ttlMapping       = 4
 	ttlCommitteeRoot = 4
 
-	// look back 5 slots
-	depth = 5
+	// depth at which we look back when evicting
+	// to ensure we evict previously skipped or missed duties
+	depth = 15
 )
 
 func (c *Collector) dumpLinkToDBPeriodically(thresholdSlot phase0.Slot) (totalSaved int) {
