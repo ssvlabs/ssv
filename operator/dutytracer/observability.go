@@ -35,13 +35,6 @@ var (
 			metric.WithUnit("s"),
 			metric.WithDescription("db interaction duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
-
-	tracerCacheSizeHistogram = observability.NewMetric(
-		meter.Float64Histogram(
-			metricName("cache.size"),
-			metric.WithUnit("count"),
-			metric.WithDescription("cache size"),
-			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
 
 func metricName(name string) string {
