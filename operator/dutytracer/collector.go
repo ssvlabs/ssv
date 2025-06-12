@@ -121,6 +121,8 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 
 			// update last evicted slot
 			c.lastEvictedSlot.Store(uint64(validatorThreshold))
+
+			c.logger.Info("in flight", zap.Int("committee", c.inFlightCommittee.SlowLen()), zap.Int("validator", c.inFlightValidator.SlowLen()))
 		}
 	}
 }

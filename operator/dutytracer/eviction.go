@@ -1,12 +1,16 @@
 package validator
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
+	"context"
+	"math"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/utils/hashmap"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.uber.org/zap"
 )
 
 // TTL in slots for each role
@@ -37,6 +41,29 @@ func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) 
 		return true
 	})
 
+	stats, minSlot, maxSlot := 0, phase0.Slot(math.MaxInt), phase0.Slot(0)
+	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
+		slotToCommittee.Range(func(slot phase0.Slot, committeeID spectypes.CommitteeID) bool {
+			stats++
+			if slot < minSlot {
+				minSlot = slot
+			}
+			if slot > maxSlot {
+				maxSlot = slot
+			}
+			return true
+		})
+		return true
+	})
+
+	c.logger.Info("dumpLinkToDBPeriodically", fields.Slot(slot), zap.Int("count", stats), zap.Uint64("minSlot", uint64(minSlot)), zap.Uint64("maxSlot", uint64(maxSlot)))
+
+	tracerCacheSizeHistogram.Record(context.Background(), float64(stats),
+		metric.WithAttributes(
+			attribute.String("type", "link"),
+		),
+	)
+
 	return
 }
 
@@ -59,6 +86,29 @@ func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved 
 		return true
 	})
 
+	stats, minSlot, maxSlot := 0, phase0.Slot(math.MaxInt), phase0.Slot(0)
+	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+		slotToTraceMap.Range(func(slot phase0.Slot, trace *committeeDutyTrace) bool {
+			if slot < minSlot {
+				minSlot = slot
+			}
+			if slot > phase0.Slot(maxSlot) {
+				maxSlot = slot
+			}
+			stats++
+			return true
+		})
+		return true
+	})
+
+	c.logger.Info("dumpCommitteeToDBPeriodically", fields.Slot(slot), zap.Int("count", stats), zap.Uint64("minSlot", uint64(minSlot)), zap.Uint64("maxSlot", uint64(maxSlot)))
+
+	tracerCacheSizeHistogram.Record(context.Background(), float64(stats),
+		metric.WithAttributes(
+			attribute.String("type", "committee"),
+		),
+	)
+
 	return
 }
 
@@ -70,10 +120,7 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 		}
 
 		for _, role := range trace.roleTraces() {
-			// TODO(me): confirm it makes sense
-			// in case some duties do not have the validator index set
 			if role.Validator == 0 {
-				c.logger.Info("got trace with missing validator index", fields.Validator(pk[:]), fields.Slot(slot))
 				index, found := c.validators.ValidatorIndex(pk)
 				if !found {
 					continue
@@ -94,6 +141,29 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 
 		return true
 	})
+
+	stats, minSlot, maxSlot := 0, phase0.Slot(math.MaxInt), phase0.Slot(0)
+	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
+		slotToTraceMap.Range(func(slot phase0.Slot, trace *validatorDutyTrace) bool {
+			stats++
+			if slot < minSlot {
+				minSlot = slot
+			}
+			if slot > maxSlot {
+				maxSlot = slot
+			}
+			return true
+		})
+		return true
+	})
+
+	c.logger.Info("dumpValidatorToDBPeriodically", fields.Slot(slot), zap.Int("count", stats), zap.Uint64("minSlot", uint64(minSlot)), zap.Uint64("maxSlot", uint64(maxSlot)))
+
+	tracerCacheSizeHistogram.Record(context.Background(), float64(stats),
+		metric.WithAttributes(
+			attribute.String("type", "validator"),
+		),
+	)
 
 	return
 }
