@@ -20,8 +20,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	kv "github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 

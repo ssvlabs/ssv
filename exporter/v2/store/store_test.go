@@ -12,8 +12,8 @@ import (
 
 	model "github.com/ssvlabs/ssv/exporter/v2"
 	store "github.com/ssvlabs/ssv/exporter/v2/store"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestSaveCommitteeDutyLink(t *testing.T) {

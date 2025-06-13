@@ -1,4 +1,4 @@
-package kv
+package badger
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 )
 
 // setupDB creates a BadgerDB instance for testing with given options and handles cleanup.
-func setupDB(t *testing.T, options basedb.Options) *BadgerDB {
+func setupDB(t *testing.T, options basedb.Options) *DB {
 	t.Helper()
 	logger := logging.TestLogger(t)
 
@@ -52,7 +52,7 @@ func setupTempDir(t *testing.T, prefix string) string {
 }
 
 // setupDataset populates a database with test data of specified size.
-func setupDataset(t *testing.T, db *BadgerDB, prefix []byte, count int) {
+func setupDataset(t *testing.T, db *DB, prefix []byte, count int) {
 	t.Helper()
 	for i := 0; i < count; i++ {
 		id := fmt.Sprintf("test-%d", i)
