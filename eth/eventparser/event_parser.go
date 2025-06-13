@@ -89,7 +89,7 @@ func (e *EventParser) unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error)
 }
 
 // PackOperatorPublicKey is used for testing only, packing the operator pubkey bytes into an event.
-func PackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
+func PackOperatorPublicKey(pubKey string) ([]byte, error) {
 	byts, err := ethabi.NewType("bytes", "bytes", nil)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func PackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
 		},
 	}
 
-	outField, err := args.Pack(fieldBytes)
+	outField, err := args.Pack([]byte(pubKey))
 	if err != nil {
 		return nil, fmt.Errorf("pack: %w", err)
 	}

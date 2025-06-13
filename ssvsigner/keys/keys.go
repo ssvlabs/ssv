@@ -122,9 +122,5 @@ func (p *publicKey) Verify(data []byte, signature []byte) error {
 }
 
 func (p *publicKey) Base64() (string, error) {
-	b, err := rsaencryption.PublicKeyToBase64PEM(p.pubKey)
-	if err != nil {
-		return "", err
-	}
-	return b, err
+	return rsaencryption.PublicKeyToBase64PEM(p.pubKey)
 }

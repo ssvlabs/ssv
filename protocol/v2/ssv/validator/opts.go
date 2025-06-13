@@ -1,6 +1,8 @@
 package validator
 
 import (
+	"time"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -20,7 +22,7 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	NetworkConfig       networkconfig.NetworkConfig
+	NetworkConfig       networkconfig.Network
 	Network             specqbft.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
@@ -37,6 +39,7 @@ type Options struct {
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
 	Graffiti            []byte
+	ProposerDelay       time.Duration
 }
 
 func (o *Options) defaults() {

@@ -26,10 +26,10 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	// NetworkName is the network name of this node
-	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.)"`
-	CustomDomainType    string `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"`
-	Network             networkconfig.NetworkConfig
+	NetworkName         string                   `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
+	CustomNetwork       *networkconfig.SSVConfig `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
+	CustomDomainType    string                   `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
+	NetworkConfig       networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     executionclient.Provider
 	P2PNetwork          network.P2PNetwork
@@ -68,7 +68,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
-		network:          opts.Network,
+		network:          opts.NetworkConfig,
 		consensusClient:  opts.BeaconNode,
 		executionClient:  opts.ExecutionClient,
 		net:              opts.P2PNetwork,
@@ -78,7 +78,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			Ctx:                 opts.Context,
 			BeaconNode:          opts.BeaconNode,
 			ExecutionClient:     opts.ExecutionClient,
-			Network:             opts.Network,
+			BeaconConfig:        opts.NetworkConfig,
 			ValidatorProvider:   opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
 			ValidatorController: opts.ValidatorController,
 			DutyExecutor:        opts.ValidatorController,
@@ -91,7 +91,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		feeRecipientCtrl: fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,
 			BeaconClient:       opts.BeaconNode,
-			Network:            opts.Network,
+			BeaconConfig:       opts.NetworkConfig.BeaconConfig,
 			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
 			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
 			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
@@ -207,6 +207,6 @@ func (n *Node) reportOperators() {
 	for i := range operators {
 		n.logger.Debug("report operator public key",
 			fields.OperatorID(operators[i].ID),
-			fields.PubKey(operators[i].PublicKey))
+			fields.OperatorPubKey(operators[i].PublicKey))
 	}
 }

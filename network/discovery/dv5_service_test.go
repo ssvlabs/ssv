@@ -10,16 +10,16 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/peers/connections/mock"
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/ttl"
 )
@@ -83,13 +83,8 @@ func TestCheckPeer(t *testing.T) {
 		}
 	)
 
-	var checkPeerTestNetwork = networkconfig.NetworkConfig{
-		BeaconConfig: networkconfig.BeaconConfig{
-			Beacon: beacon.NewNetwork(spectypes.BeaconTestNetwork),
-		},
-		SSVConfig: networkconfig.SSVConfig{
-			DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
-		},
+	var checkPeerTestSSVConfig = networkconfig.SSVConfig{
+		DomainType: spectypes.DomainType{0x1, 0x2, 0x3, 0x4},
 	}
 
 	// Create the LocalNode instances for the tests.
@@ -125,7 +120,7 @@ func TestCheckPeer(t *testing.T) {
 		ctx:                 ctx,
 		conns:               &mock.MockConnectionIndex{LimitValue: false},
 		subnetsIdx:          subnetIndex,
-		networkConfig:       checkPeerTestNetwork,
+		ssvConfig:           checkPeerTestSSVConfig,
 		subnets:             mySubnets,
 		discoveredPeersPool: ttl.New[peer.ID, DiscoveredPeer](time.Hour, time.Hour),
 		trimmedRecently:     ttl.New[peer.ID, struct{}](time.Hour, time.Hour),

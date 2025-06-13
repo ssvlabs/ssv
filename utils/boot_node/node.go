@@ -50,11 +50,11 @@ type bootNode struct {
 	externalIP  string
 	tcpPort     uint16
 	dbPath      string
-	network     networkconfig.NetworkConfig
+	ssvConfig   networkconfig.SSVConfig
 }
 
 // New is the constructor of ssvNode
-func New(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, opts Options) (Node, error) {
+func New(logger *zap.Logger, ssvConfig networkconfig.SSVConfig, opts Options) (Node, error) {
 	return &bootNode{
 		logger:      logger.Named(logging.NameBootNode),
 		privateKey:  opts.PrivateKey,
@@ -63,7 +63,7 @@ func New(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, opts Opt
 		externalIP:  opts.ExternalIP,
 		tcpPort:     opts.TCPPort,
 		dbPath:      opts.DbPath,
-		network:     networkConfig,
+		ssvConfig:   ssvConfig,
 	}, nil
 }
 
@@ -110,9 +110,9 @@ func (n *bootNode) Start(ctx context.Context) error {
 	listener := n.createListener(ipAddr, n.discv5port, privKey)
 	node := listener.LocalNode().Node()
 	n.logger.Info("Running",
-		zap.String("node", node.String()),
-		zap.String("network", n.network.Name),
-		fields.ProtocolID(n.network.DiscoveryProtocolID),
+		zap.Stringer("node", node),
+		zap.Stringer("config", n.ssvConfig),
+		fields.ProtocolID(n.ssvConfig.DiscoveryProtocolID),
 	)
 
 	handler := &handler{
@@ -171,7 +171,7 @@ func (n *bootNode) createListener(ipAddr string, port uint16, privateKey *ecdsa.
 
 	listener, err := discover.ListenV5(conn, localNode, discover.Config{
 		PrivateKey:   privateKey,
-		V5ProtocolID: &n.network.DiscoveryProtocolID,
+		V5ProtocolID: &n.ssvConfig.DiscoveryProtocolID,
 	})
 	if err != nil {
 		log.Fatal(err)

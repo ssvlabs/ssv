@@ -12,9 +12,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -24,8 +25,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestSubmitProposal(t *testing.T) {
@@ -41,12 +42,13 @@ func TestSubmitProposal(t *testing.T) {
 
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
-	network := networkconfig.TestNetwork
+
+	beaconConfig := networkconfig.TestNetwork.BeaconConfig
 	populateStorage(t, shareStorage, operatorData)
 
 	frCtrl := NewController(logger, &ControllerOptions{
 		Ctx:               context.TODO(),
-		Network:           network,
+		BeaconConfig:      beaconConfig,
 		ShareStorage:      shareStorage,
 		RecipientStorage:  recipientStorage,
 		OperatorDataStore: operatorDataStore,
@@ -79,11 +81,11 @@ func TestSubmitProposal(t *testing.T) {
 		go frCtrl.Start(t.Context())
 
 		slots := []phase0.Slot{
-			1,                                        // first time
-			2,                                        // should not call submit
-			20,                                       // should not call submit
-			phase0.Slot(network.SlotsPerEpoch()) / 2, // halfway through epoch
-			63,                                       // should not call submit
+			1,  // first time
+			2,  // should not call submit
+			20, // should not call submit
+			phase0.Slot(beaconConfig.SlotsPerEpoch / 2), // halfway through epoch
+			63, // should not call submit
 		}
 
 		for _, s := range slots {

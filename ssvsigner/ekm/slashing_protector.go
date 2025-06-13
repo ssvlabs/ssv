@@ -7,6 +7,8 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/core"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 // slashing_protector.go provides SlashingProtector, a wrapper around
@@ -42,17 +44,20 @@ type slashingProtector interface {
 // or proposal is slashable.
 type SlashingProtector struct {
 	logger      *zap.Logger
+	beaconCfg   networkconfig.Beacon
 	signerStore Storage
 	protection  *slashingprotection.NormalProtection
 }
 
 func NewSlashingProtector(
 	logger *zap.Logger,
+	beaconCfg networkconfig.Beacon,
 	signerStore Storage,
 	protection *slashingprotection.NormalProtection,
 ) *SlashingProtector {
 	return &SlashingProtector{
 		logger:      logger,
+		beaconCfg:   beaconCfg,
 		signerStore: signerStore,
 		protection:  protection,
 	}
@@ -110,7 +115,7 @@ func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot
 
 // BumpSlashingProtection updates the slashing protection data for a given public key.
 func (sp *SlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
-	currentSlot := sp.signerStore.BeaconNetwork().EstimatedCurrentSlot()
+	currentSlot := sp.beaconCfg.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
 	if err := sp.updateHighestAttestation(pubKey, currentSlot); err != nil {
@@ -133,7 +138,7 @@ func (sp *SlashingProtector) updateHighestAttestation(pubKey phase0.BLSPubKey, s
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	currentEpoch := sp.signerStore.BeaconNetwork().EstimatedEpochAtSlot(slot)
+	currentEpoch := sp.beaconCfg.EstimatedEpochAtSlot(slot)
 	minimalSP := sp.computeMinimalAttestationSP(currentEpoch)
 
 	// Check if the retrieved highest attestation data is valid and not outdated.
@@ -183,8 +188,14 @@ func (sp *SlashingProtector) updateHighestProposal(pubKey phase0.BLSPubKey, slot
 func (sp *SlashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) *phase0.AttestationData {
 	// Calculate the highest safe target epoch based on the current epoch and a predefined minimum distance.
 	highestTarget := epoch + minSPAttestationEpochGap
+
 	// The highest safe source epoch is one less than the highest target epoch.
-	highestSource := highestTarget - 1
+	var highestSource phase0.Epoch
+	if highestTarget > 0 {
+		highestSource = highestTarget - 1
+	} else {
+		highestSource = 0
+	}
 
 	// Return a new AttestationData object with the calculated source and target epochs.
 	return &phase0.AttestationData{

@@ -2,14 +2,16 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"gopkg.in/yaml.v3"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/localevents"
@@ -80,7 +82,7 @@ func TestHandleLocalEvent(t *testing.T) {
 
 		for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 			od := &storage.OperatorData{
-				PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
+				PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, id)),
 				OwnerAddress: common.Address{},
 				ID:           id,
 			}

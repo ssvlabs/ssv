@@ -20,8 +20,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -35,6 +33,7 @@ import (
 	"github.com/ssvlabs/ssv/network/topics"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
@@ -555,9 +554,9 @@ func (n *p2pNetwork) UpdateScoreParams() {
 
 	// function to get the starting time of the next epoch
 	nextEpochStartingTime := func() time.Time {
-		currEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+		currEpoch := n.cfg.NetworkConfig.EstimatedCurrentEpoch()
 		nextEpoch := currEpoch + 1
-		return n.cfg.Network.Beacon.EpochStartTime(nextEpoch)
+		return n.cfg.NetworkConfig.EpochStartTime(nextEpoch)
 	}
 
 	// Create timer that triggers on the beginning of the next epoch

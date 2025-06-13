@@ -2,16 +2,18 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"testing"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
@@ -115,7 +117,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 
 	for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
 		od := &storage.OperatorData{
-			PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
+			PublicKey:    base64.StdEncoding.EncodeToString(binary.LittleEndian.AppendUint64(nil, id)),
 			OwnerAddress: ethcommon.Address{},
 			ID:           id,
 		}

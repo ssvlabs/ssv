@@ -12,12 +12,13 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -141,7 +142,7 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 		panic("committee role shouldn't be used here")
 	}
 	netCfg := networkconfig.TestNetwork
-	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
+	height := specqbft.Height(netCfg.EstimatedCurrentSlot())
 
 	fullData := spectestingutils.TestingQBFTFullData
 
@@ -167,7 +168,7 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 
 func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round) *spectypes.SignedSSVMessage {
 	netCfg := networkconfig.TestNetwork
-	height := specqbft.Height(netCfg.Beacon.EstimatedCurrentSlot())
+	height := specqbft.Height(netCfg.EstimatedCurrentSlot())
 
 	share := &ssvtypes.SSVShare{
 		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
