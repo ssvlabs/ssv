@@ -12,6 +12,7 @@ import (
 
 	"github.com/ssvlabs/ssv/api"
 	model "github.com/ssvlabs/ssv/exporter/v2"
+	"github.com/ssvlabs/ssv/exporter/v2/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
@@ -184,7 +185,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				for _, pubkey := range pubkeys {
 					participantsByPK, err := e.traceStore.GetCommitteeDecideds(slot, pubkey, role)
 					if err != nil {
-						if errors.Is(err, dutytracer.ErrNotFound) {
+						if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
 							// we might not have a duty for this role, so we skip it
 							continue
 						}
@@ -374,7 +375,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 					}
 					duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, role)
 					if err != nil {
-						if errors.Is(err, dutytracer.ErrNotFound) {
+						if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
 							// we might not have a duty for this role, so we skip it
 							continue
 						}
