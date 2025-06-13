@@ -142,6 +142,30 @@ func (s *DutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.Va
 	return nil
 }
 
+type link struct {
+	Index phase0.ValidatorIndex
+	ID    spectypes.CommitteeID
+}
+
+func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error {
+	prefix := s.makeValidatorCommitteePrefix(slot)
+
+	var links = make([]link, 0, len(linkMap))
+	for index, id := range linkMap {
+		links = append(links, link{
+			Index: index,
+			ID:    id,
+		})
+	}
+
+	return s.db.SetMany(prefix, len(links), func(i int) (basedb.Obj, error) {
+		return basedb.Obj{
+			Key:   uInt64ToByteSlice(uint64(links[i].Index)),
+			Value: links[i].ID[:],
+		}, nil
+	})
+}
+
 func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteeSlotPrefix(slot)
 
