@@ -18,14 +18,15 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestRemoveSlot(t *testing.T) {
@@ -35,14 +36,8 @@ func TestRemoveSlot(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
-	ctrl := gomock.NewController(t)
-	ticker := mockslotticker.NewMockSlotTicker(ctrl)
-
-	ticker.EXPECT().Next().Return(nil).MaxTimes(1)
-	slotTickerProvider := func() slotticker.SlotTicker { return ticker }
-
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, slotTickerProvider))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, nil))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -122,16 +117,8 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
-	ctrl := gomock.NewController(t)
-	ticker := mockslotticker.NewMockSlotTicker(ctrl)
-	slotTickerProvider := func() slotticker.SlotTicker {
-		return ticker
-	}
-
-	ticker.EXPECT().Next().Return(nil).MaxTimes(1)
-
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, slotTickerProvider))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, nil))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -190,6 +177,9 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	// test
 	ctx, cancel := context.WithCancel(t.Context())
+
+	ctrl := gomock.NewController(t)
+	ticker := mockslotticker.NewMockSlotTicker(ctrl)
 
 	mockTimeChan := make(chan time.Time)
 	mockSlotChan := make(chan phase0.Slot)
@@ -367,47 +357,4 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectyp
 		rsaKeys = append(rsaKeys, pk)
 	}
 	return sks, nodes, rsaKeys
-}
-
-func Test_saveParticipantsJob(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
-	assert.NoError(t, err)
-
-	ticker := mockslotticker.NewMockSlotTicker(ctrl)
-
-	role := spectypes.BNRoleAttester
-	slotTickerProvider := func() slotticker.SlotTicker {
-		return ticker
-	}
-
-	tt := make(chan time.Time, 1)
-
-	ticker.EXPECT().Next().Return(tt).Times(1)
-
-	ticker.EXPECT().Slot().DoAndReturn(func() phase0.Slot {
-		close(tt)
-		return phase0.Slot(1)
-	}).AnyTimes()
-
-	st := New(zap.NewNop(), db, role, networkconfig.TestNetwork, slotTickerProvider)
-
-	ps := st.(*participantStorage)
-	ps.cachedParticipants.participants[spectypes.ValidatorPK{1}] = []spectypes.OperatorID{1}
-
-	ps.cachedParticipants.slot = phase0.Slot(1)
-
-	tt <- time.Now()
-
-	time.Sleep(10 * time.Millisecond)
-
-	ps.cacheMu.Lock()
-	require.Empty(t, ps.cachedParticipants.participants)
-	ps.cacheMu.Unlock()
-
-	diskParticipants, err := ps.getParticipants(spectypes.ValidatorPK{1}, phase0.Slot(1))
-	require.NoError(t, err)
-	require.Equal(t, []spectypes.OperatorID{1}, diskParticipants)
 }

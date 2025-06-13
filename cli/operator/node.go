@@ -17,12 +17,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -66,8 +68,9 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+	badger "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
+	pebble "github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 )
@@ -169,7 +172,18 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(cmd.Context(), logger, networkConfig)
+
+		var db basedb.Database
+		switch cfg.DBOptions.Engine {
+		case "pebble":
+			logger.Info("using pebble db")
+			db, err = setupPebbleDB(logger, networkConfig)
+		case "badger":
+			logger.Info("using badger db")
+			db, err = setupBadgerDB(logger, networkConfig)
+		default:
+			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
+		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -441,7 +455,7 @@ var StartNodeCmd = &cobra.Command{
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
-			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
+			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -764,20 +778,20 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(ctx context.Context, logger *zap.Logger, beaconConfig networkconfig.Beacon) (*kv.BadgerDB, error) {
-	db, err := kv.New(logger, cfg.DBOptions)
+func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*badger.DB, error) {
+	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open db")
+		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
 	migrationOpts := migrations.Options{
 		Db:           db,
 		DbPath:       cfg.DBOptions.Path,
-		BeaconConfig: beaconConfig,
+		BeaconConfig: networkConfig.BeaconConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to run migrations")
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 	if applied == 0 {
 		return db, nil
@@ -786,11 +800,54 @@ func setupDB(ctx context.Context, logger *zap.Logger, beaconConfig networkconfig
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
 	start := time.Now()
-	// Run a long garbage collection cycle with a timeout.
-	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
+
+	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
+
+	logger.Debug("running full GC cycle...", fields.Duration(start))
+
 	if err := db.FullGC(ctx); err != nil {
-		return nil, errors.Wrap(err, "failed to collect garbage")
+		return nil, fmt.Errorf("failed to collect garbage: %w", err)
+	}
+
+	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+
+	return db, nil
+}
+
+func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*pebble.DB, error) {
+	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
+
+	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open db: %w", err)
+	}
+
+	migrationOpts := migrations.Options{
+		Db:           db,
+		DbPath:       dbPath,
+		BeaconConfig: networkConfig.BeaconConfig,
+	}
+
+	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+	if applied == 0 {
+		return db, nil
+	}
+
+	// If migrations were applied, we run a full garbage collection cycle
+	// to reclaim any space that may have been freed up.
+	start := time.Now()
+
+	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
+	defer cancel()
+
+	logger.Debug("running full GC cycle...", fields.Duration(start))
+
+	if err := db.FullGC(ctx); err != nil {
+		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
@@ -1091,7 +1148,7 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	}
 }
 
-func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	var wg sync.WaitGroup
 
 	threshold := slot - phase0.Slot(retain)

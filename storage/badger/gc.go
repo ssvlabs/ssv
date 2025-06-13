@@ -1,4 +1,4 @@
-package kv
+package badger
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 )
 
 // periodicallyCollectGarbage runs a QuickGC cycle periodically.
-func (b *BadgerDB) periodicallyCollectGarbage(interval time.Duration) {
+func (b *DB) periodicallyCollectGarbage(interval time.Duration) {
 	defer b.wg.Done()
 	for {
 		select {
@@ -30,22 +30,26 @@ func (b *BadgerDB) periodicallyCollectGarbage(interval time.Duration) {
 
 // QuickGC runs a short garbage collection cycle to reclaim some unused disk space.
 // Designed to be called periodically while the database is being used.
-func (b *BadgerDB) QuickGC(ctx context.Context) error {
-	return b.gc(ctx, 0.7)
+func (b *DB) QuickGC(ctx context.Context) error {
+	b.gcMutex.Lock()
+	defer b.gcMutex.Unlock()
+
+	err := b.db.RunValueLogGC(0.5)
+	if errors.Is(err, badger.ErrNoRewrite) {
+		// No garbage to collect.
+		return nil
+	}
+	return err
 }
 
 // FullGC runs a long garbage collection cycle to reclaim (ideally) all unused disk space.
 // Designed to be called when the database is not being used.
-func (b *BadgerDB) FullGC(ctx context.Context) error {
-	return b.gc(ctx, 0.1)
-}
-
-func (b *BadgerDB) gc(ctx context.Context, discardRatio float64) error {
+func (b *DB) FullGC(ctx context.Context) error {
 	b.gcMutex.Lock()
 	defer b.gcMutex.Unlock()
 
 	for ctx.Err() == nil {
-		err := b.db.RunValueLogGC(discardRatio)
+		err := b.db.RunValueLogGC(0.1)
 		if errors.Is(err, badger.ErrNoRewrite) {
 			// No more garbage to collect.
 			break

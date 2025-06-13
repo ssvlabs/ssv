@@ -24,11 +24,12 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner"
 )
 
-var testNetCfg = networkconfig.TestRealNetwork.BeaconConfig // using a real network config because https://github.com/ssvlabs/eth2-key-manager doesn't support min genesis time for networkconfig.TestNetwork
+var testNetCfg = networkconfig.TestNetwork.BeaconConfig // using a real network config because https://github.com/ssvlabs/eth2-key-manager doesn't support min genesis time for networkconfig.TestNetwork
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite

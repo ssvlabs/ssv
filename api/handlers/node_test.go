@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/api"
 	"github.com/ssvlabs/ssv/network"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"

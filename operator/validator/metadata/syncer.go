@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"

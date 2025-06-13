@@ -19,6 +19,7 @@ import (
 	"tailscale.com/util/singleflight"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -107,7 +108,7 @@ func New(
 		opt(mv)
 	}
 
-	// Start automatic expired item deletion for validationLockCache and state.
+	// Start automatic expired item deletion for validationLockCache.
 	go mv.validationLockCache.Start()
 	// Start automatic expired item deletion for state.
 	go mv.state.Start()

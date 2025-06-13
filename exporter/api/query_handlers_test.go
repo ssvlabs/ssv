@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"math"
 	"testing"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -14,15 +13,15 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/operator/storage"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
@@ -214,16 +213,9 @@ func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectype
 		panic(err)
 	}
 
-	slotTickerProvider := func() slotticker.SlotTicker {
-		return slotticker.New(logger, slotticker.Config{
-			SlotDuration: 5 * time.Second,
-			GenesisTime:  time.Now(),
-		})
-	}
-
 	storageMap := qbftstorage.NewStores()
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(logger, db, role, networkconfig.TestNetwork, slotTickerProvider))
+		storageMap.Add(role, qbftstorage.New(logger, db, role, networkconfig.TestNetwork, nil))
 	}
 
 	return sExporter, storageMap

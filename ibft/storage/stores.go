@@ -2,12 +2,13 @@ package storage
 
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils/hashmap"
-	"go.uber.org/zap"
 )
 
 // ParticipantStores wraps sync map with cast functions to qbft store
