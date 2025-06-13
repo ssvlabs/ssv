@@ -20,8 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/badger"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	kv "github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -38,9 +37,7 @@ func TestEviction(t *testing.T) {
 
 	_ = f.Close()
 
-	db, err := kv.New(zap.NewNop(), basedb.Options{
-		Path: t.TempDir(),
-	})
+	db, err := kv.New(zap.NewNop(), t.TempDir(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
