@@ -91,6 +91,55 @@ func TestEviction(t *testing.T) {
 		}
 		return true
 	})
+
+	{
+		// validator
+		duties, err := dutyStore.GetValidatorDuties(spectypes.BNRoleAggregator, 3707881)
+		require.NoError(t, err)
+		require.Len(t, duties, 652)
+
+		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleValidatorRegistration, 3707881)
+		require.NoError(t, err)
+		require.Len(t, duties, 63)
+
+		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleSyncCommitteeContribution, 3707881)
+		require.NoError(t, err)
+		require.Len(t, duties, 4)
+
+		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleAggregator, 3707882)
+		require.NoError(t, err)
+		require.Len(t, duties, 657)
+
+		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleValidatorRegistration, 3707881)
+		require.NoError(t, err)
+		require.Len(t, duties, 63)
+
+		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleSyncCommitteeContribution, 3707881)
+		require.NoError(t, err)
+		require.Len(t, duties, 4)
+	}
+
+	{
+		// committee
+		duties, err := dutyStore.GetCommitteeDuties(3707881)
+		require.NoError(t, err)
+		require.Len(t, duties, 102)
+
+		duties, err = dutyStore.GetCommitteeDuties(3707882)
+		require.NoError(t, err)
+		require.Len(t, duties, 96)
+	}
+
+	{
+		// links
+		links, err := dutyStore.GetCommitteeDutyLinks(3707881)
+		require.NoError(t, err)
+		require.Len(t, links, 787)
+
+		links, err = dutyStore.GetCommitteeDutyLinks(3707882)
+		require.NoError(t, err)
+		require.Len(t, links, 799)
+	}
 }
 
 // These tests are deliberately written in a progressive manner to ensure that only the expected values are

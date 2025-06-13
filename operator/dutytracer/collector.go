@@ -107,13 +107,8 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 }
 
 func (c *Collector) evict(currentSlot phase0.Slot) {
-	start := time.Now()
-	defer func() {
-		c.logger.Info("eviction completed", fields.Slot(currentSlot), fields.Took(time.Since(start)))
-	}()
-
 	// evict committee traces
-	start = time.Now()
+	start := time.Now()
 	committeThreshold := currentSlot - ttlCommittee
 	evicted := c.dumpCommitteeToDBPeriodically(committeThreshold)
 	c.logger.Info("evicted committee duty traces to disk", fields.Slot(committeThreshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
