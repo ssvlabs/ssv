@@ -28,8 +28,11 @@ type ValidatorDutyTrace struct {
 // implemented by DutyStoreMetrics
 type DutyTraceStore interface {
 	SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error
+	SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error
 	SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error
+	SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error
 	SaveValidatorDuty(duty *model.ValidatorDutyTrace) error
+	SaveValidatorDuties(duties []*model.ValidatorDutyTrace) error
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error)

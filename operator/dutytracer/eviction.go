@@ -5,6 +5,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	model "github.com/ssvlabs/ssv/exporter/v2"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
@@ -19,50 +20,63 @@ const (
 )
 
 func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+	var links = make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
 		committeeID, found := slotToCommittee.Get(slot)
 		if !found {
 			return true
 		}
 
-		if err := c.store.SaveCommitteeDutyLink(slot, index, committeeID); err != nil {
-			c.logger.Error("save validator to committee relations to disk", zap.Error(err))
-			return true
-		}
-
-		totalSaved++
-
-		slotToCommittee.Delete(slot)
+		links[index] = committeeID
 
 		return true
 	})
+
+	if err := c.store.SaveCommitteeDutyLinks(slot, links); err != nil {
+		c.logger.Error("save validator to committee relations to disk", zap.Error(err))
+		return
+	}
+
+	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
+		slotToCommittee.Delete(slot)
+		return true
+	})
+
+	totalSaved = len(links)
 
 	return
 }
 
 func (c *Collector) dumpCommitteeToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+	var duties []*model.CommitteeDutyTrace
 	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)
 		if !found {
 			return true
 		}
 
-		if err := c.store.SaveCommitteeDuty(trace.trace()); err != nil {
-			c.logger.Error("save committee duty to disk", zap.Error(err))
-			return true
-		}
-
-		totalSaved++
-
-		slotToTraceMap.Delete(slot)
-
+		data := trace.trace()
+		duties = append(duties, data)
 		return true
 	})
+
+	if err := c.store.SaveCommitteeDuties(slot, duties); err != nil {
+		c.logger.Error("save committee duties to disk", zap.Error(err))
+		return
+	}
+
+	c.committeeTraces.Range(func(key spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
+		slotToTraceMap.Delete(slot)
+		return true
+	})
+
+	totalSaved = len(duties)
 
 	return
 }
 
 func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved int) {
+	var duties []*model.ValidatorDutyTrace
 	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
 		trace, found := slotToTraceMap.Get(slot)
 		if !found {
@@ -80,18 +94,23 @@ func (c *Collector) dumpValidatorToDBPeriodically(slot phase0.Slot) (totalSaved 
 				role.Validator = index
 			}
 
-			if err := c.store.SaveValidatorDuty(role); err != nil {
-				c.logger.Error("save validator duties to disk", zap.Error(err))
-				return true
-			}
-
-			totalSaved++
+			duties = append(duties, role)
 		}
-
-		slotToTraceMap.Delete(slot)
 
 		return true
 	})
+
+	if err := c.store.SaveValidatorDuties(duties); err != nil {
+		c.logger.Error("save validator duties to disk", zap.Error(err))
+		return
+	}
+
+	c.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
+		slotToTraceMap.Delete(slot)
+		return true
+	})
+
+	totalSaved = len(duties)
 
 	return
 }
