@@ -96,6 +96,12 @@ func (s *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 	return func(ctx *fasthttp.RequestCtx) {
 		start := time.Now()
 		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("request panicked", zap.Any("panic", r))
+				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+				ctx.SetBodyString("Internal server error")
+			}
+
 			route := string(ctx.Path())
 			matchedRoute := ctx.UserValue(router.MatchedRoutePathParam)
 			if matchedRouteStr, ok := matchedRoute.(string); ok {
