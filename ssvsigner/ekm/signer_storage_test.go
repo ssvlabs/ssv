@@ -397,7 +397,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		accountID := account.ID()
 
 		// test with encryption key
-		err = signerStorage.SetEncryptionKey("0123456789abcdef0123456789abcdef")
+		err = signerStorage.SetEncryptionKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 		require.NoError(t, err)
 
 		// save the account (this will encrypt it)
@@ -406,6 +406,20 @@ func TestStorageUtilityFunctions(t *testing.T) {
 
 		// retrieve the account (this will decrypt it)
 		retrievedAccount, err := signerStorage.OpenAccount(accountID)
+		require.NoError(t, err)
+		require.NotNil(t, retrievedAccount)
+		require.Equal(t, accountID, retrievedAccount.ID())
+
+		// now test with a key of different length
+		err = signerStorage.SetEncryptionKey("0123456789abcdef")
+		require.NoError(t, err)
+
+		// save the account again (this will encrypt it)
+		err = signerStorage.SaveAccount(account)
+		require.NoError(t, err)
+
+		// retrieve the account (this will decrypt it)
+		retrievedAccount, err = signerStorage.OpenAccount(accountID)
 		require.NoError(t, err)
 		require.NotNil(t, retrievedAccount)
 		require.Equal(t, accountID, retrievedAccount.ID())

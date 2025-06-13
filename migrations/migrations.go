@@ -27,6 +27,7 @@ var (
 		migration_4_configlock_add_alan_fork_to_network_name,
 		migration_5_change_share_format_from_gob_to_ssz,
 		migration_6_share_exit_epoch,
+		migration_7_derive_signer_key_with_hkdf,
 	}
 )
 

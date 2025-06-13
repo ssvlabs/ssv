@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/wallets"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/hkdf"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -79,21 +81,28 @@ func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *
 	}
 }
 
-// SetEncryptionKey sets the hex-encoded encryption key used
-// to encrypt/decrypt account data. If no key is set (empty),
-// the data is stored in plaintext.
+// SetEncryptionKey sets the encryption key used to encrypt/decrypt account data.
+//
+// Accepts a hex-encoded key and derives a 32-byte AES-256 key using HKDF-SHA256.
+// Empty hexKey results in plaintext storage (no encryption).
 func (s *storage) SetEncryptionKey(hexKey string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// Decode hexadecimal string into byte array
 	keyBytes, err := hex.DecodeString(hexKey)
 	if err != nil {
 		return errors.New("the key must be a valid hexadecimal string")
 	}
 
-	// Set the encryption key
-	s.encryptionKey = keyBytes
+	// Use HKDF to derive a 32-byte key for AES-256
+	kdf := hkdf.New(sha256.New, keyBytes, nil, nil)
+	derivedKey := make([]byte, 32)
+	if _, err := io.ReadFull(kdf, derivedKey); err != nil {
+		return fmt.Errorf("failed to derive encryption key: %w", err)
+	}
+
+	s.encryptionKey = derivedKey
+
 	return nil
 }
 
