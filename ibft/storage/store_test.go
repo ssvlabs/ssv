@@ -36,8 +36,15 @@ func TestRemoveSlot(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return slotticker.New(zap.NewNop(), slotticker.Config{
+			SlotDuration: 5 * time.Second,
+			GenesisTime:  time.Now(),
+		})
+	}
+
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, nil))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
@@ -117,8 +124,15 @@ func TestSlotCleanupJob(t *testing.T) {
 
 	role := spectypes.BNRoleAttester
 
+	slotTickerProvider := func() slotticker.SlotTicker {
+		return slotticker.New(zap.NewNop(), slotticker.Config{
+			SlotDuration: 5 * time.Second,
+			GenesisTime:  time.Now(),
+		})
+	}
+
 	ibftStorage := NewStores()
-	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, nil))
+	ibftStorage.Add(role, New(zap.NewNop(), db, role, networkconfig.TestNetwork, slotTickerProvider))
 
 	_ = bls.Init(bls.BLS12_381)
 
