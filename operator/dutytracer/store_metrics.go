@@ -30,6 +30,14 @@ func record(col, op string, start time.Time) {
 	)
 }
 
+func (d *DutyTraceStoreMetrics) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error {
+	start := time.Now()
+	defer func() {
+		record("link", "save_all", start)
+	}()
+	return d.Store.SaveCommitteeDutyLinks(slot, linkMap)
+}
+
 func (d *DutyTraceStoreMetrics) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
 	start := time.Now()
 	defer func() {
@@ -54,6 +62,14 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDutyLinks(slot phase0.Slot) ([]*mode
 	return d.Store.GetCommitteeDutyLinks(slot)
 }
 
+func (d *DutyTraceStoreMetrics) SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
+	start := time.Now()
+	defer func() {
+		record("committee", "save_all", start)
+	}()
+	return d.Store.SaveCommitteeDuties(slot, duties)
+}
+
 func (d *DutyTraceStoreMetrics) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error {
 	start := time.Now()
 	defer func() {
@@ -76,6 +92,14 @@ func (d *DutyTraceStoreMetrics) GetCommitteeDuties(slot phase0.Slot) ([]*model.C
 		record("committee", "get_all", start)
 	}()
 	return d.Store.GetCommitteeDuties(slot)
+}
+
+func (d *DutyTraceStoreMetrics) SaveValidatorDuties(duties []*model.ValidatorDutyTrace) error {
+	start := time.Now()
+	defer func() {
+		record("validator", "save_all", start)
+	}()
+	return d.Store.SaveValidatorDuties(duties)
 }
 
 func (d *DutyTraceStoreMetrics) SaveValidatorDuty(duty *model.ValidatorDutyTrace) error {
