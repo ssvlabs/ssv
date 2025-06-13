@@ -57,12 +57,12 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != "" || cli.Web3SignerServerCertFile != ""),
 	)
 
-	if err := bls.Init(bls.BLS12_381); err != nil {
-		return fmt.Errorf("init BLS: %w", err)
+	if err := validateConfig(cli); err != nil {
+		return fmt.Errorf("malformed config: %w", err)
 	}
 
-	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
-		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
+	if err := bls.Init(bls.BLS12_381); err != nil {
+		return fmt.Errorf("init BLS: %w", err)
 	}
 
 	ctx := context.Background()
@@ -143,6 +143,18 @@ func run(logger *zap.Logger, cli CLI) error {
 	logger.Info("all batches completed",
 		zap.Any("status_count", statusCount),
 		fields.Took(time.Since(deletingStart)))
+
+	return nil
+}
+
+func validateConfig(cli CLI) error {
+	if cli.BatchSize <= 0 {
+		return fmt.Errorf("invalid batch size %d, must be > 0", cli.BatchSize)
+	}
+
+	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
+		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
+	}
 
 	return nil
 }
