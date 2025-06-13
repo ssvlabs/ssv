@@ -18,6 +18,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"

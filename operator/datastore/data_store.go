@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 

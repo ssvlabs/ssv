@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/localevents"
 	"github.com/ssvlabs/ssv/registry/storage"

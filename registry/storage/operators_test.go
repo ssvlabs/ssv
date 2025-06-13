@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"

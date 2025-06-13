@@ -11,6 +11,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
 	p2pv1 "github.com/ssvlabs/ssv/network/p2p"

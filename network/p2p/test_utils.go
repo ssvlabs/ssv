@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
 	p2pcommons "github.com/ssvlabs/ssv/network/commons"
