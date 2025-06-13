@@ -9,7 +9,6 @@ import (
 
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
