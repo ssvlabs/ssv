@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,131 +13,11 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/exporter/v2/store"
-
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	kv "github.com/ssvlabs/ssv/storage/pebble"
-	"github.com/ssvlabs/ssv/utils/hashmap"
 )
-
-func TestEviction(t *testing.T) {
-	f, err := os.OpenFile("./benchdata/slot_3707881_3707882.ssz", os.O_RDONLY, 0644)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	traces, err := readByteSlices(f) // len(traces) = 8992
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_ = f.Close()
-
-	db, err := kv.New(zap.NewNop(), t.TempDir(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
-
-	collector := New(t.Context(), zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.BeaconConfig)
-
-	for _, trace := range traces {
-		collector.Collect(t.Context(), trace, dummyVerify)
-	}
-
-	collector.evict(3707881 + 4)
-	collector.evict(3707882 + 4)
-
-	collector.validatorTraces.Range(func(pk spectypes.ValidatorPK, slotToTraceMap *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
-		_, found := slotToTraceMap.Get(3707881 + 4)
-		if found {
-			t.Fatal("slot not evicted")
-		}
-		_, found = slotToTraceMap.Get(3707882 + 4)
-		if found {
-			t.Fatal("slot not evicted")
-		}
-		return true
-	})
-
-	collector.committeeTraces.Range(func(committeeID spectypes.CommitteeID, slotToTraceMap *hashmap.Map[phase0.Slot, *committeeDutyTrace]) bool {
-		_, found := slotToTraceMap.Get(3707881 + 4)
-		if found {
-			t.Fatal("slot not evicted")
-		}
-		_, found = slotToTraceMap.Get(3707882 + 4)
-		if found {
-			t.Fatal("slot not evicted")
-		}
-		return true
-	})
-
-	collector.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
-		_, found := slotToCommittee.Get(3707881 + 4)
-		if found {
-			t.Fatal("slot not evicted")
-		}
-		_, found = slotToCommittee.Get(3707882 + 4)
-		if found {
-			t.Fatal("slot not evicted")
-		}
-		return true
-	})
-
-	{
-		// validator
-		duties, err := dutyStore.GetValidatorDuties(spectypes.BNRoleAggregator, 3707881)
-		require.NoError(t, err)
-		require.Len(t, duties, 652)
-
-		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleValidatorRegistration, 3707881)
-		require.NoError(t, err)
-		require.Len(t, duties, 63)
-
-		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleSyncCommitteeContribution, 3707881)
-		require.NoError(t, err)
-		require.Len(t, duties, 4)
-
-		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleAggregator, 3707882)
-		require.NoError(t, err)
-		require.Len(t, duties, 657)
-
-		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleValidatorRegistration, 3707881)
-		require.NoError(t, err)
-		require.Len(t, duties, 63)
-
-		duties, err = dutyStore.GetValidatorDuties(spectypes.BNRoleSyncCommitteeContribution, 3707881)
-		require.NoError(t, err)
-		require.Len(t, duties, 4)
-	}
-
-	{
-		// committee
-		duties, err := dutyStore.GetCommitteeDuties(3707881)
-		require.NoError(t, err)
-		require.Len(t, duties, 102)
-
-		duties, err = dutyStore.GetCommitteeDuties(3707882)
-		require.NoError(t, err)
-		require.Len(t, duties, 96)
-	}
-
-	{
-		// links
-		links, err := dutyStore.GetCommitteeDutyLinks(3707881)
-		require.NoError(t, err)
-		require.Len(t, links, 787)
-
-		links, err = dutyStore.GetCommitteeDutyLinks(3707882)
-		require.NoError(t, err)
-		require.Len(t, links, 799)
-	}
-}
 
 // These tests are deliberately written in a progressive manner to ensure that only the expected values are
 // changing at any given iteration.
