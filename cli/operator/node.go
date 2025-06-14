@@ -575,7 +575,7 @@ var StartNodeCmd = &cobra.Command{
 					zap.Int("old_max_peers", cfg.P2pNetworkConfig.MaxPeers),
 					zap.Int("new_max_peers", idealMaxPeers),
 					zap.Int("subscribed_subnets", myActiveSubnets),
-					zap.Duration("took", time.Since(start)),
+					fields.Took(time.Since(start)),
 				)
 				cfg.P2pNetworkConfig.MaxPeers = idealMaxPeers
 			}
