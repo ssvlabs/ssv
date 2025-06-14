@@ -415,9 +415,9 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 	return nil
 }
 
-func (o *CommitteeObserver) postConsensusContainerCapacity() int {
+func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
 	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
-	return int(o.beaconConfig.GetSlotsPerEpoch()) + int(validation.LateSlotAllowance)
+	return int(ncv.beaconConfig.GetSlotsPerEpoch()) + int(validation.LateSlotAllowance)
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {
