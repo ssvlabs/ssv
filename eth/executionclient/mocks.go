@@ -163,6 +163,20 @@ func (mr *MockProviderMockRecorder) Healthy(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Healthy", reflect.TypeOf((*MockProvider)(nil).Healthy), ctx)
 }
 
+// IsFinalizedFork mocks base method.
+func (m *MockProvider) IsFinalizedFork(ctx context.Context) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsFinalizedFork", ctx)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsFinalizedFork indicates an expected call of IsFinalizedFork.
+func (mr *MockProviderMockRecorder) IsFinalizedFork(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsFinalizedFork", reflect.TypeOf((*MockProvider)(nil).IsFinalizedFork), ctx)
+}
+
 // StreamLogs mocks base method.
 func (m *MockProvider) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
 	m.ctrl.T.Helper()
@@ -333,6 +347,20 @@ func (m *MockSingleClientProvider) Healthy(ctx context.Context) error {
 func (mr *MockSingleClientProviderMockRecorder) Healthy(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Healthy", reflect.TypeOf((*MockSingleClientProvider)(nil).Healthy), ctx)
+}
+
+// IsFinalizedFork mocks base method.
+func (m *MockSingleClientProvider) IsFinalizedFork(ctx context.Context) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsFinalizedFork", ctx)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsFinalizedFork indicates an expected call of IsFinalizedFork.
+func (mr *MockSingleClientProviderMockRecorder) IsFinalizedFork(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsFinalizedFork", reflect.TypeOf((*MockSingleClientProvider)(nil).IsFinalizedFork), ctx)
 }
 
 // StreamLogs mocks base method.

@@ -2,13 +2,13 @@ package ethtest
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 	"testing"
 	"time"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -25,8 +25,20 @@ var (
 	testAddrBob   = crypto.PubkeyToAddress(testKeyBob.PublicKey)
 )
 
-// E2E tests for ETH package
-func TestEthExecLayer(t *testing.T) {
+// TestEthExecLayer_PreFork tests ETH package with follow distance approach (pre-fork).
+// TODO: use the correct name when we know the name of the fork.
+func TestEthExecLayer_PreFork(t *testing.T) {
+	runTestEthExecLayer(t, false)
+}
+
+// TestEthExecLayer_PostFork tests ETH package with finality approach (post-fork)
+// TODO: use the correct name when we know the name of the fork.
+func TestEthExecLayer_PostFork(t *testing.T) {
+	runTestEthExecLayer(t, true)
+}
+
+// E2E tests for ETH package with configurable finality approach
+func runTestEthExecLayer(t *testing.T, useFinalityFork bool) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -45,10 +57,10 @@ func TestEthExecLayer(t *testing.T) {
 	expectedNonce := registrystorage.Nonce(0)
 
 	testEnv := TestEnv{}
-	testEnv.SetDefaultFollowDistance()
 
 	defer testEnv.shutdown()
-	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
+
+	err := testEnv.setup(t, ctx, testAddresses, 7, 4, useFinalityFork)
 	require.NoError(t, err)
 
 	var (
@@ -83,7 +95,7 @@ func TestEthExecLayer(t *testing.T) {
 			opAddedInput.prepare(ops, auth)
 			opAddedInput.produce()
 
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
 		}
 
 		// BLOCK 3:  VALIDATOR ADDED:
@@ -96,15 +108,32 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput := NewTestValidatorRegisteredInput(common)
 			valAddInput.prepare(validators, shares, ops, auth, &expectedNonce, []uint32{0, 1})
 			valAddInput.produce()
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
+
+			// Check how the EventSyncer determines which blocks to process
+			var expectedLastHandledBlock uint64
+
+			if useFinalityFork {
+				// When using finality fork, check the finalized block number
+				finalizedBlock, err := testEnv.sim.Client().HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+				require.NoError(t, err)
+				expectedLastHandledBlock = finalizedBlock.Number.Uint64()
+			} else {
+				// When using follow distance, the last handled block is the current block minus follow distance
+				currentBlock, err := testEnv.sim.Client().BlockNumber(ctx)
+				t.Logf("Current block number: %d", currentBlock)
+				require.NoError(t, err)
+				expectedLastHandledBlock = currentBlock - testEnv.followDistance
+				t.Logf("Expected last handled block: %d", expectedLastHandledBlock)
+			}
 
 			// Run SyncHistory
 			lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
+			t.Logf("Last handled block number after SyncHistory: %d", lastHandledBlockNum)
 			require.NoError(t, err)
 
-			//check all the events were handled correctly and block number was increased
-			require.Equal(t, blockNum-*testEnv.followDistance, lastHandledBlockNum)
-			fmt.Println("lastHandledBlockNum", lastHandledBlockNum)
+			// Check that the last handled block number matches our expectation
+			require.Equal(t, expectedLastHandledBlock, lastHandledBlockNum)
 
 			// Check that operators were successfully registered
 			operators, err := nodeStorage.ListOperators(nil, 0, 10)
@@ -154,7 +183,7 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput := NewTestValidatorRegisteredInput(common)
 			valAddInput.prepare(validators, shares, ops, auth, &expectedNonce, []uint32{2, 3, 4, 5, 6})
 			valAddInput.produce()
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 5000)
@@ -185,7 +214,7 @@ func TestEthExecLayer(t *testing.T) {
 				cluster,
 			)
 			valExit.produce()
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
 
 			// Wait to make sure the state is not changed
 			time.Sleep(time.Millisecond * 500)
@@ -210,7 +239,7 @@ func TestEthExecLayer(t *testing.T) {
 				cluster,
 			)
 			valRemove.produce()
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 500)
@@ -240,7 +269,7 @@ func TestEthExecLayer(t *testing.T) {
 				},
 			})
 			clusterLiquidate.produce()
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
@@ -280,7 +309,7 @@ func TestEthExecLayer(t *testing.T) {
 				},
 			})
 			clusterReactivated.produce()
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
@@ -303,7 +332,7 @@ func TestEthExecLayer(t *testing.T) {
 			opRemoved := NewOperatorRemovedEventInput(common)
 			opRemoved.prepare([]uint64{1, 2}, auth)
 			opRemoved.produce()
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
 
 			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
 		}
@@ -317,7 +346,7 @@ func TestEthExecLayer(t *testing.T) {
 				{auth, &testAddrBob},
 			})
 			setFeeRecipient.produce()
-			testEnv.CloseFollowDistance(&blockNum)
+			testEnv.MineAndFinalize(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
