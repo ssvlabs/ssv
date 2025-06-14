@@ -29,6 +29,6 @@ jobs:
       - name: Run eviction test
         id: eviction
         run: |
-          go test -timeout 5s -run ^TestEviction$ github.com/ssvlabs/ssv/operator/dutytracer -v
+          go test -tags lfs -timeout 5s -run ^TestEviction$ github.com/ssvlabs/ssv/operator/dutytracer -v
 
       - run: echo "🍏 This job's status is ${{ job.status }}."
