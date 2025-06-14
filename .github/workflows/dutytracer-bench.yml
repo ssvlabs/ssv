@@ -3,6 +3,9 @@ run-name: ${{ github.actor }} started workflow 🚀
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/exporter-v2
 
 jobs:
   Test-with-LFS:
@@ -22,5 +25,10 @@ jobs:
         id: bench
         run: |
           go test -benchmem -run=^$ -bench ^BenchmarkTracer$ github.com/ssvlabs/ssv/operator/dutytracer -v
-          
+
+      - name: Run eviction test
+        id: eviction
+        run: |
+          go test -timeout 5s -run ^TestEviction$ github.com/ssvlabs/ssv/operator/dutytracer -v
+
       - run: echo "🍏 This job's status is ${{ job.status }}."
