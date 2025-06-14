@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -35,6 +36,7 @@ type CommitteeObserver struct {
 	beaconConfig      networkconfig.Beacon
 	ValidatorStore    registrystorage.ValidatorStore
 	newDecidedHandler qbftcontroller.NewDecidedHandler
+	rootsMtx          sync.RWMutex
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	syncCommRoots     *ttlcache.Cache[phase0.Root, struct{}]
 	domainCache       *DomainCache
@@ -43,6 +45,8 @@ type CommitteeObserver struct {
 	beaconVoteRoots *ttlcache.Cache[BeaconVoteCacheKey, struct{}]
 
 	// TODO: consider using round-robin container as []map[phase0.ValidatorIndex]*ssv.PartialSigContainer similar to what is used in OperatorState
+
+	pccMtx                 sync.Mutex
 	postConsensusContainer map[phase0.Slot]map[phase0.ValidatorIndex]*ssv.PartialSigContainer
 }
 
@@ -192,8 +196,10 @@ func (ncv *CommitteeObserver) ProcessMessage(msg *queue.SSVMessage) error {
 func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.Root) []spectypes.BeaconRole {
 	switch msg.MsgID.GetRoleType() {
 	case spectypes.RoleCommittee:
+		ncv.rootsMtx.RLock()
 		attester := ncv.attesterRoots.Get(root)
 		syncCommittee := ncv.syncCommRoots.Get(root)
+		ncv.rootsMtx.RUnlock()
 
 		switch {
 		case attester != nil && syncCommittee != nil:
@@ -216,7 +222,6 @@ func (ncv *CommitteeObserver) getBeaconRoles(msg *queue.SSVMessage, root phase0.
 	case spectypes.RoleVoluntaryExit:
 		return []spectypes.BeaconRole{spectypes.BNRoleVoluntaryExit}
 	}
-
 	return nil
 }
 
@@ -231,6 +236,10 @@ func (ncv *CommitteeObserver) processMessage(
 	quorums := make(map[validatorIndexAndRoot][]spectypes.OperatorID)
 
 	currentSlot := signedMsg.Slot
+
+	ncv.pccMtx.Lock()
+	defer ncv.pccMtx.Unlock()
+
 	slotValidators, exist := ncv.postConsensusContainer[currentSlot]
 	if !exist {
 		slotValidators = make(map[phase0.ValidatorIndex]*ssv.PartialSigContainer)
@@ -349,6 +358,9 @@ func (ncv *CommitteeObserver) OnProposalMsg(ctx context.Context, msg *queue.SSVM
 
 	epoch := ncv.beaconConfig.EstimatedEpochAtSlot(phase0.Slot(qbftMsg.Height))
 
+	ncv.rootsMtx.Lock()
+	defer ncv.rootsMtx.Unlock()
+
 	if err := ncv.saveAttesterRoots(ctx, epoch, beaconVote, qbftMsg); err != nil {
 		return err
 	}
@@ -364,7 +376,7 @@ func (ncv *CommitteeObserver) OnProposalMsg(ctx context.Context, msg *queue.SSVM
 }
 
 func (ncv *CommitteeObserver) saveAttesterRoots(ctx context.Context, epoch phase0.Epoch, beaconVote *spectypes.BeaconVote, qbftMsg *specqbft.Message) error {
-	attesterDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainAttester)
+	attesterDomain, err := ncv.domainCache.Fetch(ctx, epoch, spectypes.DomainAttester)
 	if err != nil {
 		return err
 	}
@@ -387,7 +399,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 	epoch phase0.Epoch,
 	beaconVote *spectypes.BeaconVote,
 ) error {
-	syncCommDomain, err := ncv.domainCache.Get(ctx, epoch, spectypes.DomainSyncCommittee)
+	syncCommDomain, err := ncv.domainCache.Fetch(ctx, epoch, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return err
 	}
@@ -405,7 +417,7 @@ func (ncv *CommitteeObserver) saveSyncCommRoots(
 
 func (ncv *CommitteeObserver) postConsensusContainerCapacity() int {
 	// #nosec G115 -- slots per epoch must be low epoch not to cause overflow
-	return int(ncv.beaconConfig.GetSlotsPerEpoch()) + validation.LateSlotAllowance
+	return int(ncv.beaconConfig.GetSlotsPerEpoch()) + int(validation.LateSlotAllowance)
 }
 
 func constructAttestationData(vote *spectypes.BeaconVote, slot phase0.Slot, committeeIndex phase0.CommitteeIndex) *phase0.AttestationData {

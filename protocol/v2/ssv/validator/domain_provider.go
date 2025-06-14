@@ -34,7 +34,7 @@ func (dc *DomainCache) Start() {
 	dc.cache.Start()
 }
 
-func (dc *DomainCache) Get(
+func (dc *DomainCache) Fetch(
 	ctx context.Context,
 	epoch phase0.Epoch,
 	domainType phase0.DomainType,
