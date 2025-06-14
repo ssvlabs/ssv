@@ -24,7 +24,7 @@ require (
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/holiman/uint256 v1.3.2
 	github.com/microsoft/go-crypto-openssl v0.2.9
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
+	github.com/prysmaticlabs/go-bitfield ad7364de91a5
 	github.com/ssvlabs/eth2-key-manager v1.5.5
 	github.com/ssvlabs/ssv v1.2.1-0.20250603100129-f39e516ad8de
 	github.com/ssvlabs/ssv-spec v1.1.3
