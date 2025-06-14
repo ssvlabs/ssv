@@ -18,18 +18,17 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/storage/basedb"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // RemoteKeyManager implements KeyManager by delegating signing operations to
@@ -303,11 +302,10 @@ func (km *RemoteKeyManager) handleDomainAttester(
 		return nil, errors.New("could not cast obj to AttestationData")
 	}
 
-	network := core.Network(km.beaconConfig.GetNetworkName())
-	if !signer.IsValidFarFutureEpoch(network, data.Target.Epoch) {
+	if !signer.IsValidFarFutureEpoch(km.beaconConfig, data.Target.Epoch) {
 		return nil, fmt.Errorf("target epoch too far into the future")
 	}
-	if !signer.IsValidFarFutureEpoch(network, data.Source.Epoch) {
+	if !signer.IsValidFarFutureEpoch(km.beaconConfig, data.Source.Epoch) {
 		return nil, fmt.Errorf("source epoch too far into the future")
 	}
 
@@ -436,8 +434,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 
 	blockSlot := ret.BlockHeader.Slot
 
-	network := core.Network(km.beaconConfig.GetNetworkName())
-	if !signer.IsValidFarFutureSlot(network, blockSlot) {
+	if !signer.IsValidFarFutureSlot(km.beaconConfig, blockSlot) {
 		return nil, fmt.Errorf("proposed block slot too far into the future")
 	}
 

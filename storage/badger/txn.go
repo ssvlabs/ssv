@@ -1,4 +1,4 @@
-package kv
+package badger
 
 import (
 	"errors"
@@ -10,10 +10,10 @@ import (
 
 type badgerTxn struct {
 	txn *badger.Txn
-	db  *BadgerDB
+	db  *DB
 }
 
-func newTxn(txn *badger.Txn, db *BadgerDB) basedb.Txn {
+func newTxn(txn *badger.Txn, db *DB) basedb.Txn {
 	return &badgerTxn{
 		txn: txn,
 		db:  db,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -195,7 +196,7 @@ func (mv *messageValidator) validateQBFTLogic(
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
-		signerState := signerStateBySlot.Get(msgSlot)
+		signerState := signerStateBySlot.GetSignerState(msgSlot)
 		if signerState == nil {
 			continue
 		}
@@ -310,10 +311,10 @@ func (mv *messageValidator) updateConsensusState(
 
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		stateBySlot := consensusState.Signer(committeeInfo.signerIndex(signer))
-		signerState := stateBySlot.Get(msgSlot)
+		signerState := stateBySlot.GetSignerState(msgSlot)
 		if signerState == nil {
 			signerState = newSignerState(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
-			stateBySlot.Set(msgSlot, msgEpoch, signerState)
+			stateBySlot.SetSignerState(msgSlot, msgEpoch, signerState)
 		} else {
 			if consensusMessage.Round > signerState.Round {
 				signerState.Reset(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
