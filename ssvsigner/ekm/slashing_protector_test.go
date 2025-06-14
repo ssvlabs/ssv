@@ -11,6 +11,8 @@ import (
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stretchr/testify/require"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 

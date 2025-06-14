@@ -37,6 +37,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/localevents"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	dutytracestore "github.com/ssvlabs/ssv/exporter/v2/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -54,6 +55,7 @@ import (
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -452,10 +454,10 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
+		if cfg.SSVOptions.ValidatorOptions.Exporter && !cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
-			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
+			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -467,7 +469,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
+		if cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterFull {
 			fixedSubnets = networkcommons.AllSubnets
 		}
 
@@ -480,6 +482,25 @@ var StartNodeCmd = &cobra.Command{
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
+
+		if cfg.SSVOptions.ValidatorOptions.ExporterFull && !cfg.SSVOptions.ValidatorOptions.Exporter {
+			logger.Fatal("exporter full mode is enabled but exporter is disabled")
+		}
+
+		// Validator duty tracing
+		var collector *dutytracer.Collector
+		if cfg.SSVOptions.ValidatorOptions.ExporterFull {
+			logger.Info("exporter mode: full")
+			dstore := &dutytracer.DutyTraceStoreMetrics{
+				Store: dutytracestore.New(db),
+			}
+			collector = dutytracer.New(cmd.Context(), logger,
+				nodeStorage.ValidatorStore(), consensusClient,
+				dstore, networkConfig.BeaconConfig)
+
+			go collector.Start(cmd.Context(), slotTickerProvider)
+		}
+		cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
 
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
@@ -606,9 +627,8 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				&handlers.Exporter{
-					ParticipantStores: storageMap,
-				},
+				handlers.NewExporter(storageMap, collector, nodeStorage.ValidatorStore()),
+				cfg.SSVOptions.ValidatorOptions.ExporterFull,
 			)
 			go func() {
 				err := apiServer.Run()
@@ -1150,7 +1170,7 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	}
 }
 
-func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	var wg sync.WaitGroup
 
 	threshold := slot - phase0.Slot(retain)

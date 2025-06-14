@@ -135,6 +135,7 @@ func TestNew(t *testing.T) {
 		node,
 		validators,
 		exporter,
+		false,
 	)
 
 	require.NotNil(t, server)
@@ -169,6 +170,7 @@ func TestRun_ActualExecution(t *testing.T) {
 		&handlers.Node{},
 		&handlers.Validators{},
 		&handlers.Exporter{},
+		false,
 	)
 
 	errCh := make(chan error, 1)

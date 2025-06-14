@@ -29,7 +29,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner"
 )
 
-var testNetCfg = networkconfig.TestNetwork.BeaconConfig // using a real network config because https://github.com/ssvlabs/eth2-key-manager doesn't support min genesis time for networkconfig.TestNetwork
+var testNetCfg = networkconfig.TestNetwork.BeaconConfig
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite
