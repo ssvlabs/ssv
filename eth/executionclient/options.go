@@ -125,3 +125,17 @@ func WithSyncDistanceToleranceMulti(count uint64) OptionMulti {
 		s.syncDistanceTolerance = count
 	}
 }
+
+// WithHTTPFallback sets the HTTP fallback address for the ExecutionClient configuration.
+func WithHTTPFallback(addr string) Option {
+	return func(s *ExecutionClient) {
+		s.httpFallbackAddr = addr
+	}
+}
+
+// WithAdaptiveBatch configures an ExecutionClient to use an adaptive batcher with specified minimum and maximum batch sizes.
+func WithAdaptiveBatch(min, max uint64) Option {
+	return func(s *ExecutionClient) {
+		s.batcher = NewAdaptiveBatcher(s.logBatchSize, min, max)
+	}
+}
