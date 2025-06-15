@@ -53,7 +53,8 @@ type ExecutionClient struct {
 	contractAddress ethcommon.Address
 
 	// optional
-	logger *zap.Logger
+	httpFallbackAddr string
+	logger           *zap.Logger
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
 	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
@@ -61,13 +62,17 @@ type ExecutionClient struct {
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	healthInvalidationInterval  time.Duration
-	logBatchSize                uint64
+	logBatchSize                uint64 // TODO: remove it, switch to adaptive
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
 
+	// adaptive batching
+	batcher *AdaptiveBatcher
+
 	// variables
 	client         *ethclient.Client
+	httpFallback   *HTTPFallback
 	closed         chan struct{}
 	lastSyncedTime atomic.Int64
 }
@@ -83,12 +88,18 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		batcher:                     NewAdaptiveBatcher(DefaultHistoricalLogsBatchSize, MinBatchSize, MaxBatchSize),
 		closed:                      make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
 	}
+
+	httpAddr := client.httpFallbackAddr
+	if httpAddr == "" {
+		httpAddr = nodeAddr
+	}
+	client.httpFallback = NewHTTPFallback(httpAddr, client.logger)
 
 	client.logger.Info("execution client: connecting", fields.Address(nodeAddr))
 
@@ -115,6 +126,10 @@ func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProg
 func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
 	ec.client.Close()
+	if ec.httpFallback != nil {
+		_ = ec.httpFallback.Close()
+	}
+
 	return nil
 }
 
@@ -156,8 +171,9 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 		defer close(logCh)
 		defer close(errCh)
 
-		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += ec.logBatchSize {
-			toBlock := fromBlock + ec.logBatchSize - 1
+		for fromBlock := startBlock; fromBlock <= endBlock; {
+			batchSize := ec.batcher.GetSize()
+			toBlock := fromBlock + batchSize - 1
 			if toBlock > endBlock {
 				toBlock = endBlock
 			}
@@ -171,9 +187,13 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			results, err := ec.subdivideLogFetch(ctx, query)
 			if err != nil {
+				ec.batcher.RecordFailure()
 				errCh <- err
 				return
 			}
+
+			duration := time.Since(start)
+			ec.batcher.RecordSuccess(duration)
 
 			ec.logger.Info("fetched registry events",
 				fields.FromBlock(fromBlock),
@@ -218,6 +238,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 					logCh <- BlockLogs{BlockNumber: toBlock}
 				}
 			}
+			fromBlock = toBlock + 1
 		}
 	}()
 
@@ -241,13 +262,19 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		return logs, nil
 	}
 
-	if isRPCQueryLimitError(err) {
+	// handle: RPC query limit and WS read limit errors
+	if isRPCQueryLimitError(err) || isWSReadLimitError(err) {
 		if q.FromBlock == nil || q.ToBlock == nil {
 			return nil, err
 		}
 
 		fromBlock := q.FromBlock.Uint64()
 		toBlock := q.ToBlock.Uint64()
+
+		// single block case - need special handling
+		if fromBlock == toBlock {
+			return ec.handleSingleBlockOverflow(ctx, fromBlock)
+		}
 
 		// require at least 2 blocks to subdivide (fromBlock must be less than toBlock)
 		if fromBlock >= toBlock {
@@ -298,6 +325,62 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		zap.Error(err))
 
 	return nil, err
+}
+
+// handleSingleBlockOverflow attempts to retrieve logs from a single block that exceeds the standard read limits.
+// It first tries using an HTTP fallback if configured, and as a final measure, fetches logs via transaction receipts.
+// Returns the logs found or an error in case of failure.
+func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockNum uint64) ([]ethtypes.Log, error) {
+	ec.logger.Warn("single block exceeds read limit, attempting fallback",
+		fields.BlockNumber(blockNum))
+
+	if ec.httpFallback != nil {
+		if err := ec.httpFallback.Connect(ctx, ec.connectionTimeout); err == nil {
+			logs, err := ec.httpFallback.FetchLogs(ctx, ec.contractAddress, blockNum)
+			if err == nil {
+				ec.logger.Info("fetched logs via http fallback",
+					fields.BlockNumber(blockNum),
+					zap.Int("logs", len(logs)))
+				return logs, nil
+			}
+
+			logs, err = ec.httpFallback.FetchLogsViaReceipts(ctx, ec.contractAddress, blockNum)
+			if err == nil {
+				ec.logger.Info("fetched logs via http receipts",
+					fields.BlockNumber(blockNum),
+					zap.Int("logs", len(logs)))
+				return logs, nil
+			}
+		}
+	}
+
+	block, err := ec.BlockByNumber(ctx, big.NewInt(int64(blockNum))) // nolint: gosec
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch block %d: %w", blockNum, err)
+	}
+
+	var logs []ethtypes.Log
+	for _, tx := range block.Transactions() {
+		receipt, err := ec.client.TransactionReceipt(ctx, tx.Hash())
+		if err != nil {
+			ec.logger.Debug("failed to fetch receipt",
+				fields.TxHash(tx.Hash()),
+				zap.Error(err))
+			continue
+		}
+
+		for _, log := range receipt.Logs {
+			if log.Address == ec.contractAddress {
+				logs = append(logs, *log)
+			}
+		}
+	}
+
+	ec.logger.Info("fetched logs via receipts",
+		fields.BlockNumber(blockNum),
+		zap.Int("logs", len(logs)))
+
+	return logs, nil
 }
 
 // StreamLogs subscribes to events emitted by the contract.
