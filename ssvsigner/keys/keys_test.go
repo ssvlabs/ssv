@@ -3,6 +3,7 @@ package keys
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -102,7 +103,7 @@ func TestSign_Error(t *testing.T) {
 	privKey := &privateKey{privKey: &rsa.PrivateKey{
 		PublicKey:   rsa.PublicKey{},
 		D:           nil,
-		Primes:      nil,
+		Primes:      []*big.Int{nil, nil},
 		Precomputed: rsa.PrecomputedValues{},
 	}}
 
