@@ -3,6 +3,7 @@ package badger
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -259,14 +260,12 @@ func (b *DB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) func(
 			trimmedResKey := bytes.TrimPrefix(k, prefix)
 			item, err := txn.Get(k)
 			if err != nil {
-				b.logger.Error("failed to get value", zap.Error(err),
-					zap.String("trimmedResKey", string(trimmedResKey)))
-				continue
+				return fmt.Errorf("get value from db for key: %s: %w", string(trimmedResKey), err)
+
 			}
 			val, err := item.ValueCopy(nil)
 			if err != nil {
-				b.logger.Error("failed to copy value", zap.Error(err))
-				continue
+				return fmt.Errorf("copy value for key: %s: %w", string(trimmedResKey), err)
 			}
 			if err := handler(i, basedb.Obj{
 				Key:   trimmedResKey,
@@ -289,13 +288,11 @@ func (b *DB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb.Obj) 
 					b.logger.Debug("item not found", zap.String("key", string(k)))
 					continue
 				}
-				b.logger.Warn("failed to get item", zap.String("key", string(k)))
-				return err
+				return fmt.Errorf("get value from db for key: %s: %w", string(k), err)
 			}
 			value, err = item.ValueCopy(value)
 			if err != nil {
-				b.logger.Warn("failed to copy item value", zap.String("key", string(k)))
-				return err
+				return fmt.Errorf("copy value for key: %s: %w", string(k), err)
 			}
 			cp = make([]byte, len(value))
 			copy(cp, value)
