@@ -30,6 +30,7 @@ UNFORMATTED=$(shell gofmt -l .)
 
 GET_TOOL=go get -modfile=tool.mod -tool
 RUN_TOOL=go tool -modfile=tool.mod
+SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
 lint:
@@ -41,7 +42,7 @@ lint:
 
 .PHONY: ssvsigner-lint
 ssvsigner-lint:
-	cd ssvsigner && $(RUN_TOOL) golangci-lint run -v ./... && cd ..
+	cd ssvsigner && $(SSVSIGNER_RUN_TOOL) golangci-lint run -v ./... && cd ..
 	@if [ ! -z "${UNFORMATTED}" ]; then \
 		echo "Some files requires formatting, please run 'go fmt ./...'"; \
 		exit 1; \
