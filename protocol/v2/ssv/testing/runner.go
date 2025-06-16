@@ -147,6 +147,7 @@ var ConstructBaseRunner = func(
 		)
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
+			logger,
 			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -159,6 +160,7 @@ var ConstructBaseRunner = func(
 			valCheck,
 			TestingHighestDecidedSlot,
 			[]byte("graffiti"),
+			0,
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
@@ -402,6 +404,7 @@ var ConstructBaseRunnerWithShareMap = func(
 		)
 	case spectypes.RoleProposer:
 		r, err = runner.NewProposerRunner(
+			logger,
 			networkconfig.TestNetwork.DomainType,
 			spectypes.BeaconTestNetwork,
 			shareMap,
@@ -414,6 +417,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			valCheck,
 			TestingHighestDecidedSlot,
 			[]byte("graffiti"),
+			0,
 		)
 	case spectypes.RoleSyncCommitteeContribution:
 		r, err = runner.NewSyncCommitteeAggregatorRunner(
