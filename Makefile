@@ -30,6 +30,7 @@ UNFORMATTED=$(shell gofmt -l .)
 
 GET_TOOL=go get -modfile=tool.mod -tool
 RUN_TOOL=go tool -modfile=tool.mod
+SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
 lint:
@@ -39,10 +40,27 @@ lint:
 		exit 1; \
 	fi
 
+.PHONY: ssvsigner-lint
+ssvsigner-lint:
+	cd ssvsigner && $(SSVSIGNER_RUN_TOOL) golangci-lint -c ../.golangci.yaml run -v ./... && cd ..
+	@if [ ! -z "${UNFORMATTED}" ]; then \
+		echo "Some files requires formatting, please run 'go fmt ./...'"; \
+		exit 1; \
+	fi
+
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
+
+.PHONY: ssvsigner-test
+ssvsigner-test:
+	@echo "Running ssv-signer unit tests"
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 ./... && cd ..
+
+.PHONY: unit-test-with-signer
+unit-test-with-signer: unit-test ssvsigner-test
+	@echo "Running all tests including ssv-signer"
 
 .PHONY: integration-test
 integration-test:
