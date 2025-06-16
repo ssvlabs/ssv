@@ -345,7 +345,7 @@ func verifyClientCertificate(rawCerts [][]byte, trustedFingerprints map[string]s
 // loadPasswordFromFile loads a password from a file.
 // The password is expected to be the first line of the file.
 func loadPasswordFromFile(filePath string) (string, error) {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) // #nosec G304
 	if err != nil {
 		return "", fmt.Errorf("read password file: %w", err)
 	}
@@ -364,7 +364,7 @@ func loadPasswordFromFile(filePath string) (string, error) {
 // - keystoreFile: path to the keystore file
 // - password: password to decrypt the keystore
 func loadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, error) {
-	p12Data, err := os.ReadFile(keystoreFile)
+	p12Data, err := os.ReadFile(keystoreFile) // #nosec G304
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("read keystore file: %w", err)
 	}
@@ -392,7 +392,7 @@ func loadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, er
 // Parameters:
 // - certFile: path to the certificate file
 func loadPEMCertificate(certFile string) (*x509.Certificate, error) {
-	certData, err := os.ReadFile(certFile)
+	certData, err := os.ReadFile(certFile) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("read certificate file: %w", err)
 	}
@@ -428,11 +428,13 @@ func loadPEMCertificate(certFile string) (*x509.Certificate, error) {
 // Parameters:
 // - filePath: a path to the fingerprint file
 func loadFingerprintsFile(filePath string) (map[string]string, error) {
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("open fingerprints file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	fingerprints := make(map[string]string)
 	scanner := bufio.NewScanner(file)
