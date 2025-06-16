@@ -43,7 +43,6 @@ ssvsigner-lint:
 		exit 1; \
 	fi
 
-
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
