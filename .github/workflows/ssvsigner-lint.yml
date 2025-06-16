@@ -1,0 +1,27 @@
+name: SSV-Signer lint
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup make
+        run: sudo apt-get update && sudo apt-get install make
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Run tools
+        run: make tools
+
+      - name: Run make ssvsigner-lint
+        run: make ssvsigner-lint
