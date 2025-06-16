@@ -3,7 +3,6 @@ package rsaencryption
 import (
 	"crypto/rsa"
 	"encoding/base64"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -337,10 +336,4 @@ func TestPublicKeyErrors(t *testing.T) {
 			tc.testFunc(t, malformedPubKey)
 		})
 	}
-}
-
-type failingReader struct{}
-
-func (r *failingReader) Read([]byte) (n int, err error) {
-	return 0, fmt.Errorf("failed to read random bytes")
 }
