@@ -39,7 +39,7 @@ func NewTestDenebBlock(slot phase0.Slot, proposerIndex phase0.ValidatorIndex) *d
 			ETH1Data: &phase0.ETH1Data{
 				DepositRoot:  phase0.Root{0x01},
 				DepositCount: 0,
-				BlockHash:    [32]byte{},
+				BlockHash:    make([]byte, 32),
 			},
 			Graffiti:          [32]byte{0x01},
 			ProposerSlashings: []*phase0.ProposerSlashing{},
