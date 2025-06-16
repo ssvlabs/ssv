@@ -25,10 +25,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/storage/basedb"
+
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // RemoteKeyManager implements KeyManager by delegating signing operations to
@@ -123,7 +124,6 @@ func (km *RemoteKeyManager) AddShare(
 	// However, syncer crashes node on an error and restarts the sync process from the failing block,
 	// so it will attempt to save the same share again, which won't be an issue
 	// because AddValidators doesn't fail if the same share exists.
-	// TODO: The comment assumes that https://github.com/ssvlabs/ssv/pull/2246 has already been ported but it hasn't yet
 	if err := km.signerClient.AddValidators(ctx, shareKeys); err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
@@ -139,7 +139,6 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn basedb.Txn, pub
 	// there will be some inconsistency between syncer state and remote signer.
 	// After restart, it will attempt to delete the same share again, which won't be an issue
 	// because RemoveValidators doesn't fail if the share doesn't exist.
-	// TODO: The comment assumes that https://github.com/ssvlabs/ssv/pull/2246 has already been ported but it hasn't yet
 	if err := km.signerClient.RemoveValidators(ctx, pubKey); err != nil {
 		return fmt.Errorf("remove validator: %w", err)
 	}
