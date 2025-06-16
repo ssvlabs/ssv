@@ -39,15 +39,15 @@ import (
 //
 // RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
-	logger          *zap.Logger
-	netCfg          networkconfig.NetworkConfig
-	signerClient    signerClient
-	consensusClient consensusClient
-	getOperatorId   func() spectypes.OperatorID
-	operatorPubKey  keys.OperatorPublicKey
-	signLocksMu     sync.RWMutex
-	signLocks       map[signKey]*sync.RWMutex
-	slashingProtector
+	logger            *zap.Logger
+	netCfg            networkconfig.NetworkConfig
+	signerClient      signerClient
+	consensusClient   consensusClient
+	getOperatorId     func() spectypes.OperatorID
+	operatorPubKey    keys.OperatorPublicKey
+	signLocksMu       sync.RWMutex
+	signLocks         map[signKey]*sync.RWMutex
+	slashingProtector slashingProtector
 }
 
 type signerClient interface {
@@ -152,6 +152,18 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn basedb.Txn, pub
 	}
 
 	return nil
+}
+
+func (km *RemoteKeyManager) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
+	return km.slashingProtector.IsAttestationSlashable(pubKey, attData)
+}
+
+func (km *RemoteKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
+}
+
+func (km *RemoteKeyManager) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
 // SignBeaconObject checks slashing conditions locally for attestation and beacon block,

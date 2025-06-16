@@ -57,7 +57,7 @@ type LocalKeyManager struct {
 	signer            signer.ValidatorSigner
 	domain            spectypes.DomainType
 	operatorDecrypter keys.OperatorDecrypter
-	slashingProtector
+	slashingProtector slashingProtector
 }
 
 // NewLocalKeyManager returns a new LocalKeyManager.
@@ -242,6 +242,18 @@ func (km *LocalKeyManager) signBeaconObject(
 	default:
 		return nil, nil, errors.New("domain unknown")
 	}
+}
+
+func (km *LocalKeyManager) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
+	return km.slashingProtector.IsAttestationSlashable(pubKey, attData)
+}
+
+func (km *LocalKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
+}
+
+func (km *LocalKeyManager) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
 // AddShare decrypts the provided share private key (encryptedSharePrivKey)

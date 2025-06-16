@@ -15,10 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 func TestSlashing(t *testing.T) {
@@ -180,7 +181,7 @@ func TestSlashing_Attestation(t *testing.T) {
 			require.NotZero(t, sig, "expected non-zero signature")
 			require.NotZero(t, root, "expected non-zero root")
 
-			highAtt, found, err := km.(*LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sk.GetPublicKey().Serialize()))
+			highAtt, found, err := km.(*LocalKeyManager).slashingProtector.RetrieveHighestAttestation(phase0.BLSPubKey(sk.GetPublicKey().Serialize()))
 			require.NoError(t, err)
 			require.True(t, found)
 			require.Equal(t, attestation.Source.Epoch, highAtt.Source.Epoch)
