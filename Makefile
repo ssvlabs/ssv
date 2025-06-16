@@ -37,7 +37,7 @@ lint:
 
 .PHONY: ssvsigner-lint
 ssvsigner-lint:
-	cd ssvsigner && $(SSVSIGNER_RUN_TOOL) golangci-lint run -v ./... && cd ..
+	cd ssvsigner && $(SSVSIGNER_RUN_TOOL) golangci-lint -c ../.golangci.yaml run -v ./... && cd ..
 	@if [ ! -z "${UNFORMATTED}" ]; then \
 		echo "Some files requires formatting, please run 'go fmt ./...'"; \
 		exit 1; \
