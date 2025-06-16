@@ -24,6 +24,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
@@ -96,7 +97,7 @@ func TestNewController(t *testing.T) {
 		RecipientsStorage: recipientStorage,
 		Context:           t.Context(),
 	}
-	control := NewController(logger, controllerOptions)
+	control := NewController(logger, controllerOptions, exporter.ExporterOptions{})
 	require.IsType(t, &controller{}, control)
 }
 
@@ -228,7 +229,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				validatorsMap:     mockValidatorsMap,
 				validatorStore:    mockValidatorStore,
 				validatorOptions: validator.Options{
-					Exporter: true,
+					ExporterOptions: exporter.ExporterOptions{
+						Enabled: true,
+					},
 				},
 			}
 			ctr := setupController(t, logger, controllerOptions)
@@ -247,7 +250,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	ctr := setupController(t, logger, controllerOptions) // none committee
 
 	// Only exporter handles non committee messages
-	ctr.validatorOptions.Exporter = true
+	ctr.validatorOptions.ExporterOptions.Enabled = true
 
 	go ctr.handleRouterMessages()
 

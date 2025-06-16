@@ -35,6 +35,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/exporter"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
 	dutytracestore "github.com/ssvlabs/ssv/exporter/v2/store"
@@ -92,25 +93,26 @@ type SSVSignerConfig struct {
 
 type config struct {
 	global_config.GlobalConfig   `yaml:"global"`
-	DBOptions                    basedb.Options          `yaml:"db"`
-	SSVOptions                   operator.Options        `yaml:"ssv"`
-	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
-	KeyStore                     KeyStore                `yaml:"KeyStore"`
-	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
-	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
-	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
-	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
-	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
-	EnableTraces                 bool                    `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
-	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
-	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
-	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
-	WithPing                     bool                    `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
-	SSVAPIPort                   int                     `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
-	LocalEventsPath              string                  `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
-	EnableDoppelgangerProtection bool                    `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
+	DBOptions                    basedb.Options           `yaml:"db"`
+	SSVOptions                   operator.Options         `yaml:"ssv"`
+	ExporterOptions              exporter.ExporterOptions `yaml:"exporter"`
+	ExecutionClient              executionclient.Options  `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient              goclient.Options         `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig             p2pv1.Config             `yaml:"p2p"`
+	KeyStore                     KeyStore                 `yaml:"KeyStore"`
+	SSVSigner                    SSVSignerConfig          `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
+	Graffiti                     string                   `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
+	ProposerDelay                time.Duration            `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
+	OperatorPrivateKey           string                   `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
+	MetricsAPIPort               int                      `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
+	EnableTraces                 bool                     `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
+	EnableProfile                bool                     `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
+	NetworkPrivateKey            string                   `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
+	WsAPIPort                    int                      `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
+	WithPing                     bool                     `yaml:"WithPing" env:"WITH_PING" env-description:"Enable WebSocket ping messages"`
+	SSVAPIPort                   int                      `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port for SSV API server"`
+	LocalEventsPath              string                   `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"Path to local events file"`
+	EnableDoppelgangerProtection bool                     `yaml:"EnableDoppelgangerProtection" env:"ENABLE_DOPPELGANGER_PROTECTION" env-description:"Enable doppelganger protection for validators"`
 }
 
 var cfg config
@@ -454,8 +456,8 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
-		if cfg.SSVOptions.ValidatorOptions.Exporter && !cfg.SSVOptions.ValidatorOptions.ExporterFull {
-			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
+		if cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == "" {
+			retain := cfg.ExporterOptions.RetainSlots
 			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
 		}
@@ -469,7 +471,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.SSVOptions.ValidatorOptions.Exporter || cfg.SSVOptions.ValidatorOptions.ExporterFull {
+		if cfg.ExporterOptions.Enabled {
 			fixedSubnets = networkcommons.AllSubnets
 		}
 
@@ -483,14 +485,10 @@ var StartNodeCmd = &cobra.Command{
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
 
-		if cfg.SSVOptions.ValidatorOptions.ExporterFull && !cfg.SSVOptions.ValidatorOptions.Exporter {
-			logger.Fatal("exporter full mode is enabled but exporter is disabled")
-		}
-
 		// Validator duty tracing
 		var collector *dutytracer.Collector
-		if cfg.SSVOptions.ValidatorOptions.ExporterFull {
-			logger.Info("exporter mode: full")
+		if cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ExporterModeArchive {
+			logger.Info("exporter mode: archive")
 			dstore := &dutytracer.DutyTraceStoreMetrics{
 				Store: dutytracestore.New(db),
 			}
@@ -518,11 +516,11 @@ var StartNodeCmd = &cobra.Command{
 		}
 		cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler
 
-		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions, cfg.ExporterOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		operatorNode := operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
+		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
@@ -628,7 +626,7 @@ var StartNodeCmd = &cobra.Command{
 					Shares: nodeStorage.Shares(),
 				},
 				handlers.NewExporter(storageMap, collector, nodeStorage.ValidatorStore()),
-				cfg.SSVOptions.ValidatorOptions.ExporterFull,
+				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ExporterModeArchive,
 			)
 			go func() {
 				err := apiServer.Run()

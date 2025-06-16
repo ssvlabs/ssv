@@ -6,6 +6,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -34,8 +35,7 @@ type Options struct {
 	DutyRunners         runner.ValidatorDutyRunners
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
-	Exporter            bool
-	ExporterFull        bool // enables duty tracing
+	ExporterOptions     exporter.ExporterOptions // enables duty tracing
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator

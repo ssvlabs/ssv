@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/doppelganger"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
@@ -74,10 +75,7 @@ type ControllerOptions struct {
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"Minimum number of peers required for sync"`
 	Network                    P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
-	FullNode                   bool   `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
-	Exporter                   bool   `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:"Enable data export functionality"`
-	ExporterFull               bool   `yaml:"ExporterFull" env:"EXPORTER_FULL" env-default:"false" env-description:"Expose all validator duties to the exporter in addition to the decideds"`
-	ExporterRetainSlots        uint64 `yaml:"ExporterRetainSlots" env:"EXPORTER_RETAIN_SLOTS" env-default:"50400" env-description:"Number of slots to retain in export data"`
+	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
 	BeaconSigner               ekm.BeaconSigner
 	OperatorSigner             ssvtypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -198,7 +196,7 @@ type controller struct {
 }
 
 // NewController creates a new validator controller instance
-func NewController(logger *zap.Logger, options ControllerOptions) Controller {
+func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporter.ExporterOptions) Controller {
 	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
@@ -222,11 +220,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		DutyRunners:         nil, // set per validator
 		NewDecidedHandler:   options.NewDecidedHandler,
 		FullNode:            options.FullNode,
-		Exporter:            options.Exporter,
 		GasLimit:            options.GasLimit,
 		MessageValidator:    options.MessageValidator,
 		Graffiti:            options.Graffiti,
-		ExporterFull:        options.ExporterFull,
+		ExporterOptions:     exporterOptions,
 		ProposerDelay:       options.ProposerDelay,
 	}
 
@@ -349,7 +346,7 @@ func (c *controller) handleRouterMessages() {
 					v.HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(ctx, c.logger, m)
-				} else if isExporterMode(c.validatorOptions) {
+				} else if c.validatorOptions.ExporterOptions.Enabled {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
@@ -364,10 +361,6 @@ func (c *controller) handleRouterMessages() {
 			}
 		}
 	}
-}
-
-func isExporterMode(options validator.Options) bool {
-	return options.Exporter || options.ExporterFull
 }
 
 var nonCommitteeValidatorTTLs = map[spectypes.RunnerRole]int{
@@ -411,7 +404,7 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 		ncv = item.Value()
 	}
 
-	if c.validatorOptions.ExporterFull {
+	if c.validatorOptions.ExporterOptions.Mode == exporter.ExporterModeArchive {
 		// use new exporter functionality
 		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
 	}
@@ -472,7 +465,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		}
 	}
 
-	if isExporterMode(c.validatorOptions) {
+	if c.validatorOptions.ExporterOptions.Enabled {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
 	} else {

@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -49,6 +50,7 @@ type Node struct {
 	context          context.Context
 	validatorsCtrl   validator.Controller
 	validatorOptions validator.ControllerOptions
+	exporterOptions  exporter.ExporterOptions
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  executionclient.Provider
 	net              network.P2PNetwork
@@ -62,12 +64,13 @@ type Node struct {
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+func New(logger *zap.Logger, opts Options, exporterOptions exporter.ExporterOptions, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	node := &Node{
 		logger:           logger.Named(logging.NameOperator),
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
+		exporterOptions:  exporterOptions,
 		network:          opts.NetworkConfig,
 		consensusClient:  opts.BeaconNode,
 		executionClient:  opts.ExecutionClient,
@@ -126,7 +129,7 @@ func (n *Node) Start() error {
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	if n.validatorOptions.Exporter || n.validatorOptions.ExporterFull {
+	if n.exporterOptions.Enabled {
 		// Subscribe to all subnets.
 		err := n.net.SubscribeAll()
 		if err != nil {
