@@ -78,7 +78,7 @@ func NewLocalKeyManager(
 	options.SetWalletType(core.NDWallet)
 
 	wallet, err := signerStore.OpenWallet()
-	if err != nil && errors.Is(err, errWalletNotFound) {
+	if err != nil && !errors.Is(err, errWalletNotFound) {
 		return nil, err
 	}
 	if wallet == nil {
