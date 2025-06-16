@@ -74,7 +74,8 @@ func run(logger *zap.Logger, cli CLI) error {
 	)
 
 	if cli.AllowInsecureHTTP {
-		logger.Warn("ssv-signer started without TLS, do not use this option in production")
+		logger.Warn("ssv-signer started with an insecure mode that allows HTTP and doesn't enforce HTTPS, " +
+			"do not use this option in production")
 	}
 
 	if err := validateConfig(cli); err != nil {
