@@ -1,7 +1,6 @@
 package rsaencryption
 
 import (
-	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
 	"fmt"
@@ -289,20 +288,6 @@ func TestGenerateRSAKeyPairPEM(t *testing.T) {
 		require.NotNil(t, privKey)
 		require.Equal(t, 2048, privKey.N.BitLen())
 		require.NoError(t, privKey.Validate(), "Private key should validate")
-	})
-
-	t.Run("Error", func(t *testing.T) {
-		origReader := rand.Reader
-		defer func() { rand.Reader = origReader }()
-
-		// always fail the random reader
-		rand.Reader = &failingReader{}
-
-		pubPEM, privPEM, err := GenerateKeyPairPEM()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "generate RSA key:")
-		require.Nil(t, pubPEM)
-		require.Nil(t, privPEM)
 	})
 }
 

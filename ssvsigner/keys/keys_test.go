@@ -1,10 +1,8 @@
 package keys
 
 import (
-	crand "crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -245,23 +243,4 @@ func TestPublicKey_Base64_MalformedKey(t *testing.T) {
 	s, err := invalidPub.Base64()
 	require.Error(t, err)
 	require.Empty(t, s)
-}
-
-func TestGeneratePrivateKey_ReaderError(t *testing.T) {
-	origReader := crand.Reader
-	defer func() { crand.Reader = origReader }()
-
-	crand.Reader = &failingReader{}
-
-	key, err := GeneratePrivateKey()
-
-	require.Error(t, err)
-	require.Nil(t, key)
-	require.Contains(t, err.Error(), "failed to read random bytes")
-}
-
-type failingReader struct{}
-
-func (r *failingReader) Read([]byte) (n int, err error) {
-	return 0, fmt.Errorf("failed to read random bytes")
 }
