@@ -30,8 +30,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 // LocalKeyManager implements KeyManager by storing and operating on BLS keys locally.
@@ -245,7 +246,7 @@ func (km *LocalKeyManager) signBeaconObject(
 
 // AddShare decrypts the provided share private key (encryptedSharePrivKey)
 // using the operatorDecrypter, verifies that it matches sharePubKey, and
-// saves it to the local wallet. It also calls bumps slashing protection to
+// saves it to the local wallet. It also bumps slashing protection to
 // ensure slashing records for this share are up to date.
 func (km *LocalKeyManager) AddShare(
 	_ context.Context,
