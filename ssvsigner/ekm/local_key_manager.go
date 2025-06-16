@@ -325,7 +325,8 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey
 func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {
 	key, err := core.NewHDKeyFromPrivateKey(privKey.Serialize(), "")
 	if err != nil {
-		return fmt.Errorf("generate HDKey: %w", err)
+		// Not exposing the internal error to prevent leaking private key details.
+		return fmt.Errorf("could not generate HDKey")
 	}
 	account := wallets.NewValidatorAccount("", key, nil, "", nil)
 	if err := km.wallet.AddValidatorAccount(account); err != nil {
