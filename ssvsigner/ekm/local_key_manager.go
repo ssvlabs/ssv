@@ -342,7 +342,7 @@ func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {
 	}
 	account := wallets.NewValidatorAccount("", key, nil, "", nil)
 	if err := km.wallet.AddValidatorAccount(account); err != nil {
-		return fmt.Errorf("add to wallet: %w", err)
+		return fmt.Errorf("add validator account to wallet: %w", err)
 	}
 	return nil
 }
