@@ -35,6 +35,12 @@ type Config struct {
 // LoadClientTLSConfig creates a TLS configuration for client connections.
 // This is a complete solution for connecting to Web3Signer with TLS.
 //
+// Configuration scenarios:
+// 1. No TLS configuration - Returns minimal TLS config with modern TLS version
+// 2. Client certificate only - Mutual TLS where client identifies itself to server
+// 3. Server certificate only - Trust specific server certificate based on fingerprint
+// 4. Both certificates - Mutual TLS with specific server trust (most secure)
+//
 // Parameters used from Config:
 // - ClientKeystoreFile: PKCS12 file containing client certificate and private key
 // - ClientKeystorePasswordFile: File containing password for the keystore
@@ -44,14 +50,28 @@ func (c *Config) LoadClientTLSConfig() (*tls.Config, error) {
 		return nil, fmt.Errorf("invalid client TLS config: %w", err)
 	}
 
-	certificate, err := c.loadClientCertificate()
-	if err != nil {
-		return nil, err
+	// Case 1: No TLS configuration - use minimum TLS 1.3
+	if c.ClientKeystoreFile == "" && c.ClientServerCertFile == "" {
+		return &tls.Config{MinVersion: MinTLSVersion}, nil
 	}
 
-	trustedFingerprints, err := c.loadServerFingerprints()
-	if err != nil {
-		return nil, err
+	// Load client certificate if provided
+	var certificate tls.Certificate
+	var err error
+	if c.ClientKeystoreFile != "" {
+		certificate, err = c.loadClientCertificate()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Load server fingerprints if provided
+	var trustedFingerprints map[string]string
+	if c.ClientServerCertFile != "" {
+		trustedFingerprints, err = c.loadServerFingerprints()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return createClientTLSConfig(certificate, trustedFingerprints), nil
@@ -60,8 +80,10 @@ func (c *Config) LoadClientTLSConfig() (*tls.Config, error) {
 // LoadServerTLSConfig creates a TLS configuration for server listeners.
 // This is a complete solution for setting up the SSV Signer server with TLS.
 //
-// Available configuration:
-// Server certificate with known clients - Mutual TLS where clients are verified by fingerprint
+// Configuration scenarios:
+// 1. No TLS configuration - Returns minimal TLS config with modern TLS version
+// 2. Server certificate only - Basic TLS where server identifies itself to clients
+// 3. Server certificate with known clients - Mutual TLS where clients are verified by fingerprint
 //
 // Parameters used from Config:
 // - ServerKeystoreFile: PKCS12 file containing server certificate and private key
@@ -72,14 +94,24 @@ func (c *Config) LoadServerTLSConfig() (*tls.Config, error) {
 		return nil, fmt.Errorf("invalid server TLS config: %w", err)
 	}
 
+	// Case 1: No TLS configuration - use minimum TLS 1.3
+	if c.ServerKeystoreFile == "" {
+		return &tls.Config{MinVersion: MinTLSVersion}, nil
+	}
+
+	// Case 2 & 3: Server certificate required - load it
 	certificate, err := c.loadServerCertificate()
 	if err != nil {
 		return nil, err
 	}
 
-	trustedFingerprints, err := loadFingerprintsFile(c.ServerKnownClientsFile)
-	if err != nil {
-		return nil, fmt.Errorf("load known clients: %w", err)
+	// For Case 3: Load client fingerprints if provided
+	var trustedFingerprints map[string]string
+	if c.ServerKnownClientsFile != "" {
+		trustedFingerprints, err = loadFingerprintsFile(c.ServerKnownClientsFile)
+		if err != nil {
+			return nil, fmt.Errorf("load known clients: %w", err)
+		}
 	}
 
 	return createServerTLSConfig(certificate, trustedFingerprints)
@@ -88,28 +120,48 @@ func (c *Config) LoadServerTLSConfig() (*tls.Config, error) {
 // validateServerTLS validates the server TLS configuration.
 // It verifies that TLS configuration is consistent based on multiple valid use cases.
 func (c *Config) validateServerTLS() error {
-	if c.ServerKeystoreFile == "" {
-		return fmt.Errorf("server keystore file is required")
+	// Case 1: No server TLS config provided - TLS is optional
+	if c.ServerKeystoreFile == "" && c.ServerKnownClientsFile == "" {
+		return nil
 	}
-	if c.ServerKeystorePasswordFile == "" {
-		return fmt.Errorf("server keystore password file is required")
+
+	// Case 2: Server keystore file provided but no password file
+	if c.ServerKeystoreFile != "" && c.ServerKeystorePasswordFile == "" {
+		return fmt.Errorf("server keystore password file is required when using a server keystore file")
 	}
-	if c.ServerKnownClientsFile == "" {
-		return fmt.Errorf("known clients file is required for client authentication")
+
+	// Case 3: Only known clients file provided without server certificate
+	// This is invalid because a server must have a certificate to accept TLS connections
+	if c.ServerKeystoreFile == "" && c.ServerKnownClientsFile != "" {
+		return fmt.Errorf("server keystore file is required when specifying known clients file")
 	}
+
+	// Case 4: Server keystore and password file provided (with or without known clients)
+	// This is a valid configuration
 	return nil
 }
 
+// validateClientTLS validates the client TLS configuration.
+// It verifies that TLS configuration is consistent based on multiple valid use cases.
 func (c *Config) validateClientTLS() error {
-	if c.ClientKeystoreFile == "" {
-		return fmt.Errorf("client keystore file is required")
+	// Case 1: No client TLS config provided - TLS is optional
+	if c.ClientKeystoreFile == "" && c.ClientServerCertFile == "" {
+		return nil
 	}
-	if c.ClientKeystorePasswordFile == "" {
-		return fmt.Errorf("client keystore password file is required")
+
+	// Case 2: Only trusted server certificate file provided without client certificate
+	// This is valid - the client can verify server certificates without presenting its own
+	if c.ClientKeystoreFile == "" && c.ClientServerCertFile != "" {
+		return nil
 	}
-	if c.ClientServerCertFile == "" {
-		return fmt.Errorf("trusted server certificate file is required for TLS")
+
+	// Case 3: Client keystore file provided but no password file
+	if c.ClientKeystoreFile != "" && c.ClientKeystorePasswordFile == "" {
+		return fmt.Errorf("client keystore password file is required when using a client keystore file")
 	}
+
+	// Case 4: Client keystore and password file provided (with or without server certificate)
+	// This is a valid configuration for mutual TLS
 	return nil
 }
 
@@ -201,22 +253,27 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 //
 // Parameters:
 // - certificate: server certificate to present to clients (required)
-// - trustedFingerprints: map of client common names to expected certificate fingerprints (required)
+// - trustedFingerprints: map of client common names to expected certificate fingerprints (required unless insecure HTTP is enabled)
 func createServerTLSConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
 	if certificate.Certificate == nil {
 		return nil, fmt.Errorf("server certificate is required")
-	}
-	if len(trustedFingerprints) == 0 {
-		return nil, fmt.Errorf("trusted client fingerprints are required")
 	}
 
 	tlsConfig := &tls.Config{
 		MinVersion:   MinTLSVersion,
 		Certificates: []tls.Certificate{certificate},
-		ClientAuth:   tls.RequireAnyClientCert,
-		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	}
+
+	// Configure client authentication based on fingerprints
+	if len(trustedFingerprints) > 0 {
+		// Require client certificates but verify them using our custom verification
+		tlsConfig.ClientAuth = tls.RequireAnyClientCert
+		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 			return verifyClientCertificate(rawCerts, trustedFingerprints)
-		},
+		}
+	} else {
+		// If no trusted fingerprints, don't require client certificate
+		tlsConfig.ClientAuth = tls.NoClientCert
 	}
 
 	return tlsConfig, nil

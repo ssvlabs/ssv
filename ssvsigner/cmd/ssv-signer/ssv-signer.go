@@ -27,10 +27,13 @@ type CLI struct {
 	LogFormat          string        `env:"LOG_FORMAT" default:"console" enum:"console,json" help:"Set log format (console, json)"`
 	RequestTimeout     time.Duration `env:"REQUEST_TIMEOUT" default:"10s" help:"Timeout for outgoing HTTP requests (e.g. 500ms, 10s)"`
 
+	// AllowInsecureHTTP allows ssv-signer to work without using TLS.
+	AllowInsecureHTTP bool `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"Allow insecure HTTP requests. Do not use in production"`
+
 	// Server TLS configuration (for incoming connections to SSV Signer)
-	KeystoreFile         string `env:"KEYSTORE_FILE" required:"" env-description:"Path to PKCS12 keystore file for server TLS connections"`
-	KeystorePasswordFile string `env:"KEYSTORE_PASSWORD_FILE" required:"" env-description:"Path to file containing the password for server keystore file"`
-	KnownClientsFile     string `env:"KNOWN_CLIENTS_FILE" required:"" env-description:"Path to known clients file for authenticating clients"`
+	KeystoreFile         string `env:"KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for server TLS connections"`
+	KeystorePasswordFile string `env:"KEYSTORE_PASSWORD_FILE" env-description:"Path to file containing the password for server keystore file"`
+	KnownClientsFile     string `env:"KNOWN_CLIENTS_FILE" env-description:"Path to known clients file for authenticating clients"`
 
 	// Client TLS configuration (for connecting to Web3Signer)
 	Web3SignerKeystoreFile         string `env:"WEB3SIGNER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
@@ -67,7 +70,12 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Duration("request_timeout", cli.RequestTimeout),
 		zap.Bool("server_tls_enabled", cli.KeystoreFile != ""),
 		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != ""),
+		zap.Bool("allow_insecure_http", cli.AllowInsecureHTTP),
 	)
+
+	if cli.AllowInsecureHTTP {
+		logger.Warn("ssv-signer started without TLS, do not use this option in production")
+	}
 
 	if err := validateConfig(cli); err != nil {
 		return err
@@ -127,14 +135,16 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
 	}
 
-	if cli.KeystoreFile == "" {
-		return fmt.Errorf("server TLS keystore file is required")
-	}
-	if cli.KeystorePasswordFile == "" {
-		return fmt.Errorf("server TLS keystore password file is required")
-	}
-	if cli.KnownClientsFile == "" {
-		return fmt.Errorf("known clients file is required for client authentication")
+	if !cli.AllowInsecureHTTP {
+		if cli.KeystoreFile == "" {
+			return fmt.Errorf("server TLS keystore file is required")
+		}
+		if cli.KeystorePasswordFile == "" {
+			return fmt.Errorf("server TLS keystore password file is required")
+		}
+		if cli.KnownClientsFile == "" {
+			return fmt.Errorf("known clients file is required for client authentication")
+		}
 	}
 
 	return nil
@@ -181,13 +191,19 @@ func setupWeb3SignerClient(endpoint string, timeout time.Duration, tlsConfig tls
 func startServer(logger *zap.Logger, listenAddr string, operatorKey keys.OperatorPrivateKey, web3SignerClient *web3signer.Web3Signer, tlsConfig tls.Config) error {
 	logger.Info("starting ssv-signer server",
 		zap.String("addr", listenAddr),
+		zap.Bool("tls_enabled", tlsConfig.ServerKeystoreFile != ""),
 	)
 
-	config, err := tlsConfig.LoadServerTLSConfig()
-	if err != nil {
-		return fmt.Errorf("load server TLS config: %w", err)
+	var opts []ssvsigner.Option
+	if tlsConfig.ServerKeystoreFile != "" {
+		config, err := tlsConfig.LoadServerTLSConfig()
+		if err != nil {
+			return fmt.Errorf("load server TLS config: %w", err)
+		}
+
+		opts = append(opts, ssvsigner.WithTLS(config))
 	}
 
-	srv := ssvsigner.NewServer(logger, operatorKey, web3SignerClient, ssvsigner.WithTLS(config))
+	srv := ssvsigner.NewServer(logger, operatorKey, web3SignerClient, opts...)
 	return srv.ListenAndServe(listenAddr)
 }
