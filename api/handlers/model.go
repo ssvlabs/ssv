@@ -58,7 +58,7 @@ type roundChange struct {
 }
 
 type message struct {
-	Round        uint64               `json:"round"`
+	Round        uint64               `json:"round,omitempty"`
 	BeaconRoot   phase0.Root          `json:"ssvRoot"`
 	Signer       spectypes.OperatorID `json:"signer"`
 	ReceivedTime time.Time            `json:"time"`
