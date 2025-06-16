@@ -74,19 +74,19 @@ func (env *TestEnvironment) startPostgreSQL() error {
 
 	postgresContainer, err := testcontainers.GenericContainer(env.ctx, postgresReq)
 	if err != nil {
-		return fmt.Errorf("failed to start postgres: %w", err)
+		return fmt.Errorf("failed to start PostgreSQL: %w", err)
 	}
 
 	env.postgresContainer = postgresContainer
 
 	host, err := postgresContainer.Host(env.ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get postgres host: %w", err)
+		return fmt.Errorf("failed to get PostgreSQL host: %w", err)
 	}
 
 	mappedPort, err := postgresContainer.MappedPort(env.ctx, "5432/tcp")
 	if err != nil {
-		return fmt.Errorf("failed to get postgres port: %w", err)
+		return fmt.Errorf("failed to get PostgreSQL port: %w", err)
 	}
 
 	postgresConnStr := fmt.Sprintf("host=%s port=%s user=postgres password=password dbname=web3signer sslmode=disable",

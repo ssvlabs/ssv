@@ -84,8 +84,6 @@ func (s *E2ETestSuite) RequireSlashingError(err error, operation string) {
 }
 
 // SignWeb3Signer calls Web3Signer directly, bypassing SSV protection
-// WARNING: Duplicates RemoteKeyManager's request construction logic.
-// Update if RemoteKeyManager.handleDomainAttester/handleDomainProposer changes.
 func (s *E2ETestSuite) SignWeb3Signer(
 	ctx context.Context,
 	obj ssz.HashRoot,
