@@ -30,7 +30,7 @@ func (e ShareDecryptionError) Unwrap() error {
 // and slashingProtector (for slashing checks and updates).
 type KeyManager interface {
 	BeaconSigner
-	BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
+	BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
 	// Implementations should always call BumpSlashingProtection during this process.
