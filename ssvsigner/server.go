@@ -40,6 +40,7 @@ const (
 )
 
 const (
+	// Processing one share takes ~0.5-0.8s, so 10 shares seem a reasonable limit.
 	addShareLimit = 10
 )
 
