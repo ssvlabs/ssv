@@ -108,7 +108,7 @@ func TestSign_Error(t *testing.T) {
 	}}
 
 	_, err := privKey.Sign([]byte("test"))
-	require.ErrorContains(t, err, "missing public modulus")
+	require.Error(t, err) // We use a different implementation for linux, so the error text may be different.
 }
 
 func TestBase64Encoding(t *testing.T) {
