@@ -39,6 +39,11 @@ const (
 	pathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
 )
 
+const (
+	// Processing one share takes ~0.5-0.8s, so 10 shares seem a reasonable limit.
+	addShareLimit = 10
+)
+
 type Server struct {
 	logger          *zap.Logger
 	operatorPrivKey keys.OperatorPrivateKey
@@ -96,6 +101,12 @@ func (s *Server) Handler() func(ctx *fasthttp.RequestCtx) {
 	return func(ctx *fasthttp.RequestCtx) {
 		start := time.Now()
 		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("request panicked", zap.Any("panic", r))
+				ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+				ctx.SetBodyString("Internal server error")
+			}
+
 			route := string(ctx.Path())
 			matchedRoute := ctx.UserValue(router.MatchedRoutePathParam)
 			if matchedRouteStr, ok := matchedRoute.(string); ok {
@@ -162,6 +173,13 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	}
 
 	logger = logger.With(zap.Int("req_count", len(req.ShareKeys)))
+
+	if len(req.ShareKeys) > addShareLimit {
+		logger.Warn("requested too many shares to be added")
+		s.writeJSONErr(ctx, logger, fasthttp.StatusBadRequest,
+			fmt.Errorf("requested too many shares to be added: %d", len(req.ShareKeys)))
+		return
+	}
 
 	var importKeystoreReq web3signer.ImportKeystoreRequest
 	for i, share := range req.ShareKeys {
@@ -346,7 +364,6 @@ func (s *Server) handleSignValidator(ctx *fasthttp.RequestCtx) {
 	resp, err := s.remoteSigner.Sign(ctx, blsPubKey, req)
 	recordRemoteSignerOperation(ctx, opRemoteSignerValidatorSign, err, time.Since(start))
 	if err != nil {
-		logger = logger.With(zap.String("req", string(ctx.PostBody())))
 		s.handleWeb3SignerErr(ctx, logger, resp, err)
 		return
 	}
