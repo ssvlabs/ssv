@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"

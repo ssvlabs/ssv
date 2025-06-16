@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
+
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 var mockState = &State{

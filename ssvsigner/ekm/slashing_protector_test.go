@@ -13,12 +13,11 @@ import (
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ssvlabs/ssv/networkconfig"
-
 	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestSlashing(t *testing.T) {

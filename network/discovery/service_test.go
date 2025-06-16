@@ -7,10 +7,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/records"
@@ -303,7 +304,8 @@ func TestDiscV5ServiceListenerType(t *testing.T) {
 
 // TestServiceAddressConfiguration tests the address configuration logic in the discovery service.
 // It verifies that host addresses and DNS names are correctly resolved and applied
-// to the local node, including fallback behavior when DNS resolution fails.
+// to the local node. HostDNS and HostAddress are mutually exclusive - providing both
+// results in an error.
 func TestServiceAddressConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -330,15 +332,14 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			checkLoopback: true, // expect "localhost" to resolve to a loopback address
 		},
 		{
-			name:          "both HostAddress and HostDNS",
-			hostAddress:   "192.168.1.100",
-			hostDNS:       "localhost",
-			expectError:   false,
-			checkLoopback: true, // DNS takes precedence over static address
+			name:        "both HostAddress and HostDNS",
+			hostAddress: "192.168.1.100",
+			hostDNS:     "localhost",
+			expectError: true,
 		},
 		{
-			name:        "non-resolvable HostDNS with fallback to HostAddress",
-			hostAddress: "192.168.1.100",
+			name:        "non-resolvable HostDNS",
+			hostAddress: "",
 			hostDNS:     "nonexistent-domain-qwerty.local",
 			expectError: true,
 		},
@@ -375,10 +376,6 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			if tc.expectError {
 				require.Error(t, err)
 
-				// for invalid address test case, check for the specific error message
-				if tc.name == "invalid host address format" {
-					require.ErrorContains(t, err, "invalid host address given")
-				}
 				return
 			}
 			require.NoError(t, err)

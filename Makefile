@@ -26,7 +26,6 @@ COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
 	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
-UNFORMATTED=$(shell gofmt -l .)
 
 GET_TOOL=go get -modfile=tool.mod -tool
 RUN_TOOL=go tool -modfile=tool.mod
@@ -35,10 +34,6 @@ SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 .PHONY: lint
 lint:
 	$(RUN_TOOL) golangci-lint run -v ./...
-	@if [ ! -z "${UNFORMATTED}" ]; then \
-		echo "Some files requires formatting, please run 'go fmt ./...'"; \
-		exit 1; \
-	fi
 
 .PHONY: ssvsigner-lint
 ssvsigner-lint:
@@ -183,6 +178,7 @@ generate:
 
 .PHONY: tools
 tools:
+	$(GET_TOOL) golang.org/x/tools/cmd/goimports
 	$(GET_TOOL) go.uber.org/mock/mockgen
 	$(GET_TOOL) github.com/ferranbt/fastssz/sszgen
 	$(GET_TOOL) github.com/ethereum/go-ethereum/cmd/abigen
@@ -191,7 +187,12 @@ tools:
 
 .PHONY: format
 format:
-	# TODO - instead of filtering out mock-related files we should ignore all generated files once
-	# goimports allows for it - https://github.com/golang/go/issues/71676 - but until then it is
-	# a temporary work-around
-	goimports -l -w -local github.com/ssvlabs/ssv/ $$(find . -name '*.go' -not -path "*mock*")
+	# `goimports` doesn't support simplify option ("-s"), hence we run `gofmt` separately
+	# just for that - see https://github.com/golang/go/issues/21476 for details.
+	gofmt -s -w $$(find . -name '*.go' -not -path "*mock*")
+	# Formatters such as goimports do not deem necessary to "skip" generated code and
+	# rather want generators to generate code that complies with the desired formats
+	# (see https://github.com/golang/go/issues/71676 for details). In practice however
+	# it's not always possible to fix that on the generator side, so we have to use a
+	# work-around here to filter out generated files on our own.
+	$(RUN_TOOL) goimports -l -w -local github.com/ssvlabs/ssv/ $$(find . -name '*.go' -not -path "*mock*")
