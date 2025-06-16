@@ -39,6 +39,15 @@ lint:
 		exit 1; \
 	fi
 
+.PHONY: ssvsigner-lint
+ssvsigner-lint:
+	cd ssvsigner && $(RUN_TOOL) golangci-lint run -v ./... && cd ..
+	@if [ ! -z "${UNFORMATTED}" ]; then \
+		echo "Some files requires formatting, please run 'go fmt ./...'"; \
+		exit 1; \
+	fi
+
+
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
@@ -53,6 +62,15 @@ integration-test:
 unit-test:
 	@echo "Running unit tests"
 	@go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
+
+.PHONY: ssvsigner-test
+ssvsigner-test:
+	@echo "Running ssv-signer unit tests"
+	@cd ssvsigner && go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 ./... && cd ..
+
+.PHONY: unit-test-with-signer
+unit-test-with-signer: unit-test ssvsigner-test
+	@echo "Running all tests including ssv-signer"
 
 .PHONY: spec-test
 spec-test:
