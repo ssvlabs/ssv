@@ -4,15 +4,22 @@ End-to-end testing suite for SSV-Signer slashing protection functionality.
 
 ## Overview
 
-Tests the complete signing flow with triple-layer slashing protection:
-**SSV Node** → **LocalKeyManager** + **RemoteKeyManager** → **SSV-Signer** → **Web3Signer** → **PostgreSQL**
+This E2E suite tests all three slashing protection databases:
+
+1. **LocalKeyManager's BadgerDB** - Used when SSV Node signs directly
+2. **RemoteKeyManager's BadgerDB** - Used when SSV-Signer handles signing
+3. **Web3Signer's PostgreSQL** - Final protection layer for remote signing
+
+The tests validate that each database correctly prevents slashable operations in both signing paths:
+- **Local path**: SSV Node with LocalKeyManager → Direct signing
+- **Remote path**: SSV Node → SSV-Signer with RemoteKeyManager → Web3Signer
 
 ## Test Environment
 
 - **Web3Signer 25.4.1** with PostgreSQL slashing protection database
-- **Mainnet beacon configuration** for realistic testing
 - **Docker containers** managed via testcontainers-go
-- **Shared test suite** for easy test reuse across signing domains
+
+> **Note**: Database migrations in `testdata/migrations/` are copied from Web3Signer. When upgrading Web3Signer versions, check for new migrations at: https://github.com/ConsenSys/web3signer/tree/main/slashing-protection/src/main/resources/migrations/postgresql
 
 ## Test Structure
 
@@ -24,7 +31,7 @@ e2e/
 │   ├── attestation_test.go     # Attestation slashing tests
 │   └── proposer_test.go        # Block proposal slashing tests
 ├── testenv/                    # Container & environment management
-└── testdata/migrations/        # Web3Signer DB schema (V1-V12)
+└── testdata/migrations/        # Web3Signer DB migrations
 ```
 
 ## Available Tests
@@ -77,8 +84,7 @@ go test ./signing/ -run TestBlockSlashing            # Proposer tests only
 ## Key Features
 
 - **Triple Protection**: Tests LocalKeyManager, RemoteKeyManager, and Web3Signer slashing protection
-- **Real Network Config**: Uses mainnet beacon parameters and fork schedule
-- **Container Isolation**: Fresh environment per test with persistent volumes
+- **Container Isolation**: Fresh environment per test with persistent volumes to test slashing protection database persistence across restarts
 - **Comprehensive Coverage**: Slashing protection, concurrency, and restart scenarios
 - **Easy Extension**: Shared test suite enables adding new signing domains
 
