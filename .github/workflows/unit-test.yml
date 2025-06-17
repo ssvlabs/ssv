@@ -4,9 +4,9 @@ on:
   push:
     branches:
       - "**"
-#  pull_request:
-#    branches:
-#      - "**"
+  pull_request:
+    branches:
+      - stage
 
   workflow_dispatch:
 
@@ -30,5 +30,7 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out,./ssvsigner/coverage.out
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
