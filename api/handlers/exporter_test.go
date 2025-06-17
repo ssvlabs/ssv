@@ -484,7 +484,7 @@ type mockTraceStore struct {
 	GetCommitteeDutiesFunc      func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error)
 	GetCommitteeIDFunc          func(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
 	GetValidatorDecidedsFunc    func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
-	GetCommitteeDecidedsFunc    func(slot phase0.Slot, pubKey spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetCommitteeDecidedsFunc    func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
 }
@@ -544,8 +544,7 @@ func (m *mockTraceStore) GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes
 	if m.GetCommitteeDecidedsFunc != nil {
 		return m.GetCommitteeDecidedsFunc(slot, pubKey)
 	}
-	key := fmt.Sprintf("%d-%s", slot, hex.EncodeToString(pubKey[:]))
-	return m.committeeDecideds[key], nil
+	return nil, nil
 }
 
 func (m *mockTraceStore) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
@@ -615,7 +614,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			name: "valid request - committee decideds",
 			request: map[string]any{
 				"from":    100,
-				"to":      200,
+				"to":      100,
 				"roles":   []string{"ATTESTER"},
 				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
 			},
@@ -623,7 +622,17 @@ func TestExporterTraceDecideds(t *testing.T) {
 				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
 				var pk spectypes.ValidatorPK
 				copy(pk[:], pkBytes)
-				store.AddCommitteeDecided(phase0.Slot(150), pk, []uint64{1, 2, 3})
+
+				// Mock GetCommitteeDecideds to return entries for the requested pubkey
+				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+					return []qbftstorage.ParticipantsRangeEntry{
+						{
+							Slot:    slot,
+							PubKey:  pk,
+							Signers: []uint64{1, 2, 3},
+						},
+					}, nil
+				}
 			},
 			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -633,10 +642,11 @@ func TestExporterTraceDecideds(t *testing.T) {
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Data, 1)
 				assert.Equal(t, "ATTESTER", resp.Data[0].Role)
-				assert.Equal(t, uint64(150), resp.Data[0].Slot)
+				assert.Equal(t, uint64(100), resp.Data[0].Slot)
 				assert.Equal(t, []uint64{1, 2, 3}, resp.Data[0].Message.Signers)
 			},
-		}, {
+		},
+		{
 			name: "valid request - empty signers array - proposer role",
 			request: map[string]any{
 				"from":    100,
@@ -725,6 +735,133 @@ func TestExporterTraceDecideds(t *testing.T) {
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				assert.Equal(t, "'from' must be less than or equal to 'to'", resp.Message)
+			},
+		},
+		{
+			name: "valid request - all duties in slot range",
+			request: map[string]any{
+				"from":  100,
+				"to":    101,
+				"roles": []string{"ATTESTER", "PROPOSER"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				// Mock GetAllValidatorDecideds to return entries for multiple validators
+				pk1Bytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				pk2Bytes := common.Hex2Bytes("824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170")
+
+				var pk1, pk2 spectypes.ValidatorPK
+				copy(pk1[:], pk1Bytes)
+				copy(pk2[:], pk2Bytes)
+				store.GetAllValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+					return []qbftstorage.ParticipantsRangeEntry{
+						{
+							Slot:    slot,
+							PubKey:  pk1,
+							Signers: []uint64{1, 2, 3},
+						},
+						{
+							Slot:    slot,
+							PubKey:  pk2,
+							Signers: []uint64{4, 5, 6},
+						},
+					}, nil
+				}
+				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+					return []qbftstorage.ParticipantsRangeEntry{
+						{
+							Slot:    slot,
+							PubKey:  pk1,
+							Signers: []uint64{1, 2, 3},
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 6) // 2 validators * 2 roles + 1 committee * 2 roles
+
+				// Verify we have entries for both roles
+				roles := map[string]bool{}
+				for _, item := range resp.Data {
+					roles[item.Role] = true
+				}
+				assert.True(t, roles["ATTESTER"])
+				assert.True(t, roles["PROPOSER"])
+
+				// Verify we have entries for both validators
+				pubkeys := map[string]bool{}
+				for _, item := range resp.Data {
+					pubkeys[item.PublicKey] = true
+				}
+				assert.True(t, pubkeys["b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"])
+				assert.True(t, pubkeys["824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"])
+			},
+		},
+		{
+			name: "valid request - only duties for provided pubkeys in slot range",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{"SYNC_COMMITTEE", "PROPOSER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pk1Bytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				pk2Bytes := common.Hex2Bytes("824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170")
+
+				var pk1, pk2 spectypes.ValidatorPK
+				copy(pk1[:], pk1Bytes)
+				copy(pk2[:], pk2Bytes)
+
+				// Mock GetValidatorDecideds to return entries only for the requested pubkey
+				store.GetValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error) {
+					return []qbftstorage.ParticipantsRangeEntry{
+						{
+							Slot:    slot,
+							PubKey:  pk1,
+							Signers: []uint64{1, 2, 3},
+						},
+					}, nil
+				}
+
+				// Mock GetCommitteeDecideds to return entries only for the requested pubkey
+				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+					return []qbftstorage.ParticipantsRangeEntry{
+						{
+							Slot:    slot,
+							PubKey:  pk1,
+							Signers: []uint64{1, 2, 3},
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 2) // 1 validator * 2 roles + 1 committee * 1 role
+
+				// Verify we have entries for both roles
+				roles := map[string]bool{}
+				for _, item := range resp.Data {
+					roles[item.Role] = true
+				}
+				assert.True(t, roles["SYNC_COMMITTEE"])
+				assert.True(t, roles["PROPOSER"])
+
+				// Verify we only have entries for the requested pubkey
+				pubkeys := map[string]bool{}
+				for _, item := range resp.Data {
+					pubkeys[item.PublicKey] = true
+				}
+				assert.True(t, pubkeys["b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"])
+				assert.False(t, pubkeys["824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"])
 			},
 		},
 	}
@@ -1041,6 +1178,94 @@ func TestExporterValidatorTraces(t *testing.T) {
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				assert.Equal(t, "validator not found: 1", resp.Message)
+			},
+		},
+		{
+			name: "valid request - attester role",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{"ATTESTER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				// Mock GetCommitteeID to return a committee ID and validator index
+				store.GetCommitteeIDFunc = func(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
+					return spectypes.CommitteeID{1}, 1, nil
+				}
+
+				// Mock GetCommitteeDuty to return a committee duty
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error) {
+					return &exportertypes.CommitteeDutyTrace{
+						Slot: slot,
+						ConsensusTrace: exportertypes.ConsensusTrace{
+							Rounds: []*exportertypes.RoundTrace{
+								{
+									Proposer: spectypes.OperatorID(1),
+									ProposalTrace: &exportertypes.ProposalTrace{
+										QBFTTrace: exportertypes.QBFTTrace{
+											Round:        1,
+											BeaconRoot:   phase0.Root{1},
+											Signer:       spectypes.OperatorID(1),
+											ReceivedTime: uint64(time.Now().Unix()),
+										},
+									},
+								},
+							},
+							Decideds: []*exportertypes.DecidedTrace{
+								{
+									Round:        1,
+									BeaconRoot:   phase0.Root{1},
+									Signers:      []spectypes.OperatorID{1, 2},
+									ReceivedTime: uint64(time.Now().Unix()),
+								},
+							},
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp validatorTraceResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, phase0.Slot(100), resp.Data[0].Slot)
+				assert.Equal(t, "ATTESTER", resp.Data[0].Role)
+				assert.Equal(t, phase0.ValidatorIndex(1), resp.Data[0].Validator)
+			},
+		},
+		{
+			name: "valid request - attester role with no duty",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{"ATTESTER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				// Mock GetCommitteeID to return a committee ID and validator index
+				store.GetCommitteeIDFunc = func(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error) {
+					return spectypes.CommitteeID{1}, 1, nil
+				}
+
+				// Mock GetCommitteeDuty to return ErrNotFound
+				store.GetCommitteeDutyFunc = func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error) {
+					return nil, dutytracer.ErrNotFound
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp validatorTraceResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 0) // No duties should be returned when ErrNotFound
 			},
 		},
 	}
