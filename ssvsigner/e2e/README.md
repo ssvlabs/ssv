@@ -45,16 +45,33 @@ e2e/
 
 ## Running Tests
 
+### Requirements
+
+- Docker (for testcontainers)
+- Go 1.21+
+- ~2GB available memory for containers
+
+### Quick Start
+
+The easiest way to run tests is using the provided Makefile:
+
 ```bash
-# Run all signing tests
-go test ./signing/
+# From ssvsigner directory
+make test-e2e     # Builds Docker image and runs all tests
+```
 
-# Run specific domain tests
-go test ./signing/ -run TestAttestationSlashing
-go test ./signing/ -run TestBlockSlashing
+### Manual Testing
 
-# Run with longer timeout for slow systems
-go test ./signing/ -timeout=300s
+If you prefer to run tests manually:
+
+```bash
+# Build Docker image (from repository root)
+docker build -f ssvsigner/Dockerfile -t ssv-signer:latest .
+
+# Run tests (from ssvsigner/e2e directory)
+go test ./signing/                                    # All tests
+go test ./signing/ -run TestAttestationSlashing      # Attestation tests only
+go test ./signing/ -run TestBlockSlashing            # Proposer tests only
 ```
 
 ## Key Features
@@ -65,8 +82,3 @@ go test ./signing/ -timeout=300s
 - **Comprehensive Coverage**: Slashing protection, concurrency, and restart scenarios
 - **Easy Extension**: Shared test suite enables adding new signing domains
 
-## Requirements
-
-- Docker (for testcontainers)
-- Go 1.21+
-- ~2GB available memory for containers
