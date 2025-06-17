@@ -55,7 +55,7 @@ e2e/
 ### Requirements
 
 - Docker (for testcontainers)
-- Go 1.21+
+- Go 1.24+
 - ~2GB available memory for containers
 
 ### Quick Start
