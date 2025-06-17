@@ -29,8 +29,8 @@ endif
 UNFORMATTED=$(shell gofmt -l .)
 
 GET_TOOL=go get -modfile=tool.mod -tool
-RUN_TOOL=go run -modfile=tool.mod
-SSVSIGNER_RUN_TOOL=go run -modfile=../tool.mod
+RUN_TOOL=go tool -modfile=tool.mod
+SSVSIGNER_RUN_TOOL=go tool -modfile=../tool.mod
 
 .PHONY: lint
 lint:
