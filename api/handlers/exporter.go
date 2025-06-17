@@ -368,7 +368,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		for _, r := range request.Roles {
 			role := spectypes.BeaconRole(r)
 			for _, pubkey := range pubkeys {
-				if isSyncCommitteeRole(role) {
+				if role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester {
 					committeeID, index, err := e.traceStore.GetCommitteeID(slot, pubkey)
 					if err != nil {
 						return api.Error(fmt.Errorf("error getting committee ID: %w", err))
@@ -407,10 +407,6 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	return api.Render(w, r, toValidatorTraceResponse(results))
-}
-
-func isSyncCommitteeRole(role spectypes.BeaconRole) bool {
-	return role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester
 }
 
 func toValidatorTraceResponse(duties []*dutytracer.ValidatorDutyTrace) *validatorTraceResponse {
