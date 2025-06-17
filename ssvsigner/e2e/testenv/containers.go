@@ -152,7 +152,7 @@ func (env *TestEnvironment) startSSVSigner() error {
 	operatorKeyB64 := env.operatorKey.Base64()
 
 	ssvSignerReq := testcontainers.ContainerRequest{
-		Image:        "ssv-signer-test:latest",
+		Image:        "ssv-signer:latest",
 		ExposedPorts: []string{"8080/tcp"},
 		Networks:     []string{env.networkName},
 		NetworkAliases: map[string][]string{
