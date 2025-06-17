@@ -13,25 +13,23 @@ import (
 
 // startContainers starts all Docker containers in the correct order
 func (env *TestEnvironment) startContainers() error {
-	var err error
-
-	if err = env.createNetwork(); err != nil {
+	if err := env.createNetwork(); err != nil {
 		return fmt.Errorf("failed to create network: %w", err)
 	}
 
-	if err = env.startPostgreSQL(); err != nil {
+	if err := env.startPostgreSQL(); err != nil {
 		return fmt.Errorf("failed to start PostgreSQL: %w", err)
 	}
 
-	if err = env.applyMigrations(); err != nil {
+	if err := env.applyMigrations(); err != nil {
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
-	if err = env.startWeb3Signer(); err != nil {
+	if err := env.startWeb3Signer(); err != nil {
 		return fmt.Errorf("failed to start Web3Signer: %w", err)
 	}
 
-	if err = env.startSSVSigner(); err != nil {
+	if err := env.startSSVSigner(); err != nil {
 		return fmt.Errorf("failed to start SSV-Signer: %w", err)
 	}
 
@@ -207,7 +205,7 @@ func (env *TestEnvironment) applyMigrations() error {
 		return fmt.Errorf("failed to ping postgres: %w", err)
 	}
 
-	env.postgresDB = db
+	env.web3SignerPostgresDB = db
 
 	if err = env.createMigrationTable(db); err != nil {
 		return fmt.Errorf("failed to create migration table: %w", err)

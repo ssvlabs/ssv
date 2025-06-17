@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -135,8 +136,8 @@ func (s *E2ETestSuite) SignWeb3Signer(
 	return resp.Signature[:], root, nil
 }
 
-// RequireAddValidator sets up a validator in all key managers and verifies it's properly registered
-func (s *E2ETestSuite) RequireAddValidator(ctx context.Context) *common.ValidatorKeyPair {
+// AddValidator sets up a validator in all key managers and verifies it's properly registered
+func (s *E2ETestSuite) AddValidator(ctx context.Context) *common.ValidatorKeyPair {
 	localKeyManager := s.env.GetLocalKeyManager()
 	remoteKeyManager := s.env.GetRemoteKeyManager()
 	ssvSignerClient := s.env.GetSSVSignerClient()
@@ -150,6 +151,7 @@ func (s *E2ETestSuite) RequireAddValidator(ctx context.Context) *common.Validato
 	err = localKeyManager.AddShare(ctx, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
 	s.Require().NoError(err, "Failed to add share to local key manager")
 
+	// Verify SSV-Signer operational status and that validator was successfully added
 	validators, err := ssvSignerClient.ListValidators(ctx)
 	s.Require().NoError(err, "Failed to list validators")
 	s.Require().True(slices.Contains(validators, validatorKeyPair.BLSPubKey))
@@ -211,7 +213,7 @@ func (s *E2ETestSuite) RequireFailedSigning(
 		errMsg = "slashable proposal"
 
 	default:
-		return
+		panic(fmt.Sprintf("unsupported domain type: %s", domainType))
 	}
 
 	epoch := s.env.GetMockBeacon().EstimatedEpochAtSlot(slot)
