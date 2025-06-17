@@ -13,6 +13,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
@@ -315,7 +316,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				return
 			default:
 				nextBlockToProcess, err := ec.streamLogsToChan(ctx, logs, fromBlock)
-				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
+				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) || errors.Is(err, rpc.ErrClientQuit) {
 					// Closed gracefully.
 					return
 				}
@@ -544,31 +545,34 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	return nil
 }
 
-// reconnect tries to reconnect multiple times with an exponent interval.
-// It panics when reconnecting limit is reached.
-// It must not be called twice in parallel.
+// reconnect tries to reconnect multiple times with an exponent interval. It panics when
+// reconnect-limit is reached since SSV node can't operate without stable connection to
+// Ethereum execution client.
+// It must not be called concurrently.
 func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	logger := ec.logger.With(fields.Address(ec.nodeAddr))
 
 	start := time.Now()
+	success := false
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
 		logger.Info("reconnecting")
 		if err := ec.connect(ctx); err != nil {
 			if ec.isClosed() {
 				return true, false
 			}
-			// continue until reaching to limit, and then panic as Ethereum execution client connection is required
 			if lastTick >= ec.reconnectionMaxInterval {
-				logger.Panic("failed to reconnect", zap.Error(err))
+				logger.Panic("Failed to reconnect to Ethereum execution client", zap.Error(err))
 			} else {
-				logger.Warn("could not reconnect, still trying", zap.Error(err))
+				logger.Warn("Could not reconnect to Ethereum execution client, still trying", zap.Error(err))
 			}
 			return false, false
 		}
+		success = true
 		return true, false
 	}, ec.reconnectionInitialInterval, ec.reconnectionMaxInterval+(ec.reconnectionInitialInterval))
-
-	logger.Info("reconnected to execution client", zap.Duration("took", time.Since(start)))
+	if success {
+		logger.Info("reconnected to execution client", zap.Duration("took", time.Since(start)))
+	}
 }
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {

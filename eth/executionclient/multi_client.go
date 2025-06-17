@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -260,7 +261,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				// fromBlock's value in the outer scope is updated here, so this function needs to be a closure
 				f := func(client SingleClientProvider) (any, error) {
 					nextBlockToProcess, err := client.streamLogsToChan(ctx, logs, fromBlock)
-					if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
+					if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) || errors.Is(err, rpc.ErrClientQuit) {
 						return nil, err
 					}
 
@@ -471,7 +472,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		}
 
 		v, err := f(client)
-		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
+		if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) || errors.Is(err, rpc.ErrClientQuit) {
 			logger.Debug("received graceful closure from client", zap.Error(err))
 			recordMultiClientMethodCall(ctx, method, mc.nodeAddrs[clientIndex], time.Since(startTime), err)
 			return v, err
