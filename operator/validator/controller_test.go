@@ -97,7 +97,7 @@ func TestNewController(t *testing.T) {
 		RecipientsStorage: recipientStorage,
 		Context:           t.Context(),
 	}
-	control := NewController(logger, controllerOptions, exporter.ExporterOptions{})
+	control := NewController(logger, controllerOptions, exporter.Options{})
 	require.IsType(t, &controller{}, control)
 }
 
@@ -229,7 +229,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				validatorsMap:     mockValidatorsMap,
 				validatorStore:    mockValidatorStore,
 				validatorOptions: validator.Options{
-					ExporterOptions: exporter.ExporterOptions{
+					ExporterOptions: exporter.Options{
 						Enabled: true,
 					},
 				},

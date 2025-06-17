@@ -1410,7 +1410,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		StorageMap:        storageMap,
 		OperatorDataStore: operatorDataStore,
 		ValidatorsMap:     validators.New(ctx),
-	}, exporter.ExporterOptions{})
+	}, exporter.Options{})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)

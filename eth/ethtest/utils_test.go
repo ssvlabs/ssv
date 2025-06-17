@@ -211,7 +211,7 @@ func setupEventHandler(
 		BeaconSigner:      keyManager,
 		StorageMap:        storageMap,
 		OperatorDataStore: operatorDataStore,
-	}, exporter.ExporterOptions{})
+	}, exporter.Options{})
 
 	parser := eventparser.New(contractFilterer)
 

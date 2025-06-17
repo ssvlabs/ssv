@@ -50,7 +50,7 @@ type Node struct {
 	context          context.Context
 	validatorsCtrl   validator.Controller
 	validatorOptions validator.ControllerOptions
-	exporterOptions  exporter.ExporterOptions
+	exporterOptions  exporter.Options
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  executionclient.Provider
 	net              network.P2PNetwork
@@ -64,13 +64,13 @@ type Node struct {
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, exporterOptions exporter.ExporterOptions, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	node := &Node{
 		logger:           logger.Named(logging.NameOperator),
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
-		exporterOptions:  exporterOptions,
+		exporterOptions:  exporterOpts,
 		network:          opts.NetworkConfig,
 		consensusClient:  opts.BeaconNode,
 		executionClient:  opts.ExecutionClient,

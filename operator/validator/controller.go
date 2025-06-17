@@ -196,7 +196,7 @@ type controller struct {
 }
 
 // NewController creates a new validator controller instance
-func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporter.ExporterOptions) Controller {
+func NewController(logger *zap.Logger, options ControllerOptions, exporterOptions exporter.Options) Controller {
 	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
@@ -404,7 +404,7 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 		ncv = item.Value()
 	}
 
-	if c.validatorOptions.ExporterOptions.Mode == exporter.ExporterModeArchive {
+	if c.validatorOptions.ExporterOptions.Mode == exporter.ModeArchive {
 		// use new exporter functionality
 		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
 	}

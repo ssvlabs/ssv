@@ -35,7 +35,7 @@ type Options struct {
 	DutyRunners         runner.ValidatorDutyRunners
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
-	ExporterOptions     exporter.ExporterOptions // enables duty tracing
+	ExporterOptions     exporter.Options
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
