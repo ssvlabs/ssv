@@ -53,11 +53,10 @@ e2e/
 
 ### Quick Start
 
-The easiest way to run tests is using the provided Makefile:
-
+The easiest way to run tests is using the provided Makefile. Run the following from `ssv/ssvsigner/`
+directory (it will build Docker image and runs all tests):
 ```bash
-# From ssvsigner directory
-make test-e2e     # Builds Docker image and runs all tests
+make test-e2e
 ```
 
 ### Manual Testing
@@ -69,7 +68,7 @@ If you prefer to run tests manually:
 docker build -f ssvsigner/Dockerfile -t ssv-signer:latest .
 
 # Run tests (from ssvsigner/e2e directory)
-go test ./signing/                                    # All tests
+go test ./signing/                                   # All tests
 go test ./signing/ -run TestAttestationSlashing      # Attestation tests only
 go test ./signing/ -run TestBlockSlashing            # Proposer tests only
 ```
