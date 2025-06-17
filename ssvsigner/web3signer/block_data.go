@@ -15,8 +15,6 @@ import (
 
 // ConvertBlockToBeaconBlockData converts various block types to Web3Signer BeaconBlockData format
 func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
-	var ret *BeaconBlockData
-
 	switch v := obj.(type) {
 	case *capella.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
@@ -24,7 +22,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 			return nil, fmt.Errorf("could not hash beacon block (capella): %w", err)
 		}
 
-		ret = &BeaconBlockData{
+		return &BeaconBlockData{
 			Version: DataVersion(spec.DataVersionCapella),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
@@ -33,14 +31,15 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 				StateRoot:     v.StateRoot,
 				BodyRoot:      bodyRoot,
 			},
-		}
+		}, nil
+
 	case *deneb.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
 		if err != nil {
 			return nil, fmt.Errorf("could not hash beacon block (deneb): %w", err)
 		}
 
-		ret = &BeaconBlockData{
+		return &BeaconBlockData{
 			Version: DataVersion(spec.DataVersionDeneb),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
@@ -49,7 +48,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 				StateRoot:     v.StateRoot,
 				BodyRoot:      bodyRoot,
 			},
-		}
+		}, nil
 
 	case *electra.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
@@ -57,7 +56,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 			return nil, fmt.Errorf("could not hash beacon block (electra): %w", err)
 		}
 
-		ret = &BeaconBlockData{
+		return &BeaconBlockData{
 			Version: DataVersion(spec.DataVersionElectra),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
@@ -66,7 +65,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 				StateRoot:     v.StateRoot,
 				BodyRoot:      bodyRoot,
 			},
-		}
+		}, nil
 
 	case *apiv1capella.BlindedBeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
@@ -74,7 +73,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 			return nil, fmt.Errorf("could not hash blinded beacon block (capella): %w", err)
 		}
 
-		ret = &BeaconBlockData{
+		return &BeaconBlockData{
 			Version: DataVersion(spec.DataVersionCapella),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
@@ -83,7 +82,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 				StateRoot:     v.StateRoot,
 				BodyRoot:      bodyRoot,
 			},
-		}
+		}, nil
 
 	case *apiv1deneb.BlindedBeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
@@ -91,7 +90,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 			return nil, fmt.Errorf("could not hash blinded beacon block (deneb): %w", err)
 		}
 
-		ret = &BeaconBlockData{
+		return &BeaconBlockData{
 			Version: DataVersion(spec.DataVersionDeneb),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
@@ -100,7 +99,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 				StateRoot:     v.StateRoot,
 				BodyRoot:      bodyRoot,
 			},
-		}
+		}, nil
 
 	case *apiv1electra.BlindedBeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
@@ -108,7 +107,7 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 			return nil, fmt.Errorf("could not hash blinded beacon block (electra): %w", err)
 		}
 
-		ret = &BeaconBlockData{
+		return &BeaconBlockData{
 			Version: DataVersion(spec.DataVersionElectra),
 			BlockHeader: &phase0.BeaconBlockHeader{
 				Slot:          v.Slot,
@@ -117,11 +116,9 @@ func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
 				StateRoot:     v.StateRoot,
 				BodyRoot:      bodyRoot,
 			},
-		}
+		}, nil
 
 	default:
 		return nil, fmt.Errorf("obj type is unknown: %T", obj)
 	}
-
-	return ret, nil
 }

@@ -29,8 +29,8 @@ type TestEnvironment struct {
 	web3SignerContainer testcontainers.Container
 	ssvSignerContainer  testcontainers.Container
 
-	// Essential clients
-	postgresDB       *sql.DB
+	// Essential components
+	web3SignerPostgresDB *sql.DB
 	ssvSignerClient  *ssvsigner.Client
 	web3SignerClient *web3signer.Web3Signer
 	localKeyManager  *ekm.LocalKeyManager
@@ -134,8 +134,8 @@ func (env *TestEnvironment) Stop() error {
 		}
 	}
 
-	if env.postgresDB != nil {
-		env.postgresDB.Close()
+	if env.web3SignerPostgresDB != nil {
+		env.web3SignerPostgresDB.Close()
 	}
 
 	if env.localDB != nil {
@@ -233,9 +233,9 @@ func (env *TestEnvironment) RestartPostgreSQL() error {
 		env.postgresContainer = nil
 	}
 
-	if env.postgresDB != nil {
-		env.postgresDB.Close()
-		env.postgresDB = nil
+	if env.web3SignerPostgresDB != nil {
+		env.web3SignerPostgresDB.Close()
+		env.web3SignerPostgresDB = nil
 	}
 
 	if err := env.startPostgreSQL(); err != nil {
@@ -272,7 +272,7 @@ func (env *TestEnvironment) waitForPostgreSQLReady() error {
 
 	// Re-establish the environment's database connection
 	var err error
-	env.postgresDB, err = sql.Open("postgres", env.postgresConnStr)
+	env.web3SignerPostgresDB, err = sql.Open("postgres", env.postgresConnStr)
 	if err != nil {
 		return fmt.Errorf("failed to re-establish database connection: %w", err)
 	}

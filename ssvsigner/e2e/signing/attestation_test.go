@@ -29,7 +29,7 @@ func (s *AttestationSlashingTestSuite) TestAttestationDoubleVote() {
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
 	defer cancel()
 
-	validatorKeyPair := s.RequireAddValidator(ctx)
+	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing first valid attestation")
 	testEpoch := testCurrentEpoch + 1                                       // One epoch ahead of mocked current
@@ -82,7 +82,7 @@ func (s *AttestationSlashingTestSuite) TestAttestationSurroundingVote() {
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
 	defer cancel()
 
-	validatorKeyPair := s.RequireAddValidator(ctx)
+	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial narrow attestation")
 	testEpoch := testCurrentEpoch + 10
@@ -135,7 +135,7 @@ func (s *AttestationSlashingTestSuite) TestAttestationSurroundedVote() {
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
 	defer cancel()
 
-	validatorKeyPair := s.RequireAddValidator(ctx)
+	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing wide attestation first")
 	testEpoch := testCurrentEpoch + 10
@@ -188,7 +188,7 @@ func (s *AttestationSlashingTestSuite) TestAttestationValidProgression() {
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
 	defer cancel()
 
-	validatorKeyPair := s.RequireAddValidator(ctx)
+	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Creating sequence of valid progressive attestations")
 	startEpoch := testCurrentEpoch + 10
@@ -238,15 +238,14 @@ func (s *AttestationSlashingTestSuite) TestConcurrentAttestationSigning() {
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
 	defer cancel()
 
-	validatorKeyPair := s.RequireAddValidator(ctx)
+	validatorKeyPair := s.AddValidator(ctx)
 
-	s.T().Logf("🔀 Phase 1: Testing concurrent attestation signing")
 	testEpoch := testCurrentEpoch + 10
 	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
 	attestationData := common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
 	attestationData.BeaconBlockRoot = phase0.Root{0x42} // Distinguish this concurrent test attestation
 
-	s.T().Logf("🔀 Phase 2: Testing LocalKeyManager concurrent protection")
+	s.T().Logf("🔀 Phase 1: Testing LocalKeyManager concurrent protection")
 	numGoroutines := 12
 	localResults := make(chan struct {
 		sig  spectypes.Signature
@@ -288,7 +287,7 @@ func (s *AttestationSlashingTestSuite) TestConcurrentAttestationSigning() {
 		localErrors = append(localErrors, result.err)
 	}
 
-	// Verify that all successful operations produced identical results
+	// Verify that only 1 operation was successful
 	var validLocalSig spectypes.Signature
 	var validLocalRoot phase0.Root
 	successCount := 0
@@ -296,20 +295,14 @@ func (s *AttestationSlashingTestSuite) TestConcurrentAttestationSigning() {
 	for i, err := range localErrors {
 		if err == nil {
 			successCount++
-			if validLocalSig == nil {
-				validLocalSig = localSignatures[i]
-				validLocalRoot = localRoots[i]
-			} else {
-				// All successful signatures should be identical
-				s.Require().Equal(validLocalSig, localSignatures[i])
-				s.Require().Equal(validLocalRoot, localRoots[i])
-			}
+			validLocalSig = localSignatures[i]
+			validLocalRoot = localRoots[i]
 		}
 	}
+	// LocalKeyManager allows only 1 successful signature by design (slashing protection)
+	s.Require().Equal(1, successCount)
 
-	s.Require().Equal(successCount, 1)
-
-	s.T().Logf("🔀 Phase 3: Testing RemoteKeyManager concurrent protection")
+	s.T().Logf("🔀 Phase 2: Testing RemoteKeyManager concurrent protection")
 	remoteResults := make(chan struct {
 		sig  spectypes.Signature
 		root phase0.Root
@@ -347,7 +340,7 @@ func (s *AttestationSlashingTestSuite) TestConcurrentAttestationSigning() {
 		remoteErrors = append(remoteErrors, result.err)
 	}
 
-	// Verify that all successful operations produced identical results
+	// Verify that only 1 operation was successful
 	var validRemoteSig spectypes.Signature
 	var validRemoteRoot phase0.Root
 	remoteSuccessCount := 0
@@ -355,26 +348,18 @@ func (s *AttestationSlashingTestSuite) TestConcurrentAttestationSigning() {
 	for i, err := range remoteErrors {
 		if err == nil {
 			remoteSuccessCount++
-			if validRemoteSig == nil {
-				validRemoteSig = remoteSignatures[i]
-				validRemoteRoot = remoteRoots[i]
-			} else {
-				// All successful signatures should be identical
-				s.Require().Equal(validRemoteSig, remoteSignatures[i])
-				s.Require().Equal(validRemoteRoot, remoteRoots[i])
-			}
+			validRemoteSig = remoteSignatures[i]
+			validRemoteRoot = remoteRoots[i]
 		}
 	}
-
-	s.Require().Equal(remoteSuccessCount, 1)
+	// RemoteKeyManager allows only 1 successful signature by design (slashing protection)
+	s.Require().Equal(1, remoteSuccessCount)
 
 	// Verify that LocalKeyManager and RemoteKeyManager produced identical results
-	if validLocalSig != nil && validRemoteSig != nil {
-		s.Require().Equal(validLocalSig, validRemoteSig)
-		s.Require().Equal(validLocalRoot, validRemoteRoot)
-	}
+	s.Require().Equal(validLocalSig, validRemoteSig)
+	s.Require().Equal(validLocalRoot, validRemoteRoot)
 
-	s.T().Logf("🔀 Phase 4: Testing Web3Signer concurrent protection")
+	s.T().Logf("🔀 Phase 3: Testing Web3Signer concurrent protection")
 	web3SignerResults := make(chan struct {
 		sig  spectypes.Signature
 		root phase0.Root
@@ -413,8 +398,8 @@ func (s *AttestationSlashingTestSuite) TestConcurrentAttestationSigning() {
 		s.Require().Equal(validLocalSig, web3sig)
 	}
 
-	// Web3Signer allow same source/target/block root
-	s.Require().Equal(len(web3SignerSignatures), numGoroutines)
+	// Web3Signer allows same source/target/block root (no slashing protection violation)
+	s.Require().Equal(numGoroutines, len(web3SignerSignatures))
 }
 
 // TestWeb3SignerRestart validates slashing protection persistence across restarts.
@@ -427,7 +412,7 @@ func (s *AttestationSlashingTestSuite) TestWeb3SignerRestart() {
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
 	defer cancel()
 
-	validatorKeyPair := s.RequireAddValidator(ctx)
+	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial attestation before restart")
 	testEpoch := testCurrentEpoch + 10
@@ -480,7 +465,7 @@ func (s *AttestationSlashingTestSuite) TestPostgreSQLRestart() {
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
 	defer cancel()
 
-	validatorKeyPair := s.RequireAddValidator(ctx)
+	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial attestation to populate database")
 	testEpoch := testCurrentEpoch + 10
@@ -545,7 +530,7 @@ func (s *AttestationSlashingTestSuite) TestSSVSignerRestart() {
 	ctx, cancel := context.WithTimeout(s.GetContext(), 60*time.Second)
 	defer cancel()
 
-	validatorKeyPair := s.RequireAddValidator(ctx)
+	validatorKeyPair := s.AddValidator(ctx)
 
 	s.T().Logf("✍️ Phase 1: Signing initial attestation before restart")
 	testEpoch := testCurrentEpoch + 10
