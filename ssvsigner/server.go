@@ -246,6 +246,8 @@ func (s *Server) handleAddValidator(ctx *fasthttp.RequestCtx) {
 	s.writeJSON(ctx, logger, resp)
 }
 
+// keystoreJSONFromEncryptedShare doesn't pass errors through intentionally
+// to prevent exposing information related to private key.
 func (s *Server) keystoreJSONFromEncryptedShare(
 	encryptedPrivKey hexutil.Bytes,
 	sharePubKey phase0.BLSPubKey,
@@ -253,17 +255,17 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 ) (string, error) {
 	sharePrivKeyHex, err := s.operatorPrivKey.Decrypt(encryptedPrivKey)
 	if err != nil {
-		return "", fmt.Errorf("decrypt share: %w", err)
+		return "", fmt.Errorf("failed to decrypt share")
 	}
 
 	sharePrivKey, err := hex.DecodeString(strings.TrimPrefix(string(sharePrivKeyHex), "0x"))
 	if err != nil {
-		return "", fmt.Errorf("decode share private key from hex %s: %w", string(sharePrivKeyHex), err)
+		return "", fmt.Errorf("failed to decode share private key from hex for pubkey %s", sharePubKey.String())
 	}
 
 	sharePrivBLS := &bls.SecretKey{}
 	if err = sharePrivBLS.Deserialize(sharePrivKey); err != nil {
-		return "", fmt.Errorf("deserialize share private key: %w", err)
+		return "", fmt.Errorf("failed to deserialize share private key")
 	}
 
 	if !bytes.Equal(sharePrivBLS.GetPublicKey().Serialize(), sharePubKey[:]) {
@@ -272,7 +274,7 @@ func (s *Server) keystoreJSONFromEncryptedShare(
 
 	shareKeystore, err := keystore.GenerateShareKeystore(sharePrivBLS, sharePubKey, keystorePassword)
 	if err != nil {
-		return "", fmt.Errorf("generate share keystore: %w", err)
+		return "", fmt.Errorf("failed to generate share keystore")
 	}
 
 	keystoreJSON, err := json.Marshal(shareKeystore)
