@@ -43,7 +43,6 @@ func (env *TestEnvironment) createNetwork() error {
 		return fmt.Errorf("failed to create network: %w", err)
 	}
 
-	env.network = net
 	env.networkName = net.Name
 	return nil
 }
@@ -201,7 +200,7 @@ func (env *TestEnvironment) applyMigrations() error {
 	// Don't defer close here - we want to keep the connection open for the test environment
 
 	if err = db.Ping(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return fmt.Errorf("failed to ping postgres: %w", err)
 	}
 

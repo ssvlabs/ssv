@@ -31,19 +31,18 @@ type TestEnvironment struct {
 
 	// Essential components
 	web3SignerPostgresDB *sql.DB
-	ssvSignerClient  *ssvsigner.Client
-	web3SignerClient *web3signer.Web3Signer
-	localKeyManager  *ekm.LocalKeyManager
-	remoteKeyManager *ekm.RemoteKeyManager
-	localDB          basedb.Database
-	remoteDB         basedb.Database
+	ssvSignerClient      *ssvsigner.Client
+	web3SignerClient     *web3signer.Web3Signer
+	localKeyManager      *ekm.LocalKeyManager
+	remoteKeyManager     *ekm.RemoteKeyManager
+	localDB              basedb.Database
+	remoteDB             basedb.Database
 
 	// Mock beacon for controlled testing
 	mockController *gomock.Controller
 	mockBeacon     *networkconfig.MockBeacon
 
 	// Network
-	network     testcontainers.Network
 	networkName string
 
 	// Volumes
@@ -135,15 +134,15 @@ func (env *TestEnvironment) Stop() error {
 	}
 
 	if env.web3SignerPostgresDB != nil {
-		env.web3SignerPostgresDB.Close()
+		_ = env.web3SignerPostgresDB.Close()
 	}
 
 	if env.localDB != nil {
-		env.localDB.Close()
+		_ = env.localDB.Close()
 	}
 
 	if env.remoteDB != nil {
-		env.remoteDB.Close()
+		_ = env.remoteDB.Close()
 	}
 
 	// Clean up key manager directories
@@ -161,10 +160,6 @@ func (env *TestEnvironment) Stop() error {
 
 	if env.mockController != nil {
 		env.mockController.Finish()
-	}
-
-	if env.network != nil {
-		env.network.Remove(env.ctx)
 	}
 
 	if len(errors) > 0 {
@@ -234,7 +229,7 @@ func (env *TestEnvironment) RestartPostgreSQL() error {
 	}
 
 	if env.web3SignerPostgresDB != nil {
-		env.web3SignerPostgresDB.Close()
+		_ = env.web3SignerPostgresDB.Close()
 		env.web3SignerPostgresDB = nil
 	}
 
@@ -368,7 +363,7 @@ func (env *TestEnvironment) initializeWeb3SignerClient() error {
 // setupWeb3SignerVolume creates a persistent volume for Web3Signer keystore data
 func (env *TestEnvironment) setupWeb3SignerVolume() error {
 	volumeName := fmt.Sprintf("web3signer-data-%d", os.Getpid())
-	env.web3SignerVolume = testcontainers.VolumeMount(volumeName, testcontainers.ContainerMountTarget("/opt/web3signer"))
+	env.web3SignerVolume = testcontainers.VolumeMount(volumeName, "/opt/web3signer")
 	fmt.Printf("Created Web3Signer volume: %s (mounting to /opt/web3signer)\n", volumeName)
 	return nil
 }
@@ -376,7 +371,7 @@ func (env *TestEnvironment) setupWeb3SignerVolume() error {
 // setupPostgreSQLVolume creates a persistent volume for PostgreSQL database data
 func (env *TestEnvironment) setupPostgreSQLVolume() error {
 	volumeName := fmt.Sprintf("postgres-data-%d-%d", os.Getpid(), time.Now().UnixNano())
-	env.postgresVolume = testcontainers.VolumeMount(volumeName, testcontainers.ContainerMountTarget("/var/lib/postgresql/data"))
+	env.postgresVolume = testcontainers.VolumeMount(volumeName, "/var/lib/postgresql/data")
 	fmt.Printf("Created PostgreSQL volume: %s (mounting to /var/lib/postgresql/data)\n", volumeName)
 	return nil
 }
@@ -387,14 +382,14 @@ func (env *TestEnvironment) setupKeyManagerVolumes() error {
 
 	// Local KeyManager directory
 	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%d-%d", os.Getpid(), timestamp)
-	if err := os.MkdirAll(env.localKeyManagerPath, 0755); err != nil {
+	if err := os.MkdirAll(env.localKeyManagerPath, 0750); err != nil {
 		return fmt.Errorf("failed to create local key manager directory: %w", err)
 	}
 	fmt.Printf("Created LocalKeyManager directory: %s\n", env.localKeyManagerPath)
 
 	// Remote KeyManager directory
 	env.remoteKeyManagerPath = fmt.Sprintf("/tmp/remote-keymanager-data-%d-%d", os.Getpid(), timestamp+1)
-	if err := os.MkdirAll(env.remoteKeyManagerPath, 0755); err != nil {
+	if err := os.MkdirAll(env.remoteKeyManagerPath, 0750); err != nil {
 		return fmt.Errorf("failed to create remote key manager directory: %w", err)
 	}
 	fmt.Printf("Created RemoteKeyManager directory: %s\n", env.remoteKeyManagerPath)
