@@ -47,7 +47,7 @@ Below is a list of useful attributes to help troubleshoot issues related to duty
 - `ssv.runner.role`
 - `ssv.beacon.role`
 - `ssv.validator.duty.id`  
-  **Examples:**  
+  **Duty ID Examples:**  
   - `COMMITTEE_1_2_3_4-e20897-s668706`  
     (Operators: 1,2,3,4 — Epoch: 20897 — Slot: 668706)  
   - `VALIDATOR_REGISTRATION-e20888-s668436-v843156`  
