@@ -2,6 +2,8 @@ package commons
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -41,6 +43,10 @@ func CommitteeTopicID(cid spectypes.CommitteeID) []string {
 	return []string{fmt.Sprintf("%d", CommitteeSubnet(cid))}
 }
 
+func CommitteeTopicIDPostFork(committee []spectypes.OperatorID) []string {
+	return []string{fmt.Sprintf("%d", CommitteeSubnetPostFork(committee))}
+}
+
 // GetTopicFullName returns the topic full name, including prefix
 func GetTopicFullName(baseName string) string {
 	return fmt.Sprintf("%s.%s", topicPrefix, baseName)
@@ -54,6 +60,28 @@ func GetTopicBaseName(topicName string) string {
 // CommitteeSubnet returns the subnet for the given committee
 func CommitteeSubnet(cid spectypes.CommitteeID) uint64 {
 	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), bigIntSubnetsCount)
+	return subnet.Uint64()
+}
+
+func CommitteeSubnetPostFork(committee []spectypes.OperatorID) uint64 {
+	if len(committee) < 4 {
+		panic(fmt.Sprintf("committee is too short: %v", committee))
+	}
+
+	var lowestHash *big.Int
+
+	for _, v := range committee {
+		operatorBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(operatorBytes[:], v)
+		operatorHash := sha256.Sum256(operatorBytes)
+		operatorHashNum := new(big.Int).SetBytes(operatorHash[:])
+
+		if lowestHash == nil || operatorHashNum.Cmp(lowestHash) == -1 {
+			lowestHash = operatorHashNum
+		}
+	}
+
+	subnet := new(big.Int).Mod(lowestHash, bigIntSubnetsCount)
 	return subnet.Uint64()
 }
 
