@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +22,9 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -44,8 +46,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -166,9 +166,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 		syncHighestDecidedResponse error
 		getValidatorDataResponse   error
 	}{
-		{"no shares of non committee", nil, nil, nil},
-		{"set up non committee validators", sharesWithMetadata, nil, nil},
-		{"set up non committee validators without metadata", sharesWithoutMetadata, nil, nil},
+		{"no shares of non-committee", nil, nil, nil},
+		{"set up non-committee validators", sharesWithMetadata, nil, nil},
+		{"set up non-committee validators without metadata", sharesWithoutMetadata, nil, nil},
 		{"fail to sync highest decided", sharesWithMetadata, errors.New("failed to sync highest decided"), nil},
 		{"fail to update validators metadata", sharesWithMetadata, nil, errors.New("could not update all validators")},
 	}
@@ -245,70 +245,74 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
 	}
-	ctr := setupController(t, logger, controllerOptions) // none committee
+	ctr := setupController(t, logger, controllerOptions) // non-committee
 
-	// Only exporter handles non committee messages
+	// Only exporter handles non-committee messages
 	ctr.validatorOptions.Exporter = true
 
 	go ctr.handleRouterMessages()
 
-	var wg sync.WaitGroup
-
+	receivedMsgs := make(chan network.DecodedSSVMessage, 1)
 	ctr.messageWorker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
-		wg.Done()
+		receivedMsgs <- msg
 		return nil
 	})
-
-	wg.Add(3)
 
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
+			MsgType: spectypes.SSVConsensusMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    generateDecidedMessage(t, identifier),
 		},
 	})
-
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
+			MsgType: spectypes.SSVConsensusMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    generateChangeRoundMsg(t, identifier),
 		},
 	})
-
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-			MsgType: message.SSVSyncMsgType,
-			MsgID:   identifier,
-			Data:    []byte("data"),
-		},
-	})
-
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-			MsgType: 123,
-			MsgID:   identifier,
-			Data:    []byte("data"),
-		},
-	})
-
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgType: message.SSVSyncMsgType, // this message will be skipped
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
+	})
+	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: 123, // this message will be skipped
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
+	})
+	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    []byte("data2"),
 		},
 	})
 
-	go func() {
-		time.Sleep(time.Second * 4)
-		panic("time out!")
-	}()
-
-	wg.Wait()
+	receivedMsgsCnt := 0
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case msg := <-receivedMsgs:
+			logger.Debug("received message", zap.Any("msg", msg))
+			receivedMsgsCnt++
+			if receivedMsgsCnt == 3 {
+				// Wait a bit and check in case there are unexpected messages still to come.
+				time.Sleep(100 * time.Millisecond)
+				require.Equal(t, 0, len(receivedMsgs), "unexpectedly received more than 3 messages")
+				return
+			}
+		case <-timeout:
+			require.Fail(t, "timed out waiting for all 3 messages to arrive")
+		}
+	}
 }
 
 func TestSetupValidators(t *testing.T) {
