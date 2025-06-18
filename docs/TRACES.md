@@ -42,15 +42,14 @@ This allows constructing more precise TraceQL queries.
 
 Below is a list of useful attributes to help troubleshoot issues related to duty execution:
 
-- `ssv.beacon.slot`
+- `ssv.beacon.slot` (_ATTESTER_, _AGGREGATOR_, _PROPOSER_, _SYNC_COMMITTEE_, _SYNC_COMMITTEE_CONTRIBUTION_, _VALIDATOR_REGISTRATION_, _VOLUNTARY_EXIT_)
 - `ssv.beacon.epoch`
-- `ssv.runner.role`
+- `ssv.runner.role` (_COMMITTEE_RUNNER_, _AGGREGATOR_RUNNER_, _PROPOSER_RUNNER_, _SYNC_COMMITTEE_CONTRIBUTION_RUNNER_, _VALIDATOR_REGISTRATION_RUNNER_, _VOLUNTARY_EXIT_RUNNER_)
 - `ssv.beacon.role`
 - `ssv.validator.duty.id`  
-  **Duty ID Examples:**  
-  - `COMMITTEE_1_2_3_4-e20897-s668706`  
+  - (committee example)`COMMITTEE_1_2_3_4-e20897-s668706`  
     (Operators: 1,2,3,4 — Epoch: 20897 — Slot: 668706)  
-  - `VALIDATOR_REGISTRATION-e20888-s668436-v843156`  
+  - (validator example)`VALIDATOR_REGISTRATION-e20888-s668436-v843156`  
     (Epoch: 20888 — Slot: 668436 — Validator Index: 843156)
 
 ### Queries
