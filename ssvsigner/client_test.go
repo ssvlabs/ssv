@@ -175,7 +175,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			err := s.client.AddValidators(t.Context(), tc.shares...)
+			_, err := s.client.AddValidators(t.Context(), tc.shares...)
 
 			s.assertErrorResult(err, tc.expectError, t)
 
@@ -257,7 +257,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			err := s.client.RemoveValidators(t.Context(), tc.pubKeys...)
+			_, err := s.client.RemoveValidators(t.Context(), tc.pubKeys...)
 
 			s.assertErrorResult(err, tc.expectError, t)
 		})
@@ -759,13 +759,13 @@ func TestRequestErrors(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	client := NewClient(server.URL, WithLogger(logger))
 
-	err := client.AddValidators(t.Context(), ShareKeys{
+	_, err := client.AddValidators(t.Context(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
+	_, err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 
 	_, err = client.Sign(t.Context(), phase0.BLSPubKey{1, 1, 1}, web3signer.SignRequest{})
@@ -791,13 +791,13 @@ func TestResponseHandlingErrors(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	client := NewClient(server.URL, WithLogger(logger))
 
-	err := client.AddValidators(t.Context(), ShareKeys{
+	_, err := client.AddValidators(t.Context(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
+	_, err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 }
 

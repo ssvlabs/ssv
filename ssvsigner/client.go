@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -93,7 +92,7 @@ func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKe
 	return listResp, err
 }
 
-func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err error) {
+func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (statuses []web3signer.Status, err error) {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
@@ -126,39 +125,26 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 		Fetch(ctx)
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		return ShareDecryptionError(errors.New(errStr))
+		return nil, ShareDecryptionError(errors.New(errStr))
 	}
 
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
 	if len(resp.Data) != len(shares) {
-		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(shares))
+		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(shares))
 	}
 
+	statuses = make([]web3signer.Status, 0, len(resp.Data))
 	for _, data := range resp.Data {
-		allowedStatuses := []web3signer.Status{
-			web3signer.StatusImported,
-
-			// A failed request does not guarantee that the keys were not added.
-			// It's possible that the ssv-signer successfully added the keys,
-			// but a network error occurred before a response could be received.
-			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
-			// In such cases, the node would crash and, upon restarting, encounter a duplicate key error.
-			// To handle this gracefully, we allow returning a duplicate key error without treating it as a failure.
-			web3signer.StatusDuplicated,
-		}
-
-		if !slices.Contains(allowedStatuses, data.Status) {
-			return fmt.Errorf("unexpected status %s", data.Status)
-		}
+		statuses = append(statuses, data.Status)
 	}
 
-	return nil
+	return statuses, nil
 }
 
-func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) (err error) {
+func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) (statuses []web3signer.Status, err error) {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
@@ -179,32 +165,19 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		ToJSON(&resp).
 		Fetch(ctx)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
 	if len(resp.Data) != len(pubKeys) {
-		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(pubKeys))
+		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(pubKeys))
 	}
 
+	statuses = make([]web3signer.Status, 0, len(resp.Data))
 	for _, data := range resp.Data {
-		allowedStatuses := []web3signer.Status{
-			web3signer.StatusDeleted,
-
-			// A failed request does not guarantee that the keys were not deleted.
-			// It's possible that the ssv-signer successfully deleted the keys,
-			// but a network error occurred before a response could be received.
-			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
-			// In such cases, the node would crash and, upon restarting, encounter a not found key error.
-			// To handle this gracefully, we allow returning a not found key error without treating it as a failure.
-			web3signer.StatusNotFound,
-		}
-
-		if !slices.Contains(allowedStatuses, data.Status) {
-			return fmt.Errorf("unexpected status %s", data.Status)
-		}
+		statuses = append(statuses, data.Status)
 	}
 
-	return nil
+	return nil, nil
 }
 
 func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (signature phase0.BLSSignature, err error) {
