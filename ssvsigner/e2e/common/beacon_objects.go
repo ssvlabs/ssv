@@ -5,6 +5,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
 	"github.com/prysmaticlabs/go-bitfield"
@@ -27,14 +28,14 @@ func NewTestAttestationData(sourceEpoch, targetEpoch phase0.Epoch, slot phase0.S
 	}
 }
 
-// NewTestDenebBlock creates a standard test Deneb beacon block
-func NewTestDenebBlock(slot phase0.Slot, proposerIndex phase0.ValidatorIndex) *deneb.BeaconBlock {
-	return &deneb.BeaconBlock{
+// NewTestBlock creates a standard test beacon block
+func NewTestBlock(slot phase0.Slot, proposerIndex phase0.ValidatorIndex) *electra.BeaconBlock {
+	return &electra.BeaconBlock{
 		Slot:          slot,
 		ProposerIndex: proposerIndex,
 		ParentRoot:    phase0.Root{0x01},
 		StateRoot:     phase0.Root{0x02},
-		Body: &deneb.BeaconBlockBody{
+		Body: &electra.BeaconBlockBody{
 			RANDAOReveal: phase0.BLSSignature{0x01},
 			ETH1Data: &phase0.ETH1Data{
 				DepositRoot:  phase0.Root{0x01},
@@ -43,8 +44,8 @@ func NewTestDenebBlock(slot phase0.Slot, proposerIndex phase0.ValidatorIndex) *d
 			},
 			Graffiti:          [32]byte{0x01},
 			ProposerSlashings: []*phase0.ProposerSlashing{},
-			AttesterSlashings: []*phase0.AttesterSlashing{},
-			Attestations:      []*phase0.Attestation{},
+			AttesterSlashings: []*electra.AttesterSlashing{},
+			Attestations:      []*electra.Attestation{},
 			Deposits:          []*phase0.Deposit{},
 			VoluntaryExits:    []*phase0.SignedVoluntaryExit{},
 			SyncAggregate: &altair.SyncAggregate{
@@ -59,6 +60,7 @@ func NewTestDenebBlock(slot phase0.Slot, proposerIndex phase0.ValidatorIndex) *d
 			},
 			BLSToExecutionChanges: []*capella.SignedBLSToExecutionChange{},
 			BlobKZGCommitments:    []deneb.KZGCommitment{},
+			ExecutionRequests:     &electra.ExecutionRequests{},
 		},
 	}
 }
