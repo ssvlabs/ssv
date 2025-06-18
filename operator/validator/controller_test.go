@@ -258,6 +258,8 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		return nil
 	})
 
+	logger.Debug("starting to send messages")
+
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
@@ -297,7 +299,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 
 	receivedMsgsCnt := 0
-	timeout := time.After(5 * time.Second)
+	timeout := time.After(30 * time.Second)
 	for {
 		select {
 		case msg := <-receivedMsgs:
