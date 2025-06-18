@@ -76,7 +76,7 @@ If you prefer to run tests manually:
 docker build -f ssvsigner/Dockerfile -t ssv-signer:latest .
 
 # Run tests (from ssvsigner/e2e directory)
-go test ./signing/                                    # All tests
+go test ./signing/                                   # All tests
 go test ./signing/ -run TestAttestationSlashing      # Attestation tests only
 go test ./signing/ -run TestBlockSlashing            # Proposer tests only
 ```
