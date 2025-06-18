@@ -11,10 +11,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ssz "github.com/ferranbt/fastssz"
 )
 
 // ConvertBlockToBeaconBlockData converts various block types to Web3Signer BeaconBlockData format
-func ConvertBlockToBeaconBlockData(obj interface{}) (*BeaconBlockData, error) {
+func ConvertBlockToBeaconBlockData(obj ssz.HashRoot) (*BeaconBlockData, error) {
 	switch v := obj.(type) {
 	case *capella.BeaconBlock:
 		bodyRoot, err := v.Body.HashTreeRoot()
