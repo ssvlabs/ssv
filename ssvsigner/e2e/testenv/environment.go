@@ -133,29 +133,17 @@ func (env *TestEnvironment) Stop() error {
 		}
 	}
 
-	if env.web3SignerPostgresDB != nil {
-		_ = env.web3SignerPostgresDB.Close()
-	}
-
-	if env.localDB != nil {
-		_ = env.localDB.Close()
-	}
-
-	if env.remoteDB != nil {
-		_ = env.remoteDB.Close()
-	}
+	_ = env.web3SignerPostgresDB.Close()
+	_ = env.localDB.Close()
+	_ = env.remoteDB.Close()
 
 	// Clean up key manager directories
-	if env.localKeyManagerPath != "" {
-		if err := os.RemoveAll(env.localKeyManagerPath); err != nil {
-			errors = append(errors, fmt.Errorf("failed to cleanup local key manager directory: %w", err))
-		}
+	if err := os.RemoveAll(env.localKeyManagerPath); err != nil {
+		errors = append(errors, fmt.Errorf("failed to cleanup local key manager directory: %w", err))
 	}
 
-	if env.remoteKeyManagerPath != "" {
-		if err := os.RemoveAll(env.remoteKeyManagerPath); err != nil {
-			errors = append(errors, fmt.Errorf("failed to cleanup remote key manager directory: %w", err))
-		}
+	if err := os.RemoveAll(env.remoteKeyManagerPath); err != nil {
+		errors = append(errors, fmt.Errorf("failed to cleanup remote key manager directory: %w", err))
 	}
 
 	if env.mockController != nil {
