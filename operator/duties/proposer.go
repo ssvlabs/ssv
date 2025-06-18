@@ -124,7 +124,10 @@ func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
 func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch) {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "proposer.fetch"),
-		trace.WithAttributes(observability.BeaconEpochAttribute(epoch)))
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconRoleAttribute(spectypes.BNRoleProposer),
+		))
 	defer span.End()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -148,6 +151,7 @@ func (h *ProposerHandler) processExecution(ctx context.Context, epoch phase0.Epo
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconSlotAttribute(slot),
+			observability.BeaconRoleAttribute(spectypes.BNRoleProposer),
 		))
 	defer span.End()
 

@@ -151,6 +151,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, epoch phase0
 		trace.WithAttributes(
 			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconPeriodAttribute(period),
+			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee),
 		))
 	defer span.End()
 
@@ -221,6 +222,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "sync_committee.fetch_and_store"),
 		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
 			observability.BeaconPeriodAttribute(period),
 			observability.BeaconRoleAttribute(spectypes.BNRoleSyncCommittee),
 		))
