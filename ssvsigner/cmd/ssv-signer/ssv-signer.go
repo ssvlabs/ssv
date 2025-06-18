@@ -29,7 +29,7 @@ type CLI struct {
 	LogFormat          string        `env:"LOG_FORMAT" default:"console" enum:"console,json" help:"Set log format (console, json)"`
 	RequestTimeout     time.Duration `env:"REQUEST_TIMEOUT" default:"10s" help:"Timeout for outgoing HTTP requests (e.g. 500ms, 10s)"`
 
-	// AllowInsecureHTTP allows ssv-signer to work without using TLS.
+	// AllowInsecureHTTP allows ssv-signer to work without using TLS. Note that it allows "partial" TLS as well such as only server or only client.
 	AllowInsecureHTTP bool `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"Allow insecure HTTP requests. Do not use in production"`
 
 	// Server TLS configuration (for incoming connections to SSV Signer)
@@ -123,14 +123,24 @@ func validateConfig(cli CLI) error {
 	}
 
 	if cli.AllowInsecureHTTP {
-		if cli.KeystoreFile != "" {
-			return fmt.Errorf("server TLS keystore file is unexpected in the insecure mode")
+		allFiles := []string{
+			cli.KeystoreFile,
+			cli.KeystorePasswordFile,
+			cli.KnownClientsFile,
+			cli.Web3SignerKeystoreFile,
+			cli.Web3SignerKeystorePasswordFile,
+			cli.Web3SignerServerCertFile,
 		}
-		if cli.KeystorePasswordFile != "" {
-			return fmt.Errorf("server TLS keystore password file is unexpected in the insecure mode")
+
+		filesFound := 0
+		for _, file := range allFiles {
+			if file != "" {
+				filesFound++
+			}
 		}
-		if cli.KnownClientsFile != "" {
-			return fmt.Errorf("known clients file is unexpected in the insecure mode")
+
+		if filesFound == len(allFiles) {
+			return fmt.Errorf("insecure mode is enabled, but all TLS options are provided, please disable the insecure mode")
 		}
 	} else {
 		if cli.KeystoreFile == "" {
@@ -141,6 +151,16 @@ func validateConfig(cli CLI) error {
 		}
 		if cli.KnownClientsFile == "" {
 			return fmt.Errorf("known clients file is required for client authentication")
+		}
+
+		if cli.Web3SignerKeystoreFile == "" {
+			return fmt.Errorf("web3signer TLS keystore file is required")
+		}
+		if cli.Web3SignerKeystorePasswordFile == "" {
+			return fmt.Errorf("web3signer TLS keystore password file is required")
+		}
+		if cli.Web3SignerServerCertFile == "" {
+			return fmt.Errorf("web3signer server cert file is required")
 		}
 	}
 
