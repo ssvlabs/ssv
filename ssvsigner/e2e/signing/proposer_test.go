@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/deneb"
+	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/suite"
@@ -35,7 +35,7 @@ func (s *BlockSlashingTestSuite) TestBlockDoubleProposal() {
 	s.T().Logf("✍️ Phase 1: Signing first valid block proposal")
 	testEpoch := testCurrentEpoch + 1
 	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
-	initialBlock := common.NewTestDenebBlock(testSlot, 0)
+	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -46,7 +46,7 @@ func (s *BlockSlashingTestSuite) TestBlockDoubleProposal() {
 	)
 
 	s.T().Logf("🚫 Phase 2: Attempting double proposal (should be rejected)")
-	doubleProposalBlock := common.NewTestDenebBlock(testSlot, 0)
+	doubleProposalBlock := common.NewTestBlock(testSlot, 0)
 	doubleProposalBlock.ParentRoot = phase0.Root{0x02} // Different parent root
 
 	s.RequireFailedSigning(
@@ -59,7 +59,7 @@ func (s *BlockSlashingTestSuite) TestBlockDoubleProposal() {
 
 	s.T().Logf("✅ Phase 3: Testing valid progression to higher slot")
 	validNextSlot := testSlot + 10
-	validProgressionBlock := common.NewTestDenebBlock(validNextSlot, 0)
+	validProgressionBlock := common.NewTestBlock(validNextSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -85,7 +85,7 @@ func (s *BlockSlashingTestSuite) TestBlockLowerSlotProposal() {
 	s.T().Logf("✍️ Phase 1: Signing block at higher slot")
 	testEpoch := testCurrentEpoch + 10
 	higherSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 15
-	initialBlock := common.NewTestDenebBlock(higherSlot, 0)
+	initialBlock := common.NewTestBlock(higherSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -97,7 +97,7 @@ func (s *BlockSlashingTestSuite) TestBlockLowerSlotProposal() {
 
 	s.T().Logf("🚫 Phase 2: Attempting lower slot proposal (should be rejected)")
 	lowerSlot := higherSlot - 5
-	lowerSlotBlock := common.NewTestDenebBlock(lowerSlot, 0)
+	lowerSlotBlock := common.NewTestBlock(lowerSlot, 0)
 
 	s.RequireFailedSigning(
 		ctx,
@@ -109,7 +109,7 @@ func (s *BlockSlashingTestSuite) TestBlockLowerSlotProposal() {
 
 	s.T().Logf("✅ Phase 3: Testing valid progression to even higher slot")
 	validNextSlot := higherSlot + 10
-	validProgressionBlock := common.NewTestDenebBlock(validNextSlot, 0)
+	validProgressionBlock := common.NewTestBlock(validNextSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -137,10 +137,10 @@ func (s *BlockSlashingTestSuite) TestBlockValidProgression() {
 	startSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(startEpoch) + 1
 
 	// Define a series of valid sequential block proposals with increasing slots
-	blocks := make([]*deneb.BeaconBlock, 5)
+	blocks := make([]*electra.BeaconBlock, 5)
 	for i := 0; i < 5; i++ {
 		slot := startSlot + phase0.Slot(i*10)
-		blocks[i] = common.NewTestDenebBlock(slot, 0)
+		blocks[i] = common.NewTestBlock(slot, 0)
 		blocks[i].ParentRoot = phase0.Root{byte(i + 1)}
 	}
 
@@ -180,7 +180,7 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 
 	testEpoch := testCurrentEpoch + 10
 	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
-	block := common.NewTestDenebBlock(testSlot, 0)
+	block := common.NewTestBlock(testSlot, 0)
 	block.ParentRoot = phase0.Root{0x42} // Distinguish this concurrent test block
 
 	s.T().Logf("🔀 Phase 1: Testing LocalKeyManager concurrent protection")
@@ -356,7 +356,7 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 	s.T().Logf("✍️ Phase 1: Signing initial block before restart")
 	testEpoch := testCurrentEpoch + 10
 	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
-	initialBlock := common.NewTestDenebBlock(testSlot, 0)
+	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -371,7 +371,7 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 	s.Require().NoError(err, "Failed to restart Web3Signer")
 
 	s.T().Logf("🔍 Phase 3: Testing slashing protection persistence (should be rejected)")
-	conflictingBlock := common.NewTestDenebBlock(testSlot, 0)
+	conflictingBlock := common.NewTestBlock(testSlot, 0)
 	conflictingBlock.ParentRoot = phase0.Root{0x02} // Same slot, different parent
 
 	s.RequireFailedSigning(
@@ -384,7 +384,7 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 
 	s.T().Logf("✅ Phase 4: Testing valid operations after restart")
 	higherTestSlot := testSlot + 10
-	validBlock := common.NewTestDenebBlock(higherTestSlot, 0)
+	validBlock := common.NewTestBlock(higherTestSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -409,7 +409,7 @@ func (s *BlockSlashingTestSuite) TestPostgreSQLRestart() {
 	s.T().Logf("✍️ Phase 1: Signing initial block to populate database")
 	testEpoch := testCurrentEpoch + 10
 	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
-	initialBlock := common.NewTestDenebBlock(testSlot, 0)
+	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -424,7 +424,7 @@ func (s *BlockSlashingTestSuite) TestPostgreSQLRestart() {
 	s.Require().NoError(err, "Failed to restart PostgreSQL")
 
 	s.T().Logf("🔍 Phase 3: Verifying data persistence - attempting conflicting block (should be rejected)")
-	conflictingBlock := common.NewTestDenebBlock(testSlot, 0)
+	conflictingBlock := common.NewTestBlock(testSlot, 0)
 	conflictingBlock.ParentRoot = phase0.Root{0x02} // Same slot, different parent
 
 	s.RequireFailedSigning(
@@ -437,7 +437,7 @@ func (s *BlockSlashingTestSuite) TestPostgreSQLRestart() {
 
 	s.T().Logf("✅ Phase 4: Signing new valid block with different slot")
 	freshTestSlot := testSlot + 10
-	freshBlock := common.NewTestDenebBlock(freshTestSlot, 0)
+	freshBlock := common.NewTestBlock(freshTestSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -448,7 +448,7 @@ func (s *BlockSlashingTestSuite) TestPostgreSQLRestart() {
 	)
 
 	s.T().Logf("🛡️ Phase 5: Testing slashing protection with double proposal (should be rejected)")
-	conflictingFreshBlock := common.NewTestDenebBlock(freshTestSlot, 0)
+	conflictingFreshBlock := common.NewTestBlock(freshTestSlot, 0)
 	conflictingFreshBlock.ParentRoot = phase0.Root{0x04} // Same slot, different parent
 
 	s.RequireFailedSigning(
@@ -474,7 +474,7 @@ func (s *BlockSlashingTestSuite) TestSSVSignerRestart() {
 	s.T().Logf("✍️ Phase 1: Signing initial block before restart")
 	testEpoch := testCurrentEpoch + 10
 	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
-	initialBlock := common.NewTestDenebBlock(testSlot, 0)
+	initialBlock := common.NewTestBlock(testSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -496,7 +496,7 @@ func (s *BlockSlashingTestSuite) TestSSVSignerRestart() {
 
 	s.T().Logf("✅ Phase 4: Testing signing operations after restart")
 	higherTestSlot := testSlot + 10
-	newBlock := common.NewTestDenebBlock(higherTestSlot, 0)
+	newBlock := common.NewTestBlock(higherTestSlot, 0)
 
 	s.RequireValidSigning(
 		ctx,
@@ -507,7 +507,7 @@ func (s *BlockSlashingTestSuite) TestSSVSignerRestart() {
 	)
 
 	s.T().Logf("🛡️ Phase 5: Testing slashing protection after SSV-Signer restart (should be rejected)")
-	conflictingBlock := common.NewTestDenebBlock(testSlot, 0)
+	conflictingBlock := common.NewTestBlock(testSlot, 0)
 	conflictingBlock.ParentRoot = phase0.Root{0x03} // Same slot as initial, different parent
 
 	s.RequireFailedSigning(
