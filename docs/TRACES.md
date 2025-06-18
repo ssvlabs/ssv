@@ -26,7 +26,7 @@ OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
 
 ## Resource in OpenTelemetry
 
-Each span contains a resource — a set of key-value attributes describing the producing service or process. A resource is an object attached to each span (and other telemetry data), which contains metadata about the entity that emitted the telemetry — for example: `service.name`, `deployment.environment`, `region`, etc. _Resources are queryable via TraceQL_.
+Each span contains a resource — a set of key-value attributes. A resource is an object, which contains metadata about the entity that emitted the telemetry — for example: `service.name`, `deployment.environment`, `region`, etc. _Resources are queryable via TraceQL_.
 
 The SSV Node sets multiple resource attributes such as `host.name`, `service.name`, and `service.version` via the OpenTelemetry SDKs. These values can also be overridden via native OpenTelemetry environment variables ([OpenTelemetry SDK Environment Variables](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/)).
 
