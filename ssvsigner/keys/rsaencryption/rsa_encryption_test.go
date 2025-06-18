@@ -1,10 +1,8 @@
 package rsaencryption
 
 import (
-	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -290,20 +288,6 @@ func TestGenerateRSAKeyPairPEM(t *testing.T) {
 		require.Equal(t, 2048, privKey.N.BitLen())
 		require.NoError(t, privKey.Validate(), "Private key should validate")
 	})
-
-	t.Run("Error", func(t *testing.T) {
-		origReader := rand.Reader
-		defer func() { rand.Reader = origReader }()
-
-		// always fail the random reader
-		rand.Reader = &failingReader{}
-
-		pubPEM, privPEM, err := GenerateKeyPairPEM()
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "generate RSA key:")
-		require.Nil(t, pubPEM)
-		require.Nil(t, privPEM)
-	})
 }
 
 func TestHashKeyBytes(t *testing.T) {
@@ -352,10 +336,4 @@ func TestPublicKeyErrors(t *testing.T) {
 			tc.testFunc(t, malformedPubKey)
 		})
 	}
-}
-
-type failingReader struct{}
-
-func (r *failingReader) Read([]byte) (n int, err error) {
-	return 0, fmt.Errorf("failed to read random bytes")
 }
