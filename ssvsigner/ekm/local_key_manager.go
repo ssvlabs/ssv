@@ -30,8 +30,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 // LocalKeyManager implements KeyManager by storing and operating on BLS keys locally.
@@ -77,7 +78,7 @@ func NewLocalKeyManager(
 	options.SetWalletType(core.NDWallet)
 
 	wallet, err := signerStore.OpenWallet()
-	if err != nil && err.Error() != "could not find wallet" {
+	if err != nil && !errors.Is(err, errWalletNotFound) {
 		return nil, err
 	}
 	if wallet == nil {
