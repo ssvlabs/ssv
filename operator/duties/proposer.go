@@ -177,7 +177,10 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	start := time.Now()
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "proposer.fetch_and_store"),
-		trace.WithAttributes(observability.BeaconEpochAttribute(epoch)))
+		trace.WithAttributes(
+			observability.BeaconEpochAttribute(epoch),
+			observability.BeaconRoleAttribute(spectypes.BNRoleProposer),
+		))
 	defer span.End()
 
 	var allEligibleIndices []phase0.ValidatorIndex
@@ -217,6 +220,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 			Duty:           d,
 			InCommittee:    inCommitteeDuty,
 		})
+		span.AddEvent("will store duty", trace.WithAttributes(observability.ValidatorIndexAttribute(d.ValidatorIndex)))
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
 
