@@ -25,10 +25,11 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/storage/basedb"
+
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // RemoteKeyManager implements KeyManager by delegating signing operations to
@@ -50,7 +51,7 @@ type RemoteKeyManager struct {
 
 type signerClient interface {
 	AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) ([]web3signer.Status, error)
-	RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) (statuses []web3signer.Status, err error)
+	RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) (statuses []web3signer.Status, err error)
 	Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error)
 	OperatorIdentity(ctx context.Context) (string, error)
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)

@@ -7,9 +7,10 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/ssvlabs/ssv/storage/basedb"
+
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 type MockRemoteSigner struct {
@@ -24,7 +25,7 @@ func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclien
 	return nil, args.Error(0)
 }
 
-func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error) {
+func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error) {
 	args := m.Called(ctx, pubKeys)
 	result := args.Get(0)
 	if result == nil {
