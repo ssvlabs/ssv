@@ -38,7 +38,7 @@ func (env *TestEnvironment) loadMigrations() ([]MigrationFile, error) {
 	for _, filename := range migrationOrder {
 		migrationPath := filepath.Join(env.migrationsPath, filename)
 
-		content, err := os.ReadFile(migrationPath)
+		content, err := os.ReadFile(filepath.Clean(migrationPath))
 		if err != nil {
 			return nil, fmt.Errorf("failed to read migration %s: %w", filename, err)
 		}
@@ -102,7 +102,7 @@ func (env *TestEnvironment) applyMigration(db *sql.DB, migration MigrationFile) 
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.Exec(migration.Content)
 	if err != nil {
@@ -175,7 +175,7 @@ func (env *TestEnvironment) GetMigrationStatus() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query migration status: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var applied []string
 	for rows.Next() {

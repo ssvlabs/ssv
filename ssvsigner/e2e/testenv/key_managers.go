@@ -7,8 +7,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
@@ -30,7 +30,7 @@ func (env *TestEnvironment) initializeKeyManagers() error {
 
 // createLocalKeyManager creates and configures the LocalKeyManager
 func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
-	localDB, err := kv.New(logger, basedb.Options{
+	localDB, err := badger.New(logger, basedb.Options{
 		Path: env.localKeyManagerPath,
 	})
 	if err != nil {
@@ -54,7 +54,7 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 
 // createRemoteKeyManager creates and configures the RemoteKeyManager
 func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
-	remoteDB, err := kv.New(logger, basedb.Options{
+	remoteDB, err := badger.New(logger, basedb.Options{
 		Path: env.remoteKeyManagerPath,
 	})
 	if err != nil {
