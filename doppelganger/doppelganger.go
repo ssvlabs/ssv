@@ -161,7 +161,7 @@ func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	defer h.mu.Unlock()
 
 	if h.validatorsState[validatorIndex] == nil {
-		h.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(validatorIndex))
+		h.logger.Warn("Validator not found in Doppelganger state. This is expected in the first block after failed sync", fields.ValidatorIndex(validatorIndex))
 		return
 	}
 
