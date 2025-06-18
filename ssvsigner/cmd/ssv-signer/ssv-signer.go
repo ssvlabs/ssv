@@ -122,7 +122,17 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT: %w", err)
 	}
 
-	if !cli.AllowInsecureHTTP {
+	if cli.AllowInsecureHTTP {
+		if cli.KeystoreFile != "" {
+			return fmt.Errorf("server TLS keystore file is unexpected in the insecure mode")
+		}
+		if cli.KeystorePasswordFile != "" {
+			return fmt.Errorf("server TLS keystore password file is unexpected in the insecure mode")
+		}
+		if cli.KnownClientsFile != "" {
+			return fmt.Errorf("known clients file is unexpected in the insecure mode")
+		}
+	} else {
 		if cli.KeystoreFile == "" {
 			return fmt.Errorf("server TLS keystore file is required")
 		}
