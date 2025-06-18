@@ -13,7 +13,6 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/zap"
@@ -316,13 +315,12 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				return
 			default:
 				nextBlockToProcess, err := ec.streamLogsToChan(ctx, logs, fromBlock)
-				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) || errors.Is(err, rpc.ErrClientQuit) {
-					// Closed gracefully.
+				if isInterruptedError(err) {
+					// This is a valid way to terminate, no need to log this error.
 					return
 				}
-
-				// streamLogsToChan should never return without an error,
-				// so we treat a nil error as an error by itself.
+				// streamLogsToChan should never return without an error, so we treat a nil error as
+				// an error by itself.
 				if err == nil {
 					err = errors.New("streamLogsToChan halted without an error")
 				}
@@ -545,15 +543,14 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	return nil
 }
 
-// reconnect tries to reconnect multiple times with an exponent interval. It panics when
-// reconnect-limit is reached since SSV node can't operate without stable connection to
-// Ethereum execution client.
+// reconnect tries to reconnect multiple times with an exponential interval.
+// It panics when reconnection limit is reached since SSV node can't operate
+// without stable connection to Ethereum execution client.
 // It must not be called concurrently.
 func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	logger := ec.logger.With(fields.Address(ec.nodeAddr))
 
 	start := time.Now()
-	success := false
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
 		logger.Info("reconnecting")
 		if err := ec.connect(ctx); err != nil {
@@ -561,18 +558,14 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 				return true, false
 			}
 			if lastTick >= ec.reconnectionMaxInterval {
-				logger.Panic("Failed to reconnect to Ethereum execution client", zap.Error(err))
-			} else {
-				logger.Warn("Could not reconnect to Ethereum execution client, still trying", zap.Error(err))
+				logger.Panic("failed to reconnect", zap.Error(err))
 			}
+			logger.Warn("could not reconnect, still trying", zap.Error(err))
 			return false, false
 		}
-		success = true
+		logger.Info("reconnected", zap.Duration("took", time.Since(start)))
 		return true, false
 	}, ec.reconnectionInitialInterval, ec.reconnectionMaxInterval+(ec.reconnectionInitialInterval))
-	if success {
-		logger.Info("reconnected to execution client", zap.Duration("took", time.Since(start)))
-	}
 }
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {

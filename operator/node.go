@@ -108,7 +108,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 // Start starts to stream duties and run IBFT instances
 func (n *Node) Start() error {
 	ctx := n.context // TODO: pass it to Start
-	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+	n.logger.Info("all required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
 		err := n.startWSServer()
