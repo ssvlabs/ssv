@@ -179,23 +179,6 @@ func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uin
 	return opts
 }
 
-// NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOptsValidators(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int) *Options {
-	// Create options with default values
-	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
-	opts.defaults()
-
-	// Set topic weight with equal weights
-	opts.Topic.TopicWeight = opts.Network.TotalTopicsWeight / float64(opts.Network.Subnets)
-
-	// Set expected message rate based on stage metrics
-	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
-	msgsPerValidatorPerSecond := 600.0 / 10000.0
-	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerValidatorPerSecond
-
-	return opts
-}
-
 // TopicParams creates pubsub.TopicScoreParams from the given TopicOpts
 // implementation is based on ETH2.0, with alignments to ssv:
 // https://gist.github.com/blacktemplar/5c1862cb3f0e32a1a7fb0b25e79e6e2c

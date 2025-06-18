@@ -13,18 +13,18 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/threshold"
-
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 const (
@@ -34,7 +34,16 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network networkconfig.Network, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
+func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) KeyManager {
+	km, _ := testKeyManagerImpl(t, networkconfig.TestNetwork, operatorPrivateKey)
+	return km
+}
+
+func testKeyManagerWithMockNetwork(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
+	return testKeyManagerImpl(t, nil, operatorPrivateKey)
+}
+
+func testKeyManagerImpl(t *testing.T, network networkconfig.Network, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -138,7 +147,7 @@ func TestSignBeaconObject(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	km, network := testKeyManager(t, nil, operatorPrivateKey)
+	km := testKeyManager(t, operatorPrivateKey)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -148,7 +157,7 @@ func TestSignBeaconObject(t *testing.T) {
 
 	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
-	currentSlot := network.EstimatedCurrentSlot()
+	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	t.Run("Sign Deneb block", func(t *testing.T) {
@@ -327,7 +336,7 @@ func TestRemoveShare(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("key exists", func(t *testing.T) {
-		km, _ := testKeyManager(t, nil, operatorPrivateKey)
+		km := testKeyManager(t, operatorPrivateKey)
 		pk := &bls.SecretKey{}
 		// generate random key
 		pk.SetByCSPRNG()
@@ -340,7 +349,7 @@ func TestRemoveShare(t *testing.T) {
 	})
 
 	t.Run("key doesn't exist", func(t *testing.T) {
-		km, _ := testKeyManager(t, nil, operatorPrivateKey)
+		km := testKeyManager(t, operatorPrivateKey)
 
 		pk := &bls.SecretKey{}
 		pk.SetByCSPRNG()
@@ -356,7 +365,7 @@ func TestEkmListAccounts(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	km, _ := testKeyManager(t, nil, operatorPrivateKey)
+	km := testKeyManager(t, operatorPrivateKey)
 	accounts, err := km.(*LocalKeyManager).ListAccounts()
 	require.NoError(t, err)
 	require.Len(t, accounts, 2)
