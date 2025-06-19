@@ -189,7 +189,7 @@ func (c *Config) loadServerCertificate() (tls.Certificate, error) {
 }
 
 // loadServerFingerprints loads the trusted server fingerprints from a PEM certificate file.
-// It extracts the certificate's fingerprint and identity (common name or DNS name).
+// It extracts the certificate's fingerprint and maps it to all certificate identities (common name and DNS names).
 func (c *Config) loadServerFingerprints() (map[string]string, error) {
 	serverCert, err := loadPEMCertificate(c.ClientServerCertFile)
 	if err != nil {
@@ -199,17 +199,24 @@ func (c *Config) loadServerFingerprints() (map[string]string, error) {
 	fingerprint := sha256.Sum256(serverCert.Raw)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
-	// Try to get a host identifier from the certificate
-	hostID := serverCert.Subject.CommonName
-	if hostID == "" && len(serverCert.DNSNames) > 0 {
-		hostID = serverCert.DNSNames[0]
+	// Create fingerprint entries for all possible hostnames
+	trustedFingerprints := make(map[string]string)
+
+	// Add common name if present
+	if serverCert.Subject.CommonName != "" {
+		trustedFingerprints[serverCert.Subject.CommonName] = fingerprintHex
 	}
 
-	if hostID == "" {
+	// Add all DNS names
+	for _, dnsName := range serverCert.DNSNames {
+		trustedFingerprints[dnsName] = fingerprintHex
+	}
+
+	if len(trustedFingerprints) == 0 {
 		return nil, fmt.Errorf("server certificate must have a Common Name or DNS name")
 	}
 
-	return map[string]string{hostID: fingerprintHex}, nil
+	return trustedFingerprints, nil
 }
 
 // createClientTLSConfig creates a client TLS configuration with certificates and fingerprint verification.

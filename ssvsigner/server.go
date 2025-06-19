@@ -27,16 +27,17 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
+// TODO: The routes are currently custom and adhere DESIGN.md.
+//
+//	However, web3signer and eth remote signer APIs use different ones (prefixed with /api/v1/):
+//	- https://consensys.github.io/web3signer/web3signer-eth2.html
+//	- https://github.com/ethereum/remote-signing-api
+//	We need to decide if we need to match them.
 const (
-	// TODO: The routes are currently custom and adhere DESIGN.md.
-	//  However, web3signer and eth remote signer APIs use different ones (prefixed with /api/v1/):
-	//  - https://consensys.github.io/web3signer/web3signer-eth2.html
-	//  - https://github.com/ethereum/remote-signing-api
-	//  We need to decide if we need to match them.
-	pathValidators       = "/v1/validators"        // TODO: /api/v1/eth2/publicKeys ?
-	pathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
-	pathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
-	pathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
+	PathValidators       = "/v1/validators"        // TODO: /api/v1/eth2/publicKeys ?
+	PathValidatorsSign   = "/v1/validators/sign/"  // TODO: /api/v1/eth2/sign/ ?
+	PathOperatorIdentity = "/v1/operator/identity" // TODO: /api/v1/ssv/identity ?
+	PathOperatorSign     = "/v1/operator/sign"     // TODO: /api/v1/ssv/sign ?
 )
 
 type Server struct {
@@ -66,13 +67,13 @@ func NewServer(
 		opt(server)
 	}
 
-	r.GET(pathValidators, server.handleListValidators)
-	r.POST(pathValidators, server.handleAddValidator)
-	r.DELETE(pathValidators, server.handleRemoveValidator)
-	r.POST(pathValidatorsSign+"{identifier}", server.handleSignValidator)
+	r.GET(PathValidators, server.handleListValidators)
+	r.POST(PathValidators, server.handleAddValidator)
+	r.DELETE(PathValidators, server.handleRemoveValidator)
+	r.POST(PathValidatorsSign+"{identifier}", server.handleSignValidator)
 
-	r.GET(pathOperatorIdentity, server.handleOperatorIdentity)
-	r.POST(pathOperatorSign, server.handleSignOperator)
+	r.GET(PathOperatorIdentity, server.handleOperatorIdentity)
+	r.POST(PathOperatorSign, server.handleSignOperator)
 
 	return server
 }
