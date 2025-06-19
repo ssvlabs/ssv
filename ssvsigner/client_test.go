@@ -92,6 +92,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		shares             []ShareKeys
 		expectedStatusCode int
 		expectedResponse   web3signer.ImportKeystoreResponse
+		expectStatuses     []web3signer.Status
 		expectError        bool
 		isDecryptionError  bool
 	}{
@@ -112,7 +113,8 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 					},
 				},
 			},
-			expectError: false,
+			expectStatuses: []web3signer.Status{web3signer.StatusImported},
+			expectError:    false,
 		},
 		{
 			name: "DecryptionError", // TODO: fix
@@ -146,7 +148,8 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			expectedResponse: web3signer.ImportKeystoreResponse{
 				Data: []web3signer.KeyManagerResponseData{},
 			},
-			expectError: false,
+			expectStatuses: []web3signer.Status{},
+			expectError:    false,
 		},
 	}
 
@@ -175,7 +178,8 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			_, err := s.client.AddValidators(t.Context(), tc.shares...)
+			statuses, err := s.client.AddValidators(t.Context(), tc.shares...)
+			assert.Equal(t, tc.expectStatuses, statuses)
 
 			s.assertErrorResult(err, tc.expectError, t)
 
@@ -195,6 +199,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 		pubKeys            []phase0.BLSPubKey
 		expectedStatusCode int
 		expectedResponse   web3signer.DeleteKeystoreResponse
+		expectStatuses     []web3signer.Status
 		expectError        bool
 	}{
 		{
@@ -211,7 +216,8 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 					},
 				},
 			},
-			expectError: false,
+			expectStatuses: []web3signer.Status{web3signer.StatusDeleted},
+			expectError:    false,
 		},
 		{
 			name: "ServerError",
@@ -229,7 +235,8 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 			expectedResponse: web3signer.DeleteKeystoreResponse{
 				Data: []web3signer.KeyManagerResponseData{},
 			},
-			expectError: false,
+			expectStatuses: []web3signer.Status{},
+			expectError:    false,
 		},
 	}
 
