@@ -717,7 +717,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 					Message string `json:"error"`
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Equal(t, "invalid pubkey length", resp.Message)
+				assert.Contains(t, resp.Message, "invalid pubkey length: 0x123")
 			},
 		}, {
 			name: "invalid request - invalid range",
