@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -20,7 +19,6 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/wallets"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/hkdf"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -94,14 +92,7 @@ func (s *storage) SetEncryptionKey(hexKey string) error {
 		return errors.New("the key must be a valid hexadecimal string")
 	}
 
-	// Use HKDF to derive a 32-byte key for AES-256
-	kdf := hkdf.New(sha256.New, keyBytes, nil, nil)
-	derivedKey := make([]byte, 32)
-	if _, err := io.ReadFull(kdf, derivedKey); err != nil {
-		return fmt.Errorf("failed to derive encryption key: %w", err)
-	}
-
-	s.encryptionKey = derivedKey
+	s.encryptionKey = keyBytes
 
 	return nil
 }

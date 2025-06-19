@@ -5,7 +5,11 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"io"
+
+	"golang.org/x/crypto/hkdf"
 
 	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 )
@@ -21,6 +25,7 @@ type OperatorPrivateKey interface {
 	OperatorDecrypter
 	StorageHash() string
 	EKMHash() string
+	EKMEncryptionKey() (string, error)
 	Bytes() []byte
 	Base64() string
 }
@@ -95,6 +100,23 @@ func (p *privateKey) StorageHash() string {
 
 func (p *privateKey) EKMHash() string {
 	return rsaencryption.HashKeyBytes(rsaencryption.PrivateKeyToBytes(p.privKey))
+}
+
+func (p *privateKey) EKMEncryptionKey() (string, error) {
+	ekmHash := p.EKMHash()
+
+	decodedHash, err := base64.StdEncoding.DecodeString(ekmHash)
+	if err != nil {
+		return "", fmt.Errorf("decode hash: %w", err) // TODO: get rid of conversion
+	}
+
+	kdf := hkdf.New(sha256.New, decodedHash, nil, nil)
+	derivedKey := make([]byte, 32)
+	if _, err := io.ReadFull(kdf, derivedKey); err != nil {
+		return "", fmt.Errorf("failed to derive encryption key: %w", err)
+	}
+
+	return hex.EncodeToString(derivedKey), nil // TODO: get rid of conversion
 }
 
 func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {

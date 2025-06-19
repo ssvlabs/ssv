@@ -66,8 +66,12 @@ func NewLocalKeyManager(
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*LocalKeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
-	if err := signerStore.SetEncryptionKey(operatorPrivKey.EKMHash()); err != nil {
-		return nil, err
+	encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
+	if err != nil {
+		return nil, fmt.Errorf("get encryption key: %w", err)
+	}
+	if err := signerStore.SetEncryptionKey(encryptionKey); err != nil {
+		return nil, fmt.Errorf("set encryption key: %w", err)
 	}
 
 	protection := slashingprotection.NewNormalProtection(signerStore)

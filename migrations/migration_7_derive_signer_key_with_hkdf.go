@@ -2,13 +2,9 @@ package migrations
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 
 	"go.uber.org/zap"
-	"golang.org/x/crypto/hkdf"
 
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -17,14 +13,14 @@ var migration_7_derive_signer_key_with_hkdf = Migration{
 	Name: "migration_7_derive_signer_key_with_hkdf",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
-			if opt.EKMHash == "" {
+			if opt.OperatorPrivKey == nil {
 				// No migration needed if using remote signer.
 				return nil
 			}
 
 			signerStorage := opt.signerStorage(logger)
 
-			err := signerStorage.SetEncryptionKey(opt.EKMHash)
+			err := signerStorage.SetEncryptionKey(opt.OperatorPrivKey.EKMHash())
 			if err != nil {
 				return fmt.Errorf("failed to set old encryption key: %w", err)
 			}
@@ -39,23 +35,14 @@ var migration_7_derive_signer_key_with_hkdf = Migration{
 				return completed(txn)
 			}
 
-			// TODO: get rid of conversions
-			rawEKMHash, err := hex.DecodeString(opt.EKMHash)
+			encryptionKey, err := opt.OperatorPrivKey.EKMEncryptionKey()
 			if err != nil {
-				return fmt.Errorf("failed to decode EKM hash: %w", err)
+				return fmt.Errorf("failed to get encryption key: %w", err)
 			}
 
-			// new key with HKDF from the stored hash
-			kdf := hkdf.New(sha256.New, rawEKMHash, nil, nil)
-			newKeyBytes := make([]byte, 32)
-			if _, err := io.ReadFull(kdf, newKeyBytes); err != nil {
-				return fmt.Errorf("failed to derive new key: %w", err)
-			}
-			newKeyString := hex.EncodeToString(newKeyBytes)
+			// re-encryption with the new algorithm
 
-			// re-encryption with a new key
-			err = signerStorage.SetEncryptionKey(newKeyString)
-			if err != nil {
+			if err := signerStorage.SetEncryptionKey(encryptionKey); err != nil {
 				return fmt.Errorf("failed to set new encryption key: %w", err)
 			}
 

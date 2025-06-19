@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -55,11 +56,11 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db            basedb.Database
-	NodeStorage   operatorstorage.Storage
-	DbPath        string
-	NetworkConfig networkconfig.NetworkConfig
-	EKMHash       string
+	Db              basedb.Database
+	NodeStorage     operatorstorage.Storage
+	DbPath          string
+	NetworkConfig   networkconfig.NetworkConfig
+	OperatorPrivKey keys.OperatorPrivateKey
 }
 
 // nolint

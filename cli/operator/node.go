@@ -233,7 +233,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig, operatorPrivKey.EKMHash())
+		db, err := setupDB(logger, networkConfig, operatorPrivKey)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -753,7 +753,11 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, ekmHash string) (*kv.BadgerDB, error) {
+func setupDB(
+	logger *zap.Logger,
+	networkConfig networkconfig.NetworkConfig,
+	operatorPrivKey keys.OperatorPrivateKey,
+) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -767,10 +771,10 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, ekmH
 	}
 
 	migrationOpts := migrations.Options{
-		Db:            db,
-		DbPath:        cfg.DBOptions.Path,
-		NetworkConfig: networkConfig,
-		EKMHash:       ekmHash,
+		Db:              db,
+		DbPath:          cfg.DBOptions.Path,
+		NetworkConfig:   networkConfig,
+		OperatorPrivKey: operatorPrivKey,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
