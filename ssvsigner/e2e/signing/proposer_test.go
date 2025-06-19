@@ -13,6 +13,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/e2e"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
+	"github.com/ssvlabs/ssv/ssvsigner/e2e/testutils"
 )
 
 // BlockSlashingTestSuite tests block proposal slashing protection functionality
@@ -183,166 +184,58 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 	block := common.NewTestBlock(testSlot, 0)
 	block.ParentRoot = phase0.Root{0x42} // Distinguish this concurrent test block
 
-	s.T().Logf("🔀 Phase 1: Testing LocalKeyManager concurrent protection")
-	numGoroutines := 12
-	localResults := make(chan struct {
-		sig  spectypes.Signature
-		root phase0.Root
-		err  error
-	}, numGoroutines)
-
 	domain, err := s.CalculateDomain(spectypes.DomainProposer, testEpoch)
 	s.Require().NoError(err)
 
-	// Launch multiple goroutines trying to sign the same block concurrently
-	for i := 0; i < numGoroutines; i++ {
-		go func(goroutineID int) {
-			sig, root, err := s.GetEnv().GetLocalKeyManager().SignBeaconObject(
-				ctx,
-				block,
-				domain,
-				validatorKeyPair.BLSPubKey,
-				testSlot,
-				spectypes.DomainProposer,
-			)
-			localResults <- struct {
-				sig  spectypes.Signature
-				root phase0.Root
-				err  error
-			}{sig, root, err}
-		}(i)
-	}
+	numGoroutines := 12
 
-	// Collect results from all goroutines
-	var localSignatures []spectypes.Signature
-	var localRoots []phase0.Root
-	var localErrors []error
-
-	for i := 0; i < numGoroutines; i++ {
-		result := <-localResults
-		localSignatures = append(localSignatures, result.sig)
-		localRoots = append(localRoots, result.root)
-		localErrors = append(localErrors, result.err)
-	}
-
-	// Verify that only 1 operation was successful
-	var validLocalSig spectypes.Signature
-	var validLocalRoot phase0.Root
-	successCount := 0
-
-	for i, err := range localErrors {
-		if err == nil {
-			successCount++
-			validLocalSig = localSignatures[i]
-			validLocalRoot = localRoots[i]
-		}
-	}
+	s.T().Logf("🔀 Phase 1: Testing LocalKeyManager concurrent protection")
+	localSuccessCount := testutils.RunConcurrentSigning(s.T(), ctx, numGoroutines, "LocalKeyManager", func() (spectypes.Signature, phase0.Root, error) {
+		return s.GetEnv().GetLocalKeyManager().SignBeaconObject(
+			ctx,
+			block,
+			domain,
+			validatorKeyPair.BLSPubKey,
+			testSlot,
+			spectypes.DomainProposer,
+		)
+	})
 
 	// LocalKeyManager allows only 1 successful signature by design (slashing protection)
-	s.Require().Equal(1, successCount)
+	s.Require().Equal(1, localSuccessCount)
 
 	s.T().Logf("🔀 Phase 2: Testing RemoteKeyManager concurrent protection")
-	remoteResults := make(chan struct {
-		sig  spectypes.Signature
-		root phase0.Root
-		err  error
-	}, numGoroutines)
-
-	// Launch multiple goroutines trying to sign the same block concurrently
-	for i := 0; i < numGoroutines; i++ {
-		go func(goroutineID int) {
-			sig, root, err := s.GetEnv().GetRemoteKeyManager().SignBeaconObject(
-				ctx,
-				block,
-				domain,
-				validatorKeyPair.BLSPubKey,
-				testSlot,
-				spectypes.DomainProposer,
-			)
-			remoteResults <- struct {
-				sig  spectypes.Signature
-				root phase0.Root
-				err  error
-			}{sig, root, err}
-		}(i)
-	}
-
-	// Collect results from all goroutines
-	var remoteSignatures []spectypes.Signature
-	var remoteRoots []phase0.Root
-	var remoteErrors []error
-
-	for i := 0; i < numGoroutines; i++ {
-		result := <-remoteResults
-		remoteSignatures = append(remoteSignatures, result.sig)
-		remoteRoots = append(remoteRoots, result.root)
-		remoteErrors = append(remoteErrors, result.err)
-	}
-
-	// Verify that only 1 operation was successful
-	remoteSuccessCount := 0
-	var validRemoteSig spectypes.Signature
-	var validRemoteRoot phase0.Root
-
-	for i, err := range remoteErrors {
-		if err == nil {
-			remoteSuccessCount++
-			validRemoteSig = remoteSignatures[i]
-			validRemoteRoot = remoteRoots[i]
-		}
-	}
+	remoteSuccessCount := testutils.RunConcurrentSigning(s.T(), ctx, numGoroutines, "RemoteKeyManager", func() (spectypes.Signature, phase0.Root, error) {
+		return s.GetEnv().GetRemoteKeyManager().SignBeaconObject(
+			ctx,
+			block,
+			domain,
+			validatorKeyPair.BLSPubKey,
+			testSlot,
+			spectypes.DomainProposer,
+		)
+	})
 
 	// RemoteKeyManager allows only 1 successful signature by design (slashing protection)
 	s.Require().Equal(1, remoteSuccessCount)
 
-	s.Require().Equal(validLocalSig, validRemoteSig)
-	s.Require().Equal(validLocalRoot, validRemoteRoot)
-
 	s.T().Logf("🔀 Phase 3: Testing Web3Signer concurrent protection")
-	web3SignerResults := make(chan struct {
-		sig  spectypes.Signature
-		root phase0.Root
-		err  error
-	}, numGoroutines)
+	web3SignerSuccessCount := testutils.RunConcurrentSigning(s.T(), ctx, numGoroutines, "Web3Signer", func() (spectypes.Signature, phase0.Root, error) {
+		return s.SignWeb3Signer(
+			ctx,
+			block,
+			domain,
+			validatorKeyPair.BLSPubKey,
+			testSlot,
+			spectypes.DomainProposer,
+		)
+	})
 
-	// Launch multiple goroutines trying to sign the same block directly with Web3Signer
-	for i := 0; i < numGoroutines; i++ {
-		go func(goroutineID int) {
-			sig, root, err := s.SignWeb3Signer(ctx, block, domain, validatorKeyPair.BLSPubKey, testSlot, spectypes.DomainProposer)
-			web3SignerResults <- struct {
-				sig  spectypes.Signature
-				root phase0.Root
-				err  error
-			}{sig, root, err}
-		}(i)
-	}
-
-	// Collect results from all Web3Signer goroutines
-	var web3SignerSignatures []spectypes.Signature
-	var web3SignerErrors []error
-
-	for i := 0; i < numGoroutines; i++ {
-		result := <-web3SignerResults
-		if result.err == nil {
-			web3SignerSignatures = append(web3SignerSignatures, result.sig)
-		} else {
-			web3SignerErrors = append(web3SignerErrors, result.err)
-		}
-	}
-
-	s.Require().Empty(web3SignerErrors)
-
-	// Verify all successful signatures are identical (deterministic signing)
-	for _, web3sig := range web3SignerSignatures {
-		s.Require().Equal(validLocalSig, web3sig)
-	}
-
-	// Web3Signer allows same slot/parent_root
-	s.Require().Equal(numGoroutines, len(web3SignerSignatures))
+	// Web3Signer allows same slot/parent_root (no slashing protection violation)
+	s.Require().Equal(numGoroutines, web3SignerSuccessCount)
 }
 
 // TestBlockRestart validates slashing protection persistence across restarts.
-// Tests Web3Signer, PostgreSQL, and SSV-Signer restart scenarios with block data.
 func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 	s.T().Logf("🔄 Testing block restart persistence")
 	testCurrentEpoch := phase0.Epoch(4200)
@@ -395,9 +288,9 @@ func (s *BlockSlashingTestSuite) TestWeb3SignerRestart() {
 	)
 }
 
-// TestPostgreSQLRestart validates slashing protection persistence across PostgreSQL restarts.
-func (s *BlockSlashingTestSuite) TestPostgreSQLRestart() {
-	s.T().Logf("💾 Testing PostgreSQL restart with block persistence")
+// TestWeb3SignerPostgreSQLRestart validates slashing protection persistence across PostgreSQL restarts.
+func (s *BlockSlashingTestSuite) TestWeb3SignerPostgreSQLRestart() {
+	s.T().Logf("💾 Testing Web3Signer PostgreSQL restart with block persistence")
 	testCurrentEpoch := phase0.Epoch(4200)
 	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
 

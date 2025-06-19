@@ -54,44 +54,27 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 
 // createRemoteKeyManager creates and configures the RemoteKeyManager
 func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
-	remoteDB, err := badger.New(logger, basedb.Options{
-		Path: env.remoteKeyManagerPath,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create remote database: %w", err)
+	// Only create database on first initialization
+	if env.remoteDB == nil {
+		remoteDB, err := badger.New(logger, basedb.Options{
+			Path: env.remoteKeyManagerPath,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create remote database: %w", err)
+		}
+		env.remoteDB = remoteDB
 	}
-	env.remoteDB = remoteDB
 
 	remoteKeyManager, err := ekm.NewRemoteKeyManager(
 		env.ctx,
 		logger,
 		env.mockBeacon,
-		env.ssvSignerClient,
-		remoteDB,
+		env, // TestEnvironment implements signerClient interface by delegating to ssvSignerClient
+		env.remoteDB,
 		func() spectypes.OperatorID { return 1 }, // operator ID getter
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create remote key manager: %w", err)
-	}
-	env.remoteKeyManager = remoteKeyManager
-
-	return nil
-}
-
-// reinitializeRemoteKeyManager recreates the RemoteKeyManager with updated SSV-Signer client after restart
-func (env *TestEnvironment) reinitializeRemoteKeyManager() error {
-	logger := zaptest.NewLogger(nil)
-
-	remoteKeyManager, err := ekm.NewRemoteKeyManager(
-		env.ctx,
-		logger,
-		env.mockBeacon,
-		env.ssvSignerClient,                      // This now points to the restarted SSV-Signer
-		env.remoteDB,                             // Reuse the same database
-		func() spectypes.OperatorID { return 1 }, // operator ID getter
-	)
-	if err != nil {
-		return fmt.Errorf("failed to recreate remote key manager: %w", err)
 	}
 	env.remoteKeyManager = remoteKeyManager
 

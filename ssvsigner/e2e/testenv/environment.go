@@ -7,9 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/docker/go-connections/nat"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
+	"github.com/ssvlabs/ssv/ssvsigner/e2e/testutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -30,13 +30,13 @@ type TestEnvironment struct {
 	ssvSignerContainer  testcontainers.Container
 
 	// Essential components
-	web3SignerPostgresDB *sql.DB
-	ssvSignerClient      *ssvsigner.Client
-	web3SignerClient     *web3signer.Web3Signer
-	localKeyManager      *ekm.LocalKeyManager
-	remoteKeyManager     *ekm.RemoteKeyManager
-	localDB              basedb.Database
-	remoteDB             basedb.Database
+	postgresDB       *sql.DB
+	ssvSignerClient  *ssvsigner.Client
+	web3SignerClient *web3signer.Web3Signer
+	localKeyManager  *ekm.LocalKeyManager
+	remoteKeyManager *ekm.RemoteKeyManager
+	localDB          basedb.Database
+	remoteDB         basedb.Database
 
 	// Mock beacon for controlled testing
 	mockController *gomock.Controller
@@ -98,17 +98,11 @@ func NewTestEnvironment(ctx context.Context, t gomock.TestReporter) (*TestEnviro
 
 // Start initializes and starts all containers and services
 func (env *TestEnvironment) Start() error {
-	var err error
-
-	if err = env.startContainers(); err != nil {
+	if err := env.startContainers(); err != nil {
 		return fmt.Errorf("failed to start containers: %w", err)
 	}
 
-	if err = env.initializeClients(); err != nil {
-		return fmt.Errorf("failed to initialize clients: %w", err)
-	}
-
-	if err = env.initializeKeyManagers(); err != nil {
+	if err := env.initializeKeyManagers(); err != nil {
 		return fmt.Errorf("failed to initialize key managers: %w", err)
 	}
 
@@ -133,9 +127,23 @@ func (env *TestEnvironment) Stop() error {
 		}
 	}
 
-	_ = env.web3SignerPostgresDB.Close()
-	_ = env.localDB.Close()
-	_ = env.remoteDB.Close()
+	if env.postgresDB != nil {
+		if err := env.postgresDB.Close(); err != nil {
+			errors = append(errors, fmt.Errorf("failed to close PostgreSQL database: %w", err))
+		}
+	}
+
+	if env.localDB != nil {
+		if err := env.localDB.Close(); err != nil {
+			errors = append(errors, fmt.Errorf("failed to close local database: %w", err))
+		}
+	}
+
+	if env.remoteDB != nil {
+		if err := env.remoteDB.Close(); err != nil {
+			errors = append(errors, fmt.Errorf("failed to close remote database: %w", err))
+		}
+	}
 
 	// Clean up key manager directories
 	if err := os.RemoveAll(env.localKeyManagerPath); err != nil {
@@ -165,17 +173,7 @@ func (env *TestEnvironment) RestartWeb3Signer() error {
 		env.web3SignerContainer = nil
 	}
 
-	if err := env.startWeb3Signer(); err != nil {
-		return fmt.Errorf("failed to restart Web3Signer: %w", err)
-	}
-
-	// Wait for Web3Signer to be ready using testcontainers
-	if err := env.waitForWeb3SignerReady(); err != nil {
-		return err
-	}
-
-	// Reinitialize Web3Signer client with the new container URL
-	return env.initializeWeb3SignerClient()
+	return env.startWeb3Signer()
 }
 
 // RestartSSVSigner stops and restarts the SSV-Signer container
@@ -187,24 +185,7 @@ func (env *TestEnvironment) RestartSSVSigner() error {
 		env.ssvSignerContainer = nil
 	}
 
-	if err := env.startSSVSigner(); err != nil {
-		return fmt.Errorf("failed to restart SSV-Signer: %w", err)
-	}
-
-	// Wait for SSV-Signer to be ready using testcontainers
-	if err := env.waitForSSVSignerReady(); err != nil {
-		return err
-	}
-
-	if err := env.initializeSSVSignerClient(); err != nil {
-		return fmt.Errorf("failed to reinitialize SSV-Signer client: %w", err)
-	}
-
-	if err := env.reinitializeRemoteKeyManager(); err != nil {
-		return fmt.Errorf("failed to reinitialize remote key manager: %w", err)
-	}
-
-	return nil
+	return env.startSSVSigner()
 }
 
 // RestartPostgreSQL stops and restarts the PostgreSQL container with persistent data
@@ -216,51 +197,20 @@ func (env *TestEnvironment) RestartPostgreSQL() error {
 		env.postgresContainer = nil
 	}
 
-	if env.web3SignerPostgresDB != nil {
-		_ = env.web3SignerPostgresDB.Close()
-		env.web3SignerPostgresDB = nil
+	if env.postgresDB != nil {
+		if err := env.postgresDB.Close(); err != nil {
+			return fmt.Errorf("failed to close existing PostgreSQL connection during restart: %w", err)
+		}
+		env.postgresDB = nil
 	}
 
 	if err := env.startPostgreSQL(); err != nil {
 		return fmt.Errorf("failed to restart PostgreSQL: %w", err)
 	}
 
-	// Wait for PostgreSQL to be ready using testcontainers
-	if err := env.waitForPostgreSQLReady(); err != nil {
-		return err
-	}
-
-	// Wait for Web3Signer to be ready using testcontainers
+	// Wait for Web3Signer to be healthy and ready to sign
+	// We need to wait until Web3Signer detects PostgreSQL is back
 	return env.waitForWeb3SignerReady()
-}
-
-// waitForPostgreSQLReady waits for PostgreSQL to be ready using testcontainers wait strategy
-func (env *TestEnvironment) waitForPostgreSQLReady() error {
-	if env.postgresContainer == nil {
-		return fmt.Errorf("PostgreSQL container is nil")
-	}
-
-	// Use testcontainers wait.ForSQL strategy
-	waitStrategy := wait.ForSQL("5432/tcp", "postgres", func(host string, port nat.Port) string {
-		return fmt.Sprintf("host=%s port=%s user=postgres password=password dbname=web3signer sslmode=disable", host, port.Port())
-	}).WithStartupTimeout(60 * time.Second)
-
-	ctx, cancel := context.WithTimeout(env.ctx, 60*time.Second)
-	defer cancel()
-
-	// Apply the wait strategy to the container
-	if err := waitStrategy.WaitUntilReady(ctx, env.postgresContainer); err != nil {
-		return fmt.Errorf("PostgreSQL not ready: %w", err)
-	}
-
-	// Re-establish the environment's database connection
-	var err error
-	env.web3SignerPostgresDB, err = sql.Open("postgres", env.postgresConnStr)
-	if err != nil {
-		return fmt.Errorf("failed to re-establish database connection: %w", err)
-	}
-
-	return nil
 }
 
 // waitForWeb3SignerReady waits for Web3Signer to be ready using testcontainers wait strategy
@@ -270,33 +220,14 @@ func (env *TestEnvironment) waitForWeb3SignerReady() error {
 	}
 
 	// Use testcontainers wait.ForHTTP strategy - same as used during startup
-	waitStrategy := wait.ForHTTP("/upcheck").
-		WithPort("9000/tcp").
-		WithStartupTimeout(60 * time.Second)
+	waitStrategy := web3SignerWaitStrategy()
 
 	ctx, cancel := context.WithTimeout(env.ctx, 60*time.Second)
+
 	defer cancel()
 
 	// Apply the wait strategy to the container
 	return waitStrategy.WaitUntilReady(ctx, env.web3SignerContainer)
-}
-
-// waitForSSVSignerReady waits for SSV-Signer to be ready using testcontainers wait strategy
-func (env *TestEnvironment) waitForSSVSignerReady() error {
-	if env.ssvSignerContainer == nil {
-		return fmt.Errorf("SSV-Signer container is nil")
-	}
-
-	// Use testcontainers wait.ForHTTP strategy - same as used during startup
-	waitStrategy := wait.ForHTTP("/v1/operator/identity").
-		WithPort("8080/tcp").
-		WithStartupTimeout(90 * time.Second)
-
-	ctx, cancel := context.WithTimeout(env.ctx, 90*time.Second)
-	defer cancel()
-
-	// Apply the wait strategy to the container
-	return waitStrategy.WaitUntilReady(ctx, env.ssvSignerContainer)
 }
 
 // GetSSVSignerClient returns the SSV-Signer client
@@ -329,28 +260,30 @@ func (env *TestEnvironment) GetWeb3SignerClient() *web3signer.Web3Signer {
 	return env.web3SignerClient
 }
 
-// initializeClients initializes the client connections
-func (env *TestEnvironment) initializeClients() error {
-	env.ssvSignerClient = ssvsigner.NewClient(env.ssvSignerURL)
-	env.web3SignerClient = web3signer.New(env.web3SignerURL)
-	return nil
+// Implement signerClient interface by delegating to ssvSignerClient
+func (env *TestEnvironment) AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) error {
+	return env.ssvSignerClient.AddValidators(ctx, shares...)
 }
 
-// initializeSSVSignerClient reinitializes just the SSV-Signer client after container restart
-func (env *TestEnvironment) initializeSSVSignerClient() error {
-	env.ssvSignerClient = ssvsigner.NewClient(env.ssvSignerURL)
-	return nil
+func (env *TestEnvironment) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error {
+	return env.ssvSignerClient.RemoveValidators(ctx, sharePubKeys...)
 }
 
-// initializeWeb3SignerClient reinitializes just the Web3Signer client after container restart
-func (env *TestEnvironment) initializeWeb3SignerClient() error {
-	env.web3SignerClient = web3signer.New(env.web3SignerURL)
-	return nil
+func (env *TestEnvironment) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
+	return env.ssvSignerClient.Sign(ctx, sharePubKey, payload)
+}
+
+func (env *TestEnvironment) OperatorIdentity(ctx context.Context) (string, error) {
+	return env.ssvSignerClient.OperatorIdentity(ctx)
+}
+
+func (env *TestEnvironment) OperatorSign(ctx context.Context, payload []byte) ([]byte, error) {
+	return env.ssvSignerClient.OperatorSign(ctx, payload)
 }
 
 // setupWeb3SignerVolume creates a persistent volume for Web3Signer keystore data
 func (env *TestEnvironment) setupWeb3SignerVolume() error {
-	volumeName := fmt.Sprintf("web3signer-data-%d", os.Getpid())
+	volumeName := fmt.Sprintf("web3signer-data-%s", testutils.RandomSuffix())
 	env.web3SignerVolume = testcontainers.VolumeMount(volumeName, "/opt/web3signer")
 	fmt.Printf("Created Web3Signer volume: %s (mounting to /opt/web3signer)\n", volumeName)
 	return nil
@@ -358,7 +291,7 @@ func (env *TestEnvironment) setupWeb3SignerVolume() error {
 
 // setupPostgreSQLVolume creates a persistent volume for PostgreSQL database data
 func (env *TestEnvironment) setupPostgreSQLVolume() error {
-	volumeName := fmt.Sprintf("postgres-data-%d-%d", os.Getpid(), time.Now().UnixNano())
+	volumeName := fmt.Sprintf("postgres-data-%s", testutils.RandomSuffix())
 	env.postgresVolume = testcontainers.VolumeMount(volumeName, "/var/lib/postgresql/data")
 	fmt.Printf("Created PostgreSQL volume: %s (mounting to /var/lib/postgresql/data)\n", volumeName)
 	return nil
@@ -366,17 +299,15 @@ func (env *TestEnvironment) setupPostgreSQLVolume() error {
 
 // setupKeyManagerVolumes creates temporary directories for LocalKeyManager and RemoteKeyManager BadgerDB data
 func (env *TestEnvironment) setupKeyManagerVolumes() error {
-	timestamp := time.Now().UnixNano()
-
 	// Local KeyManager directory
-	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%d-%d", os.Getpid(), timestamp)
+	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%s", testutils.RandomSuffix())
 	if err := os.MkdirAll(env.localKeyManagerPath, 0750); err != nil {
 		return fmt.Errorf("failed to create local key manager directory: %w", err)
 	}
 	fmt.Printf("Created LocalKeyManager directory: %s\n", env.localKeyManagerPath)
 
 	// Remote KeyManager directory
-	env.remoteKeyManagerPath = fmt.Sprintf("/tmp/remote-keymanager-data-%d-%d", os.Getpid(), timestamp+1)
+	env.remoteKeyManagerPath = fmt.Sprintf("/tmp/remote-keymanager-data-%s", testutils.RandomSuffix())
 	if err := os.MkdirAll(env.remoteKeyManagerPath, 0750); err != nil {
 		return fmt.Errorf("failed to create remote key manager directory: %w", err)
 	}
