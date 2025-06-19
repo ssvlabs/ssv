@@ -163,7 +163,7 @@ func NewOpts(epochDuration time.Duration, activeValidators uint64, subnets int) 
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
+func NewSubnetTopicOpts(netCfg *networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
 	// Create options with default values
 	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
 	opts.defaults()

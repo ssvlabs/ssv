@@ -29,7 +29,7 @@ type Options struct {
 	NetworkName         string                   `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
 	CustomNetwork       *networkconfig.SSVConfig `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
 	CustomDomainType    string                   `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
-	NetworkConfig       networkconfig.NetworkConfig
+	NetworkConfig       *networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     executionclient.Provider
 	P2PNetwork          network.P2PNetwork
@@ -45,7 +45,7 @@ type Options struct {
 
 type Node struct {
 	logger           *zap.Logger
-	network          networkconfig.NetworkConfig
+	network          *networkconfig.NetworkConfig
 	context          context.Context
 	validatorsCtrl   validator.Controller
 	validatorOptions validator.ControllerOptions

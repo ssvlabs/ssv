@@ -70,7 +70,7 @@ type MockControllerOptions struct {
 	validatorStore    registrystorage.ValidatorStore
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorStorage   registrystorage.Operators
-	networkConfig     networkconfig.NetworkConfig
+	networkConfig     *networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
