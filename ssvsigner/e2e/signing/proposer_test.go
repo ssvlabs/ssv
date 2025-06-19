@@ -13,7 +13,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner/e2e"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
-	"github.com/ssvlabs/ssv/ssvsigner/e2e/testutils"
 )
 
 // BlockSlashingTestSuite tests block proposal slashing protection functionality
@@ -190,7 +189,7 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 	numGoroutines := 12
 
 	s.T().Logf("🔀 Phase 1: Testing LocalKeyManager concurrent protection")
-	localSuccessCount := testutils.RunConcurrentSigning(s.T(), ctx, numGoroutines, "LocalKeyManager", func() (spectypes.Signature, phase0.Root, error) {
+	localSuccessCount := s.RunConcurrentSigning(ctx, numGoroutines, "LocalKeyManager", func() (spectypes.Signature, phase0.Root, error) {
 		return s.GetEnv().GetLocalKeyManager().SignBeaconObject(
 			ctx,
 			block,
@@ -205,7 +204,7 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 	s.Require().Equal(1, localSuccessCount)
 
 	s.T().Logf("🔀 Phase 2: Testing RemoteKeyManager concurrent protection")
-	remoteSuccessCount := testutils.RunConcurrentSigning(s.T(), ctx, numGoroutines, "RemoteKeyManager", func() (spectypes.Signature, phase0.Root, error) {
+	remoteSuccessCount := s.RunConcurrentSigning(ctx, numGoroutines, "RemoteKeyManager", func() (spectypes.Signature, phase0.Root, error) {
 		return s.GetEnv().GetRemoteKeyManager().SignBeaconObject(
 			ctx,
 			block,
@@ -220,7 +219,7 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 	s.Require().Equal(1, remoteSuccessCount)
 
 	s.T().Logf("🔀 Phase 3: Testing Web3Signer concurrent protection")
-	web3SignerSuccessCount := testutils.RunConcurrentSigning(s.T(), ctx, numGoroutines, "Web3Signer", func() (spectypes.Signature, phase0.Root, error) {
+	web3SignerSuccessCount := s.RunConcurrentSigning(ctx, numGoroutines, "Web3Signer", func() (spectypes.Signature, phase0.Root, error) {
 		return s.SignWeb3Signer(
 			ctx,
 			block,
