@@ -283,7 +283,8 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			slot := phase0.Slot(s)
 			duties, err := e.traceStore.GetCommitteeDuties(slot)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting all committee duties: %w", err))
+				e.logger.Debug("get all committee duties", zap.Error(err), fields.Slot(slot))
+				continue
 			}
 			all = append(all, duties...)
 		}
@@ -307,7 +308,8 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			slot := phase0.Slot(s)
 			duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting committee duty for slot %d and committee ID %s: %w", slot, hex.EncodeToString(cmtID[:]), err))
+				e.logger.Debug("get committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(cmtID))
+				continue
 			}
 			duties = append(duties, duty)
 		}
@@ -379,11 +381,13 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 				if role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester {
 					committeeID, index, err := e.traceStore.GetCommitteeID(slot, pubkey)
 					if err != nil {
-						return api.Error(fmt.Errorf("error getting committee ID: %w", err))
+						e.logger.Debug("get committee ID", zap.Error(err), fields.Slot(slot), fields.Validator(pubkey[:]))
+						continue
 					}
 					duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, role)
 					if err != nil {
 						if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
+							e.logger.Debug("get committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
 							// we might not have a duty for this role, so we skip it
 							continue
 						}
@@ -407,7 +411,8 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 
 				duty, err := e.traceStore.GetValidatorDuty(role, slot, pubkey)
 				if err != nil {
-					return api.Error(fmt.Errorf("error getting validator duties: %w", err))
+					e.logger.Debug("get validator duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
+					continue
 				}
 				results = append(results, duty)
 			}

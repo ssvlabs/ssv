@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -1276,10 +1277,7 @@ func TestExporterValidatorTraces(t *testing.T) {
 			validatorStore := newMockValidatorStore()
 			tt.setupMock(store, validatorStore)
 
-			exporter := &Exporter{
-				traceStore: store,
-				validators: validatorStore,
-			}
+			exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
 
 			reqBody, err := json.Marshal(tt.request)
 			require.NoError(t, err)
