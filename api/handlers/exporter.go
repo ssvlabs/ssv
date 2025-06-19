@@ -411,7 +411,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 
 				duty, err := e.traceStore.GetValidatorDuty(role, slot, pubkey)
 				if err != nil {
-					e.logger.Debug("get validator duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
+					e.logger.Debug("error getting validator duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
 					continue
 				}
 				results = append(results, duty)
