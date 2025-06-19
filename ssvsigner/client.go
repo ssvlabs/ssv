@@ -177,7 +177,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		statuses = append(statuses, data.Status)
 	}
 
-	return nil, nil
+	return statuses, nil
 }
 
 func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (signature phase0.BLSSignature, err error) {

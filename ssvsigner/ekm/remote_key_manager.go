@@ -151,7 +151,7 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPu
 		case web3signer.StatusDeleted:
 			continue
 
-		case web3signer.StatusDuplicated:
+		case web3signer.StatusNotFound:
 			// A failed request does not guarantee that the keys were not deleted.
 			// It's possible that the ssv-signer successfully deleted the keys,
 			// but a network error occurred before a response could be received.
