@@ -1,10 +1,14 @@
 package testenv
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/go-connections/nat"
 	_ "github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
@@ -12,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/ssvlabs/ssv/ssvsigner"
+	ssvtls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -122,10 +127,14 @@ func (env *TestEnvironment) startPostgreSQL() error {
 	return nil
 }
 
-// web3SignerWaitStrategy returns the standard wait strategy for Web3Signer
+// web3SignerWaitStrategy returns the wait strategy for Web3Signer
 func web3SignerWaitStrategy() wait.Strategy {
+	//nolint:gosec // InsecureSkipVerify required for self-signed test certificates
+	tlsConfig := &tls.Config{InsecureSkipVerify: true}
+
 	return wait.ForHTTP(web3signer.PathUpCheck).
 		WithPort("9000/tcp").
+		WithTLS(true, tlsConfig).
 		WithStatusCodeMatcher(func(status int) bool {
 			return status == 200
 		}).
@@ -135,32 +144,46 @@ func web3SignerWaitStrategy() wait.Strategy {
 
 // startWeb3Signer starts the Web3Signer container with persistent volume for keystore data
 func (env *TestEnvironment) startWeb3Signer() error {
-	web3SignerReq := testcontainers.ContainerRequest{
-		Image:        "consensys/web3signer:25.4.1",
-		ExposedPorts: []string{"9000/tcp"},
-		Networks:     []string{env.networkName},
-		NetworkAliases: map[string][]string{
-			env.networkName: {"web3signer"},
-		},
-		Mounts: testcontainers.ContainerMounts{env.web3SignerVolume},
-		Cmd: []string{
-			"--http-listen-host=0.0.0.0",
-			"--http-host-allowlist=*",
-			"eth2",
-			"--network=mainnet",
-			"--slashing-protection-enabled=true",
-			fmt.Sprintf("--slashing-protection-db-url=jdbc:postgresql://postgres:5432/%s", postgresDB),
-			fmt.Sprintf("--slashing-protection-db-username=%s", postgresUser),
-			fmt.Sprintf("--slashing-protection-db-password=%s", postgresPassword),
-			"--key-manager-api-enabled=true",
-		},
-		WaitingFor: web3SignerWaitStrategy(),
+	if _, err := os.Stat(env.certDir); os.IsNotExist(err) {
+		return fmt.Errorf("certificate directory does not exist: %s", env.certDir)
 	}
 
-	web3SignerContainer, err := testcontainers.GenericContainer(env.ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: web3SignerReq,
-		Started:          true,
-	})
+	web3SignerReq := testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "consensys/web3signer:25.4.1",
+			ExposedPorts: []string{"9000/tcp"},
+			Networks:     []string{env.networkName},
+			NetworkAliases: map[string][]string{
+				env.networkName: {"web3signer"},
+			},
+			Mounts: testcontainers.ContainerMounts{env.web3SignerVolume},
+			HostConfigModifier: func(hostConfig *container.HostConfig) {
+				hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
+					Type:   mount.TypeBind,
+					Source: env.certDir,
+					Target: "/certs",
+				})
+			},
+			Cmd: []string{
+				"--http-listen-host=0.0.0.0",
+				"--http-host-allowlist=*",
+				"--tls-keystore-file=/certs/localhost.p12",
+				"--tls-keystore-password-file=/certs/localhost_password.txt",
+				"--tls-allow-any-client=true",
+				"eth2",
+				"--network=mainnet",
+				"--slashing-protection-enabled=true",
+				fmt.Sprintf("--slashing-protection-db-url=jdbc:postgresql://postgres:5432/%s", postgresDB),
+				fmt.Sprintf("--slashing-protection-db-username=%s", postgresUser),
+				fmt.Sprintf("--slashing-protection-db-password=%s", postgresPassword),
+				"--key-manager-api-enabled=true",
+			},
+			WaitingFor: web3SignerWaitStrategy(),
+		},
+		Started: true,
+	}
+
+	web3SignerContainer, err := testcontainers.GenericContainer(env.ctx, web3SignerReq)
 	if err != nil {
 		return fmt.Errorf("failed to start web3signer: %w", err)
 	}
@@ -178,9 +201,16 @@ func (env *TestEnvironment) startWeb3Signer() error {
 		return fmt.Errorf("failed to get web3signer port: %w", err)
 	}
 
-	env.web3SignerURL = fmt.Sprintf("http://%s:%s", host, mappedPort.Port())
+	env.web3SignerURL = fmt.Sprintf("https://%s:%s", host, mappedPort.Port())
 
-	env.web3SignerClient = web3signer.New(env.web3SignerURL)
+	tlsConf := &ssvtls.Config{
+		ClientServerCertFile: env.web3SignerCertPath,
+	}
+	tlsConfig, err := tlsConf.LoadClientTLSConfig()
+	if err != nil {
+		return fmt.Errorf("failed to create TLS config: %w", err)
+	}
+	env.web3SignerClient = web3signer.New(env.web3SignerURL, web3signer.WithTLS(tlsConfig))
 
 	return nil
 }
@@ -189,29 +219,41 @@ func (env *TestEnvironment) startWeb3Signer() error {
 func (env *TestEnvironment) startSSVSigner() error {
 	operatorKeyB64 := env.operatorKey.Base64()
 
-	ssvSignerReq := testcontainers.ContainerRequest{
-		Image:        "ssv-signer:latest",
-		ExposedPorts: []string{"8080/tcp"},
-		Networks:     []string{env.networkName},
-		NetworkAliases: map[string][]string{
-			env.networkName: {"ssv-signer"},
-		},
-		Env: map[string]string{
-			"LISTEN_ADDR":         "0.0.0.0:8080",
-			"WEB3SIGNER_ENDPOINT": "http://web3signer:9000",
-			"PRIVATE_KEY":         operatorKeyB64,
-			"LOG_LEVEL":           "info",
-			"LOG_FORMAT":          "console",
-		},
-		WaitingFor: wait.ForHTTP(ssvsigner.PathOperatorIdentity).
-			WithPort("8080/tcp").
-			WithStartupTimeout(30 * time.Second),
+	if _, err := os.Stat(env.certDir); os.IsNotExist(err) {
+		return fmt.Errorf("certificate directory does not exist: %s", env.certDir)
 	}
 
-	ssvSignerContainer, err := testcontainers.GenericContainer(env.ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: ssvSignerReq,
-		Started:          true,
-	})
+	ssvSignerReq := testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "ssv-signer:latest",
+			ExposedPorts: []string{"8080/tcp"},
+			Networks:     []string{env.networkName},
+			NetworkAliases: map[string][]string{
+				env.networkName: {"ssv-signer"},
+			},
+			Env: map[string]string{
+				"LISTEN_ADDR":                 "0.0.0.0:8080",
+				"PRIVATE_KEY":                 operatorKeyB64,
+				"LOG_LEVEL":                   "info",
+				"LOG_FORMAT":                  "console",
+				"WEB3SIGNER_ENDPOINT":         "https://web3signer:9000",
+				"WEB3SIGNER_SERVER_CERT_FILE": "/certs/localhost.crt",
+			},
+			HostConfigModifier: func(hostConfig *container.HostConfig) {
+				hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
+					Type:   mount.TypeBind,
+					Source: env.certDir,
+					Target: "/certs",
+				})
+			},
+			WaitingFor: wait.ForHTTP(ssvsigner.PathOperatorIdentity).
+				WithPort("8080/tcp").
+				WithStartupTimeout(30 * time.Second),
+		},
+		Started: true,
+	}
+
+	ssvSignerContainer, err := testcontainers.GenericContainer(env.ctx, ssvSignerReq)
 	if err != nil {
 		return fmt.Errorf("failed to start ssv-signer: %w", err)
 	}

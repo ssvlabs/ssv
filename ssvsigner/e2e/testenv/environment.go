@@ -58,6 +58,13 @@ type TestEnvironment struct {
 	localKeyManagerPath  string
 	remoteKeyManagerPath string
 
+	// TLS certificates
+	certDir            string
+	web3SignerCertPath string
+	web3SignerKeyPath  string
+	ssvSignerCertPath  string
+	ssvSignerKeyPath   string
+
 	// Operator key for validator encryption
 	operatorKey keys.OperatorPrivateKey
 
@@ -88,6 +95,10 @@ func NewTestEnvironment(ctx context.Context, t gomock.TestReporter) (*TestEnviro
 
 	if err := env.setupKeyManagerVolumes(); err != nil {
 		return nil, fmt.Errorf("failed to setup key manager volumes: %w", err)
+	}
+
+	if err := env.setupTLSCertificates(); err != nil {
+		return nil, fmt.Errorf("failed to setup TLS certificates: %w", err)
 	}
 
 	if err := env.setupMockBeacon(t); err != nil {
@@ -153,6 +164,11 @@ func (env *TestEnvironment) Stop() error {
 
 	if err := os.RemoveAll(env.remoteKeyManagerPath); err != nil {
 		errors = append(errors, fmt.Errorf("failed to cleanup remote key manager directory: %w", err))
+	}
+
+	// Clean up TLS certificates directory
+	if err := os.RemoveAll(env.certDir); err != nil {
+		errors = append(errors, fmt.Errorf("failed to cleanup TLS certificates directory: %w", err))
 	}
 
 	if env.mockController != nil {
@@ -300,14 +316,12 @@ func (env *TestEnvironment) setupPostgreSQLVolume() error {
 
 // setupKeyManagerVolumes creates temporary directories for LocalKeyManager and RemoteKeyManager BadgerDB data
 func (env *TestEnvironment) setupKeyManagerVolumes() error {
-	// Local KeyManager directory
 	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%s", randomSuffix())
 	if err := os.MkdirAll(env.localKeyManagerPath, 0750); err != nil {
 		return fmt.Errorf("failed to create local key manager directory: %w", err)
 	}
 	fmt.Printf("Created LocalKeyManager directory: %s\n", env.localKeyManagerPath)
 
-	// Remote KeyManager directory
 	env.remoteKeyManagerPath = fmt.Sprintf("/tmp/remote-keymanager-data-%s", randomSuffix())
 	if err := os.MkdirAll(env.remoteKeyManagerPath, 0750); err != nil {
 		return fmt.Errorf("failed to create remote key manager directory: %w", err)
@@ -317,11 +331,9 @@ func (env *TestEnvironment) setupKeyManagerVolumes() error {
 	return nil
 }
 
-// randomSuffix generates a random hex string suffix for unique resource naming
 func randomSuffix() string {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
-		// Fallback to timestamp if random fails
 		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b)
