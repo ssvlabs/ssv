@@ -461,7 +461,7 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
-		if cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == "" {
+		if cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeStandard {
 			retain := cfg.ExporterOptions.RetainSlots
 			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
