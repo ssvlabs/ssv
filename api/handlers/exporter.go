@@ -173,7 +173,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				if len(pubkeys) == 0 {
 					participantsByPK, err := e.traceStore.GetAllCommitteeDecideds(slot, role)
 					if err != nil {
-						e.logger.Debug("get all committee decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+						e.logger.Debug("error getting all committee decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
 						continue
 					}
 					for _, pr := range participantsByPK {
@@ -191,7 +191,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					participantsByPK, err := e.traceStore.GetCommitteeDecideds(slot, pubkey, role)
 					if err != nil {
 						if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
-							e.logger.Debug("get committee decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
+							e.logger.Debug("error getting committee decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
 							// we might not have a duty for this role, so we skip it
 							continue
 						}
@@ -213,7 +213,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					slot := phase0.Slot(s)
 					participantsByPK, err := e.traceStore.GetAllValidatorDecideds(role, slot)
 					if err != nil {
-						e.logger.Debug("get all validator decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+						e.logger.Debug("error getting all validator decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
 						continue
 					}
 					for _, pr := range participantsByPK {
@@ -233,7 +233,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				slot := phase0.Slot(s)
 				participantsByPK, err := e.traceStore.GetValidatorDecideds(role, slot, pubkeys)
 				if err != nil {
-					e.logger.Debug("get validator decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+					e.logger.Debug("error getting validator decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
 					continue
 				}
 				for _, pr := range participantsByPK {
@@ -381,13 +381,13 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 				if role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester {
 					committeeID, index, err := e.traceStore.GetCommitteeID(slot, pubkey)
 					if err != nil {
-						e.logger.Debug("get committee ID", zap.Error(err), fields.Slot(slot), fields.Validator(pubkey[:]))
+						e.logger.Debug("error getting committee ID", zap.Error(err), fields.Slot(slot), fields.Validator(pubkey[:]))
 						continue
 					}
 					duty, err := e.traceStore.GetCommitteeDuty(slot, committeeID, role)
 					if err != nil {
 						if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
-							e.logger.Debug("get committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
+							e.logger.Debug("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
 							// we might not have a duty for this role, so we skip it
 							continue
 						}

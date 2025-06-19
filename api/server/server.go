@@ -34,7 +34,7 @@ func New(
 	node *handlers.Node,
 	validators *handlers.Validators,
 	exporter *handlers.Exporter,
-	full bool,
+	fullExporter bool,
 ) *Server {
 	return &Server{
 		logger:       logger,
@@ -42,7 +42,7 @@ func New(
 		node:         node,
 		validators:   validators,
 		exporter:     exporter,
-		fullExporter: full,
+		fullExporter: fullExporter,
 	}
 }
 
