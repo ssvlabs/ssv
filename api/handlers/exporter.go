@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -14,6 +15,7 @@ import (
 	model "github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging/fields"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
@@ -23,13 +25,15 @@ type Exporter struct {
 	participantStores *ibftstorage.ParticipantStores
 	traceStore        dutyTraceStore
 	validators        registrystorage.ValidatorStore
+	logger            *zap.Logger
 }
 
-func NewExporter(participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
+func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantStores, traceStore dutyTraceStore, validators registrystorage.ValidatorStore) *Exporter {
 	return &Exporter{
 		participantStores: participantStores,
 		traceStore:        traceStore,
 		validators:        validators,
+		logger:            logger,
 	}
 }
 
@@ -169,6 +173,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				if len(pubkeys) == 0 {
 					participantsByPK, err := e.traceStore.GetAllCommitteeDecideds(slot, role)
 					if err != nil {
+						e.logger.Debug("get all committee decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
 						continue
 					}
 					for _, pr := range participantsByPK {
@@ -186,10 +191,11 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					participantsByPK, err := e.traceStore.GetCommitteeDecideds(slot, pubkey, role)
 					if err != nil {
 						if errors.Is(err, dutytracer.ErrNotFound) || errors.Is(err, store.ErrNotFound) {
+							e.logger.Debug("get committee decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role), fields.Validator(pubkey[:]))
 							// we might not have a duty for this role, so we skip it
 							continue
 						}
-						return api.Error(fmt.Errorf("error getting committee duty: %w", err))
+						return api.Error(fmt.Errorf("error getting committee duty for slot %d and pubkey %s and role %s: %w", slot, hex.EncodeToString(pubkey[:]), role.String(), err))
 					}
 					for _, pr := range participantsByPK {
 						// duty syncer fails to parse messages with no signers so instead
@@ -207,7 +213,8 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					slot := phase0.Slot(s)
 					participantsByPK, err := e.traceStore.GetAllValidatorDecideds(role, slot)
 					if err != nil {
-						return api.Error(fmt.Errorf("error getting all validator duties: %w", err))
+						e.logger.Debug("get all validator decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+						continue
 					}
 					for _, pr := range participantsByPK {
 						// duty syncer fails to parse messages with no signers so instead
@@ -226,6 +233,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 				slot := phase0.Slot(s)
 				participantsByPK, err := e.traceStore.GetValidatorDecideds(role, slot, pubkeys)
 				if err != nil {
+					e.logger.Debug("get validator decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
 					continue
 				}
 				for _, pr := range participantsByPK {
@@ -299,7 +307,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			slot := phase0.Slot(s)
 			duty, err := e.traceStore.GetCommitteeDuty(slot, cmtID)
 			if err != nil {
-				return api.Error(fmt.Errorf("error getting committee duty: %w", err))
+				return api.Error(fmt.Errorf("error getting committee duty for slot %d and committee ID %s: %w", slot, hex.EncodeToString(cmtID[:]), err))
 			}
 			duties = append(duties, duty)
 		}
