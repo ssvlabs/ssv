@@ -73,7 +73,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 	s.client.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 		PubKey:           pubKey,
 		EncryptedPrivKey: encShare,
-	}).Return(nil)
+	}).Return([]web3signer.Status{web3signer.StatusImported}, nil)
 
 	err := rm.AddShare(s.T().Context(), encShare, pubKey)
 
@@ -100,7 +100,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 	mockSlashingProtector.On("RemoveHighestAttestation", pubKey).Return(nil)
 	mockSlashingProtector.On("RemoveHighestProposal", pubKey).Return(nil)
 
-	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(nil)
+	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return([]web3signer.Status{web3signer.StatusDeleted}, nil)
 
 	err := rm.RemoveShare(s.T().Context(), pubKey)
 
