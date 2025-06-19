@@ -520,9 +520,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("InvalidAttestationSSZ", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -537,9 +534,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyAttestationValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -652,9 +646,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyProposalValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 

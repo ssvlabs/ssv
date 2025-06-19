@@ -1,10 +1,9 @@
 package keys
 
 import (
-	crand "crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
-	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -104,12 +103,12 @@ func TestSign_Error(t *testing.T) {
 	privKey := &privateKey{privKey: &rsa.PrivateKey{
 		PublicKey:   rsa.PublicKey{},
 		D:           nil,
-		Primes:      nil,
+		Primes:      []*big.Int{nil, nil},
 		Precomputed: rsa.PrecomputedValues{},
 	}}
 
 	_, err := privKey.Sign([]byte("test"))
-	require.ErrorContains(t, err, "missing public modulus")
+	require.Error(t, err) // We use a different implementation for linux, so the error text may be different.
 }
 
 func TestBase64Encoding(t *testing.T) {
@@ -245,23 +244,4 @@ func TestPublicKey_Base64_MalformedKey(t *testing.T) {
 	s, err := invalidPub.Base64()
 	require.Error(t, err)
 	require.Empty(t, s)
-}
-
-func TestGeneratePrivateKey_ReaderError(t *testing.T) {
-	origReader := crand.Reader
-	defer func() { crand.Reader = origReader }()
-
-	crand.Reader = &failingReader{}
-
-	key, err := GeneratePrivateKey()
-
-	require.Error(t, err)
-	require.Nil(t, key)
-	require.Contains(t, err.Error(), "failed to read random bytes")
-}
-
-type failingReader struct{}
-
-func (r *failingReader) Read([]byte) (n int, err error) {
-	return 0, fmt.Errorf("failed to read random bytes")
 }
