@@ -92,6 +92,7 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 		shares             []ShareKeys
 		expectedStatusCode int
 		expectedResponse   web3signer.ImportKeystoreResponse
+		expectStatuses     []web3signer.Status
 		expectError        bool
 		isDecryptionError  bool
 	}{
@@ -112,7 +113,8 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 					},
 				},
 			},
-			expectError: false,
+			expectStatuses: []web3signer.Status{web3signer.StatusImported},
+			expectError:    false,
 		},
 		{
 			name: "DecryptionError", // TODO: fix
@@ -146,7 +148,8 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			expectedResponse: web3signer.ImportKeystoreResponse{
 				Data: []web3signer.KeyManagerResponseData{},
 			},
-			expectError: false,
+			expectStatuses: []web3signer.Status{},
+			expectError:    false,
 		},
 	}
 
@@ -175,14 +178,13 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			err := s.client.AddValidators(t.Context(), tc.shares...)
-
+			statuses, err := s.client.AddValidators(t.Context(), tc.shares...)
 			s.assertErrorResult(err, tc.expectError, t)
-
 			if tc.isDecryptionError {
 				var decryptErr ShareDecryptionError
 				assert.ErrorAs(t, err, &decryptErr, "Expected a ShareDecryptionError")
 			}
+			assert.Equal(t, tc.expectStatuses, statuses)
 		})
 	}
 }
@@ -195,6 +197,7 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 		pubKeys            []phase0.BLSPubKey
 		expectedStatusCode int
 		expectedResponse   web3signer.DeleteKeystoreResponse
+		expectStatuses     []web3signer.Status
 		expectError        bool
 	}{
 		{
@@ -211,7 +214,8 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 					},
 				},
 			},
-			expectError: false,
+			expectStatuses: []web3signer.Status{web3signer.StatusDeleted},
+			expectError:    false,
 		},
 		{
 			name: "ServerError",
@@ -229,7 +233,8 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 			expectedResponse: web3signer.DeleteKeystoreResponse{
 				Data: []web3signer.KeyManagerResponseData{},
 			},
-			expectError: false,
+			expectStatuses: []web3signer.Status{},
+			expectError:    false,
 		},
 	}
 
@@ -257,9 +262,9 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			err := s.client.RemoveValidators(t.Context(), tc.pubKeys...)
-
+			statuses, err := s.client.RemoveValidators(t.Context(), tc.pubKeys...)
 			s.assertErrorResult(err, tc.expectError, t)
+			assert.Equal(t, tc.expectStatuses, statuses)
 		})
 	}
 }
@@ -759,13 +764,13 @@ func TestRequestErrors(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	client := NewClient(server.URL, WithLogger(logger))
 
-	err := client.AddValidators(t.Context(), ShareKeys{
+	_, err := client.AddValidators(t.Context(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
+	_, err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 
 	_, err = client.Sign(t.Context(), phase0.BLSPubKey{1, 1, 1}, web3signer.SignRequest{})
@@ -791,13 +796,13 @@ func TestResponseHandlingErrors(t *testing.T) {
 	logger, _ := zap.NewDevelopment()
 	client := NewClient(server.URL, WithLogger(logger))
 
-	err := client.AddValidators(t.Context(), ShareKeys{
+	_, err := client.AddValidators(t.Context(), ShareKeys{
 		EncryptedPrivKey: []byte("test"),
 		PubKey:           phase0.BLSPubKey{1, 1, 1},
 	})
 	assert.Error(t, err)
 
-	err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
+	_, err = client.RemoveValidators(t.Context(), phase0.BLSPubKey{1, 1, 1})
 	assert.Error(t, err)
 }
 
