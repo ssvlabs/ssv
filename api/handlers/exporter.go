@@ -82,10 +82,10 @@ func (e *Exporter) Decideds(w http.ResponseWriter, r *http.Request) error {
 	to := phase0.Slot(request.To)
 
 	var pubkeys []spectypes.ValidatorPK
-	for _, req := range request.PubKeys {
+	for i, req := range request.PubKeys {
 		var pubkey spectypes.ValidatorPK
 		if len(req) != len(pubkey) {
-			return api.BadRequestError(errors.New("invalid pubkey length"))
+			return api.BadRequestError(fmt.Errorf("invalid pubkey length at index %d", i))
 		}
 		copy(pubkey[:], req)
 		pubkeys = append(pubkeys, pubkey)
