@@ -85,7 +85,7 @@ func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKe
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path(pathValidators).
+		Path(PathValidators).
 		ToJSON(&listResp).
 		Fetch(ctx)
 
@@ -117,7 +117,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path(pathValidators).
+		Path(PathValidators).
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
@@ -160,7 +160,7 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path(pathValidators).
+		Path(PathValidators).
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
@@ -193,7 +193,7 @@ func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path(pathValidatorsSign + sharePubKey.String()).
+		Path(PathValidatorsSign + sharePubKey.String()).
 		BodyJSON(payload).
 		Post().
 		ToJSON(&resp).
@@ -216,7 +216,7 @@ func (c *Client) OperatorIdentity(ctx context.Context) (pubKeyBase64 string, err
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path(pathOperatorIdentity).
+		Path(PathOperatorIdentity).
 		ToString(&resp).
 		Fetch(ctx)
 	if err != nil {
@@ -237,7 +237,7 @@ func (c *Client) OperatorSign(ctx context.Context, payload []byte) (signature []
 	err = requests.
 		URL(c.baseURL).
 		Client(c.httpClient).
-		Path(pathOperatorSign).
+		Path(PathOperatorSign).
 		BodyBytes(payload).
 		Post().
 		ToBytesBuffer(&respBuf).
