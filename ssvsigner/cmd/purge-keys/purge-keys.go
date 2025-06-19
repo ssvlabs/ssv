@@ -7,8 +7,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"net/url"
+	"os"
 	"time"
 
 	"github.com/alecthomas/kong"
@@ -16,7 +15,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
 
+	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/validation"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
@@ -32,21 +33,23 @@ type CLI struct {
 }
 
 func main() {
-	cli := CLI{}
-	_ = kong.Parse(&cli)
+	var cli CLI
 
-	logger, err := zap.NewProduction()
+	kong.Must(&cli,
+		kong.Name("purge-keys"),
+		kong.UsageOnError(),
+	)
+
+	log, err := logger.SetupProductionLogger()
 	if err != nil {
-		log.Fatal(err)
+		_, _ = fmt.Fprintf(os.Stderr, "setup logger: %v\n", err)
+		os.Exit(1)
 	}
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			log.Println("failed to sync logger: ", err)
-		}
-	}()
 
-	if err := run(logger, cli); err != nil {
-		logger.Fatal("Application failed", zap.Error(err))
+	defer func() { _ = log.Sync() }()
+
+	if err := run(log, cli); err != nil {
+		log.Fatal("application failed", zap.Error(err))
 	}
 }
 
@@ -57,12 +60,12 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != "" || cli.Web3SignerServerCertFile != ""),
 	)
 
-	if err := bls.Init(bls.BLS12_381); err != nil {
-		return fmt.Errorf("init BLS: %w", err)
+	if err := validateConfig(cli); err != nil {
+		return fmt.Errorf("malformed config: %w", err)
 	}
 
-	if _, err := url.ParseRequestURI(cli.Web3SignerEndpoint); err != nil {
-		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT format: %w", err)
+	if err := bls.Init(bls.BLS12_381); err != nil {
+		return fmt.Errorf("init BLS: %w", err)
 	}
 
 	ctx := context.Background()
@@ -143,6 +146,18 @@ func run(logger *zap.Logger, cli CLI) error {
 	logger.Info("all batches completed",
 		zap.Any("status_count", statusCount),
 		fields.Took(time.Since(deletingStart)))
+
+	return nil
+}
+
+func validateConfig(cli CLI) error {
+	if cli.BatchSize <= 0 {
+		return fmt.Errorf("invalid batch size %d, must be > 0", cli.BatchSize)
+	}
+
+	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint); err != nil {
+		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT: %w", err)
+	}
 
 	return nil
 }
