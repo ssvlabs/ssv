@@ -160,7 +160,7 @@ func extractVersionRank(version string) int {
 
 // getMigrationStatus returns the current migration status
 func (env *TestEnvironment) GetMigrationStatus() ([]string, error) {
-	if env.web3SignerPostgresDB == nil {
+	if env.postgresDB == nil {
 		return nil, fmt.Errorf("database connection not established")
 	}
 
@@ -171,7 +171,7 @@ func (env *TestEnvironment) GetMigrationStatus() ([]string, error) {
 		ORDER BY version_rank
 	`
 
-	rows, err := env.web3SignerPostgresDB.Query(query)
+	rows, err := env.postgresDB.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query migration status: %w", err)
 	}

@@ -10,6 +10,13 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
+// Initialize BLS library once when the package is imported
+func init() {
+	if err := initializeBLS(); err != nil {
+		panic(fmt.Sprintf("Failed to initialize BLS library: %v", err))
+	}
+}
+
 // ValidatorKeyPair contains keys for a validator
 type ValidatorKeyPair struct {
 	BLSPubKey      phase0.BLSPubKey // 48-byte BLS public key for Ethereum
@@ -27,10 +34,6 @@ func GenerateOperatorKey() (keys.OperatorPrivateKey, error) {
 
 // GenerateValidatorShare generates a BLS validator key and encrypts it with the operator's RSA public key
 func GenerateValidatorShare(operatorKey keys.OperatorPrivateKey) (*ValidatorKeyPair, error) {
-	if err := initializeBLS(); err != nil {
-		return nil, fmt.Errorf("failed to initialize BLS library: %w", err)
-	}
-
 	// Generate BLS key pair
 	secretKey := &bls.SecretKey{}
 	secretKey.SetByCSPRNG()

@@ -5,11 +5,28 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/docker/go-connections/nat"
 	_ "github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
+
+// PostgreSQL configuration constants
+const (
+	postgresDB       = "web3signer"
+	postgresUser     = "postgres"
+	postgresPassword = "password"
+)
+
+// buildPostgresConnStr creates a PostgreSQL connection string for the given host and port
+func buildPostgresConnStr(host, port string) string {
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		host, port, postgresUser, postgresPassword, postgresDB)
+}
 
 // startContainers starts all Docker containers in the correct order
 func (env *TestEnvironment) startContainers() error {
@@ -59,12 +76,13 @@ func (env *TestEnvironment) startPostgreSQL() error {
 			},
 			Mounts: testcontainers.ContainerMounts{env.postgresVolume},
 			Env: map[string]string{
-				"POSTGRES_DB":       "web3signer",
-				"POSTGRES_USER":     "postgres",
-				"POSTGRES_PASSWORD": "password",
+				"POSTGRES_DB":       postgresDB,
+				"POSTGRES_USER":     postgresUser,
+				"POSTGRES_PASSWORD": postgresPassword,
 			},
-			WaitingFor: wait.ForListeningPort("5432/tcp").
-				WithStartupTimeout(60 * time.Second),
+			WaitingFor: wait.ForSQL("5432/tcp", "postgres", func(host string, port nat.Port) string {
+				return buildPostgresConnStr(host, port.Port())
+			}).WithStartupTimeout(30 * time.Second),
 		},
 		Started: true,
 	}
@@ -86,11 +104,33 @@ func (env *TestEnvironment) startPostgreSQL() error {
 		return fmt.Errorf("failed to get PostgreSQL port: %w", err)
 	}
 
-	postgresConnStr := fmt.Sprintf("host=%s port=%s user=postgres password=password dbname=web3signer sslmode=disable",
-		host, mappedPort.Port())
-	env.postgresConnStr = postgresConnStr
+	env.postgresConnStr = buildPostgresConnStr(host, mappedPort.Port())
+
+	// Create database connection
+	db, err := sql.Open("postgres", env.postgresConnStr)
+	if err != nil {
+		return fmt.Errorf("failed to connect to postgres: %w", err)
+	}
+	if err = db.Ping(); err != nil {
+		if closeErr := db.Close(); closeErr != nil {
+			// Best effort cleanup, don't mask the original ping error
+		}
+		return fmt.Errorf("failed to ping postgres: %w", err)
+	}
+	env.postgresDB = db
 
 	return nil
+}
+
+// web3SignerWaitStrategy returns the standard wait strategy for Web3Signer
+func web3SignerWaitStrategy() wait.Strategy {
+	return wait.ForHTTP(web3signer.PathUpCheck).
+		WithPort("9000/tcp").
+		WithStatusCodeMatcher(func(status int) bool {
+			return status == 200
+		}).
+		WithStartupTimeout(30 * time.Second).
+		WithPollInterval(500 * time.Millisecond)
 }
 
 // startWeb3Signer starts the Web3Signer container with persistent volume for keystore data
@@ -109,14 +149,12 @@ func (env *TestEnvironment) startWeb3Signer() error {
 			"eth2",
 			"--network=mainnet",
 			"--slashing-protection-enabled=true",
-			"--slashing-protection-db-url=jdbc:postgresql://postgres:5432/web3signer",
-			"--slashing-protection-db-username=postgres",
-			"--slashing-protection-db-password=password",
+			fmt.Sprintf("--slashing-protection-db-url=jdbc:postgresql://postgres:5432/%s", postgresDB),
+			fmt.Sprintf("--slashing-protection-db-username=%s", postgresUser),
+			fmt.Sprintf("--slashing-protection-db-password=%s", postgresPassword),
 			"--key-manager-api-enabled=true",
 		},
-		WaitingFor: wait.ForHTTP("/upcheck").
-			WithPort("9000/tcp").
-			WithStartupTimeout(120 * time.Second),
+		WaitingFor: web3SignerWaitStrategy(),
 	}
 
 	web3SignerContainer, err := testcontainers.GenericContainer(env.ctx, testcontainers.GenericContainerRequest{
@@ -141,6 +179,9 @@ func (env *TestEnvironment) startWeb3Signer() error {
 	}
 
 	env.web3SignerURL = fmt.Sprintf("http://%s:%s", host, mappedPort.Port())
+
+	env.web3SignerClient = web3signer.New(env.web3SignerURL)
+
 	return nil
 }
 
@@ -162,9 +203,9 @@ func (env *TestEnvironment) startSSVSigner() error {
 			"LOG_LEVEL":           "info",
 			"LOG_FORMAT":          "console",
 		},
-		WaitingFor: wait.ForHTTP("/v1/operator/identity").
+		WaitingFor: wait.ForHTTP(ssvsigner.PathOperatorIdentity).
 			WithPort("8080/tcp").
-			WithStartupTimeout(90 * time.Second),
+			WithStartupTimeout(30 * time.Second),
 	}
 
 	ssvSignerContainer, err := testcontainers.GenericContainer(env.ctx, testcontainers.GenericContainerRequest{
@@ -188,25 +229,19 @@ func (env *TestEnvironment) startSSVSigner() error {
 	}
 
 	env.ssvSignerURL = fmt.Sprintf("http://%s:%s", host, mappedPort.Port())
+
+	env.ssvSignerClient = ssvsigner.NewClient(env.ssvSignerURL)
+
 	return nil
 }
 
 // applyMigrations applies all pending Web3Signer migrations
 func (env *TestEnvironment) applyMigrations() error {
-	db, err := sql.Open("postgres", env.postgresConnStr)
-	if err != nil {
-		return fmt.Errorf("failed to connect to postgres: %w", err)
-	}
-	// Don't defer close here - we want to keep the connection open for the test environment
-
-	if err = db.Ping(); err != nil {
-		_ = db.Close()
-		return fmt.Errorf("failed to ping postgres: %w", err)
+	if env.postgresDB == nil {
+		return fmt.Errorf("database connection not initialized")
 	}
 
-	env.web3SignerPostgresDB = db
-
-	if err = env.createMigrationTable(db); err != nil {
+	if err := env.createMigrationTable(env.postgresDB); err != nil {
 		return fmt.Errorf("failed to create migration table: %w", err)
 	}
 
@@ -216,13 +251,13 @@ func (env *TestEnvironment) applyMigrations() error {
 	}
 
 	for _, migration := range migrations {
-		applied, err := env.isMigrationApplied(db, migration.Version)
+		applied, err := env.isMigrationApplied(env.postgresDB, migration.Version)
 		if err != nil {
 			return fmt.Errorf("failed to check migration status: %w", err)
 		}
 
 		if !applied {
-			if err = env.applyMigration(db, migration); err != nil {
+			if err = env.applyMigration(env.postgresDB, migration); err != nil {
 				return fmt.Errorf("failed to apply migration: %w", err)
 			}
 		}
