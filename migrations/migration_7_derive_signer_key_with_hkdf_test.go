@@ -1,10 +1,7 @@
 package migrations
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -14,17 +11,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/hkdf"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
-
-const oldKeyHash = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
 
 func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -32,20 +27,23 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 	t.Run("successfully migrates accounts with new key derivation", func(t *testing.T) {
 		db, logger := setupTest(t)
 
+		operatorPrivKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
 		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 		require.NoError(t, err)
-		require.NoError(t, nodeStorage.SavePrivateKeyHash(oldKeyHash))
+		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
 		signerStorage := ekm.NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
-		require.NoError(t, signerStorage.SetEncryptionKey(oldKeyHash))
+		require.NoError(t, signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash()))
 
 		wallet, accounts := createTestAccounts(t, signerStorage, 3)
 		require.NoError(t, signerStorage.SaveWallet(wallet))
 
 		options := Options{
-			Db:            db,
-			NodeStorage:   nodeStorage,
-			NetworkConfig: networkconfig.TestNetwork,
+			Db:              db,
+			NetworkConfig:   networkconfig.TestNetwork,
+			OperatorPrivKey: operatorPrivKey,
 		}
 
 		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
@@ -53,22 +51,16 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 			func(rw basedb.ReadWriter) error { return nil })
 		assert.NoError(t, err)
 
-		// Verify accounts can be decrypted with new key
-		oldHashBytes, _ := hex.DecodeString(oldKeyHash)
-		kdf := hkdf.New(sha256.New, oldHashBytes, nil, nil)
-		newKeyBytes := make([]byte, 32)
-		_, err = io.ReadFull(kdf, newKeyBytes)
+		encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
 		require.NoError(t, err)
-		newKeyHash := hex.EncodeToString(newKeyBytes)
-
-		require.NoError(t, signerStorage.SetEncryptionKey(newKeyHash))
+		require.NoError(t, signerStorage.SetEncryptionKey(encryptionKey))
 
 		retrievedAccounts, err := signerStorage.ListAccounts()
 		require.NoError(t, err)
 		assert.Equal(t, len(accounts), len(retrievedAccounts))
 
 		// Verify old key no longer works
-		require.NoError(t, signerStorage.SetEncryptionKey(oldKeyHash))
+		require.NoError(t, signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash()))
 		_, err = signerStorage.ListAccounts()
 		assert.Error(t, err)
 	})
@@ -76,13 +68,13 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 	t.Run("skips migration when no private key hash found", func(t *testing.T) {
 		db, logger := setupTest(t)
 
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
 		options := Options{
-			Db:            db,
-			NodeStorage:   nodeStorage,
-			NetworkConfig: networkconfig.TestNetwork,
+			Db:              db,
+			NetworkConfig:   networkconfig.TestNetwork,
+			OperatorPrivKey: operatorPrivKey,
 		}
 
 		completedExecuted := false
@@ -100,18 +92,21 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 	t.Run("skips migration when no accounts to migrate", func(t *testing.T) {
 		db, logger := setupTest(t)
 
+		operatorPrivKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
 		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 		require.NoError(t, err)
-		require.NoError(t, nodeStorage.SavePrivateKeyHash(oldKeyHash))
+		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
 		signerStorage := ekm.NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 		require.NoError(t, signerStorage.SaveWallet(wallet))
 
 		options := Options{
-			Db:            db,
-			NodeStorage:   nodeStorage,
-			NetworkConfig: networkconfig.TestNetwork,
+			Db:              db,
+			NetworkConfig:   networkconfig.TestNetwork,
+			OperatorPrivKey: operatorPrivKey,
 		}
 
 		completedExecuted := false
@@ -129,20 +124,23 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 	t.Run("handles completion function error", func(t *testing.T) {
 		db, logger := setupTest(t)
 
+		operatorPrivKey, err := keys.GeneratePrivateKey()
+		require.NoError(t, err)
+
 		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
 		require.NoError(t, err)
-		require.NoError(t, nodeStorage.SavePrivateKeyHash(oldKeyHash))
+		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
 		signerStorage := ekm.NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
-		require.NoError(t, signerStorage.SetEncryptionKey(oldKeyHash))
+		require.NoError(t, signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash()))
 
 		wallet, _ := createTestAccounts(t, signerStorage, 1)
 		require.NoError(t, signerStorage.SaveWallet(wallet))
 
 		options := Options{
-			Db:            db,
-			NodeStorage:   nodeStorage,
-			NetworkConfig: networkconfig.TestNetwork,
+			Db:              db,
+			NetworkConfig:   networkconfig.TestNetwork,
+			OperatorPrivKey: operatorPrivKey,
 		}
 
 		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,

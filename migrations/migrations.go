@@ -57,7 +57,6 @@ type Migrations []Migration
 // Options is the options for running migrations.
 type Options struct {
 	Db              basedb.Database
-	NodeStorage     operatorstorage.Storage
 	DbPath          string
 	NetworkConfig   networkconfig.NetworkConfig
 	OperatorPrivKey keys.OperatorPrivateKey
