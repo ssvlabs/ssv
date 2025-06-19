@@ -70,6 +70,7 @@ func TestRun_InvalidPrivateKeyFormat(t *testing.T) {
 		ListenAddr:         ":8080",
 		Web3SignerEndpoint: "https://ssvlabs.io/",
 		PrivateKey:         "invalid-key-format",
+		AllowInsecureHTTP:  true,
 	}
 
 	err := run(logger, cli)
@@ -85,6 +86,7 @@ func TestRun_FailedKeystoreLoad(t *testing.T) {
 		Web3SignerEndpoint: "https://ssvlabs.io/",
 		PrivateKeyFile:     "/nonexistent/path",
 		PasswordFile:       "/nonexistent/password",
+		AllowInsecureHTTP:  true,
 	}
 
 	err := run(logger, cli)
@@ -99,6 +101,7 @@ func TestRun_FailedServerStart(t *testing.T) {
 		ListenAddr:         ":999999",
 		Web3SignerEndpoint: "https://ssvlabs.io/",
 		PrivateKey:         base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)),
+		AllowInsecureHTTP:  true,
 	}
 
 	err := run(logger, cli)
