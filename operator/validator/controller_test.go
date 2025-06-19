@@ -181,7 +181,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
 
 			defer ctrl.Finish()
-			mockValidatorsMap := validators.New(context.TODO())
+			mockValidatorsMap := validators.New(t.Context())
 
 			subnets := commons.Subnets{}
 			for _, share := range sharesWithMetadata {
@@ -234,14 +234,14 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
-			ctr.StartValidators(context.TODO())
+			ctr.StartValidators(t.Context())
 		})
 	}
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
-	mockValidatorsMap := validators.New(context.TODO())
+	mockValidatorsMap := validators.New(t.Context())
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
 	}
@@ -262,35 +262,35 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    generateDecidedMessage(t, identifier),
 		},
 	})
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    generateChangeRoundMsg(t, identifier),
 		},
 	})
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: message.SSVSyncMsgType, // this message will be skipped
 			MsgID:   identifier,
 			Data:    []byte("data"),
 		},
 	})
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: 123, // this message will be skipped
 			MsgID:   identifier,
 			Data:    []byte("data"),
 		},
 	})
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType, // this message will be processed
 			MsgID:   identifier,
@@ -531,7 +531,7 @@ func TestSetupValidators(t *testing.T) {
 				createPubKey(byte('0')): testValidator,
 			}
 			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
-			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeeMap))
+			mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, committeeMap))
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
@@ -575,7 +575,7 @@ func TestGetValidator(t *testing.T) {
 	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 		createPubKey(byte('0')): testValidator,
 	}
-	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
+	mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
 	// Set up the controller with mock data
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
@@ -625,7 +625,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     mockShares(sharesSlice),
-			validatorsMap:     validators.New(context.TODO()),
+			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -661,7 +661,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     mockShares(sharesSlice),
-			validatorsMap:     validators.New(context.TODO()),
+			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -689,7 +689,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     mockShares(sharesSlice),
-			validatorsMap:     validators.New(context.TODO()),
+			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -730,7 +730,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     mockShares(sharesSlice),
-			validatorsMap:     validators.New(context.TODO()),
+			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -760,7 +760,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			createPubKey(byte('0')): testValidator,
 		}
-		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
+		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
 
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(t, logger, controllerOptions)
@@ -777,7 +777,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			createPubKey(byte('0')): testValidator,
 		}
-		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
+		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(t, logger, controllerOptions)
 
