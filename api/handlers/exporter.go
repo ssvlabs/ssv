@@ -11,8 +11,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api"
-	model "github.com/ssvlabs/ssv/exporter/v2"
-	"github.com/ssvlabs/ssv/exporter/v2/store"
+	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"

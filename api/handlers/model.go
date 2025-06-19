@@ -9,7 +9,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	model "github.com/ssvlabs/ssv/exporter/v2"
+	model "github.com/ssvlabs/ssv/exporter"
 )
 
 type validatorTraceResponse struct {

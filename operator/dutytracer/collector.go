@@ -18,8 +18,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	model "github.com/ssvlabs/ssv/exporter/v2"
-	"github.com/ssvlabs/ssv/exporter/v2/store"
+	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/slotticker"
