@@ -41,7 +41,6 @@ var migration_7_derive_signer_key_with_hkdf = Migration{
 			}
 
 			// re-encryption with the new algorithm
-
 			if err := signerStorage.SetEncryptionKey(encryptionKey); err != nil {
 				return fmt.Errorf("failed to set new encryption key: %w", err)
 			}
