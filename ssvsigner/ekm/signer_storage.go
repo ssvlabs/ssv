@@ -27,7 +27,7 @@ import (
 
 // signer_storage.go provides a concrete implementation of Storage (backed by
 // basedb.Database) to store wallet and slashing data. It also supports optional
-// encryption of the stored data via SetEncryptionKeyHex.
+// encryption of the stored data via SetEncryptionKey.
 
 const (
 	prefix                = "signer_data-"
