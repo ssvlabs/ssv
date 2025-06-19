@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
@@ -866,18 +867,18 @@ func ensureOperatorPrivateKey(
 		return fmt.Errorf("could not get hashed private key: %w", err)
 	}
 
-	// Current hashing method (PEM‑encoded → StorageHash)
+	// Current hashing method (PEM‑encoded → StorageHashHex)
 	currentHash := operatorPrivKey.StorageHash()
 
 	// Backwards compatibility for the old hashing method,
 	// which was hashing the text from the configuration directly,
-	// whereas StorageHash re-encodes with PEM format.
+	// whereas StorageHashHex re-encodes with PEM format.
 	cliPrivKeyDecoded, err := base64.StdEncoding.DecodeString(operatorPrivKeyPEM)
 	if err != nil {
 		return fmt.Errorf("could not decode private key: %w", err)
 	}
 
-	// Legacy hashing method (base64‑decoded bytes → HashKeyBytes)
+	// Legacy hashing method (base64‑decoded bytes → HashKeyBytesHex)
 	legacyHash := rsaencryption.HashKeyBytes(cliPrivKeyDecoded)
 
 	if !found {
@@ -889,8 +890,8 @@ func ensureOperatorPrivateKey(
 	}
 
 	// Subsequent runs: enforce immutability.
-	if currentHash != storedHash &&
-		legacyHash != storedHash {
+	if !bytes.Equal(currentHash, storedHash) &&
+		!bytes.Equal(legacyHash, storedHash) {
 		// Prevent the node from running with a different key.
 		return fmt.Errorf("operator private key is not matching the one encrypted the storage")
 	}

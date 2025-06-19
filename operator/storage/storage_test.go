@@ -2,6 +2,7 @@ package storage
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"testing"
@@ -48,7 +49,7 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, pkPem, encodedPubKey)
 
-	require.NoError(t, operatorStorage.SavePrivateKeyHash(parsedPrivKeyHash))
+	require.NoError(t, operatorStorage.SavePrivateKeyHash(hex.EncodeToString(parsedPrivKeyHash)))
 	extractedHash, found, err := operatorStorage.GetPrivateKeyHash()
 	require.True(t, true, found)
 	require.NoError(t, err)

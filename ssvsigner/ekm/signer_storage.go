@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,7 +27,7 @@ import (
 
 // signer_storage.go provides a concrete implementation of Storage (backed by
 // basedb.Database) to store wallet and slashing data. It also supports optional
-// encryption of the stored data via SetEncryptionKey.
+// encryption of the stored data via SetEncryptionKeyHex.
 
 const (
 	prefix                = "signer_data-"
@@ -53,7 +52,7 @@ type Storage interface {
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
-	SetEncryptionKey(hexKey string) error
+	SetEncryptionKey(hexKey []byte)
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 
@@ -86,19 +85,12 @@ func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *
 // SetEncryptionKey sets the encryption key used to encrypt/decrypt account data.
 //
 // Accepts a hex-encoded key and derives a 32-byte AES-256 key using HKDF-SHA256.
-// Empty hexKey results in plaintext storage (no encryption).
-func (s *storage) SetEncryptionKey(hexKey string) error {
+// Empty/nil hexKey results in plaintext storage (no encryption).
+func (s *storage) SetEncryptionKey(hexKey []byte) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	keyBytes, err := hex.DecodeString(hexKey)
-	if err != nil {
-		return errors.New("the key must be a valid hexadecimal string")
-	}
-
-	s.encryptionKey = keyBytes
-
-	return nil
+	s.encryptionKey = hexKey
 }
 
 func (s *storage) DropRegistryData() error {
