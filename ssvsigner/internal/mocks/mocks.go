@@ -38,15 +38,16 @@ func (t *TestOperatorPublicKey) Base64() (string, error) {
 
 // TestOperatorPrivateKey implements a mock operator private key for testing.
 type TestOperatorPrivateKey struct {
-	Base64Value      string
-	BytesValue       []byte
-	StorageHashValue string
-	EkmHashValue     string
-	DecryptResult    []byte
-	DecryptError     error
-	SignResult       []byte
-	SignError        error
-	PublicKey        keys.OperatorPublicKey
+	Base64Value           string
+	BytesValue            []byte
+	StorageHashValue      []byte
+	EkmHashValue          []byte
+	EkmEncryptionKeyValue []byte
+	DecryptResult         []byte
+	DecryptError          error
+	SignResult            []byte
+	SignError             error
+	PublicKey             keys.OperatorPublicKey
 }
 
 // Sign mocks signing data with the private key.
@@ -71,13 +72,18 @@ func (t *TestOperatorPrivateKey) Decrypt([]byte) ([]byte, error) {
 }
 
 // StorageHash returns a mock storage hash.
-func (t *TestOperatorPrivateKey) StorageHash() string {
+func (t *TestOperatorPrivateKey) StorageHash() []byte {
 	return t.StorageHashValue
 }
 
 // EKMHash returns a mock EKM hash.
-func (t *TestOperatorPrivateKey) EKMHash() string {
+func (t *TestOperatorPrivateKey) EKMHash() []byte {
 	return t.EkmHashValue
+}
+
+// EKMEncryptionKey returns a mock EKM encryption key.
+func (t *TestOperatorPrivateKey) EKMEncryptionKey() ([]byte, error) {
+	return t.EkmHashValue, nil
 }
 
 // Bytes returns the private key bytes.
@@ -141,13 +147,14 @@ func CreateMockOperator() *TestOperatorPrivateKey {
 	}
 
 	return &TestOperatorPrivateKey{
-		PublicKey:        pubKey,
-		SignResult:       []byte("signature_bytes"),
-		Base64Value:      "test_base64",
-		BytesValue:       []byte("test_bytes"),
-		StorageHashValue: "test_storage_hash",
-		EkmHashValue:     "test_ekm_hash",
-		DecryptResult:    []byte("0x1234567890abcdef"),
+		PublicKey:             pubKey,
+		SignResult:            []byte("signature_bytes"),
+		Base64Value:           "test_base64",
+		BytesValue:            []byte("test_bytes"),
+		StorageHashValue:      []byte("test_storage_hash"),
+		EkmHashValue:          []byte("test_ekm_hash"),
+		EkmEncryptionKeyValue: []byte("test_ekm_encryption_key"),
+		DecryptResult:         []byte("0x1234567890abcdef"),
 	}
 }
 
