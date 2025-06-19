@@ -97,21 +97,36 @@ func (s *Server) Run() error {
 
 	// We kept both GET and POST methods to ensure compatibility and avoid breaking changes for clients that may rely on either method
 	if s.fullExporter {
-		// @Summary Get validator traces
+		// @Summary Post validator traces
 		// @Description Returns traces for a specific validator
 		// @Tags Exporter
 		// @Produce json
 		// @Success 200 {object} handlers.ValidatorTracesResponse
 		// @Router /v1/exporter/traces/validator [post]
 		router.Post("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
+		// @Summary Get validator traces
+		// @Description Returns traces for a specific validator
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.ValidatorTracesResponse
+		// @Router /v1/exporter/traces/validator [get]
+		router.Get("/v1/exporter/traces/validator", api.Handler(s.exporter.ValidatorTraces))
 
-		// @Summary Get committee traces
+		// @Summary Post committee traces
 		// @Description Returns traces for a specific committee
 		// @Tags Exporter
 		// @Produce json
 		// @Success 200 {object} handlers.CommitteeTracesResponse
 		// @Router /v1/exporter/traces/committee [post]
 		router.Post("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
+
+		// @Summary Get committee traces
+		// @Description Returns traces for a specific committee
+		// @Tags Exporter
+		// @Produce json
+		// @Success 200 {object} handlers.CommitteeTracesResponse
+		// @Router /v1/exporter/traces/committee [get]
+		router.Get("/v1/exporter/traces/committee", api.Handler(s.exporter.CommitteeTraces))
 
 		// @Summary Get decided messages traces
 		// @Description Returns traces of decided messages
