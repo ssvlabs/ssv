@@ -17,19 +17,14 @@ var migration_7_derive_signer_key_with_hkdf = Migration{
 	Name: "migration_7_derive_signer_key_with_hkdf",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
-			hashedKey, found, err := opt.NodeStorage.GetPrivateKeyHash()
-			if err != nil {
-				return fmt.Errorf("failed to get private key hash: %w", err)
-			}
-
-			if !found {
-				logger.Warn("private key hash not found, skipping migration")
-				return completed(txn)
+			if opt.EKMHash == "" {
+				// No migration needed if using remote signer.
+				return nil
 			}
 
 			signerStorage := opt.signerStorage(logger)
 
-			err = signerStorage.SetEncryptionKey(hashedKey)
+			err := signerStorage.SetEncryptionKey(opt.EKMHash)
 			if err != nil {
 				return fmt.Errorf("failed to set old encryption key: %w", err)
 			}
@@ -44,13 +39,14 @@ var migration_7_derive_signer_key_with_hkdf = Migration{
 				return completed(txn)
 			}
 
-			// new key with HKDF from the stored hash
-			hashBytes, err := hex.DecodeString(hashedKey)
+			// TODO: get rid of conversions
+			rawEKMHash, err := hex.DecodeString(opt.EKMHash)
 			if err != nil {
-				return fmt.Errorf("failed to decode hash: %w", err)
+				return fmt.Errorf("failed to decode EKM hash: %w", err)
 			}
 
-			kdf := hkdf.New(sha256.New, hashBytes, nil, nil)
+			// new key with HKDF from the stored hash
+			kdf := hkdf.New(sha256.New, rawEKMHash, nil, nil)
 			newKeyBytes := make([]byte, 32)
 			if _, err := io.ReadFull(kdf, newKeyBytes); err != nil {
 				return fmt.Errorf("failed to derive new key: %w", err)

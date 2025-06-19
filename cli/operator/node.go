@@ -146,15 +146,11 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
-		cfg.DBOptions.Ctx = cmd.Context()
-		db, nodeStorage, err := setupDB(logger, networkConfig)
-		if err != nil {
-			logger.Fatal("could not setup db", zap.Error(err))
-		}
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
 
 		var operatorPrivKey keys.OperatorPrivateKey
+		var operatorPrivKeyPEM string
 		var ssvSignerClient *ssvsigner.Client
 		var operatorPubKeyBase64 string
 
@@ -208,11 +204,6 @@ var StartNodeCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
 			}
-
-			// Ensure the pubkey is saved on first run and never changes afterwards
-			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
-				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
-			}
 		} else {
 			if usingKeystore {
 				logger.Info("getting operator private key from keystore")
@@ -223,11 +214,7 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not extract private key from keystore", zap.Error(err))
 				}
 
-				pemBase64 := base64.StdEncoding.EncodeToString(decryptedKeystore)
-				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, pemBase64); err != nil {
-					logger.Fatal("could not save operator private key", zap.Error(err))
-				}
-
+				operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
 			} else if usingPrivKey {
 				logger.Info("getting operator private key from args")
 
@@ -236,14 +223,34 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not decode operator private key", zap.Error(err))
 				}
 
-				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, cfg.OperatorPrivateKey); err != nil {
-					logger.Fatal("could not save operator private key", zap.Error(err))
-				}
+				operatorPrivKeyPEM = cfg.OperatorPrivateKey
 			}
 
 			operatorPubKeyBase64, err = operatorPrivKey.Public().Base64()
 			if err != nil {
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
+			}
+		}
+
+		cfg.DBOptions.Ctx = cmd.Context()
+		db, err := setupDB(logger, networkConfig, operatorPrivKey.EKMHash())
+		if err != nil {
+			logger.Fatal("could not setup db", zap.Error(err))
+		}
+
+		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
+		if err != nil {
+			logger.Fatal("failed to create node storage", zap.Error(err))
+		}
+
+		if usingSSVSigner {
+			// Ensure the pubkey is saved on first run and never changes afterwards
+			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
+				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
+			}
+		} else {
+			if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
+				logger.Fatal("could not save operator private key", zap.Error(err))
 			}
 		}
 
@@ -746,10 +753,10 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, operatorstorage.Storage, error) {
+func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, ekmHash string) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to open db")
+		return nil, errors.Wrap(err, "failed to open db")
 	}
 	reopenDb := func() error {
 		if err := db.Close(); err != nil {
@@ -759,23 +766,18 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv
 		return errors.Wrap(err, "failed to reopen db")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
-	if err != nil {
-		logger.Fatal("failed to create node storage", zap.Error(err))
-	}
-
 	migrationOpts := migrations.Options{
 		Db:            db,
 		DbPath:        cfg.DBOptions.Path,
 		NetworkConfig: networkConfig,
-		NodeStorage:   nodeStorage,
+		EKMHash:       ekmHash,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to run migrations")
+		return nil, errors.Wrap(err, "failed to run migrations")
 	}
 	if applied == 0 {
-		return db, nodeStorage, nil
+		return db, nil
 	}
 
 	// If migrations were applied, we run a full garbage collection cycle
@@ -784,23 +786,23 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv
 	// startup/shutdown procedures that the storage engine may have.
 	start := time.Now()
 	if err := reopenDb(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Run a long garbage collection cycle with a timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 	if err := db.FullGC(ctx); err != nil {
-		return nil, nil, errors.Wrap(err, "failed to collect garbage")
+		return nil, errors.Wrap(err, "failed to collect garbage")
 	}
 
 	// Close & reopen again.
 	if err := reopenDb(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
-	return db, nodeStorage, nil
+	return db, nil
 }
 
 func setupOperatorDataStore(

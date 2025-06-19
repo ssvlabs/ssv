@@ -8,10 +8,11 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -58,6 +59,7 @@ type Options struct {
 	NodeStorage   operatorstorage.Storage
 	DbPath        string
 	NetworkConfig networkconfig.NetworkConfig
+	EKMHash       string
 }
 
 // nolint
