@@ -2,7 +2,9 @@ package testenv
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"time"
@@ -16,7 +18,6 @@ import (
 
 	"github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
-	"github.com/ssvlabs/ssv/ssvsigner/e2e/testutils"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -283,7 +284,7 @@ func (env *TestEnvironment) OperatorSign(ctx context.Context, payload []byte) ([
 
 // setupWeb3SignerVolume creates a persistent volume for Web3Signer keystore data
 func (env *TestEnvironment) setupWeb3SignerVolume() error {
-	volumeName := fmt.Sprintf("web3signer-data-%s", testutils.RandomSuffix())
+	volumeName := fmt.Sprintf("web3signer-data-%s", randomSuffix())
 	env.web3SignerVolume = testcontainers.VolumeMount(volumeName, "/opt/web3signer")
 	fmt.Printf("Created Web3Signer volume: %s (mounting to /opt/web3signer)\n", volumeName)
 	return nil
@@ -291,7 +292,7 @@ func (env *TestEnvironment) setupWeb3SignerVolume() error {
 
 // setupPostgreSQLVolume creates a persistent volume for PostgreSQL database data
 func (env *TestEnvironment) setupPostgreSQLVolume() error {
-	volumeName := fmt.Sprintf("postgres-data-%s", testutils.RandomSuffix())
+	volumeName := fmt.Sprintf("postgres-data-%s", randomSuffix())
 	env.postgresVolume = testcontainers.VolumeMount(volumeName, "/var/lib/postgresql/data")
 	fmt.Printf("Created PostgreSQL volume: %s (mounting to /var/lib/postgresql/data)\n", volumeName)
 	return nil
@@ -300,18 +301,28 @@ func (env *TestEnvironment) setupPostgreSQLVolume() error {
 // setupKeyManagerVolumes creates temporary directories for LocalKeyManager and RemoteKeyManager BadgerDB data
 func (env *TestEnvironment) setupKeyManagerVolumes() error {
 	// Local KeyManager directory
-	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%s", testutils.RandomSuffix())
+	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%s", randomSuffix())
 	if err := os.MkdirAll(env.localKeyManagerPath, 0750); err != nil {
 		return fmt.Errorf("failed to create local key manager directory: %w", err)
 	}
 	fmt.Printf("Created LocalKeyManager directory: %s\n", env.localKeyManagerPath)
 
 	// Remote KeyManager directory
-	env.remoteKeyManagerPath = fmt.Sprintf("/tmp/remote-keymanager-data-%s", testutils.RandomSuffix())
+	env.remoteKeyManagerPath = fmt.Sprintf("/tmp/remote-keymanager-data-%s", randomSuffix())
 	if err := os.MkdirAll(env.remoteKeyManagerPath, 0750); err != nil {
 		return fmt.Errorf("failed to create remote key manager directory: %w", err)
 	}
 	fmt.Printf("Created RemoteKeyManager directory: %s\n", env.remoteKeyManagerPath)
 
 	return nil
+}
+
+// randomSuffix generates a random hex string suffix for unique resource naming
+func randomSuffix() string {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp if random fails
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
 }
