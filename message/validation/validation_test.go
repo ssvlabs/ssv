@@ -1878,7 +1878,7 @@ type shareSet struct {
 	noMetadata                  *ssvtypes.SSVShare
 }
 
-func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg networkconfig.NetworkConfig) shareSet {
+func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg *networkconfig.NetworkConfig) shareSet {
 	activeShare := &ssvtypes.SSVShare{
 		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:     eth2apiv1.ValidatorStateActiveOngoing,

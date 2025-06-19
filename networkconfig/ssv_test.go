@@ -20,7 +20,7 @@ import (
 
 func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	// Create a sample SSVConfig
-	originalConfig := SSVConfig{
+	originalConfig := &SSVConfig{
 		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 		RegistrySyncOffset:   big.NewInt(123456),
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -54,7 +54,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 
 func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	// Create a sample SSVConfig
-	originalConfig := SSVConfig{
+	originalConfig := &SSVConfig{
 		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 		RegistrySyncOffset:   big.NewInt(123456),
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -119,7 +119,7 @@ func hashStructJSON(v interface{}) (string, error) {
 func TestFieldPreservation(t *testing.T) {
 	t.Run("test all fields are present after marshaling", func(t *testing.T) {
 		// Get all field names from SSVConfig
-		configType := reflect.TypeOf(SSVConfig{})
+		configType := reflect.TypeOf(&SSVConfig{})
 		marshaledType := reflect.TypeOf(marshaledConfig{})
 
 		var configFields, marshaledFields []string
@@ -142,7 +142,7 @@ func TestFieldPreservation(t *testing.T) {
 
 	t.Run("hash comparison JSON", func(t *testing.T) {
 		// Create a sample config
-		config := SSVConfig{
+		config := &SSVConfig{
 			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 			RegistrySyncOffset:   big.NewInt(123456),
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -176,7 +176,7 @@ func TestFieldPreservation(t *testing.T) {
 
 	t.Run("hash comparison YAML", func(t *testing.T) {
 		// Create a sample config
-		config := SSVConfig{
+		config := &SSVConfig{
 			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 			RegistrySyncOffset:   big.NewInt(123456),
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
