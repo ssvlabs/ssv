@@ -283,7 +283,7 @@ func (e *Exporter) CommitteeTraces(w http.ResponseWriter, r *http.Request) error
 			slot := phase0.Slot(s)
 			duties, err := e.traceStore.GetCommitteeDuties(slot)
 			if err != nil {
-				e.logger.Debug("get all committee duties", zap.Error(err), fields.Slot(slot))
+				e.logger.Debug("error getting all committee duties", zap.Error(err), fields.Slot(slot))
 				continue
 			}
 			all = append(all, duties...)
