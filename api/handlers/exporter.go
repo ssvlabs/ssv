@@ -156,7 +156,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 	for _, req := range request.PubKeys {
 		var pubkey spectypes.ValidatorPK
 		if len(req) != len(pubkey) {
-			return api.BadRequestError(errors.New("invalid pubkey length"))
+			return api.BadRequestError(fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req)))
 		}
 		copy(pubkey[:], req)
 		pubkeys = append(pubkeys, pubkey)
@@ -365,7 +365,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	for _, req := range request.PubKeys {
 		var pubkey spectypes.ValidatorPK
 		if len(req) != len(pubkey) {
-			return api.BadRequestError(errors.New("invalid pubkey length"))
+			return api.BadRequestError(fmt.Errorf("invalid pubkey length: %s", hex.EncodeToString(req)))
 		}
 		copy(pubkey[:], req)
 		pubkeys = append(pubkeys, pubkey)
