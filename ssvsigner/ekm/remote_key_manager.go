@@ -113,7 +113,6 @@ func (km *RemoteKeyManager) AddShare(
 	for _, status := range statuses {
 		switch status {
 		case web3signer.StatusImported:
-			continue
 
 		case web3signer.StatusDuplicated:
 			// A failed request does not guarantee that the keys were not added.
@@ -149,7 +148,6 @@ func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPu
 	for _, status := range statuses {
 		switch status {
 		case web3signer.StatusDeleted:
-			continue
 
 		case web3signer.StatusNotFound:
 			// A failed request does not guarantee that the keys were not deleted.

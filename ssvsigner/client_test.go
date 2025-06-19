@@ -179,14 +179,12 @@ func (s *SSVSignerClientSuite) TestAddValidators() {
 			})
 
 			statuses, err := s.client.AddValidators(t.Context(), tc.shares...)
-			assert.Equal(t, tc.expectStatuses, statuses)
-
 			s.assertErrorResult(err, tc.expectError, t)
-
 			if tc.isDecryptionError {
 				var decryptErr ShareDecryptionError
 				assert.ErrorAs(t, err, &decryptErr, "Expected a ShareDecryptionError")
 			}
+			assert.Equal(t, tc.expectStatuses, statuses)
 		})
 	}
 }
@@ -264,9 +262,9 @@ func (s *SSVSignerClientSuite) TestRemoveValidators() {
 				writeJSONResponse(w, tc.expectedStatusCode, tc.expectedResponse)
 			})
 
-			_, err := s.client.RemoveValidators(t.Context(), tc.pubKeys...)
-
+			statuses, err := s.client.RemoveValidators(t.Context(), tc.pubKeys...)
 			s.assertErrorResult(err, tc.expectError, t)
+			assert.Equal(t, tc.expectStatuses, statuses)
 		})
 	}
 }

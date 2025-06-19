@@ -20,18 +20,18 @@ type MockRemoteSigner struct {
 func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) ([]web3signer.Status, error) {
 	args := m.Called(ctx, shares[0])
 	if args.Get(0) == nil {
-		return nil, args.Error(0)
+		return nil, args.Error(1)
 	}
-	return nil, args.Error(0)
+	return args.Get(0).([]web3signer.Status), args.Error(1)
 }
 
 func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error) {
 	args := m.Called(ctx, pubKeys)
 	result := args.Get(0)
 	if result == nil {
-		return nil, args.Error(0)
+		return nil, args.Error(1)
 	}
-	return nil, args.Error(0)
+	return args.Get(0).([]web3signer.Status), args.Error(1)
 }
 
 func (m *MockRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
