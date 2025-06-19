@@ -8,6 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/suite"
 
@@ -238,4 +239,73 @@ func (s *E2ETestSuite) RequireFailedSigning(
 	s.RequireSlashingError(err, errMsg)
 	s.Require().Empty(web3Sig)
 	s.Require().Equal(phase0.Root{}, web3Root)
+}
+
+// ConcurrentSignResult represents the result of a concurrent signing operation
+type ConcurrentSignResult struct {
+	Sig  spectypes.Signature
+	Root phase0.Root
+	Err  error
+	ID   int
+}
+
+// RunConcurrentSigning is a helper method to test concurrent signing with proper synchronization
+// using the conc/pool library for improved ergonomics and safety.
+func (s *E2ETestSuite) RunConcurrentSigning(
+	ctx context.Context,
+	numGoroutines int,
+	targetName string,
+	signFunc func() (spectypes.Signature, phase0.Root, error),
+) int {
+	p := pool.NewWithResults[*ConcurrentSignResult]().WithContext(ctx)
+
+	// Submit all signing tasks
+	for i := 0; i < numGoroutines; i++ {
+		goroutineID := i // Capture loop variable
+		p.Go(func(ctx context.Context) (*ConcurrentSignResult, error) {
+			sig, root, err := signFunc()
+			return &ConcurrentSignResult{
+				Sig:  sig,
+				Root: root,
+				Err:  err,
+				ID:   goroutineID,
+			}, nil // Pool handles task errors separately from signing errors
+		})
+	}
+
+	// Wait for all tasks to complete
+	results, err := p.Wait()
+	if err != nil {
+		s.T().Fatalf("%s concurrent test failed with pool error: %v", targetName, err)
+	}
+
+	// Analyze results
+	var successfulSigs []spectypes.Signature
+	var successfulRoots []phase0.Root
+	successCount := 0
+
+	for _, result := range results {
+		if result.Err == nil {
+			successCount++
+			successfulSigs = append(successfulSigs, result.Sig)
+			successfulRoots = append(successfulRoots, result.Root)
+			s.T().Logf("%s: Goroutine %d succeeded", targetName, result.ID)
+		} else {
+			s.T().Logf("%s: Goroutine %d failed with error: %v", targetName, result.ID, result.Err)
+		}
+	}
+
+	s.T().Logf("%s: %d successful signatures out of %d attempts", targetName, successCount, numGoroutines)
+
+	// Verify all successful signatures are identical (deterministic signing)
+	if successCount > 1 {
+		firstSig := successfulSigs[0]
+		firstRoot := successfulRoots[0]
+		for i := 1; i < len(successfulSigs); i++ {
+			s.Require().Equal(firstSig, successfulSigs[i], "%s: All successful signatures should be identical", targetName)
+			s.Require().Equal(firstRoot, successfulRoots[i], "%s: All successful roots should be identical", targetName)
+		}
+	}
+
+	return successCount
 }
