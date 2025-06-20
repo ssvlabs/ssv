@@ -668,7 +668,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// defer rpcServer.Stop()
 	// defer httpsrv.Close()
 
-	// httpAddr := httpToWebSocketURL(httpsrv.URL)
+	// addr := httpToWebSocketURL(httpsrv.URL)
 
 	// // 1.
 	// parsed, _ := abi.JSON(strings.NewReader(callableAbi))
@@ -681,7 +681,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 
 	// // Connect the client
 	// const followDistance = 8
-	// client, err := New(ctx, httpAddr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	// client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	// require.NoError(t, err)
 
 	// isReady, err := client.IsReady(ctx)

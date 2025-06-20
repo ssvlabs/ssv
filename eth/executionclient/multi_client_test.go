@@ -34,7 +34,7 @@ func TestNewMulti(t *testing.T) {
 
 	t.Run("error creating single client", func(t *testing.T) {
 		ctx := t.Context()
-		addr := "invalid-httpAddr"
+		addr := "invalid-addr"
 		addresses := []string{addr}
 
 		mc, err := NewMulti(ctx, addresses, ethcommon.Address{})
