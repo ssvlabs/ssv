@@ -98,20 +98,6 @@ func WithHealthInvalidationIntervalMulti(interval time.Duration) OptionMulti {
 	}
 }
 
-// WithLogBatchSize sets log batch size.
-func WithLogBatchSize(size uint64) Option {
-	return func(s *ExecutionClient) {
-		s.logBatchSize = size
-	}
-}
-
-// WithLogBatchSizeMulti sets log batch size.
-func WithLogBatchSizeMulti(size uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.logBatchSize = size
-	}
-}
-
 // WithSyncDistanceTolerance sets the number of blocks that is acceptable to lag behind.
 func WithSyncDistanceTolerance(count uint64) Option {
 	return func(s *ExecutionClient) {
@@ -133,9 +119,23 @@ func WithHTTPFallback(addr string) Option {
 	}
 }
 
+// WithHTTPFallbackMulti sets the HTTP fallback address for the MultiClient configuration.
+func WithHTTPFallbackMulti(addr string) OptionMulti {
+	return func(s *MultiClient) {
+		s.httpFallbackAddr = addr
+	}
+}
+
 // WithAdaptiveBatch configures an ExecutionClient to use an adaptive batcher with specified size limits.
 func WithAdaptiveBatch(defaultSize, min, max uint64) Option {
 	return func(s *ExecutionClient) {
-		s.batcher = NewAdaptiveBatcher(s.logBatchSize, min, max)
+		s.batcher = NewAdaptiveBatcher(defaultSize, min, max)
+	}
+}
+
+// WithAdaptiveBatchMulti configures a MultiClient to use adaptive batchers with specified size limits.
+func WithAdaptiveBatchMulti(defaultSize, min, max uint64) OptionMulti {
+	return func(s *MultiClient) {
+		s.batcher = NewAdaptiveBatcher(defaultSize, min, max)
 	}
 }

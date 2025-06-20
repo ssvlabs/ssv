@@ -15,6 +15,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
@@ -65,7 +66,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	const customReconnectionInterval = 10 * time.Millisecond
 	const customReconnectionMaxInterval = 1 * time.Second
 	const customHealthInvalidationInterval = 50 * time.Millisecond
-	const customLogBatchSize = 11
 	const customSyncDistanceTolerance = 12
 
 	mc, err := NewMulti(
@@ -78,7 +78,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 		WithReconnectionInitialIntervalMulti(customReconnectionInterval),
 		WithReconnectionMaxIntervalMulti(customReconnectionMaxInterval),
 		WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
-		WithLogBatchSizeMulti(customLogBatchSize),
 		WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
 	)
 	require.NoError(t, err)
@@ -89,7 +88,6 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	require.EqualValues(t, customReconnectionInterval, mc.reconnectionInitialInterval)
 	require.EqualValues(t, customReconnectionMaxInterval, mc.reconnectionMaxInterval)
 	require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
-	require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
 	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
 }
 
@@ -1401,4 +1399,32 @@ type dummySubscription struct{}
 func (d *dummySubscription) Unsubscribe() {}
 func (d *dummySubscription) Err() <-chan error {
 	return make(chan error)
+}
+
+func TestMultiClientOptions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("WithAdaptiveBatchMulti", func(t *testing.T) {
+		t.Parallel()
+
+		mc := &MultiClient{}
+		opt := WithAdaptiveBatchMulti(1000, 200, 2000)
+		opt(mc)
+
+		assert.NotNil(t, mc.batcher)
+		cfg := mc.batcher.Config()
+		assert.Equal(t, uint64(1000), cfg.InitialSize)
+		assert.Equal(t, uint64(200), cfg.MinSize)
+		assert.Equal(t, uint64(2000), cfg.MaxSize)
+	})
+
+	t.Run("WithHTTPFallbackMulti", func(t *testing.T) {
+		t.Parallel()
+
+		mc := &MultiClient{}
+		opt := WithHTTPFallbackMulti("http://localhost:8545")
+		opt(mc)
+
+		assert.Equal(t, "http://localhost:8545", mc.httpFallbackAddr)
+	})
 }
