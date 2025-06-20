@@ -24,6 +24,14 @@ type OperatorState struct {
 	maxEpoch        phase0.Epoch
 	currEpochDuties uint64
 	prevEpochDuties uint64
+	dutiesDebugPrev []debugDuty
+	dutiesDebugCurr []debugDuty
+}
+
+type debugDuty struct {
+	slot    phase0.Slot
+	epoch   phase0.Epoch
+	partial bool
 }
 
 func newOperatorState(size uint64) *OperatorState {
@@ -41,7 +49,7 @@ func (os *OperatorState) GetSignerState(slot phase0.Slot) *SignerState {
 	return s
 }
 
-func (os *OperatorState) SetSignerState(slot phase0.Slot, epoch phase0.Epoch, state *SignerState) {
+func (os *OperatorState) SetSignerState(slot phase0.Slot, epoch phase0.Epoch, state *SignerState, partial bool) {
 	os.signers[uint64(slot)%uint64(len(os.signers))] = state
 	if slot > os.maxSlot {
 		os.maxSlot = slot
@@ -50,10 +58,31 @@ func (os *OperatorState) SetSignerState(slot phase0.Slot, epoch phase0.Epoch, st
 		os.maxEpoch = epoch
 		os.prevEpochDuties = os.currEpochDuties
 		os.currEpochDuties = 1
+
+		os.dutiesDebugPrev = os.dutiesDebugCurr
+		os.dutiesDebugCurr = []debugDuty{
+			{
+				slot:    slot,
+				epoch:   epoch,
+				partial: partial,
+			},
+		}
 	} else if epoch == os.maxEpoch {
 		os.currEpochDuties++
+
+		os.dutiesDebugCurr = append(os.dutiesDebugCurr, debugDuty{
+			slot:    slot,
+			epoch:   epoch,
+			partial: partial,
+		})
 	} else {
 		os.prevEpochDuties++
+
+		os.dutiesDebugPrev = append(os.dutiesDebugPrev, debugDuty{
+			slot:    slot,
+			epoch:   epoch,
+			partial: partial,
+		})
 	}
 }
 

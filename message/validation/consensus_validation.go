@@ -314,7 +314,7 @@ func (mv *messageValidator) updateConsensusState(
 		signerState := stateBySlot.GetSignerState(msgSlot)
 		if signerState == nil {
 			signerState = newSignerState(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
-			stateBySlot.SetSignerState(msgSlot, msgEpoch, signerState)
+			stateBySlot.SetSignerState(msgSlot, msgEpoch, signerState, false)
 		} else {
 			if consensusMessage.Round > signerState.Round {
 				signerState.Reset(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
