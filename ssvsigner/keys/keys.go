@@ -23,8 +23,10 @@ type OperatorPrivateKey interface {
 	OperatorSigner
 	OperatorDecrypter
 	StorageHash() []byte
-	// EKMHash is DEPRECATED. Use EKMEncryptionKey instead.
+	// EKMHash calculates a hash as an encryption key for storage.
+	// DEPRECATED, use EKMEncryptionKey instead.
 	EKMHash() []byte
+	// EKMEncryptionKey calculates an encryption key for storage. Use it instead of EKMHash.
 	EKMEncryptionKey() ([]byte, error)
 	Bytes() []byte
 	Base64() string
@@ -98,7 +100,6 @@ func (p *privateKey) StorageHash() []byte {
 	return rsaencryption.HashKeyBytes(rsaencryption.PrivateKeyToPEM(p.privKey))
 }
 
-// EKMHash is DEPRECATED. Use EKMEncryptionKey instead.
 func (p *privateKey) EKMHash() []byte {
 	return rsaencryption.HashKeyBytes(rsaencryption.PrivateKeyToBytes(p.privKey))
 }
