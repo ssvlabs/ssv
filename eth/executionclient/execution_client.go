@@ -23,7 +23,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
-//go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./mocks.go -source=./execution_client.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./execution_client_mock.go -source=./execution_client.go
 
 type Provider interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error)
@@ -88,7 +88,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
-		batcher:                     NewAdaptiveBatcher(DefaultHistoricalLogsBatchSize, MinBatchSize, MaxBatchSize),
+		batcher:                     NewAdaptiveBatcher(DefaultBatchSize, MinBatchSize, MaxBatchSize),
 		closed:                      make(chan struct{}),
 	}
 	for _, opt := range opts {

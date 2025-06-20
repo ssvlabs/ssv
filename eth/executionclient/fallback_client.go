@@ -17,6 +17,8 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
+//go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./fallback_client_mock.go -source=./fallback_client.go
+
 type HTTPFallback struct {
 	client    *ethclient.Client
 	clientMu  sync.RWMutex

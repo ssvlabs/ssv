@@ -5,17 +5,6 @@ import (
 	"time"
 )
 
-const (
-	MinBatchSize     = 200
-	MaxBatchSize     = 2000
-	DefaultBatchSize = 500
-
-	batchIncreaseRatio = 1.5
-	batchDecreaseRatio = 0.7
-	successThreshold   = 5
-	latencyTarget      = 500 * time.Millisecond
-)
-
 // AdaptiveBatcher manages dynamic batch sizing.
 type AdaptiveBatcher struct {
 	currentSize    atomic.Uint64

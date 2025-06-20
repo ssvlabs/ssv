@@ -96,7 +96,7 @@ func NewMulti(
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize,
+		logBatchSize:                DefaultBatchSize,
 	}
 
 	for _, opt := range opts {
