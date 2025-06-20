@@ -35,7 +35,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
 		signerStorage := ekm.NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
-		signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash())
+		require.NoError(t, signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash()))
 
 		wallet, accounts := createTestAccounts(t, signerStorage, 3)
 		require.NoError(t, signerStorage.SaveWallet(wallet))
@@ -53,14 +53,14 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 
 		encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
 		require.NoError(t, err)
-		signerStorage.SetEncryptionKey(encryptionKey)
+		require.NoError(t, signerStorage.SetEncryptionKey(encryptionKey))
 
 		retrievedAccounts, err := signerStorage.ListAccounts()
 		require.NoError(t, err)
 		assert.Equal(t, len(accounts), len(retrievedAccounts))
 
 		// Verify old key no longer works
-		signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash())
+		require.NoError(t, signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash()))
 		_, err = signerStorage.ListAccounts()
 		assert.Error(t, err)
 	})
@@ -132,7 +132,7 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
 		signerStorage := ekm.NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
-		signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash())
+		require.NoError(t, signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash()))
 
 		wallet, _ := createTestAccounts(t, signerStorage, 1)
 		require.NoError(t, signerStorage.SaveWallet(wallet))

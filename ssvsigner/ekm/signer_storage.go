@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,7 +53,7 @@ type Storage interface {
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
-	SetEncryptionKey(hexKey []byte)
+	SetEncryptionKey(hexKey string) error
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 
@@ -83,13 +84,23 @@ func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *
 }
 
 // SetEncryptionKey sets the encryption key used to encrypt/decrypt account data.
-// Empty/nil key results in plaintext storage (no encryption).
-func (s *storage) SetEncryptionKey(key []byte) {
+//
+// Accepts a hex-encoded key and derives a 32-byte AES-256 key using HKDF-SHA256.
+// Empty hexKey results in plaintext storage (no encryption).
+func (s *storage) SetEncryptionKey(hexKey string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.logger.Warn("Setting encryption key", zap.ByteString("key", key[:8]))
-	s.encryptionKey = key
+	keyBytes, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return errors.New("the key must be a valid hexadecimal string")
+	}
+
+	s.logger.Warn("Setting encryption key", zap.ByteString("key", keyBytes[:8]))
+
+	s.encryptionKey = keyBytes
+
+	return nil
 }
 
 func (s *storage) DropRegistryData() error {

@@ -43,7 +43,11 @@ var migration_2_encrypt_shares = Migration{
 
 			keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
 			hash := sha256.Sum256(keyBytes)
-			signerStorage.SetEncryptionKey(hash[:])
+			keyString := fmt.Sprintf("%x", hash)
+			err = signerStorage.SetEncryptionKey(keyString)
+			if err != nil {
+				return fmt.Errorf("failed to set encryption key: %w", err)
+			}
 
 			for _, account := range accounts {
 				// SaveAccountTxn performs the migration overwriting the account using the encryption key above.

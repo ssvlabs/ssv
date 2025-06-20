@@ -3,7 +3,6 @@ package keys
 import (
 	"crypto/rsa"
 	"encoding/base64"
-	"encoding/hex"
 	"math/big"
 	"testing"
 
@@ -144,7 +143,7 @@ func TestHashing(t *testing.T) {
 		privKey := getTestPrivateKeyFromPEM(t)
 		hash := privKey.StorageHash()
 		require.NotEmpty(t, hash, "Storage hash should not be empty")
-		require.Equal(t, "eaba9e5320c1ef8023d74103e6b6e9828afce89442f2755cde217c06ccacf74a", hex.EncodeToString(hash),
+		require.Equal(t, "eaba9e5320c1ef8023d74103e6b6e9828afce89442f2755cde217c06ccacf74a", hash,
 			"Storage hash does not match expected value")
 	})
 
@@ -154,7 +153,7 @@ func TestHashing(t *testing.T) {
 		privKey := getTestPrivateKeyFromPEM(t)
 		hash := privKey.EKMHash()
 		require.NotEmpty(t, hash, "EKM hash should not be empty")
-		require.Equal(t, "6db24021c74d4f5784a0c1a6a519f9ffcb3996be5c0a3d9d4a6d8a567f9cc38a", hex.EncodeToString(hash),
+		require.Equal(t, "6db24021c74d4f5784a0c1a6a519f9ffcb3996be5c0a3d9d4a6d8a567f9cc38a", hash,
 			"EKM hash does not match expected value")
 	})
 }

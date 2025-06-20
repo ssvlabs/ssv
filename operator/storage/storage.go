@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -47,8 +46,8 @@ type Storage interface {
 	Shares() registrystorage.Shares
 	ValidatorStore() registrystorage.ValidatorStore
 
-	GetPrivateKeyHash() ([]byte, bool, error)
-	SavePrivateKeyHash(privKeyHash []byte) error
+	GetPrivateKeyHash() (string, bool, error)
+	SavePrivateKeyHash(privKeyHash string) error
 
 	GetPublicKey() (string, bool, error)
 	SavePublicKey(pubKey string) error
@@ -212,29 +211,20 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 }
 
 // GetPrivateKeyHash return sha256 hashed private key
-func (s *storage) GetPrivateKeyHash() ([]byte, bool, error) {
+func (s *storage) GetPrivateKeyHash() (string, bool, error) {
 	obj, found, err := s.db.Get(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey))
 	if !found {
-		return nil, found, nil
+		return "", found, nil
 	}
 	if err != nil {
-		return nil, found, err
+		return "", found, err
 	}
-
-	privateKeyHex := string(obj.Value)
-	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
-	if err != nil {
-		// Not passing an error to avoid leaking the private key.
-		return nil, found, fmt.Errorf("expected private key to be hex encoded")
-	}
-
-	return privateKeyBytes, found, nil
+	return string(obj.Value), found, nil
 }
 
 // SavePrivateKeyHash saves operator private key hash
-func (s *storage) SavePrivateKeyHash(hashedKey []byte) error {
-	hashedKeyHex := hex.EncodeToString(hashedKey) // key is stored hex-encoded
-	return s.db.Set(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey), []byte(hashedKeyHex))
+func (s *storage) SavePrivateKeyHash(hashedKey string) error {
+	return s.db.Set(OperatorStoragePrefix, []byte(hashedPrivkeyDBKey), []byte(hashedKey))
 }
 
 // GetPublicKey returns public key.

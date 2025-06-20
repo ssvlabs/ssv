@@ -17,7 +17,7 @@ import (
 var _ storage.Storage = NodeStorage{}
 
 type NodeStorage struct {
-	MockPrivateKeyHash              []byte
+	MockPrivateKeyHash              string
 	MockPublicKey                   string
 	RegisteredOperatorPublicKeyPEMs []string
 }
@@ -124,15 +124,15 @@ func (m NodeStorage) DropShares() error {
 	panic("unexpected DropShares call")
 }
 
-func (m NodeStorage) GetPrivateKeyHash() ([]byte, bool, error) {
-	if m.MockPrivateKeyHash != nil {
+func (m NodeStorage) GetPrivateKeyHash() (string, bool, error) {
+	if m.MockPrivateKeyHash != "" {
 		return m.MockPrivateKeyHash, true, nil
 	} else {
-		return nil, false, errors.New("error")
+		return "", false, errors.New("error")
 	}
 }
 
-func (m NodeStorage) SavePrivateKeyHash(privKeyHash []byte) error {
+func (m NodeStorage) SavePrivateKeyHash(privKeyHash string) error {
 	panic("unexpected SavePrivateKeyHash call")
 }
 

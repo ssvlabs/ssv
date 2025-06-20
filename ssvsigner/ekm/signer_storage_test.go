@@ -362,7 +362,13 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		defer db.Close()
 
 		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
-		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
+
+		err = signerStorage.SetEncryptionKey("aabbccddee")
+		require.NoError(t, err)
+
+		err = signerStorage.SetEncryptionKey("invalid-hex-key")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "the key must be a valid hexadecimal string")
 	})
 
 	t.Run("DataEncryption", func(t *testing.T) {
@@ -391,7 +397,8 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		accountID := account.ID()
 
 		// test with encryption key
-		signerStorage.SetEncryptionKey([]byte("0123456789abcdef0123456789abcdef"))
+		err = signerStorage.SetEncryptionKey("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+		require.NoError(t, err)
 
 		// save the account (this will encrypt it)
 		err = signerStorage.SaveAccount(account)
@@ -404,7 +411,8 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.Equal(t, accountID, retrievedAccount.ID())
 
 		// now test with a key of different length
-		signerStorage.SetEncryptionKey([]byte("0123456789abcdef"))
+		err = signerStorage.SetEncryptionKey("0123456789abcdef")
+		require.NoError(t, err)
 
 		// save the account again (this will encrypt it)
 		err = signerStorage.SaveAccount(account)
@@ -417,7 +425,8 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.Equal(t, accountID, retrievedAccount.ID())
 
 		// now test without encryption key
-		signerStorage.SetEncryptionKey(nil)
+		err = signerStorage.SetEncryptionKey("")
+		require.NoError(t, err)
 
 		// save the account again (this won't encrypt it)
 		err = signerStorage.SaveAccount(account)

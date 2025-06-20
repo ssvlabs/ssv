@@ -89,7 +89,8 @@ func TestEncryptedKeyManager(t *testing.T) {
 	require.NoError(t, err)
 
 	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
-	signerStorage.SetEncryptionKey(encryptionKey)
+	err = signerStorage.SetEncryptionKey(encryptionKey)
+	require.NoError(t, err)
 
 	defer func(db basedb.Database, logger *zap.Logger) {
 		err := db.Close()
@@ -120,18 +121,16 @@ func TestEncryptedKeyManager(t *testing.T) {
 	// Load account with key 2 (should fail).
 	wallet2, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
-
-	signerStorage.SetEncryptionKey(encryptionKey2)
-
+	err = signerStorage.SetEncryptionKey(encryptionKey2)
+	require.NoError(t, err)
 	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.ErrorContains(t, err, "decrypt stored wallet")
 
 	// Retry with key 1 (should succeed).
 	wallet3, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
-
-	signerStorage.SetEncryptionKey(encryptionKey)
-
+	err = signerStorage.SetEncryptionKey(encryptionKey)
+	require.NoError(t, err)
 	_, err = wallet3.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.NoError(t, err)
 }

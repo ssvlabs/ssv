@@ -3,7 +3,6 @@ package rsaencryption
 import (
 	"crypto/rsa"
 	"encoding/base64"
-	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -297,7 +296,7 @@ func TestHashKeyBytes(t *testing.T) {
 	data := []byte("test key")
 	hash := HashKeyBytes(data)
 
-	require.Equal(t, "fa2bdca424f01f01ffb48df93acc35d439c7fd331a1a7fba6ac2fd83aa9ab31a", hex.EncodeToString(hash))
+	require.Equal(t, "fa2bdca424f01f01ffb48df93acc35d439c7fd331a1a7fba6ac2fd83aa9ab31a", hash)
 }
 
 func TestPublicKeyErrors(t *testing.T) {
