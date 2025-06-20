@@ -138,7 +138,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 			observability.ValidatorIndexAttribute(duty.ValidatorIndex)))
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(ctx, duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
-		return observability.Errorf(span, "failed to submit aggregate and proof: %w", err)
+		return observability.Errorf(span, "committee_index: %d failed to submit aggregate and proof: %w", duty.CommitteeIndex, err)
 	}
 	r.measurements.ContinueDutyFlow()
 
