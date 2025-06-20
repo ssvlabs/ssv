@@ -3,7 +3,6 @@ package ekm
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -73,7 +72,7 @@ func NewLocalKeyManager(
 		return nil, fmt.Errorf("get encryption key: %w", err)
 	}
 
-	decodedEncryptionKey, err := base64.StdEncoding.DecodeString(encryptionKey)
+	decodedEncryptionKey, err := hex.DecodeString(encryptionKey)
 	if err != nil {
 		return nil, fmt.Errorf("decoding encryption key: %w", err)
 	}
