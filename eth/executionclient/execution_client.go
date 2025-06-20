@@ -62,7 +62,6 @@ type ExecutionClient struct {
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	healthInvalidationInterval  time.Duration
-	logBatchSize                uint64 // TODO: remove it, switch to adaptive
 
 	syncDistanceTolerance uint64
 	syncProgressFn        func(context.Context) (*ethereum.SyncProgress, error)
@@ -88,7 +87,6 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
-		logBatchSize:                DefaultBatchSize,
 		closed:                      make(chan struct{}),
 	}
 	for _, opt := range opts {
@@ -96,7 +94,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	}
 
 	if client.batcher == nil {
-		client.batcher = NewAdaptiveBatcher(client.logBatchSize, DefaultMinBatchSize, DefaultMaxBatchSize)
+		client.batcher = NewAdaptiveBatcher(DefaultBatchSize, DefaultMinBatchSize, DefaultMaxBatchSize)
 	}
 
 	if client.httpFallbackAddr != "" {

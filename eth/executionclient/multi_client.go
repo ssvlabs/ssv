@@ -61,7 +61,6 @@ type MultiClient struct {
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	healthInvalidationInterval  time.Duration
-	logBatchSize                uint64
 	syncDistanceTolerance       uint64
 
 	// HTTP fallback configuration
@@ -102,7 +101,6 @@ func NewMulti(
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		logBatchSize:                DefaultBatchSize,
 	}
 
 	for _, opt := range opts {
