@@ -67,7 +67,7 @@ func New(ctx context.Context,
 	beaconNetwork networkconfig.BeaconConfig,
 ) *Collector {
 
-	ttl := time.Duration(ttlCommitteeRoot) * beaconNetwork.SlotDuration
+	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration
 
 	collector := &Collector{
 		logger:                         logger,
@@ -106,30 +106,31 @@ func (c *Collector) Start(ctx context.Context, tickerProvider slotticker.Provide
 	}
 }
 
+const slotTTL = 4
+
 func (c *Collector) evict(currentSlot phase0.Slot) {
 	// evict committee traces
 	start := time.Now()
-	committeThreshold := currentSlot - ttlCommittee
-	evicted := c.dumpCommitteeToDBPeriodically(committeThreshold)
-	c.logger.Info("evicted committee duty traces to disk", fields.Slot(committeThreshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
+	threshold := currentSlot - slotTTL
+
+	evicted := c.dumpCommitteeToDBPeriodically(threshold)
+	c.logger.Info("evicted committee duty traces to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
 	// evict validator traces
 	start = time.Now()
-	validatorThreshold := currentSlot - ttlValidator
-	evicted = c.dumpValidatorToDBPeriodically(validatorThreshold)
-	c.logger.Info("evicted validator duty traces to disk", fields.Slot(validatorThreshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
+	evicted = c.dumpValidatorToDBPeriodically(threshold)
+	c.logger.Info("evicted validator duty traces to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
 	// evict validator committee links
 	start = time.Now()
-	mappingThreshold := currentSlot - ttlMapping
-	evicted = c.dumpLinkToDBPeriodically(mappingThreshold)
-	c.logger.Info("evicted validator mappings to disk", fields.Slot(mappingThreshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
+	evicted = c.dumpLinkToDBPeriodically(threshold)
+	c.logger.Info("evicted validator mappings to disk", fields.Slot(threshold), zap.Int("count", evicted), fields.Took(time.Since(start)))
 
 	// remove old SC roots
 	c.syncCommitteeRootsCache.DeleteExpired()
 
 	// update last evicted slot
-	c.lastEvictedSlot.Store(uint64(validatorThreshold))
+	c.lastEvictedSlot.Store(uint64(threshold))
 }
 
 func (c *Collector) getOrCreateValidatorTrace(slot phase0.Slot, role spectypes.BeaconRole, vPubKey spectypes.ValidatorPK) (*validatorDutyTrace, bool, error) {

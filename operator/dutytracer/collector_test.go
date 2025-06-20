@@ -1050,6 +1050,22 @@ func TestValidatorDutyTrace_toBNRole(t *testing.T) {
 	}
 }
 
+func TestEvict(t *testing.T) {
+	t.Run("evict updates last evicted slot", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+		dutyStore := new(mockDutyTraceStore)
+
+		slot := phase0.Slot(10)
+
+		collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+		collector.evict(slot)
+
+		threshold := slot - slotTTL
+		require.Equal(t, uint64(threshold), collector.lastEvictedSlot.Load())
+	})
+}
+
 type mockDutyTraceStore struct {
 	err error
 }

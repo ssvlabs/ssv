@@ -12,15 +12,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
-// TTL in slots for each role
-const (
-	ttlCommittee = 4
-	ttlValidator = 4
-
-	ttlMapping       = 4
-	ttlCommitteeRoot = 4
-)
-
 func (c *Collector) dumpLinkToDBPeriodically(slot phase0.Slot) (totalSaved int) {
 	var links = make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
 	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
