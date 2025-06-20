@@ -13,10 +13,11 @@ import (
 	context "context"
 	reflect "reflect"
 
-	networkconfig "github.com/ssvlabs/ssv/networkconfig"
-	slotticker "github.com/ssvlabs/ssv/operator/slotticker"
 	gomock "go.uber.org/mock/gomock"
 	zap "go.uber.org/zap"
+
+	networkconfig "github.com/ssvlabs/ssv/networkconfig"
+	slotticker "github.com/ssvlabs/ssv/operator/slotticker"
 )
 
 // MockdutyHandler is a mock of dutyHandler interface.

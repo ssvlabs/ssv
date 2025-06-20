@@ -1,4 +1,4 @@
-package kv
+package badger
 
 import (
 	"bytes"
@@ -15,8 +15,8 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-// BadgerDB struct
-type BadgerDB struct {
+// DB struct
+type DB struct {
 	logger *zap.Logger
 
 	db *badger.DB
@@ -30,16 +30,16 @@ type BadgerDB struct {
 }
 
 // New creates a persistent DB instance.
-func New(logger *zap.Logger, options basedb.Options) (*BadgerDB, error) {
+func New(logger *zap.Logger, options basedb.Options) (*DB, error) {
 	return createDB(logger, options, false)
 }
 
 // NewInMemory creates an in-memory DB instance.
-func NewInMemory(logger *zap.Logger, options basedb.Options) (*BadgerDB, error) {
+func NewInMemory(logger *zap.Logger, options basedb.Options) (*DB, error) {
 	return createDB(logger, options, true)
 }
 
-func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*BadgerDB, error) {
+func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*DB, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
 	opt := badger.DefaultOptions(options.Path)
@@ -71,7 +71,7 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 	}
 	ctx, cancel := context.WithCancel(parentCtx)
 
-	badgerDB := BadgerDB{
+	badgerDB := DB{
 		logger: logger,
 		db:     db,
 		ctx:    ctx,
@@ -94,31 +94,31 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 }
 
 // Badger returns the underlying badger.DB
-func (b *BadgerDB) Badger() *badger.DB {
+func (b *DB) Badger() *badger.DB {
 	return b.db
 }
 
 // Begin creates a read-write transaction.
-func (b *BadgerDB) Begin() basedb.Txn {
+func (b *DB) Begin() basedb.Txn {
 	txn := b.db.NewTransaction(true)
 	return newTxn(txn, b)
 }
 
 // BeginRead creates a read-only transaction.
-func (b *BadgerDB) BeginRead() basedb.ReadTxn {
+func (b *DB) BeginRead() basedb.ReadTxn {
 	txn := b.db.NewTransaction(false)
 	return newTxn(txn, b)
 }
 
 // Set save value with key to storage
-func (b *BadgerDB) Set(prefix []byte, key []byte, value []byte) error {
+func (b *DB) Set(prefix []byte, key []byte, value []byte) error {
 	return b.db.Update(func(txn *badger.Txn) error {
 		return newTxn(txn, b).Set(prefix, key, value)
 	})
 }
 
 // SetMany save many values with the given keys in a single badger transaction
-func (b *BadgerDB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+func (b *DB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
 	wb := b.db.NewWriteBatch()
 	for i := 0; i < n; i++ {
 		item, err := next(i)
@@ -135,14 +135,14 @@ func (b *BadgerDB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, err
 }
 
 // Get return value for specified key
-func (b *BadgerDB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
+func (b *DB) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	txn := b.db.NewTransaction(false)
 	defer txn.Discard()
 	return newTxn(txn, b).Get(prefix, key)
 }
 
 // GetMany return values for the given keys
-func (b *BadgerDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
+func (b *DB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -151,14 +151,14 @@ func (b *BadgerDB) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Ob
 }
 
 // Delete key in specific prefix
-func (b *BadgerDB) Delete(prefix []byte, key []byte) error {
+func (b *DB) Delete(prefix []byte, key []byte) error {
 	return b.db.Update(func(txn *badger.Txn) error {
 		return newTxn(txn, b).Delete(prefix, key)
 	})
 }
 
 // GetAll returns all the items of a given collection
-func (b *BadgerDB) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
+func (b *DB) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
 	// we got issues when reading more than 100 items with iterator (items get mixed up)
 	// instead, the keys are first fetched using an iterator, and afterwards the values are fetched one by one
 	// to avoid issues
@@ -167,7 +167,7 @@ func (b *BadgerDB) GetAll(prefix []byte, handler func(int, basedb.Obj) error) er
 }
 
 // CountPrefix return the object count for all keys under specified prefix(bucket)
-func (b *BadgerDB) CountPrefix(prefix []byte) (int64, error) {
+func (b *DB) CountPrefix(prefix []byte) (int64, error) {
 	var res int64
 	err := b.db.View(func(txn *badger.Txn) error {
 		opt := badger.DefaultIteratorOptions
@@ -183,12 +183,12 @@ func (b *BadgerDB) CountPrefix(prefix []byte) (int64, error) {
 }
 
 // DropPrefix cleans all items in a collection
-func (b *BadgerDB) DropPrefix(prefix []byte) error {
+func (b *DB) DropPrefix(prefix []byte) error {
 	return b.db.DropPrefix(prefix)
 }
 
 // Close closes the database.
-func (b *BadgerDB) Close() error {
+func (b *DB) Close() error {
 	// Stop & wait for background goroutines.
 	b.cancel()
 	b.wg.Wait()
@@ -202,7 +202,7 @@ func (b *BadgerDB) Close() error {
 }
 
 // report the db size and metrics
-func (b *BadgerDB) report() {
+func (b *DB) report() {
 	logger := b.logger.Named(logging.NameBadgerDBReporting)
 	lsm, vlog := b.db.Size()
 	blockCache := b.db.BlockCacheMetrics()
@@ -213,7 +213,7 @@ func (b *BadgerDB) report() {
 		fields.IndexCacheMetrics(indexCache))
 }
 
-func (b *BadgerDB) periodicallyReport(interval time.Duration) {
+func (b *DB) periodicallyReport(interval time.Duration) {
 	defer b.wg.Done()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -227,7 +227,7 @@ func (b *BadgerDB) periodicallyReport(interval time.Duration) {
 	}
 }
 
-func (b *BadgerDB) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
+func (b *DB) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
 	var keys [][]byte
 
 	opt := badger.DefaultIteratorOptions
@@ -246,13 +246,13 @@ func (b *BadgerDB) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
 
 // Update is a gateway to badger db Update function
 // creating and managing a read-write transaction
-func (b *BadgerDB) Update(fn func(basedb.Txn) error) error {
+func (b *DB) Update(fn func(basedb.Txn) error) error {
 	return b.db.Update(func(txn *badger.Txn) error {
 		return fn(newTxn(txn, b))
 	})
 }
 
-func (b *BadgerDB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) func(txn *badger.Txn) error {
+func (b *DB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) func(txn *badger.Txn) error {
 	return func(txn *badger.Txn) error {
 		rawKeys := b.listRawKeys(prefix, txn)
 		for i, k := range rawKeys {
@@ -279,7 +279,7 @@ func (b *BadgerDB) allGetter(prefix []byte, handler func(int, basedb.Obj) error)
 	}
 }
 
-func (b *BadgerDB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) func(txn *badger.Txn) error {
+func (b *DB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) func(txn *badger.Txn) error {
 	return func(txn *badger.Txn) error {
 		var value, cp []byte
 		for _, k := range keys {
@@ -311,7 +311,7 @@ func (b *BadgerDB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb
 }
 
 // Using returns the given ReadWriter, falling back to the database if it's nil.
-func (b *BadgerDB) Using(rw basedb.ReadWriter) basedb.ReadWriter {
+func (b *DB) Using(rw basedb.ReadWriter) basedb.ReadWriter {
 	if rw == nil {
 		return b
 	}
@@ -319,7 +319,7 @@ func (b *BadgerDB) Using(rw basedb.ReadWriter) basedb.ReadWriter {
 }
 
 // UsingReader returns the given Reader, falling back to the database if it's nil.
-func (b *BadgerDB) UsingReader(r basedb.Reader) basedb.Reader {
+func (b *DB) UsingReader(r basedb.Reader) basedb.Reader {
 	if r == nil {
 		return b
 	}
