@@ -443,13 +443,6 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.BNRoleVoluntaryExit,
 		}
 
-		storageMap := ibftstorage.NewStores()
-
-		for _, storageRole := range storageRoles {
-			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole)
-			storageMap.Add(storageRole, s)
-		}
-
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(logger, slotticker.Config{
 				SlotDuration: networkConfig.SlotDuration,
@@ -457,10 +450,17 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
+		storageMap := ibftstorage.NewStores()
+
+		for _, storageRole := range storageRoles {
+			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole, networkConfig, slotTickerProvider)
+			storageMap.Add(storageRole, s)
+		}
+
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
 			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
-			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
+			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -862,8 +862,6 @@ func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	// Close & reopen the database to trigger any unknown internal
-	// startup/shutdown procedures that the storage engine may have.
 	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
@@ -1173,7 +1171,7 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	}
 }
 
-func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	var wg sync.WaitGroup
 
 	threshold := slot - phase0.Slot(retain)
