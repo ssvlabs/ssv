@@ -14,12 +14,14 @@ const (
 	defaultLogBuf = 8 * 1024
 
 	// Adaptive batcher constants
-	DefaultBatchSize = 500
-	MinBatchSize     = 200
-	MaxBatchSize     = 2000
+	DefaultBatchSize    = 500
+	DefaultMinBatchSize = 200
+	DefaultMaxBatchSize = 2000
 
-	batchIncreaseRatio = 1.5
-	batchDecreaseRatio = 0.7
-	successThreshold   = 5
-	latencyTarget      = 500 * time.Millisecond
+	DefaultIncreaseRatio = 150 // 150% = 1.5x (50% increase)
+	DefaultDecreaseRatio = 70  // 70% = 0.7x (30% decrease)
+
+	DefaultSuccessThreshold = 5
+
+	DefaultLatencyTarget = 500 * time.Millisecond
 )

@@ -133,8 +133,8 @@ func WithHTTPFallback(addr string) Option {
 	}
 }
 
-// WithAdaptiveBatch configures an ExecutionClient to use an adaptive batcher with specified minimum and maximum batch sizes.
-func WithAdaptiveBatch(min, max uint64) Option {
+// WithAdaptiveBatch configures an ExecutionClient to use an adaptive batcher with specified size limits.
+func WithAdaptiveBatch(defaultSize, min, max uint64) Option {
 	return func(s *ExecutionClient) {
 		s.batcher = NewAdaptiveBatcher(s.logBatchSize, min, max)
 	}

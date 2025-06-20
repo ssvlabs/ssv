@@ -96,7 +96,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	}
 
 	if client.batcher == nil {
-		client.batcher = NewAdaptiveBatcher(client.logBatchSize, MinBatchSize, MaxBatchSize)
+		client.batcher = NewAdaptiveBatcher(client.logBatchSize, DefaultMinBatchSize, DefaultMaxBatchSize)
 	}
 
 	if client.httpFallbackAddr != "" {

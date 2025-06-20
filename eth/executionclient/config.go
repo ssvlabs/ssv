@@ -16,6 +16,7 @@ type Options struct {
 	HTTPFallbackAddr string `yaml:"ETH1HTTPFallbackAddr" env:"ETH_1_HTTP_FALLBACK_ADDR" env-description:"HTTP endpoint for fallback when WebSocket limits are exceeded. If empty, will attempt to convert WebSocket URL to HTTP"`
 
 	// Adaptive batching
+	BatchSize    uint64 `yaml:"ETH1BatchSize" env:"ETH_1_BATCH_SIZE" env-default:"500" env-description:"Initial batch size for log fetching"`
 	MinBatchSize uint64 `yaml:"ETH1MinBatchSize" env:"ETH_1_MIN_BATCH_SIZE" env-default:"200" env-description:"Minimum batch size for log fetching"`
 	MaxBatchSize uint64 `yaml:"ETH1MaxBatchSize" env:"ETH_1_MAX_BATCH_SIZE" env-default:"2000" env-description:"Maximum batch size for log fetching"`
 }
