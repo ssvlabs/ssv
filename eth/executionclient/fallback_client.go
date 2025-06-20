@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -19,57 +20,71 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./fallback_client_mock.go -source=./fallback_client.go
 
-type HTTPFallback struct {
-	client    *ethclient.Client
-	clientMu  sync.RWMutex
-	addr      string
-	logger    *zap.Logger
-	connected bool
+// FallbackClientInterface defines the interface for fallback client operations.
+type FallbackClientInterface interface {
+	Connect(ctx context.Context, timeout time.Duration) error
+	FetchLogs(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error)
+	FetchLogsViaReceipts(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error)
+	Close() error
 }
 
-// NewHTTPFallback creates a new HTTP fallback handler.
-func NewHTTPFallback(addr string, logger *zap.Logger) *HTTPFallback {
+var _ FallbackClientInterface = (*FallbackClient)(nil)
+
+// FallbackClient provides HTTP-based fallback for log fetching.
+type FallbackClient struct {
+	client          *ethclient.Client
+	clientMu        sync.RWMutex
+	logger          *zap.Logger
+	httpAddr        string
+	connected       atomic.Bool
+	lastConnectTime atomic.Int64
+}
+
+// NewFallbackClient creates a new FallbackClient instance.
+func NewFallbackClient(addr string, logger *zap.Logger) FallbackClientInterface {
 	if addr == "" {
 		return nil
 	}
 
-	return &HTTPFallback{
-		addr:   normalizeHTTPAddr(addr),
-		logger: logger,
+	return &FallbackClient{
+		httpAddr: normalizeHTTPAddr(addr),
+		logger:   logger,
 	}
 }
 
-// Connect establishes HTTP connection.
-func (h *HTTPFallback) Connect(ctx context.Context, timeout time.Duration) error {
-	h.clientMu.Lock()
-	defer h.clientMu.Unlock()
+// Connect establishes HTTP connection with retry logic.
+func (f *FallbackClient) Connect(ctx context.Context, timeout time.Duration) error {
+	f.clientMu.Lock()
+	defer f.clientMu.Unlock()
 
-	if h.connected && h.client != nil {
+	if f.connected.Load() && f.client != nil {
 		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	client, err := ethclient.DialContext(ctx, h.addr)
+	client, err := ethclient.DialContext(ctx, f.httpAddr)
 	if err != nil {
 		return fmt.Errorf("http fallback dial failed: %w", err)
 	}
 
-	h.client = client
-	h.connected = true
-	h.logger.Info("http fallback connected", fields.Address(h.addr))
+	f.client = client
+	f.connected.Store(true)
+	f.lastConnectTime.Store(time.Now().Unix())
+	f.logger.Info("http fallback connected", fields.Address(f.httpAddr))
 
 	return nil
 }
 
 // FetchLogs retrieves logs for a specific block using HTTP.
-func (h *HTTPFallback) FetchLogs(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error) {
-	h.clientMu.RLock()
-	client := h.client
-	h.clientMu.RUnlock()
+func (f *FallbackClient) FetchLogs(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error) {
+	f.clientMu.RLock()
+	client := f.client
+	connected := f.connected.Load()
+	f.clientMu.RUnlock()
 
-	if client == nil {
+	if !connected || client == nil {
 		return nil, fmt.Errorf("http fallback not connected")
 	}
 
@@ -88,12 +103,13 @@ func (h *HTTPFallback) FetchLogs(ctx context.Context, contractAddr ethcommon.Add
 }
 
 // FetchLogsViaReceipts fetches logs by iterating through block transactions.
-func (h *HTTPFallback) FetchLogsViaReceipts(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error) {
-	h.clientMu.RLock()
-	client := h.client
-	h.clientMu.RUnlock()
+func (f *FallbackClient) FetchLogsViaReceipts(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error) {
+	f.clientMu.RLock()
+	client := f.client
+	connected := f.connected.Load()
+	f.clientMu.RUnlock()
 
-	if client == nil {
+	if !connected || client == nil {
 		return nil, fmt.Errorf("http fallback not connected")
 	}
 
@@ -106,7 +122,7 @@ func (h *HTTPFallback) FetchLogsViaReceipts(ctx context.Context, contractAddr et
 	for _, tx := range block.Transactions() {
 		receipt, err := client.TransactionReceipt(ctx, tx.Hash())
 		if err != nil {
-			h.logger.Debug("failed to fetch tx receipt",
+			f.logger.Debug("failed to fetch tx receipt",
 				fields.TxHash(tx.Hash()),
 				zap.Error(err))
 			continue
@@ -123,20 +139,20 @@ func (h *HTTPFallback) FetchLogsViaReceipts(ctx context.Context, contractAddr et
 }
 
 // Close closes the HTTP client connection.
-func (h *HTTPFallback) Close() error {
-	h.clientMu.Lock()
-	defer h.clientMu.Unlock()
+func (f *FallbackClient) Close() error {
+	f.clientMu.Lock()
+	defer f.clientMu.Unlock()
 
-	if h.client != nil {
-		h.client.Close()
-		h.client = nil
-		h.connected = false
+	if f.client != nil {
+		f.client.Close()
+		f.client = nil
+		f.connected.Store(false)
 	}
 
 	return nil
 }
 
-// normalizeHTTPAddr normalizes a given WebSocket or HTTPS address to its HTTP equivalent.
+// normalizeHTTPAddr converts WebSocket URLs to HTTP equivalents.
 func normalizeHTTPAddr(addr string) string {
 	addr = strings.Replace(addr, "ws://", "http://", 1)
 	addr = strings.Replace(addr, "wss://", "https://", 1)

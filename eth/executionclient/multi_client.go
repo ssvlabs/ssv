@@ -297,7 +297,7 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 			client, err := mc.getClient(ctx, i)
 			if err != nil {
 				mc.logger.Warn("client unavailable",
-					zap.String("addr", mc.nodeAddrs[i]),
+					zap.String("httpAddr", mc.nodeAddrs[i]),
 					zap.Error(err))
 
 				return err
@@ -305,7 +305,7 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 
 			if err := client.Healthy(ctx); err != nil {
 				mc.logger.Warn("client is not healthy",
-					zap.String("addr", mc.nodeAddrs[i]),
+					zap.String("httpAddr", mc.nodeAddrs[i]),
 					zap.Error(err))
 
 				return err
@@ -440,7 +440,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		client, err := mc.getClient(ctx, clientIndex)
 		if err != nil {
 			mc.logger.Warn("client unavailable, switching to the next client",
-				zap.String("addr", mc.nodeAddrs[clientIndex]),
+				zap.String("httpAddr", mc.nodeAddrs[clientIndex]),
 				zap.Error(err))
 
 			if maxTries != 0 {
@@ -452,7 +452,7 @@ func (mc *MultiClient) call(ctx context.Context, f func(client SingleClientProvi
 		}
 
 		logger := mc.logger.With(
-			zap.String("addr", mc.nodeAddrs[clientIndex]),
+			zap.String("httpAddr", mc.nodeAddrs[clientIndex]),
 			zap.String("method", method))
 
 		// Make sure this client is healthy. This shouldn't cause too many requests because the result is cached.

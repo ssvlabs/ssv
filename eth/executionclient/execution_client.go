@@ -72,7 +72,7 @@ type ExecutionClient struct {
 
 	// variables
 	client         *ethclient.Client
-	httpFallback   *HTTPFallback
+	httpFallback   FallbackClientInterface
 	closed         chan struct{}
 	lastSyncedTime atomic.Int64
 }
@@ -88,18 +88,23 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		healthInvalidationInterval:  DefaultHealthInvalidationInterval,
-		batcher:                     NewAdaptiveBatcher(DefaultBatchSize, MinBatchSize, MaxBatchSize),
+		logBatchSize:                DefaultBatchSize,
 		closed:                      make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
 	}
 
-	httpAddr := client.httpFallbackAddr
-	if httpAddr == "" {
-		httpAddr = nodeAddr
+	if client.batcher == nil {
+		client.batcher = NewAdaptiveBatcher(client.logBatchSize, MinBatchSize, MaxBatchSize)
 	}
-	client.httpFallback = NewHTTPFallback(httpAddr, client.logger)
+
+	if client.httpFallbackAddr != "" {
+		client.httpFallback = NewFallbackClient(client.httpFallbackAddr, client.logger)
+	} else if nodeAddr != "" {
+		// Auto-detect HTTP endpoint from WebSocket URL
+		client.httpFallback = NewFallbackClient(nodeAddr, client.logger)
+	}
 
 	client.logger.Info("execution client: connecting", fields.Address(nodeAddr))
 
@@ -334,53 +339,75 @@ func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockN
 	ec.logger.Warn("single block exceeds read limit, attempting fallback",
 		fields.BlockNumber(blockNum))
 
-	if ec.httpFallback != nil {
-		if err := ec.httpFallback.Connect(ctx, ec.connectionTimeout); err == nil {
-			logs, err := ec.httpFallback.FetchLogs(ctx, ec.contractAddress, blockNum)
-			if err == nil {
-				ec.logger.Info("fetched logs via http fallback",
-					fields.BlockNumber(blockNum),
-					zap.Int("logs", len(logs)))
+	methods := []struct {
+		name string
+		fn   func() ([]ethtypes.Log, error)
+	}{
+		{
+			name: "http_filter",
+			fn: func() ([]ethtypes.Log, error) {
+				if ec.httpFallback == nil {
+					return nil, fmt.Errorf("no http fallback configured")
+				}
+				if err := ec.httpFallback.Connect(ctx, ec.connectionTimeout); err != nil {
+					return nil, err
+				}
+				return ec.httpFallback.FetchLogs(ctx, ec.contractAddress, blockNum)
+			},
+		},
+		{
+			name: "http_receipts",
+			fn: func() ([]ethtypes.Log, error) {
+				if ec.httpFallback == nil {
+					return nil, fmt.Errorf("no http fallback configured")
+				}
+				return ec.httpFallback.FetchLogsViaReceipts(ctx, ec.contractAddress, blockNum)
+			},
+		},
+		{
+			name: "ws_receipts",
+			fn: func() ([]ethtypes.Log, error) {
+				block, err := ec.BlockByNumber(ctx, big.NewInt(int64(blockNum)))
+				if err != nil {
+					return nil, fmt.Errorf("failed to fetch block %d: %w", blockNum, err)
+				}
+
+				var logs []ethtypes.Log
+				for _, tx := range block.Transactions() {
+					receipt, err := ec.client.TransactionReceipt(ctx, tx.Hash())
+					if err != nil {
+						ec.logger.Debug("failed to fetch receipt",
+							fields.TxHash(tx.Hash()),
+							zap.Error(err))
+						continue
+					}
+
+					for _, log := range receipt.Logs {
+						if log.Address == ec.contractAddress {
+							logs = append(logs, *log)
+						}
+					}
+				}
+
 				return logs, nil
-			}
-
-			logs, err = ec.httpFallback.FetchLogsViaReceipts(ctx, ec.contractAddress, blockNum)
-			if err == nil {
-				ec.logger.Info("fetched logs via http receipts",
-					fields.BlockNumber(blockNum),
-					zap.Int("logs", len(logs)))
-				return logs, nil
-			}
-		}
+			},
+		},
 	}
 
-	block, err := ec.BlockByNumber(ctx, big.NewInt(int64(blockNum))) // nolint: gosec
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch block %d: %w", blockNum, err)
+	var lastErr error
+	for _, method := range methods {
+		logs, err := method.fn()
+		if err == nil && len(logs) > 0 {
+			ec.logger.Info("fetched logs via fallback",
+				fields.BlockNumber(blockNum),
+				zap.String("method", method.name),
+				zap.Int("logs", len(logs)))
+			return logs, nil
+		}
+		lastErr = err
 	}
 
-	var logs []ethtypes.Log
-	for _, tx := range block.Transactions() {
-		receipt, err := ec.client.TransactionReceipt(ctx, tx.Hash())
-		if err != nil {
-			ec.logger.Debug("failed to fetch receipt",
-				fields.TxHash(tx.Hash()),
-				zap.Error(err))
-			continue
-		}
-
-		for _, log := range receipt.Logs {
-			if log.Address == ec.contractAddress {
-				logs = append(logs, *log)
-			}
-		}
-	}
-
-	ec.logger.Info("fetched logs via receipts",
-		fields.BlockNumber(blockNum),
-		zap.Int("logs", len(logs)))
-
-	return logs, nil
+	return nil, fmt.Errorf("all fallback methods failed: %w", lastErr)
 }
 
 // StreamLogs subscribes to events emitted by the contract.
