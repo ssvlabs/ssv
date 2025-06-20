@@ -72,19 +72,21 @@ func NewLocalKeyManager(
 		return nil, fmt.Errorf("get encryption key: %w", err)
 	}
 
-	decodedEncryptionKey, err := hex.DecodeString(encryptionKey)
+	ekmHash := operatorPrivKey.EKMHash()
+
+	decodedEKMHash, err := hex.DecodeString(ekmHash)
 	if err != nil {
-		return nil, fmt.Errorf("decoding encryption key: %w", err)
+		return nil, fmt.Errorf("decoding EKMHash: %w", err)
 	}
 
-	loggedEncKey := fmt.Sprintf("%s..%s", encryptionKey[:len(encryptionKey)/4], encryptionKey[len(encryptionKey)-len(encryptionKey)/4:])
-	loggedDecodedEncKey := append(append(decodedEncryptionKey[:len(decodedEncryptionKey)/4], []byte("..")...), decodedEncryptionKey[:len(decodedEncryptionKey)-len(decodedEncryptionKey)/4]...)
+	loggedEKMHash := fmt.Sprintf("%s..%s", ekmHash[:len(ekmHash)/4], ekmHash[len(ekmHash)-len(ekmHash)/4:])
+	loggedDecodedEKMKey := append(append(decodedEKMHash[:len(decodedEKMHash)/4], []byte("..")...), decodedEKMHash[:len(decodedEKMHash)-len(decodedEKMHash)/4]...)
 
 	logger.Warn("Setting encryption key",
-		zap.Int("len", len(encryptionKey)),
-		zap.Int("len_decoded", len(decodedEncryptionKey)),
-		zap.String("key", loggedEncKey),
-		zap.ByteString("key_decoded", loggedDecodedEncKey),
+		zap.Int("len", len(ekmHash)),
+		zap.Int("len_decoded", len(decodedEKMHash)),
+		zap.String("ekm_key", loggedEKMHash),
+		zap.ByteString("ekm_key_decoded", loggedDecodedEKMKey),
 	)
 
 	if err := signerStore.SetEncryptionKey(encryptionKey); err != nil {
