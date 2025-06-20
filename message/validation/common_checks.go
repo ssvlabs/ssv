@@ -58,20 +58,22 @@ func (mv *messageValidator) validateDutyCount(
 	validatorIndices []phase0.ValidatorIndex,
 	signerStateBySlot *OperatorState,
 ) error {
-	dutyCount := signerStateBySlot.DutyCount(mv.netCfg.EstimatedEpochAtSlot(msgSlot))
+	epoch := mv.netCfg.EstimatedEpochAtSlot(msgSlot)
+	dutyCount := signerStateBySlot.DutyCount(epoch)
 
 	dutyLimit, exists := mv.dutyLimit(msgID, msgSlot, validatorIndices)
 	if !exists {
 		return nil
 	}
 
-	// Check if the duty count exceeds or equals the duty limit.
-	// This validation occurs before the state is updated, which is why
-	// the first count starts at 0 and we use an inclusive comparison (>=).
-	if dutyCount > dutyLimit {
+	// Error if this validator has already been assigned at least as many duties
+	// as allowed for the target epoch. We perform this check *before* incrementing
+	// the in-memory count (so the very first duty will see count==0), hence the
+	// inclusive ">=" comparison.
+	if dutyCount >= dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
-		err.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
-		err.want = fmt.Sprintf("less than %v", dutyLimit)
+		err.got = fmt.Sprintf("%v (role %v, epoch %v)", dutyCount, msgID.GetRoleType(), epoch)
+		err.want = fmt.Sprintf("<%v", dutyLimit)
 		return err
 	}
 
