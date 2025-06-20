@@ -59,18 +59,18 @@ const (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	network           P2PNetwork
-	recipientsStorage Recipients
-	sharesStorage     SharesStorage
-	beacon            beacon.BeaconNode
-	validatorOptions  validator.Options
-	signer            ekm.BeaconSigner
-	StorageMap        *ibftstorage.ParticipantStores
-	validatorsMap     *validators.ValidatorsMap
-	validatorStore    registrystorage.ValidatorStore
-	operatorDataStore operatordatastore.OperatorDataStore
-	operatorStorage   registrystorage.Operators
-	networkConfig     networkconfig.NetworkConfig
+	network             P2PNetwork
+	recipientsStorage   Recipients
+	sharesStorage       SharesStorage
+	beacon              beacon.BeaconNode
+	validatorCommonOpts *validator.CommonOptions
+	signer              ekm.BeaconSigner
+	StorageMap          *ibftstorage.ParticipantStores
+	validatorsMap       *validators.ValidatorsMap
+	validatorStore      registrystorage.ValidatorStore
+	operatorDataStore   operatordatastore.OperatorDataStore
+	operatorStorage     registrystorage.Operators
+	networkConfig       networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
@@ -228,7 +228,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorStore:    mockValidatorStore,
-				validatorOptions: validator.Options{
+				validatorCommonOpts: &validator.CommonOptions{
 					Exporter: true,
 				},
 			}
@@ -243,12 +243,13 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
 	mockValidatorsMap := validators.New(t.Context())
 	controllerOptions := MockControllerOptions{
-		validatorsMap: mockValidatorsMap,
+		validatorsMap:       mockValidatorsMap,
+		validatorCommonOpts: &validator.CommonOptions{},
 	}
 	ctr := setupController(t, logger, controllerOptions) // non-committee
 
 	// Only exporter handles non-committee messages
-	ctr.validatorOptions.Exporter = true
+	ctr.validatorCommonOpts.Exporter = true
 
 	go ctr.handleRouterMessages()
 
@@ -543,7 +544,7 @@ func TestSetupValidators(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
-				validatorOptions: validator.Options{
+				validatorCommonOpts: &validator.CommonOptions{
 					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
 				},
@@ -806,7 +807,7 @@ func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOption
 		validatorsMap:           opts.validatorsMap,
 		validatorStore:          opts.validatorStore,
 		ctx:                     t.Context(),
-		validatorOptions:        opts.validatorOptions,
+		validatorCommonOpts:     opts.validatorCommonOpts,
 		recipientsStorage:       opts.recipientsStorage,
 		networkConfig:           opts.networkConfig,
 		messageRouter:           newMessageRouter(logger),
@@ -1213,7 +1214,7 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 		validatorsMap:     mockValidatorsMap,
 		networkConfig:     networkconfig.TestNetwork,
 		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
-		validatorOptions: validator.Options{
+		validatorCommonOpts: &validator.CommonOptions{
 			NetworkConfig: networkconfig.TestNetwork,
 		},
 		validatorStartFunc: func(validator *validator.Validator) (bool, error) {

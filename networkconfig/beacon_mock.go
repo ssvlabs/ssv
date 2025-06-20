@@ -225,6 +225,20 @@ func (mr *MockBeaconMockRecorder) GetEpochsPerSyncCommitteePeriod() *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockBeacon)(nil).GetEpochsPerSyncCommitteePeriod))
 }
 
+// GetGasLimit36Epoch mocks base method.
+func (m *MockBeacon) GetGasLimit36Epoch() phase0.Epoch {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGasLimit36Epoch")
+	ret0, _ := ret[0].(phase0.Epoch)
+	return ret0
+}
+
+// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
+func (mr *MockBeaconMockRecorder) GetGasLimit36Epoch() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGasLimit36Epoch", reflect.TypeOf((*MockBeacon)(nil).GetGasLimit36Epoch))
+}
+
 // GetGenesisTime mocks base method.
 func (m *MockBeacon) GetGenesisTime() time.Time {
 	m.ctrl.T.Helper()

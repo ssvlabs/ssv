@@ -12,9 +12,8 @@ package networkconfig
 import (
 	reflect "reflect"
 
-	gomock "go.uber.org/mock/gomock"
-
 	types "github.com/ssvlabs/ssv-spec/types"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockSSV is a mock of SSV interface.
