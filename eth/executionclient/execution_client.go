@@ -367,7 +367,7 @@ func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockN
 		{
 			name: "ws_receipts",
 			fn: func() ([]ethtypes.Log, error) {
-				block, err := ec.BlockByNumber(ctx, big.NewInt(int64(blockNum))) // nolint: gosec
+				block, err := ec.BlockByNumber(ctx, new(big.Int).SetUint64(blockNum))
 				if err != nil {
 					return nil, fmt.Errorf("failed to fetch block %d: %w", blockNum, err)
 				}
