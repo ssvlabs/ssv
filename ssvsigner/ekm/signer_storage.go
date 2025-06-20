@@ -83,14 +83,12 @@ func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *
 }
 
 // SetEncryptionKey sets the encryption key used to encrypt/decrypt account data.
-//
-// Accepts a hex-encoded key and derives a 32-byte AES-256 key using HKDF-SHA256.
-// Empty/nil hexKey results in plaintext storage (no encryption).
-func (s *storage) SetEncryptionKey(hexKey []byte) {
+// Empty/nil key results in plaintext storage (no encryption).
+func (s *storage) SetEncryptionKey(key []byte) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.encryptionKey = hexKey
+	s.encryptionKey = key
 }
 
 func (s *storage) DropRegistryData() error {
