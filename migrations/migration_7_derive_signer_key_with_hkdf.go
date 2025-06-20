@@ -19,11 +19,7 @@ var migration_7_derive_signer_key_with_hkdf = Migration{
 			}
 
 			signerStorage := opt.signerStorage(logger)
-
-			err := signerStorage.SetEncryptionKey(opt.OperatorPrivKey.EKMHash())
-			if err != nil {
-				return fmt.Errorf("failed to set old encryption key: %w", err)
-			}
+			signerStorage.SetEncryptionKey(opt.OperatorPrivKey.EKMHash())
 
 			accounts, err := signerStorage.ListAccountsTxn(txn)
 			if err != nil {
@@ -41,9 +37,7 @@ var migration_7_derive_signer_key_with_hkdf = Migration{
 			}
 
 			// re-encryption with the new algorithm
-			if err := signerStorage.SetEncryptionKey(encryptionKey); err != nil {
-				return fmt.Errorf("failed to set new encryption key: %w", err)
-			}
+			signerStorage.SetEncryptionKey(encryptionKey)
 
 			for _, account := range accounts {
 				err := signerStorage.SaveAccountTxn(txn, account)

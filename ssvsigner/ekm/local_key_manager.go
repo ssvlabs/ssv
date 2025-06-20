@@ -66,7 +66,6 @@ func NewLocalKeyManager(
 	network networkconfig.NetworkConfig,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*LocalKeyManager, error) {
-	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	encryptionKey, err := operatorPrivKey.EKMEncryptionKey()
 	if err != nil {
 		return nil, fmt.Errorf("get encryption key: %w", err)
@@ -89,9 +88,8 @@ func NewLocalKeyManager(
 		zap.ByteString("ekm_key_decoded", loggedDecodedEKMKey),
 	)
 
-	if err := signerStore.SetEncryptionKey(encryptionKey); err != nil {
-		return nil, fmt.Errorf("set encryption key: %w", err)
-	}
+	signerStore := NewSignerStorage(db, network.Beacon, logger)
+	signerStore.SetEncryptionKey(encryptionKey)
 
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
