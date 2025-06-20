@@ -268,10 +268,12 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
+
 	if acc == nil {
-		if err := km.BumpSlashingProtection(phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())); err != nil {
+		if err := km.BumpSlashingProtection(pubKey); err != nil {
 			return fmt.Errorf("could not bump slashing protection: %w", err)
 		}
+
 		if err := km.saveShare(sharePrivKey); err != nil {
 			return fmt.Errorf("could not save share: %w", err)
 		}
@@ -280,9 +282,9 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 	return nil
 }
 
-// RemoveShare removes the share from the local wallet, clears the associated
-// slashing-protection records (highest attestation/proposal) for the given
-// public key, and returns an error on any storage issue.
+// RemoveShare removes the share from the local wallet while preserving
+// slashing-protection records (attestation and proposal) for the given
+// public key to prevent slashing if the share is re-added later.
 func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
@@ -293,13 +295,10 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKe
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
+
+	// We do not remove slashing protection history to prevent slashing if the share is re-added later
+	// Only remove the account from the wallet
 	if acc != nil {
-		if err := km.RemoveHighestAttestation(pubKey); err != nil {
-			return fmt.Errorf("could not remove highest attestation: %w", err)
-		}
-		if err := km.RemoveHighestProposal(pubKey); err != nil {
-			return fmt.Errorf("could not remove highest proposal: %w", err)
-		}
 		if err := km.wallet.DeleteAccountByPublicKey(pubKeyHex); err != nil {
 			return fmt.Errorf("could not delete share: %w", err)
 		}
