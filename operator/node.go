@@ -168,6 +168,10 @@ func (n *Node) Start() error {
 		}
 	}
 
+	if err := n.net.Close(); err != nil {
+		n.logger.Error("could not close network", zap.Error(err))
+	}
+
 	return nil
 }
 
