@@ -88,7 +88,7 @@ func (s *storage) SetEncryptionKey(key []byte) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.logger.Warn("Setting encryption key", zap.ByteString("key[:8]", key[:8]))
+	s.logger.Warn("Setting encryption key", zap.ByteString("key", key[:8]))
 	s.encryptionKey = key
 }
 
