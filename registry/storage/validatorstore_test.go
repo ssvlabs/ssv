@@ -126,6 +126,18 @@ func TestValidatorStore(t *testing.T) {
 		require.True(t, e)
 		require.Equal(t, share2, s2)
 
+		validatorIndex, e := store.ValidatorIndex(share1.ValidatorPubKey)
+		require.True(t, e)
+		require.Equal(t, share1.ValidatorIndex, validatorIndex)
+
+		validatorIndex, e = store.ValidatorIndex(share2.ValidatorPubKey)
+		require.True(t, e)
+		require.Equal(t, share2.ValidatorIndex, validatorIndex)
+
+		var invalidPK spectypes.ValidatorPK
+		_, e = store.ValidatorIndex(invalidPK)
+		require.False(t, e)
+
 		require.Empty(t, store.ParticipatingValidators(99))
 		require.Len(t, store.ParticipatingValidators(101), 1)
 		require.Equal(t, share1, store.ParticipatingValidators(101)[0])

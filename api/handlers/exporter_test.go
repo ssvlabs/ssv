@@ -306,6 +306,28 @@ func TestExporterDecideds(t *testing.T) {
 				require.True(t, roles["PROPOSER"])
 			},
 		},
+		{
+			name: "invalid request - invalid pubkey length",
+			request: map[string]interface{}{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"ATTESTER"},
+				"pubkeys": []string{"0x1234"},
+			},
+			setupMock:      func(store *mockParticipantStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Contains(t, resp.Message, "invalid pubkey length at index 0")
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -965,11 +987,160 @@ func TestExporterTraceDecideds(t *testing.T) {
 				require.Len(t, resp.Data, 0) // Should return empty array when error occurs
 			},
 		},
+		{
+			name: "error case - from > to",
+			request: map[string]any{
+				"from":    101,
+				"to":      100,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock:      func(store *mockTraceStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "'from' must be less than or equal to 'to'", resp.Message)
+			},
+		},
+		{
+			name: "error case - empty roles",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock:      func(store *mockTraceStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "at least one role is required", resp.Message)
+			},
+		},
+		{
+			name: "invalid request - invalid pubkey length",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"0x1234"},
+			},
+			setupMock:      func(store *mockTraceStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Contains(t, resp.Message, "invalid pubkey length")
+			},
+		},
+		{
+			name: "valid request - attester role no request pubkeys GetAllCommitteeDecideds returns no signers",
+			request: map[string]any{
+				"from":  100,
+				"to":    100,
+				"roles": []string{"ATTESTER"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+				store.GetAllCommitteeDecidedsFunc = func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+					return []qbftstorage.ParticipantsRangeEntry{
+						{
+							Slot:    slot,
+							PubKey:  pk,
+							Signers: []uint64{},
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 0)
+			},
+		},
+		{
+			name: "valid request - attester role one pubkey GetCommitteeDecideds returns no signers",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{"ATTESTER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+				store.GetCommitteeDecidedsFunc = func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error) {
+					return []qbftstorage.ParticipantsRangeEntry{
+						{
+							Slot:    slot,
+							PubKey:  pk,
+							Signers: []uint64{},
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 0)
+			},
+		},
+		{
+			name: "valid request - proposer role no pubkey GetAllValidatorDecideds returns no signers",
+			request: map[string]any{
+				"from":  100,
+				"to":    100,
+				"roles": []string{"PROPOSER"},
+			},
+			setupMock: func(store *mockTraceStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+				store.GetAllValidatorDecidedsFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+					return []qbftstorage.ParticipantsRangeEntry{
+						{
+							Slot:    slot,
+							PubKey:  pk,
+							Signers: []uint64{},
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Data []*ParticipantResponse `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 0)
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newMockTraceStore()
+
 			tt.setupMock(store)
 
 			exporter := NewExporter(zap.NewNop(), nil, store, nil)
@@ -977,7 +1148,7 @@ func TestExporterTraceDecideds(t *testing.T) {
 			reqBody, err := json.Marshal(tt.request)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPost, "/trace/decideds", strings.NewReader(string(reqBody)))
+			req := httptest.NewRequest(http.MethodPost, "/traces/decideds", strings.NewReader(string(reqBody)))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 
@@ -995,6 +1166,34 @@ func TestExporterTraceDecideds(t *testing.T) {
 			tt.validateResp(t, rec)
 		})
 	}
+}
+
+func TestExporterTraceDecideds_InvalidJSON(t *testing.T) {
+	store := newMockTraceStore()
+	exporter := NewExporter(zap.NewNop(), nil, store, nil)
+	req := httptest.NewRequest(http.MethodPost, "/traces/decideds", strings.NewReader("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	err := exporter.TraceDecideds(rec, req)
+	if err != nil {
+		rec.Code = http.StatusBadRequest
+		errorResp := map[string]string{
+			"status": http.StatusText(http.StatusBadRequest),
+			"error":  err.Error(),
+		}
+		jsonResp, _ := json.Marshal(errorResp)
+		rec.Body.Write(jsonResp)
+		rec.Header().Set("Content-Type", "application/json")
+	}
+
+	var resp struct {
+		Status  string `json:"status"`
+		Message string `json:"error"`
+	}
+
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Message, "invalid character")
 }
 
 func makeCommitteeDutyTrace(slot phase0.Slot) *exportertypes.CommitteeDutyTrace {
@@ -1187,6 +1386,36 @@ func TestExporterCommitteeTraces(t *testing.T) {
 			tt.validateResp(t, rec)
 		})
 	}
+}
+
+func TestExporterCommitteeTraces_InvalidJSON(t *testing.T) {
+	store := newMockTraceStore()
+	validatorStore := newMockValidatorStore()
+	exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
+
+	req := httptest.NewRequest(http.MethodPost, "/traces/committee", strings.NewReader("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	err := exporter.CommitteeTraces(rec, req)
+	if err != nil {
+		rec.Code = http.StatusBadRequest
+		errorResp := map[string]string{
+			"status": http.StatusText(http.StatusBadRequest),
+			"error":  err.Error(),
+		}
+		jsonResp, _ := json.Marshal(errorResp)
+		rec.Body.Write(jsonResp)
+		rec.Header().Set("Content-Type", "application/json")
+	}
+
+	var resp struct {
+		Status  string `json:"status"`
+		Message string `json:"error"`
+	}
+
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Message, "invalid character")
 }
 
 // TestExporterValidatorTraces runs table-driven tests for the ValidatorTraces handler
@@ -1481,6 +1710,63 @@ func TestExporterValidatorTraces(t *testing.T) {
 				require.Len(t, resp.Data, 0) // Should return empty array when error occurs
 			},
 		},
+		{
+			name: "error case - from > to",
+			request: map[string]any{
+				"from":    101,
+				"to":      100,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "'from' must be less than or equal to 'to'", resp.Message)
+			},
+		},
+		{
+			name: "error case - empty roles",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+			},
+			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, "at least one role is required", resp.Message)
+			},
+		},
+		{
+			name: "invalid request - invalid pubkey length",
+			request: map[string]any{
+				"from":    100,
+				"to":      200,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"0x1234"},
+			},
+			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
+			expectedStatus: http.StatusBadRequest,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp struct {
+					Status  string `json:"status"`
+					Message string `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Contains(t, resp.Message, "invalid pubkey length")
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1512,6 +1798,36 @@ func TestExporterValidatorTraces(t *testing.T) {
 			tt.validateResp(t, rec)
 		})
 	}
+}
+
+func TestExporterValidatorTraces_InvalidJSON(t *testing.T) {
+	store := newMockTraceStore()
+	validatorStore := newMockValidatorStore()
+	exporter := NewExporter(zap.NewNop(), nil, store, validatorStore)
+
+	req := httptest.NewRequest(http.MethodPost, "/traces/validator", strings.NewReader("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	err := exporter.ValidatorTraces(rec, req)
+	if err != nil {
+		rec.Code = http.StatusBadRequest
+		errorResp := map[string]string{
+			"status": http.StatusText(http.StatusBadRequest),
+			"error":  err.Error(),
+		}
+		jsonResp, _ := json.Marshal(errorResp)
+		rec.Body.Write(jsonResp)
+		rec.Header().Set("Content-Type", "application/json")
+	}
+
+	var resp struct {
+		Status  string `json:"status"`
+		Message string `json:"error"`
+	}
+
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Contains(t, resp.Message, "invalid character")
 }
 
 // mockValidatorStore is a mock implementation of storage.ValidatorStore

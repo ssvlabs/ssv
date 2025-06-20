@@ -16,6 +16,40 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
+func TestSaveCommitteeDutyLinks(t *testing.T) {
+	logger := zap.NewNop()
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := store.New(db)
+
+	slot := phase0.Slot(123)
+	links := map[phase0.ValidatorIndex]spectypes.CommitteeID{
+		1: {1, 1, 1},
+		2: {2, 2, 2},
+		3: {3, 3, 3},
+	}
+
+	require.NoError(t, s.SaveCommitteeDutyLinks(slot, links))
+
+	retrievedLinks, err := s.GetCommitteeDutyLinks(slot)
+	require.NoError(t, err)
+	require.Len(t, retrievedLinks, len(links))
+
+	// convert slice to map for easier lookup
+	retrievedMap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
+	for _, l := range retrievedLinks {
+		retrievedMap[l.ValidatorIndex] = l.CommitteeID
+	}
+
+	for index, id := range links {
+		retrievedID, ok := retrievedMap[index]
+		require.True(t, ok, "link for validator index %d not found", index)
+		assert.Equal(t, id, retrievedID)
+	}
+}
+
 func TestSaveCommitteeDutyLink(t *testing.T) {
 	logger := zap.NewNop()
 	db, err := kv.NewInMemory(logger, basedb.Options{})
