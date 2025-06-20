@@ -292,7 +292,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	// - else, accept
 	for _, signer := range signedSSVMessage.OperatorIDs {
 		signerStateBySlot := state.Signer(committeeInfo.signerIndex(signer))
-		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, committeeInfo.validatorIndices, signerStateBySlot, false); err != nil {
+		if err := mv.validateDutyCount(signedSSVMessage, consensusMessage, signedSSVMessage.SSVMessage.GetID(), msgSlot, committeeInfo.validatorIndices, signerStateBySlot, false); err != nil {
 			return err
 		}
 	}
@@ -314,7 +314,14 @@ func (mv *messageValidator) updateConsensusState(
 		signerState := stateBySlot.GetSignerState(msgSlot)
 		if signerState == nil {
 			signerState = newSignerState(phase0.Slot(consensusMessage.Height), consensusMessage.Round)
-			stateBySlot.SetSignerState(msgSlot, msgEpoch, signerState, false)
+			msgs := struct {
+				SignedSSVMessage *spectypes.SignedSSVMessage
+				ConsensusMessage *specqbft.Message
+			}{
+				SignedSSVMessage: signedSSVMessage,
+				ConsensusMessage: consensusMessage,
+			}
+			stateBySlot.SetSignerState(msgSlot, msgEpoch, signerState, false, msgs)
 		} else {
 			if consensusMessage.Round > signerState.Round {
 				signerState.Reset(phase0.Slot(consensusMessage.Height), consensusMessage.Round)

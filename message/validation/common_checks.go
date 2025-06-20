@@ -1,11 +1,11 @@
 package validation
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -53,6 +53,8 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 }
 
 func (mv *messageValidator) validateDutyCount(
+	signedSSVMessage *spectypes.SignedSSVMessage,
+	message any,
 	msgID spectypes.MessageID,
 	msgSlot phase0.Slot,
 	validatorIndices []phase0.ValidatorIndex,
@@ -73,7 +75,18 @@ func (mv *messageValidator) validateDutyCount(
 	// inclusive ">=" comparison.
 	if dutyCount >= dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
-		err.got = fmt.Sprintf("%v (role %v), partial %v, slot %v, epoch %v, maxEpoch %v, curr %v, prev %v",
+
+		haveMsgJSON, _ := json.Marshal(signerStateBySlot.dutiesMap[msgSlot])
+		gotMsg := struct {
+			SignedSSVMessage *spectypes.SignedSSVMessage
+			Message          any
+		}{
+			SignedSSVMessage: signedSSVMessage,
+			Message:          message,
+		}
+		gotMsgJSON, _ := json.Marshal(gotMsg)
+
+		err.got = fmt.Sprintf("%v (role %v), partial %v, slot %v, epoch %v, maxEpoch %v, curr %v, prev %v, have msg %v, got msg %v",
 			dutyCount,
 			msgID.GetRoleType(),
 			partial,
@@ -82,6 +95,8 @@ func (mv *messageValidator) validateDutyCount(
 			signerStateBySlot.maxEpoch,
 			signerStateBySlot.dutiesDebugCurr,
 			signerStateBySlot.dutiesDebugPrev,
+			string(haveMsgJSON),
+			string(gotMsgJSON),
 		)
 		err.want = fmt.Sprintf("<%v", dutyLimit)
 		return err

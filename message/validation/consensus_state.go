@@ -26,6 +26,7 @@ type OperatorState struct {
 	prevEpochDuties uint64
 	dutiesDebugPrev []debugDuty
 	dutiesDebugCurr []debugDuty
+	dutiesMap       map[phase0.Slot]any
 }
 
 type debugDuty struct {
@@ -36,7 +37,8 @@ type debugDuty struct {
 
 func newOperatorState(size uint64) *OperatorState {
 	return &OperatorState{
-		signers: make([]*SignerState, size),
+		signers:   make([]*SignerState, size),
+		dutiesMap: make(map[phase0.Slot]any),
 	}
 }
 
@@ -49,7 +51,7 @@ func (os *OperatorState) GetSignerState(slot phase0.Slot) *SignerState {
 	return s
 }
 
-func (os *OperatorState) SetSignerState(slot phase0.Slot, epoch phase0.Epoch, state *SignerState, partial bool) {
+func (os *OperatorState) SetSignerState(slot phase0.Slot, epoch phase0.Epoch, state *SignerState, partial bool, msg any) {
 	os.signers[uint64(slot)%uint64(len(os.signers))] = state
 	if slot > os.maxSlot {
 		os.maxSlot = slot
@@ -84,6 +86,7 @@ func (os *OperatorState) SetSignerState(slot phase0.Slot, epoch phase0.Epoch, st
 			partial: partial,
 		})
 	}
+	os.dutiesMap[slot] = msg
 }
 
 func (os *OperatorState) MaxSlot() phase0.Slot {
