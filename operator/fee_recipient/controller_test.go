@@ -160,7 +160,7 @@ func populateStorage(t *testing.T, storage registrystorage.Shares, operatorData 
 		require.NoError(t, storage.Save(nil, createShare(i, operatorData.ID)))
 	}
 
-	// add none committee share
+	// add non-committee share
 	require.NoError(t, storage.Save(nil, createShare(2000, spectypes.OperatorID(1))))
 
 	all := storage.List(nil, registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())
