@@ -17,8 +17,9 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -124,6 +125,18 @@ func TestValidatorStore(t *testing.T) {
 		s2, e = store.ValidatorByIndex(share2.ValidatorIndex)
 		require.True(t, e)
 		require.Equal(t, share2, s2)
+
+		validatorIndex, e := store.ValidatorIndex(share1.ValidatorPubKey)
+		require.True(t, e)
+		require.Equal(t, share1.ValidatorIndex, validatorIndex)
+
+		validatorIndex, e = store.ValidatorIndex(share2.ValidatorPubKey)
+		require.True(t, e)
+		require.Equal(t, share2.ValidatorIndex, validatorIndex)
+
+		var invalidPK spectypes.ValidatorPK
+		_, e = store.ValidatorIndex(invalidPK)
+		require.False(t, e)
 
 		require.Empty(t, store.ParticipatingValidators(99))
 		require.Len(t, store.ParticipatingValidators(101), 1)
@@ -1099,6 +1112,7 @@ func createValidatorStore(shares map[spectypes.ValidatorPK]*ssvtypes.SSVShare) *
 			}
 			return share, true
 		},
+		make(map[spectypes.ValidatorPK]phase0.ValidatorIndex),
 		networkConfig,
 	)
 }

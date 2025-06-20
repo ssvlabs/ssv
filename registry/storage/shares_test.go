@@ -20,6 +20,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -210,6 +211,52 @@ func TestSharesStorage(t *testing.T) {
 
 		require.Equal(t, 2, len(existingValidators))
 	})
+}
+
+func TestValidatorPubkeysToIndicesMapping(t *testing.T) {
+	logger := logging.TestLogger(t)
+	storage, err := newTestStorage(logger)
+	require.NoError(t, err)
+	defer storage.Close()
+
+	threshold.Init()
+	const keysCount = 4
+
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
+	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
+	require.NoError(t, err)
+
+	for operatorID := range splitKeys {
+		_, err = storage.Operators.SaveOperatorData(nil, &OperatorData{ID: operatorID, PublicKey: strconv.FormatUint(operatorID, 10)})
+		require.NoError(t, err)
+	}
+
+	validatorShare := generateRandomShare(splitKeys, v1.ValidatorStateActiveOngoing, false)
+	validatorShare.ValidatorIndex = 3
+	validatorShare.ActivationEpoch = 4
+	validatorShare.OwnerAddress = common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e")
+	validatorShare.Liquidated = false
+	require.NoError(t, storage.Shares.Save(nil, validatorShare))
+
+	validatorShare2 := generateRandomShare(splitKeys, v1.ValidatorStateActiveOngoing, false)
+	validatorShare2.ValidatorIndex = 55
+	require.NoError(t, storage.Shares.Save(nil, validatorShare2))
+
+	m, err := storage.Shares.(*sharesStorage).loadPubkeyToIndexMappings()
+	require.NoError(t, err)
+	require.Equal(t, 2, len(m))
+	require.Equal(t, validatorShare.ValidatorIndex, m[validatorShare.ValidatorPubKey])
+	require.Equal(t, validatorShare2.ValidatorIndex, m[validatorShare2.ValidatorPubKey])
+
+	pubkeys := []spectypes.ValidatorPK{validatorShare.ValidatorPubKey, validatorShare2.ValidatorPubKey}
+	indices, err := storage.Shares.(*sharesStorage).GetValidatorIndicesByPubkeys(pubkeys)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(indices))
+	// should maintain order
+	assert.Equal(t, validatorShare.ValidatorIndex, indices[0])
+	assert.Equal(t, validatorShare2.ValidatorIndex, indices[1])
 }
 
 func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
