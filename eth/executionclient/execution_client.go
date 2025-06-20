@@ -267,6 +267,8 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 
 	// handle: RPC query limit and WS read limit errors
 	if isRPCQueryLimitError(err) || isWSReadLimitError(err) {
+		ec.batcher.RecordFailure()
+
 		if q.FromBlock == nil || q.ToBlock == nil {
 			return nil, err
 		}
@@ -288,6 +290,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 			zap.String("method", "eth_getLogs"),
 			fields.FromBlock(fromBlock),
 			fields.ToBlock(toBlock),
+			zap.Uint64("current_batch_size", ec.batcher.GetSize()),
 			zap.Error(err))
 
 		midBlock := fromBlock + (toBlock-fromBlock)/2
@@ -318,7 +321,8 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 		ec.logger.Info("successfully fetched logs after subdivision",
 			fields.FromBlock(fromBlock),
 			fields.ToBlock(toBlock),
-			zap.Int("total_logs", totalLogs))
+			zap.Int("total_logs", totalLogs),
+			zap.Uint64("adjusted_batch_size", ec.batcher.GetSize()))
 
 		return combinedLogs, nil
 	}
