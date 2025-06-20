@@ -879,7 +879,7 @@ func ensureOperatorPrivateKey(
 		return fmt.Errorf("could not decode private key: %w", err)
 	}
 
-	// Legacy hashing method (base64‑decoded bytes → HashKeyBytesHex)
+	// Legacy hashing method (base64‑decoded bytes → HashKeyBytes)
 	legacyHash := rsaencryption.HashKeyBytes(cliPrivKeyDecoded)
 
 	if !found {
