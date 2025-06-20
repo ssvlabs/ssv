@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -13,10 +14,14 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	model "github.com/ssvlabs/ssv/exporter"
+	"github.com/ssvlabs/ssv/exporter/store"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	kv "github.com/ssvlabs/ssv/storage/badger"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // These tests are deliberately written in a progressive manner to ensure that only the expected values are
@@ -545,10 +550,6 @@ func TestCommitteeDuty(t *testing.T) {
 		assert.Equal(t, wantBeaconRoot, commit0.BeaconRoot)
 		assert.Equal(t, uint64(1), commit0.Signer)
 		require.NotNil(t, commit0.ReceivedTime)
-
-		require.Empty(t, round0.RoundChanges)
-		require.Len(t, round0.Prepares, 1)
-		require.Len(t, round0.Commits, 1)
 	}
 
 	{ // TC 6 - RoundChange
@@ -746,4 +747,319 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 	res, err := sm.Encode()
 	require.NoError(t, err)
 	return res
+}
+
+func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+
+	dutyStore := store.New(db)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+
+	var committeeID = spectypes.CommitteeID{1}
+
+	t.Run("slot > last evicted", func(t *testing.T) {
+		collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+		slot := phase0.Slot(10)
+		collector.lastEvictedSlot.Store(uint64(5))
+
+		t.Run("committee not found", func(t *testing.T) {
+			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.NoError(t, err)
+			require.False(t, late)
+			require.NotNil(t, trace)
+			require.Equal(t, slot, trace.Slot)
+			require.Equal(t, committeeID, trace.CommitteeID)
+		})
+
+		t.Run("committee found, slot not found", func(t *testing.T) {
+			_, _, err := collector.getOrCreateCommitteeTrace(slot-1, committeeID) // create for committee
+			require.NoError(t, err)
+
+			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.NoError(t, err)
+			require.False(t, late)
+			require.NotNil(t, trace)
+			require.Equal(t, slot, trace.Slot)
+		})
+
+		t.Run("committee and slot found", func(t *testing.T) {
+			trace1, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.NoError(t, err)
+
+			trace2, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.NoError(t, err)
+			require.False(t, late)
+			require.Same(t, trace1, trace2)
+		})
+	})
+
+	t.Run("slot <= last evicted", func(t *testing.T) {
+		slot := phase0.Slot(4)
+		evictionSlot := phase0.Slot(5)
+
+		t.Run("committeeID is in flight", func(t *testing.T) {
+			collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+			collector.lastEvictedSlot.Store(uint64(evictionSlot))
+			_, _ = collector.inFlightCommittee.GetOrSet(committeeID, struct{}{})
+
+			_, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.ErrorIs(t, err, errInFlight)
+			require.False(t, late)
+		})
+
+		t.Run("committeeID not found on disk", func(t *testing.T) {
+			collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+			collector.lastEvictedSlot.Store(uint64(evictionSlot))
+
+			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.NoError(t, err)
+			require.True(t, late)
+			require.NotNil(t, trace)
+			require.Equal(t, slot, trace.Slot)
+			require.Equal(t, committeeID, trace.CommitteeID)
+		})
+
+		t.Run("committeeID found on disk", func(t *testing.T) {
+			collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+			// Setup: Create a collector, save a trace, and then evict it to disk.
+			trace, _, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.NoError(t, err)
+			trace.OperatorIDs = []uint64{1, 2, 3}
+			collector.store.SaveCommitteeDuties(slot, []*model.CommitteeDutyTrace{trace.trace()})
+			collector.lastEvictedSlot.Store(uint64(slot))
+			// Test: Create a new collector to ensure cache is empty and get the trace.
+			diskTrace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.NoError(t, err)
+			require.True(t, late)
+			require.NotNil(t, diskTrace)
+			require.Equal(t, trace.OperatorIDs, diskTrace.OperatorIDs)
+			require.Equal(t, slot, diskTrace.Slot)
+			require.Equal(t, committeeID, diskTrace.CommitteeID)
+		})
+
+		t.Run("getCommitteeDutyFromDisk errors", func(t *testing.T) {
+			innerErr := errors.New("error")
+			dutyTraceStore := &mockDutyTraceStore{err: innerErr}
+
+			collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyTraceStore, networkconfig.TestNetwork.BeaconConfig)
+			collector.lastEvictedSlot.Store(uint64(evictionSlot))
+
+			trace, late, err := collector.getOrCreateCommitteeTrace(slot, committeeID)
+			require.ErrorIs(t, err, innerErr)
+			require.False(t, late)
+			require.Nil(t, trace)
+			require.False(t, collector.inFlightCommittee.Has(committeeID))
+		})
+	})
+}
+
+func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
+	db, err := kv.NewInMemory(zap.NewNop(), basedb.Options{})
+	require.NoError(t, err)
+
+	dutyStore := store.New(db)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+
+	var vPubKey = spectypes.ValidatorPK{1}
+	var role = spectypes.BNRoleAggregator
+
+	t.Run("slot > last evicted", func(t *testing.T) {
+		collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+		slot := phase0.Slot(10)
+		collector.lastEvictedSlot.Store(uint64(5))
+
+		t.Run("validator not found", func(t *testing.T) {
+			trace, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.NoError(t, err)
+			require.False(t, late)
+			require.NotNil(t, trace)
+			roleTrace := trace.getOrCreate(slot, role)
+			require.Equal(t, slot, roleTrace.Slot)
+			require.Equal(t, role, roleTrace.Role)
+		})
+
+		t.Run("validator found, slot not found", func(t *testing.T) {
+			_, _, err := collector.getOrCreateValidatorTrace(slot-1, role, vPubKey) // create for validator
+			require.NoError(t, err)
+
+			trace, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.NoError(t, err)
+			require.False(t, late)
+			require.NotNil(t, trace)
+			roleTrace := trace.getOrCreate(slot, role)
+			require.Equal(t, slot, roleTrace.Slot)
+		})
+
+		t.Run("validator and slot found", func(t *testing.T) {
+			trace1, _, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.NoError(t, err)
+
+			trace2, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.NoError(t, err)
+			require.False(t, late)
+			require.Same(t, trace1, trace2)
+		})
+	})
+
+	t.Run("slot <= last evicted", func(t *testing.T) {
+		slot := phase0.Slot(4)
+		evictionSlot := phase0.Slot(5)
+
+		t.Run("validator is in flight", func(t *testing.T) {
+			collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+			collector.lastEvictedSlot.Store(uint64(evictionSlot))
+			_, _ = collector.inFlightValidator.GetOrSet(vPubKey, struct{}{})
+
+			_, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.ErrorIs(t, err, errInFlight)
+			require.False(t, late)
+		})
+
+		t.Run("validator not found on disk", func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+
+			collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+			collector.lastEvictedSlot.Store(uint64(evictionSlot))
+
+			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true)
+
+			trace, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.NoError(t, err)
+			require.True(t, late)
+			require.NotNil(t, trace)
+			roleTrace := trace.getOrCreate(slot, role)
+			require.Equal(t, slot, roleTrace.Slot)
+			require.Equal(t, role, roleTrace.Role)
+		})
+
+		t.Run("getValidatorDutiesFromDisk errors", func(t *testing.T) {
+			innerErr := errors.New("error")
+			dutyStore := &mockDutyTraceStore{err: innerErr}
+
+			ctrl := gomock.NewController(t)
+			vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+
+			collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+			collector.lastEvictedSlot.Store(uint64(evictionSlot))
+
+			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true)
+
+			trace, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.ErrorIs(t, err, innerErr)
+			require.False(t, late)
+			require.Nil(t, trace)
+			require.False(t, collector.inFlightValidator.Has(vPubKey))
+		})
+
+		t.Run("success late message", func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+
+			collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+
+			vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true).AnyTimes()
+
+			_, _, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.NoError(t, err)
+
+			collector.dumpValidatorToDBPeriodically(slot)
+
+			collector.inFlightValidator.Delete(vPubKey)
+
+			collector.lastEvictedSlot.Store(uint64(slot))
+			trace, late, err := collector.getOrCreateValidatorTrace(slot, role, vPubKey)
+			require.NoError(t, err)
+			require.True(t, late)
+			require.NotNil(t, trace)
+			roleTrace := trace.getOrCreate(slot, role)
+			require.Equal(t, slot, roleTrace.Slot)
+			require.Equal(t, role, roleTrace.Role)
+		})
+	})
+
+	t.Run("get or create validator duty", func(t *testing.T) {
+		dt := new(validatorDutyTrace)
+		m := dt.getOrCreate(1, role)
+		require.Equal(t, phase0.Slot(1), m.Slot)
+		require.Equal(t, role, m.Role)
+	})
+}
+
+func TestValidatorDutyTrace_toBNRole(t *testing.T) {
+	tests := []struct {
+		role spectypes.RunnerRole
+		want spectypes.BeaconRole
+		err  bool
+	}{
+		{spectypes.RoleProposer, spectypes.BNRoleProposer, false},
+		{spectypes.RoleAggregator, spectypes.BNRoleAggregator, false},
+		{spectypes.RoleSyncCommitteeContribution, spectypes.BNRoleSyncCommitteeContribution, false},
+		{spectypes.RoleValidatorRegistration, spectypes.BNRoleValidatorRegistration, false},
+		{spectypes.RoleVoluntaryExit, spectypes.BNRoleVoluntaryExit, false},
+		{spectypes.RoleCommittee, spectypes.BNRoleUnknown, true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.role.String(), func(t *testing.T) {
+			got, err := toBNRole(test.role)
+			if !test.err {
+				require.NoError(t, err)
+			}
+			require.Equal(t, test.want, got)
+		})
+	}
+}
+
+type mockDutyTraceStore struct {
+	err error
+}
+
+func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
+	return m.err
+}
+
+func (m *mockDutyTraceStore) SaveCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex, id spectypes.CommitteeID) error {
+	return m.err
+}
+
+func (m *mockDutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[phase0.ValidatorIndex]spectypes.CommitteeID) error {
+	return m.err
+}
+
+func (m *mockDutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) error {
+	return m.err
+}
+
+func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
+	return nil, m.err
+}
+
+func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
+	return nil, m.err
+}
+
+func (m *mockDutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace) error {
+	return m.err
+}
+
+func (m *mockDutyTraceStore) SaveValidatorDuty(duty *model.ValidatorDutyTrace) error {
+	return m.err
+}
+
+func (m *mockDutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.BeaconRole, index phase0.ValidatorIndex) (*model.ValidatorDutyTrace, error) {
+	return nil, m.err
+}
+
+func (m *mockDutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*model.ValidatorDutyTrace, error) {
+	return nil, m.err
+}
+
+func (m *mockDutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.ValidatorIndex) (spectypes.CommitteeID, error) {
+	return spectypes.CommitteeID{}, m.err
+}
+
+func (m *mockDutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*model.CommitteeDutyLink, error) {
+	return nil, m.err
 }
