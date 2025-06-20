@@ -3,6 +3,7 @@ package ekm
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -71,6 +72,22 @@ func NewLocalKeyManager(
 	if err != nil {
 		return nil, fmt.Errorf("get encryption key: %w", err)
 	}
+
+	decodedEncryptionKey, err := base64.StdEncoding.DecodeString(encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("decoding encryption key: %w", err)
+	}
+
+	loggedEncKey := fmt.Sprintf("%s..%s", encryptionKey[:len(encryptionKey)/4], encryptionKey[len(encryptionKey)-len(encryptionKey)/4:])
+	loggedDecodedEncKey := append(append(decodedEncryptionKey[:len(decodedEncryptionKey)/4], []byte("..")...), decodedEncryptionKey[:len(decodedEncryptionKey)-len(decodedEncryptionKey)/4]...)
+
+	logger.Warn("Setting encryption key",
+		zap.Int("len", len(encryptionKey)),
+		zap.Int("len_decoded", len(decodedEncryptionKey)),
+		zap.String("key", loggedEncKey),
+		zap.ByteString("key_decoded", loggedDecodedEncKey),
+	)
+
 	if err := signerStore.SetEncryptionKey(encryptionKey); err != nil {
 		return nil, fmt.Errorf("set encryption key: %w", err)
 	}

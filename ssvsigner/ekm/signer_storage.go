@@ -96,8 +96,6 @@ func (s *storage) SetEncryptionKey(hexKey string) error {
 		return errors.New("the key must be a valid hexadecimal string")
 	}
 
-	s.logger.Warn("Setting encryption key", zap.Int("len", len(keyBytes)), zap.ByteString("key", keyBytes[:8]))
-
 	s.encryptionKey = keyBytes
 
 	return nil
