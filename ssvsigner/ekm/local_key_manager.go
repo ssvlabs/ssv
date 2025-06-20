@@ -281,9 +281,9 @@ func (km *LocalKeyManager) AddShare(_ context.Context, encryptedPrivKey []byte, 
 	return nil
 }
 
-// RemoveShare removes the share from the local wallet, clears the associated
+// RemoveShare removes the share from the local wallet while preserving
 // slashing-protection records (attestation and proposal) for the given
-// public key, and returns an error on any storage issue.
+// public key to prevent slashing if the share is re-added later.
 func (km *LocalKeyManager) RemoveShare(_ context.Context, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
