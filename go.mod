@@ -32,7 +32,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.22.0
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
+	github.com/prysmaticlabs/go-bitfield ad7364de91a5
 	github.com/prysmaticlabs/prysm/v4 v4.0.8
 	github.com/rs/zerolog v1.32.0
 	github.com/sanity-io/litter v1.5.6
