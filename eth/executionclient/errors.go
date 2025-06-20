@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -40,4 +41,9 @@ func isRPCQueryLimitError(err error) bool {
 // isInterruptedError checks if the provided error represents some sort of interruption.
 func isInterruptedError(err error) bool {
 	return errors.Is(err, ErrClosed) || errors.Is(err, rpc.ErrClientQuit) || errors.Is(err, context.Canceled)
+}
+
+// isWSReadLimitError checks if the given error is related to exceeding the read limit in a WebSocket connection.
+func isWSReadLimitError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "websocket: read limit exceeded")
 }

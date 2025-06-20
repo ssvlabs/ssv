@@ -61,8 +61,13 @@ type MultiClient struct {
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	healthInvalidationInterval  time.Duration
-	logBatchSize                uint64
 	syncDistanceTolerance       uint64
+
+	// HTTP fallback configuration
+	httpFallbackAddr string
+
+	// adaptive batching
+	batcher *AdaptiveBatcher
 
 	contractAddress ethcommon.Address
 	chainID         atomic.Pointer[big.Int]
@@ -96,7 +101,6 @@ func NewMulti(
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize,
 	}
 
 	for _, opt := range opts {
@@ -150,10 +154,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 	// Therefore, we need to override its Fatal behavior to avoid crashing.
 	logger := mc.logger.WithOptions(zap.WithFatalHook(zapcore.WriteThenNoop), zap.WithPanicHook(zapcore.WriteThenNoop))
 
-	singleClient, err := New(
-		ctx,
-		mc.nodeAddrs[clientIndex],
-		mc.contractAddress,
+	options := []Option{
 		WithLogger(logger),
 		WithFollowDistance(mc.followDistance),
 		WithConnectionTimeout(mc.connectionTimeout),
@@ -161,6 +162,22 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		WithReconnectionMaxInterval(mc.reconnectionMaxInterval),
 		WithHealthInvalidationInterval(mc.healthInvalidationInterval),
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
+	}
+
+	if mc.batcher != nil {
+		cfg := mc.batcher.Config()
+		options = append(options, WithAdaptiveBatch(cfg.InitialSize, cfg.MinSize, cfg.MaxSize))
+	}
+
+	if mc.httpFallbackAddr != "" {
+		options = append(options, WithHTTPFallback(mc.httpFallbackAddr))
+	}
+
+	singleClient, err := New(
+		ctx,
+		mc.nodeAddrs[clientIndex],
+		mc.contractAddress,
+		options...,
 	)
 	if err != nil {
 		recordClientInitStatus(ctx, mc.nodeAddrs[clientIndex], false)
