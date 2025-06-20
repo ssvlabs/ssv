@@ -428,11 +428,49 @@ func TestCommitteeDuty(t *testing.T) {
 		require.Empty(t, duty.Rounds)
 		require.Empty(t, duty.SyncCommittee)
 		require.Equal(t, committee.Operators, duty.OperatorIDs)
+		assert.Equal(t, committeeID, committeeID)
+	}
 
-		// slotToCommittee, found := tracer.validatorIndexToCommitteeMapping.Load(vIndex)
-		// require.True(t, found)
-		// committeeID, found := slotToCommittee.Load(slot)
-		// require.True(t, found)
+	validators.EXPECT().Committee(committeeID).Return(committee, true)
+
+	{ // TC 1b - process partial sig messages with sc root
+		fakeSig := [96]byte{}
+
+		var partSigMessages = spectypes.PartialSignatureMessages{
+			Slot: 1,
+			Messages: []*spectypes.PartialSignatureMessage{
+				{
+					ValidatorIndex:   vIndex,
+					Signer:           99,
+					PartialSignature: fakeSig[:],
+					SigningRoot:      [32]byte{1, 2, 3},
+				},
+			},
+		}
+
+		partSigMessagesData, err := partSigMessages.Encode()
+		require.NoError(t, err)
+
+		trace, _, err := tracer.getOrCreateCommitteeTrace(slot, committeeID)
+		require.NoError(t, err)
+		trace.syncCommitteeRoot = [32]byte{1, 2, 3}
+
+		partSigMsg := buildPartialSigMessage(identifier, partSigMessagesData)
+		tracer.Collect(t.Context(), partSigMsg, dummyVerify)
+
+		duty, err := tracer.GetCommitteeDuty(slot, committeeID)
+		require.NoError(t, err)
+		require.NotNil(t, duty)
+		assert.Equal(t, slot, duty.Slot)
+		assert.Equal(t, duty.CommitteeID, committeeID)
+
+		require.NotNil(t, duty.SyncCommittee)
+		require.NotEmpty(t, duty.SyncCommittee)
+
+		require.NotNil(t, duty.ConsensusTrace)
+		require.Empty(t, duty.Decideds)
+		require.Empty(t, duty.Rounds)
+		require.Equal(t, committee.Operators, duty.OperatorIDs)
 		assert.Equal(t, committeeID, committeeID)
 	}
 
@@ -506,7 +544,7 @@ func TestCommitteeDuty(t *testing.T) {
 		assert.Equal(t, uint64(99), attester.Signer)
 
 		require.NotNil(t, duty.ConsensusTrace)
-		require.Empty(t, duty.SyncCommittee)
+		require.NotEmpty(t, duty.SyncCommittee)
 		require.Equal(t, committee.Operators, duty.OperatorIDs)
 
 		require.Len(t, duty.Rounds, 1)
