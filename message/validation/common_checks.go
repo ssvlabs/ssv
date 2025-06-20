@@ -57,6 +57,7 @@ func (mv *messageValidator) validateDutyCount(
 	msgSlot phase0.Slot,
 	validatorIndices []phase0.ValidatorIndex,
 	signerStateBySlot *OperatorState,
+	partial bool,
 ) error {
 	epoch := mv.netCfg.EstimatedEpochAtSlot(msgSlot)
 	dutyCount := signerStateBySlot.DutyCount(epoch)
@@ -72,9 +73,10 @@ func (mv *messageValidator) validateDutyCount(
 	// inclusive ">=" comparison.
 	if dutyCount >= dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
-		err.got = fmt.Sprintf("%v (role %v), slot %v, epoch %v, maxEpoch %v, curr %v, prev %v",
+		err.got = fmt.Sprintf("%v (role %v), partial %v, slot %v, epoch %v, maxEpoch %v, curr %v, prev %v",
 			dutyCount,
 			msgID.GetRoleType(),
+			partial,
 			msgSlot,
 			epoch,
 			signerStateBySlot.maxEpoch,
