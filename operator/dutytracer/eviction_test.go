@@ -46,7 +46,7 @@ func TestEviction(t *testing.T) {
 		collector.Collect(t.Context(), trace, dummyVerify)
 	}
 
-	slot1, slot2 := phase0.Slot(3707881+ttlValidator), phase0.Slot(3707882+ttlValidator)
+	slot1, slot2 := phase0.Slot(3707881+slotTTL), phase0.Slot(3707882+slotTTL)
 
 	collector.evict(slot1)
 	collector.evict(slot2)
