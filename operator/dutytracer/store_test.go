@@ -284,6 +284,20 @@ func TestCommitteeDutyStore(t *testing.T) {
 		require.Len(t, dd, 1)
 		require.Equal(t, []spectypes.OperatorID{1, 2, 3}, dd[0].Signers)
 	}
+
+	err = dutyStore.SaveCommitteeDutyLink(slot7, index, committeeID1)
+	require.NoError(t, err)
+
+	dd, err := collector.GetAllCommitteeDecideds(slot7)
+	require.NoError(t, err)
+	require.NotNil(t, dd)
+	require.Len(t, dd, 2)
+
+	signers := []spectypes.OperatorID{}
+	for _, decided := range dd {
+		signers = append(signers, decided.Signers...)
+	}
+	require.Equal(t, []spectypes.OperatorID{1, 2, 3}, signers)
 }
 
 func TestValidatorDutyStore(t *testing.T) {
@@ -427,4 +441,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	storedDuty7_2, err := dutyStore.GetValidatorDuty(slot7, spectypes.BNRoleProposer, 2)
 	require.ErrorIs(t, err, store.ErrNotFound)
 	require.Nil(t, storedDuty7_2)
+
+	_, err = collector.GetAllValidatorDecideds(spectypes.BNRoleProposer, slot4)
+	require.NoError(t, err)
 }

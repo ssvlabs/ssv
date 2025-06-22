@@ -22,6 +22,7 @@ import (
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 // These tests are deliberately written in a progressive manner to ensure that only the expected values are
@@ -383,7 +384,8 @@ func TestCommitteeDuty(t *testing.T) {
 	validators := registrystoragemocks.NewMockValidatorStore(ctrl)
 	validators.EXPECT().Committee(committeeID).Return(committee, true)
 
-	tracer := New(t.Context(), logger, validators, nil, nil, networkconfig.TestNetwork.BeaconConfig)
+	dutyStore := new(mockDutyTraceStore)
+	tracer := New(t.Context(), logger, validators, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
 	var wantBeaconRoot phase0.Root
 	bnVal := [32]byte{1, 2, 3}
@@ -673,6 +675,50 @@ func TestCommitteeDuty(t *testing.T) {
 		require.Empty(t, round1.Prepares)
 		require.Empty(t, round1.Commits)
 	}
+
+	duties, err := tracer.GetCommitteeDuties(slot, spectypes.BNRoleAttester)
+	require.NoError(t, err)
+	require.NotNil(t, duties)
+	require.Len(t, duties, 1)
+	require.Equal(t, slot, duties[0].Slot)
+	require.Equal(t, committeeID, duties[0].CommitteeID)
+}
+
+func TestCollector_GetCommitteeDuty(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+	dutyStore := new(mockDutyTraceStore)
+	dutyStore.committeeDutyTrace = &model.CommitteeDutyTrace{
+		Slot:        phase0.Slot(10),
+		CommitteeID: spectypes.CommitteeID{1},
+		OperatorIDs: []uint64{1, 2, 3, 4},
+	}
+
+	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	committeeID := spectypes.CommitteeID{1}
+	slot := phase0.Slot(10)
+
+	_, err := collector.GetCommitteeDuty(slot, committeeID, spectypes.BNRoleAttester)
+	require.ErrorIs(t, err, ErrNotFound)
+	dutyStore.committeeDutyTrace.Attester = append(dutyStore.committeeDutyTrace.Attester,
+		&model.SignerData{
+			Signer: 1,
+		})
+
+	duty, err := collector.GetCommitteeDuty(slot, committeeID, spectypes.BNRoleAttester)
+	require.NoError(t, err)
+	require.NotNil(t, duty)
+	require.Equal(t, slot, duty.Slot)
+	require.Equal(t, committeeID, duty.CommitteeID)
+
+	dutyStore.committeeDutyTrace.SyncCommittee = append(dutyStore.committeeDutyTrace.SyncCommittee,
+		&model.SignerData{
+			Signer: 1,
+		})
+
+	duty, err = collector.GetCommitteeDuty(slot, committeeID, spectypes.BNRoleSyncCommittee)
+	require.NoError(t, err)
+	require.NotNil(t, duty)
 }
 
 func buildPartialSigMessage(identifier spectypes.MessageID, data []byte) *queue.SSVMessage {
@@ -1066,8 +1112,31 @@ func TestEvict(t *testing.T) {
 	})
 }
 
+func TestCollector_GetCommitteeID(t *testing.T) {
+	slot := phase0.Slot(10)
+	var vPubKey = spectypes.ValidatorPK{1}
+
+	ctrl := gomock.NewController(t)
+	vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+	dutyStore := new(mockDutyTraceStore)
+
+	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+
+	slotToCommittee := hashmap.New[phase0.Slot, spectypes.CommitteeID]()
+	slotToCommittee.Set(slot, spectypes.CommitteeID{1})
+	collector.validatorIndexToCommitteeLinks.Set(phase0.ValidatorIndex(1), slotToCommittee)
+
+	vstore.EXPECT().ValidatorIndex(vPubKey).Return(phase0.ValidatorIndex(1), true)
+
+	committeeID, index, err := collector.GetCommitteeID(slot, vPubKey)
+	require.NoError(t, err)
+	require.Equal(t, committeeID, spectypes.CommitteeID{1})
+	require.Equal(t, index, phase0.ValidatorIndex(1))
+}
+
 type mockDutyTraceStore struct {
-	err error
+	err                error
+	committeeDutyTrace *model.CommitteeDutyTrace
 }
 
 func (m *mockDutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
@@ -1087,7 +1156,7 @@ func (m *mockDutyTraceStore) SaveCommitteeDuty(duty *model.CommitteeDutyTrace) e
 }
 
 func (m *mockDutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID) (*model.CommitteeDutyTrace, error) {
-	return nil, m.err
+	return m.committeeDutyTrace, m.err
 }
 
 func (m *mockDutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.CommitteeDutyTrace, error) {
