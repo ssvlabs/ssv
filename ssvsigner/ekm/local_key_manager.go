@@ -264,6 +264,10 @@ func (km *LocalKeyManager) RetrieveHighestProposal(pubKey phase0.BLSPubKey) (pha
 	return km.slashingProtector.RetrieveHighestProposal(pubKey)
 }
 
+func (km *LocalKeyManager) ListAccounts() ([]core.ValidatorAccount, error) {
+	return km.slashingProtector.ListAccounts()
+}
+
 // AddShare decrypts the provided share private key (encryptedSharePrivKey)
 // using the operatorDecrypter, verifies that it matches sharePubKey, and
 // saves it to the local wallet. It also bumps slashing protection to
