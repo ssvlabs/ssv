@@ -174,7 +174,7 @@ func (e *Exporter) TraceDecideds(w http.ResponseWriter, r *http.Request) error {
 					participantsByPK, err := e.traceStore.GetAllCommitteeDecideds(slot, role)
 					if err != nil {
 						e.logger.Debug("error getting all committee decideds", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
-						continue
+						return api.Error(fmt.Errorf("error getting all committee decideds: %w", err))
 					}
 					for _, pr := range participantsByPK {
 						// duty syncer fails to parse messages with no signers so instead
