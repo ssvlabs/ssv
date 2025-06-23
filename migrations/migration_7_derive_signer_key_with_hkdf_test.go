@@ -61,8 +61,10 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 
 		// Verify old key no longer works
 		signerStorage.SetEncryptionKey(operatorPrivKey.EKMHash())
-		_, err = signerStorage.ListAccounts()
+		accounts, err = signerStorage.ListAccounts()
 		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "decrypt accounts:")
+		assert.Empty(t, accounts)
 	})
 
 	t.Run("skips migration when no private key hash found", func(t *testing.T) {
