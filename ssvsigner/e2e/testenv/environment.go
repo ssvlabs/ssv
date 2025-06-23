@@ -278,11 +278,11 @@ func (env *TestEnvironment) GetWeb3SignerClient() *web3signer.Web3Signer {
 }
 
 // Implement signerClient interface by delegating to ssvSignerClient
-func (env *TestEnvironment) AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) error {
+func (env *TestEnvironment) AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) (statuses []web3signer.Status, err error) {
 	return env.ssvSignerClient.AddValidators(ctx, shares...)
 }
 
-func (env *TestEnvironment) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error {
+func (env *TestEnvironment) RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) (statuses []web3signer.Status, err error) {
 	return env.ssvSignerClient.RemoveValidators(ctx, sharePubKeys...)
 }
 
