@@ -256,6 +256,14 @@ func (km *LocalKeyManager) BumpSlashingProtection(txn basedb.Txn, pubKey phase0.
 	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
+func (km *LocalKeyManager) RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error) {
+	return km.slashingProtector.RetrieveHighestAttestation(pubKey)
+}
+
+func (km *LocalKeyManager) RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error) {
+	return km.slashingProtector.RetrieveHighestProposal(pubKey)
+}
+
 // AddShare decrypts the provided share private key (encryptedSharePrivKey)
 // using the operatorDecrypter, verifies that it matches sharePubKey, and
 // saves it to the local wallet. It also bumps slashing protection to
