@@ -1565,14 +1565,14 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 		encShare := []byte("encrypted_share_data")
 
-		slashingMock.On("BumpSlashingProtection", pubKey).Return(nil).Once()
+		slashingMock.On("BumpSlashingProtectionTxn", nil, pubKey).Return(nil).Once()
 
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
 		}).Return([]web3signer.Status{web3signer.StatusError}, nil).Once()
 
-		err := rmTest.AddShare(s.T().Context(), encShare, pubKey)
+		err := rmTest.AddShare(s.T().Context(), nil, encShare, pubKey)
 
 		s.ErrorContains(err, "unexpected status")
 		clientMock.AssertExpectations(s.T())
@@ -1678,7 +1678,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
 			Return([]web3signer.Status{web3signer.StatusError}, nil).Once()
 
-		s.ErrorContains(rmTest.RemoveShare(s.T().Context(), pubKey), "unexpected status")
+		s.ErrorContains(rmTest.RemoveShare(s.T().Context(), nil, pubKey), "unexpected status")
 		clientMock.AssertExpectations(s.T())
 		slashingMock.AssertExpectations(s.T())
 	})
