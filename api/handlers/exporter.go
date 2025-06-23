@@ -375,7 +375,6 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	slices.SortFunc(pubkeys, func(a, b spectypes.ValidatorPK) int {
 		return bytes.Compare(a[:], b[:])
 	})
-
 	pubkeys = slices.Compact(pubkeys)
 
 	var results []*dutytracer.ValidatorDutyTrace
