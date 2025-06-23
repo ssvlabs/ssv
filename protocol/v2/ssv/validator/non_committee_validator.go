@@ -62,7 +62,6 @@ type CommitteeObserverOptions struct {
 	BeaconConfig      networkconfig.Beacon
 	Network           specqbft.Network
 	Storage           *storage.ParticipantStores
-	Operator          *spectypes.CommitteeMember
 	OperatorSigner    ssvtypes.OperatorSigner
 	NewDecidedHandler qbftcontroller.NewDecidedHandler
 	ValidatorStore    registrystorage.ValidatorStore

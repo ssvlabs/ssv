@@ -21,6 +21,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -50,7 +52,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -97,7 +98,7 @@ type ControllerOptions struct {
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
 	QueueBufferSize int    `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"65536" env-description:"Size of message worker queue buffer"`
-	GasLimit        uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-default:"30000000" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
+	GasLimit        uint64 `yaml:"ExperimentalGasLimit" env:"EXPERIMENTAL_GAS_LIMIT" env-description:"Gas limit for MEV block proposals (must match across committee, otherwise MEV fails). Do not change unless you know what you're doing"`
 }
 
 // Controller represent the validators controller,
@@ -163,7 +164,7 @@ type controller struct {
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
-	validatorOptions        validator.Options
+	validatorCommonOpts     *validator.CommonOptions
 	validatorStore          registrystorage.ValidatorStore
 	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validator.Validator) (bool, error)
@@ -208,33 +209,23 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		Buffer:       options.QueueBufferSize,
 	}
 
-	validatorOptions := validator.Options{ //TODO add vars
-		NetworkConfig: options.NetworkConfig,
-		Network:       options.Network,
-		Beacon:        options.Beacon,
-		Storage:       options.StorageMap,
-		//Share:   nil,  // set per validator
-		Signer:              options.BeaconSigner,
-		OperatorSigner:      options.OperatorSigner,
-		DoppelgangerHandler: options.DoppelgangerHandler,
-		DutyRunners:         nil, // set per validator
-		NewDecidedHandler:   options.NewDecidedHandler,
-		FullNode:            options.FullNode,
-		GasLimit:            options.GasLimit,
-		MessageValidator:    options.MessageValidator,
-		Graffiti:            options.Graffiti,
-		ExporterOptions:     exporterOptions,
-		ProposerDelay:       options.ProposerDelay,
-	}
-
-	// If full node, increase queue size to make enough room
-	// for history sync batches to be pushed whole.
-	if options.FullNode {
-		size := options.HistorySyncBatchSize * 2
-		if size > validator.DefaultQueueSize {
-			validatorOptions.QueueSize = size
-		}
-	}
+	validatorCommonOpts := validator.NewCommonOptions(
+		options.NetworkConfig,
+		options.Network,
+		options.Beacon,
+		options.StorageMap,
+		options.BeaconSigner,
+		options.OperatorSigner,
+		options.DoppelgangerHandler,
+		options.NewDecidedHandler,
+		options.FullNode,
+		exporterOptions,
+		options.HistorySyncBatchSize,
+		options.GasLimit,
+		options.MessageValidator,
+		options.Graffiti,
+		options.ProposerDelay,
+	)
 
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
@@ -254,8 +245,8 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		network:           options.Network,
 		traceCollector:    options.DutyTraceCollector,
 
-		validatorsMap:    options.ValidatorsMap,
-		validatorOptions: validatorOptions,
+		validatorsMap:       options.ValidatorsMap,
+		validatorCommonOpts: validatorCommonOpts,
 
 		validatorSyncer: options.ValidatorSyncer,
 
@@ -347,7 +338,7 @@ func (c *controller) handleRouterMessages() {
 					v.HandleMessage(ctx, c.logger, m)
 				} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 					vc.HandleMessage(ctx, c.logger, m)
-				} else if c.validatorOptions.ExporterOptions.Enabled {
+				} else if c.validatorCommonOpts.ExporterOptions.Enabled {
 					if m.MsgType != spectypes.SSVConsensusMsgType && m.MsgType != spectypes.SSVPartialSignatureMsgType {
 						continue
 					}
@@ -383,12 +374,11 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 			Logger:            c.logger,
 			BeaconConfig:      c.networkConfig,
 			ValidatorStore:    c.validatorStore,
-			Network:           c.validatorOptions.Network,
-			Storage:           c.validatorOptions.Storage,
-			FullNode:          c.validatorOptions.FullNode,
-			Operator:          c.validatorOptions.Operator,
-			OperatorSigner:    c.validatorOptions.OperatorSigner,
-			NewDecidedHandler: c.validatorOptions.NewDecidedHandler,
+			Network:           c.validatorCommonOpts.Network,
+			Storage:           c.validatorCommonOpts.Storage,
+			FullNode:          c.validatorCommonOpts.FullNode,
+			OperatorSigner:    c.validatorCommonOpts.OperatorSigner,
+			NewDecidedHandler: c.validatorCommonOpts.NewDecidedHandler,
 			AttesterRoots:     c.attesterRoots,
 			SyncCommRoots:     c.syncCommRoots,
 			DomainCache:       c.domainCache,
@@ -405,7 +395,7 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 		ncv = item.Value()
 	}
 
-	if c.validatorOptions.ExporterOptions.Mode == exporter.ModeArchive {
+	if c.validatorCommonOpts.ExporterOptions.Mode == exporter.ModeArchive {
 		// use new exporter functionality
 		return c.traceCollector.Collect(c.ctx, ssvMsg, ncv.VerifySig)
 	}
@@ -466,7 +456,7 @@ func (c *controller) StartValidators(ctx context.Context) {
 		}
 	}
 
-	if c.validatorOptions.ExporterOptions.Enabled {
+	if c.validatorCommonOpts.ExporterOptions.Enabled {
 		// There are no committee validators to setup.
 		close(c.committeeValidatorSetup)
 	} else {
@@ -829,14 +819,12 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		opts := c.validatorOptions
-		opts.SSVShare = share
-		opts.Operator = operator
-		opts.DutyRunners, err = SetupRunners(validatorCtx, c.logger, opts)
+		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
 		}
+		opts := c.validatorCommonOpts.NewOptions(share, operator, dutyRunners)
 
 		v = validator.NewValidator(validatorCtx, validatorCancel, opts)
 		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
@@ -853,9 +841,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(c.ctx)
 
-		opts := c.validatorOptions
-		opts.SSVShare = share
-		opts.Operator = operator
+		opts := c.validatorCommonOpts.NewOptions(share, operator, nil)
 
 		committeeOpIDs := ssvtypes.OperatorIDsFromOperators(operator.Committee)
 
@@ -1108,7 +1094,7 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 
 func SetupCommitteeRunners(
 	ctx context.Context,
-	options validator.Options,
+	options *validator.Options,
 ) validator.CommitteeRunnerFunc {
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
@@ -1161,13 +1147,10 @@ func SetupCommitteeRunners(
 func SetupRunners(
 	ctx context.Context,
 	logger *zap.Logger,
-	options validator.Options,
+	share *ssvtypes.SSVShare,
+	operator *spectypes.CommitteeMember,
+	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
-	if options.SSVShare == nil || !options.SSVShare.HasBeaconMetadata() {
-		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
-		return runner.ValidatorDutyRunners{}, nil // TODO need to find better way to fix it
-	}
-
 	runnersType := []spectypes.RunnerRole{
 		spectypes.RoleCommittee,
 		spectypes.RoleProposer,
@@ -1181,10 +1164,9 @@ func SetupRunners(
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.GetDomainType(),
-			ValueCheckF:  nil, // sets per role type
+			ValueCheckF:  nil, // is set per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := qbft.RoundRobinProposer(state, round)
-				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
 			Network:     options.Network,
@@ -1193,28 +1175,28 @@ func SetupRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.NetworkConfig.GetDomainType(), options.SSVShare.ValidatorPubKey[:], role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.OperatorSigner, options.FullNode)
+		identifier := spectypes.NewMsgID(options.NetworkConfig.GetDomainType(), share.ValidatorPubKey[:], role)
+		qbftCtrl := qbftcontroller.NewController(identifier[:], operator, config, options.OperatorSigner, options.FullNode)
 		return qbftCtrl
 	}
 
 	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share) // TODO: fill the map
-	shareMap[options.SSVShare.ValidatorIndex] = &options.SSVShare.Share
+	shareMap[share.ValidatorIndex] = &share.Share
 
 	runners := runner.ValidatorDutyRunners{}
 	var err error
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.RoleProposer:
-			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig, options.SSVShare.ValidatorPubKey, options.SSVShare.ValidatorIndex, phase0.BLSPubKey(options.SSVShare.SharePubKey))
+			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, options.NetworkConfig, share.ValidatorPubKey, share.ValidatorIndex, phase0.BLSPubKey(share.SharePubKey))
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role], err = runner.NewProposerRunner(logger, options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.DoppelgangerHandler, proposedValueCheck, 0, options.Graffiti, options.ProposerDelay)
 		case spectypes.RoleAggregator:
-			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig, options.SSVShare.ValidatorPubKey, options.SSVShare.ValidatorIndex)
+			aggregatorValueCheckF := ssv.AggregatorValueCheckF(options.Signer, options.NetworkConfig, share.ValidatorPubKey, share.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
 			runners[role], err = runner.NewAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
 		case spectypes.RoleSyncCommitteeContribution:
-			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig, options.SSVShare.ValidatorPubKey, options.SSVShare.ValidatorIndex)
+			syncCommitteeContributionValueCheckF := ssv.SyncCommitteeContributionValueCheckF(options.Signer, options.NetworkConfig, share.ValidatorPubKey, share.ValidatorIndex)
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
