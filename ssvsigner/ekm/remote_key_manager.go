@@ -73,10 +73,9 @@ func NewRemoteKeyManager(
 	signerClient signerClient,
 	consensusClient consensusClient,
 	db basedb.Database,
-	networkConfig networkconfig.NetworkConfig,
 	getOperatorId func() spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
-	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
+	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
 	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx)
@@ -110,6 +109,10 @@ func (km *RemoteKeyManager) AddShare(
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
+	if err := km.BumpSlashingProtection(pubKey); err != nil {
+		return fmt.Errorf("could not bump slashing protection: %w", err)
+	}
+
 	shareKeys := ssvsigner.ShareKeys{
 		EncryptedPrivKey: hexutil.Bytes(encryptedPrivKey),
 		PubKey:           pubKey,

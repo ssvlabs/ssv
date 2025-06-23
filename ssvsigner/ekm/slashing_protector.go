@@ -186,8 +186,14 @@ func (sp *SlashingProtector) updateHighestProposal(txn basedb.Txn, pubKey phase0
 func (sp *SlashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) *phase0.AttestationData {
 	// Calculate the highest safe target epoch based on the current epoch and a predefined minimum distance.
 	highestTarget := epoch + minSPAttestationEpochGap
+
 	// The highest safe source epoch is one less than the highest target epoch.
-	highestSource := highestTarget - 1
+	var highestSource phase0.Epoch
+	if highestTarget > 0 {
+		highestSource = highestTarget - 1
+	} else {
+		highestSource = 0
+	}
 
 	// Return a new AttestationData object with the calculated source and target epochs.
 	return &phase0.AttestationData{
