@@ -101,8 +101,8 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 
-	mockSlashingProtector.On("RemoveHighestAttestationTxn", pubKey).Return(nil)
-	mockSlashingProtector.On("RemoveHighestProposalTxn", pubKey).Return(nil)
+	mockSlashingProtector.On("RemoveHighestAttestationTxn", nil, pubKey).Return(nil)
+	mockSlashingProtector.On("RemoveHighestProposalTxn", nil, pubKey).Return(nil)
 
 	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return([]web3signer.Status{web3signer.StatusDeleted}, nil)
 
@@ -1623,7 +1623,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
 			Return([]web3signer.Status{web3signer.StatusDeleted}, nil).Once()
 
-		slashingMock.On("RemoveHighestAttestationTxn", pubKey).
+		slashingMock.On("RemoveHighestAttestationTxn", nil, pubKey).
 			Return(errors.New("remove highest attestation error")).Once()
 
 		s.ErrorContains(rmTest.RemoveShare(context.Background(), nil, pubKey), "could not remove highest attestation")
@@ -1651,8 +1651,8 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
 			Return([]web3signer.Status{web3signer.StatusDeleted}, nil).Once()
 
-		slashingMock.On("RemoveHighestAttestationTxn", pubKey).Return(nil).Once()
-		slashingMock.On("RemoveHighestProposalTxn", pubKey).Return(errors.New("remove highest proposal error")).Once()
+		slashingMock.On("RemoveHighestAttestationTxn", nil, pubKey).Return(nil).Once()
+		slashingMock.On("RemoveHighestProposalTxn", nil, pubKey).Return(errors.New("remove highest proposal error")).Once()
 
 		s.ErrorContains(rmTest.RemoveShare(context.Background(), nil, pubKey), "could not remove highest proposal")
 		clientMock.AssertExpectations(s.T())
