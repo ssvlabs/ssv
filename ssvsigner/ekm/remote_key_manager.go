@@ -51,8 +51,8 @@ type RemoteKeyManager struct {
 }
 
 type signerClient interface {
-	AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) error
-	RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error
+	AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) ([]web3signer.Status, error)
+	RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) (statuses []web3signer.Status, err error)
 	Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error)
 	OperatorIdentity(ctx context.Context) (string, error)
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
@@ -107,17 +107,37 @@ func (km *RemoteKeyManager) AddShare(
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
+	if err := km.BumpSlashingProtection(pubKey); err != nil {
+		return fmt.Errorf("could not bump slashing protection: %w", err)
+	}
+
 	shareKeys := ssvsigner.ShareKeys{
 		EncryptedPrivKey: hexutil.Bytes(encryptedPrivKey),
 		PubKey:           pubKey,
 	}
 
-	if err := km.signerClient.AddValidators(ctx, shareKeys); err != nil {
+	statuses, err := km.signerClient.AddValidators(ctx, shareKeys)
+	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
 
-	if err := km.BumpSlashingProtection(pubKey); err != nil {
-		return fmt.Errorf("could not bump slashing protection: %w", err)
+	for _, status := range statuses {
+		switch status {
+		case web3signer.StatusImported:
+
+		case web3signer.StatusDuplicated:
+			// A failed request does not guarantee that the keys were not added.
+			// It's possible that the ssv-signer successfully added the keys,
+			// but a network error occurred before a response could be received.
+			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
+			// In such cases, the node would crash and, upon restarting, encounter a duplicate key error.
+			// To handle this gracefully, we allow returning a duplicate key error without treating it as a failure.
+			km.logger.Warn("Attempted to add already existing share to the remote signer. " +
+				"This is expected in the first block after failed sync")
+
+		default:
+			return fmt.Errorf("unexpected status %s", status)
+		}
 	}
 
 	return nil
@@ -127,8 +147,28 @@ func (km *RemoteKeyManager) AddShare(
 // its highest attestation/proposal data locally. If the remote or local operations
 // fail, returns an error.
 func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error {
-	if err := km.signerClient.RemoveValidators(ctx, pubKey); err != nil {
+	statuses, err := km.signerClient.RemoveValidators(ctx, pubKey)
+	if err != nil {
 		return fmt.Errorf("remove validator: %w", err)
+	}
+
+	for _, status := range statuses {
+		switch status {
+		case web3signer.StatusDeleted:
+
+		case web3signer.StatusNotFound:
+			// A failed request does not guarantee that the keys were not deleted.
+			// It's possible that the ssv-signer successfully deleted the keys,
+			// but a network error occurred before a response could be received.
+			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
+			// In such cases, the node would crash and, upon restarting, encounter a not found key error.
+			// To handle this gracefully, we allow returning a not found key error without treating it as a failure.
+			km.logger.Warn("Attempted to delete non-existing share from the remote signer. " +
+				"This is expected in the first block after failed sync")
+
+		default:
+			return fmt.Errorf("unexpected status %s", status)
+		}
 	}
 
 	if err := km.RemoveHighestAttestation(pubKey); err != nil {
