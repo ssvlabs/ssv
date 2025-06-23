@@ -1767,6 +1767,37 @@ func TestExporterValidatorTraces(t *testing.T) {
 				assert.Contains(t, resp.Message, "invalid pubkey length")
 			},
 		},
+		{
+			name: "valid request - both indices and pubkeys are provided for the same validator",
+			request: map[string]any{
+				"from":    100,
+				"to":      100,
+				"roles":   []string{"PROPOSER"},
+				"pubkeys": []string{"b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"},
+				"indices": []int{1},
+			},
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				validatorStore.ValidatorByIndexFunc = func(index phase0.ValidatorIndex) (*ssvtypes.SSVShare, bool) {
+					pubkey := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+					var pk spectypes.ValidatorPK
+					copy(pk[:], pubkey)
+					return &ssvtypes.SSVShare{
+						Share: spectypes.Share{
+							ValidatorPubKey: pk,
+						},
+					}, true
+				}
+				store.GetValidatorDutyFunc = func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error) {
+					return &dutytracer.ValidatorDutyTrace{}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
+			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				var resp validatorTraceResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				require.Len(t, resp.Data, 1) // deduplicated
+			},
+		},
 	}
 
 	for _, tt := range tests {

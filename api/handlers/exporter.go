@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
@@ -370,6 +372,12 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 		copy(pubkey[:], req)
 		pubkeys = append(pubkeys, pubkey)
 	}
+
+	slices.SortFunc(pubkeys, func(a, b spectypes.ValidatorPK) int {
+		return bytes.Compare(a[:], b[:])
+	})
+
+	pubkeys = slices.Compact(pubkeys)
 
 	var results []*dutytracer.ValidatorDutyTrace
 
