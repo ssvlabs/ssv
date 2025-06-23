@@ -326,6 +326,8 @@ github.com/ssvlabs/ssv v1.2.1-0.20250604161645-9802c13c817a h1:6UUgusPXyhRvcLUmN
 github.com/ssvlabs/ssv v1.2.1-0.20250604161645-9802c13c817a/go.mod h1:BbVBaDhZhJqqeXYM18RUxebPVcdMTtxLVEs21uktSpg=
 github.com/ssvlabs/ssv v1.2.1-0.20250623094326-4a96a1638359 h1:PoSqCuJJD83dZaRcRg2siZdegMwZETHEVD9uz5miZpg=
 github.com/ssvlabs/ssv v1.2.1-0.20250623094326-4a96a1638359/go.mod h1:3kF5dTnciHlaMC8wjLMB/xVf87IrwEloU8ySb21iIH0=
+github.com/ssvlabs/ssv v1.2.1-0.20250623095529-7019c585c255 h1:EUED/nnxS8cMIZ8M2EvJ48ggc6RTRUyMOl60moKiAus=
+github.com/ssvlabs/ssv v1.2.1-0.20250623095529-7019c585c255/go.mod h1:h8Qo/4LuqVN4pxme4qc8uSBVk0ZBub3GmtUGy+nBoCI=
 github.com/ssvlabs/ssv-spec v1.1.3 h1:46K31kI4/vA7Vp3DaOuN7t2IABAmzeiMniCqYfzzpo8=
 github.com/ssvlabs/ssv-spec v1.1.3/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
