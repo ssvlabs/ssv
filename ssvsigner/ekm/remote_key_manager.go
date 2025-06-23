@@ -140,10 +140,6 @@ func (km *RemoteKeyManager) AddShare(
 		}
 	}
 
-	if err := km.BumpSlashingProtection(pubKey); err != nil {
-		return fmt.Errorf("could not bump slashing protection: %w", err)
-	}
-
 	return nil
 }
 
