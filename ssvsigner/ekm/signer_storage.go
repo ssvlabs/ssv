@@ -54,7 +54,7 @@ type Storage interface {
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
 
-	SetEncryptionKey(hexKey string) error
+	SetEncryptionKey(hexKey []byte)
 	BeaconNetwork() beacon.BeaconNetwork
 }
 
