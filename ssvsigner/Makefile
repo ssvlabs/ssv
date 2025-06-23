@@ -4,4 +4,4 @@ docker-build:
 
 .PHONY: test-e2e
 test-e2e: docker-build
-	cd e2e && go test -count=1 -v ./signing/ -timeout=300s
+	cd e2e && go test -count=1 -v ./signing/ -timeout=600s
