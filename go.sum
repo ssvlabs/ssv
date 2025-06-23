@@ -758,14 +758,8 @@ github.com/ssvlabs/ssv-spec v1.1.3 h1:46K31kI4/vA7Vp3DaOuN7t2IABAmzeiMniCqYfzzpo
 github.com/ssvlabs/ssv-spec v1.1.3/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250604161645-9802c13c817a h1:wNloeHz2Rhk97GcxSyQ7aay8xwBUQ51K5HE031+eeZQ=
 github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250604161645-9802c13c817a/go.mod h1:HkcbtVHpGBPnJjdWWd08Z3lv7l0VWejJU80yUUqY5Go=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623094326-4a96a1638359 h1:OfcYX1dDEzg052zk/gXvZbAp1c7OU8rD485auEhBp38=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623094326-4a96a1638359/go.mod h1:+D+oGPiz6sZXwpzZzDGI2R6rzMRGRROWbrrqVdos7G0=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623095529-7019c585c255 h1:OqJhsdn4X3eXhvuiyNZi+QwdXVRrBNkBXXTsdE99/cY=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623095529-7019c585c255/go.mod h1:GxSLkhRjZORmYxbuVfxHuBD7nMi/EckW5dV2OfVl+34=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623101446-62a99b479d19 h1:19PjG2LKOdavLd3jRleYxA7FhuQtubDmfF7nFDhCjWI=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623101446-62a99b479d19/go.mod h1:rIq1k5bZcMMmZvXV5e9reMv0vpcGbqYsSYykjekccMk=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623101637-6ed27b6b915f h1:BQzLtHKjt6AK8Av+44VyV97ArM5pQED/xUiboOdB+y8=
-github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623101637-6ed27b6b915f/go.mod h1:rIq1k5bZcMMmZvXV5e9reMv0vpcGbqYsSYykjekccMk=
+github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623112006-db25cb11109f h1:QeCUBsJw7x6Z9gKvGGBmAk/sW+bVie8MtSlR41KrQ9w=
+github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250623112006-db25cb11109f/go.mod h1:+D+oGPiz6sZXwpzZzDGI2R6rzMRGRROWbrrqVdos7G0=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
