@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -25,6 +26,8 @@ const (
 	DefaultTargetAggregatorsPerSyncSubcommittee = uint64(16)
 	DefaultTargetAggregatorsPerCommittee        = uint64(16)
 	DefaultIntervalsPerSlot                     = uint64(3)
+	// TODO set proper value
+	DefaultGasLimit36Epoch = phase0.Epoch(math.MaxUint64)
 )
 
 // BeaconConfig returns the network Beacon configuration
@@ -179,6 +182,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 		TargetAggregatorsPerSyncSubcommittee: targetAggregatorsPerSyncSubcommittee,
 		TargetAggregatorsPerCommittee:        targetAggregatorsPerCommittee,
 		IntervalsPerSlot:                     intervalsPerSlot,
+		GasLimit36Epoch:                      DefaultGasLimit36Epoch,
 		GenesisForkVersion:                   genesisResponse.GenesisForkVersion,
 		GenesisTime:                          genesisResponse.GenesisTime,
 		GenesisValidatorsRoot:                genesisResponse.GenesisValidatorsRoot,
