@@ -92,7 +92,7 @@ func (c *Client) ListValidators(ctx context.Context) (listResp []phase0.BLSPubKe
 	return listResp, err
 }
 
-func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err error) {
+func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (statuses []web3signer.Status, err error) {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
@@ -101,7 +101,7 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 	}()
 
 	if len(shares) > addShareLimit {
-		return fmt.Errorf("too many shares, max allowed per request %d", addShareLimit)
+		return nil, fmt.Errorf("too many shares, max allowed per request %d", addShareLimit)
 	}
 
 	encodedShares := make([]ShareKeys, 0, len(shares))
@@ -129,27 +129,26 @@ func (c *Client) AddValidators(ctx context.Context, shares ...ShareKeys) (err er
 		Fetch(ctx)
 
 	if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
-		return ShareDecryptionError(errors.New(errStr))
+		return nil, ShareDecryptionError(errors.New(errStr))
 	}
 
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
 	if len(resp.Data) != len(shares) {
-		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(shares))
+		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(shares))
 	}
 
+	statuses = make([]web3signer.Status, 0, len(resp.Data))
 	for _, data := range resp.Data {
-		if data.Status != web3signer.StatusImported {
-			return fmt.Errorf("unexpected status %s", data.Status)
-		}
+		statuses = append(statuses, data.Status)
 	}
 
-	return nil
+	return statuses, nil
 }
 
-func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) (err error) {
+func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) (statuses []web3signer.Status, err error) {
 	start := time.Now()
 	defer func() {
 		duration := time.Since(start)
@@ -170,20 +169,19 @@ func (c *Client) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubK
 		ToJSON(&resp).
 		Fetch(ctx)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
 	if len(resp.Data) != len(pubKeys) {
-		return fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(pubKeys))
+		return nil, fmt.Errorf("unexpected statuses length, got %d, expected %d", len(resp.Data), len(pubKeys))
 	}
 
+	statuses = make([]web3signer.Status, 0, len(resp.Data))
 	for _, data := range resp.Data {
-		if data.Status != web3signer.StatusDeleted {
-			return fmt.Errorf("received status %s", data.Status)
-		}
+		statuses = append(statuses, data.Status)
 	}
 
-	return nil
+	return statuses, nil
 }
 
 func (c *Client) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (signature phase0.BLSSignature, err error) {
