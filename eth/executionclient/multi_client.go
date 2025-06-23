@@ -166,7 +166,7 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 
 	if mc.batcher != nil {
 		cfg := mc.batcher.Config()
-		options = append(options, WithAdaptiveBatch(cfg.InitialSize, cfg.MinSize, cfg.MaxSize))
+		options = append(options, WithAdaptiveBatch(cfg))
 	}
 
 	if mc.httpFallbackAddr != "" {

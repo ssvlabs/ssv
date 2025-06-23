@@ -21,7 +21,5 @@ const (
 	DefaultIncreaseRatio = 150 // 150% = 1.5x (50% increase)
 	DefaultDecreaseRatio = 70  // 70% = 0.7x (30% decrease)
 
-	DefaultSuccessThreshold = 5
-
-	DefaultLatencyTarget = 500 * time.Millisecond
+	DefaultHighLogsThreshold = 1000 // reduce batch when more than 1000 logs returned
 )

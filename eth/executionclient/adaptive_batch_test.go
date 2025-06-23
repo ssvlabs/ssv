@@ -3,7 +3,6 @@ package executionclient
 import (
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,16 +11,14 @@ import (
 func TestBatcherConfig(t *testing.T) {
 	t.Parallel()
 
-	t.Run("default config", func(t *testing.T) {
-		cfg := DefaultBatcherConfig()
-		assert.Equal(t, uint64(500), cfg.InitialSize)
-		assert.Equal(t, uint64(200), cfg.MinSize)
-		assert.Equal(t, uint64(2000), cfg.MaxSize)
-		assert.Equal(t, uint64(150), cfg.IncreaseRatio)
-		assert.Equal(t, uint64(70), cfg.DecreaseRatio)
-		assert.Equal(t, uint32(5), cfg.SuccessThreshold)
-		assert.Equal(t, 500*time.Millisecond, cfg.LatencyTarget)
-	})
+	cfg := DefaultBatcherConfig()
+
+	assert.Equal(t, uint64(DefaultBatchSize), cfg.InitialSize)
+	assert.Equal(t, uint64(DefaultMinBatchSize), cfg.MinSize)
+	assert.Equal(t, uint64(DefaultMaxBatchSize), cfg.MaxSize)
+	assert.Equal(t, uint64(DefaultIncreaseRatio), cfg.IncreaseRatio)
+	assert.Equal(t, uint64(DefaultDecreaseRatio), cfg.DecreaseRatio)
+	assert.Equal(t, uint32(DefaultHighLogsThreshold), cfg.HighLogsThreshold)
 }
 
 func TestNewAdaptiveBatcher(t *testing.T) {
@@ -185,213 +182,92 @@ func TestNewAdaptiveBatcherWithConfig(t *testing.T) {
 	}
 }
 
-func TestAdaptiveBatcher_RecordSuccess(t *testing.T) {
+func TestAdaptiveBatcher_RecordResult(t *testing.T) {
 	t.Parallel()
 
-	t.Run("default increase ratio", func(t *testing.T) {
+	t.Run("zero logs increases batch size", func(t *testing.T) {
 		t.Parallel()
 
 		ab := NewAdaptiveBatcher(1000, 100, 2000)
-
-		// Record 5 successes with low latency
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
+		ab.RecordResult(0)
 
 		// Default: 150% = 1.5x = 1500
 		assert.Equal(t, uint64(1500), ab.GetSize())
 	})
 
-	t.Run("custom increase ratio", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := DefaultBatcherConfig()
-		cfg.InitialSize = 1000
-		cfg.IncreaseRatio = 200 // 100% increase (double)
-		ab := NewAdaptiveBatcherWithConfig(cfg)
-
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
-
-		// 200% = 2x = 2000
-		assert.Equal(t, uint64(2000), ab.GetSize())
-	})
-
-	t.Run("small increase ratio", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := DefaultBatcherConfig()
-		cfg.InitialSize = 1000
-		cfg.IncreaseRatio = 110 // 10% increase
-		ab := NewAdaptiveBatcherWithConfig(cfg)
-
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
-
-		// 110% = 1.1x = 1100
-		assert.Equal(t, uint64(1100), ab.GetSize())
-	})
-
-	t.Run("custom success threshold", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := DefaultBatcherConfig()
-		cfg.InitialSize = 1000
-		cfg.SuccessThreshold = 3 // Only need 3 successes
-		ab := NewAdaptiveBatcherWithConfig(cfg)
-
-		// 2 successes - no change
-		ab.RecordSuccess(100 * time.Millisecond)
-		ab.RecordSuccess(100 * time.Millisecond)
-		assert.Equal(t, uint64(1000), ab.GetSize())
-
-		// 3rd success triggers increase
-		ab.RecordSuccess(100 * time.Millisecond)
-		assert.Equal(t, uint64(1500), ab.GetSize())
-	})
-
-	t.Run("custom latency target", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := DefaultBatcherConfig()
-		cfg.InitialSize = 1000
-		cfg.LatencyTarget = 200 * time.Millisecond // Stricter target
-		ab := NewAdaptiveBatcherWithConfig(cfg)
-
-		// High latency - no increase
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(300 * time.Millisecond)
-		}
-		assert.Equal(t, uint64(1000), ab.GetSize())
-
-		// Low latency - triggers increase
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
-		assert.Equal(t, uint64(1500), ab.GetSize())
-	})
-
-	t.Run("respects max size", func(t *testing.T) {
-		t.Parallel()
-
-		ab := NewAdaptiveBatcher(1900, 100, 2000)
-
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
-
-		assert.Equal(t, uint64(2000), ab.GetSize())
-	})
-
-	t.Run("minimum increase of 1", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := DefaultBatcherConfig()
-		cfg.InitialSize = 10
-		cfg.IncreaseRatio = 101 // 1% increase
-		cfg.MinSize = 1
-		ab := NewAdaptiveBatcherWithConfig(cfg)
-
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
-
-		// 10 * 101 / 100 = 10.1 -> 10, but we ensure min increase of 1
-		assert.Equal(t, uint64(11), ab.GetSize())
-	})
-}
-
-func TestAdaptiveBatcher_RecordFailure(t *testing.T) {
-	t.Parallel()
-
-	t.Run("default decrease ratio", func(t *testing.T) {
+	t.Run("high log count decreases batch size", func(t *testing.T) {
 		t.Parallel()
 
 		ab := NewAdaptiveBatcher(1000, 100, 2000)
-		ab.RecordFailure()
+		ab.RecordResult(1500) // Above DefaultHighLogsThreshold (1000)
 
 		// Default: 70% = 0.7x = 700
 		assert.Equal(t, uint64(700), ab.GetSize())
 	})
 
-	t.Run("custom decrease ratio", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := DefaultBatcherConfig()
-		cfg.InitialSize = 1000
-		cfg.DecreaseRatio = 50 // 50% (halve)
-		ab := NewAdaptiveBatcherWithConfig(cfg)
-
-		ab.RecordFailure()
-
-		// 50% = 0.5x = 500
-		assert.Equal(t, uint64(500), ab.GetSize())
-	})
-
-	t.Run("aggressive decrease", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := DefaultBatcherConfig()
-		cfg.InitialSize = 1000
-		cfg.DecreaseRatio = 10 // 90% decrease
-		cfg.MinSize = 50       // Set lower MinSize to allow the calculation to work
-		ab := NewAdaptiveBatcherWithConfig(cfg)
-
-		ab.RecordFailure()
-
-		// 10% = 0.1x = 100
-		assert.Equal(t, uint64(100), ab.GetSize())
-	})
-
-	t.Run("respects min size", func(t *testing.T) {
-		t.Parallel()
-
-		ab := NewAdaptiveBatcher(210, 200, 2000)
-
-		ab.RecordFailure()
-		assert.Equal(t, uint64(200), ab.GetSize())
-
-		// Second failure stays at min
-		ab.RecordFailure()
-		assert.Equal(t, uint64(200), ab.GetSize())
-	})
-
-	t.Run("minimum decrease of 1", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := DefaultBatcherConfig()
-		cfg.InitialSize = 100
-		cfg.DecreaseRatio = 99 // 1% decrease
-		cfg.MinSize = 1
-		ab := NewAdaptiveBatcherWithConfig(cfg)
-
-		ab.RecordFailure()
-
-		// 100 * 99 / 100 = 99
-		assert.Equal(t, uint64(99), ab.GetSize())
-	})
-
-	t.Run("resets success counter", func(t *testing.T) {
+	t.Run("moderate log count no change", func(t *testing.T) {
 		t.Parallel()
 
 		ab := NewAdaptiveBatcher(1000, 100, 2000)
+		ab.RecordResult(500) // Below HighLogsThreshold
 
-		// Build up successes
-		for i := 0; i < 4; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
+		// No change
+		assert.Equal(t, uint64(1000), ab.GetSize())
+	})
 
-		// Failure resets counter
-		ab.RecordFailure()
+	t.Run("custom high logs threshold", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := DefaultBatcherConfig()
+		cfg.InitialSize = 1000
+		cfg.HighLogsThreshold = 500 // Custom threshold
+		ab := NewAdaptiveBatcherWithConfig(cfg)
+
+		// Below threshold - no change
+		ab.RecordResult(400)
+		assert.Equal(t, uint64(1000), ab.GetSize())
+
+		// Above threshold - decrease
+		ab.RecordResult(600)
 		assert.Equal(t, uint64(700), ab.GetSize())
+	})
 
-		// Need full threshold again
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
-		assert.Equal(t, uint64(1050), ab.GetSize()) // 700 * 1.5
+	t.Run("respects max size when increasing", func(t *testing.T) {
+		t.Parallel()
+
+		ab := NewAdaptiveBatcher(1900, 100, 2000)
+		ab.RecordResult(0) // Zero logs
+
+		assert.Equal(t, uint64(2000), ab.GetSize()) // Capped at max
+	})
+
+	t.Run("respects min size when decreasing", func(t *testing.T) {
+		t.Parallel()
+
+		ab := NewAdaptiveBatcher(250, 200, 2000)
+		ab.RecordResult(1500) // High log count
+
+		// 250 * 70 / 100 = 175, but minimum is 200, so should be 200
+		assert.Equal(t, uint64(200), ab.GetSize())
+	})
+
+	t.Run("custom ratios", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := DefaultBatcherConfig()
+		cfg.InitialSize = 1000
+		cfg.IncreaseRatio = 200 // 100% increase (double)
+		cfg.DecreaseRatio = 50  // 50% (halve)
+		ab := NewAdaptiveBatcherWithConfig(cfg)
+
+		// Zero logs - increase
+		ab.RecordResult(0)
+		assert.Equal(t, uint64(2000), ab.GetSize())
+
+		// Reset and test decrease
+		ab.Reset()
+		ab.RecordResult(1500) // High log count
+		assert.Equal(t, uint64(500), ab.GetSize())
 	})
 }
 
@@ -403,28 +279,24 @@ func TestAdaptiveBatcher_Reset(t *testing.T) {
 	ab := NewAdaptiveBatcherWithConfig(cfg)
 
 	// Change state
-	for i := 0; i < 5; i++ {
-		ab.RecordSuccess(100 * time.Millisecond)
-	}
+	ab.RecordResult(0) // Zero logs to increase size
 	assert.Equal(t, uint64(1500), ab.GetSize())
 
 	// Reset
 	ab.Reset()
 	assert.Equal(t, uint64(1000), ab.GetSize()) // Back to initial
-	assert.Equal(t, uint32(0), ab.successCount.Load())
 }
 
 func TestAdaptiveBatcher_Config(t *testing.T) {
 	t.Parallel()
 
 	cfg := BatcherConfig{
-		InitialSize:      1000,
-		MinSize:          100,
-		MaxSize:          2000,
-		IncreaseRatio:    175,
-		DecreaseRatio:    60,
-		SuccessThreshold: 3,
-		LatencyTarget:    200 * time.Millisecond,
+		InitialSize:       1000,
+		MinSize:           100,
+		MaxSize:           2000,
+		IncreaseRatio:     175,
+		DecreaseRatio:     60,
+		HighLogsThreshold: 800,
 	}
 
 	ab := NewAdaptiveBatcherWithConfig(cfg)
@@ -435,8 +307,7 @@ func TestAdaptiveBatcher_Config(t *testing.T) {
 	assert.Equal(t, cfg.MaxSize, returnedCfg.MaxSize)
 	assert.Equal(t, cfg.IncreaseRatio, returnedCfg.IncreaseRatio)
 	assert.Equal(t, cfg.DecreaseRatio, returnedCfg.DecreaseRatio)
-	assert.Equal(t, cfg.SuccessThreshold, returnedCfg.SuccessThreshold)
-	assert.Equal(t, cfg.LatencyTarget, returnedCfg.LatencyTarget)
+	assert.Equal(t, cfg.HighLogsThreshold, returnedCfg.HighLogsThreshold)
 }
 
 func TestAdaptiveBatcher_EdgeCases(t *testing.T) {
@@ -474,9 +345,7 @@ func TestAdaptiveBatcher_EdgeCases(t *testing.T) {
 		cfg.MinSize = 100
 		ab := NewAdaptiveBatcherWithConfig(cfg)
 
-		for i := 0; i < 5; i++ {
-			ab.RecordSuccess(100 * time.Millisecond)
-		}
+		ab.RecordResult(0) // Zero logs to trigger increase
 
 		assert.Equal(t, maxUint, ab.GetSize())
 	})
@@ -493,22 +362,22 @@ func TestAdaptiveBatcher_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(workers * 3)
 
-	// Success workers
+	// Zero log workers (increase batch)
 	for i := 0; i < workers; i++ {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < opsPerWorker; j++ {
-				ab.RecordSuccess(100 * time.Millisecond)
+				ab.RecordResult(0)
 			}
 		}()
 	}
 
-	// Failure workers
+	// High log workers (decrease batch)
 	for i := 0; i < workers; i++ {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < opsPerWorker; j++ {
-				ab.RecordFailure()
+				ab.RecordResult(1500)
 			}
 		}()
 	}
@@ -557,9 +426,7 @@ func TestAdaptiveBatcher_Calculations(t *testing.T) {
 			cfg.MaxSize = 10000
 			ab := NewAdaptiveBatcherWithConfig(cfg)
 
-			for i := 0; i < 5; i++ {
-				ab.RecordSuccess(100 * time.Millisecond)
-			}
+			ab.RecordResult(0) // Zero logs to trigger increase
 
 			assert.Equal(t, tc.expected, ab.GetSize())
 		}
@@ -586,9 +453,50 @@ func TestAdaptiveBatcher_Calculations(t *testing.T) {
 			cfg.MaxSize = 10000
 			ab := NewAdaptiveBatcherWithConfig(cfg)
 
-			ab.RecordFailure()
+			ab.RecordResult(1500) // High log count to trigger decrease
 
 			assert.Equal(t, tc.expected, ab.GetSize())
 		}
+	})
+}
+
+func TestAdaptiveBatcher_RecordFailure(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default decrease ratio", func(t *testing.T) {
+		t.Parallel()
+
+		ab := NewAdaptiveBatcher(1000, 100, 2000)
+		ab.RecordFailure()
+
+		// Default: 70% = 0.7x = 700
+		assert.Equal(t, uint64(700), ab.GetSize())
+	})
+
+	t.Run("custom decrease ratio", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := DefaultBatcherConfig()
+		cfg.InitialSize = 1000
+		cfg.DecreaseRatio = 50 // 50% (halve)
+		ab := NewAdaptiveBatcherWithConfig(cfg)
+
+		ab.RecordFailure()
+
+		// 50% = 0.5x = 500
+		assert.Equal(t, uint64(500), ab.GetSize())
+	})
+
+	t.Run("respects min size", func(t *testing.T) {
+		t.Parallel()
+
+		ab := NewAdaptiveBatcher(210, 200, 2000)
+
+		ab.RecordFailure()
+		assert.Equal(t, uint64(200), ab.GetSize())
+
+		// Second failure stays at min
+		ab.RecordFailure()
+		assert.Equal(t, uint64(200), ab.GetSize())
 	})
 }

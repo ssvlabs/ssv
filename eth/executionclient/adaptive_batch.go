@@ -15,21 +15,19 @@ type BatcherConfig struct {
 	IncreaseRatio uint64 // e.g., 150 for 50% increase
 	DecreaseRatio uint64 // e.g., 70 for 30% decrease
 
-	// Scaling triggers
-	SuccessThreshold uint32
-	LatencyTarget    time.Duration
+	// Log-based thresholds for adaptation
+	HighLogsThreshold uint32
 }
 
 // DefaultBatcherConfig returns default configuration.
 func DefaultBatcherConfig() BatcherConfig {
 	return BatcherConfig{
-		InitialSize:      DefaultBatchSize,
-		MinSize:          DefaultMinBatchSize,
-		MaxSize:          DefaultMaxBatchSize,
-		IncreaseRatio:    DefaultIncreaseRatio,
-		DecreaseRatio:    DefaultDecreaseRatio,
-		SuccessThreshold: DefaultSuccessThreshold,
-		LatencyTarget:    DefaultLatencyTarget,
+		InitialSize:       DefaultBatchSize,
+		MinSize:           DefaultMinBatchSize,
+		MaxSize:           DefaultMaxBatchSize,
+		IncreaseRatio:     DefaultIncreaseRatio,
+		DecreaseRatio:     DefaultDecreaseRatio,
+		HighLogsThreshold: DefaultHighLogsThreshold,
 	}
 }
 
@@ -39,7 +37,6 @@ type AdaptiveBatcher struct {
 	config BatcherConfig
 
 	size           atomic.Uint64
-	successCount   atomic.Uint32
 	lastAdjustTime atomic.Int64
 }
 
@@ -79,7 +76,6 @@ func NewAdaptiveBatcher(initial, min, max uint64) *AdaptiveBatcher {
 }
 
 // NewAdaptiveBatcherWithConfig creates a new batcher with custom configuration.
-// Use this if you need to customize increase/decrease ratios, thresholds, etc.
 func NewAdaptiveBatcherWithConfig(cfg BatcherConfig) *AdaptiveBatcher {
 	if cfg.MinSize == 0 {
 		cfg.MinSize = DefaultMinBatchSize
@@ -96,11 +92,8 @@ func NewAdaptiveBatcherWithConfig(cfg BatcherConfig) *AdaptiveBatcher {
 	if cfg.DecreaseRatio == 0 {
 		cfg.DecreaseRatio = DefaultDecreaseRatio
 	}
-	if cfg.SuccessThreshold == 0 {
-		cfg.SuccessThreshold = DefaultSuccessThreshold
-	}
-	if cfg.LatencyTarget == 0 {
-		cfg.LatencyTarget = DefaultLatencyTarget
+	if cfg.HighLogsThreshold == 0 {
+		cfg.HighLogsThreshold = DefaultHighLogsThreshold
 	}
 
 	if cfg.InitialSize < cfg.MinSize {
@@ -132,26 +125,27 @@ func (ab *AdaptiveBatcher) GetSize() uint64 {
 	return ab.size.Load()
 }
 
-// RecordSuccess records a successful operation with its latency.
-func (ab *AdaptiveBatcher) RecordSuccess(latency time.Duration) {
-	count := ab.successCount.Add(1)
-
-	if count >= ab.config.SuccessThreshold && latency < ab.config.LatencyTarget {
+// RecordResult adapts batch size based on the number of logs returned.
+// This is the main method for log-based adaptation:
+// - logsCount == 0: increase batch size (empty result, can handle more)
+// - logsCount > HighLogsThreshold: decrease batch size (too many results)
+// - otherwise: no change
+func (ab *AdaptiveBatcher) RecordResult(logsCount int) {
+	if logsCount == 0 {
 		ab.increase()
-		ab.successCount.Store(0)
+	} else if logsCount > int(ab.config.HighLogsThreshold) {
+		ab.decrease()
 	}
 }
 
-// RecordFailure records a failed operation.
+// RecordFailure records a failed operation and decreases batch size.
 func (ab *AdaptiveBatcher) RecordFailure() {
 	ab.decrease()
-	ab.successCount.Store(0)
 }
 
 // Reset resets the batcher to initial configuration.
 func (ab *AdaptiveBatcher) Reset() {
 	ab.size.Store(ab.config.InitialSize)
-	ab.successCount.Store(0)
 	ab.lastAdjustTime.Store(time.Now().UnixNano())
 }
 

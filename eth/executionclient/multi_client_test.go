@@ -1408,7 +1408,14 @@ func TestMultiClientOptions(t *testing.T) {
 		t.Parallel()
 
 		mc := &MultiClient{}
-		opt := WithAdaptiveBatchMulti(1000, 200, 2000)
+		opt := WithAdaptiveBatchMulti(BatcherConfig{
+			InitialSize:       1000,
+			MinSize:           200,
+			MaxSize:           2000,
+			IncreaseRatio:     DefaultIncreaseRatio,
+			DecreaseRatio:     DefaultDecreaseRatio,
+			HighLogsThreshold: DefaultHighLogsThreshold,
+		})
 		opt(mc)
 
 		assert.NotNil(t, mc.batcher)

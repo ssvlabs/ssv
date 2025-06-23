@@ -126,16 +126,16 @@ func WithHTTPFallbackMulti(addr string) OptionMulti {
 	}
 }
 
-// WithAdaptiveBatch configures an ExecutionClient to use an adaptive batcher with specified size limits.
-func WithAdaptiveBatch(defaultSize, min, max uint64) Option {
+// WithAdaptiveBatch configures an ExecutionClient to use an adaptive batcher.
+func WithAdaptiveBatch(cfg BatcherConfig) Option {
 	return func(s *ExecutionClient) {
-		s.batcher = NewAdaptiveBatcher(defaultSize, min, max)
+		s.batcher = NewAdaptiveBatcherWithConfig(cfg)
 	}
 }
 
-// WithAdaptiveBatchMulti configures a MultiClient to use adaptive batchers with specified size limits.
-func WithAdaptiveBatchMulti(defaultSize, min, max uint64) OptionMulti {
+// WithAdaptiveBatchMulti configures a MultiClient to use adaptive batchers.
+func WithAdaptiveBatchMulti(cfg BatcherConfig) OptionMulti {
 	return func(s *MultiClient) {
-		s.batcher = NewAdaptiveBatcher(defaultSize, min, max)
+		s.batcher = NewAdaptiveBatcherWithConfig(cfg)
 	}
 }

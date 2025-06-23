@@ -324,7 +324,7 @@ var StartNodeCmd = &cobra.Command{
 				executionclient.WithHealthInvalidationInterval(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceTolerance(cfg.ExecutionClient.SyncDistanceTolerance),
 				executionclient.WithHTTPFallback(cfg.ExecutionClient.HTTPFallbackAddr),
-				executionclient.WithAdaptiveBatch(cfg.ExecutionClient.BatchSize, cfg.ExecutionClient.MinBatchSize, cfg.ExecutionClient.MaxBatchSize),
+				executionclient.WithAdaptiveBatch(cfg.ExecutionClient.ToBatcherConfig()),
 			)
 			if err != nil {
 				logger.Fatal("could not connect to execution client", zap.Error(err))
@@ -344,7 +344,7 @@ var StartNodeCmd = &cobra.Command{
 				executionclient.WithHealthInvalidationIntervalMulti(executionclient.DefaultHealthInvalidationInterval),
 				executionclient.WithSyncDistanceToleranceMulti(cfg.ExecutionClient.SyncDistanceTolerance),
 				executionclient.WithHTTPFallbackMulti(cfg.ExecutionClient.HTTPFallbackAddr),
-				executionclient.WithAdaptiveBatchMulti(cfg.ExecutionClient.BatchSize, cfg.ExecutionClient.MinBatchSize, cfg.ExecutionClient.MaxBatchSize),
+				executionclient.WithAdaptiveBatchMulti(cfg.ExecutionClient.ToBatcherConfig()),
 			)
 			if err != nil {
 				logger.Fatal("could not connect to execution client", zap.Error(err))

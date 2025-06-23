@@ -383,7 +383,14 @@ func TestFetchHistoricalLogs_Subdivide(t *testing.T) {
 			srv := httptest.NewServer(wrapped)
 			t.Cleanup(srv.Close)
 
-			opts := []Option{WithFollowDistance(0), WithAdaptiveBatch(10_000, 100, 1000)}
+			opts := []Option{WithFollowDistance(0), WithAdaptiveBatch(BatcherConfig{
+				InitialSize:       10_000,
+				MinSize:           100,
+				MaxSize:           1000,
+				IncreaseRatio:     DefaultIncreaseRatio,
+				DecreaseRatio:     DefaultDecreaseRatio,
+				HighLogsThreshold: DefaultHighLogsThreshold,
+			})}
 
 			client, err := New(t.Context(),
 				srv.URL,
@@ -577,7 +584,14 @@ func TestFetchLogsInBatches(t *testing.T) {
 	contract, err := env.deployCallableContract()
 	require.NoError(t, err)
 
-	err = env.createClient(WithLogger(logger), WithAdaptiveBatch(12, 10, 1000))
+	err = env.createClient(WithLogger(logger), WithAdaptiveBatch(BatcherConfig{
+		InitialSize:       12,
+		MinSize:           10,
+		MaxSize:           1000,
+		IncreaseRatio:     DefaultIncreaseRatio,
+		DecreaseRatio:     DefaultDecreaseRatio,
+		HighLogsThreshold: DefaultHighLogsThreshold,
+	}))
 	require.NoError(t, err)
 
 	// Create blocks with transactions
