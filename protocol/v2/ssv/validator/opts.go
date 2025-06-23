@@ -6,6 +6,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -13,25 +15,30 @@ import (
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 const (
 	DefaultQueueSize = 32
 )
 
-// Options represents options that should be passed to a new instance of Validator.
+// Options represents validator-specific options.
 type Options struct {
+	CommonOptions
+
+	SSVShare    *ssvtypes.SSVShare
+	Operator    *spectypes.CommitteeMember
+	DutyRunners runner.ValidatorDutyRunners
+}
+
+// CommonOptions represents options that all validators share.
+type CommonOptions struct {
 	NetworkConfig       networkconfig.NetworkConfig
 	Network             specqbft.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
-	SSVShare            *ssvtypes.SSVShare
-	Operator            *spectypes.CommitteeMember
 	Signer              ekm.BeaconSigner
 	OperatorSigner      ssvtypes.OperatorSigner
 	DoppelgangerHandler runner.DoppelgangerProvider
-	DutyRunners         runner.ValidatorDutyRunners
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
 	Exporter            bool
@@ -42,12 +49,64 @@ type Options struct {
 	ProposerDelay       time.Duration
 }
 
-func (o *Options) defaults() {
-	if o.QueueSize == 0 {
-		o.QueueSize = DefaultQueueSize
+func NewCommonOptions(
+	networkConfig networkconfig.NetworkConfig,
+	network specqbft.Network,
+	beacon beacon.BeaconNode,
+	storage *storage.ParticipantStores,
+	signer ekm.BeaconSigner,
+	operatorSigner ssvtypes.OperatorSigner,
+	doppelgangerHandler runner.DoppelgangerProvider,
+	newDecidedHandler qbftctrl.NewDecidedHandler,
+	fullNode bool,
+	exporter bool,
+	historySyncBatchSize int,
+	gasLimit uint64,
+	messageValidator validation.MessageValidator,
+	graffiti []byte,
+	proposerDelay time.Duration,
+) *CommonOptions {
+	result := &CommonOptions{
+		NetworkConfig:       networkConfig,
+		Network:             network,
+		Beacon:              beacon,
+		Storage:             storage,
+		Signer:              signer,
+		OperatorSigner:      operatorSigner,
+		DoppelgangerHandler: doppelgangerHandler,
+		NewDecidedHandler:   newDecidedHandler,
+		FullNode:            fullNode,
+		Exporter:            exporter,
+		QueueSize:           DefaultQueueSize,
+		GasLimit:            gasLimit,
+		MessageValidator:    messageValidator,
+		Graffiti:            graffiti,
+		ProposerDelay:       proposerDelay,
 	}
-	if o.GasLimit == 0 {
-		o.GasLimit = spectypes.DefaultGasLimit
+
+	// If full node, increase the queue size to make enough room for history sync batches to be pushed whole.
+	if fullNode {
+		result.QueueSize = max(result.QueueSize, historySyncBatchSize*2)
+	}
+
+	if result.GasLimit == 0 {
+		result.GasLimit = spectypes.DefaultGasLimit
+	}
+
+	return result
+}
+
+func (o *CommonOptions) NewOptions(
+	share *ssvtypes.SSVShare,
+	operator *spectypes.CommitteeMember,
+	dutyRunners runner.ValidatorDutyRunners,
+) *Options {
+	return &Options{
+		CommonOptions: *o,
+
+		SSVShare:    share,
+		Operator:    operator,
+		DutyRunners: dutyRunners,
 	}
 }
 
