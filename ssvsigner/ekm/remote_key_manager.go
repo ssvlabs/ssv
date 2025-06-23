@@ -109,17 +109,13 @@ func (km *RemoteKeyManager) AddShare(
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
-	if err := km.BumpSlashingProtection(txn, pubKey); err != nil {
+	if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey); err != nil {
 		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
 	shareKeys := ssvsigner.ShareKeys{
 		EncryptedPrivKey: hexutil.Bytes(encryptedPrivKey),
 		PubKey:           pubKey,
-	}
-
-	if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey); err != nil {
-		return fmt.Errorf("could not bump slashing protection: %w", err)
 	}
 
 	// If txn gets rolled back after share is saved,
