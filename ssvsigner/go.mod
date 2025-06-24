@@ -26,7 +26,7 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.2
-	github.com/ssvlabs/ssv v1.2.1-0.20250422001600-57842541ad25
+	github.com/ssvlabs/ssv v1.2.1-0.20250623120703-7787f963c4ad
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.58.0

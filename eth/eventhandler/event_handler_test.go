@@ -848,7 +848,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, share.Liquidated)
 		// check that slashing data was not deleted
 		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
-		highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
+		highestAttestation, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
@@ -856,7 +856,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
 		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
-		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
+		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, highestProposal, currentSlot.GetSlot())
@@ -898,14 +898,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// check that slashing data was bumped
 		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
-		highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
+		highestAttestation, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
 		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
-		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
+		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, highestProposal, currentSlot.GetSlot())
@@ -989,14 +989,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// check that slashing data is greater than current epoch
 		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
-		highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
+		highestAttestation, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 		require.Greater(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
 		require.Greater(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
 
-		highestProposal, found, err := eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
+		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Greater(t, highestProposal, currentSlot.GetSlot())
@@ -1658,34 +1658,34 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 
 func requireKeyManagerDataToExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
 	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
-	accounts, err := eh.keyManager.ListAccounts()
+	accounts, err := eh.keyManager.(*ekm.LocalKeyManager).ListAccounts()
 	require.NoError(t, err)
 	require.Equal(t, expectedAccounts, len(accounts))
 	require.True(t, shareExist(accounts, sharePubKey))
 
-	highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
+	highestAttestation, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.True(t, found)
 	require.NotNil(t, highestAttestation)
 
-	_, found, err = eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
+	_, found, err = eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.True(t, found)
 }
 
 func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
 	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
-	accounts, err := eh.keyManager.ListAccounts()
+	accounts, err := eh.keyManager.(*ekm.LocalKeyManager).ListAccounts()
 	require.NoError(t, err)
 	require.Equal(t, expectedAccounts, len(accounts))
 	require.False(t, shareExist(accounts, sharePubKey))
 
-	highestAttestation, found, err := eh.keyManager.RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
+	highestAttestation, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.False(t, found)
 	require.Nil(t, highestAttestation)
 
-	_, found, err = eh.keyManager.RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
+	_, found, err = eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.False(t, found)
 }

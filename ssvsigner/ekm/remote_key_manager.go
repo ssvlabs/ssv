@@ -39,20 +39,20 @@ import (
 //
 // RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
-	logger          *zap.Logger
-	netCfg          networkconfig.NetworkConfig
-	signerClient    signerClient
-	consensusClient consensusClient
-	getOperatorId   func() spectypes.OperatorID
-	operatorPubKey  keys.OperatorPublicKey
-	signLocksMu     sync.RWMutex
-	signLocks       map[signKey]*sync.RWMutex
-	slashingProtector
+	logger            *zap.Logger
+	netCfg            networkconfig.NetworkConfig
+	signerClient      signerClient
+	consensusClient   consensusClient
+	getOperatorId     func() spectypes.OperatorID
+	operatorPubKey    keys.OperatorPublicKey
+	signLocksMu       sync.RWMutex
+	signLocks         map[signKey]*sync.RWMutex
+	slashingProtector slashingProtector
 }
 
 type signerClient interface {
-	AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) error
-	RemoveValidators(ctx context.Context, sharePubKeys ...phase0.BLSPubKey) error
+	AddValidators(ctx context.Context, shares ...ssvsigner.ShareKeys) ([]web3signer.Status, error)
+	RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) (statuses []web3signer.Status, err error)
 	Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error)
 	OperatorIdentity(ctx context.Context) (string, error)
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
@@ -67,18 +67,18 @@ type consensusClient interface {
 // identity from the signerClient, sets up local slashing protection, and uses
 // the provided consensusClient to get the current fork/genesis for sign requests.
 func NewRemoteKeyManager(
+	ctx context.Context,
 	logger *zap.Logger,
 	netCfg networkconfig.NetworkConfig,
 	signerClient signerClient,
 	consensusClient consensusClient,
 	db basedb.Database,
-	networkConfig networkconfig.NetworkConfig,
 	getOperatorId func() spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
-	signerStore := NewSignerStorage(db, networkConfig.Beacon, logger)
+	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
-	operatorPubKeyString, err := signerClient.OperatorIdentity(context.Background()) // TODO: use context
+	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get operator identity: %w", err)
 	}
@@ -101,24 +101,50 @@ func NewRemoteKeyManager(
 }
 
 // AddShare registers a validator share with the remote service via signerClient.AddValidators
-// and then calls BumpSlashingProtection on the local store. If remote or local operations
+// and then calls BumpSlashingProtectionTxn on the local store. If remote or local operations
 // fail, returns an error.
 func (km *RemoteKeyManager) AddShare(
 	ctx context.Context,
+	txn basedb.Txn,
 	encryptedPrivKey []byte,
 	pubKey phase0.BLSPubKey,
 ) error {
+	if err := km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey); err != nil {
+		return fmt.Errorf("could not bump slashing protection: %w", err)
+	}
+
 	shareKeys := ssvsigner.ShareKeys{
 		EncryptedPrivKey: hexutil.Bytes(encryptedPrivKey),
 		PubKey:           pubKey,
 	}
 
-	if err := km.signerClient.AddValidators(ctx, shareKeys); err != nil {
+	// If txn gets rolled back after share is saved,
+	// there will be some inconsistency between syncer state and remote signer.
+	// However, syncer crashes node on an error and restarts the sync process from the failing block,
+	// so it will attempt to save the same share again, which won't be an issue
+	// because AddValidators doesn't fail if the same share exists.
+	statuses, err := km.signerClient.AddValidators(ctx, shareKeys)
+	if err != nil {
 		return fmt.Errorf("add validator: %w", err)
 	}
 
-	if err := km.BumpSlashingProtection(pubKey); err != nil {
-		return fmt.Errorf("could not bump slashing protection: %w", err)
+	for _, status := range statuses {
+		switch status {
+		case web3signer.StatusImported:
+
+		case web3signer.StatusDuplicated:
+			// A failed request does not guarantee that the keys were not added.
+			// It's possible that the ssv-signer successfully added the keys,
+			// but a network error occurred before a response could be received.
+			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
+			// In such cases, the node would crash and, upon restarting, encounter a duplicate key error.
+			// To handle this gracefully, we allow returning a duplicate key error without treating it as a failure.
+			km.logger.Warn("Attempted to add already existing share to the remote signer. " +
+				"This is expected in the first block after failed sync")
+
+		default:
+			return fmt.Errorf("unexpected status %s", status)
+		}
 	}
 
 	return nil
@@ -127,20 +153,56 @@ func (km *RemoteKeyManager) AddShare(
 // RemoveShare unregisters a validator share with the remote service and removes
 // its highest attestation/proposal data locally. If the remote or local operations
 // fail, returns an error.
-func (km *RemoteKeyManager) RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error {
-	if err := km.signerClient.RemoveValidators(ctx, pubKey); err != nil {
+func (km *RemoteKeyManager) RemoveShare(ctx context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	// Similarly to addition, if txn gets rolled back after share is removed,
+	// there will be some inconsistency between syncer state and remote signer.
+	// After restart, it will attempt to delete the same share again, which won't be an issue
+	// because RemoveValidators doesn't fail if the share doesn't exist.
+	statuses, err := km.signerClient.RemoveValidators(ctx, pubKey)
+	if err != nil {
 		return fmt.Errorf("remove validator: %w", err)
 	}
 
-	if err := km.RemoveHighestAttestation(pubKey); err != nil {
+	for _, status := range statuses {
+		switch status {
+		case web3signer.StatusDeleted:
+
+		case web3signer.StatusNotFound:
+			// A failed request does not guarantee that the keys were not deleted.
+			// It's possible that the ssv-signer successfully deleted the keys,
+			// but a network error occurred before a response could be received.
+			// Or, if ssv-signer is behind a load balancer, the load balancer may return an error.
+			// In such cases, the node would crash and, upon restarting, encounter a not found key error.
+			// To handle this gracefully, we allow returning a not found key error without treating it as a failure.
+			km.logger.Warn("Attempted to delete non-existing share from the remote signer. " +
+				"This is expected in the first block after failed sync")
+
+		default:
+			return fmt.Errorf("unexpected status %s", status)
+		}
+	}
+
+	if err := km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey); err != nil {
 		return fmt.Errorf("could not remove highest attestation: %w", err)
 	}
 
-	if err := km.RemoveHighestProposal(pubKey); err != nil {
+	if err := km.slashingProtector.RemoveHighestProposalTxn(txn, pubKey); err != nil {
 		return fmt.Errorf("could not remove highest proposal: %w", err)
 	}
 
 	return nil
+}
+
+func (km *RemoteKeyManager) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
+	return km.slashingProtector.IsAttestationSlashable(pubKey, attData)
+}
+
+func (km *RemoteKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+	return km.slashingProtector.IsBeaconBlockSlashable(pubKey, slot)
+}
+
+func (km *RemoteKeyManager) BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
 // SignBeaconObject checks slashing conditions locally for attestation and beacon block,
@@ -339,11 +401,11 @@ func (km *RemoteKeyManager) handleDomainAttester(
 		return nil, fmt.Errorf("source epoch too far into the future")
 	}
 
-	if err := km.IsAttestationSlashable(sharePubkey, data); err != nil {
+	if err := km.slashingProtector.IsAttestationSlashable(sharePubkey, data); err != nil {
 		return nil, err
 	}
 
-	if err := km.UpdateHighestAttestation(sharePubkey, data); err != nil {
+	if err := km.slashingProtector.UpdateHighestAttestation(sharePubkey, data); err != nil {
 		return nil, err
 	}
 
@@ -469,11 +531,11 @@ func (km *RemoteKeyManager) handleDomainProposer(
 		return nil, fmt.Errorf("proposed block slot too far into the future")
 	}
 
-	if err := km.IsBeaconBlockSlashable(sharePubkey, blockSlot); err != nil {
+	if err := km.slashingProtector.IsBeaconBlockSlashable(sharePubkey, blockSlot); err != nil {
 		return nil, err
 	}
 
-	if err := km.UpdateHighestProposal(sharePubkey, blockSlot); err != nil {
+	if err := km.slashingProtector.UpdateHighestProposal(sharePubkey, blockSlot); err != nil {
 		return nil, err
 	}
 
