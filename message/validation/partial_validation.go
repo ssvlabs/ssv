@@ -43,11 +43,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, err
 	}
 
-	key := peerIDWithMessageID{
-		peerID:    receivedFrom,
-		messageID: ssvMessage.GetID(),
-	}
-	state := mv.validatorState(key, committeeInfo.committee)
+	state := mv.validatorState(ssvMessage.GetID(), committeeInfo.committee)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedAt, state); err != nil {
 		return nil, err
 	}

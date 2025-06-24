@@ -47,11 +47,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	key := peerIDWithMessageID{
-		peerID:    receivedFrom,
-		messageID: ssvMessage.GetID(),
-	}
-	state := mv.validatorState(key, committeeInfo.committee)
+	state := mv.validatorState(ssvMessage.GetID(), committeeInfo.committee)
 
 	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeInfo, receivedAt, state); err != nil {
 		return consensusMessage, err

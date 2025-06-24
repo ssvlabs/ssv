@@ -157,11 +157,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
-		key := peerIDWithMessageID{
-			peerID:    peerID,
-			messageID: committeeIdentifier,
-		}
-		state := validator.validatorState(key, committee)
+		state := validator.validatorState(committeeIdentifier, committee)
 		for i := range committee {
 			signerState := state.Signer(i)
 			require.NotNil(t, signerState)
