@@ -255,12 +255,8 @@ func (eh *EventHandler) handleShareCreation(
 		// Apply any archived slashing protection data for this validator.
 		// TODO(SSV-15): This ensures slashing protection continuity across validator re-registration cycles
 		// as part of the temporary solution for audit finding SSV-15.
-		if km, ok := eh.keyManager.(interface {
-			ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error
-		}); ok {
-			if err := km.ApplyArchivedSlashingProtection(share.ValidatorPubKey[:], phase0.BLSPubKey(share.SharePubKey)); err != nil {
-				eh.logger.Warn("could not apply archived slashing protection data", zap.Error(err))
-			}
+		if err := eh.keyManager.ApplyArchivedSlashingProtection(share.ValidatorPubKey[:], phase0.BLSPubKey(share.SharePubKey)); err != nil {
+			eh.logger.Warn("could not apply archived slashing protection data", zap.Error(err))
 		}
 
 		// Set the minimum participation epoch to match slashing protection.
@@ -380,12 +376,8 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		// Archive slashing protection data before removing the share.
 		// TODO(SSV-15): This preserves slashing protection history keyed by validator public key for
 		// retrieval when the validator is re-added with regenerated shares.
-		if km, ok := eh.keyManager.(interface {
-			ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error
-		}); ok {
-			if err := km.ArchiveSlashingProtection(share.ValidatorPubKey[:], share.SharePubKey); err != nil {
-				logger.Warn("could not archive slashing protection data", zap.Error(err))
-			}
+		if err := eh.keyManager.ArchiveSlashingProtection(share.ValidatorPubKey[:], share.SharePubKey); err != nil {
+			logger.Warn("could not archive slashing protection data", zap.Error(err))
 		}
 
 		err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey))
@@ -454,12 +446,8 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		// Apply any archived slashing protection data for this validator.
 		// TODO(SSV-15): This ensures slashing protection continuity across validator reactivation cycles
 		// as part of the temporary solution for audit finding SSV-15.
-		if km, ok := eh.keyManager.(interface {
-			ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error
-		}); ok {
-			if err := km.ApplyArchivedSlashingProtection(share.ValidatorPubKey[:], phase0.BLSPubKey(share.SharePubKey)); err != nil {
-				eh.logger.Warn("could not apply archived slashing protection data during reactivation", zap.Error(err))
-			}
+		if err := eh.keyManager.ApplyArchivedSlashingProtection(share.ValidatorPubKey[:], phase0.BLSPubKey(share.SharePubKey)); err != nil {
+			eh.logger.Warn("could not apply archived slashing protection data during reactivation", zap.Error(err))
 		}
 
 		// Set the minimum participation epoch to match slashing protection.
