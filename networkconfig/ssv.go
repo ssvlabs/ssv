@@ -139,6 +139,6 @@ func (s SSVConfig) GetDomainType() spectypes.DomainType {
 	return s.DomainType
 }
 
-func (s *SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
+func (s SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
 	return s.GasLimit36Epoch
 }
