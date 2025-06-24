@@ -55,11 +55,10 @@ type KeyManager interface {
 	// due to absent or outdated protection data.
 	AddShare(ctx context.Context, txn basedb.Txn, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
-	// RemoveShare unregisters a validator share from the key manager.
-	// Implementations should consider preserving slashing protection records
-	// (attestation and proposal) to prevent slashing if the share is re-added later.
-	// This is especially important for local key managers where the local database
-	// is the only safeguard against double signing.
+	// RemoveShare unregisters a validator share from the key manager and deletes its associated
+	// slashing protection records (attestation and proposal) from the store.
+	// Implementations are expected to perform this cleanup to prevent stale protection data
+	// from persisting after the validator is no longer active, and to support safe re-adding later.
 	RemoveShare(ctx context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error
 
 	// ArchiveSlashingProtection preserves slashing protection data keyed by validator public key.
