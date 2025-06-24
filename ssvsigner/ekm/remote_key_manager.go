@@ -202,6 +202,14 @@ func (km *RemoteKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot
 }
 
 func (km *RemoteKeyManager) BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	attLock := km.lock(pubKey, lockAttestation)
+	attLock.Lock()
+	defer attLock.Unlock()
+
+	propLock := km.lock(pubKey, lockProposal)
+	propLock.Lock()
+	defer propLock.Unlock()
+
 	return km.slashingProtector.BumpSlashingProtectionTxn(txn, pubKey)
 }
 
@@ -609,16 +617,4 @@ func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation lockOpe
 
 	km.signLocks[key] = &sync.RWMutex{}
 	return km.signLocks[key]
-}
-
-func (km *RemoteKeyManager) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
-	attLock := km.lock(pubKey, lockAttestation)
-	attLock.Lock()
-	defer attLock.Unlock()
-
-	propLock := km.lock(pubKey, lockProposal)
-	propLock.Lock()
-	defer propLock.Unlock()
-
-	return km.slashingProtector.BumpSlashingProtection(pubKey)
 }
