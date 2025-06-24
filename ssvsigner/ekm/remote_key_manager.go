@@ -518,14 +518,14 @@ func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {
 	return km.getOperatorId()
 }
 
-type lockOperation string
+type lockOperation int
 
 const (
-	lockAttestation                    lockOperation = "attestation"
-	lockProposal                       lockOperation = "proposal"
-	lockSyncCommittee                  lockOperation = "sync_committee"
-	lockSyncCommitteeSelectionData     lockOperation = "sync_committee_selection_data"
-	lockSyncCommitteeSelectionAndProof lockOperation = "sync_committee_selection_and_proof"
+	lockAttestation lockOperation = iota
+	lockProposal
+	lockSyncCommittee
+	lockSyncCommitteeSelectionData
+	lockSyncCommitteeSelectionAndProof
 )
 
 type signKey struct {
