@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/assert"
@@ -1153,6 +1154,104 @@ func TestCollector_saveLateValidatorToCommiteeLinks(t *testing.T) {
 		require.Equal(t, zap.String("committee_id", hex.EncodeToString(committeeID[:])), entry.Context[3])
 	})
 
+}
+
+func TestCollector_lateMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	vstore := registrystoragemocks.NewMockValidatorStore(ctrl)
+	dutyStore := new(mockDutyTraceStore)
+
+	t.Run("late message in flight", func(t *testing.T) {
+		core, logs := observer.New(zap.DebugLevel)
+		logger := zap.New(core)
+		collector := New(t.Context(), logger, vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+
+		msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
+
+		msg := &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.MessageID{1},
+			},
+			Body: &specqbft.Message{
+				Height:     1,
+				MsgType:    specqbft.RoundChangeMsgType,
+				Identifier: msgID[:],
+			},
+		}
+
+		var committeeID spectypes.CommitteeID
+		copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
+		collector.inFlightCommittee.Set(committeeID, struct{}{})
+		collector.lastEvictedSlot.Store(uint64(1))
+
+		go func() {
+			time.Sleep(time.Millisecond * 100)
+			collector.inFlightCommittee.Delete(committeeID)
+		}()
+
+		dutyStore.err = errors.New("error")
+		collector.collectLateMessage(t.Context(), msg, nil)
+
+		require.Equal(t, 1, len(logs.All()))
+		entry := logs.All()[0]
+		require.Equal(t, "collect late message", entry.Message)
+		err := entry.Context[0].Interface.(error)
+		require.ErrorIs(t, err, dutyStore.err)
+	})
+
+	t.Run("late message in flight exhausted retries", func(t *testing.T) {
+		core, logs := observer.New(zap.DebugLevel)
+		logger := zap.New(core)
+		collector := New(t.Context(), logger, vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+
+		msgID := spectypes.NewMsgID(spectypes.DomainType{1}, []byte{1}, spectypes.RoleCommittee)
+
+		msg := &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.MessageID{1},
+			},
+			Body: &specqbft.Message{
+				Height:     1,
+				MsgType:    specqbft.RoundChangeMsgType,
+				Identifier: msgID[:],
+			},
+		}
+
+		var committeeID spectypes.CommitteeID
+		copy(committeeID[:], msgID.GetDutyExecutorID()[16:])
+		collector.inFlightCommittee.Set(committeeID, struct{}{})
+		collector.lastEvictedSlot.Store(uint64(1))
+		collector.collectLateMessage(t.Context(), msg, nil)
+
+		require.Equal(t, 2, len(logs.All()))
+
+		entry1 := logs.All()[0]
+		require.Equal(t, "exhausted retries for late message", entry1.Message)
+		require.Equal(t, zap.Int("tries", 3), entry1.Context[1])
+
+		entry2 := logs.All()[1]
+		require.Equal(t, "collect late message", entry2.Message)
+		require.Equal(t, zap.Error(errors.New("in flight")), entry2.Context[0])
+	})
+
+	t.Run("success", func(t *testing.T) {
+		core, logs := observer.New(zap.DebugLevel)
+		logger := zap.New(core)
+		collector := New(t.Context(), logger, vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+
+		msg := &queue.SSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.MessageID{1},
+			},
+		}
+
+		collector.collectLateMessage(t.Context(), msg, nil)
+
+		require.Equal(t, 0, len(logs.All()))
+	})
 }
 
 func TestEvict(t *testing.T) {
