@@ -299,6 +299,11 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.Attestation
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
+	return s.getHighestAttestation(pubKey)
+}
+
+// getHighestAttestation retrieves the highest attestation data for the given public key.
+func (s *storage) getHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
 	if pubKey == nil {
 		return nil, false, errors.New("public key could not be nil")
 	}
@@ -356,6 +361,11 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, err
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
+	return s.getHighestProposal(pubKey)
+}
+
+// getHighestProposal retrieves the highest proposal slot for the given public key.
+func (s *storage) getHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
 	if pubKey == nil {
 		return 0, false, errors.New("public key could not be nil")
 	}
@@ -467,9 +477,6 @@ type SlashingProtectionArchive struct {
 // TODO(SSV-15): This method implements a temporary solution for audit finding SSV-15
 // to preserve slashing protection across validator re-registration cycles where share keys change.
 func (s *storage) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	if validatorPubKey == nil {
 		return fmt.Errorf("validator public key must not be nil")
 	}
@@ -477,13 +484,16 @@ func (s *storage) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey 
 		return fmt.Errorf("share public key must not be nil")
 	}
 
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	// Retrieve current slashing protection data for the share
-	highestAtt, foundAtt, err := s.RetrieveHighestAttestation(sharePubKey)
+	highestAtt, foundAtt, err := s.getHighestAttestation(sharePubKey)
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	highestProp, foundProp, err := s.RetrieveHighestProposal(sharePubKey)
+	highestProp, foundProp, err := s.getHighestProposal(sharePubKey)
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest proposal: %w", err)
 	}
@@ -506,7 +516,7 @@ func (s *storage) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey 
 	}
 
 	// Check if we already have archived data and merge if needed
-	existing, found, err := s.RetrieveArchivedSlashingProtection(validatorPubKey)
+	existing, found, err := s.getArchivedSlashingProtection(validatorPubKey)
 	if err != nil {
 		return fmt.Errorf("could not check existing archive: %w", err)
 	}
@@ -540,6 +550,11 @@ func (s *storage) RetrieveArchivedSlashingProtection(validatorPubKey []byte) (*S
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
+	return s.getArchivedSlashingProtection(validatorPubKey)
+}
+
+// getArchivedSlashingProtection retrieves archived slashing protection data for a validator.
+func (s *storage) getArchivedSlashingProtection(validatorPubKey []byte) (*SlashingProtectionArchive, bool, error) {
 	if validatorPubKey == nil {
 		return nil, false, fmt.Errorf("validator public key must not be nil")
 	}
