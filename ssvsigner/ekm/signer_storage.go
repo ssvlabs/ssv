@@ -76,8 +76,9 @@ type SlashingStoreTxn interface {
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 
+	// TODO: support txn, refactor other related methods to use it
 	// ArchiveSlashingProtection saves slashing protection data for a validator public key.
-	ArchiveSlashingProtection(r basedb.Reader, validatorPubKey []byte, sharePubKey []byte) error
+	ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error
 	// RetrieveArchivedSlashingProtection retrieves archived slashing protection data for a validator.
 	RetrieveArchivedSlashingProtection(validatorPubKey []byte) (*SlashingProtectionArchive, bool, error)
 
@@ -513,7 +514,7 @@ type SlashingProtectionArchive struct {
 //
 // TODO(SSV-15): This method implements a temporary solution for audit finding SSV-15
 // to preserve slashing protection across validator re-registration cycles where share keys change.
-func (s *storage) ArchiveSlashingProtection(r basedb.Reader, validatorPubKey []byte, sharePubKey []byte) error {
+func (s *storage) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
 	if validatorPubKey == nil {
 		return fmt.Errorf("validator public key must not be nil")
 	}
@@ -525,12 +526,12 @@ func (s *storage) ArchiveSlashingProtection(r basedb.Reader, validatorPubKey []b
 	defer s.lock.Unlock()
 
 	// Retrieve current slashing protection data for the share
-	highestAtt, foundAtt, err := s.getHighestAttestation(r, sharePubKey)
+	highestAtt, foundAtt, err := s.getHighestAttestation(nil, sharePubKey)
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	highestProp, foundProp, err := s.getHighestProposal(r, sharePubKey)
+	highestProp, foundProp, err := s.getHighestProposal(nil, sharePubKey)
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest proposal: %w", err)
 	}

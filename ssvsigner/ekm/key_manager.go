@@ -28,27 +28,12 @@ func (e ShareDecryptionError) Unwrap() error {
 // KeyManager is the main interface for managing validator shares and performing slashing protection.
 // It embeds BeaconSigner (for signing beacon messages and checking whether attestation or beacon block are slashable)
 // and slashingProtector (for slashing checks and updates).
-//
-// TODO(SSV-15): This interface includes temporary methods (ArchiveSlashingProtection, ApplyArchivedSlashingProtection)
-// to work around an architectural issue where validator share regeneration produces new public keys,
-// making existing slashing protection data (keyed by share pubkey) inaccessible upon re-registration.
-//
-// The current workaround archives slashing protection by validator pubkey during removal and
-// restores it during re-addition. This addresses an edge case where a majority fork (like Holesky)
-// could lead to slashing if validators are removed and re-added.
-//
-// Long-term solutions under consideration:
-// 1. Deterministic share generation based on validator key
-// 2. Validator-centric slashing protection storage (align with EIP-3076)
-// 3. Consistent key derivation scheme for share keys
-//
-// These temporary methods should be removed once a proper architectural solution is implemented.
 type KeyManager interface {
 	BeaconSigner
 	BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
-	// Implementations should always call BumpSlashingProtection during this process.
+	// Implementations should always be called BumpSlashingProtection during this process.
 	// It ensures slashing protection records (attestation and proposal) are present and up to date,
 	// updating them only if they are missing or fall below a minimal safe threshold.
 	// This prevents the validator from signing messages that could be considered slashable
@@ -58,24 +43,8 @@ type KeyManager interface {
 	// RemoveShare unregisters a validator share from the key manager and deletes its associated
 	// slashing protection records (attestation and proposal) from the store.
 	// Implementations are expected to perform this cleanup to prevent stale protection data
-	// from persisting after the validator is no longer active, and to support safe re-adding later.
+	// from persisting after the validator is no longer active and to support safe re-adding later.
 	RemoveShare(ctx context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error
-
-	// ArchiveSlashingProtection preserves slashing protection data keyed by validator public key.
-	// This method is part of the temporary solution for audit finding SSV-15.
-	// It should be called before removing a validator share to maintain slashing protection
-	// history when the validator is subsequently re-added with regenerated shares.
-	//
-	// TODO(SSV-15): Remove this method once proper architectural solution is implemented.
-	ArchiveSlashingProtection(r basedb.Reader, validatorPubKey []byte, sharePubKey []byte) error
-
-	// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
-	// This method is part of the temporary solution for audit finding SSV-15.
-	// It should be called when adding a share to ensure slashing protection continuity
-	// across validator re-registration cycles. It uses maximum value logic to prevent regression.
-	//
-	// TODO(SSV-15): Remove this method once proper architectural solution is implemented.
-	ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error
 }
 
 // BeaconSigner provides methods for signing beacon-chain objects.
@@ -94,8 +63,8 @@ type BeaconSigner interface {
 		slot phase0.Slot,
 		signatureDomain phase0.DomainType,
 	) (spectypes.Signature, phase0.Root, error)
-	// IsAttestationSlashable returns error if attestation is slashable
+	// IsAttestationSlashable returns an error if attestation is slashable
 	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
-	// IsBeaconBlockSlashable returns error if the given block is slashable
+	// IsBeaconBlockSlashable returns an error if the given block is slashable
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 }
