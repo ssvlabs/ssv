@@ -6,6 +6,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 type ShareDecryptionError struct {
@@ -43,7 +45,7 @@ func (e ShareDecryptionError) Unwrap() error {
 // These temporary methods should be removed once a proper architectural solution is implemented.
 type KeyManager interface {
 	BeaconSigner
-	slashingProtector
+	BumpSlashingProtection(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 
 	// AddShare registers a validator share (public and encrypted private key) with the key manager.
 	// Implementations should always call BumpSlashingProtection during this process.
@@ -51,14 +53,14 @@ type KeyManager interface {
 	// updating them only if they are missing or fall below a minimal safe threshold.
 	// This prevents the validator from signing messages that could be considered slashable
 	// due to absent or outdated protection data.
-	AddShare(ctx context.Context, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
+	AddShare(ctx context.Context, txn basedb.Txn, encryptedPrivKey []byte, pubKey phase0.BLSPubKey) error
 
 	// RemoveShare unregisters a validator share from the key manager.
 	// Implementations should consider preserving slashing protection records
 	// (attestation and proposal) to prevent slashing if the share is re-added later.
 	// This is especially important for local key managers where the local database
 	// is the only safeguard against double signing.
-	RemoveShare(ctx context.Context, pubKey phase0.BLSPubKey) error
+	RemoveShare(ctx context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error
 
 	// ArchiveSlashingProtection preserves slashing protection data keyed by validator public key.
 	// This method is part of the temporary solution for audit finding SSV-15.
@@ -66,7 +68,7 @@ type KeyManager interface {
 	// history when the validator is subsequently re-added with regenerated shares.
 	//
 	// TODO(SSV-15): Remove this method once proper architectural solution is implemented.
-	ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error
+	ArchiveSlashingProtection(r basedb.Reader, validatorPubKey []byte, sharePubKey []byte) error
 
 	// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
 	// This method is part of the temporary solution for audit finding SSV-15.

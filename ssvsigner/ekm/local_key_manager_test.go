@@ -29,9 +29,7 @@ import (
 
 const (
 	sk1Str = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	pk1Str = "a8cb269bd7741740cfe90de2f8db6ea35a9da443385155da0fa2f621ba80e5ac14b5c8f65d23fd9ccc170cc85f29e27d"
 	sk2Str = "66dd37ae71b35c81022cdde98370e881cff896b689fa9136917f45afce43fd3b"
-	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
 func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, *networkconfig.NetworkConfig) {
@@ -63,8 +61,8 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig, operator
 	encryptedSK2, err := operatorPrivateKey.Public().Encrypt([]byte(sk2.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
-	require.NoError(t, km.AddShare(t.Context(), encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
 
 	return km, network
 }
@@ -148,7 +146,7 @@ func TestSignBeaconObject(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
 	currentSlot := network.Beacon.EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
@@ -337,8 +335,8 @@ func TestRemoveShare(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(pk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
-		require.NoError(t, km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.RemoveShare(t.Context(), nil, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
 	})
 
 	t.Run("key doesn't exist", func(t *testing.T) {
@@ -347,7 +345,7 @@ func TestRemoveShare(t *testing.T) {
 		pk := &bls.SecretKey{}
 		pk.SetByCSPRNG()
 
-		err := km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
+		err := km.RemoveShare(t.Context(), nil, phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
 		require.NoError(t, err)
 	})
 }
@@ -359,7 +357,7 @@ func TestEkmListAccounts(t *testing.T) {
 	require.NoError(t, err)
 
 	km, _ := testKeyManager(t, nil, operatorPrivateKey)
-	accounts, err := km.(*LocalKeyManager).ListAccounts()
+	accounts, err := km.(*LocalKeyManager).slashingProtector.ListAccounts()
 	require.NoError(t, err)
 	require.Len(t, accounts, 2)
 }

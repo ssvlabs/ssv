@@ -56,15 +56,28 @@ type Storage interface {
 	registry.RegistryStore
 	core.Storage
 	core.SlashingStore
+	SlashingStoreTxn
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
+
 	SetEncryptionKey(hexKey string) error
+	BeaconNetwork() beacon.BeaconNetwork
+}
+
+// SlashingStoreTxn represents the behavior of the slashing store with transaction support
+type SlashingStoreTxn interface {
+	SaveHighestAttestationTxn(rw basedb.ReadWriter, pubKey []byte, attestation *phase0.AttestationData) error
+	RetrieveHighestAttestationTxn(r basedb.Reader, pubKey []byte) (*phase0.AttestationData, bool, error)
+	SaveHighestProposalTxn(rw basedb.ReadWriter, pubKey []byte, slot phase0.Slot) error
+	RetrieveHighestProposalTxn(r basedb.Reader, pubKey []byte) (phase0.Slot, bool, error)
+	RemoveHighestAttestationTxn(rw basedb.ReadWriter, pubKey []byte) error
+	RemoveHighestProposalTxn(rw basedb.ReadWriter, pubKey []byte) error
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 
 	// ArchiveSlashingProtection saves slashing protection data for a validator public key.
-	ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error
+	ArchiveSlashingProtection(r basedb.Reader, validatorPubKey []byte, sharePubKey []byte) error
 	// RetrieveArchivedSlashingProtection retrieves archived slashing protection data for a validator.
 	RetrieveArchivedSlashingProtection(validatorPubKey []byte) (*SlashingProtectionArchive, bool, error)
 
@@ -274,6 +287,10 @@ func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {
 // SaveHighestAttestation persists the highest known AttestationData for the
 // given public key. Used to ensure we do not sign slashable attestations.
 func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.AttestationData) error {
+	return s.SaveHighestAttestationTxn(nil, pubKey, attestation)
+}
+
+func (s *storage) SaveHighestAttestationTxn(rw basedb.ReadWriter, pubKey []byte, attestation *phase0.AttestationData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -290,26 +307,30 @@ func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.Atte
 		return fmt.Errorf("marshal attestation: %w", err)
 	}
 
-	return s.db.Set(s.objPrefix(highestAttPrefix), pubKey, data)
+	return s.db.Using(rw).Set(s.objPrefix(highestAttPrefix), pubKey, data)
 }
 
 // RetrieveHighestAttestation fetches the stored highest attestation data.
 // Returns attestation data, whether it was found, and error.
 func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+	return s.RetrieveHighestAttestationTxn(nil, pubKey)
+}
+
+func (s *storage) RetrieveHighestAttestationTxn(r basedb.Reader, pubKey []byte) (*phase0.AttestationData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.getHighestAttestation(pubKey)
+	return s.getHighestAttestation(r, pubKey)
 }
 
 // getHighestAttestation retrieves the highest attestation data for the given public key.
-func (s *storage) getHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+func (s *storage) getHighestAttestation(r basedb.Reader, pubKey []byte) (*phase0.AttestationData, bool, error) {
 	if pubKey == nil {
 		return nil, false, errors.New("public key could not be nil")
 	}
 
 	// get wallet bytes
-	obj, found, err := s.db.Get(s.objPrefix(highestAttPrefix), pubKey)
+	obj, found, err := s.db.UsingReader(r).Get(s.objPrefix(highestAttPrefix), pubKey)
 	if err != nil {
 		return nil, found, fmt.Errorf("could not get highest attestation from db: %w", err)
 	}
@@ -329,15 +350,23 @@ func (s *storage) getHighestAttestation(pubKey []byte) (*phase0.AttestationData,
 }
 
 func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
+	return s.RemoveHighestAttestationTxn(nil, pubKey)
+}
+
+func (s *storage) RemoveHighestAttestationTxn(rw basedb.ReadWriter, pubKey []byte) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.db.Delete(s.objPrefix(highestAttPrefix), pubKey)
+	return s.db.Using(rw).Delete(s.objPrefix(highestAttPrefix), pubKey)
 }
 
 // SaveHighestProposal stores the highest known proposal slot for the given
 // public key to prevent slashable block proposals.
 func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
+	return s.SaveHighestProposalTxn(nil, pubKey, slot)
+}
+
+func (s *storage) SaveHighestProposalTxn(rw basedb.ReadWriter, pubKey []byte, slot phase0.Slot) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -352,26 +381,30 @@ func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	var data []byte
 	data = ssz.MarshalUint64(data, uint64(slot))
 
-	return s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, data)
+	return s.db.Using(rw).Set(s.objPrefix(highestProposalPrefix), pubKey, data)
 }
 
 // RetrieveHighestProposal loads the highest proposal slot from storage.
 // Returns attestation data, whether it was found, and error.
 func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+	return s.RetrieveHighestProposalTxn(nil, pubKey)
+}
+
+func (s *storage) RetrieveHighestProposalTxn(r basedb.Reader, pubKey []byte) (phase0.Slot, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.getHighestProposal(pubKey)
+	return s.getHighestProposal(r, pubKey)
 }
 
 // getHighestProposal retrieves the highest proposal slot for the given public key.
-func (s *storage) getHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+func (s *storage) getHighestProposal(r basedb.Reader, pubKey []byte) (phase0.Slot, bool, error) {
 	if pubKey == nil {
 		return 0, false, errors.New("public key could not be nil")
 	}
 
 	// get wallet bytes
-	obj, found, err := s.db.Get(s.objPrefix(highestProposalPrefix), pubKey)
+	obj, found, err := s.db.UsingReader(r).Get(s.objPrefix(highestProposalPrefix), pubKey)
 	if err != nil {
 		return 0, found, fmt.Errorf("could not get highest proposal from db: %w", err)
 	}
@@ -388,10 +421,14 @@ func (s *storage) getHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
 }
 
 func (s *storage) RemoveHighestProposal(pubKey []byte) error {
+	return s.RemoveHighestProposalTxn(nil, pubKey)
+}
+
+func (s *storage) RemoveHighestProposalTxn(rw basedb.ReadWriter, pubKey []byte) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.db.Delete(s.objPrefix(highestProposalPrefix), pubKey)
+	return s.db.Using(rw).Delete(s.objPrefix(highestProposalPrefix), pubKey)
 }
 
 func (s *storage) decryptData(objectValue []byte) ([]byte, error) {
@@ -476,7 +513,7 @@ type SlashingProtectionArchive struct {
 //
 // TODO(SSV-15): This method implements a temporary solution for audit finding SSV-15
 // to preserve slashing protection across validator re-registration cycles where share keys change.
-func (s *storage) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
+func (s *storage) ArchiveSlashingProtection(r basedb.Reader, validatorPubKey []byte, sharePubKey []byte) error {
 	if validatorPubKey == nil {
 		return fmt.Errorf("validator public key must not be nil")
 	}
@@ -488,12 +525,12 @@ func (s *storage) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey 
 	defer s.lock.Unlock()
 
 	// Retrieve current slashing protection data for the share
-	highestAtt, foundAtt, err := s.getHighestAttestation(sharePubKey)
+	highestAtt, foundAtt, err := s.getHighestAttestation(r, sharePubKey)
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	highestProp, foundProp, err := s.getHighestProposal(sharePubKey)
+	highestProp, foundProp, err := s.getHighestProposal(r, sharePubKey)
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest proposal: %w", err)
 	}
