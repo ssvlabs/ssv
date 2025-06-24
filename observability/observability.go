@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/prometheus/common/model"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
@@ -24,6 +25,24 @@ var (
 	defaultMeterProvider  = metric_noop.NewMeterProvider()
 	defaultTracerProvider = trace_noop.NewTracerProvider()
 )
+
+func init() {
+	// Force Prometheus to use legacy metric name validation scheme.
+	//
+	// Starting from github.com/prometheus/client_golang v1.21.1,
+	// the default NameValidationScheme changed to UTF8Validation,
+	// which allows non-traditional delimiters like dots (.) in metric names.
+	// This change was adopted in OpenTelemetry-Go v1.36.0:
+	// https://github.com/open-telemetry/opentelemetry-go/releases/tag/v1.36.0
+	//
+	// However, systems like Grafana Mimir currently do not support UTF-8 metric names
+	// and expect underscores (_) as delimiters:
+	// https://github.com/grafana/mimir/issues/10283
+	//
+	// Reverting to LegacyValidation ensures compatibility across the observability stack.
+	// Suggestion: keep this until model.NameValidationScheme setting is deprecated
+	model.NameValidationScheme = model.LegacyValidation
+}
 
 func Initialize(ctx context.Context, appName, appVersion string, l *zap.Logger, options ...Option) (shutdown func(context.Context) error, err error) {
 	var shutdownFuncs []func(context.Context) error
