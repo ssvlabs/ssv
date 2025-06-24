@@ -92,7 +92,8 @@ func NewCommonOptions(
 	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
 	// on the current epoch as compared to when this transition is supposed to happen.
 	if result.GasLimit == 0 {
-		defaultGasLimit := uint64(spectypes.DefaultGasLimit)
+		defaultGasLimit := uint64(30_000_000)
+		//defaultGasLimit := uint64(spectypes.DefaultGasLimit)
 		if result.NetworkConfig.EstimatedCurrentEpoch() < result.NetworkConfig.GetGasLimit36Epoch() {
 			const oldDefaultGasLimit = uint64(30_000_000)
 			defaultGasLimit = oldDefaultGasLimit
