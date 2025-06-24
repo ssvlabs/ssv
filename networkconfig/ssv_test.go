@@ -20,7 +20,7 @@ import (
 
 func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	// Create a sample SSVConfig
-	originalConfig := &SSVConfig{
+	originalConfig := SSVConfig{
 		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 		RegistrySyncOffset:   big.NewInt(123456),
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -29,7 +29,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	}
 
 	// Marshal to JSON
-	jsonBytes, err := json.Marshal(originalConfig)
+	jsonBytes, err := json.Marshal(&originalConfig)
 	require.NoError(t, err)
 
 	// Unmarshal from JSON
@@ -38,7 +38,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	// Marshal again after unmarshaling
-	remarshaledBytes, err := json.Marshal(unmarshaledConfig)
+	remarshaledBytes, err := json.Marshal(&unmarshaledConfig)
 	require.NoError(t, err)
 
 	// Compare the original and remarshaled JSON bytes
@@ -54,7 +54,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 
 func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	// Create a sample SSVConfig
-	originalConfig := &SSVConfig{
+	originalConfig := SSVConfig{
 		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 		RegistrySyncOffset:   big.NewInt(123456),
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -63,7 +63,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	}
 
 	// Marshal to YAML
-	yamlBytes, err := yaml.Marshal(originalConfig)
+	yamlBytes, err := yaml.Marshal(&originalConfig)
 	require.NoError(t, err)
 
 	// Unmarshal from YAML
@@ -72,7 +72,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	// Marshal again after unmarshaling
-	remarshaledBytes, err := yaml.Marshal(unmarshaledConfig)
+	remarshaledBytes, err := yaml.Marshal(&unmarshaledConfig)
 	require.NoError(t, err)
 
 	// Compare the original and unmarshaled structs
@@ -119,7 +119,7 @@ func hashStructJSON(v interface{}) (string, error) {
 func TestFieldPreservation(t *testing.T) {
 	t.Run("test all fields are present after marshaling", func(t *testing.T) {
 		// Get all field names from SSVConfig
-		configType := reflect.TypeOf(&SSVConfig{})
+		configType := reflect.TypeOf(SSVConfig{})
 		marshaledType := reflect.TypeOf(marshaledConfig{})
 
 		var configFields, marshaledFields []string
@@ -142,7 +142,7 @@ func TestFieldPreservation(t *testing.T) {
 
 	t.Run("hash comparison JSON", func(t *testing.T) {
 		// Create a sample config
-		config := &SSVConfig{
+		config := SSVConfig{
 			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 			RegistrySyncOffset:   big.NewInt(123456),
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -151,7 +151,7 @@ func TestFieldPreservation(t *testing.T) {
 		}
 
 		// Marshal and unmarshal to test preservation
-		jsonBytes, err := json.Marshal(config)
+		jsonBytes, err := json.Marshal(&config)
 		require.NoError(t, err)
 
 		var unmarshaled SSVConfig
@@ -159,10 +159,10 @@ func TestFieldPreservation(t *testing.T) {
 		require.NoError(t, err)
 
 		// Hash the original and unmarshaled struct
-		originalHash, err := hashStructJSON(config)
+		originalHash, err := hashStructJSON(&config)
 		require.NoError(t, err)
 
-		unmarshaledHash, err := hashStructJSON(unmarshaled)
+		unmarshaledHash, err := hashStructJSON(&unmarshaled)
 		require.NoError(t, err)
 
 		// The hashes should match if all fields are preserved
@@ -176,7 +176,7 @@ func TestFieldPreservation(t *testing.T) {
 
 	t.Run("hash comparison YAML", func(t *testing.T) {
 		// Create a sample config
-		config := &SSVConfig{
+		config := SSVConfig{
 			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 			RegistrySyncOffset:   big.NewInt(123456),
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -185,7 +185,7 @@ func TestFieldPreservation(t *testing.T) {
 		}
 
 		// Marshal and unmarshal to test preservation
-		yamlBytes, err := yaml.Marshal(config)
+		yamlBytes, err := yaml.Marshal(&config)
 		require.NoError(t, err)
 
 		var unmarshaled SSVConfig
@@ -193,10 +193,10 @@ func TestFieldPreservation(t *testing.T) {
 		require.NoError(t, err)
 
 		// For YAML, convert to JSON for consistent hashing
-		originalHash, err := hashStructJSON(config)
+		originalHash, err := hashStructJSON(&config)
 		require.NoError(t, err)
 
-		unmarshaledHash, err := hashStructJSON(unmarshaled)
+		unmarshaledHash, err := hashStructJSON(&unmarshaled)
 		require.NoError(t, err)
 
 		// The hashes should match if all fields are preserved

@@ -64,8 +64,8 @@ type marshaledConfig struct {
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
-func (s *SSVConfig) marshal() marshaledConfig {
-	aux := marshaledConfig{
+func (s *SSVConfig) marshal() *marshaledConfig {
+	return &marshaledConfig{
 		DomainType:              s.DomainType[:],
 		RegistrySyncOffset:      s.RegistrySyncOffset,
 		RegistryContractAddr:    s.RegistryContractAddr,
@@ -73,8 +73,6 @@ func (s *SSVConfig) marshal() marshaledConfig {
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
 	}
-
-	return aux
 }
 
 func (s *SSVConfig) MarshalJSON() ([]byte, error) {
