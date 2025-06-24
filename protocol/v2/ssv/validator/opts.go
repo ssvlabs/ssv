@@ -19,6 +19,9 @@ import (
 
 const (
 	DefaultQueueSize = 32
+
+	DefaultGasLimit    = uint64(36_000_000)
+	DefaultGasLimitOld = uint64(30_000_000)
 )
 
 // Options represents validator-specific options.
@@ -92,15 +95,9 @@ func NewCommonOptions(
 	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
 	// on the current epoch as compared to when this transition is supposed to happen.
 	if result.GasLimit == 0 {
-		// TODO when:
-		// - we've fixed spec-tests (in ssv-spec repo)
-		// - https://github.com/ssvlabs/ssv-spec/pull/553 is merged
-		// we can switch to using spectypes.DefaultGasLimit value instead of this hardcoded constant
-		defaultGasLimit := uint64(36_000_000)
-		//defaultGasLimit := uint64(spectypes.DefaultGasLimit)
+		defaultGasLimit := DefaultGasLimit
 		if result.NetworkConfig.EstimatedCurrentEpoch() < result.NetworkConfig.GetGasLimit36Epoch() {
-			const oldDefaultGasLimit = uint64(30_000_000)
-			defaultGasLimit = oldDefaultGasLimit
+			defaultGasLimit = DefaultGasLimitOld
 		}
 		result.GasLimit = defaultGasLimit
 	}
