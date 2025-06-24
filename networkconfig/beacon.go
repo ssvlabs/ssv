@@ -37,7 +37,6 @@ type Beacon interface {
 	GetSyncCommitteeSize() uint64
 	GetGenesisValidatorsRoot() phase0.Root
 	GetNetworkName() string
-	GetGasLimit36Epoch() phase0.Epoch
 	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
 }
 
@@ -51,13 +50,10 @@ type BeaconConfig struct {
 	TargetAggregatorsPerSyncSubcommittee uint64
 	TargetAggregatorsPerCommittee        uint64
 	IntervalsPerSlot                     uint64
-	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
-	// to 36_000_000.
-	GasLimit36Epoch       phase0.Epoch
-	GenesisForkVersion    phase0.Version
-	GenesisTime           time.Time
-	GenesisValidatorsRoot phase0.Root
-	Forks                 map[spec.DataVersion]phase0.Fork
+	GenesisForkVersion                   phase0.Version
+	GenesisTime                          time.Time
+	GenesisValidatorsRoot                phase0.Root
+	Forks                                map[spec.DataVersion]phase0.Fork
 }
 
 func (b BeaconConfig) String() string {
@@ -196,10 +192,6 @@ func (b BeaconConfig) GetGenesisValidatorsRoot() phase0.Root {
 
 func (b BeaconConfig) GetNetworkName() string {
 	return b.NetworkName
-}
-
-func (b BeaconConfig) GetGasLimit36Epoch() phase0.Epoch {
-	return b.GasLimit36Epoch
 }
 
 func (b BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {

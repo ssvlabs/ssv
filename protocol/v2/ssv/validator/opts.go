@@ -89,17 +89,13 @@ func NewCommonOptions(
 		result.QueueSize = max(result.QueueSize, historySyncBatchSize*2)
 	}
 
+	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
+	// on the current epoch as compared to when this transition is supposed to happen.
 	if result.GasLimit == 0 {
-		// TODO: we probably want to define DefaultGasLimit36 const in spectypes package next to DefaultGasLimit,
-		// the question is whether 36_000_000 should override the current value of TODO (which is 30_000_000) or
-		// we should keep DefaultGasLimit defined as 30_000_000 while introducing new DefaultGasLimit36 = 36_000_000
-		// const instead.
-		// TODO: Note also, spec-tests rely on this value being set to 30_000_000 (for the runner under test),
-		// hence we'll need to address that as well for spec-tests to pass
 		defaultGasLimit := uint64(spectypes.DefaultGasLimit)
-		if result.NetworkConfig.EstimatedCurrentEpoch() >= result.NetworkConfig.GetGasLimit36Epoch() {
-			const DefaultGasLimit36 = uint64(36_000_000)
-			defaultGasLimit = DefaultGasLimit36
+		if result.NetworkConfig.EstimatedCurrentEpoch() < result.NetworkConfig.GetGasLimit36Epoch() {
+			const oldDefaultGasLimit = uint64(30_000_000)
+			defaultGasLimit = oldDefaultGasLimit
 		}
 		result.GasLimit = defaultGasLimit
 	}
