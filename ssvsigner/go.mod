@@ -17,6 +17,7 @@ require (
 	github.com/alecthomas/kong v1.8.1
 	github.com/attestantio/go-eth2-client v0.24.1-0.20250212100859-648471aad7cc
 	github.com/carlmjohnson/requests v0.24.3
+	github.com/docker/docker v28.0.1+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/ethereum/go-ethereum v1.14.8
 	github.com/fasthttp/router v1.5.4
@@ -64,7 +65,6 @@ require (
 	github.com/dgraph-io/badger/v4 v4.2.0 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/docker v28.0.1+incompatible // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.8.2 // indirect
@@ -126,9 +126,11 @@ require (
 	github.com/prometheus/common v0.63.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/prysmaticlabs/prysm/v4 v4.0.8 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
-	github.com/shirou/gopsutil/v4 v4.25.1 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.2 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
@@ -166,6 +168,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
+	golang.org/x/mod v0.24.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect

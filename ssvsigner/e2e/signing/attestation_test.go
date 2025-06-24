@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ssz "github.com/ferranbt/fastssz"
+	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/suite"
 
@@ -471,6 +473,140 @@ func (s *AttestationSlashingTestSuite) TestSSVSignerRestart() {
 		testSlot,
 		spectypes.DomainAttester,
 	)
+}
+
+// TestConcurrentSigningStress validates concurrent signing and signature consistency.
+// Tests multiple validators signing attestations in parallel and validates that all key managers
+// produce identical signatures for the same validator+attestation combination.
+func (s *AttestationSlashingTestSuite) TestConcurrentSigningStress() {
+	testCurrentEpoch := phase0.Epoch(4200)
+	s.GetEnv().SetTestCurrentEpoch(testCurrentEpoch)
+
+	ctx, cancel := context.WithTimeout(s.GetContext(), 120*time.Second)
+	defer cancel()
+
+	numValidators := 50
+	s.T().Logf("✍️ Setting up %d validators for stress test", numValidators)
+
+	validators := make([]*common.ValidatorKeyPair, numValidators)
+	for i := 0; i < numValidators; i++ {
+		validators[i] = s.AddValidator(ctx)
+		if (i+1)%10 == 0 {
+			s.T().Logf("✅ Added %d/%d validators", i+1, numValidators)
+		}
+	}
+
+	testEpoch := testCurrentEpoch + 10
+	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
+	domain, err := s.CalculateDomain(spectypes.DomainAttester, testEpoch)
+	s.Require().NoError(err)
+
+	attestations := make([]*phase0.AttestationData, numValidators)
+	for i := 0; i < numValidators; i++ {
+		attestations[i] = common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
+		attestations[i].Index = phase0.CommitteeIndex(i % 64)
+		attestations[i].BeaconBlockRoot = phase0.Root{byte(i % 256)}
+	}
+
+	// Store signatures from each key manager for comparison
+	type SignResult struct {
+		Signature spectypes.Signature
+		Root      phase0.Root
+		Error     error
+	}
+
+	allResults := make(map[string]map[phase0.BLSPubKey]SignResult) // keyManager -> map[pubKey]SignResult
+
+	keyManagers := []struct {
+		name     string
+		signFunc func(ctx context.Context, obj ssz.HashRoot, domain phase0.Domain, pubKey phase0.BLSPubKey, slot phase0.Slot, domainType phase0.DomainType) (spectypes.Signature, phase0.Root, error)
+	}{
+		{"LocalKeyManager", s.GetEnv().GetLocalKeyManager().SignBeaconObject},
+		{"RemoteKeyManager", s.GetEnv().GetRemoteKeyManager().SignBeaconObject},
+		{"Web3Signer", s.SignWeb3Signer},
+	}
+
+	for _, km := range keyManagers {
+		s.T().Logf("🧪 Testing %s with %d concurrent signings", km.name, numValidators)
+		startTime := time.Now()
+
+		p := pool.NewWithResults[*e2e.ConcurrentSignResult]().WithContext(ctx)
+
+		for i, validator := range validators {
+			idx := i
+			val := validator
+			p.Go(func(ctx context.Context) (*e2e.ConcurrentSignResult, error) {
+				sig, root, err := km.signFunc(ctx, attestations[idx], domain, val.BLSPubKey, testSlot, spectypes.DomainAttester)
+				return &e2e.ConcurrentSignResult{Sig: sig, Root: root, Err: err, ID: idx}, nil
+			})
+		}
+
+		results, err := p.Wait()
+		s.Require().NoError(err, "%s: Pool execution failed", km.name)
+
+		// Process results and map by validator public key
+		successCount := 0
+		kmResults := make(map[phase0.BLSPubKey]SignResult)
+
+		for _, result := range results {
+			validator := validators[result.ID]
+			kmResults[validator.BLSPubKey] = SignResult{
+				Signature: result.Sig,
+				Root:      result.Root,
+				Error:     result.Err,
+			}
+			if result.Err == nil {
+				successCount++
+			}
+		}
+
+		allResults[km.name] = kmResults
+
+		duration := time.Since(startTime)
+		avgDivisor := successCount
+		if avgDivisor == 0 {
+			avgDivisor = 1
+		}
+		s.T().Logf("⏱️ %s: %d/%d successful in %v (avg: %v/sig)",
+			km.name, successCount, numValidators, duration, duration/time.Duration(avgDivisor))
+
+		// All should succeed since different validators with different attestations
+		s.Require().Equal(numValidators, successCount, "%s: All should succeed with different validators", km.name)
+	}
+
+	// Compare signatures across key managers for each validator
+	s.T().Logf("🔄 Validating signature consistency across key managers")
+	localResults := allResults["LocalKeyManager"]
+	remoteResults := allResults["RemoteKeyManager"]
+	web3Results := allResults["Web3Signer"]
+
+	consistentSignatures := 0
+	for _, validator := range validators {
+		pubKey := validator.BLSPubKey
+
+		s.Require().NoError(localResults[pubKey].Error, "LocalKeyManager should succeed")
+		s.Require().NoError(remoteResults[pubKey].Error, "RemoteKeyManager should succeed")
+		s.Require().NoError(web3Results[pubKey].Error, "Web3Signer should succeed")
+
+		// Signatures should be identical for same validator+attestation
+		s.Require().Equal(localResults[pubKey].Signature, remoteResults[pubKey].Signature,
+			"LocalKeyManager and RemoteKeyManager signatures should match")
+		s.Require().Equal(localResults[pubKey].Signature, web3Results[pubKey].Signature,
+			"LocalKeyManager and Web3Signer signatures should match")
+		s.Require().Equal(localResults[pubKey].Root, remoteResults[pubKey].Root,
+			"Signing roots should match")
+		s.Require().Equal(localResults[pubKey].Root, web3Results[pubKey].Root,
+			"Signing roots should match")
+
+		consistentSignatures++
+	}
+
+	s.T().Logf("✅ Signature consistency validated: %d/%d validators have identical signatures across all key managers",
+		consistentSignatures, numValidators)
+
+	s.Require().Equal(numValidators, consistentSignatures,
+		"Expected all %d validators to have consistent signatures across key managers, but only %d were consistent",
+		numValidators, consistentSignatures)
 }
 
 // TestAttestationSlashing runs the complete attestation slashing test suite
