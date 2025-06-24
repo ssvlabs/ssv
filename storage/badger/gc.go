@@ -1,4 +1,4 @@
-package kv
+package badger
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 )
 
 // periodicallyCollectGarbage runs a QuickGC cycle periodically.
-func (b *BadgerDB) periodicallyCollectGarbage(logger *zap.Logger, interval time.Duration) {
+func (b *DB) periodicallyCollectGarbage(interval time.Duration) {
 	defer b.wg.Done()
 	for {
 		select {
@@ -20,9 +20,9 @@ func (b *BadgerDB) periodicallyCollectGarbage(logger *zap.Logger, interval time.
 			start := time.Now()
 			err := b.QuickGC(context.Background())
 			if err != nil {
-				logger.Error("periodic GC cycle failed", zap.Error(err))
+				b.logger.Error("periodic GC cycle failed", zap.Error(err))
 			} else {
-				logger.Debug("periodic GC cycle completed", zap.Duration("took", time.Since(start)))
+				b.logger.Debug("periodic GC cycle completed", zap.Duration("took", time.Since(start)))
 			}
 		}
 	}
@@ -30,7 +30,7 @@ func (b *BadgerDB) periodicallyCollectGarbage(logger *zap.Logger, interval time.
 
 // QuickGC runs a short garbage collection cycle to reclaim some unused disk space.
 // Designed to be called periodically while the database is being used.
-func (b *BadgerDB) QuickGC(ctx context.Context) error {
+func (b *DB) QuickGC(ctx context.Context) error {
 	b.gcMutex.Lock()
 	defer b.gcMutex.Unlock()
 
@@ -44,7 +44,7 @@ func (b *BadgerDB) QuickGC(ctx context.Context) error {
 
 // FullGC runs a long garbage collection cycle to reclaim (ideally) all unused disk space.
 // Designed to be called when the database is not being used.
-func (b *BadgerDB) FullGC(ctx context.Context) error {
+func (b *DB) FullGC(ctx context.Context) error {
 	b.gcMutex.Lock()
 	defer b.gcMutex.Unlock()
 

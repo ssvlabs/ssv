@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -42,23 +43,35 @@ type Options struct {
 	SubnetsIdx          peers.SubnetsIndex
 	HostAddress         string
 	HostDNS             string
-	NetworkConfig       networkconfig.NetworkConfig
+	SSVConfig           networkconfig.SSVConfig
 	DiscoveredPeersPool *ttl.Map[peer.ID, DiscoveredPeer]
 	TrimmedRecently     *ttl.Map[peer.ID, struct{}]
+}
+
+// Validate checks if the options are valid.
+func (o *Options) Validate() error {
+	if len(o.HostDNS) > 0 && len(o.HostAddress) > 0 {
+		return fmt.Errorf("only one of HostDNS or HostAddress may be set")
+	}
+	return nil
 }
 
 // Service is the interface for discovery
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
-	DeregisterSubnets(logger *zap.Logger, subnets ...uint64) (updated bool, err error)
-	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
-	PublishENR(logger *zap.Logger)
+	RegisterSubnets(subnets ...uint64) (updated bool, err error)
+	DeregisterSubnets(subnets ...uint64) (updated bool, err error)
+	Bootstrap(handler HandleNewPeer) error
+	PublishENR()
 }
 
 // NewService creates new discovery.Service
 func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service, error) {
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
+
 	if opts.DiscV5Opts == nil {
 		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}

@@ -21,7 +21,7 @@ func TestExecWithTimeout(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("ctx timed out", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 		defer cancel()
 
 		var started atomic.Bool
@@ -41,7 +41,7 @@ func TestExecWithTimeout(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("timed out", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := t.Context()
 
 		var started atomic.Bool
 

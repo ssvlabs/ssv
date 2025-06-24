@@ -12,18 +12,19 @@ package metadata
 import (
 	reflect "reflect"
 
-	types "github.com/ssvlabs/ssv-spec/types"
+	gomock "go.uber.org/mock/gomock"
+
 	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
+	types "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
-	gomock "go.uber.org/mock/gomock"
 )
 
 // MockshareStorage is a mock of shareStorage interface.
 type MockshareStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockshareStorageMockRecorder
+	isgomock struct{}
 }
 
 // MockshareStorageMockRecorder is the mock recorder for MockshareStorage.
@@ -44,14 +45,14 @@ func (m *MockshareStorage) EXPECT() *MockshareStorageMockRecorder {
 }
 
 // List mocks base method.
-func (m *MockshareStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types0.SSVShare {
+func (m *MockshareStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types.SSVShare {
 	m.ctrl.T.Helper()
 	varargs := []any{txn}
 	for _, a := range filters {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "List", varargs...)
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -63,7 +64,7 @@ func (mr *MockshareStorageMockRecorder) List(txn any, filters ...any) *gomock.Ca
 }
 
 // Range mocks base method.
-func (m *MockshareStorage) Range(txn basedb.Reader, fn func(*types0.SSVShare) bool) {
+func (m *MockshareStorage) Range(txn basedb.Reader, fn func(*types.SSVShare) bool) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Range", txn, fn)
 }
@@ -75,11 +76,12 @@ func (mr *MockshareStorageMockRecorder) Range(txn, fn any) *gomock.Call {
 }
 
 // UpdateValidatorsMetadata mocks base method.
-func (m *MockshareStorage) UpdateValidatorsMetadata(arg0 map[types.ValidatorPK]*beacon.ValidatorMetadata) error {
+func (m *MockshareStorage) UpdateValidatorsMetadata(arg0 beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(beacon.ValidatorMetadataMap)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateValidatorsMetadata indicates an expected call of UpdateValidatorsMetadata.
@@ -92,6 +94,7 @@ func (mr *MockshareStorageMockRecorder) UpdateValidatorsMetadata(arg0 any) *gomo
 type MockselfValidatorStore struct {
 	ctrl     *gomock.Controller
 	recorder *MockselfValidatorStoreMockRecorder
+	isgomock struct{}
 }
 
 // MockselfValidatorStoreMockRecorder is the mock recorder for MockselfValidatorStore.
@@ -112,10 +115,10 @@ func (m *MockselfValidatorStore) EXPECT() *MockselfValidatorStoreMockRecorder {
 }
 
 // SelfValidators mocks base method.
-func (m *MockselfValidatorStore) SelfValidators() []*types0.SSVShare {
+func (m *MockselfValidatorStore) SelfValidators() []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SelfValidators")
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 

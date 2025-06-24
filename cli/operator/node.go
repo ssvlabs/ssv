@@ -15,19 +15,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ethcommon "github.com/ethereum/go-ethereum/common"
+	cockroachdb "github.com/cockroachdb/pebble"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -66,9 +62,15 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+	badger "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
+	pebble "github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 )
@@ -95,9 +97,12 @@ type config struct {
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
 	KeyStore                     KeyStore                `yaml:"KeyStore"`
 	SSVSigner                    SSVSignerConfig         `yaml:"SSVSigner" env-prefix:"SSV_SIGNER_"`
-	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network" `
+	Graffiti                     string                  `yaml:"Graffiti" env:"GRAFFITI" env-description:"Custom graffiti for block proposals" env-default:"ssv.network"`
+	ProposerDelay                time.Duration           `yaml:"ProposerDelay" env:"PROPOSER_DELAY" env-description:"Duration to wait out before requesting Ethereum block to propose if this Operator is proposer-duty Leader (eg. 300ms). See https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration for detailed instructions on how to use it."`
+	AllowDangerousProposerDelay  bool                    `yaml:"AllowDangerousProposerDelay" env:"ALLOW_DANGEROUS_PROPOSER_DELAY" env-description:"Allow ProposerDelay values higher than 1s (dangerous, may cause missed block proposals)"`
 	OperatorPrivateKey           string                  `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key for contract event decryption"`
 	MetricsAPIPort               int                     `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port for metrics API server"`
+	EnableTraces                 bool                    `yaml:"EnableTraces" env:"ENABLE_TRACES" env-description:"Enable Open Telemetry traces"`
 	EnableProfile                bool                    `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"Enable Go profiling tools"`
 	NetworkPrivateKey            string                  `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"Private key for P2P network identity"`
 	WsAPIPort                    int                     `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port for WebSocket API server"`
@@ -127,10 +132,19 @@ var StartNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
+		var observabilityOptions []observability.Option
+		if cfg.MetricsAPIPort > 0 {
+			observabilityOptions = append(observabilityOptions, observability.WithMetrics())
+		}
+		if cfg.EnableTraces {
+			observabilityOptions = append(observabilityOptions, observability.WithTraces())
+		}
+
 		observabilityShutdown, err := observability.Initialize(
+			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
-			observability.WithMetrics())
+			observabilityOptions...)
 		if err != nil {
 			logger.Fatal("could not initialize observability configuration", zap.Error(err))
 		}
@@ -141,17 +155,45 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}()
 
-		networkConfig, err := setupSSVNetwork(logger)
+		ssvNetworkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
+
+		consensusClient, err := goclient.New(cmd.Context(), logger, cfg.ConsensusClient)
+		if err != nil {
+			logger.Fatal("failed to create beacon go-client", zap.Error(err),
+				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
+		}
+
+		networkConfig := networkconfig.NetworkConfig{
+			Name:         cfg.SSVOptions.NetworkName,
+			SSVConfig:    ssvNetworkConfig,
+			BeaconConfig: consensusClient.BeaconConfig(),
+		}
+
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig)
+
+		var db basedb.Database
+		switch cfg.DBOptions.Engine {
+		case "pebble":
+			logger.Info("using pebble db")
+			db, err = setupPebbleDB(logger, networkConfig)
+		case "badger":
+			logger.Info("using badger db")
+			db, err = setupBadgerDB(logger, networkConfig)
+		default:
+			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
+		}
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
+
+		if err := validateProposerDelayConfig(logger); err != nil {
+			logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
+		}
 
 		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
 		if err != nil {
@@ -190,7 +232,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
 			}
 
-			ssvSignerClient := ssvsigner.NewClient(
+			ssvSignerClient = ssvsigner.NewClient(
 				cfg.SSVSigner.Endpoint,
 				ssvSignerOptions...,
 			)
@@ -260,18 +302,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
-
-		slotTickerProvider := func() slotticker.SlotTicker {
-			return slotticker.New(logger, slotticker.Config{
-				SlotDuration: networkConfig.SlotDurationSec(),
-				GenesisTime:  networkConfig.GetGenesisTime(),
-			})
-		}
-
-		cfg.ConsensusClient.Context = cmd.Context()
-		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 		operatorDataStore := setupOperatorDataStore(logger, nodeStorage, operatorPubKeyBase64)
-		consensusClient := setupConsensusClient(logger, slotTickerProvider)
 
 		executionAddrList := strings.Split(cfg.ExecutionClient.Addr, ";") // TODO: Decide what symbol to use as a separator. Bootnodes are currently separated by ";". Deployment bot currently uses ",".
 		if len(executionAddrList) == 0 {
@@ -284,7 +315,7 @@ var StartNodeCmd = &cobra.Command{
 			ec, err := executionclient.New(
 				cmd.Context(),
 				executionAddrList[0],
-				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLogger(logger),
 				executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 				executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
@@ -302,7 +333,7 @@ var StartNodeCmd = &cobra.Command{
 			ec, err := executionclient.NewMulti(
 				cmd.Context(),
 				executionAddrList,
-				ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+				ssvNetworkConfig.RegistryContractAddr,
 				executionclient.WithLoggerMulti(logger),
 				executionclient.WithFollowDistanceMulti(executionclient.DefaultFollowDistance),
 				executionclient.WithConnectionTimeoutMulti(cfg.ExecutionClient.ConnectionTimeout),
@@ -322,12 +353,11 @@ var StartNodeCmd = &cobra.Command{
 
 		if usingSSVSigner {
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
+				cmd.Context(),
 				logger,
 				networkConfig,
 				ssvSignerClient,
-				consensusClient,
 				db,
-				networkConfig,
 				operatorDataStore.GetOperatorID,
 			)
 			if err != nil {
@@ -352,7 +382,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorDataStore.GetOperatorData().PublicKey)
 		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
-		cfg.P2pNetworkConfig.Network = networkConfig
+		cfg.P2pNetworkConfig.NetworkConfig = networkConfig
 
 		validatorsMap := validators.New(cmd.Context())
 
@@ -367,7 +397,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			consensusClient.ForkEpochElectra,
+			networkConfig.Forks[spec.DataVersionElectra].Epoch,
 			validation.WithLogger(logger),
 		)
 
@@ -380,7 +410,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
-		cfg.SSVOptions.Network = networkConfig
+		cfg.SSVOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
@@ -395,10 +425,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 
 		if cfg.WsAPIPort != 0 {
-			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
+			ws := exporterapi.NewWsServer(cmd.Context(), logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(networkConfig, logger, ws)
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, networkConfig.DomainType, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -416,36 +446,40 @@ var StartNodeCmd = &cobra.Command{
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			s := ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole)
+			s := ibftstorage.New(logger, cfg.SSVOptions.ValidatorOptions.DB, storageRole)
 			storageMap.Add(storageRole, s)
+		}
+
+		slotTickerProvider := func() slotticker.SlotTicker {
+			return slotticker.New(logger, slotticker.Config{
+				SlotDuration: networkConfig.SlotDuration,
+				GenesisTime:  networkConfig.GenesisTime,
+			})
 		}
 
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
 			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
-			threshold := cfg.SSVOptions.Network.Beacon.EstimatedCurrentSlot()
+			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
 			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Graffiti = []byte(cfg.Graffiti)
+		cfg.SSVOptions.ValidatorOptions.ProposerDelay = cfg.ProposerDelay
 		cfg.SSVOptions.ValidatorOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		fixedSubnets, err := networkcommons.FromString(cfg.P2pNetworkConfig.Subnets)
+		fixedSubnets, err := networkcommons.SubnetsFromString(cfg.P2pNetworkConfig.Subnets)
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
 		if cfg.SSVOptions.ValidatorOptions.Exporter {
-			fixedSubnets, err = networkcommons.FromString(networkcommons.AllSubnets)
-			if err != nil {
-				logger.Fatal("failed to parse all fixed subnets", zap.Error(err))
-			}
+			fixedSubnets = networkcommons.AllSubnets
 		}
 
 		metadataSyncer := metadata.NewSyncer(
 			logger,
 			nodeStorage.Shares(),
 			nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
-			networkConfig,
 			consensusClient,
 			fixedSubnets,
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
@@ -455,7 +489,7 @@ var StartNodeCmd = &cobra.Command{
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
-				Network:            networkConfig,
+				BeaconConfig:       networkConfig.BeaconConfig,
 				BeaconNode:         consensusClient,
 				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
 				SlotTickerProvider: slotTickerProvider,
@@ -531,12 +565,12 @@ var StartNodeCmd = &cobra.Command{
 			)
 			start := time.Now()
 			myValidators := nodeStorage.ValidatorStore().OperatorValidators(operatorDataStore.GetOperatorID())
-			mySubnets := make(networkcommons.Subnets, networkcommons.SubnetsCount)
+			mySubnets := networkcommons.Subnets{}
 			myActiveSubnets := 0
 			for _, v := range myValidators {
 				subnet := networkcommons.CommitteeSubnet(v.CommitteeID())
-				if mySubnets[subnet] == 0 {
-					mySubnets[subnet] = 1
+				if !mySubnets.IsSet(subnet) {
+					mySubnets.Set(subnet)
 					myActiveSubnets++
 				}
 			}
@@ -554,10 +588,10 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 				return validatorCtrl.GetValidatorStats()
 			}
-			if err := p2pNetwork.Setup(logger); err != nil {
+			if err := p2pNetwork.Setup(); err != nil {
 				logger.Fatal("failed to setup network", zap.Error(err))
 			}
-			if err := p2pNetwork.Start(logger); err != nil {
+			if err := p2pNetwork.Start(); err != nil {
 				logger.Fatal("failed to start network", zap.Error(err))
 			}
 		}
@@ -588,7 +622,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 			}()
 		}
-		if err := operatorNode.Start(logger); err != nil {
+		if err := operatorNode.Start(); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
@@ -691,6 +725,24 @@ func assertSigningConfig(logger *zap.Logger) (usingSSVSigner, usingKeystore, usi
 	return usingSSVSigner, usingKeystore, usingPrivKey
 }
 
+func validateProposerDelayConfig(logger *zap.Logger) error {
+	const maxSafeProposerDelay = 1000 * time.Millisecond
+
+	if cfg.ProposerDelay > maxSafeProposerDelay {
+		if !cfg.AllowDangerousProposerDelay {
+			return fmt.Errorf("ProposerDelay value %v exceeds maximum safe delay of %v. "+
+				"This may cause missed block proposals. "+
+				"If you understand the risks and want to proceed, set AllowDangerousProposerDelay to true or use the ALLOW_DANGEROUS_PROPOSER_DELAY environment variable",
+				cfg.ProposerDelay, maxSafeProposerDelay)
+		}
+		logger.Warn("Using dangerous ProposerDelay value that may cause missed block proposals",
+			zap.Duration("proposer_delay", cfg.ProposerDelay),
+			zap.Duration("max_safe_proposer_delay", maxSafeProposerDelay))
+	}
+
+	return nil
+}
+
 func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents, usingRemoteSigner bool) error {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
@@ -708,7 +760,6 @@ func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usi
 			return fmt.Errorf("incompatible config change: %w", err)
 		}
 	} else {
-
 		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
 			return fmt.Errorf("failed to store config: %w", err)
 		}
@@ -750,27 +801,60 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
-	db, err := kv.New(logger, cfg.DBOptions)
+func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*badger.DB, error) {
+	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to open db")
-	}
-	reopenDb := func() error {
-		if err := db.Close(); err != nil {
-			return errors.Wrap(err, "failed to close db")
-		}
-		db, err = kv.New(logger, cfg.DBOptions)
-		return errors.Wrap(err, "failed to reopen db")
+		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
 	migrationOpts := migrations.Options{
-		Db:            db,
-		DbPath:        cfg.DBOptions.Path,
-		NetworkConfig: networkConfig,
+		Db:           db,
+		DbPath:       cfg.DBOptions.Path,
+		BeaconConfig: networkConfig.BeaconConfig,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to run migrations")
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+	if applied == 0 {
+		return db, nil
+	}
+
+	// If migrations were applied, we run a full garbage collection cycle
+	// to reclaim any space that may have been freed up.
+	start := time.Now()
+
+	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
+	defer cancel()
+
+	logger.Debug("running full GC cycle...", fields.Duration(start))
+
+	if err := db.FullGC(ctx); err != nil {
+		return nil, fmt.Errorf("failed to collect garbage: %w", err)
+	}
+
+	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+
+	return db, nil
+}
+
+func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*pebble.DB, error) {
+	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
+
+	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open db: %w", err)
+	}
+
+	migrationOpts := migrations.Options{
+		Db:           db,
+		DbPath:       dbPath,
+		BeaconConfig: networkConfig.BeaconConfig,
+	}
+
+	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 	if applied == 0 {
 		return db, nil
@@ -781,21 +865,16 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv
 	// Close & reopen the database to trigger any unknown internal
 	// startup/shutdown procedures that the storage engine may have.
 	start := time.Now()
-	if err := reopenDb(); err != nil {
-		return nil, err
-	}
 
-	// Run a long garbage collection cycle with a timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
 	defer cancel()
+
+	logger.Debug("running full GC cycle...", fields.Duration(start))
+
 	if err := db.FullGC(ctx); err != nil {
-		return nil, errors.Wrap(err, "failed to collect garbage")
+		return nil, fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
-	// Close & reopen again.
-	if err := reopenDb(); err != nil {
-		return nil, err
-	}
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil
@@ -804,15 +883,15 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv
 func setupOperatorDataStore(
 	logger *zap.Logger,
 	nodeStorage operatorstorage.Storage,
-	pubKey string,
+	base64PubKey string,
 ) operatordatastore.OperatorDataStore {
-	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, []byte(pubKey))
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, base64PubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: []byte(pubKey),
+			PublicKey: base64PubKey,
 		}
 	}
 	if operatorData == nil {
@@ -895,30 +974,41 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 	return nil
 }
 
-func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
-	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
-	if err != nil {
-		return networkconfig.NetworkConfig{}, err
+func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
+	var ssvConfig networkconfig.SSVConfig
+
+	if cfg.SSVOptions.CustomNetwork != nil {
+		ssvConfig = *cfg.SSVOptions.CustomNetwork
+		logger.Info("using custom network config")
+	} else if cfg.SSVOptions.NetworkName != "" {
+		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
+		if err != nil {
+			return ssvConfig, err
+		}
+		ssvConfig = snc
+		logger.Info("found network config by name",
+			zap.String("name", cfg.SSVOptions.NetworkName),
+		)
 	}
 
 	if cfg.SSVOptions.CustomDomainType != "" {
 		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
-			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be a hex string")
+			return networkconfig.SSVConfig{}, errors.New("custom domain type must be a hex string")
 		}
 		domainBytes, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
-			return networkconfig.NetworkConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+			return networkconfig.SSVConfig{}, errors.Wrap(err, "failed to decode custom domain type")
 		}
 		if len(domainBytes) != 4 {
-			return networkconfig.NetworkConfig{}, errors.New("custom domain type must be 4 bytes")
+			return networkconfig.SSVConfig{}, errors.New("custom domain type must be 4 bytes")
 		}
 
 		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
 		postForkDomain := binary.BigEndian.Uint32(domainBytes) + 1
-		binary.BigEndian.PutUint32(networkConfig.DomainType[:], postForkDomain)
+		binary.BigEndian.PutUint32(ssvConfig.DomainType[:], postForkDomain)
 
-		logger.Info("running with custom domain type",
-			fields.Domain(networkConfig.DomainType),
+		logger.Warn("running with custom domain type; it's deprecated, consider using custom network instead",
+			fields.Domain(ssvConfig.DomainType),
 		)
 	}
 
@@ -928,19 +1018,17 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	}
 
 	logger.Info("setting ssv network",
-		fields.Network(networkConfig.Name),
-		fields.Domain(networkConfig.DomainType),
+		zap.Any("config", ssvConfig),
 		zap.String("nodeType", nodeType),
-		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
-		zap.String("registryContract", networkConfig.RegistryContractAddr),
+		zap.String("registryContract", ssvConfig.RegistryContractAddr.String()),
 	)
 
-	return networkConfig, nil
+	return ssvConfig, nil
 }
 
 func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
-	istore := ssv_identity.NewIdentityStore(db)
-	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
+	istore := ssv_identity.NewIdentityStore(logger, db)
+	netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
@@ -951,16 +1039,6 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 		logger.Fatal("failed to setup p2p network", zap.Error(err))
 	}
 	return n
-}
-
-func setupConsensusClient(logger *zap.Logger, slotTickerProvider slotticker.Provider) *goclient.GoClient {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, slotTickerProvider)
-	if err != nil {
-		logger.Fatal("failed to create beacon go-client", zap.Error(err),
-			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
-	}
-
-	return cl
 }
 
 // syncContractEvents blocks until historical events are synced and then spawns a goroutine syncing ongoing events.
@@ -1088,9 +1166,9 @@ func syncContractEvents(
 func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enableProf bool, opNode *operator.Node) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewHandler(db, enableProf, opNode)
+	metricsHandler := metrics.NewHandler(logger, db, enableProf, opNode)
 	addr := fmt.Sprintf(":%d", port)
-	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
+	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
 }
@@ -1105,7 +1183,7 @@ func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorag
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			store.Prune(ctx, logger, threshold)
+			store.Prune(ctx, threshold)
 		}()
 		return nil
 	})
@@ -1114,7 +1192,7 @@ func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorag
 
 	// start background job for removing old slots on every tick
 	_ = stores.Each(func(_ spectypes.BeaconRole, store qbftstorage.ParticipantStore) error {
-		go store.PruneContinously(ctx, logger, slotTickerProvider, phase0.Slot(retain))
+		go store.PruneContinously(ctx, slotTickerProvider, phase0.Slot(retain))
 		return nil
 	})
 }

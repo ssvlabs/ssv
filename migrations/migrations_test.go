@@ -10,8 +10,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
@@ -30,7 +30,7 @@ func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 }
 
 func Test_RunNotMigratingTwice(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := logging.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
@@ -58,7 +58,7 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 }
 
 func Test_Rollback(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := logging.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func Test_Rollback(t *testing.T) {
 }
 
 func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := logging.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)

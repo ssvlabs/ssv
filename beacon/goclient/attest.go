@@ -39,7 +39,7 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 		Epoch:   epoch,
 		Indices: validatorIndices,
 	})
-	recordRequestDuration(gc.ctx, "AttesterDuties", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
+	recordRequestDuration(ctx, "AttesterDuties", gc.multiClient.Address(), http.MethodPost, time.Since(start), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "AttesterDuties"),
@@ -60,11 +60,7 @@ func (gc *GoClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 // GetAttestationData returns attestation data for a given slot.
 // Multiple calls for the same slot are joined into a single request, after which
 // the result is cached for a short duration, deep copied and returned
-func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
-	*phase0.AttestationData,
-	spec.DataVersion,
-	error,
-) {
+func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, spec.DataVersion, error) {
 	// Have to make beacon node request and cache the result.
 	result, err, _ := gc.attestationReqInflight.Do(slot, func() (*phase0.AttestationData, error) {
 		// Check cache.
@@ -77,12 +73,12 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 			err             error
 		)
 		if gc.withWeightedAttestationData {
-			attestationData, err = gc.weightedAttestationData(slot)
+			attestationData, err = gc.weightedAttestationData(ctx, slot)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			attestationData, err = gc.simpleAttestationData(slot)
+			attestationData, err = gc.simpleAttestationData(ctx, slot)
 			if err != nil {
 				return nil, err
 			}
@@ -102,13 +98,13 @@ func (gc *GoClient) GetAttestationData(slot phase0.Slot) (
 
 }
 
-func (gc *GoClient) weightedAttestationData(slot phase0.Slot) (*phase0.AttestationData, error) {
+func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
 	logger := gc.log.With(fields.Slot(slot), weightedAttestationDataRequestIDField(uuid.New()))
 	// We have two timeouts: a soft timeout and a hard timeout.
 	// At the soft timeout, we return if we have any responses so far.
 	// At the hard timeout, we return unconditionally.
 	// The soft timeout is half the duration of the hard timeout.
-	ctx, cancel := context.WithTimeout(gc.ctx, gc.weightedAttestationDataHardTimeout)
+	ctx, cancel := context.WithTimeout(ctx, gc.weightedAttestationDataHardTimeout)
 	defer cancel()
 
 	softCtx, softCancel := context.WithTimeout(ctx, gc.weightedAttestationDataSoftTimeout)
@@ -249,15 +245,15 @@ func shouldWaitForAttestationDataResponse(responded, errored, timedOut, requests
 	return responded+errored+timedOut != requestsTotal
 }
 
-func (gc *GoClient) simpleAttestationData(slot phase0.Slot) (*phase0.AttestationData, error) {
+func (gc *GoClient) simpleAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {
 	logger := gc.log.With(fields.Slot(slot))
 	attDataReqStart := time.Now()
-	resp, err := gc.multiClient.AttestationData(gc.ctx, &api.AttestationDataOpts{
+	resp, err := gc.multiClient.AttestationData(ctx, &api.AttestationDataOpts{
 		Slot:           slot,
 		CommitteeIndex: 0,
 	})
 
-	recordRequestDuration(gc.ctx, "AttestationData", gc.multiClient.Address(), http.MethodGet, time.Since(attDataReqStart), err)
+	recordRequestDuration(ctx, "AttestationData", gc.multiClient.Address(), http.MethodGet, time.Since(attDataReqStart), err)
 
 	if err != nil {
 		logger.Error(clResponseErrMsg,
@@ -459,15 +455,15 @@ func weightedAttestationDataRequestIDField(id uuid.UUID) zap.Field {
 // multiClientSubmit is a generic function that submits data to multiple beacon clients concurrently.
 // Returns nil if at least one client successfully submitted the data.
 func (gc *GoClient) multiClientSubmit(
+	ctx context.Context,
 	operationName string,
 	submitFunc func(ctx context.Context, client Client) error,
 ) error {
 	logger := gc.log.With(zap.String("api", operationName))
 
 	submissions := atomic.Int32{}
-	p := pool.New().WithErrors().WithContext(gc.ctx).WithMaxGoroutines(len(gc.clients))
+	p := pool.New().WithErrors().WithContext(ctx).WithMaxGoroutines(len(gc.clients))
 	for _, client := range gc.clients {
-		client := client
 		p.Go(func(ctx context.Context) error {
 			clientAddress := client.Address()
 			logger := logger.With(zap.String("client_addr", clientAddress))
@@ -502,11 +498,11 @@ func (gc *GoClient) multiClientSubmit(
 }
 
 // SubmitAttestations implements Beacon interface and sends attestations to the first client that succeeds
-func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation) error {
+func (gc *GoClient) SubmitAttestations(ctx context.Context, attestations []*spec.VersionedAttestation) error {
 	opts := &api.SubmitAttestationsOpts{Attestations: attestations}
 	if gc.withParallelSubmissions {
-		return gc.multiClientSubmit("SubmitAttestations", func(ctx context.Context, client Client) error {
-			return client.SubmitAttestations(gc.ctx, opts)
+		return gc.multiClientSubmit(ctx, "SubmitAttestations", func(ctx context.Context, client Client) error {
+			return client.SubmitAttestations(ctx, opts)
 		})
 	}
 
@@ -516,8 +512,8 @@ func (gc *GoClient) SubmitAttestations(attestations []*spec.VersionedAttestation
 		zap.String("client_addr", clientAddress))
 
 	start := time.Now()
-	err := gc.multiClient.SubmitAttestations(gc.ctx, opts)
-	recordRequestDuration(gc.ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
+	err := gc.multiClient.SubmitAttestations(ctx, opts)
+	recordRequestDuration(ctx, "SubmitAttestations", clientAddress, http.MethodPost, time.Since(start), err)
 	if err != nil {
 		logger.Error(clResponseErrMsg, zap.Error(err))
 		return err

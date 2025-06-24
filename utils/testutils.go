@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/mock/gomock"
 
-	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 type SlotValue struct {
@@ -29,7 +30,7 @@ func (sv *SlotValue) GetSlot() phase0.Slot {
 	return sv.slot
 }
 
-func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.MockBeaconNetwork {
+func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, currentSlot *SlotValue) *networkconfig.MockNetwork {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -39,55 +40,71 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 	}
 
 	beaconNetwork := spectypes.HoleskyNetwork // it must be something known by ekm
-	mockBeaconNetwork := mocknetwork.NewMockBeaconNetwork(ctrl)
+	mockNetwork := networkconfig.NewMockNetwork(ctrl)
 
-	mockBeaconNetwork.EXPECT().GetBeaconNetwork().Return(beaconNetwork).AnyTimes()
-	mockBeaconNetwork.EXPECT().SlotsPerEpoch().Return(beaconNetwork.SlotsPerEpoch()).AnyTimes()
-	mockBeaconNetwork.EXPECT().EstimatedCurrentSlot().DoAndReturn(
+	mockNetwork.EXPECT().GetSlotsPerEpoch().Return(beaconNetwork.SlotsPerEpoch()).AnyTimes()
+	mockNetwork.EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
 			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
+	mockNetwork.EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
 			return phase0.Epoch(uint64(currentSlot.GetSlot()) / beaconNetwork.SlotsPerEpoch())
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
+	mockNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
 			return beaconNetwork.EstimatedEpochAtSlot(slot)
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().FirstSlotAtEpoch(gomock.Any()).DoAndReturn(
+	mockNetwork.EXPECT().FirstSlotAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
 			return beaconNetwork.FirstSlotAtEpoch(epoch)
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().IsFirstSlotOfEpoch(gomock.Any()).DoAndReturn(
+	mockNetwork.EXPECT().IsFirstSlotOfEpoch(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) bool {
-			return uint64(slot)%mockBeaconNetwork.SlotsPerEpoch() == 0
+			return uint64(slot)%mockNetwork.GetSlotsPerEpoch() == 0
 		},
 	).AnyTimes()
-	mockBeaconNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
+	mockNetwork.EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {
-			timeSinceGenesisStart := int64(uint64(slot) * uint64(beaconNetwork.SlotDurationSec().Seconds())) // #nosec G115
-			minGenesisTime := int64(mockBeaconNetwork.GetBeaconNetwork().MinGenesisTime())                   // #nosec G115
-			start := time.Unix(minGenesisTime+timeSinceGenesisStart, 0)
+			timeSinceGenesisStart := time.Duration(slot) & beaconNetwork.SlotDurationSec() // #nosec G115
+			minGenesisTime := mockNetwork.GetGenesisTime()                                 // #nosec G115
+			start := minGenesisTime.Add(timeSinceGenesisStart)
 			return start
 		},
 	).AnyTimes()
+	mockNetwork.EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(func(timeVal time.Time) phase0.Slot {
+		return beaconNetwork.EstimatedSlotAtTime(timeVal.Unix())
+	}).AnyTimes()
 
-	mockBeaconNetwork.EXPECT().SlotDurationSec().DoAndReturn(
+	mockNetwork.EXPECT().GetSlotDuration().DoAndReturn(
 		func() time.Duration {
 			return 12 * time.Second
 		},
 	).AnyTimes()
 
-	mockBeaconNetwork.EXPECT().SlotsPerEpoch().DoAndReturn(
-		func() uint64 {
+	mockNetwork.EXPECT().GetSlotsPerEpoch().DoAndReturn(
+		func() phase0.Slot {
 			return 32
 		},
 	).AnyTimes()
 
-	return mockBeaconNetwork
+	mockNetwork.EXPECT().GetGenesisTime().DoAndReturn(
+		func() time.Time {
+			return time.Unix(int64(beaconNetwork.MinGenesisTime()), 0) // #nosec G115 -- genesis time is never above int64
+		},
+	).AnyTimes()
+
+	mockNetwork.EXPECT().EpochDuration().Return(time.Duration(mockNetwork.GetSlotsPerEpoch()) * mockNetwork.GetSlotDuration()).AnyTimes() // #nosec G115
+
+	mockNetwork.EXPECT().IntervalDuration().Return(mockNetwork.GetSlotDuration() / 3).AnyTimes() // #nosec G115
+
+	mockNetwork.EXPECT().GetDomainType().Return(domainType).AnyTimes()
+
+	mockNetwork.EXPECT().GetNetworkName().Return(string(beaconNetwork)).AnyTimes()
+
+	return mockNetwork
 }

@@ -3,15 +3,21 @@ package instance
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -72,6 +78,11 @@ func (i *Instance) ForceStop() {
 // Start is an interface implementation
 func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
+		ctx, span := tracer.Start(ctx,
+			observability.InstrumentName(observabilityNamespace, "qbft.instance.start"),
+			trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
+		defer span.End()
+
 		i.StartValue = value
 		i.bumpToRound(ctx, specqbft.FirstRound)
 		i.State.Height = height
@@ -83,30 +94,39 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 			fields.Height(i.State.Height))
 
 		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
-		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
+		const eventMsg = "ℹ️ starting QBFT instance"
+		logger.Debug(eventMsg, zap.Uint64("leader", proposerID))
+		span.AddEvent(eventMsg, trace.WithAttributes(observability.ValidatorProposerAttribute(proposerID)))
 
 		// propose if this node is the proposer
 		if proposerID == i.State.CommitteeMember.OperatorID {
 			proposal, err := CreateProposal(i.State, i.signer, i.StartValue, nil, nil)
-			// nolint
 			if err != nil {
 				logger.Warn("❗ failed to create proposal", zap.Error(err))
+				span.SetStatus(codes.Error, err.Error())
+				return
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
-
 				r, err := specqbft.HashDataRoot(i.StartValue) // @TODO (better than decoding?)
 				if err != nil {
 					logger.Warn("❗ failed to hash input data", zap.Error(err))
+					span.SetStatus(codes.Error, err.Error())
 					return
 				}
-				// nolint
+
 				logger = logger.With(fields.Root(r))
-				logger.Debug("📢 leader broadcasting proposal message")
+				const eventMsg = "📢 leader broadcasting proposal message"
+				logger.Debug(eventMsg)
+				span.AddEvent(eventMsg, trace.WithAttributes(attribute.String("root", hex.EncodeToString(r[:]))))
+
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
+					span.RecordError(err)
 				}
 			}
 		}
+
+		span.SetStatus(codes.Ok, "")
 	})
 }
 
@@ -167,7 +187,11 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 		return err
 	}
 
-	if msg.QBFTMessage.Round < i.State.Round {
+	// If a node gets a commit quorum before round change and other nodes don't,
+	// then the other nodes wouldn't be able to get the commit quorum,
+	// unless we allow decided messages from previous round.
+	decided := msg.QBFTMessage.MsgType == specqbft.CommitMsgType && i.State.CommitteeMember.HasQuorum(len(msg.SignedMessage.OperatorIDs))
+	if !decided && msg.QBFTMessage.Round < i.State.Round {
 		return errors.New("past round")
 	}
 

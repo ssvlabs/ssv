@@ -29,7 +29,6 @@ func TestQBFTMapping(t *testing.T) {
 	}
 
 	for name, test := range untypedTests {
-		name, test := name, test
 		testName := strings.Split(name, "_")[1]
 		testType := strings.Split(name, "_")[0]
 

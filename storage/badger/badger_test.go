@@ -1,4 +1,4 @@
-package kv
+package badger
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 )
 
 // setupDB creates a BadgerDB instance for testing with given options and handles cleanup.
-func setupDB(t *testing.T, options basedb.Options) *BadgerDB {
+func setupDB(t *testing.T, options basedb.Options) *DB {
 	t.Helper()
 	logger := logging.TestLogger(t)
 
@@ -52,7 +52,7 @@ func setupTempDir(t *testing.T, prefix string) string {
 }
 
 // setupDataset populates a database with test data of specified size.
-func setupDataset(t *testing.T, db *BadgerDB, prefix []byte, count int) {
+func setupDataset(t *testing.T, db *DB, prefix []byte, count int) {
 	t.Helper()
 	for i := 0; i < count; i++ {
 		id := fmt.Sprintf("test-%d", i)
@@ -571,7 +571,7 @@ func TestDBCreation(t *testing.T) {
 		logger := logging.TestLogger(t)
 		dir := setupTempDir(t, "badger-gc-test")
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		options := basedb.Options{
@@ -587,11 +587,11 @@ func TestDBCreation(t *testing.T) {
 
 		time.Sleep(200 * time.Millisecond)
 
-		err = db.QuickGC(context.Background())
+		err = db.QuickGC(t.Context())
 
 		require.NoError(t, err)
 
-		err = db.FullGC(context.Background())
+		err = db.FullGC(t.Context())
 
 		require.NoError(t, err)
 	})
@@ -600,7 +600,7 @@ func TestDBCreation(t *testing.T) {
 		zapCore, observedLogs := observer.New(zap.DebugLevel)
 		logger := zap.New(zapCore)
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		options := basedb.Options{
