@@ -226,12 +226,12 @@ func (km *RemoteKeyManager) SignBeaconObject(
 ) (spectypes.Signature, phase0.Root, error) {
 	req, root, err := km.prepareSignRequest(ctx, obj, domain, sharePubkey, slot, signatureDomain)
 	if err != nil {
-		return spectypes.Signature{}, phase0.Root{}, err
+		return nil, phase0.Root{}, err
 	}
 
 	sig, err := km.signerClient.Sign(ctx, sharePubkey, req)
 	if err != nil {
-		return spectypes.Signature{}, phase0.Root{}, fmt.Errorf("remote signer: %w", err)
+		return nil, phase0.Root{}, fmt.Errorf("remote signer: %w", err)
 	}
 
 	return sig[:], root, nil
