@@ -522,3 +522,118 @@ func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation string)
 	km.signLocks[key] = &sync.RWMutex{}
 	return km.signLocks[key]
 }
+
+// ArchiveSlashingProtection preserves slashing protection data keyed by validator public key.
+//
+// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
+// preserving slashing protection data before share removal to ensure continuity across re-registration cycles.
+func (km *RemoteKeyManager) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
+	if storage, ok := km.slashingProtector.(*SlashingProtector); ok {
+		return storage.signerStore.ArchiveSlashingProtection(validatorPubKey, sharePubKey)
+	}
+	return fmt.Errorf("slashing protector does not support archiving")
+}
+
+// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
+//
+// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
+// applying previously archived slashing protection history to prevent slashing after share regeneration.
+// It uses maximum value logic to prevent regression.
+func (km *RemoteKeyManager) ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
+	if storage, ok := km.slashingProtector.(*SlashingProtector); ok {
+		return km.applyArchivedSlashingProtectionInternal(storage.signerStore, validatorPubKey, sharePubKey)
+	}
+	return fmt.Errorf("slashing protector does not support archived slashing protection")
+}
+
+// applyArchivedSlashingProtectionInternal implements the core logic for applying archived slashing protection
+func (km *RemoteKeyManager) applyArchivedSlashingProtectionInternal(store Storage, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
+	// Retrieve archived slashing protection data for the validator
+	archive, found, err := store.RetrieveArchivedSlashingProtection(validatorPubKey)
+	if err != nil {
+		return fmt.Errorf("could not retrieve archived slashing protection: %w", err)
+	}
+	if !found || archive == nil {
+		return nil // No archived data found, nothing to apply
+	}
+
+	currentSlot := store.BeaconNetwork().EstimatedCurrentSlot()
+	currentEpoch := store.BeaconNetwork().EstimatedEpochAtSlot(currentSlot)
+
+	// Apply archived attestation data using max(current, archived) logic
+	if archive.HighestAttestation != nil {
+		// Get current slashing protection data for the share
+		currentAtt, foundCurrent, err := store.RetrieveHighestAttestation(sharePubKey[:])
+		if err != nil {
+			return fmt.Errorf("could not retrieve current highest attestation: %w", err)
+		}
+
+		var targetEpoch, sourceEpoch phase0.Epoch
+		if foundCurrent && currentAtt != nil {
+			// Use max of current and archived values
+			if currentAtt.Target.Epoch > archive.HighestAttestation.Target.Epoch {
+				targetEpoch = currentAtt.Target.Epoch
+			} else {
+				targetEpoch = archive.HighestAttestation.Target.Epoch
+			}
+
+			if currentAtt.Source.Epoch > archive.HighestAttestation.Source.Epoch {
+				sourceEpoch = currentAtt.Source.Epoch
+			} else {
+				sourceEpoch = archive.HighestAttestation.Source.Epoch
+			}
+		} else {
+			// Use max of current epoch and archived values
+			if currentEpoch > archive.HighestAttestation.Target.Epoch {
+				targetEpoch = currentEpoch
+			} else {
+				targetEpoch = archive.HighestAttestation.Target.Epoch
+			}
+
+			if targetEpoch > 0 {
+				sourceEpoch = targetEpoch - 1
+			}
+			if currentEpoch > 0 && currentEpoch-1 > archive.HighestAttestation.Source.Epoch {
+				sourceEpoch = currentEpoch - 1
+			} else if archive.HighestAttestation.Source.Epoch > sourceEpoch {
+				sourceEpoch = archive.HighestAttestation.Source.Epoch
+			}
+		}
+
+		// Create new attestation data with the computed epochs
+		newAttData := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: sourceEpoch},
+			Target: &phase0.Checkpoint{Epoch: targetEpoch},
+		}
+
+		// Save the updated attestation data
+		if err := store.SaveHighestAttestation(sharePubKey[:], newAttData); err != nil {
+			return fmt.Errorf("could not save updated highest attestation: %w", err)
+		}
+	}
+
+	// Apply archived proposal data using max(current, archived) logic
+	if archive.HighestProposal > 0 {
+		// Get current highest proposal for the share
+		currentProp, foundProp, err := store.RetrieveHighestProposal(sharePubKey[:])
+		if err != nil {
+			return fmt.Errorf("could not retrieve current highest proposal: %w", err)
+		}
+
+		var highestSlot phase0.Slot
+		if foundProp && currentProp > archive.HighestProposal {
+			highestSlot = currentProp
+		} else if currentSlot > archive.HighestProposal {
+			highestSlot = currentSlot
+		} else {
+			highestSlot = archive.HighestProposal
+		}
+
+		// Save the updated proposal data
+		if err := store.SaveHighestProposal(sharePubKey[:], highestSlot); err != nil {
+			return fmt.Errorf("could not save updated highest proposal: %w", err)
+		}
+	}
+
+	return nil
+}
