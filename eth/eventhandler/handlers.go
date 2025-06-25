@@ -444,17 +444,18 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
 	}
 
-	// bump slashing protection for operator reactivated validators
+	// restore archived slashing protection and bump slashing protection for operator reactivated validators
 	for _, share := range toReactivate {
-		if err := eh.keyManager.BumpSlashingProtection(txn, phase0.BLSPubKey(share.SharePubKey)); err != nil {
-			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
-		}
-
-		// Apply any archived slashing protection data for this validator.
+		// Apply any archived slashing protection data for this validator
 		// TODO(SSV-15): This ensures slashing protection continuity across validator reactivation cycles
 		// as part of the temporary solution for audit finding SSV-15.
 		if err := eh.keyManager.ApplyArchivedSlashingProtection(share.ValidatorPubKey[:], phase0.BLSPubKey(share.SharePubKey)); err != nil {
-			eh.logger.Warn("could not apply archived slashing protection data during reactivation", zap.Error(err))
+			return nil, fmt.Errorf("could not apply archived slashing protection data during reactivation: %w", err)
+		}
+
+		// Bump slashing protection for operator-reactivated validators
+		if err := eh.keyManager.BumpSlashingProtection(txn, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 
 		// Set the minimum participation epoch to match slashing protection.
