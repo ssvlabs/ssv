@@ -40,8 +40,8 @@ type slashingProtector interface {
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 
-	ArchiveSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error
-	ApplyArchivedSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error
+	ArchiveSlashingProtectionTxn(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error
+	ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error
 }
 
 // SlashingProtector manages both the local store for highest attestation/proposal
@@ -118,12 +118,12 @@ func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot
 func (sp *SlashingProtector) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
 	currentSlot := sp.signerStore.BeaconNetwork().EstimatedCurrentSlot()
 
-	// Update highest attestation data for slashing protection.
+	// Update the highest attestation data for slashing protection.
 	if err := sp.updateHighestAttestation(txn, pubKey, currentSlot); err != nil {
 		return err
 	}
 
-	// Update highest proposal data for slashing protection.
+	// Update the highest proposal data for slashing protection.
 	if err := sp.updateHighestProposal(txn, pubKey, currentSlot); err != nil {
 		return err
 	}
@@ -131,15 +131,19 @@ func (sp *SlashingProtector) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey ph
 	return nil
 }
 
-func (sp *SlashingProtector) ArchiveSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error {
+// ArchiveSlashingProtectionTxn implements the core logic for archiving slashing protection.
+//
+// TODO(SSV-15): This function is part of the temporary solution for audit finding SSV-15,
+// archiving slashing protection history to prevent slashing after share regeneration.
+func (sp *SlashingProtector) ArchiveSlashingProtectionTxn(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error {
 	return sp.signerStore.ArchiveSlashingProtectionTxn(txn, validatorPubKey, sharePubKey)
 }
 
-// ApplyArchivedSlashingProtection implements the core logic for applying archived slashing protection.
+// ApplyArchivedSlashingProtectionTxn implements the core logic for applying archived slashing protection.
 //
-// // TODO(SSV-15): This function is part of the temporary solution for audit finding SSV-15,
-// // applying previously archived slashing protection history to prevent slashing after share regeneration.
-func (sp *SlashingProtector) ApplyArchivedSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
+// TODO(SSV-15): This function is part of the temporary solution for audit finding SSV-15,
+// applying previously archived slashing protection history to prevent slashing after share regeneration.
+func (sp *SlashingProtector) ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
 	// Retrieve archived slashing protection data for the validator
 	archive, found, err := sp.signerStore.RetrieveArchivedSlashingProtectionTxn(txn, validatorPubKey)
 	if err != nil {

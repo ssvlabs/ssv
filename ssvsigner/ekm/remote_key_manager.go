@@ -593,7 +593,7 @@ func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {
 // TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
 // preserving slashing protection data before share removal to ensure continuity across re-registration cycles.
 func (km *RemoteKeyManager) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
-	return km.slashingProtector.ArchiveSlashingProtection(nil, validatorPubKey, sharePubKey)
+	return km.slashingProtector.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
 }
 
 // ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
@@ -602,7 +602,7 @@ func (km *RemoteKeyManager) ArchiveSlashingProtection(validatorPubKey []byte, sh
 // applying previously archived slashing protection history to prevent slashing after share regeneration.
 // It uses maximum value logic to prevent regression.
 func (km *RemoteKeyManager) ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
-	return km.slashingProtector.ApplyArchivedSlashingProtection(nil, validatorPubKey, sharePubKey)
+	return km.slashingProtector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
 }
 
 type lockOperation int
