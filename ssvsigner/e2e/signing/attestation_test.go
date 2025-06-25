@@ -601,12 +601,12 @@ func (s *AttestationSlashingTestSuite) TestConcurrentSigningStress() {
 		consistentSignatures++
 	}
 
-	s.T().Logf("✅ Signature consistency validated: %d/%d validators have identical signatures across all key managers",
-		consistentSignatures, numValidators)
-
 	s.Require().Equal(numValidators, consistentSignatures,
 		"Expected all %d validators to have consistent signatures across key managers, but only %d were consistent",
 		numValidators, consistentSignatures)
+
+	s.T().Logf("✅ Signature consistency validated: %d/%d validators have identical signatures across all key managers",
+		consistentSignatures, numValidators)
 }
 
 // TestAttestationSlashing runs the complete attestation slashing test suite
