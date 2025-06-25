@@ -51,6 +51,8 @@ func main() {
 		kong.UsageOnError(),
 	)
 
+	_ = kong.Parse(&cli)
+
 	log, err := logger.SetupLogger(cli.LogLevel, cli.LogFormat)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "setup logger: %v\n", err)
