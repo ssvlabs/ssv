@@ -40,7 +40,20 @@ type slashingProtector interface {
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 
+	// ArchiveSlashingProtectionTxn preserves slashing protection data keyed by validator public key.
+	// This method is part of the temporary solution for audit finding SSV-15.
+	// It should be called before removing a validator share to maintain slashing protection
+	// history when the validator is subsequently re-added with regenerated shares.
+	//
+	// TODO(SSV-15): Remove this method once proper architectural solution is implemented.
 	ArchiveSlashingProtectionTxn(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error
+
+	// ApplyArchivedSlashingProtectionTxn applies archived slashing protection data for a validator.
+	// This method is part of the temporary solution for audit finding SSV-15.
+	// It should be called when adding a share to ensure slashing protection continuity
+	// across validator re-registration cycles. It uses maximum value logic to prevent regression.
+	//
+	// TODO(SSV-15): Remove this method once proper architectural solution is implemented.
 	ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error
 }
 
