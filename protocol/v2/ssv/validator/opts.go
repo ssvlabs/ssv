@@ -19,6 +19,9 @@ import (
 
 const (
 	DefaultQueueSize = 32
+
+	DefaultGasLimit    = uint64(36_000_000)
+	DefaultGasLimitOld = uint64(30_000_000)
 )
 
 // Options represents validator-specific options.
@@ -89,8 +92,14 @@ func NewCommonOptions(
 		result.QueueSize = max(result.QueueSize, historySyncBatchSize*2)
 	}
 
+	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
+	// on the current epoch as compared to when this transition is supposed to happen.
 	if result.GasLimit == 0 {
-		result.GasLimit = spectypes.DefaultGasLimit
+		defaultGasLimit := DefaultGasLimit
+		if result.NetworkConfig.Beacon.EstimatedCurrentEpoch() < result.NetworkConfig.GasLimit36Epoch {
+			defaultGasLimit = DefaultGasLimitOld
+		}
+		result.GasLimit = defaultGasLimit
 	}
 
 	return result
