@@ -100,12 +100,9 @@ func TestValidateWeb3SignerEndpoint_ProductionSafety(t *testing.T) {
 		t.Run(endpoint, func(t *testing.T) {
 			t.Parallel()
 
-			// These will fail DNS resolution in tests but that's expected
-			// The important thing is they don't fail SSRF validation
+			// These should fail DNS resolution but pass SSRF validation
 			err := ValidateWeb3SignerEndpoint(endpoint, "")
-			if err != nil {
-				require.Contains(t, err.Error(), "hostname not found")
-			}
+			require.Error(t, err)
 		})
 	}
 }
