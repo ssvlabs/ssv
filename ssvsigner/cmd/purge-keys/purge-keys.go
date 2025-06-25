@@ -38,10 +38,7 @@ type CLI struct {
 func main() {
 	var cli CLI
 
-	kong.Must(&cli,
-		kong.Name("purge-keys"),
-		kong.UsageOnError(),
-	)
+	_ = kong.Parse(&cli, kong.Name("purge-keys"), kong.UsageOnError())
 
 	log, err := logger.SetupProductionLogger()
 	if err != nil {
