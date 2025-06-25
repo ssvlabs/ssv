@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 	"github.com/testcontainers/testcontainers-go"
 	"go.uber.org/mock/gomock"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
 
 	"github.com/ssvlabs/ssv/ssvsigner"
@@ -40,8 +41,10 @@ type TestEnvironment struct {
 	remoteDB         basedb.Database
 
 	// Mock beacon for controlled testing
-	mockController *gomock.Controller
-	mockBeacon     *networkconfig.MockBeacon
+	mockController      *gomock.Controller
+	mockBeacon          *mocks.MockBeaconNetwork
+	mockNetworkConfig   networkconfig.NetworkConfig
+	mockConsensusClient *MockConsensusClient
 
 	// Network
 	networkName string
@@ -99,6 +102,10 @@ func NewTestEnvironment(ctx context.Context, t gomock.TestReporter) (*TestEnviro
 
 	if err := env.setupTLSCertificates(); err != nil {
 		return nil, fmt.Errorf("failed to setup TLS certificates: %w", err)
+	}
+
+	if err := env.setupMockConsensusClient(); err != nil {
+		return nil, fmt.Errorf("failed to setup mock beacon: %w", err)
 	}
 
 	if err := env.setupMockBeacon(t); err != nil {
@@ -230,23 +237,6 @@ func (env *TestEnvironment) RestartPostgreSQL() error {
 	return env.waitForWeb3SignerReady()
 }
 
-// waitForWeb3SignerReady waits for Web3Signer to be ready using testcontainers wait strategy
-func (env *TestEnvironment) waitForWeb3SignerReady() error {
-	if env.web3SignerContainer == nil {
-		return fmt.Errorf("Web3Signer container is nil")
-	}
-
-	// Use testcontainers wait.ForHTTP strategy - same as used during startup
-	waitStrategy := web3SignerWaitStrategy()
-
-	ctx, cancel := context.WithTimeout(env.ctx, 60*time.Second)
-
-	defer cancel()
-
-	// Apply the wait strategy to the container
-	return waitStrategy.WaitUntilReady(ctx, env.web3SignerContainer)
-}
-
 // GetSSVSignerClient returns the SSV-Signer client
 func (env *TestEnvironment) GetSSVSignerClient() *ssvsigner.Client {
 	return env.ssvSignerClient
@@ -263,8 +253,13 @@ func (env *TestEnvironment) GetRemoteKeyManager() *ekm.RemoteKeyManager {
 }
 
 // GetMockBeacon returns the mock beacon for test control
-func (env *TestEnvironment) GetMockBeacon() *networkconfig.MockBeacon {
+func (env *TestEnvironment) GetMockBeacon() *mocks.MockBeaconNetwork {
 	return env.mockBeacon
+}
+
+// GetMockConsensusClient returns the mock consensus client for test control
+func (env *TestEnvironment) GetMockConsensusClient() *MockConsensusClient {
+	return env.mockConsensusClient
 }
 
 // GetOperatorKey returns the operator key for validator encryption
@@ -317,13 +312,13 @@ func (env *TestEnvironment) setupPostgreSQLVolume() error {
 // setupKeyManagerVolumes creates temporary directories for LocalKeyManager and RemoteKeyManager BadgerDB data
 func (env *TestEnvironment) setupKeyManagerVolumes() error {
 	env.localKeyManagerPath = fmt.Sprintf("/tmp/local-keymanager-data-%s", randomSuffix())
-	if err := os.MkdirAll(env.localKeyManagerPath, 0750); err != nil {
+	if err := os.MkdirAll(env.localKeyManagerPath, dirMode); err != nil {
 		return fmt.Errorf("failed to create local key manager directory: %w", err)
 	}
 	fmt.Printf("Created LocalKeyManager directory: %s\n", env.localKeyManagerPath)
 
 	env.remoteKeyManagerPath = fmt.Sprintf("/tmp/remote-keymanager-data-%s", randomSuffix())
-	if err := os.MkdirAll(env.remoteKeyManagerPath, 0750); err != nil {
+	if err := os.MkdirAll(env.remoteKeyManagerPath, dirMode); err != nil {
 		return fmt.Errorf("failed to create remote key manager directory: %w", err)
 	}
 	fmt.Printf("Created RemoteKeyManager directory: %s\n", env.remoteKeyManagerPath)

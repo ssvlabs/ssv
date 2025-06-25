@@ -183,7 +183,7 @@ func (s *BlockSlashingTestSuite) TestConcurrentBlockSigning() {
 	block := common.NewTestBlock(testSlot, 0)
 	block.ParentRoot = phase0.Root{0x42} // Distinguish this concurrent test block
 
-	domain, err := s.CalculateDomain(spectypes.DomainProposer, testEpoch)
+	domain, err := s.CalculateDomain(ctx, spectypes.DomainProposer, testEpoch)
 	s.Require().NoError(err)
 
 	numGoroutines := 12

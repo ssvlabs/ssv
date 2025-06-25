@@ -58,12 +58,20 @@ func (s *E2ETestSuite) GetContext() context.Context {
 }
 
 // CalculateDomain computes the signing domain for a given domain type and epoch
-func (s *E2ETestSuite) CalculateDomain(domainType phase0.DomainType, epoch phase0.Epoch) (phase0.Domain, error) {
-	_, fork := s.env.GetMockBeacon().ForkAtEpoch(epoch)
+func (s *E2ETestSuite) CalculateDomain(ctx context.Context, domainType phase0.DomainType, epoch phase0.Epoch) (phase0.Domain, error) {
+	fork, err := s.env.GetMockConsensusClient().ForkAtEpoch(ctx, epoch)
+	if err != nil {
+		return phase0.Domain{}, fmt.Errorf("failed to get fork at epoch %d: %w", epoch, err)
+	}
+
+	genesis, err := s.env.GetMockConsensusClient().Genesis(ctx)
+	if err != nil {
+		return phase0.Domain{}, fmt.Errorf("failed to get genesis: %w", err)
+	}
 
 	forkData := &phase0.ForkData{
 		CurrentVersion:        fork.CurrentVersion,
-		GenesisValidatorsRoot: s.env.GetMockBeacon().GetGenesisValidatorsRoot(),
+		GenesisValidatorsRoot: genesis.GenesisValidatorsRoot,
 	}
 
 	forkDataRoot, err := forkData.HashTreeRoot()
@@ -97,9 +105,13 @@ func (s *E2ETestSuite) SignWeb3Signer(
 	web3SignerClient := s.env.GetWeb3SignerClient()
 
 	epoch := s.env.GetMockBeacon().EstimatedEpochAtSlot(slot)
+	forkInfo, err := s.env.GetRemoteKeyManager().GetForkInfo(ctx, epoch)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
 
 	req := web3signer.SignRequest{
-		ForkInfo: s.env.GetRemoteKeyManager().GetForkInfo(epoch),
+		ForkInfo: forkInfo,
 	}
 
 	switch signatureDomain {
@@ -146,10 +158,10 @@ func (s *E2ETestSuite) AddValidator(ctx context.Context) *common.ValidatorKeyPai
 	validatorKeyPair, err := common.GenerateValidatorShare(s.env.GetOperatorKey())
 	s.Require().NoError(err, "Failed to generate validator share")
 
-	err = remoteKeyManager.AddShare(ctx, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
+	err = remoteKeyManager.AddShare(ctx, nil, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
 	s.Require().NoError(err, "Failed to add share to remote key manager")
 
-	err = localKeyManager.AddShare(ctx, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
+	err = localKeyManager.AddShare(ctx, nil, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
 	s.Require().NoError(err, "Failed to add share to local key manager")
 
 	// Verify SSV-Signer operational status and that validator was successfully added
@@ -170,7 +182,7 @@ func (s *E2ETestSuite) RequireValidSigning(
 ) spectypes.Signature {
 	epoch := s.env.GetMockBeacon().EstimatedEpochAtSlot(slot)
 
-	domain, err := s.CalculateDomain(domainType, epoch)
+	domain, err := s.CalculateDomain(ctx, domainType, epoch)
 	s.Require().NoError(err, "Failed to calculate domain")
 
 	localSig, localRoot, err := s.env.GetLocalKeyManager().SignBeaconObject(ctx, obj, domain, pubKey, slot, domainType)
@@ -219,7 +231,7 @@ func (s *E2ETestSuite) RequireFailedSigning(
 
 	epoch := s.env.GetMockBeacon().EstimatedEpochAtSlot(slot)
 
-	domain, err := s.CalculateDomain(domainType, epoch)
+	domain, err := s.CalculateDomain(ctx, domainType, epoch)
 	s.Require().NoError(err, "Failed to calculate domain")
 
 	localSig, localRoot, err := s.env.GetLocalKeyManager().SignBeaconObject(ctx, obj, domain, pubKey, slot, domainType)

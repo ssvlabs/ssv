@@ -29,8 +29,8 @@ type CLI struct {
 	LogFormat          string        `env:"LOG_FORMAT" default:"console" enum:"console,json" help:"Set log format (console, json)"`
 	RequestTimeout     time.Duration `env:"REQUEST_TIMEOUT" default:"10s" help:"Timeout for outgoing HTTP requests (e.g. 500ms, 10s)"`
 
-	// AllowInsecureHTTP allows ssv-signer to work without using TLS. Note that it allows "partial" TLS as well such as only server or only client.
-	AllowInsecureHTTP bool `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"Allow insecure HTTP requests. Do not use in production"`
+	AllowInsecureHTTP   bool   `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"TESTING ONLY: Allow insecure HTTP requests. DO NOT USE IN PRODUCTION!"`
+	TestTrustedNetworks string `env:"TEST_TRUSTED_NETWORKS" name:"test-trusted-networks" default:"" help:"TESTING ONLY: Bypasses SSRF protection for specific networks (comma-separated CIDR). DO NOT USE IN PRODUCTION!"`
 
 	// Server TLS configuration (for incoming connections to SSV Signer)
 	KeystoreFile         string `env:"KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for server TLS connections"`
@@ -46,7 +46,7 @@ type CLI struct {
 func main() {
 	var cli CLI
 
-	kong.Must(&cli,
+	kong.Parse(&cli,
 		kong.Name("ssv-signer"),
 		kong.UsageOnError(),
 	)
@@ -75,11 +75,16 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Bool("server_tls_enabled", cli.KeystoreFile != ""),
 		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != ""),
 		zap.Bool("allow_insecure_http", cli.AllowInsecureHTTP),
+		zap.Bool("test_trusted_networks_enabled", cli.TestTrustedNetworks != ""),
 	)
 
 	if cli.AllowInsecureHTTP {
-		logger.Warn("ssv-signer started with an insecure mode that allows HTTP and doesn't enforce HTTPS, " +
-			"do not use this option in production")
+		logger.Warn("SECURITY WARNING: ALLOW_INSECURE_HTTP disables TLS security! This should ONLY be used for testing. DO NOT USE IN PRODUCTION!")
+	}
+
+	if cli.TestTrustedNetworks != "" {
+		logger.Warn("SECURITY WARNING: TEST_TRUSTED_NETWORKS bypasses SSRF protection! This should ONLY be used for testing. DO NOT USE IN PRODUCTION!",
+			zap.String("networks", cli.TestTrustedNetworks))
 	}
 
 	if err := validateConfig(cli); err != nil {
@@ -118,7 +123,7 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("neither private key nor keystore provided")
 	}
 
-	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint); err != nil {
+	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint, cli.TestTrustedNetworks); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT: %w", err)
 	}
 

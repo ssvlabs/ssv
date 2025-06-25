@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/storage/kv"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
@@ -30,7 +30,7 @@ func (env *TestEnvironment) initializeKeyManagers() error {
 
 // createLocalKeyManager creates and configures the LocalKeyManager
 func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
-	localDB, err := badger.New(logger, basedb.Options{
+	localDB, err := kv.New(logger, basedb.Options{
 		Path: env.localKeyManagerPath,
 	})
 	if err != nil {
@@ -41,7 +41,7 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 	localKeyManager, err := ekm.NewLocalKeyManager(
 		logger,
 		localDB,
-		env.mockBeacon,
+		env.mockNetworkConfig,
 		env.operatorKey,
 	)
 	if err != nil {
@@ -54,22 +54,20 @@ func (env *TestEnvironment) createLocalKeyManager(logger *zap.Logger) error {
 
 // createRemoteKeyManager creates and configures the RemoteKeyManager
 func (env *TestEnvironment) createRemoteKeyManager(logger *zap.Logger) error {
-	// Only create database on first initialization
-	if env.remoteDB == nil {
-		remoteDB, err := badger.New(logger, basedb.Options{
-			Path: env.remoteKeyManagerPath,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create remote database: %w", err)
-		}
-		env.remoteDB = remoteDB
+	remoteDB, err := kv.New(logger, basedb.Options{
+		Path: env.remoteKeyManagerPath,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create remote database: %w", err)
 	}
+	env.remoteDB = remoteDB
 
 	remoteKeyManager, err := ekm.NewRemoteKeyManager(
 		env.ctx,
 		logger,
-		env.mockBeacon,
+		env.mockNetworkConfig,
 		env, // TestEnvironment implements signerClient interface by delegating to ssvSignerClient
+		env.mockConsensusClient,
 		env.remoteDB,
 		func() spectypes.OperatorID { return 1 }, // operator ID getter
 	)

@@ -115,7 +115,7 @@ func TestValidateWeb3SignerEndpoint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := ValidateWeb3SignerEndpoint(tt.endpoint)
+			err := ValidateWeb3SignerEndpoint(tt.endpoint, "")
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.wantErr)

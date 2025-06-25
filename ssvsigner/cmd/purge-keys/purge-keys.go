@@ -15,8 +15,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
 
+	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/validation"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
@@ -155,7 +155,7 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("invalid batch size %d, must be > 0", cli.BatchSize)
 	}
 
-	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint); err != nil {
+	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint, ""); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT: %w", err)
 	}
 

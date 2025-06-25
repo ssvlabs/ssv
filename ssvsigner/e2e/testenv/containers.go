@@ -1,7 +1,7 @@
 package testenv
 
 import (
-	"crypto/tls"
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -16,7 +16,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/ssvlabs/ssv/ssvsigner"
-	ssvtls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
@@ -26,12 +25,6 @@ const (
 	postgresUser     = "postgres"
 	postgresPassword = "password"
 )
-
-// buildPostgresConnStr creates a PostgreSQL connection string for the given host and port
-func buildPostgresConnStr(host, port string) string {
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		host, port, postgresUser, postgresPassword, postgresDB)
-}
 
 // startContainers starts all Docker containers in the correct order
 func (env *TestEnvironment) startContainers() error {
@@ -67,6 +60,31 @@ func (env *TestEnvironment) createNetwork() error {
 
 	env.networkName = net.Name
 	return nil
+}
+
+// getContainerNetworkIP gets the internal network IP of a container within the test network
+func (env *TestEnvironment) getContainerNetworkIP(container testcontainers.Container) (string, error) {
+	inspect, err := container.Inspect(env.ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	netSettings, ok := inspect.NetworkSettings.Networks[env.networkName]
+	if !ok {
+		return "", fmt.Errorf("container not found in network %s", env.networkName)
+	}
+	
+	if netSettings.IPAddress == "" {
+		return "", fmt.Errorf("container has no IP address in network %s", env.networkName)
+	}
+	
+	return netSettings.IPAddress, nil
+}
+
+// buildPostgresConnStr creates a PostgreSQL connection string for the given host and port
+func buildPostgresConnStr(host, port string) string {
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		host, port, postgresUser, postgresPassword, postgresDB)
 }
 
 // startPostgreSQL starts the PostgreSQL container
@@ -127,25 +145,15 @@ func (env *TestEnvironment) startPostgreSQL() error {
 	return nil
 }
 
-// web3SignerWaitStrategy returns the wait strategy for Web3Signer
-func web3SignerWaitStrategy() wait.Strategy {
-	//nolint:gosec // InsecureSkipVerify required for self-signed test certificates
-	tlsConfig := &tls.Config{InsecureSkipVerify: true}
-
-	return wait.ForHTTP(web3signer.PathUpCheck).
-		WithPort("9000/tcp").
-		WithTLS(true, tlsConfig).
-		WithStatusCodeMatcher(func(status int) bool {
-			return status == 200
-		}).
-		WithStartupTimeout(30 * time.Second).
-		WithPollInterval(500 * time.Millisecond)
-}
-
 // startWeb3Signer starts the Web3Signer container with persistent volume for keystore data
 func (env *TestEnvironment) startWeb3Signer() error {
 	if _, err := os.Stat(env.certDir); os.IsNotExist(err) {
 		return fmt.Errorf("certificate directory does not exist: %s", env.certDir)
+	}
+
+	waitStrategy, err := env.web3SignerWaitStrategy()
+	if err != nil {
+		return fmt.Errorf("failed to create wait strategy: %w", err)
 	}
 
 	web3SignerReq := testcontainers.GenericContainerRequest{
@@ -178,7 +186,7 @@ func (env *TestEnvironment) startWeb3Signer() error {
 				fmt.Sprintf("--slashing-protection-db-password=%s", postgresPassword),
 				"--key-manager-api-enabled=true",
 			},
-			WaitingFor: web3SignerWaitStrategy(),
+			WaitingFor: waitStrategy,
 		},
 		Started: true,
 	}
@@ -203,10 +211,7 @@ func (env *TestEnvironment) startWeb3Signer() error {
 
 	env.web3SignerURL = fmt.Sprintf("https://%s:%s", host, mappedPort.Port())
 
-	tlsConf := &ssvtls.Config{
-		ClientServerCertFile: env.web3SignerCertPath,
-	}
-	tlsConfig, err := tlsConf.LoadClientTLSConfig()
+	tlsConfig, err := createTrustedTLSConfig(env.web3SignerCertPath)
 	if err != nil {
 		return fmt.Errorf("failed to create TLS config: %w", err)
 	}
@@ -215,12 +220,40 @@ func (env *TestEnvironment) startWeb3Signer() error {
 	return nil
 }
 
+// web3SignerWaitStrategy returns the wait strategy for Web3Signer
+func (env *TestEnvironment) web3SignerWaitStrategy() (wait.Strategy, error) {
+	tlsConfig, err := createTrustedTLSConfig(env.web3SignerCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create TLS config for wait strategy: %w", err)
+	}
+
+	return wait.ForHTTP(web3signer.PathUpCheck).
+		WithPort("9000/tcp").
+		WithTLS(true, tlsConfig).
+		WithStatusCodeMatcher(func(status int) bool {
+			return status == 200
+		}).
+		WithStartupTimeout(30 * time.Second).
+		WithPollInterval(500 * time.Millisecond), nil
+}
+
 // startSSVSigner starts the SSV-Signer container
 func (env *TestEnvironment) startSSVSigner() error {
 	operatorKeyB64 := env.operatorKey.Base64()
 
 	if _, err := os.Stat(env.certDir); os.IsNotExist(err) {
 		return fmt.Errorf("certificate directory does not exist: %s", env.certDir)
+	}
+
+	// Get Web3Signer internal network IP for SSRF trusted networks
+	web3SignerInternalIP, err := env.getContainerNetworkIP(env.web3SignerContainer)
+	if err != nil {
+		return err
+	}
+
+	waitStrategy, err := env.ssvSignerWaitStrategy()
+	if err != nil {
+		return fmt.Errorf("failed to create wait strategy: %w", err)
 	}
 
 	ssvSignerReq := testcontainers.GenericContainerRequest{
@@ -232,12 +265,25 @@ func (env *TestEnvironment) startSSVSigner() error {
 				env.networkName: {"ssv-signer"},
 			},
 			Env: map[string]string{
-				"LISTEN_ADDR":                 "0.0.0.0:8080",
-				"PRIVATE_KEY":                 operatorKeyB64,
-				"LOG_LEVEL":                   "info",
-				"LOG_FORMAT":                  "console",
-				"WEB3SIGNER_ENDPOINT":         "https://web3signer:9000",
-				"WEB3SIGNER_SERVER_CERT_FILE": "/certs/localhost.crt",
+				// Basic configuration
+				"LISTEN_ADDR":         "0.0.0.0:8080",
+				"PRIVATE_KEY":         operatorKeyB64,
+				"LOG_LEVEL":           "info",
+				"LOG_FORMAT":          "console",
+				"WEB3SIGNER_ENDPOINT": "https://web3signer:9000",
+
+				// SSRF bypass for Docker container communication
+				"TEST_TRUSTED_NETWORKS": fmt.Sprintf("%s/32", web3SignerInternalIP),
+
+				// Server TLS configuration
+				"KEYSTORE_FILE":          "/certs/ssv-signer.p12",
+				"KEYSTORE_PASSWORD_FILE": "/certs/ssv-signer_password.txt",
+				"KNOWN_CLIENTS_FILE":     "/certs/known_clients.txt",
+
+				// Client TLS for Web3Signer
+				"WEB3SIGNER_KEYSTORE_FILE":          "/certs/localhost.p12",
+				"WEB3SIGNER_KEYSTORE_PASSWORD_FILE": "/certs/localhost_password.txt",
+				"WEB3SIGNER_SERVER_CERT_FILE":       "/certs/localhost.crt",
 			},
 			HostConfigModifier: func(hostConfig *container.HostConfig) {
 				hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
@@ -246,9 +292,7 @@ func (env *TestEnvironment) startSSVSigner() error {
 					Target: "/certs",
 				})
 			},
-			WaitingFor: wait.ForHTTP(ssvsigner.PathOperatorIdentity).
-				WithPort("8080/tcp").
-				WithStartupTimeout(30 * time.Second),
+			WaitingFor: waitStrategy,
 		},
 		Started: true,
 	}
@@ -270,40 +314,47 @@ func (env *TestEnvironment) startSSVSigner() error {
 		return fmt.Errorf("failed to get ssv-signer port: %w", err)
 	}
 
-	env.ssvSignerURL = fmt.Sprintf("http://%s:%s", host, mappedPort.Port())
+	env.ssvSignerURL = fmt.Sprintf("https://%s:%s", host, mappedPort.Port())
 
-	env.ssvSignerClient = ssvsigner.NewClient(env.ssvSignerURL)
+	tlsConfig, err := createTrustedTLSConfig(env.ssvSignerCertPath)
+	if err != nil {
+		return fmt.Errorf("failed to create TLS config for SSV-Signer client: %w", err)
+	}
+	env.ssvSignerClient = ssvsigner.NewClient(env.ssvSignerURL, ssvsigner.WithTLSConfig(tlsConfig))
 
 	return nil
 }
 
-// applyMigrations applies all pending Web3Signer migrations
-func (env *TestEnvironment) applyMigrations() error {
-	if env.postgresDB == nil {
-		return fmt.Errorf("database connection not initialized")
-	}
-
-	if err := env.createMigrationTable(env.postgresDB); err != nil {
-		return fmt.Errorf("failed to create migration table: %w", err)
-	}
-
-	migrations, err := env.loadMigrations()
+// ssvSignerWaitStrategy returns the wait strategy for SSV-Signer
+func (env *TestEnvironment) ssvSignerWaitStrategy() (wait.Strategy, error) {
+	tlsConfig, err := createTrustedTLSConfig(env.ssvSignerCertPath)
 	if err != nil {
-		return fmt.Errorf("failed to load migrations: %w", err)
+		return nil, fmt.Errorf("failed to create TLS config for wait strategy: %w", err)
 	}
 
-	for _, migration := range migrations {
-		applied, err := env.isMigrationApplied(env.postgresDB, migration.Version)
-		if err != nil {
-			return fmt.Errorf("failed to check migration status: %w", err)
-		}
+	return wait.ForHTTP(ssvsigner.PathOperatorIdentity).
+		WithPort("8080/tcp").
+		WithTLS(true, tlsConfig).
+		WithStartupTimeout(30 * time.Second), nil
+}
 
-		if !applied {
-			if err = env.applyMigration(env.postgresDB, migration); err != nil {
-				return fmt.Errorf("failed to apply migration: %w", err)
-			}
-		}
+// waitForContainerReady waits for a container to be ready using a wait strategy
+func (env *TestEnvironment) waitForContainerReady(container testcontainers.Container, strategy wait.Strategy) error {
+	if container == nil {
+		return fmt.Errorf("container is nil")
 	}
 
-	return nil
+	ctx, cancel := context.WithTimeout(env.ctx, 60*time.Second)
+	defer cancel()
+
+	return strategy.WaitUntilReady(ctx, container)
+}
+
+// waitForWeb3SignerReady waits for Web3Signer to be ready
+func (env *TestEnvironment) waitForWeb3SignerReady() error {
+	strategy, err := env.web3SignerWaitStrategy()
+	if err != nil {
+		return fmt.Errorf("failed to create wait strategy: %w", err)
+	}
+	return env.waitForContainerReady(env.web3SignerContainer, strategy)
 }

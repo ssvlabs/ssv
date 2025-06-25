@@ -71,6 +71,7 @@ func init() {
 //   - Public IP addresses (e.g., https://1.2.3.4:9000)
 //   - Localhost/loopback (e.g., http://localhost:9000, http://127.0.0.1:9000)
 //   - Domain names resolving to allowed IPs (e.g., https://web3signer.example.com)
+//   - IPs in explicitly trusted networks (for testing)
 //
 // Blocked endpoints:
 //   - Private networks (e.g., http://192.168.1.1, http://10.0.0.1)
@@ -78,11 +79,36 @@ func init() {
 //   - Special-use addresses (e.g., http://0.0.0.0, multicast, broadcast)
 //   - Non-HTTP(S) schemes (e.g., file://, ftp://)
 //
+// testTrustedNetworks: comma-separated list of CIDR ranges to allow for testing ONLY.
+// This parameter bypasses SSRF protection for specified networks and should NEVER be used in production.
+// Example: "172.17.0.2/32,10.0.0.5/32" (prefer specific IPs over broad ranges)
+//
 // Returns an error if the endpoint is invalid or potentially unsafe, nil otherwise.
-func ValidateWeb3SignerEndpoint(endpoint string) error {
+func ValidateWeb3SignerEndpoint(endpoint string, testTrustedNetworks string) error {
 	u, err := url.ParseRequestURI(endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid url format: %w", err)
+	}
+
+	// Parse trusted networks for testing
+	var trustedNets []*net.IPNet
+	if testTrustedNetworks != "" {
+		cidrs := strings.Split(testTrustedNetworks, ",")
+		if len(cidrs) == 1 && strings.TrimSpace(cidrs[0]) == "" {
+			return fmt.Errorf("test trusted networks cannot be empty string")
+		}
+		for _, cidr := range cidrs {
+			cidr = strings.TrimSpace(cidr)
+			if cidr == "" {
+				return fmt.Errorf("test trusted networks contain empty CIDR entry")
+			}
+			_, network, err := net.ParseCIDR(cidr)
+			if err != nil {
+				return fmt.Errorf("invalid trusted network CIDR %q: %w", cidr, err)
+			}
+
+			trustedNets = append(trustedNets, network)
+		}
 	}
 
 	// Only allow http/https
@@ -98,7 +124,7 @@ func ValidateWeb3SignerEndpoint(endpoint string) error {
 	// Check if it's an IP address
 	ip := net.ParseIP(hostname)
 	if ip != nil {
-		return isBlockedIP(ip)
+		return isBlockedIP(ip, trustedNets)
 	}
 
 	// It's a domain name - resolve and validate all IPs
@@ -127,7 +153,7 @@ func ValidateWeb3SignerEndpoint(endpoint string) error {
 
 	var blockedIPs []string
 	for _, resolvedIP := range ips {
-		if err := isBlockedIP(resolvedIP); err != nil {
+		if err := isBlockedIP(resolvedIP, trustedNets); err != nil {
 			blockedIPs = append(blockedIPs, resolvedIP.String())
 		}
 	}
@@ -152,8 +178,9 @@ func ValidateWeb3SignerEndpoint(endpoint string) error {
 //
 // The function allows:
 //   - Loopback addresses (127.0.0.0/8, ::1) for local Web3Signer support
+//   - IPs in explicitly trusted networks (for testing)
 //   - All public IPv4 and IPv6 addresses
-func isBlockedIP(ip net.IP) error {
+func isBlockedIP(ip net.IP, trustedNets []*net.IPNet) error {
 	// Always block unspecified addresses
 	if ip.IsUnspecified() {
 		return fmt.Errorf("invalid ip address type (unspecified): %s", ip)
@@ -167,6 +194,13 @@ func isBlockedIP(ip net.IP) error {
 	// Allow loopback (localhost)
 	if ip.IsLoopback() {
 		return nil
+	}
+
+	// Check if IP is in trusted networks (allow for testing)
+	for _, trustedNet := range trustedNets {
+		if trustedNet.Contains(ip) {
+			return nil // Explicitly trusted, allow it
+		}
 	}
 
 	// Check against blocked networks

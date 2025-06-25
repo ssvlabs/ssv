@@ -247,7 +247,7 @@ func (s *AttestationSlashingTestSuite) TestConcurrentAttestationSigning() {
 	attestationData := common.NewTestAttestationData(testEpoch-1, testEpoch, testSlot)
 	attestationData.BeaconBlockRoot = phase0.Root{0x42} // Distinguish this concurrent test attestation
 
-	domain, err := s.CalculateDomain(spectypes.DomainAttester, testEpoch)
+	domain, err := s.CalculateDomain(ctx, spectypes.DomainAttester, testEpoch)
 	s.Require().NoError(err)
 
 	numGoroutines := 12
@@ -498,7 +498,7 @@ func (s *AttestationSlashingTestSuite) TestConcurrentSigningStress() {
 
 	testEpoch := testCurrentEpoch + 10
 	testSlot := s.GetEnv().GetMockBeacon().GetEpochFirstSlot(testEpoch) + 5
-	domain, err := s.CalculateDomain(spectypes.DomainAttester, testEpoch)
+	domain, err := s.CalculateDomain(ctx, spectypes.DomainAttester, testEpoch)
 	s.Require().NoError(err)
 
 	attestations := make([]*phase0.AttestationData, numValidators)

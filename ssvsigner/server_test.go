@@ -271,7 +271,7 @@ func (s *ServerTestSuite) TestAddValidator() {
 		tooBigRequestBody, err := json.Marshal(tooBigRequest)
 		require.NoError(t, err)
 
-		resp, err := s.ServeHTTP("POST", pathValidators, tooBigRequestBody)
+		resp, err := s.ServeHTTP("POST", PathValidators, tooBigRequestBody)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusBadRequest, resp.StatusCode())
 	})

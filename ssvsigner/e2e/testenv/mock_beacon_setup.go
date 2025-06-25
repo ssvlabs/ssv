@@ -1,20 +1,65 @@
 package testenv
 
 import (
-	"time"
+	"context"
 
-	"github.com/attestantio/go-eth2-client/spec"
+	eth2api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
+	"github.com/stretchr/testify/mock"
 	"go.uber.org/mock/gomock"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+
 	"github.com/ssvlabs/ssv/ssvsigner/e2e/common"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
+
+// MockConsensusClient wraps ekm.MockConsensusClient to provide dynamic behavior
+type MockConsensusClient struct {
+	ekm.MockConsensusClient
+}
+
+// ForkAtEpoch dynamically calls common.ForkAtEpoch
+func (d *MockConsensusClient) ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error) {
+	// Record the call for assertion purposes
+	d.Called(ctx, epoch)
+
+	// Call the actual function dynamically with the real epoch parameter
+	fork, err := common.ForkAtEpoch(epoch)
+
+	// Return the dynamic result based on the actual epoch
+	return fork, err
+}
+
+// Genesis dynamically calls common.Genesis
+func (d *MockConsensusClient) Genesis(ctx context.Context) (*eth2api.Genesis, error) {
+	// Record the call for assertion purposes
+	d.Called(ctx)
+
+	// Call the actual function dynamically
+	genesis, err := common.Genesis()
+
+	return genesis, err
+}
+
+func (env *TestEnvironment) setupMockConsensusClient() error {
+	env.mockConsensusClient = &MockConsensusClient{}
+
+	env.mockConsensusClient.On("ForkAtEpoch", mock.Anything, mock.AnythingOfType("phase0.Epoch"))
+	env.mockConsensusClient.On("Genesis", mock.Anything)
+
+	return nil
+}
 
 // setupMockBeacon initializes the mock beacon controller and sets up basic expectations
 func (env *TestEnvironment) setupMockBeacon(t gomock.TestReporter) error {
 	env.mockController = gomock.NewController(t)
-	env.mockBeacon = networkconfig.NewMockBeacon(env.mockController)
+
+	// Use real config but replace beacon with our mock
+	env.mockBeacon = mocks.NewMockBeaconNetwork(env.mockController)
+	env.mockNetworkConfig = networkconfig.Mainnet
+	env.mockNetworkConfig.Beacon = env.mockBeacon
 
 	// (EstimatedCurrentSlot left for individual tests to define)
 	env.setupBasicMockBeaconExpectations()
@@ -25,28 +70,14 @@ func (env *TestEnvironment) setupMockBeacon(t gomock.TestReporter) error {
 // setupBasicMockBeaconExpectations configures the mock beacon with real network values
 // EstimatedCurrentSlot() is intentionally left for individual tests to define
 func (env *TestEnvironment) setupBasicMockBeaconExpectations() {
-	realConfig := common.MainnetBeaconConfig
-
-	env.mockBeacon.EXPECT().GetGenesisValidatorsRoot().Return(realConfig.GetGenesisValidatorsRoot()).AnyTimes()
-	env.mockBeacon.EXPECT().GetNetworkName().Return(realConfig.GetNetworkName()).AnyTimes()
-	env.mockBeacon.EXPECT().GetSlotsPerEpoch().Return(realConfig.GetSlotsPerEpoch()).AnyTimes()
-	env.mockBeacon.EXPECT().GetSlotDuration().Return(realConfig.GetSlotDuration()).AnyTimes()
-	env.mockBeacon.EXPECT().GetGenesisTime().Return(realConfig.GetGenesisTime()).AnyTimes()
-
-	env.mockBeacon.EXPECT().ForkAtEpoch(gomock.Any()).DoAndReturn(func(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
-		return realConfig.ForkAtEpoch(epoch)
-	}).AnyTimes()
+	env.mockBeacon.EXPECT().GetBeaconNetwork().Return(networkconfig.Mainnet.Beacon.GetBeaconNetwork()).AnyTimes()
 
 	env.mockBeacon.EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(func(slot phase0.Slot) phase0.Epoch {
-		return realConfig.EstimatedEpochAtSlot(slot)
+		return networkconfig.Mainnet.Beacon.EstimatedEpochAtSlot(slot)
 	}).AnyTimes()
 
 	env.mockBeacon.EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(func(epoch phase0.Epoch) phase0.Slot {
-		return realConfig.GetEpochFirstSlot(epoch)
-	}).AnyTimes()
-
-	env.mockBeacon.EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(func(t time.Time) phase0.Slot {
-		return realConfig.EstimatedSlotAtTime(t)
+		return networkconfig.Mainnet.Beacon.GetEpochFirstSlot(epoch)
 	}).AnyTimes()
 
 	// NOTE: EstimatedCurrentSlot() is intentionally left for individual tests to define
