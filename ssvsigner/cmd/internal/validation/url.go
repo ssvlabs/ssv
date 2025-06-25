@@ -79,7 +79,7 @@ func init() {
 //   - Non-HTTP(S) schemes (e.g., file://, ftp://)
 //
 // Returns an error if the endpoint is invalid or potentially unsafe, nil otherwise.
-func ValidateWeb3SignerEndpoint(endpoint string) error {
+func ValidateWeb3SignerEndpoint(endpoint string, allowInsecureNetworks bool) error {
 	u, err := url.ParseRequestURI(endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid url format: %w", err)
@@ -90,51 +90,53 @@ func ValidateWeb3SignerEndpoint(endpoint string) error {
 		return fmt.Errorf("invalid url scheme %q: only http/https allowed", u.Scheme)
 	}
 
-	hostname := u.Hostname()
-	if hostname == "" {
-		return fmt.Errorf("missing hostname in url")
-	}
+	if !allowInsecureNetworks {
+		hostname := u.Hostname()
+		if hostname == "" {
+			return fmt.Errorf("missing hostname in url")
+		}
 
-	// Check if it's an IP address
-	ip := net.ParseIP(hostname)
-	if ip != nil {
-		return isBlockedIP(ip)
-	}
+		// Check if it's an IP address
+		ip := net.ParseIP(hostname)
+		if ip != nil {
+			return isBlockedIP(ip)
+		}
 
-	// It's a domain name - resolve and validate all IPs
-	ips, err := net.LookupIP(hostname)
-	if err != nil {
-		var dnsErr *net.DNSError
-		if errors.As(err, &dnsErr) {
-			if dnsErr.IsNotFound {
-				return fmt.Errorf("hostname not found: %s", hostname)
+		// It's a domain name - resolve and validate all IPs
+		ips, err := net.LookupIP(hostname)
+		if err != nil {
+			var dnsErr *net.DNSError
+			if errors.As(err, &dnsErr) {
+				if dnsErr.IsNotFound {
+					return fmt.Errorf("hostname not found: %s", hostname)
+				}
+
+				if dnsErr.IsTimeout {
+					return fmt.Errorf("dns lookup timeout for hostname: %s", hostname)
+				}
+
+				if dnsErr.IsTemporary {
+					return fmt.Errorf("temporary dns failure for hostname: %s", hostname)
+				}
 			}
+			return fmt.Errorf("failed to resolve hostname %s: %w", hostname, err)
+		}
 
-			if dnsErr.IsTimeout {
-				return fmt.Errorf("dns lookup timeout for hostname: %s", hostname)
-			}
+		if len(ips) == 0 {
+			return fmt.Errorf("hostname %s did not resolve to any ip addresses", hostname)
+		}
 
-			if dnsErr.IsTemporary {
-				return fmt.Errorf("temporary dns failure for hostname: %s", hostname)
+		var blockedIPs []string
+		for _, resolvedIP := range ips {
+			if err := isBlockedIP(resolvedIP); err != nil {
+				blockedIPs = append(blockedIPs, resolvedIP.String())
 			}
 		}
-		return fmt.Errorf("failed to resolve hostname %s: %w", hostname, err)
-	}
 
-	if len(ips) == 0 {
-		return fmt.Errorf("hostname %s did not resolve to any ip addresses", hostname)
-	}
-
-	var blockedIPs []string
-	for _, resolvedIP := range ips {
-		if err := isBlockedIP(resolvedIP); err != nil {
-			blockedIPs = append(blockedIPs, resolvedIP.String())
+		if len(blockedIPs) > 0 {
+			return fmt.Errorf("hostname %s resolves to blocked ip addresses: %s",
+				hostname, strings.Join(blockedIPs, ", "))
 		}
-	}
-
-	if len(blockedIPs) > 0 {
-		return fmt.Errorf("hostname %s resolves to blocked ip addresses: %s",
-			hostname, strings.Join(blockedIPs, ", "))
 	}
 
 	return nil

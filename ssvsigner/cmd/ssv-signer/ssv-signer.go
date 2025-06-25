@@ -31,6 +31,8 @@ type CLI struct {
 
 	// AllowInsecureHTTP allows ssv-signer to work without using TLS. Note that it allows "partial" TLS as well such as only server or only client.
 	AllowInsecureHTTP bool `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"Allow insecure HTTP requests. Do not use in production"`
+	// AllowInsecureNetworks allows ssv-signer to work in insecure networks, which are blocked by default.
+	AllowInsecureNetworks bool `env:"ALLOW_INSECURE_NETWORKS" name:"allow-insecure-networks" default:"false" help:"Allow insecure HTTP networks. Do not use in production"`
 
 	// Server TLS configuration (for incoming connections to SSV Signer)
 	KeystoreFile         string `env:"KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for server TLS connections"`
@@ -75,6 +77,7 @@ func run(logger *zap.Logger, cli CLI) error {
 		zap.Bool("server_tls_enabled", cli.KeystoreFile != ""),
 		zap.Bool("client_tls_enabled", cli.Web3SignerKeystoreFile != ""),
 		zap.Bool("allow_insecure_http", cli.AllowInsecureHTTP),
+		zap.Bool("allow_insecure_networks", cli.AllowInsecureNetworks),
 	)
 
 	if cli.AllowInsecureHTTP {
@@ -118,7 +121,7 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("neither private key nor keystore provided")
 	}
 
-	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint); err != nil {
+	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint, cli.AllowInsecureNetworks); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT: %w", err)
 	}
 

@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
 
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/validation"
@@ -24,7 +25,9 @@ import (
 
 type CLI struct {
 	Web3SignerEndpoint string `env:"WEB3SIGNER_ENDPOINT" required:""`
-	BatchSize          int    `env:"BATCH_SIZE" default:"20"` // reduce if getting context deadline exceeded; increase if it's fast
+	// AllowInsecureNetworks allows ssv-signer to work in insecure networks, which are blocked by default.
+	AllowInsecureNetworks bool `env:"ALLOW_INSECURE_NETWORKS" name:"allow-insecure-networks" default:"false" help:"Allow insecure HTTP networks. Do not use in production"`
+	BatchSize             int  `env:"BATCH_SIZE" default:"20"` // reduce if getting context deadline exceeded; increase if it's fast
 
 	// Client TLS configuration (for connecting to Web3Signer)
 	Web3SignerKeystoreFile         string `env:"WEB3SIGNER_KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for TLS connection to Web3Signer"`
@@ -155,7 +158,7 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("invalid batch size %d, must be > 0", cli.BatchSize)
 	}
 
-	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint); err != nil {
+	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint, cli.AllowInsecureNetworks); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT: %w", err)
 	}
 
