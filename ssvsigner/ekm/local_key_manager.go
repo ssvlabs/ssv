@@ -318,18 +318,6 @@ func (km *LocalKeyManager) AddShare(
 	return nil
 }
 
-// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
-//
-// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
-// applying previously archived slashing protection history to prevent slashing after share regeneration.
-// It uses maximum value logic to prevent regression.
-func (km *LocalKeyManager) ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
-	if storage, ok := km.slashingProtector.(*SlashingProtector); ok {
-		return applyArchivedSlashingProtection(storage.signerStore, validatorPubKey, sharePubKey)
-	}
-	return fmt.Errorf("slashing protector does not support archiving")
-}
-
 // RemoveShare removes the share from the local wallet and clears the associated
 // slashing-protection records (highest attestation/proposal) for the given
 // public key. Note: slashing protection history is preserved through archiving
@@ -367,10 +355,16 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey
 // TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
 // preserving slashing protection data before share removal to ensure continuity across re-registration cycles.
 func (km *LocalKeyManager) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
-	if storage, ok := km.slashingProtector.(*SlashingProtector); ok {
-		return storage.signerStore.ArchiveSlashingProtection(validatorPubKey, sharePubKey)
-	}
-	return fmt.Errorf("slashing protector does not support archiving")
+	return km.slashingProtector.ArchiveSlashingProtection(nil, validatorPubKey, sharePubKey)
+}
+
+// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
+//
+// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
+// applying previously archived slashing protection history to prevent slashing after share regeneration.
+// It uses maximum value logic to prevent regression.
+func (km *LocalKeyManager) ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
+	return km.slashingProtector.ApplyArchivedSlashingProtection(nil, validatorPubKey, sharePubKey)
 }
 
 func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {

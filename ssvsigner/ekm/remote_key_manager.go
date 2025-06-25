@@ -590,6 +590,23 @@ func (km *RemoteKeyManager) GetOperatorID() spectypes.OperatorID {
 	return km.getOperatorId()
 }
 
+// ArchiveSlashingProtection preserves slashing protection data keyed by validator public key.
+//
+// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
+// preserving slashing protection data before share removal to ensure continuity across re-registration cycles.
+func (km *RemoteKeyManager) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
+	return km.slashingProtector.ArchiveSlashingProtection(nil, validatorPubKey, sharePubKey)
+}
+
+// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
+//
+// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
+// applying previously archived slashing protection history to prevent slashing after share regeneration.
+// It uses maximum value logic to prevent regression.
+func (km *RemoteKeyManager) ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
+	return km.slashingProtector.ApplyArchivedSlashingProtection(nil, validatorPubKey, sharePubKey)
+}
+
 type lockOperation int
 
 const (
@@ -619,27 +636,4 @@ func (km *RemoteKeyManager) lock(sharePubkey phase0.BLSPubKey, operation lockOpe
 
 	km.signLocks[key] = &sync.RWMutex{}
 	return km.signLocks[key]
-}
-
-// ArchiveSlashingProtection preserves slashing protection data keyed by validator public key.
-//
-// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
-// preserving slashing protection data before share removal to ensure continuity across re-registration cycles.
-func (km *RemoteKeyManager) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
-	if storage, ok := km.slashingProtector.(*SlashingProtector); ok {
-		return storage.signerStore.ArchiveSlashingProtection(validatorPubKey, sharePubKey)
-	}
-	return fmt.Errorf("slashing protector does not support archiving")
-}
-
-// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
-//
-// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
-// applying previously archived slashing protection history to prevent slashing after share regeneration.
-// It uses maximum value logic to prevent regression.
-func (km *RemoteKeyManager) ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
-	if storage, ok := km.slashingProtector.(*SlashingProtector); ok {
-		return applyArchivedSlashingProtection(storage.signerStore, validatorPubKey, sharePubKey)
-	}
-	return fmt.Errorf("slashing protector does not support archiving")
 }

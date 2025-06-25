@@ -282,3 +282,13 @@ func (m *MockSlashingProtector) RemoveHighestProposalTxn(txn basedb.Txn, pubKey 
 	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }
+
+func (m *MockSlashingProtector) ArchiveSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error {
+	args := m.Called(txn, validatorPubKey, sharePubKey)
+	return args.Error(0)
+}
+
+func (m *MockSlashingProtector) ApplyArchivedSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
+	args := m.Called(txn, validatorPubKey, sharePubKey)
+	return args.Error(0)
+}
