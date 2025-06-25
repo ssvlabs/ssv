@@ -595,10 +595,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot+4))
 		require.NoError(t, err)
 
-		// Third duty.
+		// Third duty (exceeds the limit).
 		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot+8))
-		require.NoError(t, err)
+		require.ErrorIs(t, err, ErrTooManyDutiesPerEpoch)
 	})
 
 	// Throw error if getting a message for proposal and see there is no message from beacon
