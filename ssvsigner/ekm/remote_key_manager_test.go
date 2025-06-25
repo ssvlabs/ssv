@@ -738,7 +738,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		signature, root, err := rm.SignBeaconObject(ctx, attestationData, domain, pubKey, slot, spectypes.DomainAttester)
 
 		s.ErrorContains(err, "get fork info")
-		s.Equal(spectypes.Signature{}, signature)
+		s.Nil(signature)
 		s.Equal(phase0.Root{}, root)
 		s.consensusClient.AssertExpectations(s.T())
 	})
@@ -786,7 +786,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		signature, root, err := rmTest.SignBeaconObject(ctx, attestationData, domain, pubKey, slot, spectypes.DomainAttester)
 
 		s.ErrorContains(err, "get fork info: get genesis")
-		s.Equal(spectypes.Signature{}, signature)
+		s.Nil(signature)
 		s.Equal(phase0.Root{}, root)
 		consensusMock.AssertExpectations(s.T())
 	})
@@ -843,7 +843,7 @@ func (s *RemoteKeyManagerTestSuite) TestSignBeaconObjectErrorCases() {
 		signature, root, err := rmTest.SignBeaconObject(ctx, attestationData, domain, pubKey, slot, spectypes.DomainAttester)
 
 		s.ErrorContains(err, "remote signer")
-		s.Equal(spectypes.Signature{}, signature)
+		s.Nil(signature)
 		s.Equal(phase0.Root{}, root)
 		consensusMock.AssertExpectations(s.T())
 	})
