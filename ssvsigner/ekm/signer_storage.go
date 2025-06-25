@@ -40,10 +40,10 @@ const (
 	highestAttPrefix      = prefix + "highest_att-"
 	highestProposalPrefix = prefix + "highest_prop-"
 
-	// slashingArchiveAttPrefix is the prefix for archived slashing protection data.
-	// It stores slashing protection data (highest attestation and proposal)
-	// keyed by validator public key. This is a temporary solution for audit finding SSV-15
-	slashingArchiveAttPrefix = prefix + "archive_att-"
+	// slashingArchivePrefix is the prefix for archived slashing protection data.
+	// It stores slashing protection data (the highest attestation and proposal)
+	// keyed by a validator public key. This is a temporary solution for audit finding SSV-15
+	slashingArchivePrefix = prefix + "archive_sp-"
 )
 
 var (
@@ -574,7 +574,7 @@ func (s *storage) ArchiveSlashingProtectionTxn(rw basedb.ReadWriter, validatorPu
 		return fmt.Errorf("marshal archive: %w", err)
 	}
 
-	return s.db.Using(rw).Set(s.objPrefix(slashingArchiveAttPrefix), validatorPubKey, data)
+	return s.db.Using(rw).Set(s.objPrefix(slashingArchivePrefix), validatorPubKey, data)
 }
 
 // RetrieveArchivedSlashingProtectionTxn retrieves archived slashing protection data for a validator.
@@ -594,7 +594,7 @@ func (s *storage) getArchivedSlashingProtection(r basedb.Reader, validatorPubKey
 		return nil, false, fmt.Errorf("validator public key must not be nil")
 	}
 
-	obj, found, err := s.db.UsingReader(r).Get(s.objPrefix(slashingArchiveAttPrefix), validatorPubKey)
+	obj, found, err := s.db.UsingReader(r).Get(s.objPrefix(slashingArchivePrefix), validatorPubKey)
 	if err != nil {
 		return nil, false, fmt.Errorf("could not get archived slashing protection: %w", err)
 	}
