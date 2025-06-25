@@ -46,12 +46,7 @@ type CLI struct {
 func main() {
 	var cli CLI
 
-	kong.Must(&cli,
-		kong.Name("ssv-signer"),
-		kong.UsageOnError(),
-	)
-
-	_ = kong.Parse(&cli)
+	_ = kong.Parse(&cli, kong.Name("ssv-signer"), kong.UsageOnError())
 
 	log, err := logger.SetupLogger(cli.LogLevel, cli.LogFormat)
 	if err != nil {
