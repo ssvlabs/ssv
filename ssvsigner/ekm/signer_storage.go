@@ -558,6 +558,10 @@ func (s *storage) ArchiveSlashingProtectionTxn(rw basedb.ReadWriter, validatorPu
 
 	if found && existing != nil {
 		// Merge with existing data, keeping the highest values
+		// This handles cases where a validator is removed and re-added multiple times.
+		// Example: removed at epoch 100, re-added and used until epoch 200, then removed again.
+		// We must keep epoch 200, not overwrite with 100.
+		// This also protects against any edge cases (like hard forks).
 		if existing.HighestAttestation != nil && (archive.HighestAttestation == nil ||
 			existing.HighestAttestation.Target.Epoch > archive.HighestAttestation.Target.Epoch) {
 			archive.HighestAttestation = existing.HighestAttestation
