@@ -1,8 +1,10 @@
 package networkconfig
 
 import (
+	"math"
 	"math/big"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -29,4 +31,6 @@ var MainnetSSV = SSVConfig{
 		"enr:-Li4QH7FwJcL8gJj0zHAITXqghMkG-A5bfWh2-3Q7vosy9D1BS8HZk-1ITuhK_rfzG3v_UtBDI6uNJZWpdcWfrQFCxKGAYnQ1DRCh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQKeSDcZWSaY9FC723E9yYX1Li18bswhLNlxBZdLfgOKp4N0Y3CCE4mDdWRwgg-h",
 	},
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
+	// TODO - set proper value for mainnet
+	GasLimit36Epoch: phase0.Epoch(math.MaxUint64),
 }
