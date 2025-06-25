@@ -65,8 +65,9 @@ func (mv *messageValidator) validateDutyCount(
 		return nil
 	}
 
-	// If a message for this slot hasn't already been observed, we should treat it as a new duty.
-	// It will trigger duty count increase, therefore, in this case, we increase duty count
+	// If no message has been observed for this slot yet, treat it as a new duty.
+	// It will increment the duty count during state update after successful validation,
+	// so we preemptively increment the checked duty count to reflect that.
 	if signerStateBySlot.GetSignerState(msgSlot) == nil {
 		dutyCount++
 	}
