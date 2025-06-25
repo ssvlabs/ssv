@@ -352,8 +352,8 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey
 //
 // TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
 // preserving slashing protection data before share removal to ensure continuity across re-registration cycles.
-func (km *LocalKeyManager) ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error {
-	return km.slashingProtector.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+func (km *LocalKeyManager) ArchiveSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error {
+	return km.slashingProtector.ArchiveSlashingProtectionTxn(txn, validatorPubKey, sharePubKey)
 }
 
 // ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
@@ -361,8 +361,8 @@ func (km *LocalKeyManager) ArchiveSlashingProtection(validatorPubKey []byte, sha
 // TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
 // applying previously archived slashing protection history to prevent slashing after share regeneration.
 // It uses maximum value logic to prevent regression.
-func (km *LocalKeyManager) ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
-	return km.slashingProtector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+func (km *LocalKeyManager) ApplyArchivedSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
+	return km.slashingProtector.ApplyArchivedSlashingProtectionTxn(txn, validatorPubKey, sharePubKey)
 }
 
 func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {

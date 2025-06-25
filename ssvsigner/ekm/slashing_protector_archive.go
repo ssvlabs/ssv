@@ -2,6 +2,8 @@ package ekm
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // SlashingProtectionArchiver handles archiving and restoring slashing protection data
@@ -28,7 +30,7 @@ type SlashingProtectionArchiver interface {
 	// history when the validator is subsequently re-added with regenerated shares.
 	//
 	// TODO(SSV-15): Remove this method once proper architectural solution is implemented.
-	ArchiveSlashingProtection(validatorPubKey []byte, sharePubKey []byte) error
+	ArchiveSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error
 
 	// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
 	// This method is part of the temporary solution for audit finding SSV-15.
@@ -36,5 +38,5 @@ type SlashingProtectionArchiver interface {
 	// across validator re-registration cycles. It uses maximum value logic to prevent regression.
 	//
 	// TODO(SSV-15): Remove this method once proper architectural solution is implemented.
-	ApplyArchivedSlashingProtection(validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error
+	ApplyArchivedSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error
 }
