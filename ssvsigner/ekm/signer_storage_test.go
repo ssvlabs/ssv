@@ -937,6 +937,6 @@ func (a *mockAccount) ValidatorPublicKey() []byte {
 	return sk.GetPublicKey().Serialize()
 }
 func (a *mockAccount) WithdrawalPublicKey() []byte                     { return nil }
-func (a *mockAccount) ValidationKeySign(data []byte) ([]byte, error)   { return nil, nil }
+func (a *mockAccount) ValidationKeySign([]byte) ([]byte, error)        { return nil, nil }
 func (a *mockAccount) GetDepositData() (map[string]interface{}, error) { return nil, nil }
-func (a *mockAccount) SetContext(ctx *core.WalletContext)              {}
+func (a *mockAccount) SetContext(*core.WalletContext)                  {}
