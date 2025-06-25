@@ -35,15 +35,13 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
-var _ SlashingProtectionArchiver = (*LocalKeyManager)(nil)
-
 // LocalKeyManager implements KeyManager by storing and operating on BLS keys locally.
 // It relies on eth2-key-manager for signing and performing slashing checks before signing.
 //
 // It uses the operator's private key to decrypt incoming shares.
 //
 // The underlying wallet data is stored in the provided db.
-// Signing along with slashing protection are managed with eth2-key-manager's slashingprotection.NewNormalProtection.
+// Signing along with slashing protection is managed with eth2-key-manager's slashingprotection.NewNormalProtection.
 //
 // There are two wrappers for slashingprotection.NewNormalProtection:
 //   - signer.SimpleSigner for internal checks and updates

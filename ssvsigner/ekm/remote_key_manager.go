@@ -32,14 +32,12 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-var _ SlashingProtectionArchiver = (*RemoteKeyManager)(nil)
-
 // RemoteKeyManager implements KeyManager by delegating signing operations to
 // a remote signing service (via signerClient). Validator shares are
 // registered or removed on the remote side, while minimal slashing protection
 // data is still maintained locally to prevent slashable requests.
 //
-// RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
+// RemoteKeyManager doesn't use an operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
 	logger            *zap.Logger
 	netCfg            networkconfig.NetworkConfig
@@ -120,9 +118,9 @@ func (km *RemoteKeyManager) AddShare(
 		PubKey:           pubKey,
 	}
 
-	// If txn gets rolled back after share is saved,
+	// If txn gets rolled back after a share is saved,
 	// there will be some inconsistency between syncer state and remote signer.
-	// However, syncer crashes node on an error and restarts the sync process from the failing block,
+	// However, syncer crashes the node on an error and restarts the sync process from the failing block,
 	// so it will attempt to save the same share again, which won't be an issue
 	// because AddValidators doesn't fail if the same share exists.
 	statuses, err := km.signerClient.AddValidators(ctx, shareKeys)
@@ -217,7 +215,7 @@ func (km *RemoteKeyManager) BumpSlashingProtection(txn basedb.Txn, pubKey phase0
 
 // SignBeaconObject checks slashing conditions locally for attestation and beacon block,
 // then constructs a SignRequest for the remote signerClient. If slashable, returns an error immediately.
-// Otherwise, forwards to the remote service. It returns signature as well as the computed signing root.
+// Otherwise, forwards to the remote service. It returns the signature as well as the computed signing root.
 func (km *RemoteKeyManager) SignBeaconObject(
 	ctx context.Context,
 	obj ssz.HashRoot,
