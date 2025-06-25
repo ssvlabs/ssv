@@ -157,7 +157,6 @@ func (sp *SlashingProtector) ArchiveSlashingProtectionTxn(txn basedb.Txn, valida
 // TODO(SSV-15): This function is part of the temporary solution for audit finding SSV-15,
 // applying previously archived slashing protection history to prevent slashing after share regeneration.
 func (sp *SlashingProtector) ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
-	// Retrieve archived slashing protection data for the validator
 	archive, found, err := sp.signerStore.RetrieveArchivedSlashingProtectionTxn(txn, validatorPubKey)
 	if err != nil {
 		return fmt.Errorf("could not retrieve archived slashing protection: %w", err)
@@ -193,30 +192,26 @@ func (sp *SlashingProtector) ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, 
 				sourceEpoch = archive.HighestAttestation.Source.Epoch
 			}
 		} else {
-			// Use max of current epoch and archived values
+			// No current data - use max of current epoch and archived values
 			if currentEpoch > archive.HighestAttestation.Target.Epoch {
 				targetEpoch = currentEpoch
 			} else {
 				targetEpoch = archive.HighestAttestation.Target.Epoch
 			}
 
-			if targetEpoch > 0 {
-				sourceEpoch = targetEpoch - 1
-			}
-			if currentEpoch > 0 && currentEpoch-1 > archive.HighestAttestation.Source.Epoch {
-				sourceEpoch = currentEpoch - 1
-			} else if archive.HighestAttestation.Source.Epoch > sourceEpoch {
+			// Compute a minimal source epoch based on target, then take max with archived
+			minimalSP := sp.computeMinimalAttestationSP(targetEpoch)
+			sourceEpoch = minimalSP.Source.Epoch
+			if archive.HighestAttestation.Source.Epoch > sourceEpoch {
 				sourceEpoch = archive.HighestAttestation.Source.Epoch
 			}
 		}
 
-		// Create new attestation data with the computed epochs
 		newAttData := &phase0.AttestationData{
 			Source: &phase0.Checkpoint{Epoch: sourceEpoch},
 			Target: &phase0.Checkpoint{Epoch: targetEpoch},
 		}
 
-		// Save the updated attestation data
 		if err := sp.signerStore.SaveHighestAttestationTxn(txn, sharePubKey[:], newAttData); err != nil {
 			return fmt.Errorf("could not save updated highest attestation: %w", err)
 		}
@@ -230,16 +225,20 @@ func (sp *SlashingProtector) ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, 
 			return fmt.Errorf("could not retrieve current highest proposal: %w", err)
 		}
 
+		minimalSPSlot := sp.computeMinimalProposerSP(currentSlot)
+
 		var highestSlot phase0.Slot
 		if foundProp && currentProp > archive.HighestProposal {
+			// Current data is higher than archived - use current
 			highestSlot = currentProp
-		} else if currentSlot > archive.HighestProposal {
-			highestSlot = currentSlot
+		} else if minimalSPSlot > archive.HighestProposal {
+			// Minimal SP for the current time is higher than archived - use minimal SP
+			highestSlot = minimalSPSlot
 		} else {
+			// Archived data is the highest - use archived
 			highestSlot = archive.HighestProposal
 		}
 
-		// Save the updated proposal data
 		if err := sp.signerStore.SaveHighestProposalTxn(txn, sharePubKey[:], highestSlot); err != nil {
 			return fmt.Errorf("could not save updated highest proposal: %w", err)
 		}
