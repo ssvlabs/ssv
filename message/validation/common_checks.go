@@ -66,14 +66,28 @@ func (mv *messageValidator) validateDutyCount(
 		return nil
 	}
 
+	alreadySeen := signerStateBySlot.GetSignerState(msgSlot) != nil
+	if alreadySeen {
+		dutyLimit++ // won't overflow because duty limit should never be max int
+	}
+
 	// Error if this validator has already been assigned at least as many duties
 	// as allowed for the target epoch. We perform this check *before* incrementing
 	// the in-memory count (so the very first duty will see count==0), hence the
 	// inclusive ">=" comparison.
-	if dutyCount >= dutyLimit {
+	exceededDutyLimit := dutyCount >= dutyLimit
+	logSign := "<"
+	// If a message for this slot has already been observed, we shouldn't treat it as a new duty.
+	// It won't trigger duty count increase, therefore, in this case, we allow duty count to be at the limit
+	if signerStateBySlot.GetSignerState(msgSlot) != nil {
+		exceededDutyLimit = dutyCount > dutyLimit
+		logSign = "<="
+	}
+
+	if exceededDutyLimit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v, epoch %v)", dutyCount, msgID.GetRoleType(), epoch)
-		err.want = fmt.Sprintf("<%v", dutyLimit)
+		err.want = fmt.Sprintf("%s%v", logSign, dutyLimit)
 		return err
 	}
 
