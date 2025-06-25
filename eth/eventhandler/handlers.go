@@ -245,19 +245,19 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
+		// Apply any archived slashing protection data for this validator before adding the share.
+		// TODO(SSV-15): This ensures slashing protection continuity across validator re-registration cycles
+		// as part of the temporary solution for audit finding SSV-15.
+		if err := eh.keyManager.ApplyArchivedSlashingProtection(txn, share.ValidatorPubKey[:], phase0.BLSPubKey(share.SharePubKey)); err != nil {
+			return nil, fmt.Errorf("could not apply archived slashing protection data: %w", err)
+		}
+
 		if err := eh.keyManager.AddShare(ctx, txn, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			var shareDecryptionEKMError ekm.ShareDecryptionError
 			if errors.As(err, &shareDecryptionEKMError) {
 				return nil, &MalformedEventError{Err: err}
 			}
 			return nil, fmt.Errorf("could not add share encrypted key: %w", err)
-		}
-
-		// Apply any archived slashing protection data for this validator.
-		// TODO(SSV-15): This ensures slashing protection continuity across validator re-registration cycles
-		// as part of the temporary solution for audit finding SSV-15.
-		if err := eh.keyManager.ApplyArchivedSlashingProtection(txn, share.ValidatorPubKey[:], phase0.BLSPubKey(share.SharePubKey)); err != nil {
-			eh.logger.Warn("could not apply archived slashing protection data", zap.Error(err))
 		}
 
 		// Set the minimum participation epoch to match slashing protection.

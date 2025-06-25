@@ -169,9 +169,9 @@ func (sp *SlashingProtector) ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, 
 	currentSlot := sp.signerStore.BeaconNetwork().EstimatedCurrentSlot()
 	currentEpoch := sp.signerStore.BeaconNetwork().EstimatedEpochAtSlot(currentSlot)
 
-	// Apply archived attestation data using max(current, archived) logic
+	// Apply archived attestation data using max(current data, archived, current epoch) logic
 	if archive.HighestAttestation != nil {
-		// Get current slashing protection data for the share
+		// Get current slashing protection data for the share to ensure we never regress
 		currentAtt, foundCurrent, err := sp.signerStore.RetrieveHighestAttestationTxn(txn, sharePubKey[:])
 		if err != nil {
 			return fmt.Errorf("could not retrieve current highest attestation: %w", err)
@@ -179,16 +179,17 @@ func (sp *SlashingProtector) ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, 
 
 		var targetEpoch, sourceEpoch phase0.Epoch
 		if foundCurrent && currentAtt != nil {
-			// Use max of current and archived values
-			if currentAtt.Target.Epoch > archive.HighestAttestation.Target.Epoch {
-				targetEpoch = currentAtt.Target.Epoch
-			} else {
+			// Use max of current, archived, and current epoch values
+			targetEpoch = currentAtt.Target.Epoch
+			if archive.HighestAttestation.Target.Epoch > targetEpoch {
 				targetEpoch = archive.HighestAttestation.Target.Epoch
 			}
+			if currentEpoch > targetEpoch {
+				targetEpoch = currentEpoch
+			}
 
-			if currentAtt.Source.Epoch > archive.HighestAttestation.Source.Epoch {
-				sourceEpoch = currentAtt.Source.Epoch
-			} else {
+			sourceEpoch = currentAtt.Source.Epoch
+			if archive.HighestAttestation.Source.Epoch > sourceEpoch {
 				sourceEpoch = archive.HighestAttestation.Source.Epoch
 			}
 		} else {
@@ -217,9 +218,9 @@ func (sp *SlashingProtector) ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, 
 		}
 	}
 
-	// Apply archived proposal data using max(current, archived) logic
+	// Apply archived proposal data using max(current data, archived, current slot) logic
 	if archive.HighestProposal > 0 {
-		// Get the current highest proposal for the share
+		// Get current slashing protection data for the share to ensure we never regress
 		currentProp, foundProp, err := sp.signerStore.RetrieveHighestProposalTxn(txn, sharePubKey[:])
 		if err != nil {
 			return fmt.Errorf("could not retrieve current highest proposal: %w", err)
@@ -228,15 +229,22 @@ func (sp *SlashingProtector) ApplyArchivedSlashingProtectionTxn(txn basedb.Txn, 
 		minimalSPSlot := sp.computeMinimalProposerSP(currentSlot)
 
 		var highestSlot phase0.Slot
-		if foundProp && currentProp > archive.HighestProposal {
-			// Current data is higher than archived - use current
+		if foundProp && currentProp > 0 {
+			// Use max of current, archived, and minimal SP values
 			highestSlot = currentProp
-		} else if minimalSPSlot > archive.HighestProposal {
-			// Minimal SP for the current time is higher than archived - use minimal SP
-			highestSlot = minimalSPSlot
+			if archive.HighestProposal > highestSlot {
+				highestSlot = archive.HighestProposal
+			}
+			if minimalSPSlot > highestSlot {
+				highestSlot = minimalSPSlot
+			}
 		} else {
-			// Archived data is the highest - use archived
-			highestSlot = archive.HighestProposal
+			// No current data - use max of minimal SP and archived values
+			if minimalSPSlot > archive.HighestProposal {
+				highestSlot = minimalSPSlot
+			} else {
+				highestSlot = archive.HighestProposal
+			}
 		}
 
 		if err := sp.signerStore.SaveHighestProposalTxn(txn, sharePubKey[:], highestSlot); err != nil {
