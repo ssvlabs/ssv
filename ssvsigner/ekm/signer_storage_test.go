@@ -695,6 +695,227 @@ func TestSlashingProtection(t *testing.T) {
 	})
 }
 
+// TestSlashingProtectionArchiving tests the archiving functionality for slashing protection data.
+//
+// TODO(SSV-15): These tests are part of the temporary solution for audit finding SSV-15.
+func TestSlashingProtectionArchiving(t *testing.T) {
+	t.Run("archive and retrieve", func(t *testing.T) {
+		_, signerStorage, done := testWallet(t)
+		defer done()
+
+		validatorPubKey := []byte("validator_pub_key_test")
+		sharePubKey := []byte("share_pub_key_test")
+
+		testAtt := &phase0.AttestationData{
+			Slot:            100,
+			Index:           1,
+			BeaconBlockRoot: [32]byte{},
+			Source: &phase0.Checkpoint{
+				Epoch: 50,
+				Root:  [32]byte{},
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: 51,
+				Root:  [32]byte{},
+			},
+		}
+		testProposal := phase0.Slot(200)
+
+		err := signerStorage.SaveHighestAttestation(sharePubKey, testAtt)
+		require.NoError(t, err)
+		err = signerStorage.SaveHighestProposal(sharePubKey, testProposal)
+		require.NoError(t, err)
+
+		err = signerStorage.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, validatorPubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, archive)
+
+		require.Equal(t, validatorPubKey, archive.ValidatorPubKey)
+		require.NotNil(t, archive.HighestAttestation)
+		require.Equal(t, testAtt.Source.Epoch, archive.HighestAttestation.Source.Epoch)
+		require.Equal(t, testAtt.Target.Epoch, archive.HighestAttestation.Target.Epoch)
+		require.Equal(t, testProposal, archive.HighestProposal)
+		require.Greater(t, archive.ArchivedAt, int64(0))
+	})
+
+	t.Run("archive with no existing data", func(t *testing.T) {
+		_, signerStorage, done := testWallet(t)
+		defer done()
+
+		validatorPubKey := []byte("validator_pub_key_empty")
+		sharePubKey := []byte("share_pub_key_empty")
+
+		err := signerStorage.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, validatorPubKey)
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Nil(t, archive)
+	})
+
+	t.Run("archive only attestation", func(t *testing.T) {
+		_, signerStorage, done := testWallet(t)
+		defer done()
+
+		validatorPubKey := []byte("validator_pub_key_att_only")
+		sharePubKey := []byte("share_pub_key_att_only")
+
+		testAtt := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 10},
+			Target: &phase0.Checkpoint{Epoch: 11},
+		}
+		err := signerStorage.SaveHighestAttestation(sharePubKey, testAtt)
+		require.NoError(t, err)
+
+		err = signerStorage.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, validatorPubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, archive.HighestAttestation)
+		require.Equal(t, phase0.Slot(0), archive.HighestProposal)
+	})
+
+	t.Run("archive only proposal", func(t *testing.T) {
+		_, signerStorage, done := testWallet(t)
+		defer done()
+
+		validatorPubKey := []byte("validator_pub_key_prop_only")
+		sharePubKey := []byte("share_pub_key_prop_only")
+
+		testProposal := phase0.Slot(300)
+		err := signerStorage.SaveHighestProposal(sharePubKey, testProposal)
+		require.NoError(t, err)
+
+		err = signerStorage.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, validatorPubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Nil(t, archive.HighestAttestation)
+		require.Equal(t, testProposal, archive.HighestProposal)
+	})
+
+	t.Run("merge with existing archive", func(t *testing.T) {
+		_, signerStorage, done := testWallet(t)
+		defer done()
+
+		validatorPubKey := []byte("validator_pub_key_merge")
+		sharePubKey1 := []byte("share_pub_key_merge_1")
+		sharePubKey2 := []byte("share_pub_key_merge_2")
+
+		testAtt1 := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 10},
+			Target: &phase0.Checkpoint{Epoch: 11},
+		}
+		testProposal1 := phase0.Slot(100)
+
+		err := signerStorage.SaveHighestAttestation(sharePubKey1, testAtt1)
+		require.NoError(t, err)
+		err = signerStorage.SaveHighestProposal(sharePubKey1, testProposal1)
+		require.NoError(t, err)
+
+		err = signerStorage.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey1)
+		require.NoError(t, err)
+
+		testAtt2 := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 20},
+			Target: &phase0.Checkpoint{Epoch: 21},
+		}
+		testProposal2 := phase0.Slot(200)
+
+		err = signerStorage.SaveHighestAttestation(sharePubKey2, testAtt2)
+		require.NoError(t, err)
+		err = signerStorage.SaveHighestProposal(sharePubKey2, testProposal2)
+		require.NoError(t, err)
+
+		err = signerStorage.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey2)
+		require.NoError(t, err)
+
+		archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, validatorPubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, testAtt2.Target.Epoch, archive.HighestAttestation.Target.Epoch)
+		require.Equal(t, testProposal2, archive.HighestProposal)
+	})
+
+	t.Run("error cases", func(t *testing.T) {
+		_, signerStorage, done := testWallet(t)
+		defer done()
+
+		t.Run("nil validator pub key", func(t *testing.T) {
+			sharePubKey := []byte("share_pub_key")
+			err := signerStorage.ArchiveSlashingProtectionTxn(nil, nil, sharePubKey)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "validator public key must not be nil")
+		})
+
+		t.Run("nil share pub key", func(t *testing.T) {
+			validatorPubKey := []byte("validator_pub_key")
+			err := signerStorage.ArchiveSlashingProtectionTxn(nil, validatorPubKey, nil)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "share public key must not be nil")
+		})
+
+		t.Run("nil validator pub key for retrieve", func(t *testing.T) {
+			archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, nil)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "validator public key must not be nil")
+			require.False(t, found)
+			require.Nil(t, archive)
+		})
+
+		t.Run("non existent archive", func(t *testing.T) {
+			validatorPubKey := []byte("non_existent_validator")
+			archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, validatorPubKey)
+			require.NoError(t, err)
+			require.False(t, found)
+			require.Nil(t, archive)
+		})
+
+		t.Run("empty archive value", func(t *testing.T) {
+			_, signerStorage, done := testWallet(t)
+			defer done()
+
+			s := signerStorage.(*storage)
+			validatorPubKey := []byte("test_validator")
+
+			err := s.db.Set(s.objPrefix(slashingArchivePrefix), validatorPubKey, []byte{})
+			require.NoError(t, err)
+
+			archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, validatorPubKey)
+			require.Error(t, err)
+			require.False(t, found)
+			require.Contains(t, err.Error(), "archived slashing protection value is empty")
+			require.Nil(t, archive)
+		})
+
+		t.Run("invalid archive json", func(t *testing.T) {
+			_, signerStorage, done := testWallet(t)
+			defer done()
+
+			s := signerStorage.(*storage)
+			validatorPubKey := []byte("test_validator_invalid")
+
+			err := s.db.Set(s.objPrefix(slashingArchivePrefix), validatorPubKey, []byte("{invalid-json}"))
+			require.NoError(t, err)
+
+			archive, found, err := signerStorage.RetrieveArchivedSlashingProtectionTxn(nil, validatorPubKey)
+			require.Error(t, err)
+			require.False(t, found)
+			require.Contains(t, err.Error(), "could not unmarshal archived slashing protection")
+			require.Nil(t, archive)
+		})
+	})
+}
+
 // Helper functions for testing
 
 func _bigInt(input string) *big.Int {
