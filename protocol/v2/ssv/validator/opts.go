@@ -6,8 +6,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -15,6 +14,7 @@ import (
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 const (
@@ -44,7 +44,7 @@ type CommonOptions struct {
 	DoppelgangerHandler runner.DoppelgangerProvider
 	NewDecidedHandler   qbftctrl.NewDecidedHandler
 	FullNode            bool
-	Exporter            bool
+	ExporterOptions     exporter.Options
 	QueueSize           int
 	GasLimit            uint64
 	MessageValidator    validation.MessageValidator
@@ -62,7 +62,7 @@ func NewCommonOptions(
 	doppelgangerHandler runner.DoppelgangerProvider,
 	newDecidedHandler qbftctrl.NewDecidedHandler,
 	fullNode bool,
-	exporter bool,
+	exporterOptions exporter.Options,
 	historySyncBatchSize int,
 	gasLimit uint64,
 	messageValidator validation.MessageValidator,
@@ -79,7 +79,7 @@ func NewCommonOptions(
 		DoppelgangerHandler: doppelgangerHandler,
 		NewDecidedHandler:   newDecidedHandler,
 		FullNode:            fullNode,
-		Exporter:            exporter,
+		ExporterOptions:     exporterOptions,
 		QueueSize:           DefaultQueueSize,
 		GasLimit:            gasLimit,
 		MessageValidator:    messageValidator,

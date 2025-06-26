@@ -19,6 +19,7 @@ import (
 
 type BaseValidatorStore interface {
 	Validator(pubKey []byte) (*types.SSVShare, bool)
+	ValidatorIndex(pubKey spectypes.ValidatorPK) (phase0.ValidatorIndex, bool)
 	ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool)
 	Validators() []*types.SSVShare
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
@@ -75,9 +76,10 @@ type validatorStore struct {
 	shares     func() []*types.SSVShare
 	byPubKey   func([]byte) (*types.SSVShare, bool)
 
-	byValidatorIndex map[phase0.ValidatorIndex]*types.SSVShare
-	byCommitteeID    map[spectypes.CommitteeID]*Committee
-	byOperatorID     map[spectypes.OperatorID]*sharesAndCommittees
+	byValidatorPubkey map[spectypes.ValidatorPK]phase0.ValidatorIndex
+	byValidatorIndex  map[phase0.ValidatorIndex]*types.SSVShare
+	byCommitteeID     map[spectypes.CommitteeID]*Committee
+	byOperatorID      map[spectypes.OperatorID]*sharesAndCommittees
 
 	beaconCfg networkconfig.Beacon
 
@@ -87,20 +89,34 @@ type validatorStore struct {
 func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
+	pubkeyIndexMapping map[spectypes.ValidatorPK]phase0.ValidatorIndex,
 	beaconCfg networkconfig.Beacon,
 ) *validatorStore {
 	return &validatorStore{
-		shares:           shares,
-		byPubKey:         shareByPubKey,
-		byValidatorIndex: make(map[phase0.ValidatorIndex]*types.SSVShare),
-		byCommitteeID:    make(map[spectypes.CommitteeID]*Committee),
-		byOperatorID:     make(map[spectypes.OperatorID]*sharesAndCommittees),
-		beaconCfg:        beaconCfg,
+		shares:            shares,
+		byPubKey:          shareByPubKey,
+		byValidatorPubkey: pubkeyIndexMapping,
+		byValidatorIndex:  make(map[phase0.ValidatorIndex]*types.SSVShare),
+		byCommitteeID:     make(map[spectypes.CommitteeID]*Committee),
+		byOperatorID:      make(map[spectypes.OperatorID]*sharesAndCommittees),
+		beaconCfg:         beaconCfg,
 	}
 }
 
 func (c *validatorStore) Validator(pubKey []byte) (*types.SSVShare, bool) {
 	return c.byPubKey(pubKey)
+}
+
+func (c *validatorStore) ValidatorIndex(pubkey spectypes.ValidatorPK) (phase0.ValidatorIndex, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	index, found := c.byValidatorPubkey[pubkey]
+	if !found {
+		return 0, false
+	}
+
+	return index, true
 }
 
 func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) (*types.SSVShare, bool) {
@@ -238,9 +254,10 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) error {
 			return fmt.Errorf("nil share")
 		}
 
-		// Update byValidatorIndex
+		// Update byValidatorIndex and mapping
 		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.ValidatorIndex] = share
+			c.byValidatorPubkey[share.ValidatorPubKey] = share.ValidatorIndex
 		}
 
 		// Update byCommitteeID
@@ -317,7 +334,7 @@ func (c *validatorStore) handleShareRemoved(share *types.SSVShare) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Update byValidatorIndex
+	// Delete byValidatorIndex
 	if share.HasBeaconMetadata() {
 		delete(c.byValidatorIndex, share.ValidatorIndex)
 	}
@@ -389,9 +406,10 @@ func (c *validatorStore) handleSharesUpdated(shares ...*types.SSVShare) error {
 			return fmt.Errorf("nil share")
 		}
 
-		// Update byValidatorIndex
+		// Update byValidatorIndex and mapping
 		if share.HasBeaconMetadata() {
 			c.byValidatorIndex[share.ValidatorIndex] = share
+			c.byValidatorPubkey[share.ValidatorPubKey] = share.ValidatorIndex
 		}
 
 		// Update byCommitteeID

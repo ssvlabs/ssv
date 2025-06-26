@@ -20,6 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/simulator"
+	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -210,7 +211,7 @@ func setupEventHandler(
 		BeaconSigner:      keyManager,
 		StorageMap:        storageMap,
 		OperatorDataStore: operatorDataStore,
-	})
+	}, exporter.Options{})
 
 	parser := eventparser.New(contractFilterer)
 
