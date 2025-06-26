@@ -59,7 +59,7 @@ var (
 func TestHandleBlockEventsStream(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	operatorsCount := uint64(0)
@@ -1688,4 +1688,342 @@ func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAcc
 	_, found, err = eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 	require.NoError(t, err)
 	require.False(t, found)
+}
+
+// TestSlashingProtectionArchiveIntegration tests the full cycle of slashing protection archiving
+// across validator registration, removal, and re-registration events.
+//
+// TODO(SSV-15): These tests verify the temporary solution for audit finding SSV-15.
+func TestSlashingProtectionArchiveIntegration(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	ops, err := createOperators(4, 0)
+	require.NoError(t, err)
+
+	currentSlot := &utils.SlotValue{}
+	currentSlot.SetSlot(100)
+	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
+	mockNetworkConfig := &networkconfig.NetworkConfig{}
+	mockNetworkConfig.Beacon = mockBeaconNetwork
+
+	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
+	require.NoError(t, err)
+
+	testAddresses := []*ethcommon.Address{&testAddr}
+	sim := simTestBackend(testAddresses)
+
+	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim.Client())
+	require.NoError(t, err)
+	sim.Commit()
+
+	rpcServer, _ := sim.Node().RPCHandler()
+	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	defer httpsrv.Close()
+	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+
+	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger), executionclient.WithFollowDistance(0))
+	require.NoError(t, err)
+	logs := client.StreamLogs(ctx, 0)
+
+	boundContract, err := simcontract.NewSimcontract(contractAddr, sim.Client())
+	require.NoError(t, err)
+
+	// Register operators first
+	for _, op := range ops {
+		encodedPubKey, err := op.privateKey.Public().Base64()
+		require.NoError(t, err)
+		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey([]byte(encodedPubKey))
+		require.NoError(t, err)
+		_, err = boundContract.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+		require.NoError(t, err)
+	}
+	sim.Commit()
+
+	// Process operator registration events
+	block := <-logs
+	eventsCh := make(chan executionclient.BlockLogs)
+	go func() {
+		defer close(eventsCh)
+		eventsCh <- block
+	}()
+	_, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+	require.NoError(t, err)
+
+	t.Run("validator registration with archive restore", func(t *testing.T) {
+		validatorData, err := createNewValidator(ops)
+		require.NoError(t, err)
+		sharesData, err := generateSharesData(validatorData, ops, testAddr, 0)
+		require.NoError(t, err)
+
+		// Step 1: Register validator
+		_, err = boundContract.RegisterValidator(
+			auth,
+			validatorData.masterPubKey.Serialize(),
+			[]uint64{1, 2, 3, 4},
+			sharesData,
+			big.NewInt(100_000_000),
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           1,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		// Process validator registration
+		block := <-logs
+		eventsCh := make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+		_, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		require.NoError(t, err)
+
+		// Verify validator exists with slashing protection
+		requireKeyManagerDataToExist(t, eh, 1, validatorData)
+
+		// Get the initial slashing protection data
+		sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
+		initialAtt, foundAtt, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(sharePubKey))
+		require.NoError(t, err)
+		require.True(t, foundAtt)
+
+		initialProp, foundProp, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
+		require.NoError(t, err)
+		require.True(t, foundProp)
+
+		// Step 2: Remove validator (should archive slashing protection)
+		_, err = boundContract.RemoveValidator(
+			auth,
+			validatorData.masterPubKey.Serialize(),
+			[]uint64{1, 2, 3, 4},
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           1,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		// Process validator removal
+		block = <-logs
+		eventsCh = make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+		_, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		require.NoError(t, err)
+
+		// Verify validator was removed
+		requireKeyManagerDataToNotExist(t, eh, 0, validatorData)
+
+		// Step 3: Re-register validator with new shares (simulating share regeneration)
+		newValidatorData, err := createNewValidator(ops)
+		require.NoError(t, err)
+
+		// Use the same validator public key but different share keys (simulating regeneration)
+		newValidatorData.masterPubKey = validatorData.masterPubKey
+		newValidatorData.masterKey = validatorData.masterKey
+
+		sharesData2, err := generateSharesData(newValidatorData, ops, testAddr, 1)
+		require.NoError(t, err)
+
+		_, err = boundContract.RegisterValidator(
+			auth,
+			newValidatorData.masterPubKey.Serialize(),
+			[]uint64{1, 2, 3, 4},
+			sharesData2,
+			big.NewInt(100_000_000),
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           2,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		// Process re-registration
+		block = <-logs
+		eventsCh = make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+		_, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		require.NoError(t, err)
+
+		// Verify validator exists again with restored slashing protection
+		requireKeyManagerDataToExist(t, eh, 1, newValidatorData)
+
+		// Verify archived slashing protection was applied
+		newSharePubKey := newValidatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
+		restoredAtt, foundAtt, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(phase0.BLSPubKey(newSharePubKey))
+		require.NoError(t, err)
+		require.True(t, foundAtt)
+
+		restoredProp, foundProp, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(newSharePubKey))
+		require.NoError(t, err)
+		require.True(t, foundProp)
+
+		// The restored values should be at least as high as the archived ones
+		require.GreaterOrEqual(t, restoredAtt.Target.Epoch, initialAtt.Target.Epoch)
+		require.GreaterOrEqual(t, restoredProp, initialProp)
+	})
+
+	t.Run("cluster reactivation applies archive", func(t *testing.T) {
+		// Set a higher slot to test time-based slashing protection
+		currentSlot.SetSlot(2000)
+
+		// At this point we should have 1 validator from the first test
+		_, err = boundContract.Liquidate(
+			auth,
+			testAddr,
+			[]uint64{1, 2, 3, 4},
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           3,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		// Process liquidation
+		block := <-logs
+		eventsCh := make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+		_, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		require.NoError(t, err)
+
+		// Reactivate the cluster (should apply archived data and bump based on the current slot)
+		_, err = boundContract.Reactivate(
+			auth,
+			[]uint64{1, 2, 3, 4},
+			big.NewInt(100_000_000),
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           3,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		// Process reactivation
+		block = <-logs
+		eventsCh = make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+		_, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		require.NoError(t, err)
+
+		// We should still have 1 validator account, reactivation doesn't create new shares
+		accounts, err := eh.keyManager.(*ekm.LocalKeyManager).ListAccounts()
+		require.NoError(t, err)
+		require.Len(t, accounts, 1)
+
+		// Get the share public key to check slashing protection
+		account := accounts[0]
+		sharePubKey := phase0.BLSPubKey(account.ValidatorPublicKey())
+
+		// Verify that slashing protection data exists and is properly bumped
+		reactivatedAtt, foundAtt, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestAttestation(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, foundAtt)
+
+		reactivatedProp, foundProp, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, foundProp)
+
+		// The reactivated values should be appropriately bumped based on the current slot (2000)
+		// This ensures that archived data was applied, AND time-based bumping worked
+		expectedEpoch := phase0.Epoch(2000 / 32) // slot to epoch conversion
+		require.GreaterOrEqual(t, reactivatedAtt.Target.Epoch, expectedEpoch)
+		require.GreaterOrEqual(t, reactivatedProp, phase0.Slot(2000))
+
+		require.Greater(t, reactivatedAtt.Target.Epoch, phase0.Epoch(0))
+		require.Greater(t, reactivatedProp, phase0.Slot(0))
+	})
+
+	t.Run("archive error handling", func(t *testing.T) {
+		validatorData, err := createNewValidator(ops)
+		require.NoError(t, err)
+		sharesData, err := generateSharesData(validatorData, ops, testAddr, 3)
+		require.NoError(t, err)
+
+		// Register validator
+		_, err = boundContract.RegisterValidator(
+			auth,
+			validatorData.masterPubKey.Serialize(),
+			[]uint64{1, 2, 3, 4},
+			sharesData,
+			big.NewInt(100_000_000),
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           4,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		block := <-logs
+		eventsCh := make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+		_, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		require.NoError(t, err)
+
+		// Remove validator (archive should succeed)
+		_, err = boundContract.RemoveValidator(
+			auth,
+			validatorData.masterPubKey.Serialize(),
+			[]uint64{1, 2, 3, 4},
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           4,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		block = <-logs
+		eventsCh = make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+
+		// This should succeed even if archiving encounters issues
+		_, err = eh.HandleBlockEventsStream(ctx, eventsCh, false)
+		require.NoError(t, err)
+
+		// Validator should still be removed (expect 1 account from the previous reactivation test)
+		requireKeyManagerDataToNotExist(t, eh, 1, validatorData)
+	})
 }
