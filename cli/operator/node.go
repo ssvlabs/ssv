@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
@@ -22,6 +23,13 @@ import (
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
@@ -60,12 +68,6 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/commons"
@@ -146,11 +148,6 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
-		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig)
-		if err != nil {
-			logger.Fatal("could not setup db", zap.Error(err))
-		}
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
 
@@ -158,12 +155,8 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
 		}
 
-		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
-		if err != nil {
-			logger.Fatal("failed to create node storage", zap.Error(err))
-		}
-
 		var operatorPrivKey keys.OperatorPrivateKey
+		var operatorPrivKeyPEM string
 		var ssvSignerClient *ssvsigner.Client
 		var operatorPubKeyBase64 string
 
@@ -195,7 +188,7 @@ var StartNodeCmd = &cobra.Command{
 				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
 			}
 
-			ssvSignerClient := ssvsigner.NewClient(
+			ssvSignerClient = ssvsigner.NewClient(
 				cfg.SSVSigner.Endpoint,
 				ssvSignerOptions...,
 			)
@@ -217,11 +210,6 @@ var StartNodeCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
 			}
-
-			// Ensure the pubkey is saved on first run and never changes afterwards
-			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
-				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
-			}
 		} else {
 			if usingKeystore {
 				logger.Info("getting operator private key from keystore")
@@ -232,11 +220,7 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not extract private key from keystore", zap.Error(err))
 				}
 
-				pemBase64 := base64.StdEncoding.EncodeToString(decryptedKeystore)
-				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, pemBase64); err != nil {
-					logger.Fatal("could not save operator private key", zap.Error(err))
-				}
-
+				operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
 			} else if usingPrivKey {
 				logger.Info("getting operator private key from args")
 
@@ -245,14 +229,34 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not decode operator private key", zap.Error(err))
 				}
 
-				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, cfg.OperatorPrivateKey); err != nil {
-					logger.Fatal("could not save operator private key", zap.Error(err))
-				}
+				operatorPrivKeyPEM = cfg.OperatorPrivateKey
 			}
 
 			operatorPubKeyBase64, err = operatorPrivKey.Public().Base64()
 			if err != nil {
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
+			}
+		}
+
+		cfg.DBOptions.Ctx = cmd.Context()
+		db, err := setupDB(logger, networkConfig, operatorPrivKey)
+		if err != nil {
+			logger.Fatal("could not setup db", zap.Error(err))
+		}
+
+		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
+		if err != nil {
+			logger.Fatal("failed to create node storage", zap.Error(err))
+		}
+
+		if usingSSVSigner {
+			// Ensure the pubkey is saved on first run and never changes afterwards
+			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
+				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
+			}
+		} else {
+			if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
+				logger.Fatal("could not save operator private key", zap.Error(err))
 			}
 		}
 
@@ -774,7 +778,11 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv.BadgerDB, error) {
+func setupDB(
+	logger *zap.Logger,
+	networkConfig networkconfig.NetworkConfig,
+	operatorPrivKey keys.OperatorPrivateKey,
+) (*kv.BadgerDB, error) {
 	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -788,9 +796,10 @@ func setupDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*kv
 	}
 
 	migrationOpts := migrations.Options{
-		Db:            db,
-		DbPath:        cfg.DBOptions.Path,
-		NetworkConfig: networkConfig,
+		Db:              db,
+		DbPath:          cfg.DBOptions.Path,
+		NetworkConfig:   networkConfig,
+		OperatorPrivKey: operatorPrivKey,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
@@ -883,8 +892,8 @@ func ensureOperatorPrivateKey(
 	}
 
 	// Subsequent runs: enforce immutability.
-	if currentHash != storedHash &&
-		legacyHash != storedHash {
+	if !bytes.Equal(currentHash, storedHash) &&
+		!bytes.Equal(legacyHash, storedHash) {
 		// Prevent the node from running with a different key.
 		return fmt.Errorf("operator private key is not matching the one encrypted the storage")
 	}

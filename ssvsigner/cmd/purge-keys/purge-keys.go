@@ -35,10 +35,7 @@ type CLI struct {
 func main() {
 	var cli CLI
 
-	kong.Must(&cli,
-		kong.Name("purge-keys"),
-		kong.UsageOnError(),
-	)
+	_ = kong.Parse(&cli, kong.Name("purge-keys"), kong.UsageOnError())
 
 	log, err := logger.SetupProductionLogger()
 	if err != nil {
@@ -155,7 +152,7 @@ func validateConfig(cli CLI) error {
 		return fmt.Errorf("invalid batch size %d, must be > 0", cli.BatchSize)
 	}
 
-	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint, ""); err != nil {
+	if err := validation.ValidateWeb3SignerEndpoint(cli.Web3SignerEndpoint); err != nil {
 		return fmt.Errorf("invalid WEB3SIGNER_ENDPOINT: %w", err)
 	}
 

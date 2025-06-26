@@ -24,9 +24,19 @@ func TestRun_InvalidWeb3SignerEndpoint(t *testing.T) {
 			wantErr:  "invalid WEB3SIGNER_ENDPOINT: invalid url format",
 		},
 		{
-			name:     "private IP blocked",
-			endpoint: "http://192.168.1.1:9000",
-			wantErr:  "invalid WEB3SIGNER_ENDPOINT: private/internal ip addresses are not allowed",
+			name:     "missing scheme",
+			endpoint: "192.168.1.1:9000",
+			wantErr:  "invalid WEB3SIGNER_ENDPOINT: invalid url format",
+		},
+		{
+			name:     "invalid scheme",
+			endpoint: "ftp://example.com",
+			wantErr:  "invalid WEB3SIGNER_ENDPOINT: invalid url scheme \"ftp\": only http/https allowed",
+		},
+		{
+			name:     "missing hostname",
+			endpoint: "http://",
+			wantErr:  "invalid WEB3SIGNER_ENDPOINT: missing hostname in url",
 		},
 	}
 

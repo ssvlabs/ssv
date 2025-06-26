@@ -44,13 +44,14 @@ func (s *ServerTestSuite) SetupTest() {
 	}
 
 	s.operatorPrivKey = &mocks.TestOperatorPrivateKey{
-		Base64Value:      "test_operator_key_base64",
-		BytesValue:       []byte("test_bytes"),
-		StorageHashValue: "test_storage_hash",
-		EkmHashValue:     "test_ekm_hash",
-		DecryptResult:    []byte("decrypted_data"),
-		PublicKey:        s.pubKey,
-		SignResult:       []byte("signature_bytes"),
+		Base64Value:           "test_operator_key_base64",
+		BytesValue:            []byte("test_bytes"),
+		StorageHashValue:      []byte("test_storage_hash"),
+		EkmHashValue:          []byte("test_ekm_hash"),
+		EkmEncryptionKeyValue: []byte("test_ekm_encryption_key"),
+		DecryptResult:         []byte("decrypted_data"),
+		PublicKey:             s.pubKey,
+		SignResult:            []byte("signature_bytes"),
 	}
 
 	s.remoteSigner = &mocks.TestRemoteSigner{
