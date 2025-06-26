@@ -341,13 +341,12 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				return
 			default:
 				nextBlockToProcess, err := ec.streamLogsToChan(ctx, logs, fromBlock)
-				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
-					// Closed gracefully.
+				if isInterruptedError(err) {
+					// This is a valid way to terminate, no need to log this error.
 					return
 				}
-
-				// streamLogsToChan should never return without an error,
-				// so we treat a nil error as an error by itself.
+				// streamLogsToChan should never return without an error, so we treat a nil error as
+				// an error by itself.
 				if err == nil {
 					err = errors.New("streamLogsToChan halted without an error")
 				}

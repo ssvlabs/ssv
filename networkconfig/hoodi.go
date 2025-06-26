@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -31,4 +32,5 @@ var HoodiSSV = SSVConfig{
 			},
 		},
 	},
+	GasLimit36Epoch:         0,
 }

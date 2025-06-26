@@ -30,4 +30,5 @@ var HoodiStageSSV = SSVConfig{
 			},
 		},
 	},
+	GasLimit36Epoch:         0,
 }

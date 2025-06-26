@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
@@ -365,23 +366,16 @@ func TestMultiClient_StreamLogs(t *testing.T) {
 
 	logsCh := mc.StreamLogs(ctx, 200)
 
+	var receivedLogs []BlockLogs
 	var wg sync.WaitGroup
 	wg.Add(2) // Expecting two logs: 200, 201
-
-	var receivedLogs []BlockLogs
-	var mu sync.Mutex
-
 	go func() {
 		for blk := range logsCh {
-			mu.Lock()
 			receivedLogs = append(receivedLogs, blk)
-			mu.Unlock()
 			wg.Done()
 		}
 	}()
-
 	wg.Wait()
-
 	require.Len(t, receivedLogs, 2, "expected to receive two logs")
 	require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
 	require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
@@ -432,23 +426,16 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 
 	logsCh := mc.StreamLogs(ctx, 200)
 
+	var receivedLogs []BlockLogs
 	var wg sync.WaitGroup
 	wg.Add(2) // Expecting two logs: 200, 201
-
-	var receivedLogs []BlockLogs
-	var mu sync.Mutex
-
 	go func() {
 		for blk := range logsCh {
-			mu.Lock()
 			receivedLogs = append(receivedLogs, blk)
-			mu.Unlock()
 			wg.Done()
 		}
 	}()
-
 	wg.Wait()
-
 	require.Len(t, receivedLogs, 2, "expected to receive two logs")
 	require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
 	require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
@@ -458,6 +445,186 @@ func TestMultiClient_StreamLogs_Success(t *testing.T) {
 
 	// Make sure Fatal was not called since the client succeeded
 	require.False(t, hook.called, "did not expect Fatal to be called")
+}
+
+func TestMultiClient_StreamLogs_Interrupted(t *testing.T) {
+	t.Run("ErrClosed", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		mockClient1 := NewMockSingleClientProvider(ctrl)
+		mockClient2 := NewMockSingleClientProvider(ctrl)
+
+		// Setup mockClient1 to return interrupt-error
+		mockClient1.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
+				return 0, ErrClosed
+			}).
+			Times(1)
+
+		mockClient1.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		// Setup mockClient2 to not be called
+		mockClient2.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(0)
+
+		mockClient2.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		hook := &fatalHook{}
+
+		mc := &MultiClient{
+			nodeAddrs: []string{"mockNode1", "mockClient2"},
+			clients:   []SingleClientProvider{mockClient1, mockClient2},
+			clientsMu: make([]sync.Mutex, 2),
+			logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
+			closed:    make(chan struct{}),
+		}
+
+		logsCh := mc.StreamLogs(ctx, 200)
+		// Make sure logsCh is closed
+		for range logsCh {
+			require.FailNow(t, "expected to receive no logs")
+		}
+		// Make sure Fatal was not called since the client succeeded
+		require.False(t, hook.called, "did not expect Fatal to be called")
+	})
+	t.Run("rpc.ErrClientQuit", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		mockClient1 := NewMockSingleClientProvider(ctrl)
+		mockClient2 := NewMockSingleClientProvider(ctrl)
+
+		// Setup mockClient1 to return interrupt-error
+		mockClient1.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
+				return 0, rpc.ErrClientQuit
+			}).
+			Times(1)
+
+		mockClient1.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		// Setup mockClient2 to not be called
+		mockClient2.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(0)
+
+		mockClient2.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		hook := &fatalHook{}
+
+		mc := &MultiClient{
+			nodeAddrs: []string{"mockNode1", "mockClient2"},
+			clients:   []SingleClientProvider{mockClient1, mockClient2},
+			clientsMu: make([]sync.Mutex, 2),
+			logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
+			closed:    make(chan struct{}),
+		}
+
+		logsCh := mc.StreamLogs(ctx, 200)
+		// Make sure logsCh is closed
+		for range logsCh {
+			require.FailNow(t, "expected to receive no logs")
+		}
+		// Make sure Fatal was not called since the client succeeded
+		require.False(t, hook.called, "did not expect Fatal to be called")
+	})
+	t.Run("context.Canceled", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		mockClient1 := NewMockSingleClientProvider(ctrl)
+		mockClient2 := NewMockSingleClientProvider(ctrl)
+
+		// Setup mockClient1 to return interrupt-error
+		mockClient1.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(200)).
+			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
+				return 0, context.Canceled
+			}).
+			Times(1)
+
+		mockClient1.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		// Setup mockClient2 to not be called
+		mockClient2.
+			EXPECT().
+			streamLogsToChan(gomock.Any(), gomock.Any(), gomock.Any()).
+			Times(0)
+
+		mockClient2.
+			EXPECT().
+			Healthy(gomock.Any()).
+			DoAndReturn(func(ctx context.Context) error {
+				return nil
+			}).
+			AnyTimes()
+
+		hook := &fatalHook{}
+
+		mc := &MultiClient{
+			nodeAddrs: []string{"mockNode1", "mockClient2"},
+			clients:   []SingleClientProvider{mockClient1, mockClient2},
+			clientsMu: make([]sync.Mutex, 2),
+			logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
+			closed:    make(chan struct{}),
+		}
+
+		logsCh := mc.StreamLogs(ctx, 200)
+		// Make sure logsCh is closed
+		for range logsCh {
+			require.FailNow(t, "expected to receive no logs")
+		}
+		// Make sure Fatal was not called since the client succeeded
+		require.False(t, hook.called, "did not expect Fatal to be called")
+	})
 }
 
 func TestMultiClient_StreamLogs_Failover(t *testing.T) {
@@ -504,42 +671,44 @@ func TestMultiClient_StreamLogs_Failover(t *testing.T) {
 			streamLogsToChan(gomock.Any(), gomock.Any(), uint64(202)).
 			DoAndReturn(func(_ context.Context, out chan<- BlockLogs, fromBlock uint64) (uint64, error) {
 				out <- BlockLogs{BlockNumber: 202}
-				return 203, ErrClosed // Reference exported ErrClosed
+				return 203, nil
 			}).
 			Times(1),
 	)
+
+	hook := &fatalHook{}
 
 	mc := &MultiClient{
 		nodeAddrs: []string{"mockNode1", "mockClient2"},
 		clients:   []SingleClientProvider{mockClient1, mockClient2},
 		clientsMu: make([]sync.Mutex, 2),
-		logger:    zap.NewNop(),
+		logger:    zap.NewNop().WithOptions(zap.WithFatalHook(hook)),
 		closed:    make(chan struct{}),
 	}
 
 	logsCh := mc.StreamLogs(ctx, 200)
 
+	var receivedLogs []BlockLogs
 	var wg sync.WaitGroup
 	wg.Add(3) // Expecting three logs: 200, 201, 202
-
-	var receivedLogs []BlockLogs
-	var mu sync.Mutex
-
 	go func() {
 		for blk := range logsCh {
-			mu.Lock()
 			receivedLogs = append(receivedLogs, blk)
-			mu.Unlock()
 			wg.Done()
 		}
 	}()
-
 	wg.Wait()
 
 	require.Len(t, receivedLogs, 3, "expected to receive three logs")
 	require.Equal(t, uint64(200), receivedLogs[0].BlockNumber)
 	require.Equal(t, uint64(201), receivedLogs[1].BlockNumber)
 	require.Equal(t, uint64(202), receivedLogs[2].BlockNumber)
+
+	_, open := <-logsCh
+	require.False(t, open, "logs channel should be closed after all logs are received")
+
+	// Make sure Fatal was not called since the client succeeded
+	require.False(t, hook.called, "did not expect Fatal to be called")
 }
 
 func TestMultiClient_StreamLogs_SameFromBlock(t *testing.T) {

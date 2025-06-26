@@ -71,19 +71,6 @@ func NewProposerRunner(
 		return nil, errors.New("must have one share")
 	}
 
-	// Cap proposerDelay value to make sure we don't miss block proposals, for details
-	// on how this value should be chosen see:
-	// https://github.com/ssvlabs/ssv/blob/main/docs/MEV_CONSIDERATIONS.md#getting-started-with-mev-configuration
-	const maxReasonableProposerDelay = 1650 * time.Millisecond
-	if proposerDelay > maxReasonableProposerDelay {
-		logger.Warn(
-			"ProposerDelay value set is too high, capping it at max reasonable proposer delay value",
-			zap.Duration("proposer_delay", proposerDelay),
-			zap.Duration("max_reasonable_proposer_delay", maxReasonableProposerDelay),
-		)
-		proposerDelay = maxReasonableProposerDelay
-	}
-
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
@@ -160,10 +147,15 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 		fields.PreConsensusTime(r.measurements.PreConsensusTime()))
 
 	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
-	slotStartTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
-	timeIntoSlot := max(time.Since(slotStartTime), 0)
-	proposerDelayAdjusted := max(r.proposerDelay-timeIntoSlot, 0)
-	time.Sleep(proposerDelayAdjusted)
+	slotTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
+	proposeTime := slotTime.Add(r.proposerDelay)
+	if timeLeft := time.Until(proposeTime); timeLeft > 0 {
+		select {
+		case <-time.After(timeLeft):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 
 	// Fetch the block our operator will propose if it is a Leader (note, even if our operator
 	// isn't leading the 1st QBFT round it might become a Leader in case of round change - hence
