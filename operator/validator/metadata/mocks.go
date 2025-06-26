@@ -12,11 +12,12 @@ package metadata
 import (
 	reflect "reflect"
 
+	gomock "go.uber.org/mock/gomock"
+
 	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	types "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
-	gomock "go.uber.org/mock/gomock"
 )
 
 // MockshareStorage is a mock of shareStorage interface.

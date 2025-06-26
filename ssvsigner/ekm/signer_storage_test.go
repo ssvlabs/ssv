@@ -19,8 +19,8 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -520,9 +520,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("InvalidAttestationSSZ", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -537,9 +534,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyAttestationValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -652,9 +646,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyProposalValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 

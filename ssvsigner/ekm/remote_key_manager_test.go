@@ -19,17 +19,18 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/electra"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/holiman/uint256"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/networkconfig"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-var testNetCfg = networkconfig.TestRealNetwork.BeaconConfig // using a real network config because https://github.com/ssvlabs/eth2-key-manager doesn't support min genesis time for networkconfig.TestNetwork
+var testNetCfg = networkconfig.TestNetwork.BeaconConfig
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite
@@ -71,7 +72,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoteKeyManagerWithMockedOperatorKey() 
 	s.client.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 		PubKey:           pubKey,
 		EncryptedPrivKey: encShare,
-	}).Return(nil)
+	}).Return([]web3signer.Status{web3signer.StatusImported}, nil)
 
 	err := rm.AddShare(s.T().Context(), encShare, pubKey)
 
@@ -98,7 +99,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareWithMockedOperatorKey() {
 	mockSlashingProtector.On("RemoveHighestAttestation", pubKey).Return(nil)
 	mockSlashingProtector.On("RemoveHighestProposal", pubKey).Return(nil)
 
-	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(nil)
+	s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return([]web3signer.Status{web3signer.StatusDeleted}, nil)
 
 	err := rm.RemoveShare(s.T().Context(), pubKey)
 
@@ -1159,7 +1160,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
-		}).Return(errors.New("add validators error")).Once()
+		}).Return([]web3signer.Status{web3signer.StatusImported}, errors.New("add validators error")).Once()
 
 		err := rmTest.AddShare(s.T().Context(), encShare, pubKey)
 
@@ -1187,7 +1188,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
 			PubKey:           pubKey,
 			EncryptedPrivKey: encShare,
-		}).Return(nil).Once()
+		}).Return([]web3signer.Status{web3signer.StatusImported}, nil).Once()
 
 		slashingMock.On("BumpSlashingProtection", pubKey).Return(errors.New("bump slashing protection error")).Once()
 
@@ -1196,6 +1197,33 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 		s.ErrorContains(err, "could not bump slashing protection")
 		clientMock.AssertExpectations(s.T())
 		slashingMock.AssertExpectations(s.T())
+	})
+
+	s.Run("UnexpectedStatus", func() {
+		clientMock := new(MockRemoteSigner)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			beaconConfig:      testNetCfg,
+			signerClient:      clientMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			slashingProtector: &MockSlashingProtector{},
+			signLocks:         map[signKey]*sync.RWMutex{},
+		}
+
+		pubKey := phase0.BLSPubKey{1, 2, 3}
+		encShare := []byte("encrypted_share_data")
+
+		clientMock.On("AddValidators", mock.Anything, ssvsigner.ShareKeys{
+			PubKey:           pubKey,
+			EncryptedPrivKey: encShare,
+		}).Return([]web3signer.Status{web3signer.StatusError}, nil).Once()
+
+		err := rmTest.AddShare(s.T().Context(), encShare, pubKey)
+
+		s.ErrorContains(err, "unexpected status")
+		clientMock.AssertExpectations(s.T())
 	})
 }
 
@@ -1216,7 +1244,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 
 		s.client.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
-			Return(errors.New("remove validators error"))
+			Return([]web3signer.Status{web3signer.StatusDeleted}, errors.New("remove validators error"))
 
 		s.ErrorContains(rm.RemoveShare(s.T().Context(), pubKey), "remove validator")
 		s.client.AssertExpectations(s.T())
@@ -1239,7 +1267,7 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 
 		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
-			Return(nil).Once()
+			Return([]web3signer.Status{web3signer.StatusDeleted}, nil).Once()
 
 		slashingMock.On("RemoveHighestAttestation", pubKey).
 			Return(errors.New("remove highest attestation error")).Once()
@@ -1265,12 +1293,37 @@ func (s *RemoteKeyManagerTestSuite) TestRemoveShareErrorCases() {
 
 		pubKey := phase0.BLSPubKey{1, 2, 3}
 
-		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).Return(nil).Once()
+		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
+			Return([]web3signer.Status{web3signer.StatusDeleted}, nil).Once()
 
 		slashingMock.On("RemoveHighestAttestation", pubKey).Return(nil).Once()
 		slashingMock.On("RemoveHighestProposal", pubKey).Return(errors.New("remove highest proposal error")).Once()
 
 		s.ErrorContains(rmTest.RemoveShare(s.T().Context(), pubKey), "could not remove highest proposal")
+		clientMock.AssertExpectations(s.T())
+		slashingMock.AssertExpectations(s.T())
+	})
+
+	s.Run("UnexpectedStatus", func() {
+		clientMock := new(MockRemoteSigner)
+		slashingMock := new(MockSlashingProtector)
+
+		rmTest := &RemoteKeyManager{
+			logger:            s.logger,
+			beaconConfig:      testNetCfg,
+			signerClient:      clientMock,
+			getOperatorId:     func() spectypes.OperatorID { return 1 },
+			operatorPubKey:    &MockOperatorPublicKey{},
+			slashingProtector: slashingMock,
+			signLocks:         map[signKey]*sync.RWMutex{},
+		}
+
+		pubKey := phase0.BLSPubKey{1, 2, 3}
+
+		clientMock.On("RemoveValidators", mock.Anything, []phase0.BLSPubKey{pubKey}).
+			Return([]web3signer.Status{web3signer.StatusError}, nil).Once()
+
+		s.ErrorContains(rmTest.RemoveShare(s.T().Context(), pubKey), "unexpected status")
 		clientMock.AssertExpectations(s.T())
 		slashingMock.AssertExpectations(s.T())
 	})

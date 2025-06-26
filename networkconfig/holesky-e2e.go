@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -15,4 +16,5 @@ var HoleskyE2ESSV = SSVConfig{
 	RegistrySyncOffset:      big.NewInt(405579),
 	Bootnodes:               []string{},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
+	GasLimit36Epoch:         0,
 }
