@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
+
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
 
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/validation"
@@ -35,10 +36,7 @@ type CLI struct {
 func main() {
 	var cli CLI
 
-	kong.Must(&cli,
-		kong.Name("purge-keys"),
-		kong.UsageOnError(),
-	)
+	_ = kong.Parse(&cli, kong.Name("purge-keys"), kong.UsageOnError())
 
 	log, err := logger.SetupProductionLogger()
 	if err != nil {

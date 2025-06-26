@@ -23,6 +23,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -42,8 +45,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -57,18 +58,18 @@ const (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	network           P2PNetwork
-	recipientsStorage Recipients
-	sharesStorage     SharesStorage
-	beacon            beacon.BeaconNode
-	validatorOptions  validator.Options
-	signer            ekm.BeaconSigner
-	StorageMap        *ibftstorage.ParticipantStores
-	validatorsMap     *validators.ValidatorsMap
-	validatorStore    registrystorage.ValidatorStore
-	operatorDataStore operatordatastore.OperatorDataStore
-	operatorStorage   registrystorage.Operators
-	networkConfig     networkconfig.NetworkConfig
+	network             P2PNetwork
+	recipientsStorage   Recipients
+	sharesStorage       SharesStorage
+	beacon              beacon.BeaconNode
+	validatorCommonOpts *validator.CommonOptions
+	signer              ekm.BeaconSigner
+	StorageMap          *ibftstorage.ParticipantStores
+	validatorsMap       *validators.ValidatorsMap
+	validatorStore      registrystorage.ValidatorStore
+	operatorDataStore   operatordatastore.OperatorDataStore
+	operatorStorage     registrystorage.Operators
+	networkConfig       networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
@@ -226,7 +227,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorStore:    mockValidatorStore,
-				validatorOptions: validator.Options{
+				validatorCommonOpts: &validator.CommonOptions{
 					Exporter: true,
 				},
 			}
@@ -241,12 +242,13 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
 	mockValidatorsMap := validators.New(context.TODO())
 	controllerOptions := MockControllerOptions{
-		validatorsMap: mockValidatorsMap,
+		validatorsMap:       mockValidatorsMap,
+		validatorCommonOpts: &validator.CommonOptions{},
 	}
 	ctr := setupController(logger, controllerOptions) // none committee
 
-	// Only exporter handles non committee messages
-	ctr.validatorOptions.Exporter = true
+	// Only exporter handles non-committee messages
+	ctr.validatorCommonOpts.Exporter = true
 
 	go ctr.handleRouterMessages()
 
@@ -537,7 +539,7 @@ func TestSetupValidators(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
-				validatorOptions: validator.Options{
+				validatorCommonOpts: &validator.CommonOptions{
 					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
 				},
@@ -816,7 +818,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		validatorsMap:           opts.validatorsMap,
 		validatorStore:          opts.validatorStore,
 		ctx:                     context.Background(),
-		validatorOptions:        opts.validatorOptions,
+		validatorCommonOpts:     opts.validatorCommonOpts,
 		recipientsStorage:       opts.recipientsStorage,
 		networkConfig:           opts.networkConfig,
 		messageRouter:           newMessageRouter(logger),
