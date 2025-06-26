@@ -28,6 +28,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -51,6 +52,11 @@ type peerIDWithMessageID struct {
 	peerID    peer.ID
 	messageID spectypes.MessageID
 }
+
+var (
+	PeerIDtoSigner hashmap.Map[peer.ID, []spectypes.OperatorID]
+	peerIDmu       sync.Mutex
+)
 
 type messageValidator struct {
 	logger          *zap.Logger
@@ -155,6 +161,26 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 	if err != nil {
 		return nil, err
 	}
+
+	pid := pMsg.GetFrom()
+
+	func() {
+		ops := slices.Clone(signedSSVMessage.OperatorIDs)
+
+		peerIDmu.Lock()
+		defer peerIDmu.Unlock()
+
+		existing, found := PeerIDtoSigner.Get(pid)
+		if found {
+			ops = append(ops, existing...)
+		}
+
+		slices.Sort(ops)
+
+		ops = slices.Compact(ops)
+
+		PeerIDtoSigner.Set(pid, ops)
+	}()
 
 	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), pMsg.ReceivedFrom, receivedAt)
 }
