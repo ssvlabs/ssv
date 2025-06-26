@@ -231,6 +231,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		))
 	defer span.End()
 
+	span.AddEvent("fetching decided value from base consensus message processing")
 	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr, msg, &spectypes.BeaconVote{})
 	if err != nil {
 		return observability.Errorf(span, "failed processing consensus message: %w", err)
@@ -243,11 +244,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		return nil
 	}
 
+	span.AddEvent("instance is decided")
+
 	cr.measurements.EndConsensus()
 	recordConsensusDuration(ctx, cr.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
 	cr.measurements.StartPostConsensus()
-	// decided means consensus is done
 
 	duty := cr.BaseRunner.State.StartingDuty
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
@@ -256,10 +258,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	beaconVote := decidedValue.(*spectypes.BeaconVote)
-	totalAttesterDuties := 0
-	totalSyncCommitteeDuties := 0
-	blockedAttesterDuties := 0
+	var (
+		beaconVote = decidedValue.(*spectypes.BeaconVote)
+		totalAttesterDuties,
+		totalSyncCommitteeDuties,
+		blockedAttesterDuties uint32
+	)
 
 	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 	version, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
@@ -369,8 +373,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		const eventMsg = "Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties."
 		span.AddEvent(eventMsg)
 		logger.Debug(eventMsg,
-			zap.Int("attester_duties", totalAttesterDuties),
-			zap.Int("blocked_attesters", blockedAttesterDuties))
+			zap.Uint32("attester_duties", totalAttesterDuties),
+			zap.Uint32("blocked_attesters", blockedAttesterDuties))
 
 		span.SetStatus(codes.Ok, "")
 		return nil
