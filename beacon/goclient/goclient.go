@@ -427,6 +427,9 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	var errsMu sync.Mutex
 	var errs error
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	for _, client := range gc.clients {
 		wg.Add(1)
 		go func(client Client) {
@@ -439,7 +442,9 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 				errs = errors.Join(errs, err)
 				errsMu.Unlock()
 			} else {
-				hasHealthy.Store(true)
+				if hasHealthy.CompareAndSwap(false, true) {
+					cancel() // one healthy node is enough
+				}
 			}
 		}(client)
 	}
