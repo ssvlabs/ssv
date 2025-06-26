@@ -24,9 +24,9 @@ type OperatorPrivateKey interface {
 	OperatorDecrypter
 	StorageHash() []byte
 	// EKMHash calculates a hash as an encryption key for storage.
-	// DEPRECATED, use EKMEncryptionKey instead.
+	// DEPRECATED, use StorageHash with EKMEncryptionKey instead.
 	EKMHash() []byte
-	// EKMEncryptionKey calculates an encryption key for storage. Use it instead of EKMHash.
+	// EKMEncryptionKey calculates an encryption key for storage using HKDF with StorageHash as input.
 	EKMEncryptionKey() ([]byte, error)
 	Bytes() []byte
 	Base64() string
@@ -105,9 +105,9 @@ func (p *privateKey) EKMHash() []byte {
 }
 
 func (p *privateKey) EKMEncryptionKey() ([]byte, error) {
-	ekmHash := p.EKMHash()
+	storageHash := p.StorageHash()
 
-	kdf := hkdf.New(sha256.New, ekmHash, nil, nil)
+	kdf := hkdf.New(sha256.New, storageHash, nil, nil)
 	derivedKey := make([]byte, 32)
 	if _, err := io.ReadFull(kdf, derivedKey); err != nil {
 		return nil, fmt.Errorf("failed to derive encryption key: %w", err)
