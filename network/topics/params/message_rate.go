@@ -28,12 +28,12 @@ const (
 )
 
 type rateCalculator struct {
-	netCfg                                                           networkconfig.NetworkConfig
+	netCfg                                                           *networkconfig.NetworkConfig
 	generatedExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation []float64
 	generatedExpectedSingleSCCommitteeDutiesPerEpoch                 []float64
 }
 
-func newRateCalculator(netCfg networkconfig.NetworkConfig) *rateCalculator {
+func newRateCalculator(netCfg *networkconfig.NetworkConfig) *rateCalculator {
 	rc := &rateCalculator{
 		netCfg: netCfg,
 		generatedExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation: []float64{},

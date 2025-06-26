@@ -30,7 +30,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	}
 
 	// Marshal to JSON
-	jsonBytes, err := json.Marshal(originalConfig)
+	jsonBytes, err := json.Marshal(&originalConfig)
 	require.NoError(t, err)
 
 	// Unmarshal from JSON
@@ -39,7 +39,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	// Marshal again after unmarshaling
-	remarshaledBytes, err := json.Marshal(unmarshaledConfig)
+	remarshaledBytes, err := json.Marshal(&unmarshaledConfig)
 	require.NoError(t, err)
 
 	// Compare the original and remarshaled JSON bytes
@@ -65,7 +65,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	}
 
 	// Marshal to YAML
-	yamlBytes, err := yaml.Marshal(originalConfig)
+	yamlBytes, err := yaml.Marshal(&originalConfig)
 	require.NoError(t, err)
 
 	// Unmarshal from YAML
@@ -74,7 +74,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	// Marshal again after unmarshaling
-	remarshaledBytes, err := yaml.Marshal(unmarshaledConfig)
+	remarshaledBytes, err := yaml.Marshal(&unmarshaledConfig)
 	require.NoError(t, err)
 
 	// Compare the original and unmarshaled structs
@@ -154,7 +154,7 @@ func TestFieldPreservation(t *testing.T) {
 		}
 
 		// Marshal and unmarshal to test preservation
-		jsonBytes, err := json.Marshal(config)
+		jsonBytes, err := json.Marshal(&config)
 		require.NoError(t, err)
 
 		var unmarshaled SSVConfig
@@ -162,10 +162,10 @@ func TestFieldPreservation(t *testing.T) {
 		require.NoError(t, err)
 
 		// Hash the original and unmarshaled struct
-		originalHash, err := hashStructJSON(config)
+		originalHash, err := hashStructJSON(&config)
 		require.NoError(t, err)
 
-		unmarshaledHash, err := hashStructJSON(unmarshaled)
+		unmarshaledHash, err := hashStructJSON(&unmarshaled)
 		require.NoError(t, err)
 
 		// The hashes should match if all fields are preserved
@@ -189,7 +189,7 @@ func TestFieldPreservation(t *testing.T) {
 		}
 
 		// Marshal and unmarshal to test preservation
-		yamlBytes, err := yaml.Marshal(config)
+		yamlBytes, err := yaml.Marshal(&config)
 		require.NoError(t, err)
 
 		var unmarshaled SSVConfig
@@ -197,10 +197,10 @@ func TestFieldPreservation(t *testing.T) {
 		require.NoError(t, err)
 
 		// For YAML, convert to JSON for consistent hashing
-		originalHash, err := hashStructJSON(config)
+		originalHash, err := hashStructJSON(&config)
 		require.NoError(t, err)
 
-		unmarshaledHash, err := hashStructJSON(unmarshaled)
+		unmarshaledHash, err := hashStructJSON(&unmarshaled)
 		require.NoError(t, err)
 
 		// The hashes should match if all fields are preserved

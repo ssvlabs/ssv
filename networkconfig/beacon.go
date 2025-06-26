@@ -56,7 +56,7 @@ type BeaconConfig struct {
 	Forks                                map[spec.DataVersion]phase0.Fork
 }
 
-func (b BeaconConfig) String() string {
+func (b *BeaconConfig) String() string {
 	marshaled, err := json.Marshal(b)
 	if err != nil {
 		panic(err)
@@ -66,7 +66,7 @@ func (b BeaconConfig) String() string {
 }
 
 // GetSlotStartTime returns the start time for the given slot
-func (b BeaconConfig) GetSlotStartTime(slot phase0.Slot) time.Time {
+func (b *BeaconConfig) GetSlotStartTime(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
 		panic(fmt.Sprintf("slot %d out of range", slot))
 	}
@@ -76,17 +76,17 @@ func (b BeaconConfig) GetSlotStartTime(slot phase0.Slot) time.Time {
 }
 
 // GetSlotEndTime returns the end time for the given slot
-func (b BeaconConfig) GetSlotEndTime(slot phase0.Slot) time.Time {
+func (b *BeaconConfig) GetSlotEndTime(slot phase0.Slot) time.Time {
 	return b.GetSlotStartTime(slot + 1)
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot
-func (b BeaconConfig) EstimatedCurrentSlot() phase0.Slot {
+func (b *BeaconConfig) EstimatedCurrentSlot() phase0.Slot {
 	return b.EstimatedSlotAtTime(time.Now())
 }
 
 // EstimatedSlotAtTime estimates slot at the given time
-func (b BeaconConfig) EstimatedSlotAtTime(time time.Time) phase0.Slot {
+func (b *BeaconConfig) EstimatedSlotAtTime(time time.Time) phase0.Slot {
 	if time.Before(b.GenesisTime) {
 		panic(fmt.Sprintf("time %v is before genesis time %v", time, b.GenesisTime))
 	}
@@ -96,59 +96,59 @@ func (b BeaconConfig) EstimatedSlotAtTime(time time.Time) phase0.Slot {
 
 // EstimatedCurrentEpoch estimates the current epoch
 // https://github.com/ethereum/eth2.0-specs/blob/dev/specs/phase0/beacon-chain.md#compute_start_slot_at_epoch
-func (b BeaconConfig) EstimatedCurrentEpoch() phase0.Epoch {
+func (b *BeaconConfig) EstimatedCurrentEpoch() phase0.Epoch {
 	return b.EstimatedEpochAtSlot(b.EstimatedCurrentSlot())
 }
 
 // EstimatedEpochAtSlot estimates epoch at the given slot
-func (b BeaconConfig) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
+func (b *BeaconConfig) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
 	return phase0.Epoch(uint64(slot) / b.SlotsPerEpoch)
 }
 
 // IsFirstSlotOfEpoch estimates epoch at the given slot
-func (b BeaconConfig) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
+func (b *BeaconConfig) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 	return uint64(slot)%b.SlotsPerEpoch == 0
 }
 
 // GetEpochFirstSlot returns the beacon node first slot in epoch
-func (b BeaconConfig) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
+func (b *BeaconConfig) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 	return phase0.Slot(uint64(epoch) * b.SlotsPerEpoch)
 }
 
 // GetEpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
-func (b BeaconConfig) GetEpochsPerSyncCommitteePeriod() uint64 {
+func (b *BeaconConfig) GetEpochsPerSyncCommitteePeriod() uint64 {
 	return b.EpochsPerSyncCommitteePeriod
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
-func (b BeaconConfig) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
+func (b *BeaconConfig) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
 	return uint64(epoch) / b.GetEpochsPerSyncCommitteePeriod()
 }
 
 // FirstEpochOfSyncPeriod calculates the first epoch of the given sync period.
-func (b BeaconConfig) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
+func (b *BeaconConfig) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
 	return phase0.Epoch(period * b.GetEpochsPerSyncCommitteePeriod())
 }
 
 // LastSlotOfSyncPeriod calculates the first epoch of the given sync period.
-func (b BeaconConfig) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
+func (b *BeaconConfig) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 	lastEpoch := b.FirstEpochOfSyncPeriod(period+1) - 1
 	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 	// as it will never be included, hence -1.
 	return b.GetEpochFirstSlot(lastEpoch+1) - 2
 }
 
-func (b BeaconConfig) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
+func (b *BeaconConfig) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
 	return phase0.Slot(uint64(epoch) * b.SlotsPerEpoch)
 }
 
-func (b BeaconConfig) EpochStartTime(epoch phase0.Epoch) time.Time {
+func (b *BeaconConfig) EpochStartTime(epoch phase0.Epoch) time.Time {
 	firstSlot := b.FirstSlotAtEpoch(epoch)
 	t := b.EstimatedTimeAtSlot(firstSlot)
 	return t
 }
 
-func (b BeaconConfig) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
+func (b *BeaconConfig) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
 		panic(fmt.Sprintf("slot %d out of range", slot))
 	}
@@ -156,45 +156,45 @@ func (b BeaconConfig) EstimatedTimeAtSlot(slot phase0.Slot) time.Time {
 	return b.GenesisTime.Add(d)
 }
 
-func (b BeaconConfig) IntervalDuration() time.Duration {
+func (b *BeaconConfig) IntervalDuration() time.Duration {
 	if b.IntervalsPerSlot > math.MaxInt64 {
 		panic("intervals per slot out of range")
 	}
 	return b.SlotDuration / time.Duration(b.IntervalsPerSlot) // #nosec G115: intervals per slot cannot exceed math.MaxInt64
 }
 
-func (b BeaconConfig) EpochDuration() time.Duration {
+func (b *BeaconConfig) EpochDuration() time.Duration {
 	if b.SlotsPerEpoch > math.MaxInt64 {
 		panic("slots per epoch out of range")
 	}
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
 }
 
-func (b BeaconConfig) GetSlotDuration() time.Duration {
+func (b *BeaconConfig) GetSlotDuration() time.Duration {
 	return b.SlotDuration
 }
 
-func (b BeaconConfig) GetSlotsPerEpoch() uint64 {
+func (b *BeaconConfig) GetSlotsPerEpoch() uint64 {
 	return b.SlotsPerEpoch
 }
 
-func (b BeaconConfig) GetGenesisTime() time.Time {
+func (b *BeaconConfig) GetGenesisTime() time.Time {
 	return b.GenesisTime
 }
 
-func (b BeaconConfig) GetSyncCommitteeSize() uint64 {
+func (b *BeaconConfig) GetSyncCommitteeSize() uint64 {
 	return b.SyncCommitteeSize
 }
 
-func (b BeaconConfig) GetGenesisValidatorsRoot() phase0.Root {
+func (b *BeaconConfig) GetGenesisValidatorsRoot() phase0.Root {
 	return b.GenesisValidatorsRoot
 }
 
-func (b BeaconConfig) GetNetworkName() string {
+func (b *BeaconConfig) GetNetworkName() string {
 	return b.NetworkName
 }
 
-func (b BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+func (b *BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
 	versions := []spec.DataVersion{
 		spec.DataVersionPhase0,
 		spec.DataVersionAltair,
@@ -221,7 +221,7 @@ func (b BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0
 	return version, &fork
 }
 
-func (b BeaconConfig) AssertSame(other BeaconConfig) error {
+func (b *BeaconConfig) AssertSame(other *BeaconConfig) error {
 	if b.NetworkName != other.NetworkName {
 		return fmt.Errorf("different NetworkName")
 	}

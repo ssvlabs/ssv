@@ -72,7 +72,7 @@ type DiscV5Service struct {
 	conn       *net.UDPConn
 	sharedConn *SharedUDPConn
 
-	ssvConfig networkconfig.SSVConfig
+	ssvConfig *networkconfig.SSVConfig
 	subnets   commons.Subnets
 
 	publishLock chan struct{}

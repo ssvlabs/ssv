@@ -25,6 +25,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -65,15 +72,9 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
-	badger "github.com/ssvlabs/ssv/storage/badger"
+	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	pebble "github.com/ssvlabs/ssv/storage/pebble"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 )
@@ -172,7 +173,7 @@ var StartNodeCmd = &cobra.Command{
 				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
 		}
 
-		networkConfig := networkconfig.NetworkConfig{
+		networkConfig := &networkconfig.NetworkConfig{
 			Name:         cfg.SSVOptions.NetworkName,
 			SSVConfig:    ssvNetworkConfig,
 			BeaconConfig: consensusClient.BeaconConfig(),
@@ -828,7 +829,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*badger.DB, error) {
+func setupBadgerDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
@@ -865,7 +866,7 @@ func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	return db, nil
 }
 
-func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*pebble.DB, error) {
+func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
 
 	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
@@ -1001,11 +1002,11 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 	return nil
 }
 
-func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
-	var ssvConfig networkconfig.SSVConfig
+func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSVConfig, error) {
+	var ssvConfig *networkconfig.SSVConfig
 
 	if cfg.SSVOptions.CustomNetwork != nil {
-		ssvConfig = *cfg.SSVOptions.CustomNetwork
+		ssvConfig = cfg.SSVOptions.CustomNetwork
 		logger.Info("using custom network config")
 	} else if cfg.SSVOptions.NetworkName != "" {
 		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
@@ -1020,14 +1021,14 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
 
 	if cfg.SSVOptions.CustomDomainType != "" {
 		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
-			return networkconfig.SSVConfig{}, errors.New("custom domain type must be a hex string")
+			return nil, errors.New("custom domain type must be a hex string")
 		}
 		domainBytes, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
-			return networkconfig.SSVConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+			return nil, errors.Wrap(err, "failed to decode custom domain type")
 		}
 		if len(domainBytes) != 4 {
-			return networkconfig.SSVConfig{}, errors.New("custom domain type must be 4 bytes")
+			return nil, errors.New("custom domain type must be 4 bytes")
 		}
 
 		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
@@ -1074,7 +1075,7 @@ func syncContractEvents(
 	logger *zap.Logger,
 	executionClient executionclient.Provider,
 	validatorCtrl validator.Controller,
-	networkConfig networkconfig.NetworkConfig,
+	networkConfig *networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,

@@ -46,7 +46,7 @@ const (
 
 // PubSubConfig is the needed config to instantiate pubsub
 type PubSubConfig struct {
-	NetworkConfig networkconfig.NetworkConfig
+	NetworkConfig *networkconfig.NetworkConfig
 	Host          host.Host
 	TraceLog      bool
 	StaticPeers   []peer.AddrInfo
