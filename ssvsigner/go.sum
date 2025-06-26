@@ -324,6 +324,8 @@ github.com/ssvlabs/eth2-key-manager v1.5.2 h1:gF+8FJkoV1VXpVCPspyVW/Jdky0kt9Pndk
 github.com/ssvlabs/eth2-key-manager v1.5.2/go.mod h1:yeUzAP+SBJXgeXPiGBrLeLuHIQCpeJZV7Jz3Fwzm/zk=
 github.com/ssvlabs/ssv v1.2.1-0.20250619015436-127dc5706a1b h1:jzqyxCVbDq/OfBRyR8RpApl0mGDGeRMwpmPIrV6qXpk=
 github.com/ssvlabs/ssv v1.2.1-0.20250619015436-127dc5706a1b/go.mod h1:wfLNrMNI46Sq8iul7IAWhRV/8XnEFGJcaqaaaPvU/Cw=
+github.com/ssvlabs/ssv v1.2.1-0.20250626103842-bdeee56070ca h1:0FdjxY+vSb36JmGjIAwLKNQTqRLRkU+LOEtiLJyUN/k=
+github.com/ssvlabs/ssv v1.2.1-0.20250626103842-bdeee56070ca/go.mod h1:T8nGTyuqYK278r1qeQDYlHfij5ZXR9K9yfhNj+fFcXc=
 github.com/ssvlabs/ssv-spec v1.1.3 h1:46K31kI4/vA7Vp3DaOuN7t2IABAmzeiMniCqYfzzpo8=
 github.com/ssvlabs/ssv-spec v1.1.3/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
