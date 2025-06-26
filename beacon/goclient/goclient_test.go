@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
@@ -19,50 +19,64 @@ import (
 )
 
 func TestHealthy(t *testing.T) {
+	t.Run("sync distance larger than allowed", func(t *testing.T) {
+		syncData := &v1.SyncState{
+			SyncDistance: phase0.Slot(3),
+			IsSyncing:    true,
+		}
+		err := runHealthyTest(t, syncData, 2)
+		require.ErrorIs(t, err, errSyncing)
+	})
+
+	t.Run("sync distance within allowed limits", func(t *testing.T) {
+		syncData := &v1.SyncState{
+			SyncDistance: phase0.Slot(3),
+			IsSyncing:    true,
+		}
+
+		err := runHealthyTest(t, syncData, 3)
+		require.NoError(t, err)
+	})
+}
+
+func runHealthyTest(t *testing.T, syncData *v1.SyncState, syncDistanceTolerance phase0.Slot) error {
 	const (
 		commonTimeout = 100 * time.Millisecond
 		longTimeout   = 500 * time.Millisecond
 	)
 
-	undialableServer := tests.MockServer(nil)
-	c, err := mockClient(t.Context(), undialableServer.URL, commonTimeout, longTimeout)
+	replaceSyncing := atomic.Bool{}
+
+	mockResponses := tests.MockResponses()
+	mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		if r.URL.Path == syncingPath && replaceSyncing.Load() {
+			output := struct {
+				Data *v1.SyncState `json:"data"`
+			}{
+				Data: syncData,
+			}
+			rawData, err := json.Marshal(output)
+			if err != nil {
+				return nil, err
+			}
+
+			return rawData, nil
+		}
+
+		return mockResponses[r.URL.Path], nil
+	})
+	c, err := mockClient(t.Context(), mockServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
 
 	client := c.(*GoClient)
 	err = client.Healthy(t.Context())
 	require.NoError(t, err)
 
-	t.Run("sync distance larger than allowed", func(t *testing.T) {
-		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
-			r := new(api.Response[*v1.SyncState])
-			r.Data = &v1.SyncState{
-				SyncDistance: phase0.Slot(3),
-				IsSyncing:    true,
-			}
-			return r, nil
-		}
+	client.syncDistanceTolerance = syncDistanceTolerance
 
-		client.syncDistanceTolerance = 2
+	replaceSyncing.Store(true)
 
-		err = client.Healthy(t.Context())
-		require.ErrorIs(t, err, errSyncing)
-	})
-
-	t.Run("sync distance within allowed limits", func(t *testing.T) {
-		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
-			r := new(api.Response[*v1.SyncState])
-			r.Data = &v1.SyncState{
-				SyncDistance: phase0.Slot(3),
-				IsSyncing:    true,
-			}
-			return r, nil
-		}
-
-		client.syncDistanceTolerance = 3
-
-		err = client.Healthy(t.Context())
-		require.NoError(t, err)
-	})
+	return client.Healthy(t.Context())
 }
 
 func TestTimeouts(t *testing.T) {

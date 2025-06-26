@@ -25,15 +25,7 @@ func (m MockDataStore) AwaitOperatorID() types.OperatorID {
 type requestCallback = func(r *http.Request, resp json.RawMessage) (json.RawMessage, error)
 
 func MockServer(onRequestFn requestCallback) *httptest.Server {
-	var mockResponses map[string]json.RawMessage
-	f, err := os.Open("./tests/mock-beacon-responses.json")
-	if err != nil {
-		panic(fmt.Sprintf("os.Open returned error: %v", err))
-	}
-	err = json.NewDecoder(f).Decode(&mockResponses)
-	if err != nil {
-		panic(fmt.Sprintf("couldn't decode json file: %v", err))
-	}
+	mockResponses := MockResponses()
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp, ok := mockResponses[r.URL.Path]
@@ -54,6 +46,19 @@ func MockServer(onRequestFn requestCallback) *httptest.Server {
 			panic(fmt.Sprintf("got error writing response: %v", err))
 		}
 	}))
+}
+
+func MockResponses() map[string]json.RawMessage {
+	var responses map[string]json.RawMessage
+	f, err := os.Open("./tests/mock-beacon-responses.json")
+	if err != nil {
+		panic(fmt.Sprintf("os.Open returned error: %v", err))
+	}
+	err = json.NewDecoder(f).Decode(&responses)
+	if err != nil {
+		panic(fmt.Sprintf("couldn't decode json file: %v", err))
+	}
+	return responses
 }
 
 func MockSlotTickerProvider() slotticker.SlotTicker {

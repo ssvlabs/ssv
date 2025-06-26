@@ -129,7 +129,6 @@ type GoClient struct {
 	multiClient MultiClient
 
 	syncDistanceTolerance phase0.Slot
-	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
 	// registrationMu synchronises access to registrations
 	registrationMu sync.Mutex
@@ -224,8 +223,6 @@ func New(
 
 		return nil, err
 	}
-
-	client.nodeSyncingFn = client.nodeSyncing
 
 	initCtx, initCtxCancel := context.WithTimeout(ctx, client.longTimeout)
 	defer initCtxCancel()
@@ -428,7 +425,7 @@ var errSyncing = errors.New("syncing")
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.nodeSyncingFn(ctx, &api.NodeSyncingOpts{})
+	nodeSyncingResp, err := gc.nodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "NodeSyncing"),
