@@ -19,13 +19,15 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 func TestNewMulti(t *testing.T) {
 	t.Run("no node addresses", func(t *testing.T) {
 		ctx := t.Context()
 
-		mc, err := NewMulti(ctx, []string{}, ethcommon.Address{})
+		mc, err := NewMulti(ctx, networkconfig.TestNetwork, []string{}, ethcommon.Address{})
 
 		require.Nil(t, mc, "MultiClient should be nil on error")
 		require.Error(t, err, "expected an error due to no node addresses")
@@ -37,7 +39,7 @@ func TestNewMulti(t *testing.T) {
 		addr := "invalid-addr"
 		addresses := []string{addr}
 
-		mc, err := NewMulti(ctx, addresses, ethcommon.Address{})
+		mc, err := NewMulti(ctx, networkconfig.TestNetwork, addresses, ethcommon.Address{})
 
 		require.Nil(t, mc, "MultiClient should be nil on error")
 		require.Error(t, err)
@@ -62,35 +64,53 @@ func TestNewMulti_WithOptions(t *testing.T) {
 	customLogger := zap.NewExample()
 	const customFollowDistance = uint64(10)
 	const customTimeout = 100 * time.Millisecond
-	const customReconnectionInterval = 10 * time.Millisecond
-	const customReconnectionMaxInterval = 1 * time.Second
 	const customHealthInvalidationInterval = 50 * time.Millisecond
 	const customLogBatchSize = 11
 	const customSyncDistanceTolerance = 12
 
-	mc, err := NewMulti(
-		ctx,
-		addresses,
-		contractAddr,
-		WithLoggerMulti(customLogger),
-		WithFollowDistanceMulti(customFollowDistance),
-		WithConnectionTimeoutMulti(customTimeout),
-		WithReconnectionInitialIntervalMulti(customReconnectionInterval),
-		WithReconnectionMaxIntervalMulti(customReconnectionMaxInterval),
-		WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
-		WithLogBatchSizeMulti(customLogBatchSize),
-		WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, mc)
-	require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
-	require.EqualValues(t, customFollowDistance, mc.followDistance)
-	require.EqualValues(t, customTimeout, mc.connectionTimeout)
-	require.EqualValues(t, customReconnectionInterval, mc.reconnectionInitialInterval)
-	require.EqualValues(t, customReconnectionMaxInterval, mc.reconnectionMaxInterval)
-	require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
-	require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
-	require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
+	t.Run("pre-fork (follow distance)", func(t *testing.T) {
+		mc, err := NewMulti(
+			ctx,
+			networkconfig.TestNetwork,
+			addresses,
+			contractAddr,
+			WithLoggerMulti(customLogger),
+			WithConnectionTimeoutMulti(customTimeout),
+			WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
+			WithLogBatchSizeMulti(customLogBatchSize),
+			WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
+			WithFollowDistanceMulti(customFollowDistance),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, mc)
+		require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
+		require.EqualValues(t, customFollowDistance, mc.followDistance)
+		require.EqualValues(t, customTimeout, mc.connectionTimeout)
+		require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
+		require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
+		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
+	})
+
+	t.Run("post-fork (finality)", func(t *testing.T) {
+		mc, err := NewMulti(
+			ctx,
+			networkconfig.TestNetwork,
+			addresses,
+			contractAddr,
+			WithLoggerMulti(customLogger),
+			WithConnectionTimeoutMulti(customTimeout),
+			WithHealthInvalidationIntervalMulti(customHealthInvalidationInterval),
+			WithLogBatchSizeMulti(customLogBatchSize),
+			WithSyncDistanceToleranceMulti(customSyncDistanceTolerance),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, mc)
+		require.Equal(t, customLogger.Named("execution_client_multi"), mc.logger)
+		require.EqualValues(t, customTimeout, mc.connectionTimeout)
+		require.EqualValues(t, customHealthInvalidationInterval, mc.healthInvalidationInterval)
+		require.EqualValues(t, customLogBatchSize, mc.logBatchSize)
+		require.EqualValues(t, customSyncDistanceTolerance, mc.syncDistanceTolerance)
+	})
 }
 
 func TestMultiClient_assertSameChainIDs(t *testing.T) {

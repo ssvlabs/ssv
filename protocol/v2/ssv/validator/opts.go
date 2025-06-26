@@ -96,7 +96,7 @@ func NewCommonOptions(
 	// on the current epoch as compared to when this transition is supposed to happen.
 	if result.GasLimit == 0 {
 		defaultGasLimit := DefaultGasLimit
-		if result.NetworkConfig.EstimatedCurrentEpoch() < result.NetworkConfig.GetGasLimit36Epoch() {
+		if result.NetworkConfig.EstimatedCurrentEpoch() < result.NetworkConfig.GetForks().GetGasLimit36Epoch() {
 			defaultGasLimit = DefaultGasLimitOld
 		}
 		result.GasLimit = defaultGasLimit

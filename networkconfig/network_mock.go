@@ -240,18 +240,18 @@ func (mr *MockNetworkMockRecorder) GetEpochsPerSyncCommitteePeriod() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockNetwork)(nil).GetEpochsPerSyncCommitteePeriod))
 }
 
-// GetGasLimit36Epoch mocks base method.
-func (m *MockNetwork) GetGasLimit36Epoch() phase0.Epoch {
+// GetForks mocks base method.
+func (m *MockNetwork) GetForks() SSVForkConfig {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGasLimit36Epoch")
-	ret0, _ := ret[0].(phase0.Epoch)
+	ret := m.ctrl.Call(m, "GetForks")
+	ret0, _ := ret[0].(SSVForkConfig)
 	return ret0
 }
 
-// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
-func (mr *MockNetworkMockRecorder) GetGasLimit36Epoch() *gomock.Call {
+// GetForks indicates an expected call of GetForks.
+func (mr *MockNetworkMockRecorder) GetForks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGasLimit36Epoch", reflect.TypeOf((*MockNetwork)(nil).GetGasLimit36Epoch))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetForks", reflect.TypeOf((*MockNetwork)(nil).GetForks))
 }
 
 // GetGenesisTime mocks base method.

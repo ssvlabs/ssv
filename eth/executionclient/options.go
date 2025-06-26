@@ -14,114 +14,84 @@ type OptionMulti func(client *MultiClient)
 
 // WithLogger enables logging.
 func WithLogger(logger *zap.Logger) Option {
-	return func(s *ExecutionClient) {
-		s.logger = logger.Named("execution_client")
+	return func(c *ExecutionClient) {
+		c.logger = logger.Named("execution_client")
 	}
 }
 
 // WithLoggerMulti enables logging.
 func WithLoggerMulti(logger *zap.Logger) OptionMulti {
-	return func(s *MultiClient) {
-		s.logger = logger.Named("execution_client_multi")
-	}
-}
-
-// WithFollowDistance sets finalization offset (a block at this offset into the past
-// from the head block will be considered as very likely finalized).
-func WithFollowDistance(offset uint64) Option {
-	return func(s *ExecutionClient) {
-		s.followDistance = offset
-	}
-}
-
-// WithFollowDistanceMulti sets finalization offset (a block at this offset into the past
-// from the head block will be considered as very likely finalized).
-func WithFollowDistanceMulti(offset uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.followDistance = offset
+	return func(c *MultiClient) {
+		c.logger = logger.Named("execution_client_multi")
 	}
 }
 
 // WithConnectionTimeout sets timeout for network connection to eth1 node.
 func WithConnectionTimeout(timeout time.Duration) Option {
-	return func(s *ExecutionClient) {
-		s.connectionTimeout = timeout
+	return func(c *ExecutionClient) {
+		c.connectionTimeout = timeout
 	}
 }
 
 // WithConnectionTimeoutMulti sets timeout for network connection to eth1 node.
 func WithConnectionTimeoutMulti(timeout time.Duration) OptionMulti {
-	return func(s *MultiClient) {
-		s.connectionTimeout = timeout
-	}
-}
-
-// WithReconnectionInitialInterval sets initial reconnection interval.
-func WithReconnectionInitialInterval(interval time.Duration) Option {
-	return func(s *ExecutionClient) {
-		s.reconnectionInitialInterval = interval
-	}
-}
-
-// WithReconnectionInitialIntervalMulti sets initial reconnection interval.
-func WithReconnectionInitialIntervalMulti(interval time.Duration) OptionMulti {
-	return func(s *MultiClient) {
-		s.reconnectionInitialInterval = interval
-	}
-}
-
-// WithReconnectionMaxInterval sets max reconnection interval.
-func WithReconnectionMaxInterval(interval time.Duration) Option {
-	return func(s *ExecutionClient) {
-		s.reconnectionMaxInterval = interval
-	}
-}
-
-// WithReconnectionMaxIntervalMulti sets max reconnection interval.
-func WithReconnectionMaxIntervalMulti(interval time.Duration) OptionMulti {
-	return func(s *MultiClient) {
-		s.reconnectionMaxInterval = interval
+	return func(c *MultiClient) {
+		c.connectionTimeout = timeout
 	}
 }
 
 // WithHealthInvalidationInterval sets health invalidation interval. 0 disables caching.
 func WithHealthInvalidationInterval(interval time.Duration) Option {
-	return func(s *ExecutionClient) {
-		s.healthInvalidationInterval = interval
+	return func(c *ExecutionClient) {
+		c.healthInvalidationInterval = interval
 	}
 }
 
 // WithHealthInvalidationIntervalMulti sets health invalidation interval.
 func WithHealthInvalidationIntervalMulti(interval time.Duration) OptionMulti {
-	return func(s *MultiClient) {
-		s.healthInvalidationInterval = interval
+	return func(c *MultiClient) {
+		c.healthInvalidationInterval = interval
 	}
 }
 
 // WithLogBatchSize sets log batch size.
 func WithLogBatchSize(size uint64) Option {
-	return func(s *ExecutionClient) {
-		s.logBatchSize = size
+	return func(c *ExecutionClient) {
+		c.logBatchSize = size
 	}
 }
 
 // WithLogBatchSizeMulti sets log batch size.
 func WithLogBatchSizeMulti(size uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.logBatchSize = size
+	return func(c *MultiClient) {
+		c.logBatchSize = size
 	}
 }
 
 // WithSyncDistanceTolerance sets the number of blocks that is acceptable to lag behind.
 func WithSyncDistanceTolerance(count uint64) Option {
-	return func(s *ExecutionClient) {
-		s.syncDistanceTolerance = count
+	return func(c *ExecutionClient) {
+		c.syncDistanceTolerance = count
 	}
 }
 
 // WithSyncDistanceToleranceMulti sets the number of blocks that is acceptable to lag behind.
 func WithSyncDistanceToleranceMulti(count uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.syncDistanceTolerance = count
+	return func(c *MultiClient) {
+		c.syncDistanceTolerance = count
+	}
+}
+
+// WithFollowDistance sets the follow distance for pre-fork block processing.
+func WithFollowDistance(distance uint64) Option {
+	return func(c *ExecutionClient) {
+		c.followDistance = distance
+	}
+}
+
+// WithFollowDistanceMulti sets the follow distance for pre-fork block processing.
+func WithFollowDistanceMulti(distance uint64) OptionMulti {
+	return func(c *MultiClient) {
+		c.followDistance = distance
 	}
 }
