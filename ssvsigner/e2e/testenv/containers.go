@@ -62,25 +62,6 @@ func (env *TestEnvironment) createNetwork() error {
 	return nil
 }
 
-// getContainerNetworkIP gets the internal network IP of a container within the test network
-func (env *TestEnvironment) getContainerNetworkIP(container testcontainers.Container) (string, error) {
-	inspect, err := container.Inspect(env.ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to inspect container: %w", err)
-	}
-
-	netSettings, ok := inspect.NetworkSettings.Networks[env.networkName]
-	if !ok {
-		return "", fmt.Errorf("container not found in network %s", env.networkName)
-	}
-	
-	if netSettings.IPAddress == "" {
-		return "", fmt.Errorf("container has no IP address in network %s", env.networkName)
-	}
-	
-	return netSettings.IPAddress, nil
-}
-
 // buildPostgresConnStr creates a PostgreSQL connection string for the given host and port
 func buildPostgresConnStr(host, port string) string {
 	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
@@ -245,12 +226,6 @@ func (env *TestEnvironment) startSSVSigner() error {
 		return fmt.Errorf("certificate directory does not exist: %s", env.certDir)
 	}
 
-	// Get Web3Signer internal network IP for SSRF trusted networks
-	web3SignerInternalIP, err := env.getContainerNetworkIP(env.web3SignerContainer)
-	if err != nil {
-		return err
-	}
-
 	waitStrategy, err := env.ssvSignerWaitStrategy()
 	if err != nil {
 		return fmt.Errorf("failed to create wait strategy: %w", err)
@@ -271,9 +246,6 @@ func (env *TestEnvironment) startSSVSigner() error {
 				"LOG_LEVEL":           "info",
 				"LOG_FORMAT":          "console",
 				"WEB3SIGNER_ENDPOINT": "https://web3signer:9000",
-
-				// SSRF bypass for Docker container communication
-				"TEST_TRUSTED_NETWORKS": fmt.Sprintf("%s/32", web3SignerInternalIP),
 
 				// Server TLS configuration
 				"KEYSTORE_FILE":          "/certs/ssv-signer.p12",
