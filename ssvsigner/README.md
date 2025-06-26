@@ -92,15 +92,15 @@ For TLS-enabled Web3Signer:
 
 ```bash
 web3signer --http-listen-port=9000 \
+  --tls-keystore-file=/path/to/keystore.p12 \
+  --tls-keystore-password-file=/path/to/password.txt \
+  --tls-known-clients-file=/path/to/knownClients.txt \
   eth2 \
   --network=mainnet \
   --slashing-protection-db-url="jdbc:postgresql://${POSTGRES_HOST}/web3signer" \
   --slashing-protection-db-username=postgres \
   --slashing-protection-db-password=password \
-  --key-manager-api-enabled=true \
-  --tls-keystore-file=/path/to/keystore.p12 \
-  --tls-keystore-password-file=/path/to/password.txt \
-  --tls-known-clients-file=/path/to/knownClients.txt
+  --key-manager-api-enabled=true
 ```
 
 This configures Web3Signer to accept secure connections from SSV-Signer. When TLS is enabled on Web3Signer, make sure
