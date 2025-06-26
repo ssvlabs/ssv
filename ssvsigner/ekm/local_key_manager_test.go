@@ -73,7 +73,8 @@ func TestEncryptedKeyManager(t *testing.T) {
 	privateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	encryptionKey := privateKey.EKMHash()
+	encryptionKey, err := privateKey.EKMEncryptionKey()
+	require.NoError(t, err)
 
 	// Create account with key 1.
 	threshold.Init()
@@ -113,7 +114,8 @@ func TestEncryptedKeyManager(t *testing.T) {
 	privateKey2, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	encryptionKey2 := privateKey2.EKMHash()
+	encryptionKey2, err := privateKey2.EKMEncryptionKey()
+	require.NoError(t, err)
 
 	// Load account with key 2 (should fail).
 	wallet2, err := signerStorage.OpenWallet()
