@@ -21,5 +21,20 @@ var HoleskyStageSSV = SSVConfig{
 		"enr:-Ja4QDRUBjWOvVfGxpxvv3FqaCy3psm7IsKu5ETb1GXiexGYDFppD33t7AHRfmQddoAkBiyb7pt4t7ZN0sNB9CsW4I-GAZGOmChMgmlkgnY0gmlwhAorXxuJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 	},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
-	GasLimit36Epoch:         0,
+	Forks: SSVForkConfig{
+		Forks: SSVForks{
+			{
+				Name:  "Alan",
+				Epoch: 0,
+			},
+			{
+				Name:  "Gas Limit 36M",
+				Epoch: 0, // Already active on holesky-stage
+			},
+			{
+				Name:  "Finality Consensus",
+				Epoch: MaxEpoch,
+			},
+		},
+	},
 }

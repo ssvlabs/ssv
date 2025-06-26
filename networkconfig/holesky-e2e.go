@@ -16,5 +16,20 @@ var HoleskyE2ESSV = SSVConfig{
 	RegistrySyncOffset:      big.NewInt(405579),
 	Bootnodes:               []string{},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
-	GasLimit36Epoch:         0,
+	Forks: SSVForkConfig{
+		Forks: SSVForks{
+			{
+				Name:  "Alan",
+				Epoch: 0,
+			},
+			{
+				Name:  "Gas Limit 36M",
+				Epoch: 0, // Already active on holesky-e2e
+			},
+			{
+				Name:  "Finality Consensus",
+				Epoch: MaxEpoch,
+			},
+		},
+	},
 }

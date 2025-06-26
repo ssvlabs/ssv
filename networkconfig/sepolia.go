@@ -27,10 +27,13 @@ var SepoliaSSV = SSVConfig{
 				Epoch: 0,
 			},
 			{
+				Name:  "Gas Limit 36M",
+				Epoch: 0, // Already active on sepolia
+			},
+			{
 				Name:  "Finality Consensus",
 				Epoch: MaxEpoch,
 			},
 		},
 	},
-	GasLimit36Epoch:         0,
 }

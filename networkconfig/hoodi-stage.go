@@ -25,10 +25,13 @@ var HoodiStageSSV = SSVConfig{
 				Epoch: 0,
 			},
 			{
+				Name:  "Gas Limit 36M",
+				Epoch: 0, // Already active on hoodi-stage
+			},
+			{
 				Name:  "Finality Consensus",
 				Epoch: 100, // TODO: MaxEpoch
 			},
 		},
 	},
-	GasLimit36Epoch:         0,
 }

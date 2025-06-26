@@ -26,7 +26,18 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		GasLimit36Epoch:      0,
+		Forks: SSVForkConfig{
+			Forks: SSVForks{
+				{
+					Name:  "Alan",
+					Epoch: 0,
+				},
+				{
+					Name:  "Gas Limit 36M",
+					Epoch: 0,
+				},
+			},
+		},
 	}
 
 	// Marshal to JSON
@@ -61,7 +72,18 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
 		Bootnodes:            []string{"bootnode1", "bootnode2"},
 		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		GasLimit36Epoch:      0,
+		Forks: SSVForkConfig{
+			Forks: SSVForks{
+				{
+					Name:  "Alan",
+					Epoch: 0,
+				},
+				{
+					Name:  "Gas Limit 36M",
+					Epoch: 0,
+				},
+			},
+		},
 	}
 
 	// Marshal to YAML
@@ -157,12 +179,15 @@ func TestFieldPreservation(t *testing.T) {
 						Epoch: 0,
 					},
 					{
+						Name:  "Gas Limit 36M",
+						Epoch: 0,
+					},
+					{
 						Name:  "Finality Consensus",
 						Epoch: 1,
 					},
 				},
 			},
-			GasLimit36Epoch:      0,
 		}
 
 		// Marshal and unmarshal to test preservation
@@ -184,7 +209,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "b1353678b60c092192f60939b50cdd34dd918648ad97890ccf6a69c66cee217b"
+		expectedJSONHash := "e1aac5bc6d1459fb82a942e170d00732e04c201a39743a0b8cfe5d71dc81dfab"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -204,12 +229,15 @@ func TestFieldPreservation(t *testing.T) {
 						Epoch: 0,
 					},
 					{
+						Name:  "Gas Limit 36M",
+						Epoch: 0,
+					},
+					{
 						Name:  "Finality Consensus",
 						Epoch: 1,
 					},
 				},
 			},
-			GasLimit36Epoch:      0,
 		}
 
 		// Marshal and unmarshal to test preservation

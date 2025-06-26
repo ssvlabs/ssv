@@ -11,6 +11,7 @@ type SSVForkName int
 
 const (
 	Alan              SSVForkName = iota
+	GasLimit36M                   // Gas limit increase from 30M to 36M - upgrade from the default gas limit value of 30_000_000 to 36_000_000
 	FinalityConsensus             // TODO: use a different name when we have a better one
 )
 
@@ -25,6 +26,7 @@ func (f SSVForkName) String() string {
 
 var forkToString = map[SSVForkName]string{
 	Alan:              "Alan",
+	GasLimit36M:       "Gas Limit 36M",
 	FinalityConsensus: "Finality Consensus", // TODO: use a different name when we have a better one
 }
 
@@ -105,6 +107,17 @@ func (c SSVForkConfig) FindForkByName(name string) *SSVFork {
 // IsForkActive returns whether the fork with the given name is active at the given epoch.
 func (c SSVForkConfig) IsForkActive(name string, epoch phase0.Epoch) bool {
 	return c.Forks.IsForkActive(name, epoch)
+}
+
+// GetGasLimit36Epoch returns the epoch at which the Gas Limit 36M fork is activated.
+// This fork upgrades the default gas limit value from 30_000_000 to 36_000_000.
+// If the fork is not found, returns MaxEpoch (undefined).
+func (c SSVForkConfig) GetGasLimit36Epoch() phase0.Epoch {
+	fork := c.FindForkByName("Gas Limit 36M")
+	if fork != nil {
+		return fork.Epoch
+	}
+	return MaxEpoch
 }
 
 // GetFinalityConsensusEpoch returns the epoch at which the Finality Consensus fork is activated.

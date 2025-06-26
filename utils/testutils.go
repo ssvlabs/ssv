@@ -106,7 +106,7 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 
 	mockNetwork.EXPECT().GetNetworkName().Return(string(beaconNetwork)).AnyTimes()
 
-	mockNetwork.EXPECT().GetGasLimit36Epoch().Return(phase0.Epoch(0)).AnyTimes()
+	mockNetwork.EXPECT().GetForks().Return(networkconfig.SSVForkConfig{}).AnyTimes()
 
 	return mockNetwork
 }
