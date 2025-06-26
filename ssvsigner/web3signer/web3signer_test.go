@@ -2,6 +2,7 @@ package web3signer
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -116,7 +117,7 @@ func TestListKeys(t *testing.T) {
 
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
-				require.Equal(t, pathPublicKeys, r.URL.Path)
+				require.Equal(t, PathPublicKeys, r.URL.Path)
 
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tt.statusCode)
@@ -186,7 +187,7 @@ func TestImportKeystore(t *testing.T) {
 
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodPost, r.Method)
-				require.Equal(t, pathKeystores, r.URL.Path)
+				require.Equal(t, PathKeystores, r.URL.Path)
 
 				var req ImportKeystoreRequest
 
@@ -261,7 +262,7 @@ func TestDeleteKeystore(t *testing.T) {
 
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodDelete, r.Method)
-				require.Equal(t, pathKeystores, r.URL.Path)
+				require.Equal(t, PathKeystores, r.URL.Path)
 
 				var req DeleteKeystoreRequest
 
@@ -382,7 +383,7 @@ func TestSign(t *testing.T) {
 			t.Parallel()
 
 			_, web3Signer := setupTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-				expectedPath := pathSign + tt.pubKey.String()
+				expectedPath := PathSign + tt.pubKey.String()
 
 				require.Equal(t, expectedPath, r.URL.Path)
 
@@ -400,6 +401,53 @@ func TestSign(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.EqualValues(t, tt.wantSignature, resp.Signature)
+			}
+		})
+	}
+}
+
+func TestUpCheck(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name            string
+		setupServer     func(w http.ResponseWriter, r *http.Request)
+		wantErrContains string
+	}{
+		{
+			name: "successful up check",
+			setupServer: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodGet, r.Method)
+				require.Equal(t, PathUpCheck, r.URL.Path)
+				w.WriteHeader(http.StatusOK)
+			},
+		},
+		{
+			name: "server error",
+			setupServer: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, PathUpCheck, r.URL.Path)
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+			wantErrContains: "error status 500",
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, web3Signer := setupTestServer(t, tt.setupServer)
+
+			err := web3Signer.UpCheck(context.Background())
+
+			if tt.wantErrContains != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErrContains)
+
+				var httpErr HTTPResponseError
+				require.ErrorAs(t, err, &httpErr)
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
