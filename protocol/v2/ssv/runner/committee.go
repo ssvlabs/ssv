@@ -272,8 +272,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		observability.BeaconSlotAttribute(duty.DutySlot()),
 		observability.BeaconEpochAttribute(epoch),
 		observability.BeaconVersionAttribute(version),
+		observability.DutyCountAttribute(len(duty.(*spectypes.CommitteeDuty).ValidatorDuties)),
 	)
 
+	span.AddEvent("signing validator duties")
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		attr := trace.WithAttributes(
 			observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
@@ -281,7 +283,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			observability.BeaconRoleAttribute(validatorDuty.Type),
 		)
 
-		span.AddEvent("validating duty", attr)
 		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
 			const eventMsg = "duty is no longer valid"
 			span.AddEvent(eventMsg, attr)
@@ -303,10 +304,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				continue
 			}
 
-			span.AddEvent("constructing attestation data", attr)
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 
-			span.AddEvent("signing attestation data", attr)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(
 				ctx,
 				cr,
@@ -320,13 +319,11 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
-			// TODO: revert log
 			attDataRoot, err := attestationData.HashTreeRoot()
 			if err != nil {
 				return observability.Errorf(span, "failed to hash attestation data: %w", err)
 			}
-			const eventMsg = "signed attestation data"
-			logger.Debug(eventMsg,
+			logger.Debug("signed attestation data",
 				zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
 				zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
@@ -334,8 +331,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 			)
-			span.AddEvent(eventMsg, attr)
-
 		case spectypes.BNRoleSyncCommittee:
 			totalSyncCommitteeDuties++
 
