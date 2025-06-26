@@ -468,6 +468,9 @@ func (gc *GoClient) checkNodeHealthiness(ctx context.Context, client Client) err
 
 	nodeSyncingResp, err := client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil // already found healthy nodes
+		}
 		logger.Error(clResponseErrMsg, zap.Error(err))
 		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
 		return fmt.Errorf("failed to obtain node syncing status: %w", err)
