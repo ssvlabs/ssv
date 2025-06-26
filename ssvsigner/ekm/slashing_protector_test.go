@@ -1060,3 +1060,380 @@ func TestSlashingConcurrency(t *testing.T) {
 	require.Error(t, err, "Concurrency: Final check failed - slashable block was signable")
 	require.Contains(t, err.Error(), "slashable proposal", "Concurrency: Final check error message mismatch")
 }
+
+// TestApplyArchivedSlashingProtection tests the archived slashing protection functionality.
+//
+// TODO(SSV-15): These tests are part of the temporary solution for audit finding SSV-15.
+func TestApplyArchivedSlashingProtection(t *testing.T) {
+	t.Run("apply with no existing data", func(t *testing.T) {
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+		signerStore := NewSignerStorage(db, mockBeacon, logger)
+		protection := slashingprotection.NewNormalProtection(signerStore)
+		protector := NewSlashingProtector(logger, signerStore, protection)
+
+		require.NoError(t, bls.Init(bls.BLS12_381))
+		sharePrivKey := &bls.SecretKey{}
+		sharePrivKey.SetByCSPRNG()
+		sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+		validatorPubKey := []byte("validator_test_1")
+
+		archivedAtt := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 100},
+			Target: &phase0.Checkpoint{Epoch: 101},
+		}
+		archivedProposal := phase0.Slot(500)
+
+		err = signerStore.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey[:])
+		require.NoError(t, err)
+
+		err = signerStore.SaveHighestAttestation(sharePubKey[:], archivedAtt)
+		require.NoError(t, err)
+		err = signerStore.SaveHighestProposal(sharePubKey[:], archivedProposal)
+		require.NoError(t, err)
+
+		err = signerStore.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey[:])
+		require.NoError(t, err)
+
+		err = signerStore.RemoveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		err = signerStore.RemoveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+
+		err = protector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		retrievedAtt, foundAtt, err := signerStore.RetrieveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundAtt)
+		require.Equal(t, archivedAtt.Source.Epoch, retrievedAtt.Source.Epoch)
+		require.Equal(t, archivedAtt.Target.Epoch, retrievedAtt.Target.Epoch)
+
+		retrievedProp, foundProp, err := signerStore.RetrieveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundProp)
+		require.Equal(t, archivedProposal, retrievedProp)
+	})
+
+	t.Run("apply with existing data uses max logic", func(t *testing.T) {
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+		signerStore := NewSignerStorage(db, mockBeacon, logger)
+		protection := slashingprotection.NewNormalProtection(signerStore)
+		protector := NewSlashingProtector(logger, signerStore, protection)
+
+		require.NoError(t, bls.Init(bls.BLS12_381))
+		sharePrivKey := &bls.SecretKey{}
+		sharePrivKey.SetByCSPRNG()
+		sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+		validatorPubKey := []byte("validator_test_2")
+
+		// Test: archived data (lower) vs current data (higher) -> keep current
+		archivedAtt := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 50},
+			Target: &phase0.Checkpoint{Epoch: 51},
+		}
+		archivedProposal := phase0.Slot(200)
+
+		currentAtt := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 80},
+			Target: &phase0.Checkpoint{Epoch: 81},
+		}
+		currentProposal := phase0.Slot(400)
+
+		err = signerStore.SaveHighestAttestation(sharePubKey[:], archivedAtt)
+		require.NoError(t, err)
+		err = signerStore.SaveHighestProposal(sharePubKey[:], archivedProposal)
+		require.NoError(t, err)
+		err = signerStore.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey[:])
+		require.NoError(t, err)
+
+		err = signerStore.SaveHighestAttestation(sharePubKey[:], currentAtt)
+		require.NoError(t, err)
+		err = signerStore.SaveHighestProposal(sharePubKey[:], currentProposal)
+		require.NoError(t, err)
+
+		err = protector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		retrievedAtt, foundAtt, err := signerStore.RetrieveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundAtt)
+		require.Equal(t, currentAtt.Source.Epoch, retrievedAtt.Source.Epoch)
+		require.Equal(t, currentAtt.Target.Epoch, retrievedAtt.Target.Epoch)
+
+		retrievedProp, foundProp, err := signerStore.RetrieveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundProp)
+		require.Equal(t, currentProposal, retrievedProp)
+	})
+
+	t.Run("apply with archived data higher than current", func(t *testing.T) {
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+		signerStore := NewSignerStorage(db, mockBeacon, logger)
+		protection := slashingprotection.NewNormalProtection(signerStore)
+		protector := NewSlashingProtector(logger, signerStore, protection)
+
+		require.NoError(t, bls.Init(bls.BLS12_381))
+		sharePrivKey := &bls.SecretKey{}
+		sharePrivKey.SetByCSPRNG()
+		sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+		validatorPubKey := []byte("validator_test_3")
+
+		// Test: archived data (higher) vs current data (lower) -> use archived
+		archivedAtt := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 120},
+			Target: &phase0.Checkpoint{Epoch: 121},
+		}
+		archivedProposal := phase0.Slot(600)
+
+		currentAtt := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 90},
+			Target: &phase0.Checkpoint{Epoch: 91},
+		}
+		currentProposal := phase0.Slot(300)
+
+		err = signerStore.SaveHighestAttestation(sharePubKey[:], archivedAtt)
+		require.NoError(t, err)
+		err = signerStore.SaveHighestProposal(sharePubKey[:], archivedProposal)
+		require.NoError(t, err)
+		err = signerStore.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey[:])
+		require.NoError(t, err)
+
+		err = signerStore.SaveHighestAttestation(sharePubKey[:], currentAtt)
+		require.NoError(t, err)
+		err = signerStore.SaveHighestProposal(sharePubKey[:], currentProposal)
+		require.NoError(t, err)
+
+		err = protector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		retrievedAtt, foundAtt, err := signerStore.RetrieveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundAtt)
+		require.Equal(t, archivedAtt.Source.Epoch, retrievedAtt.Source.Epoch)
+		require.Equal(t, archivedAtt.Target.Epoch, retrievedAtt.Target.Epoch)
+
+		retrievedProp, foundProp, err := signerStore.RetrieveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundProp)
+		require.Equal(t, archivedProposal, retrievedProp)
+	})
+
+	t.Run("apply with current time higher than both", func(t *testing.T) {
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		// Test: current time (highest) vs archived/current data (lower) -> use current time
+		highSlot := &utils.SlotValue{}
+		highSlot.SetSlot(phase0.Slot(10000))
+		mockBeacon := utils.SetupMockBeaconNetwork(t, highSlot)
+
+		signerStore := NewSignerStorage(db, mockBeacon, logger)
+		protection := slashingprotection.NewNormalProtection(signerStore)
+		protector := NewSlashingProtector(logger, signerStore, protection)
+
+		require.NoError(t, bls.Init(bls.BLS12_381))
+		sharePrivKey := &bls.SecretKey{}
+		sharePrivKey.SetByCSPRNG()
+		sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+		validatorPubKey := []byte("validator_test_4")
+
+		archivedAtt := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 10},
+			Target: &phase0.Checkpoint{Epoch: 11},
+		}
+		archivedProposal := phase0.Slot(50)
+
+		err = signerStore.SaveHighestAttestation(sharePubKey[:], archivedAtt)
+		require.NoError(t, err)
+		err = signerStore.SaveHighestProposal(sharePubKey[:], archivedProposal)
+		require.NoError(t, err)
+		err = signerStore.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey[:])
+		require.NoError(t, err)
+
+		err = signerStore.RemoveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		err = signerStore.RemoveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+
+		err = protector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		currentEpoch := mockBeacon.EstimatedCurrentEpoch()
+		currentSlot := mockBeacon.EstimatedCurrentSlot()
+
+		retrievedAtt, foundAtt, err := signerStore.RetrieveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundAtt)
+		require.GreaterOrEqual(t, retrievedAtt.Target.Epoch, currentEpoch)
+
+		retrievedProp, foundProp, err := signerStore.RetrieveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundProp)
+		require.GreaterOrEqual(t, retrievedProp, currentSlot)
+	})
+
+	t.Run("apply with no archived data", func(t *testing.T) {
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+		signerStore := NewSignerStorage(db, mockBeacon, logger)
+		protection := slashingprotection.NewNormalProtection(signerStore)
+		protector := NewSlashingProtector(logger, signerStore, protection)
+
+		require.NoError(t, bls.Init(bls.BLS12_381))
+		sharePrivKey := &bls.SecretKey{}
+		sharePrivKey.SetByCSPRNG()
+		sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+		validatorPubKey := []byte("validator_test_5")
+
+		err = protector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		_, foundAtt, err := signerStore.RetrieveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		require.False(t, foundAtt)
+
+		_, foundProp, err := signerStore.RetrieveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+		require.False(t, foundProp)
+	})
+
+	t.Run("apply only archived attestation", func(t *testing.T) {
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+		signerStore := NewSignerStorage(db, mockBeacon, logger)
+		protection := slashingprotection.NewNormalProtection(signerStore)
+		protector := NewSlashingProtector(logger, signerStore, protection)
+
+		require.NoError(t, bls.Init(bls.BLS12_381))
+		sharePrivKey := &bls.SecretKey{}
+		sharePrivKey.SetByCSPRNG()
+		sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+		validatorPubKey := []byte("validator_test_6")
+
+		archivedAtt := &phase0.AttestationData{
+			Source: &phase0.Checkpoint{Epoch: 60},
+			Target: &phase0.Checkpoint{Epoch: 61},
+		}
+
+		err = signerStore.SaveHighestAttestation(sharePubKey[:], archivedAtt)
+		require.NoError(t, err)
+		err = signerStore.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey[:])
+		require.NoError(t, err)
+
+		err = signerStore.RemoveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+
+		err = protector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		retrievedAtt, foundAtt, err := signerStore.RetrieveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundAtt)
+		require.Equal(t, archivedAtt.Source.Epoch, retrievedAtt.Source.Epoch)
+		require.Equal(t, archivedAtt.Target.Epoch, retrievedAtt.Target.Epoch)
+
+		_, foundProp, err := signerStore.RetrieveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+		require.False(t, foundProp)
+	})
+
+	t.Run("apply only archived proposal", func(t *testing.T) {
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+		signerStore := NewSignerStorage(db, mockBeacon, logger)
+		protection := slashingprotection.NewNormalProtection(signerStore)
+		protector := NewSlashingProtector(logger, signerStore, protection)
+
+		require.NoError(t, bls.Init(bls.BLS12_381))
+		sharePrivKey := &bls.SecretKey{}
+		sharePrivKey.SetByCSPRNG()
+		sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+		validatorPubKey := []byte("validator_test_7")
+
+		archivedProposal := phase0.Slot(250)
+
+		err = signerStore.SaveHighestProposal(sharePubKey[:], archivedProposal)
+		require.NoError(t, err)
+		err = signerStore.ArchiveSlashingProtectionTxn(nil, validatorPubKey, sharePubKey[:])
+		require.NoError(t, err)
+
+		err = signerStore.RemoveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+
+		err = protector.ApplyArchivedSlashingProtectionTxn(nil, validatorPubKey, sharePubKey)
+		require.NoError(t, err)
+
+		retrievedProp, foundProp, err := signerStore.RetrieveHighestProposal(sharePubKey[:])
+		require.NoError(t, err)
+		require.True(t, foundProp)
+		require.Equal(t, archivedProposal, retrievedProp)
+
+		_, foundAtt, err := signerStore.RetrieveHighestAttestation(sharePubKey[:])
+		require.NoError(t, err)
+		require.False(t, foundAtt)
+	})
+
+	t.Run("error cases", func(t *testing.T) {
+		logger := logging.TestLogger(t)
+		db, err := getBaseStorage(logger)
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockBeacon := utils.SetupMockBeaconNetwork(t, nil)
+		signerStore := NewSignerStorage(db, mockBeacon, logger)
+		protection := slashingprotection.NewNormalProtection(signerStore)
+		protector := NewSlashingProtector(logger, signerStore, protection)
+
+		require.NoError(t, bls.Init(bls.BLS12_381))
+		sharePrivKey := &bls.SecretKey{}
+		sharePrivKey.SetByCSPRNG()
+		sharePubKey := phase0.BLSPubKey(sharePrivKey.GetPublicKey().Serialize())
+
+		t.Run("nil validator pub key", func(t *testing.T) {
+			err := protector.ApplyArchivedSlashingProtectionTxn(nil, nil, sharePubKey)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "validator public key must not be nil")
+		})
+
+		t.Run("empty validator pub key", func(t *testing.T) {
+			err := protector.ApplyArchivedSlashingProtectionTxn(nil, []byte{}, sharePubKey)
+			require.NoError(t, err)
+		})
+	})
+}

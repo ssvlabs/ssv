@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
@@ -38,6 +39,11 @@ const (
 	accountsPath          = "accounts_%s"
 	highestAttPrefix      = prefix + "highest_att-"
 	highestProposalPrefix = prefix + "highest_prop-"
+
+	// slashingArchivePrefix is the prefix for archived slashing protection data.
+	// It stores slashing protection data (the highest attestation and proposal)
+	// keyed by a validator public key. This is a temporary solution for audit finding SSV-15
+	slashingArchivePrefix = prefix + "archive_sp-"
 )
 
 var (
@@ -69,6 +75,11 @@ type SlashingStoreTxn interface {
 	RemoveHighestProposalTxn(rw basedb.ReadWriter, pubKey []byte) error
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
+
+	// ArchiveSlashingProtectionTxn saves slashing protection data for a validator public key.
+	ArchiveSlashingProtectionTxn(rw basedb.ReadWriter, validatorPubKey []byte, sharePubKey []byte) error
+	// RetrieveArchivedSlashingProtectionTxn retrieves archived slashing protection data for a validator.
+	RetrieveArchivedSlashingProtectionTxn(r basedb.Reader, validatorPubKey []byte) (*SlashingProtectionArchive, bool, error)
 }
 
 // storage is an internal struct implementing the Storage interface. It uses
@@ -307,6 +318,11 @@ func (s *storage) RetrieveHighestAttestationTxn(r basedb.Reader, pubKey []byte) 
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
+	return s.getHighestAttestation(r, pubKey)
+}
+
+// getHighestAttestation retrieves the highest attestation data for the given public key.
+func (s *storage) getHighestAttestation(r basedb.Reader, pubKey []byte) (*phase0.AttestationData, bool, error) {
 	if pubKey == nil {
 		return nil, false, errors.New("public key could not be nil")
 	}
@@ -376,6 +392,11 @@ func (s *storage) RetrieveHighestProposalTxn(r basedb.Reader, pubKey []byte) (ph
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
+	return s.getHighestProposal(r, pubKey)
+}
+
+// getHighestProposal retrieves the highest proposal slot for the given public key.
+func (s *storage) getHighestProposal(r basedb.Reader, pubKey []byte) (phase0.Slot, bool, error) {
 	if pubKey == nil {
 		return 0, false, errors.New("public key could not be nil")
 	}
@@ -471,4 +492,129 @@ func (s *storage) decrypt(nonceCipherText []byte) ([]byte, error) {
 
 func (s *storage) BeaconNetwork() beacon.BeaconNetwork {
 	return s.network
+}
+
+// SlashingProtectionArchive represents archived slashing protection data for a validator.
+//
+// TODO(SSV-15): This struct implements a temporary solution for audit finding SSV-15.
+// The underlying issue is that validator share regeneration produces new public keys,
+// making existing slashing protection data (keyed by share public key) inaccessible
+// upon re-registration.
+type SlashingProtectionArchive struct {
+	ValidatorPubKey    []byte                  `json:"validator_pub_key"`
+	HighestAttestation *phase0.AttestationData `json:"highest_attestation"`
+	HighestProposal    phase0.Slot             `json:"highest_proposal"`
+	ArchivedAt         int64                   `json:"archived_at"` // unix timestamp
+}
+
+// ArchiveSlashingProtectionTxn saves slashing protection data for a validator public key.
+//
+// TODO(SSV-15): This method implements a temporary solution for audit finding SSV-15
+// to preserve slashing protection across validator re-registration cycles where share keys change.
+func (s *storage) ArchiveSlashingProtectionTxn(rw basedb.ReadWriter, validatorPubKey []byte, sharePubKey []byte) error {
+	if validatorPubKey == nil {
+		return fmt.Errorf("validator public key must not be nil")
+	}
+	if sharePubKey == nil {
+		return fmt.Errorf("share public key must not be nil")
+	}
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// Retrieve current slashing protection data for the share
+	highestAtt, foundAtt, err := s.getHighestAttestation(rw, sharePubKey)
+	if err != nil {
+		return fmt.Errorf("could not retrieve highest attestation: %w", err)
+	}
+
+	highestProp, foundProp, err := s.getHighestProposal(rw, sharePubKey)
+	if err != nil {
+		return fmt.Errorf("could not retrieve highest proposal: %w", err)
+	}
+
+	// Only archive if we have some slashing protection data
+	if !foundAtt && !foundProp {
+		return nil // No data to archive
+	}
+
+	archive := &SlashingProtectionArchive{
+		ValidatorPubKey: validatorPubKey,
+		ArchivedAt:      time.Now().Unix(),
+	}
+
+	if foundAtt {
+		archive.HighestAttestation = highestAtt
+	}
+	if foundProp {
+		archive.HighestProposal = highestProp
+	}
+
+	// Check if we already have archived data and merge if needed
+	existing, found, err := s.getArchivedSlashingProtection(rw, validatorPubKey)
+	if err != nil {
+		return fmt.Errorf("could not check existing archive: %w", err)
+	}
+
+	if found && existing != nil {
+		// Merge with existing data, keeping the highest values
+		// This handles cases where a validator is removed and re-added multiple times.
+		// Example: removed at epoch 100, re-added and used until epoch 200, then removed again.
+		// We must keep epoch 200, not overwrite with 100.
+		// This also protects against any edge cases (like hard forks).
+		if existing.HighestAttestation != nil && (archive.HighestAttestation == nil ||
+			existing.HighestAttestation.Target.Epoch > archive.HighestAttestation.Target.Epoch) {
+			archive.HighestAttestation = existing.HighestAttestation
+		}
+
+		if existing.HighestProposal > archive.HighestProposal {
+			archive.HighestProposal = existing.HighestProposal
+		}
+	}
+
+	// Save the archive
+	data, err := json.Marshal(archive)
+	if err != nil {
+		return fmt.Errorf("marshal archive: %w", err)
+	}
+
+	return s.db.Using(rw).Set(s.objPrefix(slashingArchivePrefix), validatorPubKey, data)
+}
+
+// RetrieveArchivedSlashingProtectionTxn retrieves archived slashing protection data for a validator.
+//
+// TODO(SSV-15): This method is part of the temporary solution for audit finding SSV-15,
+// retrieving validator-keyed slashing protection data that was archived during validator removal.
+func (s *storage) RetrieveArchivedSlashingProtectionTxn(r basedb.Reader, validatorPubKey []byte) (*SlashingProtectionArchive, bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.getArchivedSlashingProtection(r, validatorPubKey)
+}
+
+// getArchivedSlashingProtection retrieves archived slashing protection data for a validator.
+func (s *storage) getArchivedSlashingProtection(r basedb.Reader, validatorPubKey []byte) (*SlashingProtectionArchive, bool, error) {
+	if validatorPubKey == nil {
+		return nil, false, fmt.Errorf("validator public key must not be nil")
+	}
+
+	obj, found, err := s.db.UsingReader(r).Get(s.objPrefix(slashingArchivePrefix), validatorPubKey)
+	if err != nil {
+		return nil, false, fmt.Errorf("could not get archived slashing protection: %w", err)
+	}
+
+	if !found {
+		return nil, false, nil
+	}
+
+	if len(obj.Value) == 0 {
+		return nil, false, fmt.Errorf("archived slashing protection value is empty")
+	}
+
+	var archive SlashingProtectionArchive
+	if err := json.Unmarshal(obj.Value, &archive); err != nil {
+		return nil, false, fmt.Errorf("could not unmarshal archived slashing protection: %w", err)
+	}
+
+	return &archive, true, nil
 }

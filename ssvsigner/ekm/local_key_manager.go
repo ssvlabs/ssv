@@ -41,7 +41,7 @@ import (
 // It uses the operator's private key to decrypt incoming shares.
 //
 // The underlying wallet data is stored in the provided db.
-// Signing along with slashing protection are managed with eth2-key-manager's slashingprotection.NewNormalProtection.
+// Signing along with slashing protection is managed with eth2-key-manager's slashingprotection.NewNormalProtection.
 //
 // There are two wrappers for slashingprotection.NewNormalProtection:
 //   - signer.SimpleSigner for internal checks and updates
@@ -316,9 +316,10 @@ func (km *LocalKeyManager) AddShare(
 	return nil
 }
 
-// RemoveShare removes the share from the local wallet, clears the associated
+// RemoveShare removes the share from the local wallet and clears the associated
 // slashing-protection records (highest attestation/proposal) for the given
-// public key, and returns an error on any storage issue.
+// public key. Note: slashing protection history is preserved through archiving
+// before this method is called.
 func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey phase0.BLSPubKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
@@ -335,6 +336,7 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey
 	if err != nil && err.Error() != "account not found" {
 		return fmt.Errorf("could not check share existence: %w", err)
 	}
+
 	if acc != nil {
 		// We don't pass txn because wallet doesn't support transactions (eth2-key-manager doesn't depend on DB entities).
 		// However, a rolled back transaction should not be an issue,
@@ -344,6 +346,23 @@ func (km *LocalKeyManager) RemoveShare(_ context.Context, txn basedb.Txn, pubKey
 		}
 	}
 	return nil
+}
+
+// ArchiveSlashingProtection preserves slashing protection data keyed by validator public key.
+//
+// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
+// preserving slashing protection data before share removal to ensure continuity across re-registration cycles.
+func (km *LocalKeyManager) ArchiveSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey []byte) error {
+	return km.slashingProtector.ArchiveSlashingProtectionTxn(txn, validatorPubKey, sharePubKey)
+}
+
+// ApplyArchivedSlashingProtection applies archived slashing protection data for a validator.
+//
+// TODO(SSV-15): This method implements part of the temporary solution for audit finding SSV-15,
+// applying previously archived slashing protection history to prevent slashing after share regeneration.
+// It uses maximum value logic to prevent regression.
+func (km *LocalKeyManager) ApplyArchivedSlashingProtection(txn basedb.Txn, validatorPubKey []byte, sharePubKey phase0.BLSPubKey) error {
+	return km.slashingProtector.ApplyArchivedSlashingProtectionTxn(txn, validatorPubKey, sharePubKey)
 }
 
 func (km *LocalKeyManager) saveAccount(privKey *bls.SecretKey) error {
