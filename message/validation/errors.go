@@ -131,7 +131,7 @@ var (
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 	ErrUnknownOperator                         = Error{text: "operator is unknown"}
 	ErrOperatorValidation                      = Error{text: "failed to validate operator data"}
-	ErrRCLowerJustificationCount               = Error{text: "lower round change justification count"}
+	ErrRCShorterJustifications                 = Error{text: "round change has less justifications than previous ones"}
 )
 
 func (mv *messageValidator) handleValidationError(ctx context.Context, peerID peer.ID, decodedMessage *queue.SSVMessage, err error) pubsub.ValidationResult {

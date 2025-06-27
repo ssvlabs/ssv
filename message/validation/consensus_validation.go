@@ -226,7 +226,7 @@ func (mv *messageValidator) validateQBFTLogic(
 
 				// Rule: Round change justification length should not decrease
 				if rcjLen < signerState.MaxRCJ {
-					err := ErrRCLowerJustificationCount
+					err := ErrRCShorterJustifications
 					err.got = len(consensusMessage.RoundChangeJustification)
 					err.want = fmt.Sprintf(">%d", signerState.MaxRCJ)
 					return err
