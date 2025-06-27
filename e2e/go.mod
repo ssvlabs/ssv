@@ -35,7 +35,7 @@ require (
 
 require (
 	github.com/alecthomas/kong v0.8.1
-	github.com/docker/docker v24.0.7+incompatible
+	github.com/docker/docker v24.0.9+incompatible
 	github.com/ssvlabs/ssv-spec v0.3.10-0.20240519064657-54fad5befec4
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 	gopkg.in/yaml.v3 v3.0.1
