@@ -65,7 +65,6 @@ func (e Error) Is(target error) bool {
 	return e.text == t.text
 }
 
-// ignored errors
 var (
 	ErrWrongDomain                             = Error{text: "wrong domain"}
 	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
