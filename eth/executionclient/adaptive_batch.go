@@ -14,7 +14,11 @@ type BatcherConfig struct {
 	IncreaseRatio uint64 // e.g., 150 for 50% increase
 	DecreaseRatio uint64 // e.g., 70 for 30% decrease
 
-	// Log-based thresholds for adaptation
+	// HighLogsThreshold defines the maximum number of logs that should be returned
+	// in a single batch before the batch size is reduced. When a log fetch returns
+	// more logs than this threshold, it indicates the batch size is too large and
+	// should be decreased to prevent RPC timeouts, memory issues, or hitting node
+	// query limits. Set to 0 to disable threshold-based reduction.
 	HighLogsThreshold uint32
 }
 
