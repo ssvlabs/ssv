@@ -22,6 +22,7 @@ type SignerState struct {
 	// 10 (f=3): C(10,7)+C(10,8)+C(10,9)+C(10,10)=176
 	// 13 (f=4): C(13,9)+C(13,10)+C(13,11)+C(13,12)+C(13,13)=1093
 	SeenSigners map[SignersBitMask]struct{}
+	MaxRCJ      uint8
 }
 
 func newSignerState(slot phase0.Slot, round specqbft.Round) *SignerState {

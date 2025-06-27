@@ -185,7 +185,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{msgBitMask: 0b10}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b10}, storedState.SeenMsgTypes)
 		for i := 1; i < len(committee); i++ {
 			require.NotNil(t, state.Signer(i))
 		}
@@ -203,7 +203,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, storedState)
 		require.EqualValues(t, height, storedState.Slot)
 		require.EqualValues(t, 2, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{msgBitMask: 0b100}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b100}, storedState.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
@@ -218,7 +218,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		storedState = stateBySlot.GetSignerState(phase0.Slot(height) + 1)
 		require.NotNil(t, storedState)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{msgBitMask: 0b1000}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
@@ -228,7 +228,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, stateBySlot)
 		require.EqualValues(t, 1, storedState.Round)
-		require.EqualValues(t, SeenMsgTypes{msgBitMask: 0b1000}, storedState.SeenMsgTypes)
+		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
 	})
 
 	// Send a pubsub message with no data should cause an error

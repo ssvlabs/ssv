@@ -221,10 +221,32 @@ func (mv *messageValidator) validateQBFTLogic(
 					}
 				}
 
-				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit per round,
-				// as well as 1 round-change per each round change justification length
-				if err := signerState.SeenMsgTypes.ValidateConsensusMessage(signedSSVMessage, consensusMessage); err != nil {
+				// #nosec G115 maxRCJ never exceeds maxOperators
+				rcjLen := uint8(len(consensusMessage.RoundChangeJustification))
+
+				// Rule: Round change justification length should not decrease
+				if rcjLen < signerState.MaxRCJ {
+					err := ErrRCLowerJustificationCount
+					err.got = len(consensusMessage.RoundChangeJustification)
+					err.want = fmt.Sprintf(">%d", signerState.MaxRCJ)
 					return err
+				}
+
+				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit per round,
+				// as well as 1 round-change per each RCJ length (not checking round changes with higher RCJ length).
+				var needDuplicatedMsgCheck bool
+				switch consensusMessage.MsgType {
+				case specqbft.CommitMsgType:
+					needDuplicatedMsgCheck = len(signedSSVMessage.OperatorIDs) == 1
+				case specqbft.RoundChangeMsgType:
+					needDuplicatedMsgCheck = rcjLen == signerState.MaxRCJ
+				default:
+					needDuplicatedMsgCheck = true
+				}
+				if needDuplicatedMsgCheck {
+					if err := signerState.SeenMsgTypes.ValidateConsensusMessage(consensusMessage); err != nil {
+						return err
+					}
 				}
 			}
 		} else if len(signedSSVMessage.OperatorIDs) > 1 {
@@ -352,6 +374,12 @@ func (mv *messageValidator) processSignerState(
 			signerState.SeenSigners = make(map[SignersBitMask]struct{}) // lazy init on demand to reduce mem consumption
 		}
 		signerState.SeenSigners[quorum.ToBitMask()] = struct{}{}
+	}
+
+	if consensusMessage.MsgType == specqbft.RoundChangeMsgType {
+		// #nosec G115 maxRCJ never exceeds maxOperators
+		// maxRCJ always increases, otherwise the message is not accepted making this code unreachable
+		signerState.MaxRCJ = uint8(len(consensusMessage.RoundChangeJustification))
 	}
 
 	return signerState.SeenMsgTypes.RecordConsensusMessage(signedSSVMessage, consensusMessage)
