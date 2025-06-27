@@ -20,7 +20,7 @@ const (
 	validatorIndexSize      = 8 // uint64
 	identifierSize          = 56
 	rootSize                = 32
-	maxOperators            = 13
+	maxSignatures           = 13
 	encodingOverheadDivisor = 20 // Divisor for message size to get encoding overhead, e.g. 10 for 10%, 20 for 5%. Done this way to keep const int.
 )
 
@@ -37,7 +37,7 @@ const (
 	roundSize                  = 8     // uint64
 	maxNoJustificationSize     = 3616  // from KB
 	max1JustificationSize      = 50624 // from KB
-	maxConsensusMsgSize        = qbftMsgTypeSize + heightSize + roundSize + identifierSize + rootSize + roundSize + maxOperators*(maxNoJustificationSize+max1JustificationSize)
+	maxConsensusMsgSize        = qbftMsgTypeSize + heightSize + roundSize + identifierSize + rootSize + roundSize + maxSignatures*(maxNoJustificationSize+max1JustificationSize)
 	maxEncodedConsensusMsgSize = maxConsensusMsgSize + maxConsensusMsgSize/encodingOverheadDivisor + 4
 )
 
@@ -52,8 +52,8 @@ const (
 
 const (
 	msgTypeSize           = 8 // uint64
-	maxSignaturesSize     = maxOperators * rsaSignatureSize
-	maxOperatorIDSize     = maxOperators * operatorIDSize
+	maxSignaturesSize     = maxSignatures * rsaSignatureSize
+	maxOperatorIDSize     = maxSignatures * operatorIDSize
 	maxFullDataSize       = 5243144 // from old spectypes.SignedSSVMessage
 	pectraMaxFullDataSize = 8388836 // from spectypes.SignedSSVMessage
 )
