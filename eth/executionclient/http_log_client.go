@@ -50,12 +50,12 @@ var _ HTTPLogClientInterface = (*HTTPLogClient)(nil)
 
 // HTTPLogClient provides HTTP-based log fetching as backup when WebSocket fails.
 type HTTPLogClient struct {
-	client          *ethclient.Client // HTTP client to execution node
-	clientMu        sync.RWMutex      // Protects client access
-	logger          *zap.Logger
-	httpAddr        string      // HTTP address of an execution client
-	connected       atomic.Bool // Connection state
-	lastConnectTime atomic.Int64
+	client   *ethclient.Client // HTTP client to execution node
+	clientMu sync.RWMutex      // Protects client access
+	logger   *zap.Logger
+
+	httpAddr  string      // HTTP address of an execution client
+	connected atomic.Bool // Connection state
 }
 
 // NewHTTPLogClient creates an HTTP log client for the given execution client address.
@@ -92,7 +92,7 @@ func (h *HTTPLogClient) Connect(ctx context.Context, timeout time.Duration) erro
 
 	h.client = client
 	h.connected.Store(true)
-	h.lastConnectTime.Store(time.Now().Unix())
+
 	h.logger.Info("http log client connected", fields.Address(h.httpAddr))
 
 	return nil
