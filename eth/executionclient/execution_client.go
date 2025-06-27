@@ -279,7 +279,11 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 
 		// single block case - need special handling
 		if fromBlock == toBlock {
-			return ec.handleSingleBlockOverflow(ctx, fromBlock)
+			ec.logger.Warn("single block exceeds read limit, attempting to fetch logs via alternative methods",
+				fields.BlockNumber(fromBlock),
+				zap.String("method", "eth_getLogs"),
+				zap.Error(err))
+			return ec.fetchLogsForSingleBlock(ctx, fromBlock)
 		}
 
 		// require at least 2 blocks to subdivide (fromBlock must be less than toBlock)
@@ -335,12 +339,10 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 	return nil, err
 }
 
-// handleSingleBlockOverflow attempts to retrieve logs from a single block that exceeds the standard read limits.
-// It first tries using HTTP log client if configured, and as a final measure, fetches logs via transaction receipts.
-// Returns the logs found or an error in case of failure.
-func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockNum uint64) ([]ethtypes.Log, error) {
-	ec.logger.Warn("single block exceeds read limit, attempting HTTP log client",
-		fields.BlockNumber(blockNum))
+// fetchLogsForSingleBlock attempts to retrieve logs from a single block using alternative methods.
+// It tries HTTP log client methods if configured, and falls back to fetching logs via transaction receipts.
+// Returns the logs found or an error if all methods fail.
+func (ec *ExecutionClient) fetchLogsForSingleBlock(ctx context.Context, blockNum uint64) ([]ethtypes.Log, error) {
 
 	methods := []struct {
 		name string
@@ -401,16 +403,16 @@ func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockN
 	for _, method := range methods {
 		logs, err := method.fn()
 		if err == nil && len(logs) > 0 {
-			ec.logger.Info("fetched logs via HTTP log client",
-				fields.BlockNumber(blockNum),
+			ec.logger.Info("successfully fetched logs",
 				zap.String("method", method.name),
-				zap.Int("logs", len(logs)))
+				fields.BlockNumber(blockNum),
+				zap.Int("logs_count", len(logs)))
 			return logs, nil
 		}
 		lastErr = err
 	}
 
-	return nil, fmt.Errorf("all HTTP log client methods failed: %w", lastErr)
+	return nil, fmt.Errorf("all alternative log fetching methods failed: %w", lastErr)
 }
 
 // StreamLogs subscribes to events emitted by the contract.
