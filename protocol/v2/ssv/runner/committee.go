@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -258,13 +260,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 
-	var (
-		beaconVote = decidedValue.(*spectypes.BeaconVote)
-		totalAttesterDuties,
-		totalSyncCommitteeDuties,
-		blockedAttesterDuties uint32
-	)
-
 	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 	version, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
 
@@ -276,84 +271,134 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	)
 
 	span.AddEvent("signing validator duties")
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		wg    sync.WaitGroup
+		errCh = make(chan error, 1)
+
+		beaconVote = decidedValue.(*spectypes.BeaconVote)
+		totalAttesterDuties,
+		totalSyncCommitteeDuties,
+		blockedAttesterDuties atomic.Uint32
+	)
+
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
-		attr := trace.WithAttributes(
-			observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
-			observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
-			observability.BeaconRoleAttribute(validatorDuty.Type),
-		)
+		wg.Add(1)
 
-		if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
-			const eventMsg = "duty is no longer valid"
-			span.AddEvent(eventMsg, attr)
-			logger.Warn(eventMsg, fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
-			continue
-		}
+		go func(ctx context.Context, validatorDuty *spectypes.ValidatorDuty) {
+			defer wg.Done()
 
-		switch validatorDuty.Type {
-		case spectypes.BNRoleAttester:
-			totalAttesterDuties++
+			if ctx.Err() != nil {
+				return
+			}
 
-			// Doppelganger protection applies only to attester duties since they are slashable.
-			// Sync committee duties are not slashable, so they are always allowed.
-			if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
-				const eventMsg = "Signing not permitted due to Doppelganger protection"
+			attr := trace.WithAttributes(
+				observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
+				observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
+				observability.BeaconRoleAttribute(validatorDuty.Type),
+			)
+
+			if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
+				const eventMsg = "duty is no longer valid"
 				span.AddEvent(eventMsg, attr)
-				logger.Warn(eventMsg, fields.ValidatorIndex(validatorDuty.ValidatorIndex))
-				blockedAttesterDuties++
-				continue
+				logger.Warn(eventMsg, fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
+				return
 			}
 
-			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
+			switch validatorDuty.Type {
+			case spectypes.BNRoleAttester:
+				totalAttesterDuties.Add(1)
 
-			partialMsg, err := cr.BaseRunner.signBeaconObject(
-				ctx,
-				cr,
-				validatorDuty,
-				attestationData,
-				validatorDuty.DutySlot(),
-				spectypes.DomainAttester,
-			)
-			if err != nil {
-				return observability.Errorf(span, "failed signing attestation data: %w", err)
+				// Doppelganger protection applies only to attester duties since they are slashable.
+				// Sync committee duties are not slashable, so they are always allowed.
+				if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
+					const eventMsg = "Signing not permitted due to Doppelganger protection"
+					span.AddEvent(eventMsg, attr)
+					logger.Warn(eventMsg, fields.ValidatorIndex(validatorDuty.ValidatorIndex))
+					blockedAttesterDuties.Add(1)
+					return
+				}
+
+				attestationData := constructAttestationData(beaconVote, validatorDuty, version)
+
+				partialMsg, err := cr.BaseRunner.signBeaconObject(
+					ctx,
+					cr,
+					validatorDuty,
+					attestationData,
+					validatorDuty.DutySlot(),
+					spectypes.DomainAttester,
+				)
+				if err != nil {
+					errCh <- observability.Errorf(span, "failed signing attestation data: %w", err)
+					cancel()
+					return
+				}
+
+				lock.Lock()
+				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+				lock.Unlock()
+
+				attDataRoot, err := attestationData.HashTreeRoot()
+				if err != nil {
+					errCh <- observability.Errorf(span, "failed to hash attestation data: %w", err)
+					cancel()
+					return
+				}
+				logger.Debug("signed attestation data",
+					zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
+					zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
+					zap.Any("attestation_data", attestationData),
+					zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
+					zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+					zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+				)
+			case spectypes.BNRoleSyncCommittee:
+				totalSyncCommitteeDuties.Add(1)
+
+				blockRoot := beaconVote.BlockRoot
+				partialMsg, err := cr.BaseRunner.signBeaconObject(
+					ctx,
+					cr,
+					validatorDuty,
+					spectypes.SSZBytes(blockRoot[:]),
+					validatorDuty.DutySlot(),
+					spectypes.DomainSyncCommittee,
+				)
+				if err != nil {
+					errCh <- observability.Errorf(span, "failed signing sync committee message: %w", err)
+					cancel()
+					return
+				}
+
+				lock.Lock()
+				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+				lock.Unlock()
+
+			default:
+				errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
+				cancel()
 			}
-			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
-
-			attDataRoot, err := attestationData.HashTreeRoot()
-			if err != nil {
-				return observability.Errorf(span, "failed to hash attestation data: %w", err)
-			}
-			logger.Debug("signed attestation data",
-				zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
-				zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
-				zap.Any("attestation_data", attestationData),
-				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
-				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
-				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
-			)
-		case spectypes.BNRoleSyncCommittee:
-			totalSyncCommitteeDuties++
-
-			blockRoot := beaconVote.BlockRoot
-			partialMsg, err := cr.BaseRunner.signBeaconObject(
-				ctx,
-				cr,
-				validatorDuty,
-				spectypes.SSZBytes(blockRoot[:]),
-				validatorDuty.DutySlot(),
-				spectypes.DomainSyncCommittee,
-			)
-			if err != nil {
-				return observability.Errorf(span, "failed signing sync committee message: %w", err)
-			}
-			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
-
-		default:
-			return fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
-		}
+		}(ctx, validatorDuty)
 	}
 
-	if totalAttesterDuties == 0 && totalSyncCommitteeDuties == 0 {
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-doneCh:
+		span.AddEvent("finished signing validator duties")
+	}
+
+	if totalAttesterDuties.Load() == 0 && totalSyncCommitteeDuties.Load() == 0 {
 		cr.BaseRunner.State.Finished = true
 		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
 		return ErrNoValidDuties
@@ -364,12 +409,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	//
 	// We do not mark the state as finished here because post-consensus messages must still be processed,
 	// allowing validators to be marked as safe once sufficient consensus is reached.
-	if totalAttesterDuties == blockedAttesterDuties && totalSyncCommitteeDuties == 0 {
+	if totalAttesterDuties.Load() == blockedAttesterDuties.Load() && totalSyncCommitteeDuties.Load() == 0 {
 		const eventMsg = "Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties."
 		span.AddEvent(eventMsg)
 		logger.Debug(eventMsg,
-			zap.Uint32("attester_duties", totalAttesterDuties),
-			zap.Uint32("blocked_attesters", blockedAttesterDuties))
+			zap.Uint32("attester_duties", totalAttesterDuties.Load()),
+			zap.Uint32("blocked_attesters", blockedAttesterDuties.Load()))
 
 		span.SetStatus(codes.Ok, "")
 		return nil
