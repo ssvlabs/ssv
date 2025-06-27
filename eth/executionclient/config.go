@@ -11,7 +11,7 @@ type Options struct {
 	Addr                  string        `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true" env-description:"Execution client WebSocket URL(s). Multiple clients are supported via semicolon-separated URLs (e.g. 'ws://localhost:8546;ws://localhost:8547')"`
 	ConnectionTimeout     time.Duration `yaml:"ETH1ConnectionTimeout" env:"ETH_1_CONNECTION_TIMEOUT" env-default:"10s" env-description:"Timeout for execution client connections"`
 	SyncDistanceTolerance uint64        `yaml:"ETH1SyncDistanceTolerance" env:"ETH_1_SYNC_DISTANCE_TOLERANCE" env-default:"5" env-description:"Maximum number of blocks that the execution client can lag behind the current head"`
-	HTTPFallbackAddr      string        `yaml:"ETH1HTTPFallbackAddr" env:"ETH_1_HTTP_FALLBACK_ADDR" env-description:"HTTP fallback address for the execution client"`
+	HTTPLogClientAddr     string        `yaml:"ETH1HTTPLogClientAddr" env:"ETH_1_HTTP_LOG_CLIENT_ADDR" env-description:"HTTP log client address for the execution client"`
 
 	// Adaptive batch configuration
 	BatchSize         uint64 `yaml:"ETH1BatchSize" env:"ETH1BatchSize" env-default:"500" env-description:"Initial batch size for log fetching"`

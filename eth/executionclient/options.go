@@ -112,17 +112,17 @@ func WithSyncDistanceToleranceMulti(count uint64) OptionMulti {
 	}
 }
 
-// WithHTTPFallback sets the HTTP fallback address for the ExecutionClient configuration.
-func WithHTTPFallback(addr string) Option {
+// WithHTTPLogClient sets the HTTP log client address for the ExecutionClient configuration.
+func WithHTTPLogClient(addr string) Option {
 	return func(s *ExecutionClient) {
-		s.httpFallbackAddr = addr
+		s.httpLogClientAddr = addr
 	}
 }
 
-// WithHTTPFallbackMulti sets the HTTP fallback address for the MultiClient configuration.
-func WithHTTPFallbackMulti(addr string) OptionMulti {
+// WithHTTPLogClientMulti sets the HTTP log client address for the MultiClient configuration.
+func WithHTTPLogClientMulti(addr string) OptionMulti {
 	return func(s *MultiClient) {
-		s.httpFallbackAddr = addr
+		s.httpLogClientAddr = addr
 	}
 }
 

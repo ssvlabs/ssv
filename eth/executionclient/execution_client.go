@@ -46,15 +46,15 @@ type SingleClientProvider interface {
 
 var _ Provider = &ExecutionClient{}
 
-// ExecutionClient represents a client for interacting with Ethereum execution client.
+// ExecutionClient represents a client for interacting with an Ethereum execution client.
 type ExecutionClient struct {
 	// mandatory
 	nodeAddr        string
 	contractAddress ethcommon.Address
 
 	// optional
-	httpFallbackAddr string
-	logger           *zap.Logger
+	httpLogClientAddr string
+	logger            *zap.Logger
 	// followDistance defines an offset into the past from the head block such that the block
 	// at this offset will be considered as very likely finalized.
 	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
@@ -71,7 +71,7 @@ type ExecutionClient struct {
 
 	// variables
 	client         *ethclient.Client
-	httpFallback   FallbackClientInterface
+	httpLogClient  HTTPLogClientInterface
 	closed         chan struct{}
 	lastSyncedTime atomic.Int64
 }
@@ -97,11 +97,11 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 		client.batcher = NewAdaptiveBatcher(DefaultBatchSize, DefaultMinBatchSize, DefaultMaxBatchSize)
 	}
 
-	if client.httpFallbackAddr != "" {
-		client.httpFallback = NewFallbackClient(client.httpFallbackAddr, client.logger)
+	if client.httpLogClientAddr != "" {
+		client.httpLogClient = NewHTTPLogClient(client.httpLogClientAddr, client.logger)
 	} else if nodeAddr != "" {
 		// Auto-detect HTTP endpoint from WebSocket URL
-		client.httpFallback = NewFallbackClient(nodeAddr, client.logger)
+		client.httpLogClient = NewHTTPLogClient(nodeAddr, client.logger)
 	}
 
 	client.logger.Info("execution client: connecting", fields.Address(nodeAddr))
@@ -129,8 +129,8 @@ func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProg
 func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
 	ec.client.Close()
-	if ec.httpFallback != nil {
-		_ = ec.httpFallback.Close()
+	if ec.httpLogClient != nil {
+		_ = ec.httpLogClient.Close()
 	}
 
 	return nil
@@ -336,10 +336,10 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 }
 
 // handleSingleBlockOverflow attempts to retrieve logs from a single block that exceeds the standard read limits.
-// It first tries using an HTTP fallback if configured, and as a final measure, fetches logs via transaction receipts.
+// It first tries using HTTP log client if configured, and as a final measure, fetches logs via transaction receipts.
 // Returns the logs found or an error in case of failure.
 func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockNum uint64) ([]ethtypes.Log, error) {
-	ec.logger.Warn("single block exceeds read limit, attempting fallback",
+	ec.logger.Warn("single block exceeds read limit, attempting HTTP log client",
 		fields.BlockNumber(blockNum))
 
 	methods := []struct {
@@ -349,22 +349,22 @@ func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockN
 		{
 			name: "http_filter",
 			fn: func() ([]ethtypes.Log, error) {
-				if ec.httpFallback == nil {
-					return nil, fmt.Errorf("no http fallback configured")
+				if ec.httpLogClient == nil {
+					return nil, fmt.Errorf("no http log client configured")
 				}
-				if err := ec.httpFallback.Connect(ctx, ec.connectionTimeout); err != nil {
+				if err := ec.httpLogClient.Connect(ctx, ec.connectionTimeout); err != nil {
 					return nil, err
 				}
-				return ec.httpFallback.FetchLogs(ctx, ec.contractAddress, blockNum)
+				return ec.httpLogClient.FetchLogs(ctx, ec.contractAddress, blockNum)
 			},
 		},
 		{
 			name: "http_receipts",
 			fn: func() ([]ethtypes.Log, error) {
-				if ec.httpFallback == nil {
-					return nil, fmt.Errorf("no http fallback configured")
+				if ec.httpLogClient == nil {
+					return nil, fmt.Errorf("no http log client configured")
 				}
-				return ec.httpFallback.FetchLogsViaReceipts(ctx, ec.contractAddress, blockNum)
+				return ec.httpLogClient.FetchLogsViaReceipts(ctx, ec.contractAddress, blockNum)
 			},
 		},
 		{
@@ -401,7 +401,7 @@ func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockN
 	for _, method := range methods {
 		logs, err := method.fn()
 		if err == nil && len(logs) > 0 {
-			ec.logger.Info("fetched logs via fallback",
+			ec.logger.Info("fetched logs via HTTP log client",
 				fields.BlockNumber(blockNum),
 				zap.String("method", method.name),
 				zap.Int("logs", len(logs)))
@@ -410,7 +410,7 @@ func (ec *ExecutionClient) handleSingleBlockOverflow(ctx context.Context, blockN
 		lastErr = err
 	}
 
-	return nil, fmt.Errorf("all fallback methods failed: %w", lastErr)
+	return nil, fmt.Errorf("all HTTP log client methods failed: %w", lastErr)
 }
 
 // StreamLogs subscribes to events emitted by the contract.

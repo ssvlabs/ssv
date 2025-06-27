@@ -1425,13 +1425,13 @@ func TestMultiClientOptions(t *testing.T) {
 		assert.Equal(t, uint64(2000), cfg.MaxSize)
 	})
 
-	t.Run("WithHTTPFallbackMulti", func(t *testing.T) {
+	t.Run("WithHTTPLogClientMulti", func(t *testing.T) {
 		t.Parallel()
 
 		mc := &MultiClient{}
-		opt := WithHTTPFallbackMulti("http://localhost:8545")
+		opt := WithHTTPLogClientMulti("http://localhost:8545")
 		opt(mc)
 
-		assert.Equal(t, "http://localhost:8545", mc.httpFallbackAddr)
+		assert.Equal(t, "http://localhost:8545", mc.httpLogClientAddr)
 	})
 }

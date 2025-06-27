@@ -18,8 +18,8 @@ import (
 	"github.com/ssvlabs/ssv/eth/simulator"
 )
 
-// fallbackTestEnv provides test environment for fallback client testing.
-type fallbackTestEnv struct {
+// httpLogClientTestEnv provides test environment for HTTP log client testing.
+type httpLogClientTestEnv struct {
 	ctx          context.Context
 	t            *testing.T
 	sim          *simulator.Backend
@@ -28,8 +28,8 @@ type fallbackTestEnv struct {
 	auth         *bind.TransactOpts
 }
 
-// setupFallbackTestEnv creates a new test environment for fallback client testing.
-func setupFallbackTestEnv(t *testing.T, testTimeout time.Duration) *fallbackTestEnv {
+// setupHTTPLogClientTestEnv creates a new test environment for HTTP log client testing.
+func setupHTTPLogClientTestEnv(t *testing.T, testTimeout time.Duration) *httpLogClientTestEnv {
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	t.Cleanup(cancel)
 
@@ -45,7 +45,7 @@ func setupFallbackTestEnv(t *testing.T, testTimeout time.Duration) *fallbackTest
 
 	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
 
-	return &fallbackTestEnv{
+	return &httpLogClientTestEnv{
 		ctx:        ctx,
 		t:          t,
 		sim:        sim,
@@ -54,8 +54,8 @@ func setupFallbackTestEnv(t *testing.T, testTimeout time.Duration) *fallbackTest
 	}
 }
 
-// deployContract deploys the test contract for fallback testing.
-func (env *fallbackTestEnv) deployContract() (*bind.BoundContract, error) {
+// deployContract deploys the test contract for HTTP log client testing.
+func (env *httpLogClientTestEnv) deployContract() (*bind.BoundContract, error) {
 	contract, err := env.deployCallableContract()
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (env *fallbackTestEnv) deployContract() (*bind.BoundContract, error) {
 }
 
 // deployCallableContract deploys the callable test contract.
-func (env *fallbackTestEnv) deployCallableContract() (*bind.BoundContract, error) {
+func (env *httpLogClientTestEnv) deployCallableContract() (*bind.BoundContract, error) {
 	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
 	contractAddr, _, contract, err := bind.DeployContract(
 		env.auth,
@@ -81,7 +81,7 @@ func (env *fallbackTestEnv) deployCallableContract() (*bind.BoundContract, error
 }
 
 // createBlocksWithLogs creates blocks with transaction logs.
-func (env *fallbackTestEnv) createBlocksWithLogs(contract *bind.BoundContract, count int) error {
+func (env *httpLogClientTestEnv) createBlocksWithLogs(contract *bind.BoundContract, count int) error {
 	for i := 0; i < count; i++ {
 		_, err := contract.Transact(env.auth, "Call")
 		if err != nil {
@@ -92,22 +92,22 @@ func (env *fallbackTestEnv) createBlocksWithLogs(contract *bind.BoundContract, c
 	return nil
 }
 
-// TestNewFallbackClient tests the NewFallbackClient constructor function.
-func TestNewFallbackClient(t *testing.T) {
+// TestNewHTTPLogClient tests the NewHTTPLogClient constructor function.
+func TestNewHTTPLogClient(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("creates client with valid address", func(t *testing.T) {
-		client := NewFallbackClient("http://localhost:8545", logger)
+		client := NewHTTPLogClient("http://localhost:8545", logger)
 		require.NotNil(t, client)
 
-		fallbackClient := client.(*FallbackClient)
-		require.Equal(t, "http://localhost:8545", fallbackClient.httpAddr)
-		require.Equal(t, logger, fallbackClient.logger)
-		require.False(t, fallbackClient.connected.Load())
+		httpLogClient := client.(*HTTPLogClient)
+		require.Equal(t, "http://localhost:8545", httpLogClient.httpAddr)
+		require.Equal(t, logger, httpLogClient.logger)
+		require.False(t, httpLogClient.connected.Load())
 	})
 
 	t.Run("returns nil with empty address", func(t *testing.T) {
-		client := NewFallbackClient("", logger)
+		client := NewHTTPLogClient("", logger)
 		require.Nil(t, client)
 	})
 
@@ -123,30 +123,30 @@ func TestNewFallbackClient(t *testing.T) {
 		}
 
 		for _, tc := range testCases {
-			client := NewFallbackClient(tc.input, logger)
+			client := NewHTTPLogClient(tc.input, logger)
 			require.NotNil(t, client)
-			fallbackClient := client.(*FallbackClient)
-			require.Equal(t, tc.expected, fallbackClient.httpAddr)
+			httpLogClient := client.(*HTTPLogClient)
+			require.Equal(t, tc.expected, httpLogClient.httpAddr)
 		}
 	})
 }
 
-// TestFallbackClient_Connect tests the Connect method of the fallback client.
-func TestFallbackClient_Connect(t *testing.T) {
+// TestHTTPLogClient_Connect tests the Connect method of the HTTP log client.
+func TestHTTPLogClient_Connect(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully connects to HTTP endpoint", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err := client.Connect(env.ctx, 2*time.Second)
 		require.NoError(t, err)
 
-		fallbackClient := client.(*FallbackClient)
-		require.True(t, fallbackClient.connected.Load())
-		require.NotNil(t, fallbackClient.client)
+		httpLogClient := client.(*HTTPLogClient)
+		require.True(t, httpLogClient.connected.Load())
+		require.NotNil(t, httpLogClient.client)
 
 		require.NoError(t, client.Close())
 	})
@@ -155,39 +155,39 @@ func TestFallbackClient_Connect(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 		defer cancel()
 
-		client := NewFallbackClient("http://127.0.0.1:1", logger)
+		client := NewHTTPLogClient("http://127.0.0.1:1", logger)
 		require.NotNil(t, client)
 
 		err := client.Connect(ctx, 100*time.Millisecond)
 		if err == nil {
-			fallbackClient := client.(*FallbackClient)
-			require.True(t, fallbackClient.connected.Load())
+			httpLogClient := client.(*HTTPLogClient)
+			require.True(t, httpLogClient.connected.Load())
 
 			_, err = client.FetchLogs(ctx, ethcommon.Address{}, 1)
 			require.Error(t, err)
 		} else {
-			require.ErrorContains(t, err, "http fallback dial failed")
-			fallbackClient := client.(*FallbackClient)
-			require.False(t, fallbackClient.connected.Load())
+			require.ErrorContains(t, err, "http log client dial failed")
+			httpLogClient := client.(*HTTPLogClient)
+			require.False(t, httpLogClient.connected.Load())
 		}
 	})
 
 	t.Run("returns early if already connected", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err := client.Connect(env.ctx, 2*time.Second)
 		require.NoError(t, err)
 
-		fallbackClient := client.(*FallbackClient)
-		firstClient := fallbackClient.client
-		require.True(t, fallbackClient.connected.Load())
+		httpLogClient := client.(*HTTPLogClient)
+		firstClient := httpLogClient.client
+		require.True(t, httpLogClient.connected.Load())
 
 		err = client.Connect(env.ctx, 2*time.Second)
 		require.NoError(t, err)
-		require.Same(t, firstClient, fallbackClient.client)
+		require.Same(t, firstClient, httpLogClient.client)
 
 		require.NoError(t, client.Close())
 	})
@@ -196,7 +196,7 @@ func TestFallbackClient_Connect(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		client := NewFallbackClient("http://127.0.0.1:1", logger)
+		client := NewHTTPLogClient("http://127.0.0.1:1", logger)
 		require.NotNil(t, client)
 
 		err := client.Connect(ctx, 1*time.Second)
@@ -204,17 +204,17 @@ func TestFallbackClient_Connect(t *testing.T) {
 			_, err = client.FetchLogs(ctx, ethcommon.Address{}, 1)
 			require.Error(t, err)
 		} else {
-			require.ErrorContains(t, err, "http fallback dial failed")
+			require.ErrorContains(t, err, "http log client dial failed")
 		}
 	})
 }
 
-// TestFallbackClient_FetchLogs tests the FetchLogs method of the fallback client.
-func TestFallbackClient_FetchLogs(t *testing.T) {
+// TestHTTPLogClient_FetchLogs tests the FetchLogs method of the HTTP log client.
+func TestHTTPLogClient_FetchLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully fetches logs", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
 		// Deploy contract and create logs
 		contract, err := env.deployContract()
@@ -231,8 +231,8 @@ func TestFallbackClient_FetchLogs(t *testing.T) {
 		currentBlockAfter, err := env.sim.Client().BlockNumber(env.ctx)
 		require.NoError(t, err)
 
-		// Create and connect fallback client
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		// Create and connect HTTP log client
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err = client.Connect(env.ctx, 2*time.Second)
@@ -250,7 +250,7 @@ func TestFallbackClient_FetchLogs(t *testing.T) {
 	})
 
 	t.Run("returns empty logs for block with no matching events", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
 		// Deploy contract but don't create any logs
 		_, err := env.deployContract()
@@ -260,8 +260,8 @@ func TestFallbackClient_FetchLogs(t *testing.T) {
 		env.sim.Commit()
 		env.sim.Commit()
 
-		// Create and connect fallback client
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		// Create and connect HTTP log client
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err = client.Connect(env.ctx, 2*time.Second)
@@ -275,22 +275,22 @@ func TestFallbackClient_FetchLogs(t *testing.T) {
 	})
 
 	t.Run("fails when not connected", func(t *testing.T) {
-		client := NewFallbackClient("http://localhost:8545", logger)
+		client := NewHTTPLogClient("http://localhost:8545", logger)
 		require.NotNil(t, client)
 
 		logs, err := client.FetchLogs(t.Context(), ethcommon.Address{}, 1)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "http fallback not connected")
+		require.ErrorContains(t, err, "http log client not connected")
 		require.Nil(t, logs)
 	})
 
 	t.Run("handles context cancellation", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
 		_, err := env.deployContract()
 		require.NoError(t, err)
 
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err = client.Connect(env.ctx, 2*time.Second)
@@ -306,12 +306,12 @@ func TestFallbackClient_FetchLogs(t *testing.T) {
 	})
 }
 
-// TestFallbackClient_FetchLogsViaReceipts tests the FetchLogsViaReceipts method of the fallback client.
-func TestFallbackClient_FetchLogsViaReceipts(t *testing.T) {
+// TestHTTPLogClient_FetchLogsViaReceipts tests the FetchLogsViaReceipts method of the HTTP log client.
+func TestHTTPLogClient_FetchLogsViaReceipts(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully fetches logs via receipts", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
 		// Deploy contract and create logs
 		contract, err := env.deployContract()
@@ -328,8 +328,8 @@ func TestFallbackClient_FetchLogsViaReceipts(t *testing.T) {
 		currentBlockAfter, err := env.sim.Client().BlockNumber(env.ctx)
 		require.NoError(t, err)
 
-		// Create and connect fallback client
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		// Create and connect HTTP log client
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err = client.Connect(env.ctx, 2*time.Second)
@@ -346,7 +346,7 @@ func TestFallbackClient_FetchLogsViaReceipts(t *testing.T) {
 	})
 
 	t.Run("returns empty logs for block with no transactions", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
 		// Deploy contract
 		_, err := env.deployContract()
@@ -355,8 +355,8 @@ func TestFallbackClient_FetchLogsViaReceipts(t *testing.T) {
 		// Create empty block
 		env.sim.Commit()
 
-		// Create and connect fallback client
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		// Create and connect HTTP log client
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err = client.Connect(env.ctx, 2*time.Second)
@@ -370,24 +370,24 @@ func TestFallbackClient_FetchLogsViaReceipts(t *testing.T) {
 	})
 
 	t.Run("fails when not connected", func(t *testing.T) {
-		client := NewFallbackClient("http://localhost:8545", logger)
+		client := NewHTTPLogClient("http://localhost:8545", logger)
 		require.NotNil(t, client)
 
 		logs, err := client.FetchLogsViaReceipts(t.Context(), ethcommon.Address{}, 1)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "http fallback not connected")
+		require.ErrorContains(t, err, "http log client not connected")
 		require.Nil(t, logs)
 	})
 
 	t.Run("handles non-existent block", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
 		// Deploy contract
 		_, err := env.deployContract()
 		require.NoError(t, err)
 
-		// Create and connect fallback client
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		// Create and connect HTTP log client
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err = client.Connect(env.ctx, 2*time.Second)
@@ -402,12 +402,12 @@ func TestFallbackClient_FetchLogsViaReceipts(t *testing.T) {
 	})
 
 	t.Run("handles context cancellation", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
 		_, err := env.deployContract()
 		require.NoError(t, err)
 
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err = client.Connect(env.ctx, 2*time.Second)
@@ -423,45 +423,45 @@ func TestFallbackClient_FetchLogsViaReceipts(t *testing.T) {
 	})
 }
 
-// TestFallbackClient_Close tests the Close method of the fallback client.
-func TestFallbackClient_Close(t *testing.T) {
+// TestHTTPLogClient_Close tests the Close method of the HTTP log client.
+func TestHTTPLogClient_Close(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("successfully closes connected client", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err := client.Connect(env.ctx, 2*time.Second)
 		require.NoError(t, err)
 
-		fallbackClient := client.(*FallbackClient)
-		require.True(t, fallbackClient.connected.Load())
-		require.NotNil(t, fallbackClient.client)
+		httpLogClient := client.(*HTTPLogClient)
+		require.True(t, httpLogClient.connected.Load())
+		require.NotNil(t, httpLogClient.client)
 
 		err = client.Close()
 		require.NoError(t, err)
-		require.False(t, fallbackClient.connected.Load())
-		require.Nil(t, fallbackClient.client)
+		require.False(t, httpLogClient.connected.Load())
+		require.Nil(t, httpLogClient.client)
 	})
 
 	t.Run("successfully closes non-connected client", func(t *testing.T) {
-		client := NewFallbackClient("http://localhost:8545", logger)
+		client := NewHTTPLogClient("http://localhost:8545", logger)
 		require.NotNil(t, client)
 
-		fallbackClient := client.(*FallbackClient)
-		require.False(t, fallbackClient.connected.Load())
+		httpLogClient := client.(*HTTPLogClient)
+		require.False(t, httpLogClient.connected.Load())
 
 		err := client.Close()
 		require.NoError(t, err)
-		require.False(t, fallbackClient.connected.Load())
+		require.False(t, httpLogClient.connected.Load())
 	})
 
 	t.Run("handles multiple close calls", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 5*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
 
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err := client.Connect(env.ctx, 2*time.Second)
@@ -478,14 +478,14 @@ func TestFallbackClient_Close(t *testing.T) {
 	})
 }
 
-// TestFallbackClient_ConcurrentAccess tests concurrent access patterns of the fallback client.
-func TestFallbackClient_ConcurrentAccess(t *testing.T) {
+// TestHTTPLogClient_ConcurrentAccess tests concurrent access patterns of the HTTP log client.
+func TestHTTPLogClient_ConcurrentAccess(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	t.Run("handles concurrent connect and close operations", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 10*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 10*time.Second)
 
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		var wg sync.WaitGroup
@@ -513,7 +513,7 @@ func TestFallbackClient_ConcurrentAccess(t *testing.T) {
 	})
 
 	t.Run("handles concurrent fetch operations", func(t *testing.T) {
-		env := setupFallbackTestEnv(t, 10*time.Second)
+		env := setupHTTPLogClientTestEnv(t, 10*time.Second)
 
 		contract, err := env.deployContract()
 		require.NoError(t, err)
@@ -521,7 +521,7 @@ func TestFallbackClient_ConcurrentAccess(t *testing.T) {
 		err = env.createBlocksWithLogs(contract, 5)
 		require.NoError(t, err)
 
-		client := NewFallbackClient(env.httpServer.URL, logger)
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
 		err = client.Connect(env.ctx, 2*time.Second)

@@ -64,7 +64,7 @@ type MultiClient struct {
 	syncDistanceTolerance       uint64
 
 	// HTTP fallback configuration
-	httpFallbackAddr string
+	httpLogClientAddr string
 
 	// adaptive batching
 	batcher *AdaptiveBatcher
@@ -169,8 +169,8 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		options = append(options, WithAdaptiveBatch(cfg))
 	}
 
-	if mc.httpFallbackAddr != "" {
-		options = append(options, WithHTTPFallback(mc.httpFallbackAddr))
+	if mc.httpLogClientAddr != "" {
+		options = append(options, WithHTTPLogClient(mc.httpLogClientAddr))
 	}
 
 	singleClient, err := New(
