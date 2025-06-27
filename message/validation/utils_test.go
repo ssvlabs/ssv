@@ -74,21 +74,21 @@ func TestRecordConsensusMessage(t *testing.T) {
 			name:             "ProposalMessage_IncrementsProposalCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
-			expectedSeen:     SeenMsgTypes{v: 0b10},
+			expectedSeen:     SeenMsgTypes{msgBitMask: 0b10},
 			expectedError:    nil,
 		},
 		{
 			name:             "PrepareMessage_IncrementsPrepareCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.PrepareMsgType},
-			expectedSeen:     SeenMsgTypes{v: 0b100},
+			expectedSeen:     SeenMsgTypes{msgBitMask: 0b100},
 			expectedError:    nil,
 		},
 		{
 			name:             "CommitMessageWithSingleOperator_IncrementsCommitCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{OperatorIDs: []spectypes.OperatorID{1}},
 			msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
-			expectedSeen:     SeenMsgTypes{v: 0b1000},
+			expectedSeen:     SeenMsgTypes{msgBitMask: 0b1000},
 			expectedError:    nil,
 		},
 		{
@@ -102,7 +102,7 @@ func TestRecordConsensusMessage(t *testing.T) {
 			name:             "RoundChangeMessage_IncrementsRoundChangeCount",
 			signedSSVMessage: &spectypes.SignedSSVMessage{},
 			msg:              &specqbft.Message{MsgType: specqbft.RoundChangeMsgType},
-			expectedSeen:     SeenMsgTypes{v: 0b10000},
+			expectedSeen:     SeenMsgTypes{msgBitMask: 0b10000},
 			expectedError:    nil,
 		},
 		{
@@ -145,7 +145,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "ProposalMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b10},
+				seenMsgTypes:     &SeenMsgTypes{msgBitMask: 0b10},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
 			},
@@ -154,7 +154,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "PrepareMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b100},
+				seenMsgTypes:     &SeenMsgTypes{msgBitMask: 0b100},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.PrepareMsgType},
 			},
@@ -163,7 +163,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "CommitMessageWithSingleOperator_ExceedsLimit_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b1000},
+				seenMsgTypes:     &SeenMsgTypes{msgBitMask: 0b1000},
 				signedSSVMessage: &spectypes.SignedSSVMessage{OperatorIDs: []spectypes.OperatorID{1}},
 				msg:              &specqbft.Message{MsgType: specqbft.CommitMsgType},
 			},
@@ -172,7 +172,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "RoundChangeMessage_ExceedsLimit_ReturnsError",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b10000},
+				seenMsgTypes:     &SeenMsgTypes{msgBitMask: 0b10000},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.RoundChangeMsgType},
 			},
@@ -190,7 +190,7 @@ func TestValidateConsensusMessage(t *testing.T) {
 		{
 			name: "ValidProposalMessage_HappyFlow",
 			input: input{
-				seenMsgTypes:     &SeenMsgTypes{v: 0b0},
+				seenMsgTypes:     &SeenMsgTypes{msgBitMask: 0b0},
 				signedSSVMessage: &spectypes.SignedSSVMessage{},
 				msg:              &specqbft.Message{MsgType: specqbft.ProposalMsgType},
 			},

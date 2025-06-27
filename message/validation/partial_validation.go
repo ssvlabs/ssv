@@ -213,10 +213,10 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		}
 	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleSyncCommitteeContribution {
 		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync committee contribution duty
-		if partialSignatureMessageCount > maxSignatures {
+		if partialSignatureMessageCount > maxOperators {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount
-			e.want = maxSignatures
+			e.want = maxOperators
 			return e
 		}
 	} else if partialSignatureMessageCount > 1 {
