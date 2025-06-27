@@ -221,7 +221,8 @@ func (mv *messageValidator) validateQBFTLogic(
 					}
 				}
 
-				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, and 1 round-change per round
+				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit per round,
+				// as well as 1 round-change per each round change justification length
 				if err := signerState.SeenMsgTypes.ValidateConsensusMessage(signedSSVMessage, consensusMessage); err != nil {
 					return err
 				}
