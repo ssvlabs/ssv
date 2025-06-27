@@ -197,15 +197,13 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			ec.batcher.RecordResult(len(results))
 
-			duration := time.Since(start)
-
 			ec.logger.Info("fetched registry events",
 				fields.FromBlock(fromBlock),
 				fields.ToBlock(toBlock),
 				zap.Uint64("target_block", endBlock),
 				zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock+1)/float64(endBlock-startBlock+1)*100)),
 				zap.Int("events", len(results)),
-				fields.Took(duration),
+				fields.Took(time.Since(start)),
 			)
 
 			select {
