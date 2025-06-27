@@ -66,8 +66,8 @@ type MultiClient struct {
 	// HTTP fallback configuration
 	httpLogClientAddr string
 
-	// adaptive batching
-	batcher *AdaptiveBatcher
+	// adaptive batching configuration
+	batcherConfig *BatcherConfig
 
 	contractAddress ethcommon.Address
 	chainID         atomic.Pointer[big.Int]
@@ -164,9 +164,8 @@ func (mc *MultiClient) connect(ctx context.Context, clientIndex int) error {
 		WithSyncDistanceTolerance(mc.syncDistanceTolerance),
 	}
 
-	if mc.batcher != nil {
-		cfg := mc.batcher.Config()
-		options = append(options, WithAdaptiveBatch(cfg))
+	if mc.batcherConfig != nil {
+		options = append(options, WithAdaptiveBatch(*mc.batcherConfig))
 	}
 
 	if mc.httpLogClientAddr != "" {

@@ -1418,11 +1418,10 @@ func TestMultiClientOptions(t *testing.T) {
 		})
 		opt(mc)
 
-		assert.NotNil(t, mc.batcher)
-		cfg := mc.batcher.Config()
-		assert.Equal(t, uint64(1000), cfg.InitialSize)
-		assert.Equal(t, uint64(200), cfg.MinSize)
-		assert.Equal(t, uint64(2000), cfg.MaxSize)
+		assert.NotNil(t, mc.batcherConfig)
+		assert.Equal(t, uint64(1000), mc.batcherConfig.InitialSize)
+		assert.Equal(t, uint64(200), mc.batcherConfig.MinSize)
+		assert.Equal(t, uint64(2000), mc.batcherConfig.MaxSize)
 	})
 
 	t.Run("WithHTTPLogClientMulti", func(t *testing.T) {
