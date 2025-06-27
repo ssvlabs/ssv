@@ -293,15 +293,13 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				return
 			}
 
-			attr := trace.WithAttributes(
-				observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
-				observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
-				observability.BeaconRoleAttribute(validatorDuty.Type),
-			)
-
 			if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
 				const eventMsg = "duty is no longer valid"
-				span.AddEvent(eventMsg, attr)
+				span.AddEvent(eventMsg, trace.WithAttributes(
+					observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
+					observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
+					observability.BeaconRoleAttribute(validatorDuty.Type),
+				))
 				logger.Warn(eventMsg, fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
 				return
 			}
@@ -309,60 +307,28 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			switch validatorDuty.Type {
 			case spectypes.BNRoleAttester:
 				totalAttesterDuties.Add(1)
-
-				// Doppelganger protection applies only to attester duties since they are slashable.
-				// Sync committee duties are not slashable, so they are always allowed.
-				if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
-					const eventMsg = "Signing not permitted due to Doppelganger protection"
-					span.AddEvent(eventMsg, attr)
-					logger.Warn(eventMsg, fields.ValidatorIndex(validatorDuty.ValidatorIndex))
-					blockedAttesterDuties.Add(1)
-					return
-				}
-
-				attestationData := constructAttestationData(beaconVote, validatorDuty, version)
-
-				partialMsg, err := cr.BaseRunner.signBeaconObject(
-					ctx,
-					cr,
-					validatorDuty,
-					attestationData,
-					validatorDuty.DutySlot(),
-					spectypes.DomainAttester,
-				)
+				isAttesterDutyBlocked, partialSigMsg, err := cr.signAttesterDuty(ctx, validatorDuty, beaconVote, version, logger)
 				if err != nil {
 					errCh <- observability.Errorf(span, "failed signing attestation data: %w", err)
 					cancel()
 					return
 				}
-
-				lock.Lock()
-				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
-				lock.Unlock()
-
-				attDataRoot, err := attestationData.HashTreeRoot()
-				if err != nil {
-					errCh <- observability.Errorf(span, "failed to hash attestation data: %w", err)
-					cancel()
+				if isAttesterDutyBlocked {
+					blockedAttesterDuties.Add(1)
 					return
 				}
-				logger.Debug("signed attestation data",
-					zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
-					zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
-					zap.Any("attestation_data", attestationData),
-					zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
-					zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
-					zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
-				)
+
+				lock.Lock()
+				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialSigMsg)
+				lock.Unlock()
 			case spectypes.BNRoleSyncCommittee:
 				totalSyncCommitteeDuties.Add(1)
 
-				blockRoot := beaconVote.BlockRoot
-				partialMsg, err := cr.BaseRunner.signBeaconObject(
+				partialSigMsg, err := cr.BaseRunner.signBeaconObject(
 					ctx,
 					cr,
 					validatorDuty,
-					spectypes.SSZBytes(blockRoot[:]),
+					spectypes.SSZBytes(beaconVote.BlockRoot[:]),
 					validatorDuty.DutySlot(),
 					spectypes.DomainSyncCommittee,
 				)
@@ -373,7 +339,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				}
 
 				lock.Lock()
-				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialSigMsg)
 				lock.Unlock()
 
 			default:
@@ -456,6 +422,62 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	span.SetStatus(codes.Ok, "")
 	return nil
+}
+
+func (cr *CommitteeRunner) signAttesterDuty(
+	ctx context.Context,
+	validatorDuty *spectypes.ValidatorDuty,
+	beaconVote *spectypes.BeaconVote,
+	version spec.DataVersion,
+	logger *zap.Logger) (isBlocked bool, partialSig *spectypes.PartialSignatureMessage, err error) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "runner.process_committee_consensus"),
+		trace.WithAttributes(
+			observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
+			observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
+			observability.BeaconRoleAttribute(validatorDuty.Type),
+		))
+	defer span.End()
+
+	// Doppelganger protection applies only to attester duties since they are slashable.
+	// Sync committee duties are not slashable, so they are always allowed.
+	if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
+		const eventMsg = "Signing not permitted due to Doppelganger protection"
+		span.AddEvent(eventMsg)
+		logger.Warn(eventMsg, fields.ValidatorIndex(validatorDuty.ValidatorIndex))
+		isBlocked = true
+		return
+	}
+
+	attestationData := constructAttestationData(beaconVote, validatorDuty, version)
+
+	partialMsg, err := cr.BaseRunner.signBeaconObject(
+		ctx,
+		cr,
+		validatorDuty,
+		attestationData,
+		validatorDuty.DutySlot(),
+		spectypes.DomainAttester,
+	)
+	if err != nil {
+		return isBlocked, partialMsg, observability.Errorf(span, "failed signing attestation data: %w", err)
+	}
+
+	attDataRoot, err := attestationData.HashTreeRoot()
+	if err != nil {
+		return isBlocked, partialMsg, observability.Errorf(span, "failed to hash attestation data: %w", err)
+	}
+
+	logger.Debug("signed attestation data",
+		zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
+		zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
+		zap.Any("attestation_data", attestationData),
+		zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
+		zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+		zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+	)
+
+	return isBlocked, partialMsg, nil
 }
 
 // TODO finish edge case where some roots may be missing
