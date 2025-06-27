@@ -2,7 +2,6 @@ package executionclient
 
 import (
 	"sync/atomic"
-	"time"
 )
 
 // BatcherConfig contains configuration for adaptive batcher.
@@ -36,8 +35,7 @@ func DefaultBatcherConfig() BatcherConfig {
 type AdaptiveBatcher struct {
 	config BatcherConfig
 
-	size           atomic.Uint64
-	lastAdjustTime atomic.Int64
+	size atomic.Uint64
 }
 
 // NewAdaptiveBatcher creates a new adaptive batcher with specified size limits.
@@ -70,7 +68,6 @@ func NewAdaptiveBatcher(initial, min, max uint64) *AdaptiveBatcher {
 	}
 
 	ab.size.Store(initial)
-	ab.lastAdjustTime.Store(time.Now().UnixNano())
 
 	return ab
 }
@@ -115,7 +112,6 @@ func NewAdaptiveBatcherWithConfig(cfg BatcherConfig) *AdaptiveBatcher {
 	}
 
 	ab.size.Store(cfg.InitialSize)
-	ab.lastAdjustTime.Store(time.Now().UnixNano())
 
 	return ab
 }
@@ -146,7 +142,6 @@ func (ab *AdaptiveBatcher) RecordFailure() {
 // Reset resets the batcher to initial configuration.
 func (ab *AdaptiveBatcher) Reset() {
 	ab.size.Store(ab.config.InitialSize)
-	ab.lastAdjustTime.Store(time.Now().UnixNano())
 }
 
 // Config returns the current configuration.
@@ -175,7 +170,6 @@ func (ab *AdaptiveBatcher) increase() {
 
 	if newSize != current {
 		ab.size.Store(newSize)
-		ab.lastAdjustTime.Store(time.Now().UnixNano())
 	}
 }
 
@@ -196,6 +190,5 @@ func (ab *AdaptiveBatcher) decrease() {
 
 	if newSize != current {
 		ab.size.Store(newSize)
-		ab.lastAdjustTime.Store(time.Now().UnixNano())
 	}
 }
