@@ -99,7 +99,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 
 	if client.httpLogClientAddr != "" {
 		client.httpLogClient = NewHTTPLogClient(client.httpLogClientAddr, client.logger)
-	} else if nodeAddr != "" {
+	} else {
 		// Auto-detect HTTP endpoint from WebSocket URL
 		client.httpLogClient = NewHTTPLogClient(nodeAddr, client.logger)
 	}
@@ -129,9 +129,7 @@ func (ec *ExecutionClient) syncProgress(ctx context.Context) (*ethereum.SyncProg
 func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
 	ec.client.Close()
-	if ec.httpLogClient != nil {
-		_ = ec.httpLogClient.Close()
-	}
+	_ = ec.httpLogClient.Close()
 
 	return nil
 }
@@ -361,18 +359,12 @@ func (ec *ExecutionClient) fetchLogsForSingleBlock(ctx context.Context, blockNum
 		{
 			name: "http_filter",
 			fn: func() ([]ethtypes.Log, error) {
-				if ec.httpLogClient == nil {
-					return nil, fmt.Errorf("no http log client configured")
-				}
 				return ec.httpLogClient.FetchLogs(ctx, ec.contractAddress, blockNum)
 			},
 		},
 		{
 			name: "http_receipts",
 			fn: func() ([]ethtypes.Log, error) {
-				if ec.httpLogClient == nil {
-					return nil, fmt.Errorf("no http log client configured")
-				}
 				return ec.httpLogClient.FetchLogsViaReceipts(ctx, ec.contractAddress, blockNum)
 			},
 		},
