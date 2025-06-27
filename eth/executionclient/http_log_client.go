@@ -162,7 +162,7 @@ func (h *HTTPLogClient) Close() error {
 	h.clientMu.Lock()
 	defer h.clientMu.Unlock()
 
-	if h.client != nil {
+	if h.connected.Load() {
 		h.client.Close()
 		h.client = nil
 		h.connected.Store(false)
