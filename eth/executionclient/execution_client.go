@@ -393,10 +393,7 @@ func (ec *ExecutionClient) fetchLogsForSingleBlock(ctx context.Context, blockNum
 				for _, tx := range block.Transactions() {
 					receipt, err := ec.client.TransactionReceipt(ctx, tx.Hash())
 					if err != nil {
-						ec.logger.Debug("failed to fetch receipt",
-							fields.TxHash(tx.Hash()),
-							zap.Error(err))
-						continue
+						return nil, fmt.Errorf("failed to fetch receipt for tx %s: %w", tx.Hash().Hex(), err)
 					}
 
 					for _, log := range receipt.Logs {
