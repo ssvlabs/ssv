@@ -1438,6 +1438,47 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		expectedErr := ErrDuplicatedMessage
 		expectedErr.got = "round change, having round change"
 		require.ErrorIs(t, err, expectedErr)
+
+		signedSSVMessageLongerRCJ := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+
+			justification, err := (&spectypes.SignedSSVMessage{}).Encode()
+			require.NoError(t, err)
+
+			message.RoundChangeJustification = [][]byte{justification}
+		})
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessageLongerRCJ, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+	})
+
+	// Receive round change with less round change justification length than in previous round change should receive an error
+	t.Run("round change with decreased round change justifications length", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, operators, dutyStore, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+
+		slot := netCfg.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+
+			justification, err := (&spectypes.SignedSSVMessage{}).Encode()
+			require.NoError(t, err)
+
+			message.RoundChangeJustification = [][]byte{justification}
+		})
+
+		receivedAt := netCfg.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
+		require.NoError(t, err)
+
+		signedSSVMessageShorterRCJ := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.MsgType = specqbft.RoundChangeMsgType
+		})
+		signedSSVMessage.FullData = nil
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessageShorterRCJ, topicID, peerID, receivedAt)
+		require.ErrorIs(t, err, ErrRCShorterJustifications)
 	})
 
 	// Decided with same signers should receive an error
