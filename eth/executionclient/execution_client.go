@@ -364,9 +364,6 @@ func (ec *ExecutionClient) fetchLogsForSingleBlock(ctx context.Context, blockNum
 				if ec.httpLogClient == nil {
 					return nil, fmt.Errorf("no http log client configured")
 				}
-				if err := ec.httpLogClient.Connect(ctx, ec.connectionTimeout); err != nil {
-					return nil, err
-				}
 				return ec.httpLogClient.FetchLogs(ctx, ec.contractAddress, blockNum)
 			},
 		},

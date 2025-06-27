@@ -18,6 +18,11 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 )
 
+const (
+	// defaultHTTPConnectionTimeout is the default timeout for establishing HTTP connections.
+	defaultHTTPConnectionTimeout = 10 * time.Second
+)
+
 //go:generate go tool -modfile=../../tool.mod mockgen -package=executionclient -destination=./http_log_client_mock.go -source=./http_log_client.go
 
 // HTTPLogClientInterface provides HTTP-based log fetching when WebSocket connections fail.
@@ -48,7 +53,7 @@ type HTTPLogClient struct {
 	client          *ethclient.Client // HTTP client to execution node
 	clientMu        sync.RWMutex      // Protects client access
 	logger          *zap.Logger
-	httpAddr        string      // HTTP address of execution client
+	httpAddr        string      // HTTP address of an execution client
 	connected       atomic.Bool // Connection state
 	lastConnectTime atomic.Int64
 }
@@ -93,17 +98,30 @@ func (h *HTTPLogClient) Connect(ctx context.Context, timeout time.Duration) erro
 	return nil
 }
 
-// FetchLogs retrieves logs using eth_getLogs RPC over HTTP.
-// Used as first fallback when WebSocket hits read limits.
-func (h *HTTPLogClient) FetchLogs(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error) {
+// ensureConnected ensures the client is connected, using lazy connection if needed.
+// This method handles the automatic connection establishment for all HTTP operations.
+func (h *HTTPLogClient) ensureConnected(ctx context.Context) error {
 	h.clientMu.RLock()
-	client := h.client
-	connected := h.connected.Load()
+	if h.connected.Load() && h.client != nil {
+		h.clientMu.RUnlock()
+		return nil
+	}
 	h.clientMu.RUnlock()
 
-	if !connected {
-		return nil, fmt.Errorf("http log client not connected")
+	return h.Connect(ctx, defaultHTTPConnectionTimeout)
+}
+
+// FetchLogs retrieves logs using eth_getLogs RPC over HTTP.
+// Used as the first fallback when WebSocket hits read limits.
+// Automatically establishes connection if not already connected.
+func (h *HTTPLogClient) FetchLogs(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error) {
+	if err := h.ensureConnected(ctx); err != nil {
+		return nil, err
 	}
+
+	h.clientMu.RLock()
+	client := h.client
+	h.clientMu.RUnlock()
 
 	query := ethereum.FilterQuery{
 		Addresses: []ethcommon.Address{contractAddr},
@@ -122,15 +140,15 @@ func (h *HTTPLogClient) FetchLogs(ctx context.Context, contractAddr ethcommon.Ad
 // FetchLogsViaReceipts gets logs by fetching individual transaction receipts.
 // Used when eth_getLogs fails due to too many logs in the block.
 // Slower but works around query size limits.
+// Automatically establishes connection if not already connected.
 func (h *HTTPLogClient) FetchLogsViaReceipts(ctx context.Context, contractAddr ethcommon.Address, blockNum uint64) ([]ethtypes.Log, error) {
+	if err := h.ensureConnected(ctx); err != nil {
+		return nil, err
+	}
+
 	h.clientMu.RLock()
 	client := h.client
-	connected := h.connected.Load()
 	h.clientMu.RUnlock()
-
-	if !connected {
-		return nil, fmt.Errorf("http log client not connected")
-	}
 
 	block, err := client.BlockByNumber(ctx, big.NewInt(int64(blockNum))) // nolint: gosec
 	if err != nil {

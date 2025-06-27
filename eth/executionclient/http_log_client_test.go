@@ -207,6 +207,33 @@ func TestHTTPLogClient_Connect(t *testing.T) {
 			require.ErrorContains(t, err, "http log client dial failed")
 		}
 	})
+
+	t.Run("lazy connect - ensures connection during fetch operations", func(t *testing.T) {
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
+
+		contract, err := env.deployContract()
+		require.NoError(t, err)
+
+		err = env.createBlocksWithLogs(contract, 1)
+		require.NoError(t, err)
+
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
+		require.NotNil(t, client)
+		defer client.Close()
+
+		httpLogClient := client.(*HTTPLogClient)
+
+		// First call establishes connection via lazy connect
+		_, err = client.FetchLogs(env.ctx, env.contractAddr, 1)
+		require.NoError(t, err)
+		require.True(t, httpLogClient.connected.Load(), "should be connected after first fetch")
+		firstClient := httpLogClient.client
+
+		// Second call reuses existing connection
+		_, err = client.FetchLogsViaReceipts(env.ctx, env.contractAddr, 1)
+		require.NoError(t, err)
+		require.Same(t, firstClient, httpLogClient.client, "should reuse existing connection")
+	})
 }
 
 // TestHTTPLogClient_FetchLogs tests the FetchLogs method of the HTTP log client.
@@ -220,18 +247,18 @@ func TestHTTPLogClient_FetchLogs(t *testing.T) {
 		contract, err := env.deployContract()
 		require.NoError(t, err)
 
-		// Get current block before creating logs
+		// Get the current block before creating logs
 		currentBlockBefore, err := env.sim.Client().BlockNumber(env.ctx)
 		require.NoError(t, err)
 
 		err = env.createBlocksWithLogs(contract, 3)
 		require.NoError(t, err)
 
-		// Get current block after creating logs
+		// Get the current block after creating logs
 		currentBlockAfter, err := env.sim.Client().BlockNumber(env.ctx)
 		require.NoError(t, err)
 
-		// Create and connect HTTP log client
+		// Create and connect the HTTP log client
 		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
@@ -260,7 +287,7 @@ func TestHTTPLogClient_FetchLogs(t *testing.T) {
 		env.sim.Commit()
 		env.sim.Commit()
 
-		// Create and connect HTTP log client
+		// Create and connect the HTTP log client
 		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
@@ -274,13 +301,13 @@ func TestHTTPLogClient_FetchLogs(t *testing.T) {
 		require.Empty(t, logs)
 	})
 
-	t.Run("fails when not connected", func(t *testing.T) {
-		client := NewHTTPLogClient("http://localhost:8545", logger)
+	t.Run("fails when cannot connect to invalid endpoint", func(t *testing.T) {
+		client := NewHTTPLogClient("http://127.0.0.1:1", logger)
 		require.NotNil(t, client)
 
 		logs, err := client.FetchLogs(t.Context(), ethcommon.Address{}, 1)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "http log client not connected")
+		require.ErrorContains(t, err, "connection refused")
 		require.Nil(t, logs)
 	})
 
@@ -317,18 +344,18 @@ func TestHTTPLogClient_FetchLogsViaReceipts(t *testing.T) {
 		contract, err := env.deployContract()
 		require.NoError(t, err)
 
-		// Get current block before creating logs
+		// Get the current block before creating logs
 		currentBlockBefore, err := env.sim.Client().BlockNumber(env.ctx)
 		require.NoError(t, err)
 
 		err = env.createBlocksWithLogs(contract, 2)
 		require.NoError(t, err)
 
-		// Get current block after creating logs
+		// Get the current block after creating logs
 		currentBlockAfter, err := env.sim.Client().BlockNumber(env.ctx)
 		require.NoError(t, err)
 
-		// Create and connect HTTP log client
+		// Create and connect the HTTP log client
 		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
@@ -352,10 +379,10 @@ func TestHTTPLogClient_FetchLogsViaReceipts(t *testing.T) {
 		_, err := env.deployContract()
 		require.NoError(t, err)
 
-		// Create empty block
+		// Create an empty block
 		env.sim.Commit()
 
-		// Create and connect HTTP log client
+		// Create and connect the HTTP log client
 		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
@@ -363,20 +390,69 @@ func TestHTTPLogClient_FetchLogsViaReceipts(t *testing.T) {
 		require.NoError(t, err)
 		defer client.Close()
 
-		// Fetch logs from empty block
+		// Fetch logs from an empty block
 		logs, err := client.FetchLogsViaReceipts(env.ctx, env.contractAddr, 2)
 		require.NoError(t, err)
 		require.Empty(t, logs)
 	})
 
-	t.Run("fails when not connected", func(t *testing.T) {
-		client := NewHTTPLogClient("http://localhost:8545", logger)
+	t.Run("fails when cannot connect to invalid endpoint", func(t *testing.T) {
+		client := NewHTTPLogClient("http://127.0.0.1:1", logger)
 		require.NotNil(t, client)
 
 		logs, err := client.FetchLogsViaReceipts(t.Context(), ethcommon.Address{}, 1)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "http log client not connected")
+		require.ErrorContains(t, err, "connection refused")
 		require.Nil(t, logs)
+	})
+
+	t.Run("lazy connect - automatically establishes connection", func(t *testing.T) {
+		env := setupHTTPLogClientTestEnv(t, 5*time.Second)
+
+		// Deploy contract and create logs
+		contract, err := env.deployContract()
+		require.NoError(t, err)
+
+		currentBlockBefore, err := env.sim.Client().BlockNumber(env.ctx)
+		require.NoError(t, err)
+
+		err = env.createBlocksWithLogs(contract, 1)
+		require.NoError(t, err)
+
+		// Create an HTTP log client but DO NOT call Connect()
+		client := NewHTTPLogClient(env.httpServer.URL, logger)
+		require.NotNil(t, client)
+		defer client.Close()
+
+		httpLogClient := client.(*HTTPLogClient)
+		require.False(t, httpLogClient.connected.Load())
+
+		// Call FetchLogsViaReceipts without explicit Connect() - should auto-connect
+		blockWithLogs := currentBlockBefore + 1
+		logs, err := client.FetchLogsViaReceipts(env.ctx, env.contractAddr, blockWithLogs)
+		require.NoError(t, err)
+		require.Len(t, logs, 1)
+
+		// Verify connection was established
+		require.True(t, httpLogClient.connected.Load())
+		require.NotNil(t, httpLogClient.client)
+	})
+
+	t.Run("lazy connect - fails with invalid URL", func(t *testing.T) {
+		// Use truly invalid protocol to force dial failure
+		client := NewHTTPLogClient("invalid://invalid.url", logger)
+		require.NotNil(t, client)
+
+		httpLogClient := client.(*HTTPLogClient)
+		require.False(t, httpLogClient.connected.Load())
+
+		// FetchLogsViaReceipts should fail during lazy connect
+		_, err := client.FetchLogsViaReceipts(t.Context(), ethcommon.Address{}, 1)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "http log client dial failed")
+
+		// Should still not be connected
+		require.False(t, httpLogClient.connected.Load())
 	})
 
 	t.Run("handles non-existent block", func(t *testing.T) {
@@ -386,7 +462,7 @@ func TestHTTPLogClient_FetchLogsViaReceipts(t *testing.T) {
 		_, err := env.deployContract()
 		require.NoError(t, err)
 
-		// Create and connect HTTP log client
+		// Create and connect the HTTP log client
 		client := NewHTTPLogClient(env.httpServer.URL, logger)
 		require.NotNil(t, client)
 
