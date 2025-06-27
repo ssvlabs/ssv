@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/gorilla/websocket"
 )
 
 var (
@@ -45,5 +45,5 @@ func isInterruptedError(err error) bool {
 
 // isWSReadLimitError checks if the given error is related to exceeding the read limit in a WebSocket connection.
 func isWSReadLimitError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "websocket: read limit exceeded")
+	return errors.Is(err, websocket.ErrReadLimit)
 }

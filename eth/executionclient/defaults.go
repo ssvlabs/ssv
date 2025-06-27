@@ -10,8 +10,7 @@ const (
 	DefaultReconnectionMaxInterval     = 64 * time.Second
 	DefaultHealthInvalidationInterval  = 24 * time.Second // TODO: decide on this value, for now choosing the node prober interval but it should probably be a bit less than block interval
 	DefaultFollowDistance              = 8
-	// TODO ALAN: revert
-	defaultLogBuf = 8 * 1024
+	defaultLogBuf                      = 8 * 1024
 
 	// Adaptive batcher constants
 	DefaultBatchSize    = 500

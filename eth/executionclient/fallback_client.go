@@ -84,7 +84,7 @@ func (f *FallbackClient) FetchLogs(ctx context.Context, contractAddr ethcommon.A
 	connected := f.connected.Load()
 	f.clientMu.RUnlock()
 
-	if !connected || client == nil {
+	if !connected {
 		return nil, fmt.Errorf("http fallback not connected")
 	}
 
@@ -109,7 +109,7 @@ func (f *FallbackClient) FetchLogsViaReceipts(ctx context.Context, contractAddr 
 	connected := f.connected.Load()
 	f.clientMu.RUnlock()
 
-	if !connected || client == nil {
+	if !connected {
 		return nil, fmt.Errorf("http fallback not connected")
 	}
 
