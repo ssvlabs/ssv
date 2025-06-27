@@ -340,7 +340,19 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 }
 
 // fetchLogsForSingleBlock attempts to retrieve logs from a single block using alternative methods.
-// It tries HTTP log client methods if configured, and falls back to fetching logs via transaction receipts.
+//
+// This function is called when the standard eth_getLogs query fails due to read limits or query size limits.
+// Common circumstances when this happens:
+// - Blocks with extremely high transaction volume (e.g., popular token launches, major DeFi events)
+// - WebSocket read limits exceeded when response size is too large
+// - RPC query limits hit due to too many matching logs in a single block
+// - Execution client protective limits to prevent resource exhaustion
+//
+// The function tries multiple fallback strategies in order:
+// 1. HTTP eth_getLogs (bypasses WebSocket read limits)
+// 2. HTTP transaction receipts (works around query size limits)
+// 3. WebSocket transaction receipts (final fallback using existing connection)
+//
 // Returns the logs found or an error if all methods fail.
 func (ec *ExecutionClient) fetchLogsForSingleBlock(ctx context.Context, blockNum uint64) ([]ethtypes.Log, error) {
 
