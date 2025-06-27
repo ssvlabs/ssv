@@ -233,7 +233,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		))
 	defer span.End()
 
-	span.AddEvent("fetching decided value from base consensus message processing")
+	span.AddEvent("checking if instance is decided")
 	decided, decidedValue, err := cr.BaseRunner.baseConsensusMsgProcessing(ctx, logger, cr, msg, &spectypes.BeaconVote{})
 	if err != nil {
 		return observability.Errorf(span, "failed processing consensus message: %w", err)
@@ -247,7 +247,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	}
 
 	span.AddEvent("instance is decided")
-
 	cr.measurements.EndConsensus()
 	recordConsensusDuration(ctx, cr.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
@@ -270,8 +269,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		observability.DutyCountAttribute(len(duty.(*spectypes.CommitteeDuty).ValidatorDuties)),
 	)
 
-	span.AddEvent("signing validator duties")
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -285,6 +282,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		blockedAttesterDuties atomic.Uint32
 	)
 
+	span.AddEvent("signing validator duties")
 	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
 		wg.Add(1)
 
@@ -393,12 +391,18 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	select {
 	case err := <-errCh:
-		return err
+		return observability.Error(span, err)
 	case <-doneCh:
 		span.AddEvent("finished signing validator duties")
 	}
 
-	if totalAttesterDuties.Load() == 0 && totalSyncCommitteeDuties.Load() == 0 {
+	var (
+		totalAttestations   = totalAttesterDuties.Load()
+		totalSyncCommittee  = totalSyncCommitteeDuties.Load()
+		blockedAttestations = blockedAttesterDuties.Load()
+	)
+
+	if totalAttestations == 0 && totalSyncCommittee == 0 {
 		cr.BaseRunner.State.Finished = true
 		span.SetStatus(codes.Error, ErrNoValidDuties.Error())
 		return ErrNoValidDuties
@@ -409,12 +413,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	//
 	// We do not mark the state as finished here because post-consensus messages must still be processed,
 	// allowing validators to be marked as safe once sufficient consensus is reached.
-	if totalAttesterDuties.Load() == blockedAttesterDuties.Load() && totalSyncCommitteeDuties.Load() == 0 {
+	if totalAttestations == blockedAttestations && totalSyncCommittee == 0 {
 		const eventMsg = "Skipping message broadcast: all attester duties blocked by Doppelganger protection, no sync committee duties."
 		span.AddEvent(eventMsg)
 		logger.Debug(eventMsg,
-			zap.Uint32("attester_duties", totalAttesterDuties.Load()),
-			zap.Uint32("blocked_attesters", blockedAttesterDuties.Load()))
+			zap.Uint32("attester_duties", totalAttestations),
+			zap.Uint32("blocked_attesters", blockedAttestations))
 
 		span.SetStatus(codes.Ok, "")
 		return nil
