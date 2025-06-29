@@ -125,7 +125,7 @@ func TestListKeys(t *testing.T) {
 				require.NoError(t, json.NewEncoder(w).Encode(tt.resp))
 			})
 
-			keys, err := web3Signer.ListKeys(context.Background())
+			keys, err := web3Signer.ListKeys(t.Context())
 
 			if tt.errContains != "" {
 				require.ErrorContains(t, err, tt.errContains)
@@ -200,7 +200,7 @@ func TestImportKeystore(t *testing.T) {
 				require.NoError(t, json.NewEncoder(w).Encode(tt.response))
 			})
 
-			data, err := web3Signer.ImportKeystore(context.Background(), tt.req)
+			data, err := web3Signer.ImportKeystore(t.Context(), tt.req)
 
 			if tt.containsErr != "" {
 				require.ErrorContains(t, err, tt.containsErr)
@@ -275,7 +275,7 @@ func TestDeleteKeystore(t *testing.T) {
 				require.NoError(t, json.NewEncoder(w).Encode(tt.response))
 			})
 
-			resp, err := web3Signer.DeleteKeystore(context.Background(), tt.req)
+			resp, err := web3Signer.DeleteKeystore(t.Context(), tt.req)
 
 			if tt.containsErr != "" {
 				require.ErrorContains(t, err, tt.containsErr)
@@ -390,7 +390,7 @@ func TestSign(t *testing.T) {
 				tt.setupServer(w, r)
 			})
 
-			resp, err := web3Signer.Sign(context.Background(), tt.pubKey, tt.payload)
+			resp, err := web3Signer.Sign(t.Context(), tt.pubKey, tt.payload)
 
 			if tt.wantErrContains != "" {
 				require.Error(t, err)
@@ -425,6 +425,7 @@ func TestUpCheck(t *testing.T) {
 		{
 			name: "server error",
 			setupServer: func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodGet, r.Method)
 				require.Equal(t, PathUpCheck, r.URL.Path)
 				w.WriteHeader(http.StatusInternalServerError)
 			},
@@ -438,7 +439,7 @@ func TestUpCheck(t *testing.T) {
 
 			_, web3Signer := setupTestServer(t, tt.setupServer)
 
-			err := web3Signer.UpCheck(context.Background())
+			err := web3Signer.UpCheck(t.Context())
 
 			if tt.wantErrContains != "" {
 				require.Error(t, err)
