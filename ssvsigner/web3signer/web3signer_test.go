@@ -2,7 +2,6 @@ package web3signer
 
 import (
 	"bytes"
-	"context"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
