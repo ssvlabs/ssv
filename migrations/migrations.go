@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -33,7 +34,7 @@ var (
 
 // Run executes the default migrations.
 func Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
-	return defaultMigrations.Run(ctx, logger.Named("Migrations"), opt)
+	return defaultMigrations.Run(ctx, logger.Named(logging.NameMigrations), opt)
 }
 
 // CompletedFunc is a function that marks a migration as completed.
