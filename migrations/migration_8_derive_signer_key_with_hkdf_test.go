@@ -22,7 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
+func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
 	t.Run("successfully migrates accounts with new key derivation", func(t *testing.T) {
@@ -47,8 +47,8 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 			OperatorPrivKey: operatorPrivKey,
 		}
 
-		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
-			[]byte(migration_7_derive_signer_key_with_hkdf.Name),
+		err = migration_8_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
+			[]byte(migration_8_derive_signer_key_with_hkdf.Name),
 			func(rw basedb.ReadWriter) error { return nil })
 		assert.NoError(t, err)
 
@@ -81,8 +81,8 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		}
 
 		completedExecuted := false
-		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
-			[]byte(migration_7_derive_signer_key_with_hkdf.Name),
+		err = migration_8_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
+			[]byte(migration_8_derive_signer_key_with_hkdf.Name),
 			func(rw basedb.ReadWriter) error {
 				completedExecuted = true
 				return nil
@@ -113,8 +113,8 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 		}
 
 		completedExecuted := false
-		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
-			[]byte(migration_7_derive_signer_key_with_hkdf.Name),
+		err = migration_8_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
+			[]byte(migration_8_derive_signer_key_with_hkdf.Name),
 			func(rw basedb.ReadWriter) error {
 				completedExecuted = true
 				return nil
@@ -146,8 +146,8 @@ func TestMigration7DeriveSignerKeyWithHKDF(t *testing.T) {
 			OperatorPrivKey: operatorPrivKey,
 		}
 
-		err = migration_7_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
-			[]byte(migration_7_derive_signer_key_with_hkdf.Name),
+		err = migration_8_derive_signer_key_with_hkdf.Run(t.Context(), logger, options,
+			[]byte(migration_8_derive_signer_key_with_hkdf.Name),
 			func(rw basedb.ReadWriter) error {
 				return fmt.Errorf("completion error")
 			})

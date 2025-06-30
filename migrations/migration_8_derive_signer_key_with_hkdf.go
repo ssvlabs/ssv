@@ -9,8 +9,8 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-var migration_7_derive_signer_key_with_hkdf = Migration{
-	Name: "migration_7_derive_signer_key_with_hkdf",
+var migration_8_derive_signer_key_with_hkdf = Migration{
+	Name: "migration_8_derive_signer_key_with_hkdf",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) (err error) {
 		return opt.Db.Update(func(txn basedb.Txn) error {
 			if opt.OperatorPrivKey == nil {

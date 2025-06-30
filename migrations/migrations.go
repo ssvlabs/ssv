@@ -30,7 +30,7 @@ var (
 		migration_5_change_share_format_from_gob_to_ssz,
 		migration_6_share_exit_epoch,
 		migration_7_populate_validator_index_mapping,
-		migration_7_derive_signer_key_with_hkdf,
+		migration_8_derive_signer_key_with_hkdf,
 	}
 )
 
