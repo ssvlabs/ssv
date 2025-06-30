@@ -6,13 +6,26 @@ import (
 
 // Internal constants for adaptive batching - not exposed to configuration
 const (
+	// defaultInitialBatchSize is the initial number of blocks processed per batch.
 	defaultInitialBatchSize = 500
-	defaultMinBatchSize     = 200
-	defaultMaxBatchSize     = 2000
-	growthFactor            = 125 // 25% increase (125% = 1.25x)
-	shrinkFactor            = 80  // 20% decrease (80% = 0.8x)
-	queryLimitFactor        = 50  // 50% decrease on query errors (50% = 0.5x)
-	highLogsThreshold       = 1000
+
+	// defaultMinBatchSize is the minimum allowed batch size.
+	defaultMinBatchSize = 200
+
+	// defaultMaxBatchSize is the maximum allowed batch size.
+	defaultMaxBatchSize = 2000
+
+	// growthFactor is the multiplication factor for batch size increases.
+	growthFactor = 125 // 25% increase (125% = 1.25x)
+
+	// shrinkFactor is the multiplication factor for batch size decreases on high log counts.
+	shrinkFactor = 80 // 20% decrease (80% = 0.8x)
+
+	// queryLimitFactor is the multiplication factor for batch size decreases on query limit errors.
+	queryLimitFactor = 50 // 50% decrease on query errors (50% = 0.5x)
+
+	// highLogsThreshold is the log count that triggers batch size reduction.
+	highLogsThreshold = 1000
 )
 
 // AdaptiveBatcher dynamically adjusts batch sizes based on operation performance.
