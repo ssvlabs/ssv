@@ -70,7 +70,7 @@ type MockControllerOptions struct {
 	validatorStore      registrystorage.ValidatorStore
 	operatorDataStore   operatordatastore.OperatorDataStore
 	operatorStorage     registrystorage.Operators
-	networkConfig       networkconfig.NetworkConfig
+	networkConfig       *networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
@@ -794,7 +794,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 
 func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOptions) controller {
 	// Default to test network config if not provided.
-	if opts.networkConfig.Name == "" {
+	if opts.networkConfig == nil {
 		opts.networkConfig = networkconfig.TestNetwork
 	}
 
