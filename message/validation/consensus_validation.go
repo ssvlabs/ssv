@@ -378,7 +378,6 @@ func (mv *messageValidator) processSignerState(
 
 	if consensusMessage.MsgType == specqbft.RoundChangeMsgType {
 		// #nosec G115 maxRCJ never exceeds max operators count
-		// maxRCJ always increases, otherwise the message is not accepted making this code unreachable
 		signerState.MaxRCJ = uint8(len(consensusMessage.RoundChangeJustification))
 	}
 
