@@ -15,6 +15,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 )
 
@@ -64,9 +65,34 @@ func setupSyncCommitteeDutiesMock(
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfParticipatingValidators(gomock.Any()).Return(activeShares).MinTimes(1)
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validator(gomock.Any()).DoAndReturn(
-		func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetSelfParticipatingValidators(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch, opts registrystorage.ParticipationOptions) []*registrystorage.ValidatorSnapshot {
+			snapshots := make([]*registrystorage.ValidatorSnapshot, len(activeShares))
+			for i, share := range activeShares {
+				snapshots[i] = &registrystorage.ValidatorSnapshot{
+					Share:          *share,
+					LastUpdated:    time.Now(),
+					IsOwnValidator: true,
+					ParticipationStatus: registrystorage.ParticipationStatus{
+						IsParticipating:     true,
+						HasBeaconMetadata:   true,
+						IsAttesting:         true,
+						MinParticipationMet: true,
+					},
+				}
+			}
+			return snapshots
+		}).MinTimes(1)
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetValidator(gomock.Any()).DoAndReturn(
+		func(id registrystorage.ValidatorID) (*registrystorage.ValidatorSnapshot, bool) {
+			// Convert ValidatorID to pubkey bytes for comparison
+			var pubKey []byte
+			if pk, ok := id.(registrystorage.ValidatorPubKey); ok {
+				pubKey = pk.Bytes()
+			} else {
+				return nil, false
+			}
+
 			var ssvShare *ssvtypes.SSVShare
 			var minEpoch phase0.Epoch
 			dutiesMap.Range(func(period uint64, duties []*v1.SyncCommitteeDuty) bool {
@@ -89,7 +115,18 @@ func setupSyncCommitteeDutiesMock(
 			})
 
 			if ssvShare != nil {
-				return ssvShare, true
+				snapshot := &registrystorage.ValidatorSnapshot{
+					Share:          *ssvShare,
+					LastUpdated:    time.Now(),
+					IsOwnValidator: true,
+					ParticipationStatus: registrystorage.ParticipationStatus{
+						IsParticipating:     true,
+						HasBeaconMetadata:   true,
+						IsAttesting:         true,
+						MinParticipationMet: true,
+					},
+				}
+				return snapshot, true
 			}
 
 			return nil, false

@@ -61,8 +61,8 @@ func setupAttesterDutiesMock(
 		return attestingShares
 	}
 
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().DoAndReturn(getShares).AnyTimes()
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validator(gomock.Any()).DoAndReturn(
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetSelfValidators().DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetValidator(gomock.Any()).DoAndReturn(
 		func(pubKey []byte) (*types.SSVShare, bool) {
 			var ssvShare *types.SSVShare
 			var minEpoch phase0.Epoch

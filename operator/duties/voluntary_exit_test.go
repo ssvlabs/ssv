@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/trie"
@@ -19,7 +21,7 @@ import (
 )
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
-	exitCh := make(chan ExitDescriptor)
+	exitCh := make(chan registrystorage.ExitDescriptor)
 	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
 
 	currentSlot := &SafeValue[phase0.Slot]{}
@@ -37,32 +39,32 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 
 	const blockNumber = uint64(1)
 
-	normalExit := ExitDescriptor{
+	normalExit := registrystorage.ExitDescriptor{
 		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    blockNumber,
 	}
-	sameBlockExit := ExitDescriptor{
+	sameBlockExit := registrystorage.ExitDescriptor{
 		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{4, 5, 6},
 		ValidatorIndex: phase0.ValidatorIndex(2),
 		BlockNumber:    normalExit.BlockNumber,
 	}
-	newBlockExit := ExitDescriptor{
+	newBlockExit := registrystorage.ExitDescriptor{
 		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    normalExit.BlockNumber + 1,
 	}
-	pastBlockExit := ExitDescriptor{
+	pastBlockExit := registrystorage.ExitDescriptor{
 		OwnValidator:   true,
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		ValidatorIndex: phase0.ValidatorIndex(1),
 		BlockNumber:    normalExit.BlockNumber + 4,
 	}
 
-	allDescriptors := []ExitDescriptor{
+	allDescriptors := []registrystorage.ExitDescriptor{
 		normalExit,
 		sameBlockExit,
 		newBlockExit,
@@ -171,7 +173,7 @@ func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	require.EqualValues(t, blockNumber, slot)
 }
 
-func expectedExecutedVoluntaryExitDuties(descriptors []ExitDescriptor) []*spectypes.ValidatorDuty {
+func expectedExecutedVoluntaryExitDuties(descriptors []registrystorage.ExitDescriptor) []*spectypes.ValidatorDuty {
 	expectedDuties := make([]*spectypes.ValidatorDuty, 0)
 	for _, d := range descriptors {
 		expectedDuties = append(expectedDuties, &spectypes.ValidatorDuty{

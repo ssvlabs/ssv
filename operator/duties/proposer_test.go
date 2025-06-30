@@ -52,8 +52,8 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 		return proposerShares
 	}
 
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().SelfValidators().DoAndReturn(getShares).AnyTimes()
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().Validators().DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetSelfValidators().DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetAllValidators().DoAndReturn(getShares).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
