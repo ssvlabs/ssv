@@ -19,7 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 const (
@@ -111,7 +111,7 @@ func (cfg *PubSubConfig) initScoring() {
 }
 
 type CommitteesProvider interface {
-	Committees() []*storage.IndexedCommittee
+	Committees() []*registrystorage.CommitteeSnapshot
 }
 
 // NewPubSub creates a new pubsub router and the necessary components

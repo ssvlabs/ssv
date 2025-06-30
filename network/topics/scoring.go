@@ -14,7 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
-	"github.com/ssvlabs/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 // DefaultScoringConfig returns the default scoring config
@@ -218,9 +218,9 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 }
 
 // Returns a new committee list with only the committees that belong to the given topic
-func filterCommitteesForTopic(topic string, committees []*storage.IndexedCommittee) []*storage.IndexedCommittee {
+func filterCommitteesForTopic(topic string, committees []*registrystorage.CommitteeSnapshot) []*registrystorage.CommitteeSnapshot {
 
-	topicCommittees := make([]*storage.IndexedCommittee, 0)
+	topicCommittees := make([]*registrystorage.CommitteeSnapshot, 0)
 
 	for _, committee := range committees {
 		// Get topic
