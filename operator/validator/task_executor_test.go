@@ -15,6 +15,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"

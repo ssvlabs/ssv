@@ -1202,7 +1202,7 @@ func (s *RemoteKeyManagerTestSuite) TestAddShareErrorCases() {
 
 		rmTest := &RemoteKeyManager{
 			logger:            s.logger,
-			netCfg:            testNetCfg,
+			beaconConfig:      testNetCfg,
 			signerClient:      clientMock,
 			getOperatorId:     func() spectypes.OperatorID { return 1 },
 			operatorPubKey:    &MockOperatorPublicKey{},
