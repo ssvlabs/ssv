@@ -185,10 +185,10 @@ var StartNodeCmd = &cobra.Command{
 		switch cfg.DBOptions.Engine {
 		case "pebble":
 			logger.Info("using pebble db")
-			db, err = setupPebbleDB(logger, networkConfig)
+			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig)
 		case "badger":
 			logger.Info("using badger db")
-			db, err = setupBadgerDB(logger, networkConfig)
+			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig)
 		default:
 			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
 		}
@@ -829,44 +829,20 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupBadgerDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*badger.DB, error) {
+func setupBadgerDB(logger *zap.Logger, beaconConfig *networkconfig.BeaconConfig) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	migrationOpts := migrations.Options{
-		Db:           db,
-		DbPath:       cfg.DBOptions.Path,
-		BeaconConfig: networkConfig.BeaconConfig,
+	if err := applyMigrations(logger, beaconConfig, db, cfg.DBOptions.Path); err != nil {
+		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
-	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-	if applied == 0 {
-		return db, nil
-	}
-
-	// If migrations were applied, we run a full garbage collection cycle
-	// to reclaim any space that may have been freed up.
-	start := time.Now()
-
-	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
-	defer cancel()
-
-	logger.Debug("running full GC cycle...", fields.Duration(start))
-
-	if err := db.FullGC(ctx); err != nil {
-		return nil, fmt.Errorf("failed to collect garbage: %w", err)
-	}
-
-	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil
 }
 
-func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*pebble.DB, error) {
+func setupPebbleDB(logger *zap.Logger, beaconConfig *networkconfig.BeaconConfig) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
 
 	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
@@ -874,24 +850,35 @@ func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfi
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
+	if err := applyMigrations(logger, beaconConfig, db, dbPath); err != nil {
+		return nil, fmt.Errorf("apply migrations: %w", err)
+	}
+
+	return db, nil
+}
+
+func applyMigrations(
+	logger *zap.Logger,
+	beaconConfig *networkconfig.BeaconConfig,
+	db basedb.Database,
+	dbPath string,
+) error {
 	migrationOpts := migrations.Options{
 		Db:           db,
 		DbPath:       dbPath,
-		BeaconConfig: networkConfig.BeaconConfig,
+		BeaconConfig: beaconConfig,
 	}
 
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
+		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 	if applied == 0 {
-		return db, nil
+		return nil
 	}
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	// Close & reopen the database to trigger any unknown internal
-	// startup/shutdown procedures that the storage engine may have.
 	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
@@ -900,12 +887,12 @@ func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfi
 	logger.Debug("running full GC cycle...", fields.Duration(start))
 
 	if err := db.FullGC(ctx); err != nil {
-		return nil, fmt.Errorf("failed to collect garbage: %w", err)
+		return fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
-	return db, nil
+	return nil
 }
 
 func setupOperatorDataStore(
