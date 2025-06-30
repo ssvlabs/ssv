@@ -422,34 +422,42 @@ var errSyncing = errors.New("syncing")
 // is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	var wg sync.WaitGroup
-	var hasHealthy atomic.Bool
-	var errsMu sync.Mutex
-	var errs error
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	var hasHealthy atomic.Bool
+	errCh := make(chan error, len(gc.clients))
+
 	for _, client := range gc.clients {
-		wg.Add(1)
-		go func(client Client) {
-			defer wg.Done()
-
-			err := gc.checkNodeHealthiness(ctx, client)
-
-			if err != nil {
-				errsMu.Lock()
-				errs = errors.Join(errs, err)
-				errsMu.Unlock()
-			} else {
-				if hasHealthy.CompareAndSwap(false, true) {
-					cancel() // one healthy node is enough
+		go func() {
+			if err := gc.checkNodeHealth(ctx, client); err != nil {
+				select {
+				case errCh <- err:
+				default:
 				}
+				return
 			}
-		}(client)
+
+			if hasHealthy.CompareAndSwap(false, true) {
+				cancel() // one healthy node is enough
+			}
+		}()
 	}
 
-	wg.Wait()
+	// Wait only for the result: either one success, or all errors
+	var errs error
+	for i := 0; i < len(gc.clients); i++ {
+		select {
+		case <-ctx.Done():
+			// If canceled, and we have a healthy client, return no error
+			if hasHealthy.Load() {
+				return nil
+			}
+			// Otherwise, collect errors and keep going
+		case err := <-errCh:
+			errs = errors.Join(errs, err)
+		}
+	}
 
 	if !hasHealthy.Load() {
 		return errs
@@ -458,9 +466,8 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	return nil
 }
 
-// checkNodeHealthiness checks client's healthiness but checking if it's synced.
-// Errors are logged and metrics are recorded accordingly, so the caller doesn't need to do it.
-func (gc *GoClient) checkNodeHealthiness(ctx context.Context, client Client) error {
+// checkNodeHealth checks client's healthiness by checking if it's synced.
+func (gc *GoClient) checkNodeHealth(ctx context.Context, client Client) error {
 	logger := gc.log.With(
 		zap.String("api", "NodeSyncing"),
 		zap.String("address", client.Address()),
