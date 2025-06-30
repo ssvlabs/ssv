@@ -8,7 +8,7 @@ Honest nodes have `1/3 * SECONDS_PER_SLOT` (4 seconds) from the start of the slo
 
 Full technical specification for Ethereum attestations can be found [here](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/validator.md#attesting).
 
-We've published a high-level overview of how SSV network executes Ethereum validator duties (Validator is distributed across cluster of Operators) [in the past](https://ssv.network/blog/technology/ssv-protocol-implementation-deep-dive/), the high-level summary for validator-attestations specifically (with optimizations [Alan-fork brough forth](https://ssv.network/blog/technology/the-impact-of-alan-on-mainnet-post-fork-analysis/)) looks like this:
+We've published a high-level overview of how SSV network executes Ethereum validator duties (Validator is distributed across cluster of Operators) [in the past](https://ssv.network/blog/technology/ssv-protocol-implementation-deep-dive/), the high-level summary for validator-attestations specifically (with optimizations [Alan-fork brought forth](https://ssv.network/blog/technology/the-impact-of-alan-on-mainnet-post-fork-analysis/)) looks like this:
 - every Operator (SSV node) polls its own Beacon node periodically to fetch all the necessary validator-attestation duties for the upcoming slots, many validator-attestation duties are clustered together (Validator is always assigned to some Operator-cluster)
 - when the next Ethereum slot time comes, every Operator checks if there are validator-attestation duties to perform for any Operator-cluster he is part of, and if there are - Operator kicks off duty execution for that particular Operator-cluster (which is comprised of a bunch of attestation duties for specific Validators for that target slot); every Operator in SSV cluster does the same thing independently - this way Operator-cluster as a whole can function in face of some Operators in Operator-cluster misbehaving (due to being maliscious or simply experiencing issues such as downtime)
 - once validator-attestation duty is started, Operator waits 4 seconds (1/3 of Ethereum slot-time) to make sure enough time passes for block production to happen for the current(target) slot such that voting validator can actually see the latest produced block and vote on it
@@ -19,7 +19,7 @@ We've published a high-level overview of how SSV network executes Ethereum valid
 
 # Measuring validator-attestation performance
 
-Around 85% of validators' rewards come from making attestations (see the [Attestation rewards section](https://besu.hyperledger.org/public-networks/concepts/proof-of-stake/attestations#attestation-rewards) for more details). Validator rewards in Ethereum can be negatively affected by multiple factors such as: poor network connectivity, network latency, slow hardware, software bugs, etc. Most Eteherum client implementations (including SSV node) print logs that Operator can use to debug a particular issue, but to get a bird's-eye view it's better to look at metrics that can be "charted over time" such that any changes in client-node behavior can be easily spotted.
+Around 85% of validators' rewards come from making attestations (see the [Attestation rewards section](https://besu.hyperledger.org/public-networks/concepts/proof-of-stake/attestations#attestation-rewards) for more details). Validator rewards in Ethereum can be negatively affected by multiple factors such as: poor network connectivity, network latency, slow hardware, software bugs, etc. Most Ethereum client implementations (including SSV node) print logs that Operator can use to debug a particular issue, but to get a bird's-eye view it's better to look at metrics that can be "charted over time" such that any changes in client-node behavior can be easily spotted.
 
 For Ethereum attestations specifically the most interesting metrics are **"success rate"**, **"correctness"**, **"effectiveness"**.
 
@@ -33,7 +33,7 @@ metrics.Rate(stats.Attestations.Executed, stats.Attestations.Assigned)
 
 ## correctness
 
-Even if attestation was successfully accepted(acknowledged) by Ethereum network it doesn't necessarily mean it was attesting to the correct block. This is because different validators might see different versions of the tip of Ethereum chain - so they cast different attestation votes - with the "votes that agree with each other the most winning over time" (and receiving the highest rewards as the result). Thus, attestation correctness is defined as:
+Even if attestation was successfully accepted (acknowledged) by Ethereum network it doesn't necessarily mean it was attesting to the correct block. This is because different validators might see different versions of the tip of Ethereum chain - so they cast different attestation votes - with the "votes that agree with each other the most winning over time" (and receiving the highest rewards as the result). Thus, attestation correctness is defined as:
 ```
 // (correct successful attestations) / (total successful attestations), in % terms
 metrics.Rate(stats.CorrectHeadVotes, stats.Attestations.Executed)
@@ -68,13 +68,13 @@ The data displayed on the charts above is based on what actually happened with t
 
 ![image](resources/attestations/attestations_4.png)
 
-we can get even more detailed breakdow on how a particular Operator is doing during each epoch:
+we can get an even more detailed breakdown on how a particular Operator is doing during each epoch:
 
 ![image](resources/attestations/attestations_5.png)
 
 # Summary
 
-At SSV-labs we value data-based approach. To get the most out of DVT techology we are constantly enhansing data gathering and analytics tools at our disposal to find and resolve the bottlenecks SSV Validators and Operators might experience, and Etheruem validator-attestations in just one example of how we do it.
+At SSV-labs we value data-based approach. To get the most out of DVT technology, we are constantly enhancing data gathering and analytics tools at our disposal to find and resolve the bottlenecks SSV Validators and Operators might experience, and Ethereum validator-attestations in just one example of how we do it.
 
 # References
 - https://docs.ethstaker.org/validator-clients/validator-effectiveness/?h=effect
