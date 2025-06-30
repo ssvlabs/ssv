@@ -217,7 +217,7 @@ func (km *RemoteKeyManager) SignBeaconObject(
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (spectypes.Signature, phase0.Root, error) {
-	req, root, err := km.prepareSignRequest(ctx, obj, domain, sharePubkey, slot, signatureDomain)
+	req, root, err := km.prepareSignRequest(obj, domain, sharePubkey, slot, signatureDomain)
 	if err != nil {
 		return nil, phase0.Root{}, err
 	}
@@ -231,22 +231,16 @@ func (km *RemoteKeyManager) SignBeaconObject(
 }
 
 func (km *RemoteKeyManager) prepareSignRequest(
-	ctx context.Context,
 	obj ssz.HashRoot,
 	domain phase0.Domain,
 	sharePubkey phase0.BLSPubKey,
 	slot phase0.Slot,
 	signatureDomain phase0.DomainType,
 ) (web3signer.SignRequest, phase0.Root, error) {
-	epoch := km.netCfg.Beacon.EstimatedEpochAtSlot(slot)
-
-	forkInfo, err := km.getForkInfo(ctx, epoch)
-	if err != nil {
-		return web3signer.SignRequest{}, phase0.Root{}, fmt.Errorf("get fork info: %w", err)
-	}
+	epoch := km.beaconConfig.EstimatedEpochAtSlot(slot)
 
 	req := web3signer.SignRequest{
-		ForkInfo: forkInfo,
+		ForkInfo: km.getForkInfo(epoch),
 	}
 
 	switch signatureDomain {
