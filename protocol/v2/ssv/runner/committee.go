@@ -274,6 +274,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	var (
 		wg    sync.WaitGroup
+		lock  sync.Mutex
 		errCh = make(chan error, 1)
 
 		beaconVote = decidedValue.(*spectypes.BeaconVote)
