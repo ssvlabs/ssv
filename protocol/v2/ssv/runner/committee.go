@@ -495,6 +495,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 		))
 	defer span.End()
 
+	span.AddEvent("base process post consensus message")
 	hasQuorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(ctx, cr, signedMsg)
 	if err != nil {
 		return observability.Errorf(span, "failed processing post consensus message: %w", err)
