@@ -1,6 +1,7 @@
 package goclient
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"net/http"
@@ -25,14 +26,17 @@ type validatorRegistration struct {
 }
 
 // GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
-func (gc *GoClient) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+func (gc *GoClient) GetValidatorData(
+	ctx context.Context,
+	validatorPubKeys []phase0.BLSPubKey,
+) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 	reqStart := time.Now()
-	resp, err := gc.multiClient.Validators(gc.ctx, &api.ValidatorsOpts{
+	resp, err := gc.multiClient.Validators(ctx, &api.ValidatorsOpts{
 		State:   "head", // TODO maybe need to get the chainId (head) as var
 		PubKeys: validatorPubKeys,
 		Common:  api.CommonOpts{Timeout: gc.longTimeout},
 	})
-	recordRequestDuration(gc.ctx, "Validators", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
+	recordRequestDuration(ctx, "Validators", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "Validators"),
@@ -76,11 +80,11 @@ func (gc *GoClient) SubmitValidatorRegistration(registration *api.VersionedSigne
 //     GoClient is aware of it
 //   - every validator registration GoClient is aware of is submitted at least once during 1 epoch
 //     period
-func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
+func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvider slotticker.Provider) {
 	ticker := slotTickerProvider()
 	for {
 		select {
-		case <-gc.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
@@ -99,9 +103,10 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 				}
 
 				// Distribute the registrations evenly across the epoch based on the pubkeys.
-				slotInEpoch := uint64(currentSlot) % gc.network.SlotsPerEpoch()
+				config := gc.getBeaconConfig()
+				slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch
 				validatorDescriptor := xxhash.Sum64(validatorPk[:])
-				shouldSubmit := validatorDescriptor%gc.network.SlotsPerEpoch() == slotInEpoch
+				shouldSubmit := validatorDescriptor%config.SlotsPerEpoch == slotInEpoch
 
 				if r.new || shouldSubmit {
 					r.new = false
@@ -117,8 +122,8 @@ func (gc *GoClient) registrationSubmitter(slotTickerProvider slotticker.Provider
 				chunk := registrations[start:end]
 
 				reqStart := time.Now()
-				err := gc.multiClient.SubmitValidatorRegistrations(gc.ctx, chunk)
-				recordRequestDuration(gc.ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
+				err := gc.multiClient.SubmitValidatorRegistrations(ctx, chunk)
+				recordRequestDuration(ctx, "SubmitValidatorRegistrations", gc.multiClient.Address(), http.MethodPost, time.Since(reqStart), err)
 				if err != nil {
 					gc.log.Error(clResponseErrMsg, zap.Error(err))
 					break

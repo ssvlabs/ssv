@@ -18,11 +18,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/signer"
 	slashingprotection "github.com/ssvlabs/eth2-key-manager/slashing_protection"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -40,9 +40,9 @@ import (
 // RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
 	logger            *zap.Logger
-	netCfg            networkconfig.NetworkConfig
+	beaconConfig            networkconfig.Beacon
 	signerClient      signerClient
-	consensusClient   consensusClient
+
 	getOperatorId     func() spectypes.OperatorID
 	operatorPubKey    keys.OperatorPublicKey
 	signLocksMu       sync.RWMutex
@@ -58,24 +58,18 @@ type signerClient interface {
 	OperatorSign(ctx context.Context, payload []byte) ([]byte, error)
 }
 
-type consensusClient interface {
-	ForkAtEpoch(ctx context.Context, epoch phase0.Epoch) (*phase0.Fork, error)
-	Genesis(ctx context.Context) (*eth2apiv1.Genesis, error)
-}
-
 // NewRemoteKeyManager returns a RemoteKeyManager that fetches the operator's public
 // identity from the signerClient, sets up local slashing protection, and uses
 // the provided consensusClient to get the current fork/genesis for sign requests.
 func NewRemoteKeyManager(
 	ctx context.Context,
 	logger *zap.Logger,
-	netCfg networkconfig.NetworkConfig,
+	beaconConfig networkconfig.Beacon,
 	signerClient signerClient,
-	consensusClient consensusClient,
 	db basedb.Database,
 	getOperatorId func() spectypes.OperatorID,
 ) (*RemoteKeyManager, error) {
-	signerStore := NewSignerStorage(db, netCfg.Beacon, logger)
+	signerStore := NewSignerStorage(db, beaconConfig, logger)
 	protection := slashingprotection.NewNormalProtection(signerStore)
 
 	operatorPubKeyString, err := signerClient.OperatorIdentity(ctx)
@@ -90,10 +84,9 @@ func NewRemoteKeyManager(
 
 	return &RemoteKeyManager{
 		logger:            logger,
-		netCfg:            netCfg,
+		beaconConfig:      beaconConfig,
 		signerClient:      signerClient,
-		consensusClient:   consensusClient,
-		slashingProtector: NewSlashingProtector(logger, signerStore, protection),
+		slashingProtector: NewSlashingProtector(logger, beaconConfig, signerStore, protection),
 		getOperatorId:     getOperatorId,
 		operatorPubKey:    operatorPubKey,
 		signLocks:         map[signKey]*sync.RWMutex{},
@@ -401,11 +394,10 @@ func (km *RemoteKeyManager) handleDomainAttester(
 		return nil, errors.New("could not cast obj to AttestationData")
 	}
 
-	network := core.Network(km.netCfg.Beacon.GetBeaconNetwork())
-	if !signer.IsValidFarFutureEpoch(network, data.Target.Epoch) {
+	if !signer.IsValidFarFutureEpoch(km.beaconConfig, data.Target.Epoch) {
 		return nil, fmt.Errorf("target epoch too far into the future")
 	}
-	if !signer.IsValidFarFutureEpoch(network, data.Source.Epoch) {
+	if !signer.IsValidFarFutureEpoch(km.beaconConfig, data.Source.Epoch) {
 		return nil, fmt.Errorf("source epoch too far into the future")
 	}
 
@@ -534,8 +526,7 @@ func (km *RemoteKeyManager) handleDomainProposer(
 
 	blockSlot := ret.BlockHeader.Slot
 
-	network := core.Network(km.netCfg.Beacon.GetBeaconNetwork())
-	if !signer.IsValidFarFutureSlot(network, blockSlot) {
+	if !signer.IsValidFarFutureSlot(km.beaconConfig, blockSlot) {
 		return nil, fmt.Errorf("proposed block slot too far into the future")
 	}
 
@@ -550,21 +541,13 @@ func (km *RemoteKeyManager) handleDomainProposer(
 	return ret, nil
 }
 
-func (km *RemoteKeyManager) getForkInfo(ctx context.Context, epoch phase0.Epoch) (web3signer.ForkInfo, error) {
-	currentFork, err := km.consensusClient.ForkAtEpoch(ctx, epoch)
-	if err != nil {
-		return web3signer.ForkInfo{}, fmt.Errorf("get current fork: %w", err)
-	}
-
-	genesis, err := km.consensusClient.Genesis(ctx)
-	if err != nil {
-		return web3signer.ForkInfo{}, fmt.Errorf("get genesis: %w", err)
-	}
+func (km *RemoteKeyManager) getForkInfo(epoch phase0.Epoch) web3signer.ForkInfo {
+	_, currentFork := km.beaconConfig.ForkAtEpoch(epoch)
 
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
-		GenesisValidatorsRoot: genesis.GenesisValidatorsRoot,
-	}, nil
+		GenesisValidatorsRoot: km.beaconConfig.GetGenesisValidatorsRoot(),
+	}
 }
 
 func (km *RemoteKeyManager) Sign(payload []byte) ([]byte, error) {

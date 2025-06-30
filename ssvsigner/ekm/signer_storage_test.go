@@ -19,8 +19,8 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -40,7 +40,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 		return nil, func() {}
 	}
 
-	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+	s := NewSignerStorage(db, networkconfig.TestNetwork, logger)
 	return s, func() {
 		db.Close()
 	}
@@ -361,7 +361,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
 		signerStorage.SetEncryptionKey([]byte{0xaa, 0xbb, 0xcc, 0xdd})
 	})
 
@@ -373,7 +373,7 @@ func TestStorageUtilityFunctions(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+		signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
 
 		// create a test account
 		wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
@@ -525,9 +525,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("InvalidAttestationSSZ", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -542,9 +539,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyAttestationValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 
@@ -657,9 +651,6 @@ func TestSlashingProtection(t *testing.T) {
 		})
 
 		t.Run("EmptyProposalValue", func(t *testing.T) {
-			_, signerStorage, done := testWallet(t)
-			defer done()
-
 			s := signerStorage.(*storage)
 			pubKey := []byte("test_pubkey")
 

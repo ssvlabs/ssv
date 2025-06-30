@@ -55,7 +55,7 @@ type BeaconNode interface {
 
 // Options contains the configuration options for the Doppelgänger protection.
 type Options struct {
-	Network            networkconfig.NetworkConfig
+	BeaconConfig       *networkconfig.BeaconConfig
 	BeaconNode         BeaconNode
 	ValidatorProvider  ValidatorProvider
 	SlotTickerProvider slotticker.Provider
@@ -68,7 +68,7 @@ type handler struct {
 	mu              sync.RWMutex
 	validatorsState map[phase0.ValidatorIndex]*doppelgangerState
 
-	network            networkconfig.NetworkConfig
+	beaconConfig       *networkconfig.BeaconConfig
 	beaconNode         BeaconNode
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
@@ -78,7 +78,7 @@ type handler struct {
 // NewHandler initializes a new instance of the Doppelgänger protection.
 func NewHandler(opts *Options) *handler {
 	return &handler{
-		network:            opts.Network,
+		beaconConfig:       opts.BeaconConfig,
 		beaconNode:         opts.BeaconNode,
 		validatorProvider:  opts.ValidatorProvider,
 		slotTickerProvider: opts.SlotTickerProvider,
@@ -176,7 +176,7 @@ func (h *handler) Start(ctx context.Context) error {
 	var startEpoch, previousEpoch phase0.Epoch
 	firstRun := true
 	ticker := h.slotTickerProvider()
-	slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
+	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
 
 	for {
 		select {
@@ -184,7 +184,7 @@ func (h *handler) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.Next():
 			currentSlot := ticker.Slot()
-			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+			currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_pos", buildStr))
@@ -233,7 +233,7 @@ func (h *handler) Start(ctx context.Context) error {
 
 func (h *handler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch phase0.Epoch) {
 	// Set a deadline until the start of the next slot, with a 100ms safety margin
-	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	h.mu.RLock()

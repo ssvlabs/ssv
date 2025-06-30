@@ -2,6 +2,7 @@ package storage
 
 import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -19,10 +20,10 @@ func NewStores() *ParticipantStores {
 	}
 }
 
-func NewStoresFromRoles(db basedb.Database, roles ...spectypes.BeaconRole) *ParticipantStores {
+func NewStoresFromRoles(logger *zap.Logger, db basedb.Database, roles ...spectypes.BeaconRole) *ParticipantStores {
 	stores := NewStores()
 	for _, role := range roles {
-		stores.Add(role, New(db, role))
+		stores.Add(role, New(logger, db, role))
 	}
 	return stores
 }

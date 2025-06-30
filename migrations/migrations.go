@@ -29,6 +29,7 @@ var (
 		migration_4_configlock_add_alan_fork_to_network_name,
 		migration_5_change_share_format_from_gob_to_ssz,
 		migration_6_share_exit_epoch,
+		migration_7_populate_validator_index_mapping,
 		migration_7_derive_signer_key_with_hkdf,
 	}
 )
@@ -76,8 +77,6 @@ func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
 func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
 	logger.Info("applying migrations", fields.Count(len(m)))
 	for _, migration := range m {
-		migration := migration
-
 		// Skip the migration if it's already completed.
 		obj, _, err := opt.Db.Get(migrationsPrefix, []byte(migration.Name))
 		if err != nil {

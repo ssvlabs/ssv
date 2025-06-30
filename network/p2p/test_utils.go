@@ -10,9 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network"
@@ -25,8 +26,8 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
@@ -55,7 +56,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, networkconfig.TestNetwork.SSVConfig, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -79,10 +80,8 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 
 		eg, ctx := errgroup.WithContext(pCtx)
 		for i, node := range ln.Nodes {
-			i, node := i, node //hack to avoid closures. price of using error groups
-
 			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
-				if err := node.Start(logger); err != nil {
+				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
 				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -162,7 +161,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 			if !ok {
 				_, err := nodeStorage.SaveOperatorData(nil, &registrystorage.OperatorData{
 					ID:           sm.Signer,
-					PublicKey:    []byte(operatorPubkey),
+					PublicKey:    operatorPubkey,
 					OwnerAddress: common.BytesToAddress([]byte("testOwnerAddress")),
 				})
 				if err != nil {
@@ -175,7 +174,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
-	cfg := NewNetConfig(keys, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
@@ -187,7 +186,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		signatureVerifier,
 		phase0.Epoch(0),
 	)
-	cfg.Network = networkconfig.TestNetwork
+	cfg.NetworkConfig = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
@@ -230,7 +229,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	if err != nil {
 		return nil, err
 	}
-	err = p.Setup(logger)
+	err = p.Setup()
 	if err != nil {
 		return nil, err
 	}

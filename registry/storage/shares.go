@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,10 +12,11 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -25,6 +27,10 @@ import (
 // During database migrations, records often need to be moved to a different prefix,
 // which is why the version evolves over time.
 var sharesPrefix = []byte("shares_v2/")
+
+// pubkeyIndexMapping is a prefix for the pubkey to index mapping.
+// since the churn of validators is low, we can use an append only mapping
+var pubkeyIndexMapping = []byte("val_pki")
 
 // SharesFilter is a function that filters shares.
 type SharesFilter func(*types.SSVShare) bool
@@ -54,7 +60,7 @@ type Shares interface {
 	Drop() error
 
 	// UpdateValidatorsMetadata updates the metadata of the given validators
-	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorsMetadata(metadataMap beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error)
 }
 
 type sharesStorage struct {
@@ -121,7 +127,7 @@ func (s *Share) Decode(data []byte) error {
 	return nil
 }
 
-func NewSharesStorage(networkConfig networkconfig.NetworkConfig, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
+func NewSharesStorage(beaconCfg networkconfig.Beacon, db basedb.Database, prefix []byte) (Shares, ValidatorStore, error) {
 	storage := &sharesStorage{
 		shares:        make(map[string]*types.SSVShare),
 		db:            db,
@@ -131,10 +137,17 @@ func NewSharesStorage(networkConfig networkconfig.NetworkConfig, db basedb.Datab
 	if err := storage.loadFromDB(); err != nil {
 		return nil, nil, err
 	}
+
+	pubkeyIndexMapping, err := storage.loadPubkeyToIndexMappings()
+	if err != nil {
+		return nil, nil, fmt.Errorf("load validator pubkey index mapping: %w", err)
+	}
+
 	storage.validatorStore = newValidatorStore(
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) (*types.SSVShare, bool) { return storage.Get(nil, pk) },
-		networkConfig,
+		pubkeyIndexMapping,
+		beaconCfg,
 	)
 	if err := storage.validatorStore.handleSharesAdded(slices.Collect(maps.Values(storage.shares))...); err != nil {
 		return nil, nil, err
@@ -142,9 +155,25 @@ func NewSharesStorage(networkConfig networkconfig.NetworkConfig, db basedb.Datab
 	return storage, storage.validatorStore, nil
 }
 
-// loadFromDB reads all shares from db.
+func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]phase0.ValidatorIndex, error) {
+	m := make(map[spectypes.ValidatorPK]phase0.ValidatorIndex)
+
+	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
+
+	err := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		var key spectypes.ValidatorPK
+		if len(obj.Key) != len(key) {
+			return fmt.Errorf("invalid validator PK: bad length: %d", len(obj.Key))
+		}
+		copy(key[:], obj.Key)
+		m[key] = phase0.ValidatorIndex(binary.LittleEndian.Uint64(obj.Value))
+		return nil
+	})
+
+	return m, err
+}
+
 func (s *sharesStorage) loadFromDB() error {
-	// not locking since at this point nobody has the reference to this object
 	return s.db.GetAll(SharesDBPrefix(s.storagePrefix), func(i int, obj basedb.Obj) error {
 		val := &Share{}
 		if err := val.Decode(obj.Value); err != nil {
@@ -256,7 +285,44 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	return s.saveToDB(rw, shares...)
 }
 
+func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.ValidatorPK) (out []phase0.ValidatorIndex, err error) {
+	var pubkeys = make([][]byte, 0, len(vkeys))
+
+	for _, pk := range vkeys {
+		pubkeys = append(pubkeys, pk[:])
+	}
+
+	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
+
+	err = s.db.GetMany(prefix, pubkeys, func(obj basedb.Obj) error {
+		index := binary.LittleEndian.Uint64(obj.Value)
+		out = append(out, phase0.ValidatorIndex(index))
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get validator index by pubkey: %w", err)
+	}
+
+	return out, nil
+}
+
 func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
+	// save validator pubkey -> index mapping
+	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
+
+	err := s.db.Using(rw).SetMany(prefix, len(shares), func(i int) (basedb.Obj, error) {
+		vindex := shares[i].ValidatorIndex
+		pubkey := shares[i].ValidatorPubKey
+
+		b := make([]byte, 8)
+		binary.LittleEndian.PutUint64(b, uint64(vindex))
+
+		return basedb.Obj{Key: pubkey[:], Value: b}, nil
+	})
+	if err != nil {
+		return fmt.Errorf("save validator pubkey to index mapping: %w", err)
+	}
+
 	return s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (basedb.Obj, error) {
 		share := FromSSVShare(shares[i])
 		value, err := share.Encode()
@@ -360,9 +426,14 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	return s.db.Using(rw).Delete(s.storagePrefix, SharesDBKey(pubKey))
 }
 
-// UpdateValidatorsMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	var shares []*types.SSVShare
+// UpdateValidatorsMetadata updates shares with provided validator metadata.
+// It returns only metadata entries that actually changed the stored shares.
+// The returned map is nil if no changes occurred.
+func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	var (
+		changedShares   []*types.SSVShare
+		changedMetadata beacon.ValidatorMetadataMap
+	)
 
 	s.storageMtx.Lock()
 	defer s.storageMtx.Unlock()
@@ -378,24 +449,43 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 			if metadata == nil {
 				continue
 			}
+
 			share, exists := s.unsafeGet(pk[:])
 			if !exists {
 				continue
 			}
-			share.ValidatorIndex = metadata.Index
-			share.Status = metadata.Status
-			share.ActivationEpoch = metadata.ActivationEpoch
-			share.ExitEpoch = metadata.ExitEpoch
-			shares = append(shares, share)
+
+			if metadata.Equals(share.BeaconMetadata()) {
+				continue
+			}
+
+			// Update the share with the new metadata
+			share.SetBeaconMetadata(metadata)
+			changedShares = append(changedShares, share)
+
+			if changedMetadata == nil {
+				changedMetadata = make(beacon.ValidatorMetadataMap)
+			}
+			changedMetadata[pk] = metadata
 		}
 
-		return s.validatorStore.handleSharesUpdated(shares...)
+		if len(changedShares) == 0 {
+			return nil
+		}
+
+		return s.validatorStore.handleSharesUpdated(changedShares...)
 	}()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return s.saveToDB(nil, shares...)
+	if len(changedShares) > 0 {
+		if err := s.saveToDB(nil, changedShares...); err != nil {
+			return nil, err
+		}
+	}
+
+	return changedMetadata, nil
 }
 
 // Drop deletes all shares.
@@ -422,6 +512,11 @@ func SharesDBPrefix(storagePrefix []byte) []byte {
 // SharesDBKey builds share key using sharesPrefix & validator public key, e.g. "shares_ssz/0x00..01"
 func SharesDBKey(pk []byte) []byte {
 	return append(sharesPrefix, pk...)
+}
+
+// PubkeyToIndexMappingDBKey builds key using storage prefix followed by mapping prefix, e.g. "operator/val_pki"
+func PubkeyToIndexMappingDBKey(storagePrefix []byte) []byte {
+	return append(storagePrefix, pubkeyIndexMapping...)
 }
 
 // ByOperatorID filters by operator ID.

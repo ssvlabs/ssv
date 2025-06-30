@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/networkconfig"
 	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -47,6 +47,7 @@ var (
 // TODO: review if we need all of them
 type Storage interface {
 	registry.RegistryStore
+
 	core.Storage
 	core.SlashingStore
 	SlashingStoreTxn
@@ -78,18 +79,18 @@ type SlashingStoreTxn interface {
 // (walletPrefix, highestAttPrefix, etc.).
 type storage struct {
 	db            basedb.Database
-	network       beacon.BeaconNetwork
+	beaconConfig  networkconfig.Beacon
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, beaconConfig networkconfig.Beacon, logger *zap.Logger) Storage {
 	return &storage{
-		db:      db,
-		network: network,
-		logger:  logger.Named(logging.NameSignerStorage).Named(prefix + "storage"),
-		lock:    sync.RWMutex{},
+		db:           db,
+		beaconConfig: beaconConfig,
+		logger:       logger.Named(logging.NameSignerStorage).Named(prefix + "storage"),
+		lock:         sync.RWMutex{},
 	}
 }
 
@@ -107,7 +108,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(string(s.network.GetBeaconNetwork()) + obj)
+	return []byte(s.beaconConfig.GetNetworkName() + obj)
 }
 
 // Name returns storage name.
@@ -117,7 +118,7 @@ func (s *storage) Name() string {
 
 // Network returns the network storage is related to.
 func (s *storage) Network() core.Network {
-	return core.Network(s.network.GetBeaconNetwork())
+	return core.Network(s.beaconConfig.GetNetworkName())
 }
 
 // SaveWallet stores the given wallet.
@@ -457,8 +458,4 @@ func (s *storage) decrypt(nonceCipherText []byte) ([]byte, error) {
 	nonce, ciphertext := nonceCipherText[:nonceSize], nonceCipherText[nonceSize:]
 	// #nosec G407 false positive: https://github.com/securego/gosec/issues/1211
 	return gcm.Open(nil, nonce, ciphertext, nil)
-}
-
-func (s *storage) BeaconNetwork() beacon.BeaconNetwork {
-	return s.network
 }
