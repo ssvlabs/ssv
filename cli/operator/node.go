@@ -274,10 +274,10 @@ var StartNodeCmd = &cobra.Command{
 		switch cfg.DBOptions.Engine {
 		case "pebble":
 			logger.Info("using pebble db")
-			db, err = setupPebbleDB(logger, networkConfig)
+			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
 		case "badger":
 			logger.Info("using badger db")
-			db, err = setupBadgerDB(logger, networkConfig)
+			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
 		default:
 			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
 		}
@@ -832,7 +832,7 @@ func setupGlobal() (*zap.Logger, error) {
 
 func setupBadgerDB(
 	logger *zap.Logger,
-	networkConfig *networkconfig.NetworkConfig,
+	beaconConfig *networkconfig.BeaconConfig,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
@@ -843,7 +843,7 @@ func setupBadgerDB(
 	migrationOpts := migrations.Options{
 		Db:              db,
 		DbPath:          cfg.DBOptions.Path,
-		BeaconConfig:    networkConfig.BeaconConfig,
+		BeaconConfig:    beaconConfig,
 		OperatorPrivKey: operatorPrivKey,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
@@ -872,7 +872,11 @@ func setupBadgerDB(
 	return db, nil
 }
 
-func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*pebble.DB, error) {
+func setupPebbleDB(
+	logger *zap.Logger,
+	beaconConfig *networkconfig.BeaconConfig,
+	operatorPrivKey keys.OperatorPrivateKey,
+) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
 
 	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
@@ -881,9 +885,10 @@ func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfi
 	}
 
 	migrationOpts := migrations.Options{
-		Db:           db,
-		DbPath:       dbPath,
-		BeaconConfig: networkConfig.BeaconConfig,
+		Db:              db,
+		DbPath:          dbPath,
+		BeaconConfig:    beaconConfig,
+		OperatorPrivKey: operatorPrivKey,
 	}
 
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
