@@ -71,6 +71,8 @@ func runHealthyTest(t *testing.T, syncData *v1.SyncState, syncDistanceTolerance 
 	})
 	require.NoError(t, err)
 
+	// Multi client library we depend on won't start if client is not synced,
+	// so we need to let it start with synced state and then get the state from the test data.
 	replaceSyncing.Store(true)
 
 	return c.Healthy(t.Context())
