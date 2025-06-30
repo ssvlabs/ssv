@@ -447,6 +447,8 @@ func (cr *CommitteeRunner) signAttesterDuty(
 		span.AddEvent(eventMsg)
 		logger.Warn(eventMsg, fields.ValidatorIndex(validatorDuty.ValidatorIndex))
 		isBlocked = true
+
+		span.SetStatus(codes.Ok, "")
 		return
 	}
 
@@ -477,6 +479,8 @@ func (cr *CommitteeRunner) signAttesterDuty(
 		zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 		zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
 	)
+
+	span.SetStatus(codes.Ok, "")
 
 	return isBlocked, partialMsg, nil
 }
