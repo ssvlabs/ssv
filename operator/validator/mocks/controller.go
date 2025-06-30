@@ -18,7 +18,6 @@ import (
 	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
 	commons "github.com/ssvlabs/ssv/network/commons"
-	duties "github.com/ssvlabs/ssv/operator/duties"
 	validator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
@@ -254,10 +253,10 @@ func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient any) *
 }
 
 // ValidatorExitChan mocks base method.
-func (m *MockController) ValidatorExitChan() <-chan duties.ExitDescriptor {
+func (m *MockController) ValidatorExitChan() <-chan storage.ExitDescriptor {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatorExitChan")
-	ret0, _ := ret[0].(<-chan duties.ExitDescriptor)
+	ret0, _ := ret[0].(<-chan storage.ExitDescriptor)
 	return ret0
 }
 

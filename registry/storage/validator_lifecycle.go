@@ -7,7 +7,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -30,7 +29,7 @@ type ValidatorLifecycleCallbacks struct {
 	OnValidatorRemoved func(ctx context.Context, pubKey spectypes.ValidatorPK) error
 
 	// OnValidatorExited is called when a voluntary exit is initiated.
-	OnValidatorExited func(ctx context.Context, descriptor duties.ExitDescriptor) error
+	OnValidatorExited func(ctx context.Context, descriptor ExitDescriptor) error
 
 	// OnCommitteeChanged is called when committee membership changes.
 	OnCommitteeChanged func(ctx context.Context, committeeID spectypes.CommitteeID, action CommitteeAction) error
@@ -80,4 +79,13 @@ type SyncCommitteeInfo struct {
 	ValidatorIndex phase0.ValidatorIndex
 	Period         uint64
 	Indices        []phase0.CommitteeIndex
+}
+
+// ExitDescriptor contains information about a validator exit.
+// TODO: rethink this structure, it might be better to use a more generic type or native one.
+type ExitDescriptor struct {
+	PubKey         phase0.BLSPubKey
+	ValidatorIndex phase0.ValidatorIndex
+	BlockNumber    uint64
+	OwnValidator   bool
 }

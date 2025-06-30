@@ -10,9 +10,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/operator/duties"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {
@@ -96,7 +96,7 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		zap.Uint64("validator_index", uint64(validatorIndex)),
 	)
 
-	exitDesc := duties.ExitDescriptor{
+	exitDesc := registrystorage.ExitDescriptor{
 		OwnValidator:   ownValidator,
 		PubKey:         pubKey,
 		ValidatorIndex: validatorIndex,

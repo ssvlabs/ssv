@@ -20,7 +20,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
 	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
-	storage2 "github.com/ssvlabs/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -36,7 +36,7 @@ type Options struct {
 	Context             context.Context
 	DB                  basedb.Database
 	ValidatorController validator.Controller
-	ValidatorStore      storage2.ValidatorIndices
+	ValidatorStore      registrystorage.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
 	WS                  api.WebSocketServer
@@ -79,7 +79,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			BeaconNode:          opts.BeaconNode,
 			ExecutionClient:     opts.ExecutionClient,
 			BeaconConfig:        opts.NetworkConfig,
-			ValidatorProvider:   opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
+			ValidatorProvider:   opts.ValidatorStore,
 			ValidatorController: opts.ValidatorController,
 			DutyExecutor:        opts.ValidatorController,
 			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),

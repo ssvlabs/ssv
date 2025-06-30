@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type SyncCommitteeHandler struct {
@@ -247,10 +248,15 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, epoch 
 		return observability.Errorf(span, "failed to fetch sync committee duties: %w", err)
 	}
 
-	selfShares := h.validatorProvider.SelfParticipatingValidators(epoch)
-	selfIndices := make(map[phase0.ValidatorIndex]struct{}, len(selfShares))
-	for _, share := range selfShares {
-		selfIndices[share.ValidatorIndex] = struct{}{}
+	selfSnapshots := h.validatorProvider.GetSelfParticipatingValidators(epoch, registrystorage.ParticipationOptions{
+		IncludeLiquidated: false,
+		IncludeExited:     false,
+		OnlyAttesting:     false,
+		OnlySyncCommittee: true,
+	})
+	selfIndices := make(map[phase0.ValidatorIndex]struct{}, len(selfSnapshots))
+	for _, snapshot := range selfSnapshots {
+		selfIndices[snapshot.Share.ValidatorIndex] = struct{}{}
 	}
 
 	storeDuties := make([]dutystore.StoreSyncCommitteeDuty, 0, len(duties))
@@ -337,11 +343,12 @@ func (h *SyncCommitteeHandler) shouldExecute(duty *eth2apiv1.SyncCommitteeDuty, 
 	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
-	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
+	snapshot, exists := h.validatorProvider.GetValidator(registrystorage.ValidatorPubKey(duty.PubKey))
 	if !exists {
 		h.logger.Warn("validator not found", fields.Validator(duty.PubKey[:]))
 		return false
 	}
+	v := &snapshot.Share
 
 	if v.MinParticipationEpoch() > currentEpoch {
 		h.logger.Debug("validator not yet participating",

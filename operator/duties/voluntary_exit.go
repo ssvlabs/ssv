@@ -14,26 +14,20 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)
 
-type ExitDescriptor struct {
-	OwnValidator   bool
-	PubKey         phase0.BLSPubKey
-	ValidatorIndex phase0.ValidatorIndex
-	BlockNumber    uint64
-}
-
 type VoluntaryExitHandler struct {
 	baseHandler
 	duties          *dutystore.VoluntaryExitDuties
-	validatorExitCh <-chan ExitDescriptor
+	validatorExitCh <-chan storage.ExitDescriptor
 	dutyQueue       []*spectypes.ValidatorDuty
 	blockSlots      map[uint64]phase0.Slot
 }
 
-func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
+func NewVoluntaryExitHandler(duties *dutystore.VoluntaryExitDuties, validatorExitCh <-chan storage.ExitDescriptor) *VoluntaryExitHandler {
 	return &VoluntaryExitHandler{
 		duties:          duties,
 		validatorExitCh: validatorExitCh,

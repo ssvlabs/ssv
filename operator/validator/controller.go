@@ -112,7 +112,7 @@ type Controller interface {
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	IndicesChangeChan() chan struct{}
-	ValidatorExitChan() <-chan duties.ExitDescriptor
+	ValidatorExitChan() <-chan registrystorage.ExitDescriptor
 
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
@@ -193,7 +193,7 @@ type controller struct {
 	domainCache *validator.DomainCache
 
 	indicesChangeCh chan struct{}
-	validatorExitCh chan duties.ExitDescriptor
+	validatorExitCh chan registrystorage.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -279,7 +279,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
 		),
 		indicesChangeCh:         make(chan struct{}),
-		validatorExitCh:         make(chan duties.ExitDescriptor),
+		validatorExitCh:         make(chan registrystorage.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
 
@@ -301,7 +301,7 @@ func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChangeCh
 }
 
-func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
+func (c *controller) ValidatorExitChan() <-chan registrystorage.ExitDescriptor {
 	return c.validatorExitCh
 }
 
@@ -1071,7 +1071,8 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 			start := time.Now()
 			validatorsPerStatus := make(map[validatorStatus]uint32)
 
-			for _, share := range c.validatorStore.OperatorValidators(c.operatorDataStore.GetOperatorID()) {
+			for _, snapshot := range c.validatorStore.GetOperatorValidators(c.operatorDataStore.GetOperatorID()) {
+				share := &snapshot.Share
 				if share.IsParticipating(c.networkConfig, c.networkConfig.EstimatedCurrentEpoch()) {
 					validatorsPerStatus[statusParticipating]++
 				}

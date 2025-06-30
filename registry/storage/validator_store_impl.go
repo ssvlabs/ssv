@@ -17,8 +17,6 @@ import (
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
-	"github.com/ssvlabs/ssv/operator/duties"
-
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
@@ -604,13 +602,13 @@ func (s *validatorStoreImpl) OnValidatorExited(ctx context.Context, pubKey spect
 
 	// Trigger validator exited callback if exists
 	if s.callbacks.OnValidatorExited != nil {
-		exitDescriptor := duties.ExitDescriptor{
+		exitDescriptor := ExitDescriptor{
 			PubKey:         phase0.BLSPubKey(pubKey),
 			ValidatorIndex: state.share.ValidatorIndex,
 			BlockNumber:    blockNumber,
 			OwnValidator:   state.share.BelongsToOperator(s.operatorIDFn()),
 		}
-		go func(desc duties.ExitDescriptor) {
+		go func(desc ExitDescriptor) {
 			if err := s.callbacks.OnValidatorExited(ctx, desc); err != nil {
 				s.logger.Error("validator exited callback failed", zap.Error(err))
 			}

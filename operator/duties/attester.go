@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -227,8 +229,11 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	start := time.Now()
 
-	var eligibleShares []*types.SSVShare
-	for _, share := range h.validatorProvider.SelfValidators() {
+	selfValidators := h.validatorProvider.GetSelfValidators()
+
+	eligibleShares := make([]*types.SSVShare, 0, len(selfValidators))
+	for _, snapshot := range selfValidators {
+		share := &snapshot.Share
 		if share.IsParticipatingAndAttesting(epoch) {
 			eligibleShares = append(eligibleShares, share)
 		}
@@ -322,11 +327,12 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	currentSlot := h.beaconConfig.EstimatedCurrentSlot()
 	currentEpoch := h.beaconConfig.EstimatedEpochAtSlot(currentSlot)
 
-	v, exists := h.validatorProvider.Validator(duty.PubKey[:])
+	snapshot, exists := h.validatorProvider.GetValidator(registrystorage.ValidatorPubKey(duty.PubKey))
 	if !exists {
 		h.logger.Warn("validator not found", fields.Validator(duty.PubKey[:]))
 		return false
 	}
+	v := &snapshot.Share
 
 	if v.MinParticipationEpoch() > currentEpoch {
 		h.logger.Debug("validator not yet participating",

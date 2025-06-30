@@ -66,7 +66,7 @@ type MockControllerOptions struct {
 	signer            ekm.BeaconSigner
 	StorageMap        *ibftstorage.ParticipantStores
 	validatorsMap     *validators.ValidatorsMap
-	validatorStore    registrystorage.ValidatorIndices
+	validatorStore    registrystorage.ValidatorStore
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorStorage   registrystorage.Operators
 	networkConfig     networkconfig.NetworkConfig
@@ -82,7 +82,7 @@ func TestNewController(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	registryStorage, newStorageErr := storage.NewNodeStorage(logger, db)
 	require.NoError(t, newStorageErr)
 
 	controllerOptions := ControllerOptions{
@@ -212,8 +212,16 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
-			mockValidatorStore := registrystoragemocks.NewMockValidatorIndices(ctrl)
-			mockValidatorStore.EXPECT().OperatorValidators(gomock.Any()).Return(sharesWithMetadata).AnyTimes()
+			// Convert shares to snapshots for the new interface
+			snapshotsWithMetadata := make([]*registrystorage.ValidatorSnapshot, len(sharesWithMetadata))
+			for i, share := range sharesWithMetadata {
+				snapshotsWithMetadata[i] = &registrystorage.ValidatorSnapshot{
+					Share: *share,
+				}
+			}
+
+			mockValidatorStore := registrystoragemocks.NewMockValidatorStore(ctrl)
+			mockValidatorStore.EXPECT().GetOperatorValidators(gomock.Any()).Return(snapshotsWithMetadata).AnyTimes()
 
 			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
 				return true, nil

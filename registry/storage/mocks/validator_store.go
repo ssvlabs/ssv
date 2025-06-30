@@ -16,6 +16,7 @@ import (
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	common "github.com/ethereum/go-ethereum/common"
 	types "github.com/ssvlabs/ssv-spec/types"
+	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	gomock "go.uber.org/mock/gomock"
@@ -128,6 +129,34 @@ func (m *MockValidatorStore) GetParticipatingValidators(epoch phase0.Epoch, opts
 func (mr *MockValidatorStoreMockRecorder) GetParticipatingValidators(epoch, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParticipatingValidators", reflect.TypeOf((*MockValidatorStore)(nil).GetParticipatingValidators), epoch, opts)
+}
+
+// GetSelfParticipatingValidators mocks base method.
+func (m *MockValidatorStore) GetSelfParticipatingValidators(epoch phase0.Epoch, opts storage.ParticipationOptions) []*storage.ValidatorSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSelfParticipatingValidators", epoch, opts)
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
+	return ret0
+}
+
+// GetSelfParticipatingValidators indicates an expected call of GetSelfParticipatingValidators.
+func (mr *MockValidatorStoreMockRecorder) GetSelfParticipatingValidators(epoch, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfParticipatingValidators", reflect.TypeOf((*MockValidatorStore)(nil).GetSelfParticipatingValidators), epoch, opts)
+}
+
+// GetSelfValidators mocks base method.
+func (m *MockValidatorStore) GetSelfValidators() []*storage.ValidatorSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSelfValidators")
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
+	return ret0
+}
+
+// GetSelfValidators indicates an expected call of GetSelfValidators.
+func (mr *MockValidatorStoreMockRecorder) GetSelfValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfValidators", reflect.TypeOf((*MockValidatorStore)(nil).GetSelfValidators))
 }
 
 // GetSyncCommitteeValidators mocks base method.
@@ -295,4 +324,19 @@ func (m *MockValidatorStore) RegisterSyncCommitteeInfo(info []storage.SyncCommit
 func (mr *MockValidatorStoreMockRecorder) RegisterSyncCommitteeInfo(info any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterSyncCommitteeInfo", reflect.TypeOf((*MockValidatorStore)(nil).RegisterSyncCommitteeInfo), info)
+}
+
+// UpdateValidatorsMetadata mocks base method.
+func (m *MockValidatorStore) UpdateValidatorsMetadata(ctx context.Context, metadata beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", ctx, metadata)
+	ret0, _ := ret[0].(beacon.ValidatorMetadataMap)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateValidatorsMetadata indicates an expected call of UpdateValidatorsMetadata.
+func (mr *MockValidatorStoreMockRecorder) UpdateValidatorsMetadata(ctx, metadata any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockValidatorStore)(nil).UpdateValidatorsMetadata), ctx, metadata)
 }
