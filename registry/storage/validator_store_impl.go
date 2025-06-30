@@ -698,6 +698,13 @@ func (s *validatorStoreImpl) GetParticipatingValidators(epoch phase0.Epoch, opts
 
 	var snapshots []*ValidatorSnapshot
 	for _, state := range s.validators {
+		// Early exit if not participating and no override flags
+		if !state.participationStatus.IsParticipating &&
+			!opts.IncludeLiquidated &&
+			!opts.IncludeExited {
+			continue
+		}
+
 		// Check liquidation filter
 		if state.share.Liquidated && !opts.IncludeLiquidated {
 			continue
@@ -781,9 +788,11 @@ func (s *validatorStoreImpl) RegisterSyncCommitteeInfo(info []SyncCommitteeInfo)
 		}
 
 		// Store the committee indices for this validator
-		s.syncCommittees[sci.Period][sci.ValidatorIndex] = sci.Indices
+		indicesCopy := make([]phase0.CommitteeIndex, len(sci.Indices))
+		copy(indicesCopy, sci.Indices)
+		s.syncCommittees[sci.Period][sci.ValidatorIndex] = indicesCopy
 
-		// Update participation status for affected validator
+		// Update participation status for the affected validator
 		for _, state := range s.validators {
 			if state.share.ValidatorIndex == sci.ValidatorIndex {
 				oldStatus := state.participationStatus
@@ -980,6 +989,7 @@ func (s *validatorStoreImpl) createCommitteeSnapshot(committee *committeeState) 
 		Validators: make([]*ValidatorSnapshot, 0, len(committee.validators)),
 	}
 
+	snapshot.Operators = make([]spectypes.OperatorID, len(committee.operators))
 	copy(snapshot.Operators, committee.operators)
 
 	// Add validator snapshots
@@ -1095,7 +1105,7 @@ func (s *validatorStoreImpl) removeShareFromCommittee(share *types.SSVShare) err
 	return nil
 }
 
-// copyShare creates a deep copy of the SSVShare object to ensure immutability
+// copyShare creates a deep copy of the SSVShare object to ensure the immutability
 // of the shares stored and passed around within the ValidatorStore.
 func (s *validatorStoreImpl) copyShare(share *types.SSVShare) *types.SSVShare {
 	newShare := &types.SSVShare{
