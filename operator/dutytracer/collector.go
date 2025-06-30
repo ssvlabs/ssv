@@ -43,7 +43,7 @@ type Collector struct {
 	syncCommitteeRootsCache *ttlcache.Cache[scRootKey, phase0.Root]
 	syncCommitteeRootsSf    singleflight.Group
 
-	beacon networkconfig.BeaconConfig
+	beacon *networkconfig.BeaconConfig
 
 	store      DutyTraceStore
 	client     DomainDataProvider
@@ -64,7 +64,7 @@ func New(
 	validators registrystorage.ValidatorStore,
 	client DomainDataProvider,
 	store DutyTraceStore,
-	beaconNetwork networkconfig.BeaconConfig,
+	beaconNetwork *networkconfig.BeaconConfig,
 ) *Collector {
 
 	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration

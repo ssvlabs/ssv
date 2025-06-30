@@ -397,12 +397,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	}
 }
 
-func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkconfig.BeaconConfig) (networkconfig.BeaconConfig, error) {
+func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkconfig.BeaconConfig) (*networkconfig.BeaconConfig, error) {
 	gc.beaconConfigMu.Lock()
 	defer gc.beaconConfigMu.Unlock()
 
 	if gc.beaconConfig == nil {
-		gc.beaconConfig = &beaconConfig
+		gc.beaconConfig = beaconConfig
 		close(gc.beaconConfigInit)
 
 		gc.log.Info("beacon config has been initialized",
@@ -413,10 +413,10 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkco
 	}
 
 	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
-		return *gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
+		return gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
 	}
 
-	return *gc.beaconConfig, nil
+	return gc.beaconConfig, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {

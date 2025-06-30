@@ -14,7 +14,7 @@ import (
 
 //go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./ssv_mock.go -source=./ssv.go
 
-var supportedSSVConfigs = map[string]SSVConfig{
+var supportedSSVConfigs = map[string]*SSVConfig{
 	MainnetName:      MainnetSSV,
 	HoleskyName:      HoleskySSV,
 	HoleskyStageName: HoleskyStageSSV,
@@ -25,12 +25,12 @@ var supportedSSVConfigs = map[string]SSVConfig{
 	SepoliaName:      SepoliaSSV,
 }
 
-func GetSSVConfigByName(name string) (SSVConfig, error) {
+func GetSSVConfigByName(name string) (*SSVConfig, error) {
 	if network, ok := supportedSSVConfigs[name]; ok {
 		return network, nil
 	}
 
-	return SSVConfig{}, fmt.Errorf("network not supported: %v", name)
+	return nil, fmt.Errorf("network not supported: %v", name)
 }
 
 type SSV interface {
@@ -52,7 +52,7 @@ type SSVConfig struct {
 	GasLimit36Epoch phase0.Epoch
 }
 
-func (s SSVConfig) String() string {
+func (s *SSVConfig) String() string {
 	marshaled, err := json.Marshal(s)
 	if err != nil {
 		panic(err)
@@ -72,8 +72,8 @@ type marshaledConfig struct {
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
-func (s SSVConfig) marshal() marshaledConfig {
-	aux := marshaledConfig{
+func (s *SSVConfig) marshal() *marshaledConfig {
+	return &marshaledConfig{
 		DomainType:              s.DomainType[:],
 		RegistrySyncOffset:      s.RegistrySyncOffset,
 		RegistryContractAddr:    s.RegistryContractAddr,
@@ -82,15 +82,13 @@ func (s SSVConfig) marshal() marshaledConfig {
 		TotalEthereumValidators: s.TotalEthereumValidators,
 		GasLimit36Epoch:         s.GasLimit36Epoch,
 	}
-
-	return aux
 }
 
-func (s SSVConfig) MarshalJSON() ([]byte, error) {
+func (s *SSVConfig) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.marshal())
 }
 
-func (s SSVConfig) MarshalYAML() (interface{}, error) {
+func (s *SSVConfig) MarshalYAML() (interface{}, error) {
 	return s.marshal(), nil
 }
 
@@ -135,10 +133,10 @@ func (s *SSVConfig) UnmarshalJSON(data []byte) error {
 	return s.unmarshalFromConfig(aux)
 }
 
-func (s SSVConfig) GetDomainType() spectypes.DomainType {
+func (s *SSVConfig) GetDomainType() spectypes.DomainType {
 	return s.DomainType
 }
 
-func (s SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
+func (s *SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
 	return s.GasLimit36Epoch
 }
