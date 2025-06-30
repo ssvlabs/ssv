@@ -42,8 +42,10 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/exporter"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -61,6 +63,7 @@ import (
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -93,6 +96,7 @@ type config struct {
 	global_config.GlobalConfig   `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
+	ExporterOptions              exporter.Options        `yaml:"exporter"`
 	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
 	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
@@ -460,10 +464,10 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
-			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
+		if cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeStandard {
+			retain := cfg.ExporterOptions.RetainSlots
 			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
-			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
+			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -475,7 +479,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
+		if cfg.ExporterOptions.Enabled {
 			fixedSubnets = networkcommons.AllSubnets
 		}
 
@@ -488,6 +492,28 @@ var StartNodeCmd = &cobra.Command{
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
+
+		// Exporter duty tracing
+		var collector *dutytracer.Collector
+		if cfg.ExporterOptions.Enabled {
+			switch cfg.ExporterOptions.Mode {
+			case exporter.ModeArchive:
+				logger.Info("exporter mode: archive")
+				dstore := &dutytracer.DutyTraceStoreMetrics{
+					Store: dutytracestore.New(db),
+				}
+				collector = dutytracer.New(cmd.Context(), logger,
+					nodeStorage.ValidatorStore(), consensusClient,
+					dstore, networkConfig.BeaconConfig)
+
+				go collector.Start(cmd.Context(), slotTickerProvider)
+				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
+			case exporter.ModeStandard:
+				logger.Info("exporter mode: standard")
+			default:
+				logger.Fatal("invalid exporter configuration", zap.String("mode", cfg.ExporterOptions.Mode))
+			}
+		}
 
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
@@ -505,11 +531,11 @@ var StartNodeCmd = &cobra.Command{
 		}
 		cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler
 
-		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions, cfg.ExporterOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		operatorNode := operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
+		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
@@ -614,9 +640,8 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				&handlers.Exporter{
-					ParticipantStores: storageMap,
-				},
+				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
 				err := apiServer.Run()
@@ -1176,7 +1201,7 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	}
 }
 
-func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	var wg sync.WaitGroup
 
 	threshold := slot - phase0.Slot(retain)
