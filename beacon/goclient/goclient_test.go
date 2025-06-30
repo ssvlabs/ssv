@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -64,7 +63,7 @@ func runHealthyTest(t *testing.T, syncData *v1.SyncState, syncDistanceTolerance 
 
 		return mockResponses[r.URL.Path], nil
 	})
-	c, err := newClient(t.Context(), Options{
+	c, err := New(t.Context(), zap.NewNop(), Options{
 		BeaconNodeAddr:        mockServer.URL,
 		CommonTimeout:         commonTimeout,
 		LongTimeout:           longTimeout,
@@ -91,7 +90,7 @@ func TestTimeouts(t *testing.T) {
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
-		_, err := newClient(t.Context(), Options{
+		_, err := New(t.Context(), zap.NewNop(), Options{
 			BeaconNodeAddr: undialableServer.URL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
@@ -110,7 +109,7 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := newClient(t.Context(), Options{
+		client, err := New(t.Context(), zap.NewNop(), Options{
 			BeaconNodeAddr: unresponsiveServer.URL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
@@ -142,7 +141,7 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := newClient(t.Context(), Options{
+		client, err := New(t.Context(), zap.NewNop(), Options{
 			BeaconNodeAddr: unresponsiveServer.URL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
@@ -167,7 +166,7 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := newClient(t.Context(), Options{
+		client, err := New(t.Context(), zap.NewNop(), Options{
 			BeaconNodeAddr: fastServer.URL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
@@ -182,12 +181,4 @@ func TestTimeouts(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
-}
-
-func newClient(ctx context.Context, options Options) (*GoClient, error) {
-	return New(
-		ctx,
-		zap.NewNop(),
-		options,
-	)
 }
