@@ -54,9 +54,7 @@ type Storage interface {
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
-
 	SetEncryptionKey(hexKey []byte)
-	BeaconNetwork() beacon.BeaconNetwork
 }
 
 // SlashingStoreTxn represents the behavior of the slashing store with transaction support
