@@ -501,7 +501,7 @@ var StartNodeCmd = &cobra.Command{
 				dstore := &dutytracer.DutyTraceStoreMetrics{
 					Store: dutytracestore.New(db),
 				}
-				collector = dutytracer.New(cmd.Context(), logger,
+				collector = dutytracer.New(logger,
 					nodeStorage.ValidatorStore(), consensusClient,
 					dstore, networkConfig.BeaconConfig)
 
