@@ -98,20 +98,6 @@ func WithHealthInvalidationIntervalMulti(interval time.Duration) OptionMulti {
 	}
 }
 
-// WithLogBatchSize sets log batch size.
-func WithLogBatchSize(size uint64) Option {
-	return func(s *ExecutionClient) {
-		s.logBatchSize = size
-	}
-}
-
-// WithLogBatchSizeMulti sets log batch size.
-func WithLogBatchSizeMulti(size uint64) OptionMulti {
-	return func(s *MultiClient) {
-		s.logBatchSize = size
-	}
-}
-
 // WithSyncDistanceTolerance sets the number of blocks that is acceptable to lag behind.
 func WithSyncDistanceTolerance(count uint64) Option {
 	return func(s *ExecutionClient) {
@@ -123,5 +109,19 @@ func WithSyncDistanceTolerance(count uint64) Option {
 func WithSyncDistanceToleranceMulti(count uint64) OptionMulti {
 	return func(s *MultiClient) {
 		s.syncDistanceTolerance = count
+	}
+}
+
+// WithHTTPLogClient sets the HTTP log client address for the ExecutionClient configuration.
+func WithHTTPLogClient(addr string) Option {
+	return func(s *ExecutionClient) {
+		s.httpLogClientAddr = addr
+	}
+}
+
+// WithHTTPLogClientMulti sets the HTTP log client address for the MultiClient configuration.
+func WithHTTPLogClientMulti(addr string) OptionMulti {
+	return func(s *MultiClient) {
+		s.httpLogClientAddr = addr
 	}
 }
