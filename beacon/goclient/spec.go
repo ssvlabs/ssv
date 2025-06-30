@@ -28,11 +28,11 @@ const (
 )
 
 // BeaconConfig returns the network Beacon configuration
-func (gc *GoClient) BeaconConfig() networkconfig.BeaconConfig {
+func (gc *GoClient) BeaconConfig() *networkconfig.BeaconConfig {
 	// BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
 	// It fails otherwise.
 	config := gc.getBeaconConfig()
-	return *config
+	return config
 }
 
 func specForClient(ctx context.Context, log *zap.Logger, provider client.Service) (map[string]any, error) {
@@ -63,18 +63,18 @@ func specForClient(ctx context.Context, log *zap.Logger, provider client.Service
 }
 
 // fetchBeaconConfig must be called once on GoClient's initialization
-func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthttp.Service) (networkconfig.BeaconConfig, error) {
+func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthttp.Service) (*networkconfig.BeaconConfig, error) {
 	specResponse, err := specForClient(ctx, gc.log, client)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Spec"), zap.Error(err))
-		return networkconfig.BeaconConfig{}, fmt.Errorf("failed to obtain spec response: %w", err)
+		return nil, fmt.Errorf("failed to obtain spec response: %w", err)
 	}
 
 	// types of most values are already cast: https://github.com/attestantio/go-eth2-client/blob/v0.21.7/http/spec.go#L78
 
 	networkName, err := get[string](specResponse, "CONFIG_NAME")
 	if err != nil {
-		return networkconfig.BeaconConfig{}, fmt.Errorf("get CONFIG_NAME: %w", err)
+		return nil, fmt.Errorf("get CONFIG_NAME: %w", err)
 	}
 
 	slotDuration, err := get[time.Duration](specResponse, "SECONDS_PER_SLOT")
@@ -160,16 +160,16 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 	forkData, err := gc.getForkData(specResponse)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Spec"), zap.Error(err))
-		return networkconfig.BeaconConfig{}, fmt.Errorf("failed to extract fork data: %w", err)
+		return nil, fmt.Errorf("failed to extract fork data: %w", err)
 	}
 
 	genesisResponse, err := genesisForClient(ctx, gc.log, client)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Genesis"), zap.Error(err))
-		return networkconfig.BeaconConfig{}, fmt.Errorf("failed to obtain genesis response: %w", err)
+		return nil, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
 
-	beaconConfig := networkconfig.BeaconConfig{
+	beaconConfig := &networkconfig.BeaconConfig{
 		NetworkName:                          networkName,
 		SlotDuration:                         slotDuration,
 		SlotsPerEpoch:                        slotsPerEpoch,

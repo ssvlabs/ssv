@@ -65,13 +65,17 @@ func (mv *messageValidator) validateDutyCount(
 		return nil
 	}
 
-	// Check if the duty count exceeds or equals the duty limit.
-	// This validation occurs before the state is updated, which is why
-	// the first count starts at 0 and we use an inclusive comparison (>=).
+	// If no message has been observed for this slot yet, treat it as a new duty.
+	// It will increment the duty count during state update after successful validation,
+	// so we preemptively increment the checked duty count to reflect that.
+	if signerStateBySlot.GetSignerState(msgSlot) == nil {
+		dutyCount++
+	}
+
 	if dutyCount > dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
-		err.want = fmt.Sprintf("less than %v", dutyLimit)
+		err.want = fmt.Sprintf("<=%v", dutyLimit)
 		return err
 	}
 

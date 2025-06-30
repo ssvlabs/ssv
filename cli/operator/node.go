@@ -25,6 +25,13 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
+
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -35,8 +42,10 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventsyncer"
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/exporter"
 	exporterapi "github.com/ssvlabs/ssv/exporter/api"
 	"github.com/ssvlabs/ssv/exporter/api/decided"
+	dutytracestore "github.com/ssvlabs/ssv/exporter/store"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	ssv_identity "github.com/ssvlabs/ssv/identity"
 	"github.com/ssvlabs/ssv/logging"
@@ -54,6 +63,7 @@ import (
 	"github.com/ssvlabs/ssv/operator"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	dutytracer "github.com/ssvlabs/ssv/operator/dutytracer"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -62,15 +72,9 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
-	badger "github.com/ssvlabs/ssv/storage/badger"
+	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	pebble "github.com/ssvlabs/ssv/storage/pebble"
+	"github.com/ssvlabs/ssv/storage/pebble"
 	"github.com/ssvlabs/ssv/utils/commons"
 	"github.com/ssvlabs/ssv/utils/format"
 )
@@ -92,6 +96,7 @@ type config struct {
 	global_config.GlobalConfig   `yaml:"global"`
 	DBOptions                    basedb.Options          `yaml:"db"`
 	SSVOptions                   operator.Options        `yaml:"ssv"`
+	ExporterOptions              exporter.Options        `yaml:"exporter"`
 	ExecutionClient              executionclient.Options `yaml:"eth1"` // TODO: execution_client in yaml
 	ConsensusClient              goclient.Options        `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig             p2pv1.Config            `yaml:"p2p"`
@@ -140,10 +145,12 @@ var StartNodeCmd = &cobra.Command{
 			observabilityOptions = append(observabilityOptions, observability.WithTraces())
 		}
 
+		logger.Info("initializing observability")
 		observabilityShutdown, err := observability.Initialize(
 			cmd.Context(),
 			cmd.Parent().Short,
 			cmd.Parent().Version,
+			logger,
 			observabilityOptions...)
 		if err != nil {
 			logger.Fatal("could not initialize observability configuration", zap.Error(err))
@@ -151,7 +158,7 @@ var StartNodeCmd = &cobra.Command{
 
 		defer func() {
 			if err = observabilityShutdown(cmd.Context()); err != nil {
-				logger.Error("could not shutdown observability object", zap.Error(err))
+				logger.Error("could not shutdown observability stack", zap.Error(err))
 			}
 		}()
 
@@ -166,7 +173,7 @@ var StartNodeCmd = &cobra.Command{
 				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
 		}
 
-		networkConfig := networkconfig.NetworkConfig{
+		networkConfig := &networkconfig.NetworkConfig{
 			Name:         cfg.SSVOptions.NetworkName,
 			SSVConfig:    ssvNetworkConfig,
 			BeaconConfig: consensusClient.BeaconConfig(),
@@ -457,10 +464,10 @@ var StartNodeCmd = &cobra.Command{
 			})
 		}
 
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
-			retain := cfg.SSVOptions.ValidatorOptions.ExporterRetainSlots
+		if cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeStandard {
+			retain := cfg.ExporterOptions.RetainSlots
 			threshold := cfg.SSVOptions.NetworkConfig.EstimatedCurrentSlot()
-			initSlotPruning(cmd.Context(), logger, storageMap, slotTickerProvider, threshold, retain)
+			initSlotPruning(cmd.Context(), storageMap, slotTickerProvider, threshold, retain)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -472,7 +479,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.SSVOptions.ValidatorOptions.Exporter {
+		if cfg.ExporterOptions.Enabled {
 			fixedSubnets = networkcommons.AllSubnets
 		}
 
@@ -485,6 +492,28 @@ var StartNodeCmd = &cobra.Command{
 			metadata.WithSyncInterval(cfg.SSVOptions.ValidatorOptions.MetadataUpdateInterval),
 		)
 		cfg.SSVOptions.ValidatorOptions.ValidatorSyncer = metadataSyncer
+
+		// Exporter duty tracing
+		var collector *dutytracer.Collector
+		if cfg.ExporterOptions.Enabled {
+			switch cfg.ExporterOptions.Mode {
+			case exporter.ModeArchive:
+				logger.Info("exporter mode: archive")
+				dstore := &dutytracer.DutyTraceStoreMetrics{
+					Store: dutytracestore.New(db),
+				}
+				collector = dutytracer.New(cmd.Context(), logger,
+					nodeStorage.ValidatorStore(), consensusClient,
+					dstore, networkConfig.BeaconConfig)
+
+				go collector.Start(cmd.Context(), slotTickerProvider)
+				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
+			case exporter.ModeStandard:
+				logger.Info("exporter mode: standard")
+			default:
+				logger.Fatal("invalid exporter configuration", zap.String("mode", cfg.ExporterOptions.Mode))
+			}
+		}
 
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
@@ -502,11 +531,11 @@ var StartNodeCmd = &cobra.Command{
 		}
 		cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler
 
-		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions, cfg.ExporterOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.ValidatorStore = nodeStorage.ValidatorStore()
 
-		operatorNode := operator.New(logger, cfg.SSVOptions, slotTickerProvider, storageMap)
+		operatorNode := operator.New(logger, cfg.SSVOptions, cfg.ExporterOptions, slotTickerProvider, storageMap)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(logger, db, cfg.MetricsAPIPort, cfg.EnableProfile, operatorNode)
@@ -611,9 +640,8 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				&handlers.Exporter{
-					ParticipantStores: storageMap,
-				},
+				handlers.NewExporter(logger, storageMap, collector, nodeStorage.ValidatorStore()),
+				cfg.ExporterOptions.Enabled && cfg.ExporterOptions.Mode == exporter.ModeArchive,
 			)
 			go func() {
 				err := apiServer.Run()
@@ -801,7 +829,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*badger.DB, error) {
+func setupBadgerDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
@@ -838,7 +866,7 @@ func setupBadgerDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	return db, nil
 }
 
-func setupPebbleDB(logger *zap.Logger, networkConfig networkconfig.NetworkConfig) (*pebble.DB, error) {
+func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
 
 	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
@@ -974,11 +1002,11 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 	return nil
 }
 
-func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
-	var ssvConfig networkconfig.SSVConfig
+func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSVConfig, error) {
+	var ssvConfig *networkconfig.SSVConfig
 
 	if cfg.SSVOptions.CustomNetwork != nil {
-		ssvConfig = *cfg.SSVOptions.CustomNetwork
+		ssvConfig = cfg.SSVOptions.CustomNetwork
 		logger.Info("using custom network config")
 	} else if cfg.SSVOptions.NetworkName != "" {
 		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
@@ -993,14 +1021,14 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.SSVConfig, error) {
 
 	if cfg.SSVOptions.CustomDomainType != "" {
 		if !strings.HasPrefix(cfg.SSVOptions.CustomDomainType, "0x") {
-			return networkconfig.SSVConfig{}, errors.New("custom domain type must be a hex string")
+			return nil, errors.New("custom domain type must be a hex string")
 		}
 		domainBytes, err := hex.DecodeString(cfg.SSVOptions.CustomDomainType[2:])
 		if err != nil {
-			return networkconfig.SSVConfig{}, errors.Wrap(err, "failed to decode custom domain type")
+			return nil, errors.Wrap(err, "failed to decode custom domain type")
 		}
 		if len(domainBytes) != 4 {
-			return networkconfig.SSVConfig{}, errors.New("custom domain type must be 4 bytes")
+			return nil, errors.New("custom domain type must be 4 bytes")
 		}
 
 		// https://github.com/ssvlabs/ssv/pull/1808 incremented the post-fork domain type by 1, so we have to maintain the compatibility.
@@ -1047,7 +1075,7 @@ func syncContractEvents(
 	logger *zap.Logger,
 	executionClient executionclient.Provider,
 	validatorCtrl validator.Controller,
-	networkConfig networkconfig.NetworkConfig,
+	networkConfig *networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
@@ -1173,7 +1201,7 @@ func startMetricsHandler(logger *zap.Logger, db basedb.Database, port int, enabl
 	}
 }
 
-func initSlotPruning(ctx context.Context, logger *zap.Logger, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
+func initSlotPruning(ctx context.Context, stores *ibftstorage.ParticipantStores, slotTickerProvider slotticker.Provider, slot phase0.Slot, retain uint64) {
 	var wg sync.WaitGroup
 
 	threshold := slot - phase0.Slot(retain)
