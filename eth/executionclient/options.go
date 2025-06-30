@@ -125,24 +125,3 @@ func WithHTTPLogClientMulti(addr string) OptionMulti {
 		s.httpLogClientAddr = addr
 	}
 }
-
-// WithAdaptiveBatch configures an ExecutionClient to use adaptive batching for log retrieval.
-// Adaptive batching dynamically adjusts the number of blocks processed per batch based on
-// the number of logs returned, helping to avoid RPC timeouts and memory issues while
-// maintaining optimal performance. The batcher increases batch size when few logs are found
-// and decreases it when many logs are returned.
-func WithAdaptiveBatch(cfg BatcherConfig) Option {
-	return func(s *ExecutionClient) {
-		s.batcher = NewAdaptiveBatcherWithConfig(cfg)
-	}
-}
-
-// WithAdaptiveBatchMulti configures a MultiClient to propagate adaptive batching configuration
-// to its underlying ExecutionClient instances. Unlike WithAdaptiveBatch, this option does not
-// create adaptive batchers at the MultiClient level - instead, it passes the configuration
-// to individual clients which handle the actual adaptive batching logic.
-func WithAdaptiveBatchMulti(cfg BatcherConfig) OptionMulti {
-	return func(s *MultiClient) {
-		s.batcherConfig = &cfg
-	}
-}

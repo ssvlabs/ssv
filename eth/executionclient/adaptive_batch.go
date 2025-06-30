@@ -4,119 +4,28 @@ import (
 	"sync/atomic"
 )
 
-// BatcherConfig contains configuration for adaptive batcher.
-type BatcherConfig struct {
-	InitialSize uint64
-	MinSize     uint64
-	MaxSize     uint64
-
-	// Scaling ratios (as percentages)
-	IncreaseRatio uint64 // e.g., 150 for 50% increase
-	DecreaseRatio uint64 // e.g., 70 for 30% decrease
-
-	// HighLogsThreshold defines the maximum number of logs that should be returned
-	// in a single batch before the batch size is reduced. When a log fetch returns
-	// more logs than this threshold, it indicates the batch size is too large and
-	// should be decreased to prevent RPC timeouts, memory issues, or hitting node
-	// query limits. Set to 0 to disable threshold-based reduction.
-	HighLogsThreshold uint32
-}
-
-// DefaultBatcherConfig returns default configuration.
-func DefaultBatcherConfig() BatcherConfig {
-	return BatcherConfig{
-		InitialSize:       DefaultBatchSize,
-		MinSize:           DefaultMinBatchSize,
-		MaxSize:           DefaultMaxBatchSize,
-		IncreaseRatio:     DefaultIncreaseRatio,
-		DecreaseRatio:     DefaultDecreaseRatio,
-		HighLogsThreshold: DefaultHighLogsThreshold,
-	}
-}
+// Internal constants for adaptive batching - not exposed to configuration
+const (
+	defaultInitialBatchSize = 500
+	defaultMinBatchSize     = 200
+	defaultMaxBatchSize     = 2000
+	growthFactor            = 125 // 25% increase (125% = 1.25x)
+	shrinkFactor            = 80  // 20% decrease (80% = 0.8x)
+	queryLimitFactor        = 50  // 50% decrease on query errors (50% = 0.5x)
+	highLogsThreshold       = 1000
+)
 
 // AdaptiveBatcher dynamically adjusts batch sizes based on operation performance.
+// This is an internal optimization mechanism not exposed to operators.
 // Thread-safe for concurrent use.
 type AdaptiveBatcher struct {
-	config BatcherConfig
-
 	size atomic.Uint64
 }
 
-// NewAdaptiveBatcher creates a new adaptive batcher with specified size limits.
-func NewAdaptiveBatcher(initial, min, max uint64) *AdaptiveBatcher {
-	if min == 0 {
-		min = DefaultMinBatchSize
-	}
-	if max == 0 {
-		max = DefaultMaxBatchSize
-	}
-	if initial == 0 {
-		initial = DefaultBatchSize
-	}
-
-	if initial < min {
-		initial = min
-	}
-	if initial > max {
-		initial = max
-	}
-
-	// Use default configuration with custom sizes
-	cfg := DefaultBatcherConfig()
-	cfg.InitialSize = initial
-	cfg.MinSize = min
-	cfg.MaxSize = max
-
-	ab := &AdaptiveBatcher{
-		config: cfg,
-	}
-
-	ab.size.Store(initial)
-
-	return ab
-}
-
-// NewAdaptiveBatcherWithConfig creates a new batcher with custom configuration.
-func NewAdaptiveBatcherWithConfig(cfg BatcherConfig) *AdaptiveBatcher {
-	if cfg.MinSize == 0 {
-		cfg.MinSize = DefaultMinBatchSize
-	}
-	if cfg.MaxSize == 0 {
-		cfg.MaxSize = DefaultMaxBatchSize
-	}
-	if cfg.InitialSize == 0 {
-		cfg.InitialSize = DefaultBatchSize
-	}
-	if cfg.IncreaseRatio == 0 {
-		cfg.IncreaseRatio = DefaultIncreaseRatio
-	}
-	if cfg.DecreaseRatio == 0 {
-		cfg.DecreaseRatio = DefaultDecreaseRatio
-	}
-	if cfg.HighLogsThreshold == 0 {
-		cfg.HighLogsThreshold = DefaultHighLogsThreshold
-	}
-
-	if cfg.InitialSize < cfg.MinSize {
-		cfg.InitialSize = cfg.MinSize
-	}
-	if cfg.InitialSize > cfg.MaxSize {
-		cfg.InitialSize = cfg.MaxSize
-	}
-
-	if cfg.IncreaseRatio <= 100 {
-		cfg.IncreaseRatio = DefaultIncreaseRatio
-	}
-	if cfg.DecreaseRatio >= 100 || cfg.DecreaseRatio == 0 {
-		cfg.DecreaseRatio = DefaultDecreaseRatio
-	}
-
-	ab := &AdaptiveBatcher{
-		config: cfg,
-	}
-
-	ab.size.Store(cfg.InitialSize)
-
+// NewAdaptiveBatcher creates a new adaptive batcher with default internal settings.
+func NewAdaptiveBatcher() *AdaptiveBatcher {
+	ab := &AdaptiveBatcher{}
+	ab.size.Store(defaultInitialBatchSize)
 	return ab
 }
 
@@ -125,51 +34,51 @@ func (ab *AdaptiveBatcher) GetSize() uint64 {
 	return ab.size.Load()
 }
 
-// RecordResult adapts batch size based on the number of logs returned.
-// This is the main method for log-based adaptation:
-// - logsCount == 0: increase batch size (empty result, can handle more)
-// - logsCount > HighLogsThreshold: decrease batch size (too many results)
-// - otherwise: no change
-func (ab *AdaptiveBatcher) RecordResult(logsCount int) {
-	if logsCount == 0 {
-		ab.increase()
-	} else if logsCount > int(ab.config.HighLogsThreshold) {
-		ab.decrease()
+// OnEmptyResult adjusts batch size when no logs are returned.
+// Increases batch size since we can handle more blocks.
+func (ab *AdaptiveBatcher) OnEmptyResult() {
+	ab.increaseByFactor(growthFactor)
+}
+
+// OnHighLogCount adjusts batch size based on the number of logs returned.
+// Decreases batch size if the log count exceeds the threshold.
+func (ab *AdaptiveBatcher) OnHighLogCount(logCount int) {
+	if logCount > highLogsThreshold {
+		ab.decreaseByFactor(shrinkFactor)
 	}
 }
 
-// RecordFailure records a failed operation and decreases batch size.
-func (ab *AdaptiveBatcher) RecordFailure() {
-	ab.decrease()
+// OnQueryLimitError adjusts batch size when RPC or WS query limits are exceeded.
+// Aggressively decreases batch size for limit-related errors.
+func (ab *AdaptiveBatcher) OnQueryLimitError() {
+	ab.decreaseByFactor(queryLimitFactor)
 }
 
-// Reset resets the batcher to initial configuration.
+// Reset resets the batcher to the initial batch size.
 func (ab *AdaptiveBatcher) Reset() {
-	ab.size.Store(ab.config.InitialSize)
+	ab.size.Store(defaultInitialBatchSize)
 }
 
-// Config returns the current configuration.
-func (ab *AdaptiveBatcher) Config() BatcherConfig {
-	return ab.config
-}
-
-// increase the batch size according to configured ratio.
-func (ab *AdaptiveBatcher) increase() {
+// increaseByFactor increases the batch size by the given factor (as percentage).
+func (ab *AdaptiveBatcher) increaseByFactor(factor uint64) {
 	current := ab.size.Load()
 
-	// Calculate increase: new = current * ratio / 100
-	newSize := (current * ab.config.IncreaseRatio) / 100
+	// Calculate increase: new = current * factor / 100
+	newSize := (current * factor) / 100
 
+	// Ensure at least 1 block increase if calculation would result in the same size
 	if newSize == current {
 		newSize = current + 1
 	}
 
+	// Handle overflow protection
 	if newSize < current {
-		newSize = ab.config.MaxSize
+		newSize = defaultMaxBatchSize
 	}
 
-	if newSize > ab.config.MaxSize {
-		newSize = ab.config.MaxSize
+	// Cap at maximum
+	if newSize > defaultMaxBatchSize {
+		newSize = defaultMaxBatchSize
 	}
 
 	if newSize != current {
@@ -177,19 +86,21 @@ func (ab *AdaptiveBatcher) increase() {
 	}
 }
 
-// decrease the batch size according to configured ratio.
-func (ab *AdaptiveBatcher) decrease() {
+// decreaseByFactor decreases the batch size by the given factor (as percentage).
+func (ab *AdaptiveBatcher) decreaseByFactor(factor uint64) {
 	current := ab.size.Load()
 
-	// Calculate decrease: new = current * ratio / 100
-	newSize := (current * ab.config.DecreaseRatio) / 100
+	// Calculate decrease: new = current * factor / 100
+	newSize := (current * factor) / 100
 
-	if newSize == current && current > ab.config.MinSize {
+	// Ensure at least 1 block decrease if calculation would result in the same size
+	if newSize == current && current > defaultMinBatchSize {
 		newSize = current - 1
 	}
 
-	if newSize < ab.config.MinSize {
-		newSize = ab.config.MinSize
+	// Cap at minimum
+	if newSize < defaultMinBatchSize {
+		newSize = defaultMinBatchSize
 	}
 
 	if newSize != current {

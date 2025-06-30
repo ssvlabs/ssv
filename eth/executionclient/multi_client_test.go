@@ -1404,26 +1404,6 @@ func (d *dummySubscription) Err() <-chan error {
 func TestMultiClientOptions(t *testing.T) {
 	t.Parallel()
 
-	t.Run("WithAdaptiveBatchMulti", func(t *testing.T) {
-		t.Parallel()
-
-		mc := &MultiClient{}
-		opt := WithAdaptiveBatchMulti(BatcherConfig{
-			InitialSize:       1000,
-			MinSize:           200,
-			MaxSize:           2000,
-			IncreaseRatio:     DefaultIncreaseRatio,
-			DecreaseRatio:     DefaultDecreaseRatio,
-			HighLogsThreshold: DefaultHighLogsThreshold,
-		})
-		opt(mc)
-
-		assert.NotNil(t, mc.batcherConfig)
-		assert.Equal(t, uint64(1000), mc.batcherConfig.InitialSize)
-		assert.Equal(t, uint64(200), mc.batcherConfig.MinSize)
-		assert.Equal(t, uint64(2000), mc.batcherConfig.MaxSize)
-	})
-
 	t.Run("WithHTTPLogClientMulti", func(t *testing.T) {
 		t.Parallel()
 

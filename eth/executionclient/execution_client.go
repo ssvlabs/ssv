@@ -94,7 +94,7 @@ func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, o
 	}
 
 	if client.batcher == nil {
-		client.batcher = NewAdaptiveBatcher(DefaultBatchSize, DefaultMinBatchSize, DefaultMaxBatchSize)
+		client.batcher = NewAdaptiveBatcher()
 	}
 
 	if client.httpLogClientAddr != "" {
@@ -188,12 +188,15 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			results, err := ec.subdivideLogFetch(ctx, query)
 			if err != nil {
-				ec.batcher.RecordFailure()
 				errCh <- err
 				return
 			}
 
-			ec.batcher.RecordResult(len(results))
+			if len(results) == 0 {
+				ec.batcher.OnEmptyResult()
+			} else {
+				ec.batcher.OnHighLogCount(len(results))
+			}
 
 			ec.logger.Info("fetched registry events",
 				fields.FromBlock(fromBlock),
@@ -264,7 +267,7 @@ func (ec *ExecutionClient) subdivideLogFetch(ctx context.Context, q ethereum.Fil
 
 	// handle: RPC query limit and WS read limit errors
 	if isRPCQueryLimitError(err) || isWSReadLimitError(err) {
-		ec.batcher.RecordFailure()
+		ec.batcher.OnQueryLimitError()
 
 		if q.FromBlock == nil || q.ToBlock == nil {
 			return nil, err
