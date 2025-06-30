@@ -432,7 +432,7 @@ func (cr *CommitteeRunner) signAttesterDuty(
 	version spec.DataVersion,
 	logger *zap.Logger) (isBlocked bool, partialSig *spectypes.PartialSignatureMessage, err error) {
 	ctx, span := tracer.Start(ctx,
-		observability.InstrumentName(observabilityNamespace, "runner.process_committee_consensus"),
+		observability.InstrumentName(observabilityNamespace, "runner.sign_attester_duty"),
 		trace.WithAttributes(
 			observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
 			observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
