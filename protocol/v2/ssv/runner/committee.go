@@ -611,9 +611,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
 
-			const eventMsg = "🧩 reconstructed partial signatures committee"
-			span.AddEvent(eventMsg)
-			vlogger.Debug(eventMsg, zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
+			vlogger.Debug("🧩 reconstructed partial signatures committee", zap.Uint64s("signers", getPostConsensusCommitteeSigners(cr.BaseRunner.State, root)))
 			// Get the beacon object related to root
 			validatorObjs, exists := beaconObjects[validator]
 			if !exists {
@@ -660,12 +658,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 
 	// Submit multiple attestations
 	attestations := make([]*spec.VersionedAttestation, 0, len(attestationsToSubmit))
+
+	span.AddEvent("adding attestations to submit to beacon")
 	for _, att := range attestationsToSubmit {
 		if att != nil && att.ValidatorIndex != nil {
-			span.AddEvent("adding attestation to submit to beacon", trace.WithAttributes(
-				observability.ValidatorIndexAttribute(*att.ValidatorIndex),
-			))
-
 			attestations = append(attestations, att)
 		}
 	}
