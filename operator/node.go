@@ -3,10 +3,14 @@ package operator
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/exporter/api"
 	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
@@ -49,6 +53,7 @@ type Node struct {
 	context          context.Context
 	validatorsCtrl   validator.Controller
 	validatorOptions validator.ControllerOptions
+	exporterOptions  exporter.Options
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  executionclient.Provider
 	net              network.P2PNetwork
@@ -62,12 +67,13 @@ type Node struct {
 }
 
 // New is the constructor of Node
-func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
+func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTickerProvider slotticker.Provider, qbftStorage *qbftstorage.ParticipantStores) *Node {
 	node := &Node{
 		logger:           logger.Named(logging.NameOperator),
 		context:          opts.Context,
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
+		exporterOptions:  exporterOpts,
 		network:          opts.NetworkConfig,
 		consensusClient:  opts.BeaconNode,
 		executionClient:  opts.ExecutionClient,
@@ -108,7 +114,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 // Start starts to stream duties and run IBFT instances
 func (n *Node) Start() error {
 	ctx := n.context // TODO: pass it to Start
-	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+	n.logger.Info("all required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
 		err := n.startWSServer()
@@ -118,15 +124,17 @@ func (n *Node) Start() error {
 		}
 	}()
 
-	// Start the duty scheduler, and a background goroutine to crash the node
-	// in case there were any errors.
-	if err := n.dutyScheduler.Start(ctx); err != nil {
-		return fmt.Errorf("failed to run duty scheduler: %w", err)
+	if !n.exporterOptions.Enabled {
+		// Start the duty scheduler, and a background goroutine to crash the node
+		// in case there were any errors.
+		if err := n.dutyScheduler.Start(ctx); err != nil {
+			return fmt.Errorf("failed to run duty scheduler: %w", err)
+		}
 	}
 
 	n.validatorsCtrl.StartNetworkHandlers()
 
-	if n.validatorOptions.Exporter {
+	if n.exporterOptions.Enabled {
 		// Subscribe to all subnets.
 		err := n.net.SubscribeAll()
 		if err != nil {
@@ -148,8 +156,16 @@ func (n *Node) Start() error {
 		}
 	}()
 
-	if err := n.dutyScheduler.Wait(); err != nil {
-		n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
+	if n.exporterOptions.Enabled {
+		n.logger.Info("exporter is enabled, duty scheduler will not run")
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+		n.logger.Info("received shutdown signal")
+	} else {
+		if err := n.dutyScheduler.Wait(); err != nil {
+			n.logger.Fatal("duty scheduler exited with error", zap.Error(err))
+		}
 	}
 
 	return nil

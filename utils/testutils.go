@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/mock/gomock"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -75,6 +76,9 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 			return start
 		},
 	).AnyTimes()
+	mockNetwork.EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(func(timeVal time.Time) phase0.Slot {
+		return beaconNetwork.EstimatedSlotAtTime(timeVal.Unix())
+	}).AnyTimes()
 
 	mockNetwork.EXPECT().GetSlotDuration().DoAndReturn(
 		func() time.Duration {
@@ -101,6 +105,8 @@ func SetupMockNetworkConfig(t *testing.T, domainType spectypes.DomainType, curre
 	mockNetwork.EXPECT().GetDomainType().Return(domainType).AnyTimes()
 
 	mockNetwork.EXPECT().GetNetworkName().Return(string(beaconNetwork)).AnyTimes()
+
+	mockNetwork.EXPECT().GetGasLimit36Epoch().Return(phase0.Epoch(0)).AnyTimes()
 
 	return mockNetwork
 }
