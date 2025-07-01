@@ -3,6 +3,7 @@ package keys
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/hex"
 	"math/big"
 	"testing"
 
@@ -143,7 +144,7 @@ func TestHashing(t *testing.T) {
 		privKey := getTestPrivateKeyFromPEM(t)
 		hash := privKey.StorageHash()
 		require.NotEmpty(t, hash, "Storage hash should not be empty")
-		require.Equal(t, "eaba9e5320c1ef8023d74103e6b6e9828afce89442f2755cde217c06ccacf74a", hash,
+		require.Equal(t, "eaba9e5320c1ef8023d74103e6b6e9828afce89442f2755cde217c06ccacf74a", hex.EncodeToString(hash),
 			"Storage hash does not match expected value")
 	})
 
@@ -153,8 +154,26 @@ func TestHashing(t *testing.T) {
 		privKey := getTestPrivateKeyFromPEM(t)
 		hash := privKey.EKMHash()
 		require.NotEmpty(t, hash, "EKM hash should not be empty")
-		require.Equal(t, "6db24021c74d4f5784a0c1a6a519f9ffcb3996be5c0a3d9d4a6d8a567f9cc38a", hash,
+		require.Equal(t, "6db24021c74d4f5784a0c1a6a519f9ffcb3996be5c0a3d9d4a6d8a567f9cc38a", hex.EncodeToString(hash),
 			"EKM hash does not match expected value")
+	})
+
+	t.Run("EKMEncryptionKey", func(t *testing.T) {
+		t.Parallel()
+
+		privKey := getTestPrivateKeyFromPEM(t)
+		encryptionKey, err := privKey.EKMEncryptionKey()
+		require.NoError(t, err)
+		require.NotEmpty(t, encryptionKey)
+		require.Len(t, encryptionKey, 32)
+
+		expectedKey := "91cd046be36747434d22b5db5d3b5a1e270b3281aef5ef37359dab7b6817595c"
+		require.Equal(t, expectedKey, hex.EncodeToString(encryptionKey))
+
+		// Test that the same key can be derived again
+		encryptionKey2, err := privKey.EKMEncryptionKey()
+		require.NoError(t, err)
+		require.Equal(t, encryptionKey, encryptionKey2)
 	})
 }
 
