@@ -42,3 +42,27 @@ WITH_PARALLEL_SUBMISSIONS=true
 ```
 
 Note: Multiple Beacon nodes are required for WAD to be effective. Parallel submissions are recommended but not required.
+
+
+## License & Attribution
+
+Portions of this feature are adapted from the [Vouch](https://github.com/attestantio/vouch) project:
+
+> Copyright © The Vouch Project Authors
+> Licensed under the Apache License, Version 2.0
+
+## Changes Made
+
+The following modifications and improvements were made compared to the original Vouch codebase:
+
+- The *Block Root to Slot* mapping, populated from Consensus Client Head Events (used for the Attestation Data Scoring feature), is implemented differently. This decision was made to better integrate with the SSV codebase.
+- Introduced a timeout for BeaconBlockHeader HTTP calls, set to one-fourth of "soft" timeout. This handles scenarios where the cache was not populated from Head events. This change was necessary because the Consensus Client's BeaconBlockHeader endpoint has proven to be highly unreliable, with long response times that negatively impacted the overall reliability of the feature.
+- Implemented retries with delays when fetching *Block Root to Slot* from either the cache or the Consensus Client HTTP endpoint. This significantly improved reliability. The main motivation: Head events were occasionally received milliseconds after the Attestation Data fetch attempt, reducing scoring accuracy. Introducing retries with static delays and a timeout mitigated this issue.
+- Refactored soft and hard timeout handling loops for improved clarity. Additional logging was added to monitor how frequently Attestation Data is overridden due to a higher score.
+- Added `nil` checks for the Attestation Data response to improve safety.
+- Added validation logic for BeaconBlockHeader responses.
+- The `blockRootToSlotCache` eviction logic was reimplemented using an external library to better align with the SSV codebase's caching patterns.
+
+## Acknowledgements
+
+Special thanks to the [Vouch](https://github.com/attestantio/vouch) maintainers and contributors for their open-source work, which served as the foundation for this feature.
