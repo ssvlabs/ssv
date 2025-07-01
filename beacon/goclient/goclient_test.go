@@ -247,7 +247,7 @@ func TestHealthy(t *testing.T) {
 			},
 		}
 
-		err := runHealthyTest(t, syncResponseList, 2, false)
+		err := runHealthyTest(t, syncResponseList, 2, true)
 		require.NoError(t, err)
 	})
 
@@ -269,7 +269,7 @@ func TestHealthy(t *testing.T) {
 			},
 		}
 
-		err := runHealthyTest(t, syncResponseList, 2, false)
+		err := runHealthyTest(t, syncResponseList, 2, true)
 		require.NoError(t, err)
 	})
 
@@ -291,8 +291,30 @@ func TestHealthy(t *testing.T) {
 			},
 		}
 
-		err := runHealthyTest(t, syncResponseList, 2, false)
+		err := runHealthyTest(t, syncResponseList, 2, true)
 		require.NoError(t, err)
+	})
+
+	t.Run("multi client: concurrent check, no synced", func(t *testing.T) {
+		t.Parallel()
+
+		syncResponseList := []syncResponse{
+			{
+				state: &v1.SyncState{
+					SyncDistance: phase0.Slot(3),
+					IsSyncing:    true,
+				},
+			},
+			{
+				state: &v1.SyncState{
+					SyncDistance: phase0.Slot(4),
+					IsSyncing:    true,
+				},
+			},
+		}
+
+		err := runHealthyTest(t, syncResponseList, 2, true)
+		require.ErrorIs(t, err, errSyncing)
 	})
 }
 
@@ -377,6 +399,8 @@ func runHealthyTest(
 			}
 		}()
 	}
+
+	wg.Wait()
 
 	return errs
 }
