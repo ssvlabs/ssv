@@ -419,7 +419,7 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkc
 var errSyncing = errors.New("syncing")
 
 // Healthy returns if the consensus client (for single client) or at least one of consensus clients (for multi client)
-// is currently healthy: responds to requests, not in the syncing state, not optimistic
+// is currently healthy. It's healthy if it: responds to requests, is not in the syncing state, is not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
