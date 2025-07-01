@@ -845,34 +845,9 @@ func setupBadgerDB(
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	migrationOpts := migrations.Options{
-		Db:              db,
-		DbPath:          cfg.DBOptions.Path,
-		BeaconConfig:    beaconConfig,
-		OperatorPrivKey: operatorPrivKey,
+	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, cfg.DBOptions.Path); err != nil {
+		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
-	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-	if applied == 0 {
-		return db, nil
-	}
-
-	// If migrations were applied, we run a full garbage collection cycle
-	// to reclaim any space that may have been freed up.
-	start := time.Now()
-
-	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
-	defer cancel()
-
-	logger.Debug("running full GC cycle...", fields.Duration(start))
-
-	if err := db.FullGC(ctx); err != nil {
-		return nil, fmt.Errorf("failed to collect garbage: %w", err)
-	}
-
-	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil
 }
@@ -889,6 +864,20 @@ func setupPebbleDB(
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
+	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, dbPath); err != nil {
+		return nil, fmt.Errorf("apply migrations: %w", err)
+	}
+
+	return db, nil
+}
+
+func applyMigrations(
+	logger *zap.Logger,
+	beaconConfig *networkconfig.BeaconConfig,
+	operatorPrivKey keys.OperatorPrivateKey,
+	db basedb.Database,
+	dbPath string,
+) error {
 	migrationOpts := migrations.Options{
 		Db:              db,
 		DbPath:          dbPath,
@@ -898,16 +887,14 @@ func setupPebbleDB(
 
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
+		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 	if applied == 0 {
-		return db, nil
+		return nil
 	}
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	// Close & reopen the database to trigger any unknown internal
-	// startup/shutdown procedures that the storage engine may have.
 	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
@@ -916,12 +903,12 @@ func setupPebbleDB(
 	logger.Debug("running full GC cycle...", fields.Duration(start))
 
 	if err := db.FullGC(ctx); err != nil {
-		return nil, fmt.Errorf("failed to collect garbage: %w", err)
+		return fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
-	return db, nil
+	return nil
 }
 
 func setupOperatorDataStore(
