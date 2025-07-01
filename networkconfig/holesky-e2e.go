@@ -15,6 +15,7 @@ var HoleskyE2ESSV = &SSVConfig{
 	RegistryContractAddr:    ethcommon.HexToAddress("0x58410bef803ecd7e63b23664c586a6db72daf59c"),
 	RegistrySyncOffset:      big.NewInt(405579),
 	Bootnodes:               []string{},
+	MaxF:                    4,
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
 	GasLimit36Epoch:         0,
 }

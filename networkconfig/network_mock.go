@@ -408,6 +408,20 @@ func (mr *MockNetworkMockRecorder) LastSlotOfSyncPeriod(period any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastSlotOfSyncPeriod", reflect.TypeOf((*MockNetwork)(nil).LastSlotOfSyncPeriod), period)
 }
 
+// MaxOperators mocks base method.
+func (m *MockNetwork) MaxOperators() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaxOperators")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// MaxOperators indicates an expected call of MaxOperators.
+func (mr *MockNetworkMockRecorder) MaxOperators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaxOperators", reflect.TypeOf((*MockNetwork)(nil).MaxOperators))
+}
+
 // NetworkName mocks base method.
 func (m *MockNetwork) NetworkName() string {
 	m.ctrl.T.Helper()
