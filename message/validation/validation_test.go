@@ -52,7 +52,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	ns, err := storage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
 	netCfg := networkconfig.TestNetwork
@@ -61,7 +61,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	shares := generateShares(t, ks, ns, netCfg)
 
 	dutyStore := dutystore.New()
-	validatorStore := mocks.NewMockValidatorIndices(ctrl)
+	validatorStore := mocks.NewMockValidatorStore(ctrl)
 	operators := mocks.NewMockOperators(ctrl)
 
 	committee := slices.Collect(maps.Keys(ks.Shares))
@@ -69,7 +69,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	committeeID := shares.active.CommitteeID()
 
-	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.IndexedCommittee, bool) {
+	validatorStore.EXPECT().GetCommittee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.CommitteeSnapshot, bool) {
 		if id == committeeID {
 
 			share1 := cloneSSVShare(t, shares.active)
@@ -78,18 +78,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			share3 := cloneSSVShare(t, share2)
 			share3.ValidatorIndex = share2.ValidatorIndex + 1
 
-			return &registrystorage.IndexedCommittee{
+			return &registrystorage.CommitteeSnapshot{
 				ID:        id,
 				Operators: committee,
-				Validators: []*ssvtypes.SSVShare{
-					share1,
-					share2,
-					share3,
-				},
-				Indices: []phase0.ValidatorIndex{
-					share1.ValidatorIndex,
-					share2.ValidatorIndex,
-					share3.ValidatorIndex,
+				Validators: []*registrystorage.ValidatorSnapshot{
+					{Share: *share1},
+					{Share: *share2},
+					{Share: *share3},
 				},
 			}, true
 		}
@@ -97,7 +92,15 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		return nil, false
 	}).AnyTimes()
 
-	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pubKey []byte) (*ssvtypes.SSVShare, bool) {
+	validatorStore.EXPECT().GetValidator(gomock.Any()).DoAndReturn(func(id registrystorage.ValidatorID) (*registrystorage.ValidatorSnapshot, bool) {
+		// Extract public key from ValidatorID
+		var pubKey []byte
+		if pk, ok := id.(registrystorage.ValidatorPubKey); ok {
+			pubKey = pk.Bytes()
+		} else {
+			return nil, false
+		}
+
 		for _, share := range []*ssvtypes.SSVShare{
 			shares.active,
 			shares.liquidated,
@@ -107,7 +110,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			shares.noMetadata,
 		} {
 			if bytes.Equal(share.ValidatorPubKey[:], pubKey) {
-				return share, true
+				return &registrystorage.ValidatorSnapshot{Share: *share}, true
 			}
 		}
 		return nil, false
@@ -388,7 +391,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		unknown := spectypes.NewMsgID(netCfg.DomainType, sk.PublicKey().Marshal(), nonCommitteeRole)
 		signedSSVMessage := generateSignedMessage(ks, unknown, slot)
 
-		_, exists := validatorStore.Validator(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID())
+		dutyExecutorID := signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()
+		validatorID := registrystorage.ValidatorPubKey(dutyExecutorID)
+		_, exists := validatorStore.GetValidator(validatorID)
 		require.False(t, exists)
 
 		topicID := commons.CommitteeTopicID(shares.active.CommitteeID())[0]
