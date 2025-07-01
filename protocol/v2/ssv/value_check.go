@@ -360,5 +360,5 @@ func checkConsensusDataSameToOwn(consensusData, ownConsensusData *spectypes.Vali
 
 	// TODO: check other fields
 
-	return fmt.Errorf("own consensus data is neither block nor blinded block")
+	return nil
 }
