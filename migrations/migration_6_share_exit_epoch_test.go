@@ -96,7 +96,7 @@ func assertMigratedShares(t *testing.T, db basedb.Database, key []byte, seededSh
 	var persistedShares []*storage.Share
 	err := db.GetAll(key, func(i int, o basedb.Obj) error {
 		share := &storage.Share{}
-		err := share.UnmarshalSSZ(o.Value)
+		err := share.UnmarshalSSZ(o.Value())
 		require.NoError(t, err)
 		persistedShares = append(persistedShares, share)
 		return nil
@@ -118,8 +118,13 @@ func assertMigratedShares(t *testing.T, db basedb.Database, key []byte, seededSh
 }
 
 func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*migration_6_OldStorageShare, error) {
+	type dbObject struct{
+		key   []byte
+		value []byte
+	}
+
 	var (
-		dbShares     []basedb.Obj
+		dbShares     []dbObject
 		seededShares []*migration_6_OldStorageShare
 	)
 	for range numOfItems {
@@ -143,14 +148,14 @@ func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*mig
 			return nil, err
 		}
 
-		dbShares = append(dbShares, basedb.Obj{
-			Key:   append(oldSharesPrefix, share.ValidatorPubKey[:]...),
-			Value: shareBytes,
+		dbShares = append(dbShares, dbObject{
+			key:   append(oldSharesPrefix, share.ValidatorPubKey[:]...),
+			value: shareBytes,
 		})
 	}
 
-	err := db.SetMany(storageKey, len(dbShares), func(i int) (basedb.Obj, error) {
-		return dbShares[i], nil
+	err := db.SetMany(storageKey, len(dbShares), func(i int) (key, valye []byte, err error) {
+		return dbShares[i].key, dbShares[i].value, nil
 	})
 
 	return seededShares, err

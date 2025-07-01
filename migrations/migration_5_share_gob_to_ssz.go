@@ -33,19 +33,23 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			logger.Info("migration completed", zap.Int("gob_shares_total", sharesGOBTotal))
 		}()
 
+		type dbObject struct {
+			key   []byte
+			value []byte
+		}
 		// sharesSSZEncoded is a bunch of updates this migration will need to perform, we cannot do them
 		// all in a single transaction (because there is a limit on how large a single transaction can be)
 		// so we'll use SetMany func that will split up the data we want to update into batches committing
 		// each batch in a separate transaction. I guess that makes this migration non-atomic, but since
 		// this migration is idempotent atomicity isn't required (we can re-apply it however many times
 		// we like without "breaking" anything)
-		sharesSSZEncoded := make([]basedb.Obj, 0)
+		sharesSSZEncoded := make([]dbObject, 0)
 
 		// sharesGOB maps share ID to GOB-encoded shares we already have stored in DB
 		sharesGOB := make(map[string]*storageShareGOB)
 		err = opt.Db.GetAll(append(opstorage.OperatorStoragePrefix, sharesPrefixGOB...), func(i int, obj basedb.Obj) error {
 			shareGOB := &storageShareGOB{}
-			if err := shareGOB.Decode(obj.Value); err != nil {
+			if err := shareGOB.Decode(obj.Value()); err != nil {
 				return fmt.Errorf("decode gob share: %w", err)
 			}
 			sID := shareID(shareGOB.ValidatorPubKey)
@@ -63,9 +67,9 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			if err != nil {
 				return fmt.Errorf("encode ssz share: %w", err)
 			}
-			sharesSSZEncoded = append(sharesSSZEncoded, basedb.Obj{
-				Key:   key,
-				Value: value,
+			sharesSSZEncoded = append(sharesSSZEncoded, dbObject{
+				key:   key,
+				value: value,
 			})
 			return nil
 		})
@@ -78,8 +82,8 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 			return nil // we won't be creating any SSZ shares
 		}
 
-		if err := opt.Db.SetMany(opstorage.OperatorStoragePrefix, len(sharesSSZEncoded), func(i int) (basedb.Obj, error) {
-			return sharesSSZEncoded[i], nil
+		if err := opt.Db.SetMany(opstorage.OperatorStoragePrefix, len(sharesSSZEncoded), func(i int) (key, value []byte, err error) {
+			return sharesSSZEncoded[i].key, sharesSSZEncoded[i].value, nil
 		}); err != nil {
 			return fmt.Errorf("SetMany: %w", err)
 		}
@@ -87,7 +91,7 @@ var migration_5_change_share_format_from_gob_to_ssz = Migration{
 		sharesSSZTotal := 0
 		if err := opt.Db.GetAll(storage.SharesDBPrefix(opstorage.OperatorStoragePrefix), func(i int, obj basedb.Obj) error {
 			shareSSZ := &storage.Share{}
-			err := shareSSZ.Decode(obj.Value)
+			err := shareSSZ.Decode(obj.Value())
 			if err != nil {
 				return fmt.Errorf("decode ssz share: %w", err)
 			}

@@ -118,15 +118,15 @@ func (b *DB) Set(prefix []byte, key []byte, value []byte) error {
 }
 
 // SetMany save many values with the given keys in a single badger transaction
-func (b *DB) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+func (b *DB) SetMany(prefix []byte, n int, next func(int) (key, value []byte, err error)) error {
 	wb := b.db.NewWriteBatch()
-	for i := 0; i < n; i++ {
-		item, err := next(i)
+	for i := range n {
+		key, value, err := next(i)
 		if err != nil {
 			wb.Cancel()
 			return err
 		}
-		if err := wb.Set(append(prefix, item.Key...), item.Value); err != nil {
+		if err := wb.Set(append(prefix, key...), value); err != nil {
 			wb.Cancel()
 			return err
 		}
@@ -268,9 +268,9 @@ func (b *DB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) func(
 				b.logger.Error("failed to copy value", zap.Error(err))
 				continue
 			}
-			if err := handler(i, basedb.Obj{
-				Key:   trimmedResKey,
-				Value: val,
+			if err := handler(i, Obj{
+				key:   trimmedResKey,
+				value: val,
 			}); err != nil {
 				return err
 			}
@@ -299,9 +299,9 @@ func (b *DB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb.Obj) 
 			}
 			cp = make([]byte, len(value))
 			copy(cp, value)
-			if err := iterator(basedb.Obj{
-				Key:   k,
-				Value: cp,
+			if err := iterator(Obj{
+				key:   k,
+				value: cp,
 			}); err != nil {
 				return err
 			}

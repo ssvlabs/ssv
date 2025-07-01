@@ -48,20 +48,17 @@ func (s *DutyTraceStore) SaveValidatorDuty(dto *model.ValidatorDutyTrace) error 
 }
 
 func (s *DutyTraceStore) SaveValidatorDuties(duties []*model.ValidatorDutyTrace) error {
-	return s.db.SetMany(nil, len(duties), func(i int) (basedb.Obj, error) {
-		value, err := duties[i].MarshalSSZ()
+	return s.db.SetMany(nil, len(duties), func(i int) (key, value []byte, err error) {
+		value, err = duties[i].MarshalSSZ()
 		if err != nil {
-			return basedb.Obj{}, fmt.Errorf("marshall committee duty: %w", err)
+			return nil, nil, fmt.Errorf("marshall committee duty: %w", err)
 		}
 		role := duties[i].Role
 		slot := duties[i].Slot
 		index := duties[i].Validator
 
-		key := s.makeValidatorPrefix(slot, role, index)
-		return basedb.Obj{
-			Key:   key,
-			Value: value,
-		}, nil
+		key = s.makeValidatorPrefix(slot, role, index)
+		return key, value, nil
 	})
 }
 
@@ -76,7 +73,7 @@ func (s *DutyTraceStore) GetValidatorDuty(slot phase0.Slot, role spectypes.Beaco
 	}
 
 	duty := new(model.ValidatorDutyTrace)
-	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+	if err := duty.UnmarshalSSZ(obj.Value()); err != nil {
 		return nil, fmt.Errorf("unmarshall validator duty: %w", err)
 	}
 
@@ -87,7 +84,7 @@ func (s *DutyTraceStore) GetValidatorDuties(role spectypes.BeaconRole, slot phas
 	prefix := s.makeValidatorPrefix(slot, role)
 	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
 		duty := new(model.ValidatorDutyTrace)
-		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+		if err := duty.UnmarshalSSZ(obj.Value()); err != nil {
 			return fmt.Errorf("unmarshall validator duty: %w", err)
 		}
 		duties = append(duties, duty)
@@ -111,15 +108,15 @@ func (s *DutyTraceStore) GetCommitteeDutyLink(slot phase0.Slot, index phase0.Val
 		return spectypes.CommitteeID{}, ErrNotFound
 	}
 
-	return spectypes.CommitteeID(obj.Value), nil
+	return spectypes.CommitteeID(obj.Value()), nil
 }
 
 func (s *DutyTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) (links []*model.CommitteeDutyLink, err error) {
 	prefix := s.makeValidatorCommitteePrefix(slot)
 	err = s.db.GetAll(prefix, func(_ int, obj basedb.Obj) error {
 		var committeeID spectypes.CommitteeID
-		copy(committeeID[:], obj.Value)
-		index := binary.LittleEndian.Uint64(obj.Key)
+		copy(committeeID[:], obj.Value())
+		index := binary.LittleEndian.Uint64(obj.Key())
 		links = append(links, &model.CommitteeDutyLink{
 			ValidatorIndex: phase0.ValidatorIndex(index),
 			CommitteeID:    committeeID,
@@ -159,26 +156,20 @@ func (s *DutyTraceStore) SaveCommitteeDutyLinks(slot phase0.Slot, linkMap map[ph
 		})
 	}
 
-	return s.db.SetMany(prefix, len(links), func(i int) (basedb.Obj, error) {
-		return basedb.Obj{
-			Key:   uInt64ToByteSlice(uint64(links[i].Index)),
-			Value: links[i].ID[:],
-		}, nil
+	return s.db.SetMany(prefix, len(links), func(i int) (key, value []byte, err error) {
+		return uInt64ToByteSlice(uint64(links[i].Index)), links[i].ID[:], nil
 	})
 }
 
 func (s *DutyTraceStore) SaveCommitteeDuties(slot phase0.Slot, duties []*model.CommitteeDutyTrace) error {
 	prefix := s.makeCommitteeSlotPrefix(slot)
 
-	return s.db.SetMany(prefix, len(duties), func(i int) (basedb.Obj, error) {
-		value, err := duties[i].MarshalSSZ()
+	return s.db.SetMany(prefix, len(duties), func(i int) (key, value []byte, err error) {
+		value, err = duties[i].MarshalSSZ()
 		if err != nil {
-			return basedb.Obj{}, fmt.Errorf("marshall committee duty: %w", err)
+			return nil, nil, fmt.Errorf("marshall committee duty: %w", err)
 		}
-		return basedb.Obj{
-			Value: value,
-			Key:   duties[i].CommitteeID[:],
-		}, nil
+		return value, duties[i].CommitteeID[:], nil
 	})
 }
 
@@ -203,7 +194,7 @@ func (s *DutyTraceStore) GetCommitteeDuties(slot phase0.Slot) ([]*model.Committe
 	var duties []*model.CommitteeDutyTrace
 	err := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
 		duty := new(model.CommitteeDutyTrace)
-		if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+		if err := duty.UnmarshalSSZ(obj.Value()); err != nil {
 			return fmt.Errorf("unmarshall committee duty: %w", err)
 		}
 		duties = append(duties, duty)
@@ -228,7 +219,7 @@ func (s *DutyTraceStore) GetCommitteeDuty(slot phase0.Slot, committeeID spectype
 	}
 
 	duty = new(model.CommitteeDutyTrace)
-	if err := duty.UnmarshalSSZ(obj.Value); err != nil {
+	if err := duty.UnmarshalSSZ(obj.Value()); err != nil {
 		return nil, fmt.Errorf("unmarshall committee duty: %w", err)
 	}
 

@@ -25,7 +25,7 @@ type Reader interface {
 type ReadWriter interface {
 	Reader
 	Set(prefix []byte, key []byte, value []byte) error
-	SetMany(prefix []byte, n int, next func(int) (Obj, error)) error
+	SetMany(prefix []byte, n int, next func(int) (key, value []byte, err error)) error
 	Delete(prefix []byte, key []byte) error
 }
 
@@ -71,7 +71,7 @@ type GarbageCollector interface {
 }
 
 // Obj struct for getting key/value from storage
-type Obj struct {
-	Key   []byte
-	Value []byte
+type Obj interface {
+	Key() []byte
+	Value() []byte
 }

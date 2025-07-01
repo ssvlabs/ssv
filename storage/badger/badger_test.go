@@ -194,7 +194,7 @@ func TestGetAll(t *testing.T) {
 
 			visited := make(map[string]struct{}, tc.itemCount)
 			for _, item := range all {
-				visited[string(item.Key)] = struct{}{}
+				visited[string(item.Key())] = struct{}{}
 			}
 
 			assert.Equal(t, tc.itemCount, len(visited))
@@ -254,7 +254,7 @@ func TestGetMany(t *testing.T) {
 			encodeUint64(10),
 		}, func(obj basedb.Obj) error {
 
-			require.True(t, bytes.Equal(obj.Key, obj.Value))
+			require.True(t, bytes.Equal(obj.Key(), obj.Value()))
 			results = append(results, obj)
 
 			return nil
@@ -305,10 +305,10 @@ func TestSetMany(t *testing.T) {
 
 	t.Run("set multiple items", func(t *testing.T) {
 		var values [][]byte
-		err := db.SetMany(prefix, 10, func(i int) (basedb.Obj, error) {
+		err := db.SetMany(prefix, 10, func(i int) (key, value []byte, err error) {
 			seq := uint64(i + 1)
 			values = append(values, encodeUint64(seq))
-			return basedb.Obj{Key: encodeUint64(seq), Value: encodeUint64(seq)}, nil
+			return encodeUint64(seq), encodeUint64(seq), nil
 		})
 
 		require.NoError(t, err)
@@ -319,18 +319,18 @@ func TestSetMany(t *testing.T) {
 
 			require.NoError(t, err, "should find item %d", i)
 			require.True(t, found, "should find item %d", i)
-			require.True(t, bytes.Equal(obj.Value, values[i]), "item %d wrong value", i)
+			require.True(t, bytes.Equal(obj.Value(), values[i]), "item %d wrong value", i)
 		}
 	})
 
 	t.Run("error in next function", func(t *testing.T) {
 		expectedErr := errors.New("next error")
-		err := db.SetMany(prefix, 10, func(i int) (basedb.Obj, error) {
+		err := db.SetMany(prefix, 10, func(i int) (key, value []byte, err error) {
 			if i > 2 {
-				return basedb.Obj{}, expectedErr
+				return nil, nil, expectedErr
 			}
 
-			return basedb.Obj{Key: encodeUint64(uint64(i)), Value: encodeUint64(uint64(i))}, nil
+			return encodeUint64(uint64(i)), encodeUint64(uint64(i)), nil
 		})
 
 		assert.Equal(t, expectedErr, err)
@@ -350,11 +350,8 @@ func TestSetMany_SetError(t *testing.T) {
 		hugeKey[i] = byte(i % 256)
 	}
 
-	err := db.SetMany(prefix, 1, func(i int) (basedb.Obj, error) {
-		return basedb.Obj{
-			Key:   hugeKey,
-			Value: []byte("value"),
-		}, nil
+	err := db.SetMany(prefix, 1, func(i int) (key, value []byte, err error) {
+		return hugeKey, []byte("value"), nil
 	})
 
 	require.Error(t, err)

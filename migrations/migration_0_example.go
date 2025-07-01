@@ -4,14 +4,17 @@ import (
 	"context"
 
 	"go.uber.org/zap"
-
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // This migration is an Example migration
 var migration_0_example = Migration{
 	Name: "migration_0_example",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
+		type dbObject struct {
+			key   []byte
+			value []byte
+		}
+
 		// Example to clean registry data for specific storage
 		nodeStorage, err := opt.nodeStorage(logger)
 		if err != nil {
@@ -25,22 +28,22 @@ var migration_0_example = Migration{
 		// or they all rollback.
 		// If we used Set 3 times independently, the migration could abort in the middle
 		// with only some of the Set's committed, resulting in a corrupted database.
-		sets := []basedb.Obj{
+		sets := []dbObject{
 			{
-				Key:   []byte("owner-address"),
-				Value: []byte("123"),
+				key:   []byte("owner-address"),
+				value: []byte("123"),
 			},
 			{
-				Key:   []byte("operators-public-keys"),
-				Value: []byte("abc"),
+				key:   []byte("operators-public-keys"),
+				value: []byte("abc"),
 			},
 			{
-				Key:   key,
-				Value: migrationCompleted,
+				key:   key,
+				value: migrationCompleted,
 			},
 		}
-		return opt.Db.SetMany(migrationsPrefix, 3, func(i int) (basedb.Obj, error) {
-			return sets[i], nil
+		return opt.Db.SetMany(migrationsPrefix, 3, func(i int) (key, value []byte, err error) {
+			return sets[i].key, sets[i].value, nil
 		})
 	},
 }

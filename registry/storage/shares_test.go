@@ -53,9 +53,8 @@ func TestValidatorSerializer(t *testing.T) {
 	b, err := validatorShare.Encode()
 	require.NoError(t, err)
 
-	obj := basedb.Obj{Value: b}
 	v1 := &Share{}
-	require.NoError(t, v1.Decode(obj.Value))
+	require.NoError(t, v1.Decode(b))
 	require.NotNil(t, v1.ValidatorPubKey)
 	require.Equal(t, hex.EncodeToString(v1.ValidatorPubKey[:]), hex.EncodeToString(validatorShare.ValidatorPubKey[:]))
 	require.NotNil(t, v1.Committee)
@@ -66,7 +65,7 @@ func TestValidatorSerializer(t *testing.T) {
 	require.Equal(t, v1.OwnerAddress, validatorShare.OwnerAddress)
 	require.Equal(t, v1.Liquidated, validatorShare.Liquidated)
 
-	tooBigEncodedShare := bytes.Repeat(obj.Value, 20)
+	tooBigEncodedShare := bytes.Repeat(b, 20)
 	require.ErrorContains(t, v1.Decode(tooBigEncodedShare),
 		"share size is too big, got "+strconv.Itoa(len(tooBigEncodedShare))+", max allowed "+strconv.Itoa(ssvtypes.MaxAllowedShareSize))
 }

@@ -208,7 +208,7 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 		return nil, found, err
 	}
 
-	offset := new(big.Int).SetBytes(obj.Value)
+	offset := new(big.Int).SetBytes(obj.Value())
 	return offset, found, nil
 }
 
@@ -222,7 +222,7 @@ func (s *storage) GetPrivateKeyHash() ([]byte, bool, error) {
 		return nil, found, err
 	}
 
-	privateKeyHex := string(obj.Value)
+	privateKeyHex := string(obj.Value())
 	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
 	if err != nil {
 		// Not passing an error to avoid leaking the private key.
@@ -248,7 +248,7 @@ func (s *storage) GetPublicKey() (string, bool, error) {
 		return "", false, err
 	}
 
-	return string(obj.Value), true, nil
+	return string(obj.Value()), true, nil
 }
 
 // SavePublicKey saves operator public key.
@@ -266,7 +266,7 @@ func (s *storage) GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error) {
 	}
 
 	config := &ConfigLock{}
-	if err := json.Unmarshal(obj.Value, &config); err != nil {
+	if err := json.Unmarshal(obj.Value(), &config); err != nil {
 		return nil, false, fmt.Errorf("unmarshal: %w", err)
 	}
 

@@ -13,10 +13,10 @@ import (
 func getter(key []byte, dbFetch func(key []byte) ([]byte, io.Closer, error)) (basedb.Obj, bool, error) {
 	value, closer, err := dbFetch(key)
 	if errors.Is(err, pebble.ErrNotFound) {
-		return basedb.Obj{}, false, nil
+		return Obj{}, false, nil
 	}
 	if err != nil {
-		return basedb.Obj{}, true, err
+		return Obj{}, true, err
 	}
 
 	// Since the returned value is only valid until closer.Close(),
@@ -25,12 +25,12 @@ func getter(key []byte, dbFetch func(key []byte) ([]byte, io.Closer, error)) (ba
 	copy(val, value)
 
 	if err := closer.Close(); err != nil {
-		return basedb.Obj{}, true, err
+		return Obj{}, true, err
 	}
 
-	return basedb.Obj{
-		Key:   key,
-		Value: val,
+	return Obj{
+		key:   key,
+		value: val,
 	}, true, nil
 }
 
@@ -57,9 +57,9 @@ func manyGetter(logger *zap.Logger, keys [][]byte, dbFetch func(key []byte) ([]b
 		}
 
 		// Wrap the key/value in an object satisfying basedb.Obj.
-		obj := basedb.Obj{
-			Key:   key,
-			Value: val,
+		obj := Obj{
+			key:   key,
+			value: val,
 		}
 
 		// Call the iterator callback.
@@ -88,9 +88,9 @@ func allGetter(logger *zap.Logger, iter *pebble.Iterator, prefix []byte, fn func
 		val := make([]byte, len(value))
 		copy(val, value)
 
-		obj := basedb.Obj{
-			Key:   key,
-			Value: val,
+		obj := Obj{
+			key:   key,
+			value: val,
 		}
 
 		// Call the iterator callback.

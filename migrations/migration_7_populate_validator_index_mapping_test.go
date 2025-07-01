@@ -108,7 +108,7 @@ func TestMigration7PopulateValidatorIndexMapping(t *testing.T) {
 func assertPubkeyToIndexMappingFromOldShares(t *testing.T, db basedb.Database, mappingPrefix []byte, shares []*storage.Share) {
 	var mappings = make(map[string]uint64)
 	err := db.GetAll(mappingPrefix, func(i int, obj basedb.Obj) error {
-		mappings[string(obj.Key)] = bytesToUint64(obj.Value)
+		mappings[string(obj.Key())] = bytesToUint64(obj.Value())
 		return nil
 	})
 	require.NoError(t, err)

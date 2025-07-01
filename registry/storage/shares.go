@@ -162,11 +162,11 @@ func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]p
 
 	err := s.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
 		var key spectypes.ValidatorPK
-		if len(obj.Key) != len(key) {
-			return fmt.Errorf("invalid validator PK: bad length: %d", len(obj.Key))
+		if len(obj.Key()) != len(key) {
+			return fmt.Errorf("invalid validator PK: bad length: %d", len(obj.Key()))
 		}
-		copy(key[:], obj.Key)
-		m[key] = phase0.ValidatorIndex(binary.LittleEndian.Uint64(obj.Value))
+		copy(key[:], obj.Key())
+		m[key] = phase0.ValidatorIndex(binary.LittleEndian.Uint64(obj.Value()))
 		return nil
 	})
 
@@ -176,7 +176,7 @@ func (s *sharesStorage) loadPubkeyToIndexMappings() (map[spectypes.ValidatorPK]p
 func (s *sharesStorage) loadFromDB() error {
 	return s.db.GetAll(SharesDBPrefix(s.storagePrefix), func(i int, obj basedb.Obj) error {
 		val := &Share{}
-		if err := val.Decode(obj.Value); err != nil {
+		if err := val.Decode(obj.Value()); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
 
@@ -295,7 +295,7 @@ func (s *sharesStorage) GetValidatorIndicesByPubkeys(vkeys []spectypes.Validator
 	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
 
 	err = s.db.GetMany(prefix, pubkeys, func(obj basedb.Obj) error {
-		index := binary.LittleEndian.Uint64(obj.Value)
+		index := binary.LittleEndian.Uint64(obj.Value())
 		out = append(out, phase0.ValidatorIndex(index))
 		return nil
 	})
@@ -310,26 +310,26 @@ func (s *sharesStorage) saveToDB(rw basedb.ReadWriter, shares ...*types.SSVShare
 	// save validator pubkey -> index mapping
 	prefix := PubkeyToIndexMappingDBKey(s.storagePrefix)
 
-	err := s.db.Using(rw).SetMany(prefix, len(shares), func(i int) (basedb.Obj, error) {
+	err := s.db.Using(rw).SetMany(prefix, len(shares), func(i int) (key, value []byte, err error) {
 		vindex := shares[i].ValidatorIndex
 		pubkey := shares[i].ValidatorPubKey
 
 		b := make([]byte, 8)
 		binary.LittleEndian.PutUint64(b, uint64(vindex))
-
-		return basedb.Obj{Key: pubkey[:], Value: b}, nil
+		
+		return pubkey[:], b, nil
 	})
 	if err != nil {
 		return fmt.Errorf("save validator pubkey to index mapping: %w", err)
 	}
 
-	return s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (basedb.Obj, error) {
+	return s.db.Using(rw).SetMany(s.storagePrefix, len(shares), func(i int) (key, value []byte, err error) {
 		share := FromSSVShare(shares[i])
-		value, err := share.Encode()
+		value, err = share.Encode()
 		if err != nil {
-			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
+			return nil, nil, fmt.Errorf("failed to serialize share: %w", err)
 		}
-		return basedb.Obj{Key: SharesDBKey(share.ValidatorPubKey[:]), Value: value}, nil
+		return SharesDBKey(share.ValidatorPubKey[:]), value, nil
 	})
 }
 

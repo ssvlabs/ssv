@@ -109,7 +109,7 @@ func (s *recipientsStorage) getRecipientData(r basedb.Reader, owner common.Addre
 	}
 
 	var recipientData RecipientData
-	err = json.Unmarshal(obj.Value, &recipientData)
+	err = json.Unmarshal(obj.Value(), &recipientData)
 	return &recipientData, found, err
 }
 
@@ -124,7 +124,7 @@ func (s *recipientsStorage) GetRecipientDataMany(r basedb.Reader, owners []commo
 	results := make(map[common.Address]bellatrix.ExecutionAddress)
 	err := s.db.UsingReader(r).GetMany(s.prefix, keys, func(obj basedb.Obj) error {
 		var recipient RecipientData
-		err := json.Unmarshal(obj.Value, &recipient)
+		err := json.Unmarshal(obj.Value(), &recipient)
 		if err != nil {
 			return errors.Wrap(err, "could not unmarshal recipient data")
 		}
