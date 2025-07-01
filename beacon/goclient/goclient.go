@@ -431,10 +431,7 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	for _, client := range gc.clients {
 		go func() {
 			if err := gc.checkNodeHealth(ctx, client); err != nil {
-				select {
-				case errCh <- err:
-				default:
-				}
+				errCh <- err
 				return
 			}
 
@@ -449,7 +446,7 @@ func (gc *GoClient) Healthy(ctx context.Context) error {
 	for i := 0; i < len(gc.clients); i++ {
 		select {
 		case <-ctx.Done():
-			// If canceled, and we have a healthy client, return no error
+			// If we have a healthy client, return no error
 			if hasHealthy.Load() {
 				return nil
 			}
