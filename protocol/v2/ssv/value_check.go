@@ -187,7 +187,7 @@ func AggregatorValueCheckF(
 			}
 
 			if err := checkConsensusDataSameToOwn(cd, ocd); err != nil {
-				return fmt.Errorf("check own blinded block data: %w", err)
+				return fmt.Errorf("check if consensus data is same to own: %w", err)
 			}
 		}
 
@@ -225,7 +225,7 @@ func SyncCommitteeContributionValueCheckF(
 			}
 
 			if err := checkConsensusDataSameToOwn(cd, ocd); err != nil {
-				return fmt.Errorf("check own blinded block data: %w", err)
+				return fmt.Errorf("check if consensus data is same to own: %w", err)
 			}
 		}
 
