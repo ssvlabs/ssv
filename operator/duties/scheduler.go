@@ -14,12 +14,16 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/network"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -382,42 +386,77 @@ func (s *Scheduler) HandleHeadEvent() func(event *eth2apiv1.HeadEvent) {
 
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(ctx context.Context, duties []*spectypes.ValidatorDuty) {
+	ctx, span := tracer.Start(ctx,
+		observability.InstrumentName(observabilityNamespace, "scheduler.execute_duties"),
+		trace.WithAttributes(observability.DutyCountAttribute(len(duties))),
+	)
+	defer span.End()
+
 	for _, duty := range duties {
+		duty := duty
 		logger := s.loggerWithDutyContext(duty)
+
 		slotDelay := time.Since(s.beaconConfig.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			const eventMsg = "⚠️ late duty execution"
+			logger.Debug(eventMsg, zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			span.AddEvent(eventMsg,
+				trace.WithAttributes(
+					attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds()),
+					observability.BeaconRoleAttribute(duty.Type),
+					observability.RunnerRoleAttribute(duty.RunnerRole())))
 		}
+
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
-		go func() {
+
+		go func(ctx context.Context) {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
 			recordDutyExecuted(ctx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteDuty(ctx, logger, duty)
-		}()
+		}(ctx)
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(ctx context.Context, duties committeeDutiesMap) {
+	ctx, span := tracer.Start(ctx, observability.InstrumentName(observabilityNamespace, "scheduler.execute_committee_duties"))
+	defer span.End()
+
 	for _, committee := range duties {
 		duty := committee.duty
 		logger := s.loggerWithCommitteeDutyContext(committee) // TODO: extract this in dutyExecutor (validator controller), don't pass logger to ExecuteCommitteeDuty
 		dutyEpoch := s.beaconConfig.EstimatedEpochAtSlot(duty.Slot)
-		logger.Debug("🔧 executing committee duty", fields.Duties(dutyEpoch, duty.ValidatorDuties))
+
+		const eventMsg = "🔧 executing committee duty"
+		logger.Debug(eventMsg, fields.Duties(dutyEpoch, duty.ValidatorDuties))
+		span.AddEvent(eventMsg, trace.WithAttributes(
+			observability.CommitteeIDAttribute(committee.id),
+			observability.DutyCountAttribute(len(duty.ValidatorDuties)),
+		))
 
 		slotDelay := time.Since(s.beaconConfig.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
-			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			const eventMsg = "⚠️ late duty execution"
+			logger.Debug(eventMsg, zap.Int64("slot_delay", slotDelay.Milliseconds()))
+			span.AddEvent(eventMsg, trace.WithAttributes(
+				observability.CommitteeIDAttribute(committee.id),
+				attribute.Int64("ssv.beacon.slot_delay_ms", slotDelay.Milliseconds())))
 		}
+
 		slotDelayHistogram.Record(ctx, slotDelay.Seconds())
-		go func() {
+
+		go func(ctx context.Context) {
 			s.waitOneThirdOrValidBlock(duty.Slot)
 			recordDutyExecuted(ctx, duty.RunnerRole())
 			s.dutyExecutor.ExecuteCommitteeDuty(ctx, logger, committee.id, duty)
-		}()
+		}(ctx)
 	}
+
+	span.SetStatus(codes.Ok, "")
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information

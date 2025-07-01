@@ -18,9 +18,10 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
@@ -40,7 +41,7 @@ var (
 )
 
 // Options for the discovery service
-func testingDiscoveryOptions(t *testing.T, ssvConfig networkconfig.SSVConfig) *Options {
+func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSVConfig) *Options {
 	// Generate key
 	privKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
@@ -74,7 +75,7 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig networkconfig.SSVConfig) *O
 }
 
 // Testing discovery with a given NetworkConfig
-func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig networkconfig.SSVConfig) *DiscV5Service {
+func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SSVConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, ssvConfig)
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)

@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -46,12 +45,12 @@ func Decrypt(sk *rsa.PrivateKey, encryptedKey []byte) ([]byte, error) {
 }
 
 // HashKeyBytes computes the SHA-256 hash of the given key material (typically in DER or PEM format)
-// and returns it as a hexadecimal string.
+// and returns it as bytes.
 //
 // Note: This function does not parse or validate the key — it simply hashes the raw bytes as-is.
-func HashKeyBytes(keyBytes []byte) string {
+func HashKeyBytes(keyBytes []byte) []byte {
 	hash := sha256.Sum256(keyBytes)
-	return hex.EncodeToString(hash[:])
+	return hash[:]
 }
 
 // PEMToPrivateKey parses a PEM-encoded RSA private key in PKCS#1 format

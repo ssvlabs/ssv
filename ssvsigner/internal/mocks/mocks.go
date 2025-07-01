@@ -38,15 +38,16 @@ func (t *TestOperatorPublicKey) Base64() (string, error) {
 
 // TestOperatorPrivateKey implements a mock operator private key for testing.
 type TestOperatorPrivateKey struct {
-	Base64Value      string
-	BytesValue       []byte
-	StorageHashValue string
-	EkmHashValue     string
-	DecryptResult    []byte
-	DecryptError     error
-	SignResult       []byte
-	SignError        error
-	PublicKey        keys.OperatorPublicKey
+	Base64Value           string
+	BytesValue            []byte
+	StorageHashValue      []byte
+	EkmHashValue          []byte
+	EkmEncryptionKeyValue []byte
+	DecryptResult         []byte
+	DecryptError          error
+	SignResult            []byte
+	SignError             error
+	PublicKey             keys.OperatorPublicKey
 }
 
 // Sign mocks signing data with the private key.
@@ -54,6 +55,7 @@ func (t *TestOperatorPrivateKey) Sign([]byte) ([]byte, error) {
 	if t.SignError != nil {
 		return nil, t.SignError
 	}
+
 	return t.SignResult, nil
 }
 
@@ -67,17 +69,23 @@ func (t *TestOperatorPrivateKey) Decrypt([]byte) ([]byte, error) {
 	if t.DecryptError != nil {
 		return nil, t.DecryptError
 	}
+
 	return t.DecryptResult, nil
 }
 
 // StorageHash returns a mock storage hash.
-func (t *TestOperatorPrivateKey) StorageHash() string {
+func (t *TestOperatorPrivateKey) StorageHash() []byte {
 	return t.StorageHashValue
 }
 
 // EKMHash returns a mock EKM hash.
-func (t *TestOperatorPrivateKey) EKMHash() string {
+func (t *TestOperatorPrivateKey) EKMHash() []byte {
 	return t.EkmHashValue
+}
+
+// EKMEncryptionKey returns a mock EKM encryption key.
+func (t *TestOperatorPrivateKey) EKMEncryptionKey() ([]byte, error) {
+	return t.EkmEncryptionKeyValue, nil
 }
 
 // Bytes returns the private key bytes.
@@ -107,6 +115,7 @@ func (t *TestRemoteSigner) ListKeys(context.Context) (web3signer.ListKeysRespons
 	if t.ListKeysError != nil {
 		return nil, t.ListKeysError
 	}
+
 	return t.ListKeysResult, nil
 }
 
@@ -115,6 +124,7 @@ func (t *TestRemoteSigner) ImportKeystore(context.Context, web3signer.ImportKeys
 	if t.ImportError != nil {
 		return web3signer.ImportKeystoreResponse{}, t.ImportError
 	}
+
 	return t.ImportResult, nil
 }
 
@@ -123,6 +133,7 @@ func (t *TestRemoteSigner) DeleteKeystore(context.Context, web3signer.DeleteKeys
 	if t.DeleteError != nil {
 		return web3signer.DeleteKeystoreResponse{}, t.DeleteError
 	}
+
 	return t.DeleteResult, nil
 }
 
@@ -132,45 +143,4 @@ func (t *TestRemoteSigner) Sign(context.Context, phase0.BLSPubKey, web3signer.Si
 		return web3signer.SignResponse{}, t.SignError
 	}
 	return t.SignResult, nil
-}
-
-// CreateMockOperator creates a new mock operator private key with default values.
-func CreateMockOperator() *TestOperatorPrivateKey {
-	pubKey := &TestOperatorPublicKey{
-		PubKeyBase64: "test_pubkey_base64",
-	}
-
-	return &TestOperatorPrivateKey{
-		PublicKey:        pubKey,
-		SignResult:       []byte("signature_bytes"),
-		Base64Value:      "test_base64",
-		BytesValue:       []byte("test_bytes"),
-		StorageHashValue: "test_storage_hash",
-		EkmHashValue:     "test_ekm_hash",
-		DecryptResult:    []byte("0x1234567890abcdef"),
-	}
-}
-
-// CreateMockRemoteSigner creates a new mock remote signer with default values.
-func CreateMockRemoteSigner() *TestRemoteSigner {
-	return &TestRemoteSigner{
-		ListKeysResult: []phase0.BLSPubKey{{1, 2, 3}},
-		ImportResult: web3signer.ImportKeystoreResponse{
-			Data: []web3signer.KeyManagerResponseData{
-				{
-					Status: web3signer.StatusImported,
-				},
-			},
-		},
-		DeleteResult: web3signer.DeleteKeystoreResponse{
-			Data: []web3signer.KeyManagerResponseData{
-				{
-					Status: web3signer.StatusDeleted,
-				},
-			},
-		},
-		SignResult: web3signer.SignResponse{
-			Signature: phase0.BLSSignature{1, 2, 3},
-		},
-	}
 }

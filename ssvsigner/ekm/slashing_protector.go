@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // slashing_protector.go provides SlashingProtector, a wrapper around
@@ -26,17 +27,19 @@ const (
 	minSPProposalSlotGap = phase0.Slot(0)
 )
 
+var _ slashingProtector = &SlashingProtector{}
+
 type slashingProtector interface {
 	ListAccounts() ([]core.ValidatorAccount, error)
 	RetrieveHighestAttestation(pubKey phase0.BLSPubKey) (*phase0.AttestationData, bool, error)
 	RetrieveHighestProposal(pubKey phase0.BLSPubKey) (phase0.Slot, bool, error)
-	RemoveHighestAttestation(pubKey phase0.BLSPubKey) error
-	RemoveHighestProposal(pubKey phase0.BLSPubKey) error
+	RemoveHighestAttestationTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
+	RemoveHighestProposalTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 	UpdateHighestAttestation(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	UpdateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error
 	IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error
 	IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error
-	BumpSlashingProtection(pubKey phase0.BLSPubKey) error
+	BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error
 }
 
 // SlashingProtector manages both the local store for highest attestation/proposal
@@ -75,12 +78,12 @@ func (sp *SlashingProtector) RetrieveHighestProposal(pubKey phase0.BLSPubKey) (p
 	return sp.signerStore.RetrieveHighestProposal(pubKey[:])
 }
 
-func (sp *SlashingProtector) RemoveHighestAttestation(pubKey phase0.BLSPubKey) error {
-	return sp.signerStore.RemoveHighestAttestation(pubKey[:])
+func (sp *SlashingProtector) RemoveHighestAttestationTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	return sp.signerStore.RemoveHighestAttestationTxn(txn, pubKey[:])
 }
 
-func (sp *SlashingProtector) RemoveHighestProposal(pubKey phase0.BLSPubKey) error {
-	return sp.signerStore.RemoveHighestProposal(pubKey[:])
+func (sp *SlashingProtector) RemoveHighestProposalTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	return sp.signerStore.RemoveHighestProposalTxn(txn, pubKey[:])
 }
 
 func (sp *SlashingProtector) IsAttestationSlashable(pubKey phase0.BLSPubKey, attData *phase0.AttestationData) error {
@@ -113,17 +116,16 @@ func (sp *SlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, slot
 	return sp.protection.UpdateHighestProposal(pubKey[:], slot)
 }
 
-// BumpSlashingProtection updates the slashing protection data for a given public key.
-func (sp *SlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
+func (sp *SlashingProtector) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
 	currentSlot := sp.beaconCfg.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
-	if err := sp.updateHighestAttestation(pubKey, currentSlot); err != nil {
+	if err := sp.updateHighestAttestation(txn, pubKey, currentSlot); err != nil {
 		return err
 	}
 
 	// Update highest proposal data for slashing protection.
-	if err := sp.updateHighestProposal(pubKey, currentSlot); err != nil {
+	if err := sp.updateHighestProposal(txn, pubKey, currentSlot); err != nil {
 		return err
 	}
 
@@ -131,9 +133,9 @@ func (sp *SlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) err
 }
 
 // updateHighestAttestation updates the highest attestation data for slashing protection.
-func (sp *SlashingProtector) updateHighestAttestation(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+func (sp *SlashingProtector) updateHighestAttestation(txn basedb.Txn, pubKey phase0.BLSPubKey, slot phase0.Slot) error {
 	// Retrieve the highest attestation data stored for the given public key.
-	retrievedHighAtt, found, err := sp.RetrieveHighestAttestation(pubKey)
+	retrievedHighAtt, found, err := sp.signerStore.RetrieveHighestAttestationTxn(txn, pubKey[:])
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
@@ -150,7 +152,7 @@ func (sp *SlashingProtector) updateHighestAttestation(pubKey phase0.BLSPubKey, s
 
 	// At this point, either the retrieved attestation data was not found, or it was outdated.
 	// In either case, we update it to the minimal slashing protection data.
-	if err := sp.signerStore.SaveHighestAttestation(pubKey[:], minimalSP); err != nil {
+	if err := sp.signerStore.SaveHighestAttestationTxn(txn, pubKey[:], minimalSP); err != nil {
 		return fmt.Errorf("could not save highest attestation: %w", err)
 	}
 
@@ -158,9 +160,9 @@ func (sp *SlashingProtector) updateHighestAttestation(pubKey phase0.BLSPubKey, s
 }
 
 // updateHighestProposal updates the highest proposal slot for slashing protection.
-func (sp *SlashingProtector) updateHighestProposal(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
+func (sp *SlashingProtector) updateHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey, slot phase0.Slot) error {
 	// Retrieve the highest proposal slot stored for the given public key.
-	retrievedHighProp, found, err := sp.RetrieveHighestProposal(pubKey)
+	retrievedHighProp, found, err := sp.signerStore.RetrieveHighestProposalTxn(txn, pubKey[:])
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest proposal: %w", err)
 	}
@@ -176,7 +178,7 @@ func (sp *SlashingProtector) updateHighestProposal(pubKey phase0.BLSPubKey, slot
 
 	// At this point, either the retrieved proposal slot was not found, or it was outdated.
 	// In either case, we update it to the minimal slashing protection slot.
-	if err := sp.signerStore.SaveHighestProposal(pubKey[:], minimalSPSlot); err != nil {
+	if err := sp.signerStore.SaveHighestProposalTxn(txn, pubKey[:], minimalSPSlot); err != nil {
 		return fmt.Errorf("could not save highest proposal: %w", err)
 	}
 
@@ -188,8 +190,14 @@ func (sp *SlashingProtector) updateHighestProposal(pubKey phase0.BLSPubKey, slot
 func (sp *SlashingProtector) computeMinimalAttestationSP(epoch phase0.Epoch) *phase0.AttestationData {
 	// Calculate the highest safe target epoch based on the current epoch and a predefined minimum distance.
 	highestTarget := epoch + minSPAttestationEpochGap
+
 	// The highest safe source epoch is one less than the highest target epoch.
-	highestSource := highestTarget - 1
+	var highestSource phase0.Epoch
+	if highestTarget > 0 {
+		highestSource = highestTarget - 1
+	} else {
+		highestSource = 0
+	}
 
 	// Return a new AttestationData object with the calculated source and target epochs.
 	return &phase0.AttestationData{

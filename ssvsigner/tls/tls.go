@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/crypto/pkcs12"
@@ -230,7 +231,15 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 
 	// Set up certificate verification if fingerprints provided
 	if len(trustedFingerprints) > 0 {
-		tlsConfig.InsecureSkipVerify = true // We're doing manual verification
+		// InsecureSkipVerify is deliberately enabled to bypass Go's default certificate validation,
+		// including CA-based trust chains and hostname checks.
+		//
+		// This is required because we perform strict manual verification via VerifyConnection
+		// using pinned SHA-256 fingerprints of the expected server certificate.
+		//
+		// This does NOT disable security — instead, it replaces the traditional PKI trust model
+		// with explicit certificate pinning, which is simpler and stronger in this context.
+		tlsConfig.InsecureSkipVerify = true
 		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
 			return verifyServerCertificate(state, trustedFingerprints)
 		}
@@ -245,7 +254,7 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 //
 // Parameters:
 // - certificate: server certificate to present to clients (required)
-// - trustedFingerprints: map of client common names to expected certificate fingerprints (optional)
+// - trustedFingerprints: map of client common names to expected certificate fingerprints (required unless insecure HTTP is enabled)
 func createServerTLSConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
 	if certificate.Certificate == nil {
 		return nil, fmt.Errorf("server certificate is required")
@@ -344,8 +353,8 @@ func verifyClientCertificate(rawCerts [][]byte, trustedFingerprints map[string]s
 
 // loadPasswordFromFile loads a password from a file.
 // The password is expected to be the first line of the file.
-func loadPasswordFromFile(filePath string) (string, error) {
-	data, err := os.ReadFile(filePath)
+func loadPasswordFromFile(path string) (string, error) {
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return "", fmt.Errorf("read password file: %w", err)
 	}
@@ -364,7 +373,7 @@ func loadPasswordFromFile(filePath string) (string, error) {
 // - keystoreFile: path to the keystore file
 // - password: password to decrypt the keystore
 func loadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, error) {
-	p12Data, err := os.ReadFile(keystoreFile)
+	p12Data, err := os.ReadFile(filepath.Clean(keystoreFile))
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("read keystore file: %w", err)
 	}
@@ -392,7 +401,7 @@ func loadKeystoreCertificate(keystoreFile, password string) (tls.Certificate, er
 // Parameters:
 // - certFile: path to the certificate file
 func loadPEMCertificate(certFile string) (*x509.Certificate, error) {
-	certData, err := os.ReadFile(certFile)
+	certData, err := os.ReadFile(filepath.Clean(certFile))
 	if err != nil {
 		return nil, fmt.Errorf("read certificate file: %w", err)
 	}
@@ -427,12 +436,14 @@ func loadPEMCertificate(certFile string) (*x509.Certificate, error) {
 //
 // Parameters:
 // - filePath: a path to the fingerprint file
-func loadFingerprintsFile(filePath string) (map[string]string, error) {
-	file, err := os.Open(filePath)
+func loadFingerprintsFile(path string) (map[string]string, error) {
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("open fingerprints file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	fingerprints := make(map[string]string)
 	scanner := bufio.NewScanner(file)

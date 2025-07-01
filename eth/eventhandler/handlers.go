@@ -11,13 +11,12 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -245,7 +244,7 @@ func (eh *EventHandler) handleShareCreation(
 	}
 
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
-		if err := eh.keyManager.AddShare(ctx, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		if err := eh.keyManager.AddShare(ctx, txn, encryptedKey, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			var shareDecryptionEKMError ekm.ShareDecryptionError
 			if errors.As(err, &shareDecryptionEKMError) {
 				return nil, &MalformedEventError{Err: err}
@@ -257,6 +256,9 @@ func (eh *EventHandler) handleShareCreation(
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
+		//
+		// If txn gets rolled back, the share will remain updated, however, it's not an issue,
+		// because the node will crash and attempt to sync events again updating the participation epoch.
 		share.SetMinParticipationEpoch(eh.networkConfig.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 
@@ -367,12 +369,15 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
-		err := eh.keyManager.RemoveShare(ctx, phase0.BLSPubKey(share.SharePubKey))
+		err := eh.keyManager.RemoveShare(ctx, txn, phase0.BLSPubKey(share.SharePubKey))
 		if err != nil {
 			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
 		// Remove validator from doppelganger service
+		//
+		// If txn gets rolled back, the validator state will remain removed, however, it's not an issue,
+		// because the node will crash and attempt to sync events again fixing the state inconsistency.
 		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
 
 		logger.Debug("processed event")
@@ -426,7 +431,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 
 	// bump slashing protection for operator reactivated validators
 	for _, share := range toReactivate {
-		if err := eh.keyManager.BumpSlashingProtection(phase0.BLSPubKey(share.SharePubKey)); err != nil {
+		if err := eh.keyManager.BumpSlashingProtection(txn, phase0.BLSPubKey(share.SharePubKey)); err != nil {
 			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
 		}
 
@@ -434,6 +439,9 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		// Note: The current epoch can differ from the epoch set in slashing protection
 		// due to the passage of time between saving slashing protection data and setting
 		// the minimum participation epoch
+		//
+		// If txn gets rolled back, the share will remain updated, however, it's not an issue,
+		// because the node will crash and attempt to sync events again updating the participation epoch.
 		share.SetMinParticipationEpoch(eh.networkConfig.EstimatedCurrentEpoch() + contractParticipationDelay)
 	}
 

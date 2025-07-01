@@ -55,7 +55,7 @@ type BeaconNode interface {
 
 // Options contains the configuration options for the Doppelgänger protection.
 type Options struct {
-	BeaconConfig       networkconfig.BeaconConfig
+	BeaconConfig       *networkconfig.BeaconConfig
 	BeaconNode         BeaconNode
 	ValidatorProvider  ValidatorProvider
 	SlotTickerProvider slotticker.Provider
@@ -68,7 +68,7 @@ type handler struct {
 	mu              sync.RWMutex
 	validatorsState map[phase0.ValidatorIndex]*doppelgangerState
 
-	beaconConfig       networkconfig.BeaconConfig
+	beaconConfig       *networkconfig.BeaconConfig
 	beaconNode         BeaconNode
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider
@@ -161,7 +161,7 @@ func (h *handler) RemoveValidatorState(validatorIndex phase0.ValidatorIndex) {
 	defer h.mu.Unlock()
 
 	if h.validatorsState[validatorIndex] == nil {
-		h.logger.Warn("Validator not found in Doppelganger state", fields.ValidatorIndex(validatorIndex))
+		h.logger.Warn("Validator not found in Doppelganger state. This is expected in the first block after failed sync", fields.ValidatorIndex(validatorIndex))
 		return
 	}
 

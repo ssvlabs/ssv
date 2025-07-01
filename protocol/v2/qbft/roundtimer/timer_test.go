@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
 )
@@ -47,7 +48,7 @@ func TestTimeoutForRound(t *testing.T) {
 	}
 }
 
-func setupMockBeaconConfig() networkconfig.BeaconConfig {
+func setupMockBeaconConfig() *networkconfig.BeaconConfig {
 	config := networkconfig.TestNetwork.BeaconConfig
 	config.SlotDuration = 120 * time.Millisecond
 	config.GenesisTime = time.Now()
@@ -57,7 +58,7 @@ func setupMockBeaconConfig() networkconfig.BeaconConfig {
 
 func setupTimer(
 	t *testing.T,
-	beaconConfig networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.BeaconConfig,
 	onTimeout OnRoundTimeoutF,
 	role spectypes.RunnerRole,
 	round specqbft.Round,

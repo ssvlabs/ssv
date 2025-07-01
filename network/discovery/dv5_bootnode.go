@@ -28,7 +28,7 @@ type Bootnode struct {
 }
 
 // NewBootnode creates a new bootnode
-func NewBootnode(pctx context.Context, logger *zap.Logger, ssvConfig networkconfig.SSVConfig, opts *BootnodeOptions) (*Bootnode, error) {
+func NewBootnode(pctx context.Context, logger *zap.Logger, ssvConfig *networkconfig.SSVConfig, opts *BootnodeOptions) (*Bootnode, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	disc, err := createBootnodeDiscovery(ctx, logger, ssvConfig, opts)
 	if err != nil {
@@ -52,7 +52,7 @@ func (b *Bootnode) Close() error {
 	return nil
 }
 
-func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, ssvConfig networkconfig.SSVConfig, opts *BootnodeOptions) (Service, error) {
+func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, ssvConfig *networkconfig.SSVConfig, opts *BootnodeOptions) (Service, error) {
 	privKey, err := utils.ECDSAPrivateKey(logger.Named(logging.NameBootNode), opts.PrivateKey)
 	if err != nil {
 		return nil, err

@@ -13,28 +13,35 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/ssvlabs/eth2-key-manager/wallets/hd"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/threshold"
-
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 const (
 	sk1Str = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	pk1Str = "a8cb269bd7741740cfe90de2f8db6ea35a9da443385155da0fa2f621ba80e5ac14b5c8f65d23fd9ccc170cc85f29e27d"
 	sk2Str = "66dd37ae71b35c81022cdde98370e881cff896b689fa9136917f45afce43fd3b"
-	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network networkconfig.Network, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
+func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) KeyManager {
+	km, _ := testKeyManagerImpl(t, networkconfig.TestNetwork, operatorPrivateKey)
+	return km
+}
+
+func testKeyManagerWithMockNetwork(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
+	return testKeyManagerImpl(t, nil, operatorPrivateKey)
+}
+
+func testKeyManagerImpl(t *testing.T, network networkconfig.Network, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -61,8 +68,8 @@ func testKeyManager(t *testing.T, network networkconfig.Network, operatorPrivate
 	encryptedSK2, err := operatorPrivateKey.Public().Encrypt([]byte(sk2.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
-	require.NoError(t, km.AddShare(t.Context(), encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
 
 	return km, network
 }
@@ -72,7 +79,8 @@ func TestEncryptedKeyManager(t *testing.T) {
 	privateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	encryptionKey := privateKey.EKMHash()
+	encryptionKey, err := privateKey.EKMEncryptionKey()
+	require.NoError(t, err)
 
 	// Create account with key 1.
 	threshold.Init()
@@ -86,8 +94,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	require.NoError(t, err)
 
 	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
-	err = signerStorage.SetEncryptionKey(encryptionKey)
-	require.NoError(t, err)
+	signerStorage.SetEncryptionKey(encryptionKey)
 
 	defer func(db basedb.Database, logger *zap.Logger) {
 		err := db.Close()
@@ -113,21 +120,24 @@ func TestEncryptedKeyManager(t *testing.T) {
 	privateKey2, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	encryptionKey2 := privateKey2.EKMHash()
+	encryptionKey2, err := privateKey2.EKMEncryptionKey()
+	require.NoError(t, err)
 
 	// Load account with key 2 (should fail).
 	wallet2, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
-	err = signerStorage.SetEncryptionKey(encryptionKey2)
-	require.NoError(t, err)
+
+	signerStorage.SetEncryptionKey(encryptionKey2)
+
 	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.ErrorContains(t, err, "decrypt stored wallet")
 
 	// Retry with key 1 (should succeed).
 	wallet3, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
-	err = signerStorage.SetEncryptionKey(encryptionKey)
-	require.NoError(t, err)
+
+	signerStorage.SetEncryptionKey(encryptionKey)
+
 	_, err = wallet3.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.NoError(t, err)
 }
@@ -138,7 +148,7 @@ func TestSignBeaconObject(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	km, network := testKeyManager(t, nil, operatorPrivateKey)
+	km := testKeyManager(t, operatorPrivateKey)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -146,9 +156,9 @@ func TestSignBeaconObject(t *testing.T) {
 	encryptedSK1, err := operatorPrivateKey.Public().Encrypt([]byte(sk1.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, km.AddShare(t.Context(), encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
+	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
-	currentSlot := network.EstimatedCurrentSlot()
+	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	t.Run("Sign Deneb block", func(t *testing.T) {
@@ -327,7 +337,7 @@ func TestRemoveShare(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("key exists", func(t *testing.T) {
-		km, _ := testKeyManager(t, nil, operatorPrivateKey)
+		km := testKeyManager(t, operatorPrivateKey)
 		pk := &bls.SecretKey{}
 		// generate random key
 		pk.SetByCSPRNG()
@@ -335,17 +345,17 @@ func TestRemoveShare(t *testing.T) {
 		encryptedPrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(pk.SerializeToHexStr()))
 		require.NoError(t, err)
 
-		require.NoError(t, km.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
-		require.NoError(t, km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
+		require.NoError(t, km.RemoveShare(t.Context(), nil, phase0.BLSPubKey(pk.GetPublicKey().Serialize())))
 	})
 
 	t.Run("key doesn't exist", func(t *testing.T) {
-		km, _ := testKeyManager(t, nil, operatorPrivateKey)
+		km := testKeyManager(t, operatorPrivateKey)
 
 		pk := &bls.SecretKey{}
 		pk.SetByCSPRNG()
 
-		err := km.RemoveShare(t.Context(), phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
+		err := km.RemoveShare(t.Context(), nil, phase0.BLSPubKey(pk.GetPublicKey().Serialize()))
 		require.NoError(t, err)
 	})
 }
@@ -356,8 +366,8 @@ func TestEkmListAccounts(t *testing.T) {
 	operatorPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	km, _ := testKeyManager(t, nil, operatorPrivateKey)
-	accounts, err := km.(*LocalKeyManager).ListAccounts()
+	km := testKeyManager(t, operatorPrivateKey)
+	accounts, err := km.(*LocalKeyManager).slashingProtector.ListAccounts()
 	require.NoError(t, err)
 	require.Len(t, accounts, 2)
 }

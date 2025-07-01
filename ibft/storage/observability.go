@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -22,15 +21,11 @@ var (
 
 	operationDurationHistogram = observability.NewMetric(
 		meter.Float64Histogram(
-			metricName("operation.duration"),
+			observability.InstrumentName(observabilityNamespace, "operation.duration"),
 			metric.WithUnit("s"),
 			metric.WithDescription("participants db ops duration"),
 			metric.WithExplicitBucketBoundaries(observability.SecondsHistogramBuckets...)))
 )
-
-func metricName(name string) string {
-	return fmt.Sprintf("%s.%s", observabilityNamespace, name)
-}
 
 func recordSaveDuration(name string, duration time.Duration) {
 	operationDurationHistogram.Record(
