@@ -41,9 +41,11 @@ func NewExporter(logger *zap.Logger, participantStores *ibftstorage.ParticipantS
 
 type dutyTraceStore interface {
 	GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
+	GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDuty(slot phase0.Slot, committeeID spectypes.CommitteeID, role ...spectypes.BeaconRole) (*model.CommitteeDutyTrace, error)
 	GetCommitteeDuties(slot phase0.Slot, roles ...spectypes.BeaconRole) ([]*model.CommitteeDutyTrace, error)
 	GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
+	GetCommitteeDutyLinks(slot phase0.Slot) ([]*model.CommitteeDutyLink, error)
 	GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetAllValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetCommitteeDecideds(slot phase0.Slot, pubKey spectypes.ValidatorPK, roles ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
@@ -328,14 +330,16 @@ func toCommitteeTraceResponse(duties []*model.CommitteeDutyTrace) *committeeTrac
 	return r
 }
 
+type validatorTracesRequest struct {
+	From    uint64          `json:"from"`
+	To      uint64          `json:"to"`
+	Roles   api.RoleSlice   `json:"roles"`
+	PubKeys api.HexSlice    `json:"pubkeys"`
+	Indices api.Uint64Slice `json:"indices"`
+}
+
 func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error {
-	var request struct {
-		From    uint64          `json:"from"`
-		To      uint64          `json:"to"`
-		Roles   api.RoleSlice   `json:"roles"`
-		PubKeys api.HexSlice    `json:"pubkeys"`
-		Indices api.Uint64Slice `json:"indices"`
-	}
+	var request validatorTracesRequest
 
 	if err := api.Bind(r, &request); err != nil {
 		return api.BadRequestError(err)
@@ -350,7 +354,7 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 	}
 
 	if len(request.PubKeys) == 0 && len(request.Indices) == 0 {
-		return api.BadRequestError(errors.New("either pubkeys or indices is required"))
+		return e.getAllValidatorTraces(w, r, request)
 	}
 
 	var pubkeys []spectypes.ValidatorPK
@@ -421,6 +425,54 @@ func (e *Exporter) ValidatorTraces(w http.ResponseWriter, r *http.Request) error
 					continue
 				}
 				results = append(results, duty)
+			}
+		}
+	}
+
+	return api.Render(w, r, toValidatorTraceResponse(results))
+}
+
+func (e *Exporter) getAllValidatorTraces(w http.ResponseWriter, r *http.Request, request validatorTracesRequest) error {
+	var results []*dutytracer.ValidatorDutyTrace
+
+	for s := request.From; s <= request.To; s++ {
+		slot := phase0.Slot(s)
+		for _, r := range request.Roles {
+			role := spectypes.BeaconRole(r)
+			if role == spectypes.BNRoleSyncCommittee || role == spectypes.BNRoleAttester {
+				links, err := e.traceStore.GetCommitteeDutyLinks(slot)
+				if err != nil {
+					e.logger.Debug("error getting all committee links", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+					continue
+				}
+				for _, link := range links {
+					duty, err := e.traceStore.GetCommitteeDuty(slot, link.CommitteeID, role)
+					if err != nil {
+						e.logger.Debug("error getting committee duty", zap.Error(err), fields.Slot(slot), fields.CommitteeID(link.CommitteeID), fields.BeaconRole(role))
+						continue
+					}
+					validatorDuty := &dutytracer.ValidatorDutyTrace{
+						CommitteeID: link.CommitteeID,
+						ValidatorDutyTrace: model.ValidatorDutyTrace{
+							ConsensusTrace: duty.ConsensusTrace,
+							Slot:           duty.Slot,
+							Validator:      link.ValidatorIndex,
+							Role:           role,
+						},
+					}
+
+					results = append(results, validatorDuty)
+
+					continue
+				}
+			} else {
+				duties, err := e.traceStore.GetAllValidatorDuties(role, slot)
+				if err != nil {
+					e.logger.Debug("error getting validator duty", zap.Error(err), fields.Slot(slot), fields.BeaconRole(role))
+					continue
+				}
+
+				results = append(results, duties...)
 			}
 		}
 	}

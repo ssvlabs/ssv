@@ -495,6 +495,7 @@ type mockTraceStore struct {
 	validatorDecideds           map[string][]qbftstorage.ParticipantsRangeEntry
 	committeeDecideds           map[string][]qbftstorage.ParticipantsRangeEntry
 	GetValidatorDutyFunc        func(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error)
+	GetAllValidatorDutiesFunc   func(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error)
 	GetCommitteeDutyFunc        func(slot phase0.Slot, committeeID spectypes.CommitteeID) (*exportertypes.CommitteeDutyTrace, error)
 	GetCommitteeDutiesFunc      func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyTrace, error)
 	GetCommitteeIDFunc          func(slot phase0.Slot, pubkey spectypes.ValidatorPK) (spectypes.CommitteeID, phase0.ValidatorIndex, error)
@@ -502,6 +503,7 @@ type mockTraceStore struct {
 	GetCommitteeDecidedsFunc    func(slot phase0.Slot, pubKey spectypes.ValidatorPK, _ ...spectypes.BeaconRole) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetAllCommitteeDecidedsFunc func(slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
 	GetAllValidatorDecidedsFunc func(role spectypes.BeaconRole, slot phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error)
+	GetCommitteeDutyLinksFunc   func(slot phase0.Slot) ([]*exportertypes.CommitteeDutyLink, error)
 }
 
 func newMockTraceStore() *mockTraceStore {
@@ -514,6 +516,13 @@ func newMockTraceStore() *mockTraceStore {
 func (m *mockTraceStore) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*dutytracer.ValidatorDutyTrace, error) {
 	if m.GetValidatorDutyFunc != nil {
 		return m.GetValidatorDutyFunc(role, slot, pubkey)
+	}
+	return nil, nil
+}
+
+func (m *mockTraceStore) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error) {
+	if m.GetAllValidatorDutiesFunc != nil {
+		return m.GetAllValidatorDutiesFunc(role, slot)
 	}
 	return nil, nil
 }
@@ -537,6 +546,13 @@ func (m *mockTraceStore) GetCommitteeID(slot phase0.Slot, pubkey spectypes.Valid
 		return m.GetCommitteeIDFunc(slot, pubkey)
 	}
 	return spectypes.CommitteeID{}, 0, nil
+}
+
+func (m *mockTraceStore) GetCommitteeDutyLinks(slot phase0.Slot) ([]*exportertypes.CommitteeDutyLink, error) {
+	if m.GetCommitteeDutyLinksFunc != nil {
+		return m.GetCommitteeDutyLinksFunc(slot)
+	}
+	return nil, nil
 }
 
 func (m *mockTraceStore) GetValidatorDecideds(role spectypes.BeaconRole, slot phase0.Slot, pubKeys []spectypes.ValidatorPK) ([]qbftstorage.ParticipantsRangeEntry, error) {
@@ -1502,21 +1518,39 @@ func TestExporterValidatorTraces(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid request - no pubkeys or indices",
+			name: "valid request - when no pubkeys nor indices are provided",
 			request: map[string]any{
 				"from":  100,
-				"to":    200,
+				"to":    100,
 				"roles": []string{"PROPOSER"},
 			},
-			setupMock:      func(store *mockTraceStore, validatorStore *mockValidatorStore) {},
-			expectedStatus: http.StatusBadRequest,
+			setupMock: func(store *mockTraceStore, validatorStore *mockValidatorStore) {
+				pkBytes := common.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1")
+				var pk spectypes.ValidatorPK
+				copy(pk[:], pkBytes)
+
+				store.GetAllValidatorDutiesFunc = func(role spectypes.BeaconRole, slot phase0.Slot) ([]*dutytracer.ValidatorDutyTrace, error) {
+					return []*dutytracer.ValidatorDutyTrace{
+						{
+							ValidatorDutyTrace: exportertypes.ValidatorDutyTrace{
+								Slot:      150,
+								Role:      role,
+								Validator: 1,
+							},
+						},
+					}, nil
+				}
+			},
+			expectedStatus: http.StatusOK,
 			validateResp: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				var resp struct {
-					Status  string `json:"status"`
-					Message string `json:"error"`
+					Data []*validatorTrace `json:"data"`
 				}
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Equal(t, "either pubkeys or indices is required", resp.Message)
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, phase0.Slot(150), resp.Data[0].Slot)
+				assert.Equal(t, "PROPOSER", resp.Data[0].Role)
+				assert.Equal(t, phase0.ValidatorIndex(1), resp.Data[0].Validator)
 			},
 		},
 		{

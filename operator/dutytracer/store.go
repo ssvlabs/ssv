@@ -56,6 +56,30 @@ func (c *Collector) GetCommitteeID(slot phase0.Slot, pubkey spectypes.ValidatorP
 	return committeeID, index, nil
 }
 
+func (c *Collector) GetCommitteeDutyLinks(slot phase0.Slot) ([]*model.CommitteeDutyLink, error) {
+	links := make([]*model.CommitteeDutyLink, 0)
+
+	c.validatorIndexToCommitteeLinks.Range(func(index phase0.ValidatorIndex, slotToCommittee *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
+		committeeID, has := slotToCommittee.Get(slot)
+		if has {
+			links = append(links, &model.CommitteeDutyLink{
+				CommitteeID:    committeeID,
+				ValidatorIndex: index,
+			})
+		}
+		return true
+	})
+
+	diskLinks, err := c.store.GetCommitteeDutyLinks(slot)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duty links from disk: %w", err)
+	}
+
+	links = append(links, diskLinks...)
+
+	return links, nil
+}
+
 func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
 	// lookup in cache
 	validatorSlots, found := c.validatorTraces.Get(pubkey)
@@ -81,6 +105,65 @@ func (c *Collector) GetValidatorDuty(role spectypes.BeaconRole, slot phase0.Slot
 
 	// go to disk for the older ones
 	return c.getValidatorDutiesFromDisk(role, slot, pubkey)
+}
+
+func (c *Collector) GetAllValidatorDuties(role spectypes.BeaconRole, slot phase0.Slot) (out []*ValidatorDutyTrace, err error) {
+	c.validatorTraces.Range(func(pubkey spectypes.ValidatorPK, slotToDuty *hashmap.Map[phase0.Slot, *validatorDutyTrace]) bool {
+		traces, found := slotToDuty.Get(slot)
+		if found {
+			func() {
+				traces.Lock()
+				defer traces.Unlock()
+				for _, trace := range traces.roles {
+					if trace.Role == role {
+						out = append(out, &ValidatorDutyTrace{
+							ValidatorDutyTrace: *deepCopyValidatorDutyTrace(trace),
+							pubkey:             pubkey,
+						})
+					}
+				}
+			}()
+			return true
+		}
+
+		return true
+	})
+
+	diskDuties, err := c.getAllValidatorDutiesFromDisk(role, slot)
+	if err != nil {
+		return nil, fmt.Errorf("get all validator duties from disk: %w", err)
+	}
+
+	out = append(out, diskDuties...)
+
+	return out, nil
+}
+
+func (c *Collector) getAllValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot) (out []*ValidatorDutyTrace, err error) {
+	duties, err := c.store.GetValidatorDuties(role, slot)
+	if err != nil {
+		return nil, fmt.Errorf("get validator duties from disk: %w", err)
+	}
+
+	pubkeys := make(map[phase0.ValidatorIndex]spectypes.ValidatorPK)
+
+	for _, duty := range duties {
+		share, found := c.validators.ValidatorByIndex(duty.Validator)
+		if !found {
+			c.logger.Error("validator not found", fields.ValidatorIndex(duty.Validator))
+			continue
+		}
+		pubkeys[duty.Validator] = share.ValidatorPubKey
+	}
+
+	for _, duty := range duties {
+		out = append(out, &ValidatorDutyTrace{
+			ValidatorDutyTrace: *deepCopyValidatorDutyTrace(duty),
+			pubkey:             pubkeys[duty.Validator],
+		})
+	}
+
+	return out, nil
 }
 
 func (c *Collector) getValidatorDutiesFromDisk(role spectypes.BeaconRole, slot phase0.Slot, pubkey spectypes.ValidatorPK) (*ValidatorDutyTrace, error) {
