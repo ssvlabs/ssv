@@ -284,6 +284,11 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
+		defer func() {
+			if err := db.Close(); err != nil {
+				logger.Error("could not close db", zap.Error(err))
+			}
+		}()
 
 		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
 		if err != nil {
