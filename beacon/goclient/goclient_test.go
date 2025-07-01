@@ -19,7 +19,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestHealthy(t *testing.T) {
@@ -305,7 +304,7 @@ type syncResponse struct {
 func runHealthyTest(
 	t *testing.T,
 	syncResponseList []syncResponse,
-	syncDistanceTolerance phase0.Slot,
+	syncDistanceTolerance uint64,
 	concurrentHealthCheck bool,
 ) error {
 	const (
@@ -345,19 +344,20 @@ func runHealthyTest(
 		urls = append(urls, mockServer.URL)
 	}
 
-	c, err := mockClient(t.Context(), strings.Join(urls, ";"), commonTimeout, longTimeout)
+	c, err := New(t.Context(), zap.NewNop(), Options{
+		BeaconNodeAddr:        strings.Join(urls, ";"),
+		CommonTimeout:         commonTimeout,
+		LongTimeout:           longTimeout,
+		SyncDistanceTolerance: syncDistanceTolerance,
+	})
 	require.NoError(t, err)
 
-	client := c.(*GoClient)
-	err = client.Healthy(t.Context())
-	require.NoError(t, err)
-
-	client.syncDistanceTolerance = syncDistanceTolerance
-
+	// Multi client library we depend on won't start if client is not synced,
+	// so we need to let it start with synced state and then get the state from the test data.
 	replaceSyncing.Store(true)
 
 	if !concurrentHealthCheck {
-		return client.Healthy(t.Context())
+		return c.Healthy(t.Context())
 	}
 
 	var wg sync.WaitGroup
@@ -368,7 +368,7 @@ func runHealthyTest(
 		go func() {
 			defer wg.Done()
 
-			err := client.Healthy(t.Context())
+			err := c.Healthy(t.Context())
 			if err != nil {
 				errMu.Lock()
 				errs = errors.Join(errs, err)
@@ -395,7 +395,11 @@ func TestTimeouts(t *testing.T) {
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
-		_, err := mockClient(t.Context(), undialableServer.URL, commonTimeout, longTimeout)
+		_, err := New(t.Context(), zap.NewNop(), Options{
+			BeaconNodeAddr: undialableServer.URL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		})
 		require.ErrorContains(t, err, "client is not active")
 	}
 
@@ -410,7 +414,11 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(t.Context(), unresponsiveServer.URL, commonTimeout, longTimeout)
+		client, err := New(t.Context(), zap.NewNop(), Options{
+			BeaconNodeAddr: unresponsiveServer.URL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		})
 		require.NoError(t, err)
 
 		validators, err := client.GetValidatorData(t.Context(), nil) // Should call BeaconState internally.
@@ -438,7 +446,11 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(t.Context(), unresponsiveServer.URL, commonTimeout, longTimeout)
+		client, err := New(t.Context(), zap.NewNop(), Options{
+			BeaconNodeAddr: unresponsiveServer.URL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		})
 		require.NoError(t, err)
 
 		_, err = client.ProposerDuties(t.Context(), mockServerEpoch, nil)
@@ -459,7 +471,11 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(t.Context(), fastServer.URL, commonTimeout, longTimeout)
+		client, err := New(t.Context(), zap.NewNop(), Options{
+			BeaconNodeAddr: fastServer.URL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		})
 		require.NoError(t, err)
 
 		validators, err := client.GetValidatorData(t.Context(), nil)
@@ -470,16 +486,4 @@ func TestTimeouts(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
-}
-
-func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
-	return New(
-		ctx,
-		zap.NewNop(),
-		Options{
-			BeaconNodeAddr: serverURL,
-			CommonTimeout:  commonTimeout,
-			LongTimeout:    longTimeout,
-		},
-	)
 }
