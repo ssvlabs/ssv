@@ -26,13 +26,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ssvsigner"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
-	"github.com/ssvlabs/ssv/ssvsigner/keystore"
-	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
-
 	"github.com/ssvlabs/ssv/api/handlers"
 	apiserver "github.com/ssvlabs/ssv/api/server"
 	"github.com/ssvlabs/ssv/beacon/goclient"
@@ -73,6 +66,12 @@ import (
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/ssvsigner"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+	"github.com/ssvlabs/ssv/ssvsigner/keystore"
+	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/pebble"
@@ -485,7 +484,8 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to parse fixed subnets", zap.Error(err))
 		}
-		if cfg.ExporterOptions.Enabled {
+
+		if cfg.ExporterOptions.Enabled && fixedSubnets == networkcommons.ZeroSubnets {
 			fixedSubnets = networkcommons.AllSubnets
 		}
 
@@ -845,34 +845,9 @@ func setupBadgerDB(
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	migrationOpts := migrations.Options{
-		Db:              db,
-		DbPath:          cfg.DBOptions.Path,
-		BeaconConfig:    beaconConfig,
-		OperatorPrivKey: operatorPrivKey,
+	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, cfg.DBOptions.Path); err != nil {
+		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
-	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-	if applied == 0 {
-		return db, nil
-	}
-
-	// If migrations were applied, we run a full garbage collection cycle
-	// to reclaim any space that may have been freed up.
-	start := time.Now()
-
-	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
-	defer cancel()
-
-	logger.Debug("running full GC cycle...", fields.Duration(start))
-
-	if err := db.FullGC(ctx); err != nil {
-		return nil, fmt.Errorf("failed to collect garbage: %w", err)
-	}
-
-	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil
 }
@@ -889,6 +864,20 @@ func setupPebbleDB(
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
+	if err := applyMigrations(logger, beaconConfig, operatorPrivKey, db, dbPath); err != nil {
+		return nil, fmt.Errorf("apply migrations: %w", err)
+	}
+
+	return db, nil
+}
+
+func applyMigrations(
+	logger *zap.Logger,
+	beaconConfig *networkconfig.BeaconConfig,
+	operatorPrivKey keys.OperatorPrivateKey,
+	db basedb.Database,
+	dbPath string,
+) error {
 	migrationOpts := migrations.Options{
 		Db:              db,
 		DbPath:          dbPath,
@@ -898,16 +887,14 @@ func setupPebbleDB(
 
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
+		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 	if applied == 0 {
-		return db, nil
+		return nil
 	}
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	// Close & reopen the database to trigger any unknown internal
-	// startup/shutdown procedures that the storage engine may have.
 	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(cfg.DBOptions.Ctx, 6*time.Minute)
@@ -916,12 +903,12 @@ func setupPebbleDB(
 	logger.Debug("running full GC cycle...", fields.Duration(start))
 
 	if err := db.FullGC(ctx); err != nil {
-		return nil, fmt.Errorf("failed to collect garbage: %w", err)
+		return fmt.Errorf("failed to collect garbage: %w", err)
 	}
 
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
-	return db, nil
+	return nil
 }
 
 func setupOperatorDataStore(
