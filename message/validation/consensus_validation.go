@@ -234,16 +234,19 @@ func (mv *messageValidator) validateQBFTLogic(
 
 				// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit per round,
 				// as well as 1 round-change per each RCJ length (not checking round changes with higher RCJ length).
-				var needDuplicatedMsgCheck bool
+				var needMsgLimitCheck bool
 				switch consensusMessage.MsgType {
+				// There must be only one commit per round but there may be several decided messages.
 				case specqbft.CommitMsgType:
-					needDuplicatedMsgCheck = len(signedSSVMessage.OperatorIDs) == 1
+					needMsgLimitCheck = len(signedSSVMessage.OperatorIDs) == 1
+				// There may be several round changes per round, but they must have different round change justification
+				// length. There must be only one round change per round for each RCJ length
 				case specqbft.RoundChangeMsgType:
-					needDuplicatedMsgCheck = rcjLen == signerState.MaxRCJ
+					needMsgLimitCheck = rcjLen == signerState.MaxRCJ
 				default:
-					needDuplicatedMsgCheck = true
+					needMsgLimitCheck = true
 				}
-				if needDuplicatedMsgCheck {
+				if needMsgLimitCheck {
 					if err := signerState.SeenMsgTypes.ValidateConsensusMessage(consensusMessage); err != nil {
 						return err
 					}
