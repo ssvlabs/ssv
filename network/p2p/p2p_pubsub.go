@@ -18,6 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type validatorStatus int
@@ -53,11 +54,16 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		topics = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
 	} else {
-		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		validatorID, err := registrystorage.NewValidatorPubKey(msg.SSVMessage.MsgID.GetDutyExecutorID())
+		if err != nil {
+			return fmt.Errorf("could not create validator ID: %w", err)
+		}
+
+		val, exists := n.validatorStore.GetValidator(validatorID)
 		if !exists {
 			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
 		}
-		topics = commons.CommitteeTopicID(val.CommitteeID())
+		topics = commons.CommitteeTopicID(val.Share.CommitteeID())
 	}
 
 	for _, topic := range topics {
@@ -146,12 +152,17 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	validatorID, err := registrystorage.NewValidatorPubKey(pk[:])
+	if err != nil {
+		return fmt.Errorf("could not create validator ID: %w", err)
+	}
+
+	share, exists := n.validatorStore.GetValidator(validatorID)
 	if !exists {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
-	err := n.subscribeCommittee(share.CommitteeID())
+	err = n.subscribeCommittee(share.Share.CommitteeID())
 	if err != nil {
 		return fmt.Errorf("could not subscribe to committee: %w", err)
 	}
@@ -195,12 +206,17 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	share, exists := n.nodeStorage.ValidatorStore().Validator(pk[:])
+	validatorID, err := registrystorage.NewValidatorPubKey(pk[:])
+	if err != nil {
+		return fmt.Errorf("could not create validator ID: %w", err)
+	}
+
+	share, exists := n.validatorStore.GetValidator(validatorID)
 	if !exists {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
-	cmtid := share.CommitteeID()
+	cmtid := share.Share.CommitteeID()
 	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {

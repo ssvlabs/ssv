@@ -46,7 +46,7 @@ func newRateCalculator(netCfg networkconfig.NetworkConfig) *rateCalculator {
 }
 
 // Calculates the message rate for a topic given its committees' configurations (number of operators and number of validators)
-func (rc *rateCalculator) calculateMessageRateForTopic(committees []*storage.IndexedCommittee) float64 {
+func (rc *rateCalculator) calculateMessageRateForTopic(committees []*storage.CommitteeSnapshot) float64 {
 	if len(committees) == 0 {
 		return 0
 	}

@@ -30,7 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
-// TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
+// TODO: i think we use a lot of useless stuff here, check things related to validator store and node storage
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
@@ -139,7 +139,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		return nil, err
 	}
 
-	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := storage.NewNodeStorage(logger, db)
 	if err != nil {
 		return nil, err
 	}
@@ -170,27 +170,27 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		}
 	}
 
+	operatorDataStore := operatordatastore.New(&registrystorage.OperatorData{ID: nodeIndex + 1})
+
+	// Create ValidatorStore
+	validatorStore, err := registrystorage.NewValidatorStore(
+		logger,
+		nodeStorage.Shares(),
+		nodeStorage,
+		networkconfig.TestNetwork.BeaconConfig,
+		operatorDataStore.GetOperatorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	dutyStore := dutystore.New()
 	signatureVerifier := &mockSignatureVerifier{}
 
 	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
-	cfg.NodeStorage = nodeStorage
-	cfg.MessageValidator = validation.New(
-		networkconfig.TestNetwork,
-		nodeStorage.ValidatorStore(),
-		nodeStorage,
-		dutyStore,
-		signatureVerifier,
-		phase0.Epoch(0),
-	)
-	cfg.NetworkConfig = networkconfig.TestNetwork
-	if options.TotalValidators > 0 {
-		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
-		}
-	}
+	cfg.ValidatorStore = validatorStore
 
 	pubKey, err := p2pcommons.ECDSAPrivToInterface(keys.NetKey)
 	if err != nil {
@@ -206,13 +206,19 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	} else {
 		cfg.MessageValidator = validation.New(
 			networkconfig.TestNetwork,
-			nodeStorage.ValidatorStore(),
+			validatorStore,
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
 			phase0.Epoch(0),
 			validation.WithSelfAccept(selfPeerID, true),
 		)
+	}
+	cfg.NetworkConfig = networkconfig.TestNetwork
+	if options.TotalValidators > 0 {
+		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
+		}
 	}
 
 	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {
@@ -222,7 +228,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
 
-	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: nodeIndex + 1})
+	cfg.OperatorDataStore = operatorDataStore
 
 	p, err := New(logger, cfg)
 	if err != nil {

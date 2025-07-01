@@ -12,25 +12,27 @@ import (
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
-func createTestingValidators(n int) []*types.SSVShare {
-	ret := make([]*types.SSVShare, 0)
+func createTestingValidatorSnapshots(n int) []*storage.ValidatorSnapshot {
+	ret := make([]*storage.ValidatorSnapshot, 0)
 	for i := 1; i <= n; i++ {
-		ret = append(ret, &types.SSVShare{
-			Share: spectypes.Share{
-				ValidatorIndex: phase0.ValidatorIndex(i),
+		ret = append(ret, &storage.ValidatorSnapshot{
+			Share: types.SSVShare{
+				Share: spectypes.Share{
+					ValidatorIndex: phase0.ValidatorIndex(i),
+				},
 			},
 		})
 	}
 	return ret
 }
 
-func createTestingSingleCommittees(n uint64) []*storage.IndexedCommittee {
-	ret := make([]*storage.IndexedCommittee, 0)
+func createTestingSingleCommittees(n uint64) []*storage.CommitteeSnapshot {
+	ret := make([]*storage.CommitteeSnapshot, 0)
 	for i := uint64(0); i <= n; i++ {
-		opRef := i*4 + 1
-		ret = append(ret, &storage.IndexedCommittee{
-			Operators:  []uint64{opRef, opRef + 1, opRef + 2, opRef + 3},
-			Validators: createTestingValidators(1),
+		opRef := spectypes.OperatorID(i*4 + 1)
+		ret = append(ret, &storage.CommitteeSnapshot{
+			Operators:  []spectypes.OperatorID{opRef, opRef + 1, opRef + 2, opRef + 3},
+			Validators: createTestingValidatorSnapshots(1),
 		})
 	}
 	return ret
@@ -45,7 +47,7 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 	}
 
 	type args struct {
-		committees []*storage.IndexedCommittee
+		committees []*storage.CommitteeSnapshot
 	}
 	tests := []struct {
 		name string
@@ -55,14 +57,14 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 		{
 			name: "Case 1",
 			args: args{
-				committees: []*storage.IndexedCommittee{
+				committees: []*storage.CommitteeSnapshot{
 					{
-						Operators:  []uint64{1, 2, 3, 4},
-						Validators: createTestingValidators(500),
+						Operators:  []spectypes.OperatorID{1, 2, 3, 4},
+						Validators: createTestingValidatorSnapshots(500),
 					},
 					{
-						Operators:  []uint64{5, 6, 7, 8},
-						Validators: createTestingValidators(500),
+						Operators:  []spectypes.OperatorID{5, 6, 7, 8},
+						Validators: createTestingValidatorSnapshots(500),
 					},
 				},
 			},

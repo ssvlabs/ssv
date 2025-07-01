@@ -21,7 +21,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/ssvlabs/ssv/operator/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	uc "github.com/ssvlabs/ssv/utils/commons"
 )
@@ -71,8 +71,8 @@ type Config struct {
 	Router network.MessageRouter
 	// UserAgent to use by libp2p identify protocol
 	UserAgent string
-	// NodeStorage is used to get operator metadata.
-	NodeStorage storage.Storage
+	// ValidatorStore is the centralized validator management store
+	ValidatorStore registrystorage.ValidatorStore
 	// NetworkConfig defines a network configuration.
 	NetworkConfig networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.

@@ -192,7 +192,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 		logger.Debug("got validator stats for score params")
 
 		// Get committees
-		committees := committeesProvider.Committees()
+		committees := committeesProvider.GetCommittees()
 		topicCommittees := filterCommitteesForTopic(t, committees)
 
 		// Log

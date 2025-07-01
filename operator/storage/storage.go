@@ -61,7 +61,6 @@ type storage struct {
 }
 
 // NewNodeStorage creates a new instance of Storage
-// TODO: inject registrystorage
 func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
