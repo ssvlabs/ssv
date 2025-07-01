@@ -8,10 +8,12 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
@@ -28,6 +30,7 @@ var (
 		migration_5_change_share_format_from_gob_to_ssz,
 		migration_6_share_exit_epoch,
 		migration_7_populate_validator_index_mapping,
+		migration_8_derive_signer_key_with_hkdf,
 	}
 )
 
@@ -54,10 +57,10 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db           basedb.Database
-	NodeStorage  operatorstorage.Storage
-	DbPath       string
-	BeaconConfig networkconfig.Beacon
+	Db              basedb.Database
+	DbPath          string
+	BeaconConfig    *networkconfig.BeaconConfig
+	OperatorPrivKey keys.OperatorPrivateKey
 }
 
 // nolint
