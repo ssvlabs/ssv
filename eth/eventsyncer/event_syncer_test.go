@@ -28,6 +28,7 @@ import (
 	"github.com/ssvlabs/ssv/eth/executionclient"
 	"github.com/ssvlabs/ssv/eth/simulator"
 	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/exporter"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
@@ -166,7 +167,7 @@ func setupEventHandler(
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,
 		ValidatorsMap:     validators.New(ctx),
-	})
+	}, exporter.Options{})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)

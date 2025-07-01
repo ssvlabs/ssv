@@ -23,10 +23,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
@@ -46,6 +44,8 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -70,7 +70,7 @@ type MockControllerOptions struct {
 	validatorStore      registrystorage.ValidatorStore
 	operatorDataStore   operatordatastore.OperatorDataStore
 	operatorStorage     registrystorage.Operators
-	networkConfig       networkconfig.NetworkConfig
+	networkConfig       *networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
@@ -97,7 +97,7 @@ func TestNewController(t *testing.T) {
 		RecipientsStorage: recipientStorage,
 		Context:           t.Context(),
 	}
-	control := NewController(logger, controllerOptions)
+	control := NewController(logger, controllerOptions, exporter.Options{})
 	require.IsType(t, &controller{}, control)
 }
 
@@ -229,7 +229,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				validatorsMap:     mockValidatorsMap,
 				validatorStore:    mockValidatorStore,
 				validatorCommonOpts: &validator.CommonOptions{
-					Exporter: true,
+					ExporterOptions: exporter.Options{
+						Enabled: true,
+					},
 				},
 			}
 			ctr := setupController(t, logger, controllerOptions)
@@ -249,7 +251,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	ctr := setupController(t, logger, controllerOptions) // non-committee
 
 	// Only exporter handles non-committee messages
-	ctr.validatorCommonOpts.Exporter = true
+	ctr.validatorCommonOpts.ExporterOptions.Enabled = true
 
 	go ctr.handleRouterMessages()
 
@@ -792,7 +794,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 
 func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOptions) controller {
 	// Default to test network config if not provided.
-	if opts.networkConfig.Name == "" {
+	if opts.networkConfig == nil {
 		opts.networkConfig = networkconfig.TestNetwork
 	}
 

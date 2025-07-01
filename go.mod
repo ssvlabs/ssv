@@ -40,7 +40,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/ssvlabs/eth2-key-manager v1.5.5
 	github.com/ssvlabs/ssv-spec v1.1.3
-	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250603100129-f39e516ad8de
+	github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250630180859-c6a58aa0aaa3
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.10.0
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -226,7 +226,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polydawn/refmt v0.89.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.64.0 // indirect
+	github.com/prometheus/common v0.64.0
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
 	github.com/quic-go/quic-go v0.46.0 // indirect
