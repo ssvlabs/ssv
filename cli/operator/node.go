@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
@@ -179,41 +180,14 @@ var StartNodeCmd = &cobra.Command{
 			BeaconConfig: consensusClient.BeaconConfig(),
 		}
 
-		cfg.DBOptions.Ctx = cmd.Context()
-
-		var db basedb.Database
-		switch cfg.DBOptions.Engine {
-		case "pebble":
-			logger.Info("using pebble db")
-			db, err = setupPebbleDB(logger, networkConfig)
-		case "badger":
-			logger.Info("using badger db")
-			db, err = setupBadgerDB(logger, networkConfig)
-		default:
-			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
-		}
-		if err != nil {
-			logger.Fatal("could not setup db", zap.Error(err))
-		}
-
-		defer func() {
-			if err := db.Close(); err != nil {
-				logger.Error("could not close db", zap.Error(err))
-			}
-		}()
-
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
 
 		if err := validateProposerDelayConfig(logger); err != nil {
 			logger.Fatal("invalid ProposerDelay configuration", zap.Error(err))
 		}
 
-		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
-		if err != nil {
-			logger.Fatal("failed to create node storage", zap.Error(err))
-		}
-
 		var operatorPrivKey keys.OperatorPrivateKey
+		var operatorPrivKeyPEM string
 		var ssvSignerClient *ssvsigner.Client
 		var operatorPubKeyBase64 string
 
@@ -267,11 +241,6 @@ var StartNodeCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
 			}
-
-			// Ensure the pubkey is saved on first run and never changes afterwards
-			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
-				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
-			}
 		} else {
 			if usingKeystore {
 				logger.Info("getting operator private key from keystore")
@@ -282,11 +251,7 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not extract private key from keystore", zap.Error(err))
 				}
 
-				pemBase64 := base64.StdEncoding.EncodeToString(decryptedKeystore)
-				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, pemBase64); err != nil {
-					logger.Fatal("could not save operator private key", zap.Error(err))
-				}
-
+				operatorPrivKeyPEM = base64.StdEncoding.EncodeToString(decryptedKeystore)
 			} else if usingPrivKey {
 				logger.Info("getting operator private key from args")
 
@@ -295,14 +260,49 @@ var StartNodeCmd = &cobra.Command{
 					logger.Fatal("could not decode operator private key", zap.Error(err))
 				}
 
-				if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, cfg.OperatorPrivateKey); err != nil {
-					logger.Fatal("could not save operator private key", zap.Error(err))
-				}
+				operatorPrivKeyPEM = cfg.OperatorPrivateKey
 			}
 
 			operatorPubKeyBase64, err = operatorPrivKey.Public().Base64()
 			if err != nil {
 				logger.Fatal("could not get operator public key base64", zap.Error(err))
+			}
+		}
+
+		cfg.DBOptions.Ctx = cmd.Context()
+		var db basedb.Database
+		switch cfg.DBOptions.Engine {
+		case "pebble":
+			logger.Info("using pebble db")
+			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
+		case "badger":
+			logger.Info("using badger db")
+			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
+		default:
+			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
+		}
+		if err != nil {
+			logger.Fatal("could not setup db", zap.Error(err))
+		}
+		defer func() {
+			if err := db.Close(); err != nil {
+				logger.Error("could not close db", zap.Error(err))
+			}
+		}()
+
+		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig, logger, db)
+		if err != nil {
+			logger.Fatal("failed to create node storage", zap.Error(err))
+		}
+
+		if usingSSVSigner {
+			// Ensure the pubkey is saved on first run and never changes afterwards
+			if err := ensureOperatorPubKey(nodeStorage, operatorPubKeyBase64); err != nil {
+				logger.Fatal("could not save base64-encoded operator public key", zap.Error(err))
+			}
+		} else {
+			if err := ensureOperatorPrivateKey(nodeStorage, operatorPrivKey, operatorPrivKeyPEM); err != nil {
+				logger.Fatal("could not save operator private key", zap.Error(err))
 			}
 		}
 
@@ -835,16 +835,21 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupBadgerDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*badger.DB, error) {
+func setupBadgerDB(
+	logger *zap.Logger,
+	beaconConfig *networkconfig.BeaconConfig,
+	operatorPrivKey keys.OperatorPrivateKey,
+) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
 	migrationOpts := migrations.Options{
-		Db:           db,
-		DbPath:       cfg.DBOptions.Path,
-		BeaconConfig: networkConfig.BeaconConfig,
+		Db:              db,
+		DbPath:          cfg.DBOptions.Path,
+		BeaconConfig:    beaconConfig,
+		OperatorPrivKey: operatorPrivKey,
 	}
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
 	if err != nil {
@@ -872,7 +877,11 @@ func setupBadgerDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfi
 	return db, nil
 }
 
-func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfig) (*pebble.DB, error) {
+func setupPebbleDB(
+	logger *zap.Logger,
+	beaconConfig *networkconfig.BeaconConfig,
+	operatorPrivKey keys.OperatorPrivateKey,
+) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
 
 	db, err := pebble.New(logger, dbPath, &cockroachdb.Options{})
@@ -881,9 +890,10 @@ func setupPebbleDB(logger *zap.Logger, networkConfig *networkconfig.NetworkConfi
 	}
 
 	migrationOpts := migrations.Options{
-		Db:           db,
-		DbPath:       dbPath,
-		BeaconConfig: networkConfig.BeaconConfig,
+		Db:              db,
+		DbPath:          dbPath,
+		BeaconConfig:    beaconConfig,
+		OperatorPrivKey: operatorPrivKey,
 	}
 
 	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
@@ -972,8 +982,8 @@ func ensureOperatorPrivateKey(
 	}
 
 	// Subsequent runs: enforce immutability.
-	if currentHash != storedHash &&
-		legacyHash != storedHash {
+	if !bytes.Equal(currentHash, storedHash) &&
+		!bytes.Equal(legacyHash, storedHash) {
 		// Prevent the node from running with a different key.
 		return fmt.Errorf("operator private key is not matching the one encrypted the storage")
 	}

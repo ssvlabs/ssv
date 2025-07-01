@@ -13,16 +13,49 @@ import (
 )
 
 func TestRun_InvalidWeb3SignerEndpoint(t *testing.T) {
-	logger, _ := zap.NewDevelopment()
-
-	cli := CLI{
-		ListenAddr:         ":8080",
-		Web3SignerEndpoint: "invalid-url",
-		PrivateKey:         base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)),
+	tests := []struct {
+		name     string
+		endpoint string
+		wantErr  string
+	}{
+		{
+			name:     "invalid URL format",
+			endpoint: "invalid-url",
+			wantErr:  "invalid WEB3SIGNER_ENDPOINT: invalid url format",
+		},
+		{
+			name:     "missing scheme",
+			endpoint: "192.168.1.1:9000",
+			wantErr:  "invalid WEB3SIGNER_ENDPOINT: invalid url format",
+		},
+		{
+			name:     "invalid scheme",
+			endpoint: "ftp://example.com",
+			wantErr:  "invalid WEB3SIGNER_ENDPOINT: invalid url scheme \"ftp\": only http/https allowed",
+		},
+		{
+			name:     "missing hostname",
+			endpoint: "http://",
+			wantErr:  "invalid WEB3SIGNER_ENDPOINT: missing hostname in url",
+		},
 	}
 
-	err := run(logger, cli)
-	require.ErrorContains(t, err, "invalid WEB3SIGNER_ENDPOINT format")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			logger, _ := zap.NewDevelopment()
+
+			cli := CLI{
+				ListenAddr:         ":8080",
+				Web3SignerEndpoint: tt.endpoint,
+				PrivateKey:         base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)),
+			}
+
+			err := run(logger, cli)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
 }
 
 func TestRun_MissingPrivateKey(t *testing.T) {
@@ -30,7 +63,7 @@ func TestRun_MissingPrivateKey(t *testing.T) {
 
 	cli := CLI{
 		ListenAddr:         ":8080",
-		Web3SignerEndpoint: "http://example.com",
+		Web3SignerEndpoint: "https://ssvlabs.io/",
 		PrivateKey:         "",
 		PrivateKeyFile:     "",
 	}
@@ -45,8 +78,9 @@ func TestRun_InvalidPrivateKeyFormat(t *testing.T) {
 
 	cli := CLI{
 		ListenAddr:         ":8080",
-		Web3SignerEndpoint: "http://example.com",
+		Web3SignerEndpoint: "https://ssvlabs.io/",
 		PrivateKey:         "invalid-key-format",
+		AllowInsecureHTTP:  true,
 	}
 
 	err := run(logger, cli)
@@ -59,9 +93,10 @@ func TestRun_FailedKeystoreLoad(t *testing.T) {
 
 	cli := CLI{
 		ListenAddr:         ":8080",
-		Web3SignerEndpoint: "http://example.com",
+		Web3SignerEndpoint: "https://ssvlabs.io/",
 		PrivateKeyFile:     "/nonexistent/path",
 		PasswordFile:       "/nonexistent/password",
+		AllowInsecureHTTP:  true,
 	}
 
 	err := run(logger, cli)
@@ -74,8 +109,9 @@ func TestRun_FailedServerStart(t *testing.T) {
 
 	cli := CLI{
 		ListenAddr:         ":999999",
-		Web3SignerEndpoint: "http://example.com",
+		Web3SignerEndpoint: "https://ssvlabs.io/",
 		PrivateKey:         base64.StdEncoding.EncodeToString([]byte(rsatesting.PrivKeyPEM)),
+		AllowInsecureHTTP:  true,
 	}
 
 	err := run(logger, cli)
