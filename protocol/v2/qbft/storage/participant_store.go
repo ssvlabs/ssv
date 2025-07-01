@@ -11,8 +11,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
-const maxCommitteeSize = 13 // TODO: define in ssv network config
-
 // Participation extends ParticipantsRangeEntry with role and pubkey.
 type Participation struct {
 	ParticipantsRangeEntry

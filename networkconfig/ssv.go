@@ -72,6 +72,7 @@ type marshaledConfig struct {
 	RegistryContractAddr    ethcommon.Address `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
 	Bootnodes               []string          `json:"Bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
 	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
+	MaxF                    int               `json:"MaxF,omitempty" yaml:"MaxF,omitempty"`
 	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 	GasLimit36Epoch         phase0.Epoch      `json:"GasLimit36Epoch,omitempty" yaml:"GasLimit36Epoch,omitempty"`
 }
@@ -84,6 +85,7 @@ func (s *SSVConfig) marshal() *marshaledConfig {
 		RegistryContractAddr:    s.RegistryContractAddr,
 		Bootnodes:               s.Bootnodes,
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
+		MaxF:                    s.MaxF,
 		TotalEthereumValidators: s.TotalEthereumValidators,
 		GasLimit36Epoch:         s.GasLimit36Epoch,
 	}
@@ -113,6 +115,7 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 		RegistryContractAddr:    aux.RegistryContractAddr,
 		Bootnodes:               aux.Bootnodes,
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
+		MaxF:                    aux.MaxF,
 		TotalEthereumValidators: aux.TotalEthereumValidators,
 		GasLimit36Epoch:         aux.GasLimit36Epoch,
 	}

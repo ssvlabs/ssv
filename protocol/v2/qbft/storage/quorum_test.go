@@ -71,12 +71,12 @@ func TestQuorum_ToBitMask_InvalidSizes(t *testing.T) {
 		shouldPanic bool
 	}{
 		{
-			name: "Committee size exceeds maxCommitteeSize",
+			name: "Committee size exceeds uint16Bits",
 			quorum: newQuorum(
 				createOperatorIDs(1, 2, 3),
 				func() []spectypes.OperatorID {
-					committee := make([]spectypes.OperatorID, maxCommitteeSize+1)
-					for i := 0; i < maxCommitteeSize+1; i++ {
+					committee := make([]spectypes.OperatorID, uint16Bits+1)
+					for i := 0; i < uint16Bits+1; i++ {
 						committee[i] = spectypes.OperatorID(i + 1)
 					}
 					return committee
@@ -85,11 +85,11 @@ func TestQuorum_ToBitMask_InvalidSizes(t *testing.T) {
 			shouldPanic: true,
 		},
 		{
-			name: "Signers size exceeds maxCommitteeSize",
+			name: "Signers size exceeds uint16Bits",
 			quorum: newQuorum(
 				func() []spectypes.OperatorID {
-					signers := make([]spectypes.OperatorID, maxCommitteeSize+1)
-					for i := 0; i < maxCommitteeSize+1; i++ {
+					signers := make([]spectypes.OperatorID, uint16Bits+1)
+					for i := 0; i < uint16Bits+1; i++ {
 						signers[i] = spectypes.OperatorID(i + 1)
 					}
 					return signers
@@ -237,11 +237,11 @@ func TestOperatorsBitMask_Signers_InvalidSizes(t *testing.T) {
 		shouldError bool
 	}{
 		{
-			name:    "Committee size exceeds maxCommitteeSize",
+			name:    "Committee size exceeds uint16Bits",
 			bitmask: 1 << 0,
 			committee: func() []spectypes.OperatorID {
-				committee := make([]spectypes.OperatorID, maxCommitteeSize+1)
-				for i := 0; i < maxCommitteeSize+1; i++ {
+				committee := make([]spectypes.OperatorID, uint16Bits+1)
+				for i := 0; i < uint16Bits+1; i++ {
 					committee[i] = spectypes.OperatorID(i + 1)
 				}
 				return committee

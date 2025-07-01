@@ -7,23 +7,28 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
+// We currently don't support committee sizes more than 13, but this package may work with any sizes that fit uint16.
+const uint16Bits = 16
+
 type Quorum struct {
 	Signers   []spectypes.OperatorID
 	Committee []spectypes.OperatorID
 }
 
 func NewQuorum(signers, committee []spectypes.OperatorID) (Quorum, error) {
-	// We currently don't support committee sizes more than 13, but Quorum may work with any sizes that fit uint16.
-	if len(committee) > uint16Bits || len(signers) > uint16Bits || len(signers) > len(committee) {
-		return Quorum{}, fmt.Errorf("invalid signers/quorum size: %d/%d", len(committee), len(signers))
-	}
-	return Quorum{
+	q := Quorum{
 		Signers:   signers,
 		Committee: committee,
-	}, nil
+	}
+
+	return q, q.validateOperators()
 }
 
 func (q *Quorum) ToSignersBitMask() SignersBitMask {
+	if err := q.validateOperators(); err != nil {
+		panic(err)
+	}
+
 	bitmask := SignersBitMask(0)
 	i, j := 0, 0
 	for i < len(q.Signers) && j < len(q.Committee) {
@@ -41,6 +46,14 @@ func (q *Quorum) ToSignersBitMask() SignersBitMask {
 	return bitmask
 }
 
+func (q *Quorum) validateOperators() error {
+	if len(q.Signers) > uint16Bits || len(q.Committee) > uint16Bits || len(q.Signers) > len(q.Committee) {
+		return fmt.Errorf("invalid signers/committee size: %d/%d", len(q.Signers), len(q.Committee))
+	}
+
+	return nil
+}
+
 // SignersBitMask represents a bitset of committee indices of operators participated in the quorum.
 // As the maximal supported operator count is 13, it needs to be at least 13 bits long.
 // The starting bit is the least significant bit, so it represents the first operator in the committee.
@@ -49,10 +62,7 @@ func (q *Quorum) ToSignersBitMask() SignersBitMask {
 // If committee is [1,2,3,4] and SignersBitMask is 0b0000_0000_0000_1101, it means quorum of [1,3,4].
 type SignersBitMask uint16
 
-const uint16Bits = 16
-
 func (obm SignersBitMask) Signers(committee []spectypes.OperatorID) ([]spectypes.OperatorID, error) {
-	// We currently don't support committee sizes more than 13, but Signers may work with any sizes that fit uint16.
 	if len(committee) > uint16Bits {
 		return nil, fmt.Errorf("unsupported committee size: %d", len(committee))
 	}
