@@ -25,6 +25,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -35,7 +36,7 @@ type ValidatorRegistrationRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
+	valCheck       ssv.ProposedValueCheckF
 
 	gasLimit uint64
 }
@@ -288,7 +289,7 @@ func (r *ValidatorRegistrationRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (r *ValidatorRegistrationRunner) GetValCheckF() ssv.ProposedValueCheckF {
 	return r.valCheck
 }
 

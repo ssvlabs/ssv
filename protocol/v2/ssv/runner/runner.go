@@ -15,19 +15,20 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() beacon.BeaconNode
-	GetValCheckF() specqbft.ProposedValueCheckF
+	GetValCheckF() ssv.ProposedValueCheckF
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
@@ -327,7 +328,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		return observability.Errorf(span, "could not encode input data for consensus: %w", err)
 	}
 
-	if err := runner.GetValCheckF()(byts); err != nil {
+	if err := runner.GetValCheckF()(byts, nil); err != nil {
 		return observability.Errorf(span, "input data invalid: %w", err)
 	}
 

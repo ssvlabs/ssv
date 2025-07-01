@@ -18,13 +18,15 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type SyncCommitteeAggregatorRunner struct {
@@ -34,7 +36,7 @@ type SyncCommitteeAggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
+	valCheck       ssv.ProposedValueCheckF
 	measurements   measurementsStore
 }
 
@@ -46,7 +48,7 @@ func NewSyncCommitteeAggregatorRunner(
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) (Runner, error) {
 	if len(share) != 1 {
@@ -541,7 +543,7 @@ func (r *SyncCommitteeAggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (r *SyncCommitteeAggregatorRunner) GetValCheckF() ssv.ProposedValueCheckF {
 	return r.valCheck
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -22,7 +23,7 @@ func (i *Instance) uponRoundChange(
 	instanceStartValue []byte,
 	msg *specqbft.ProcessingMessage,
 	roundChangeMsgContainer *specqbft.MsgContainer,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ProposedValueCheckF,
 ) error {
 	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, roundChangeMsgContainer.MessagesForRound(msg.QBFTMessage.Round))
 	// Currently, even if we have a quorum of round change messages, we update the container
@@ -163,7 +164,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 	instanceStartValue []byte,
 	roundChangeMessage *specqbft.ProcessingMessage,
 	roundChangeMsgContainer *specqbft.MsgContainer,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ProposedValueCheckF,
 ) (*specqbft.ProcessingMessage, []byte, error) {
 	roundChanges := roundChangeMsgContainer.MessagesForRound(roundChangeMessage.QBFTMessage.Round)
 	// optimization, if no round change quorum can return false
@@ -218,7 +219,7 @@ func isProposalJustificationForLeadingRound(
 	roundChanges []*specqbft.ProcessingMessage,
 	roundChangeJustifications []*specqbft.ProcessingMessage,
 	value []byte,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ProposedValueCheckF,
 	newRound specqbft.Round,
 ) error {
 	if err := isReceivedProposalJustification(
@@ -253,7 +254,7 @@ func isReceivedProposalJustification(
 	roundChanges, prepares []*specqbft.ProcessingMessage,
 	newRound specqbft.Round,
 	value []byte,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ProposedValueCheckF,
 ) error {
 	if err := isProposalJustification(
 		state,
@@ -263,6 +264,7 @@ func isReceivedProposalJustification(
 		state.Height,
 		newRound,
 		value,
+		nil,
 		valCheck,
 	); err != nil {
 		return errors.Wrap(err, "proposal not justified")

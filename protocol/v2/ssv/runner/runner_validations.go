@@ -102,7 +102,7 @@ func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val spectypes.E
 	if err != nil {
 		return errors.Wrap(err, "could not encode decided value")
 	}
-	if err := runner.GetValCheckF()(byts); err != nil {
+	if err := runner.GetValCheckF()(byts, nil); err != nil {
 		return errors.Wrap(err, "decided value is invalid")
 	}
 

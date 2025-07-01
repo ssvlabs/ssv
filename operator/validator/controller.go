@@ -1095,7 +1095,7 @@ func SetupCommitteeRunners(
 	ctx context.Context,
 	options *validator.Options,
 ) validator.CommitteeRunnerFunc {
-	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
+	buildController := func(role spectypes.RunnerRole, valueCheckF ssv.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.GetDomainType(),
@@ -1159,7 +1159,7 @@ func SetupRunners(
 		spectypes.RoleVoluntaryExit,
 	}
 
-	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
+	buildController := func(role spectypes.RunnerRole, valueCheckF ssv.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner: options.Signer,
 			Domain:       options.NetworkConfig.GetDomainType(),

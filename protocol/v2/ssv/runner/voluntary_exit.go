@@ -16,12 +16,14 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 // ValidatorDuty runner for validator voluntary exit duty
@@ -32,7 +34,7 @@ type VoluntaryExitRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
+	valCheck       ssv.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
 }
@@ -265,7 +267,7 @@ func (r *VoluntaryExitRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (r *VoluntaryExitRunner) GetValCheckF() ssv.ProposedValueCheckF {
 	return r.valCheck
 }
 

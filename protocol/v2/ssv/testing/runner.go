@@ -79,7 +79,7 @@ var ConstructBaseRunner = func(
 	opSigner := spectestingutils.NewOperatorSigner(keySet, 1)
 	dgHandler := doppelganger.NoOpHandler{}
 
-	var valCheck specqbft.ProposedValueCheckF
+	var valCheck ssv.ProposedValueCheckF
 	switch role {
 	case spectypes.RoleCommittee:
 		valCheck = ssv.BeaconVoteValueCheckF(km, spectestingutils.TestingDutySlot,
@@ -296,7 +296,7 @@ var ConstructBaseRunnerWithShareMap = func(
 	var identifier spectypes.MessageID
 	var net *spectestingutils.TestingNetwork
 	var opSigner *spectypes.OperatorSigner
-	var valCheck specqbft.ProposedValueCheckF
+	var valCheck ssv.ProposedValueCheckF
 	var contr *controller.Controller
 
 	km := ekm.NewTestingKeyManagerAdapter(spectestingutils.NewTestingKeyManager())

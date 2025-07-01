@@ -31,6 +31,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -42,7 +43,7 @@ type ProposerRunner struct {
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
-	valCheck            specqbft.ProposedValueCheckF
+	valCheck            ssv.ProposedValueCheckF
 	measurements        measurementsStore
 	graffiti            []byte
 
@@ -62,7 +63,7 @@ func NewProposerRunner(
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	doppelgangerHandler DoppelgangerProvider,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
 	proposerDelay time.Duration,
@@ -588,7 +589,7 @@ func (r *ProposerRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (r *ProposerRunner) GetValCheckF() ssv.ProposedValueCheckF {
 	return r.valCheck
 }
 

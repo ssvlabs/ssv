@@ -30,6 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -48,7 +49,7 @@ type CommitteeRunner struct {
 	beacon              beacon.BeaconNode
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
-	valCheck            specqbft.ProposedValueCheckF
+	valCheck            ssv.ProposedValueCheckF
 	DutyGuard           CommitteeDutyGuard
 	doppelgangerHandler DoppelgangerProvider
 	measurements        measurementsStore
@@ -64,7 +65,7 @@ func NewCommitteeRunner(
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck specqbft.ProposedValueCheckF,
+	valCheck ssv.ProposedValueCheckF,
 	dutyGuard CommitteeDutyGuard,
 	doppelgangerHandler DoppelgangerProvider,
 ) (Runner, error) {
@@ -149,7 +150,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		network        specqbft.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
-		valCheck       specqbft.ProposedValueCheckF
+		valCheck       ssv.ProposedValueCheckF
 	}
 
 	// Create object and marshal
@@ -174,7 +175,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		network        specqbft.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
-		valCheck       specqbft.ProposedValueCheckF
+		valCheck       ssv.ProposedValueCheckF
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
@@ -201,7 +202,7 @@ func (cr *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return cr.beacon
 }
 
-func (cr *CommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (cr *CommitteeRunner) GetValCheckF() ssv.ProposedValueCheckF {
 	return cr.valCheck
 }
 

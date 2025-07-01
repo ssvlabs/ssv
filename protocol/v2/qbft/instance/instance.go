@@ -201,6 +201,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 			i.State,
 			i.config,
 			msg,
+			i.StartValue,
 			i.config.GetValueCheckF(),
 		)
 	case specqbft.PrepareMsgType:

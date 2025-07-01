@@ -5,6 +5,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
+
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
@@ -20,7 +22,7 @@ type signing interface {
 type IConfig interface {
 	signing
 	// GetValueCheckF returns value check function
-	GetValueCheckF() specqbft.ProposedValueCheckF
+	GetValueCheckF() ssv.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
@@ -34,7 +36,7 @@ type IConfig interface {
 type Config struct {
 	BeaconSigner ekm.BeaconSigner
 	Domain       spectypes.DomainType
-	ValueCheckF  specqbft.ProposedValueCheckF
+	ValueCheckF  ssv.ProposedValueCheckF
 	ProposerF    specqbft.ProposerF
 	Network      specqbft.Network
 	Timer        roundtimer.Timer
@@ -52,7 +54,7 @@ func (c *Config) GetSignatureDomainType() spectypes.DomainType {
 }
 
 // GetValueCheckF returns value check instance
-func (c *Config) GetValueCheckF() specqbft.ProposedValueCheckF {
+func (c *Config) GetValueCheckF() ssv.ProposedValueCheckF {
 	return c.ValueCheckF
 }
 

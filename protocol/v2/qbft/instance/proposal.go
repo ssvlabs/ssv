@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -66,7 +67,8 @@ func isValidProposal(
 	state *specqbft.State,
 	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
-	valCheck specqbft.ProposedValueCheckF,
+	ownData []byte,
+	valCheck ssv.ProposedValueCheckF,
 ) error {
 	if msg.QBFTMessage.MsgType != specqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
@@ -128,6 +130,7 @@ func isValidProposal(
 		state.Height,
 		msg.QBFTMessage.Round,
 		msg.SignedMessage.FullData,
+		ownData,
 		valCheck,
 	); err != nil {
 		return errors.Wrap(err, "proposal not justified")
@@ -147,7 +150,7 @@ func IsProposalJustification(
 	prepareMsgs []*specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
-	fullData []byte,
+	fullData, ownData []byte,
 ) error {
 	return isProposalJustification(
 		&specqbft.State{
@@ -159,8 +162,8 @@ func IsProposalJustification(
 		prepareMsgs,
 		height,
 		round,
-		fullData,
-		func(data []byte) error { return nil },
+		fullData, ownData,
+		func(data, ownData []byte) error { return nil },
 	)
 }
 
@@ -172,10 +175,10 @@ func isProposalJustification(
 	prepareMsgs []*specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
-	fullData []byte,
-	valCheck specqbft.ProposedValueCheckF,
+	fullData, ownData []byte,
+	valCheck ssv.ProposedValueCheckF,
 ) error {
-	if err := valCheck(fullData); err != nil {
+	if err := valCheck(fullData, ownData); err != nil {
 		return errors.Wrap(err, "proposal fullData invalid")
 	}
 
