@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -376,7 +376,7 @@ func (ps *participantStorage) getCommittee(
 		return nil, fmt.Errorf("no committee found for pk %s", pk)
 	}
 
-	committeeSlots := maps.Keys(committeeBySlot)
+	committeeSlots := slices.Collect(maps.Keys(committeeBySlot))
 	slices.Sort(committeeSlots)
 	idx, ok := slices.BinarySearch(committeeSlots, slot)
 	switch {
@@ -431,7 +431,7 @@ func (ps *participantStorage) upsertSlot(
 	slot phase0.Slot,
 	committee []spectypes.OperatorID,
 ) bool {
-	slots := maps.Keys(committeeBySlot)
+	slots := slices.Collect(maps.Keys(committeeBySlot))
 	if len(slots) == 0 {
 		committeeBySlot[slot] = committee
 		return true
