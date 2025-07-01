@@ -399,6 +399,11 @@ database, cleaning keys in Web3Signer is required to ensure all shares are prope
    to implement a robust backup and recovery strategy for their databases (PostgreSQL for Web3Signer, or the node's
    local database for local signing setups). Failure to maintain database backups can lead to significant financial
    loss. Operators are responsible for their own database management and protection.
+5. **Local File Read Protection**: We recommend restricting ssv-signer's permissions at the OS level to read files only 
+   from its own directory to avoid possible attacks if the service is compromised. 
+6. **SSRF Protection**: We recommend restricting ssv-signer's access to networks at the infrastructure level, allowing
+   only access to the Web3Signer service endpoint. Consider restricting access to all local and private addresses 
+   to prevent attacks on the infrastructure.
 
 ## Performance Considerations
 
