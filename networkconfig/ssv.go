@@ -48,6 +48,8 @@ type SSVConfig struct {
 	// MaxF defines max amount of failed operators with which SSV node will continue working.
 	// The max amount of operators is inherited from this value using the 3F+1 formula.
 	// We currently support only MaxF=4, it should be changed only for experimental testing.
+	// IMPORTANT: While it's possible to change it, the codebase is not adapted to the change yet,
+	// so it doesn't work out of the box. The support will be added gradually.
 	MaxF int
 	// TotalEthereumValidators value needs to be maintained — consider getting it from external API
 	// with default or per-network value(s) as fallback
