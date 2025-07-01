@@ -280,6 +280,8 @@ func checkConsensusDataSameToOwn(consensusData, ownConsensusData *spectypes.Vali
 		return errors.New("validator consensus data Version differs from own data")
 	}
 
+	var needBlockDataCheck bool
+
 	var blockSlot phase0.Slot
 	var blockProposerIndex phase0.ValidatorIndex
 
@@ -297,6 +299,7 @@ func checkConsensusDataSameToOwn(consensusData, ownConsensusData *spectypes.Vali
 		}
 
 		blockProposerIndex = proposerIndex
+		needBlockDataCheck = true
 	} else if blockData, _, err := consensusData.GetBlockData(); err == nil {
 		slot, err := blockData.Slot()
 		if err != nil {
@@ -311,51 +314,53 @@ func checkConsensusDataSameToOwn(consensusData, ownConsensusData *spectypes.Vali
 		}
 
 		blockProposerIndex = proposerIndex
+		needBlockDataCheck = true
 	} else {
-		return fmt.Errorf("data is neither block nor blinded block")
+		// TODO: consider handling AggregateAndProof
 	}
 
-	var ownBlockSlot phase0.Slot
-	var ownBlockProposerIndex phase0.ValidatorIndex
+	if needBlockDataCheck {
+		var ownBlockSlot phase0.Slot
+		var ownBlockProposerIndex phase0.ValidatorIndex
 
-	if ownBlindedBlockData, _, err := ownConsensusData.GetBlindedBlockData(); err == nil {
-		slot, err := ownBlindedBlockData.Slot()
-		if err != nil {
-			return errors.Wrap(err, "failed to get slot from own blinded block data")
+		if ownBlindedBlockData, _, err := ownConsensusData.GetBlindedBlockData(); err == nil {
+			slot, err := ownBlindedBlockData.Slot()
+			if err != nil {
+				return errors.Wrap(err, "failed to get slot from own blinded block data")
+			}
+
+			ownBlockSlot = slot
+
+			proposerIndex, err := ownBlindedBlockData.ProposerIndex()
+			if err != nil {
+				return errors.Wrap(err, "failed to get block proposer index")
+			}
+
+			ownBlockProposerIndex = proposerIndex
+		} else if ownBlockData, _, err := ownConsensusData.GetBlockData(); err == nil {
+			slot, err := ownBlockData.Slot()
+			if err != nil {
+				return errors.Wrap(err, "failed to get slot from own block data")
+			}
+
+			ownBlockSlot = slot
+
+			proposerIndex, err := ownBlockData.ProposerIndex()
+			if err != nil {
+				return errors.Wrap(err, "failed to get own block proposer index")
+			}
+
+			ownBlockProposerIndex = proposerIndex
+		} else {
+			// TODO: consider handling AggregateAndProof
+		}
+		if blockSlot != ownBlockSlot {
+			return fmt.Errorf("validator duty block slot differs from own validator duty")
 		}
 
-		ownBlockSlot = slot
-
-		proposerIndex, err := ownBlindedBlockData.ProposerIndex()
-		if err != nil {
-			return errors.Wrap(err, "failed to get block proposer index")
+		if blockProposerIndex != ownBlockProposerIndex {
+			return fmt.Errorf("validator duty block proposer index differs from own validator duty")
 		}
-
-		ownBlockProposerIndex = proposerIndex
-	} else if ownBlockData, _, err := ownConsensusData.GetBlockData(); err == nil {
-		slot, err := ownBlockData.Slot()
-		if err != nil {
-			return errors.Wrap(err, "failed to get slot from own block data")
-		}
-
-		ownBlockSlot = slot
-
-		proposerIndex, err := ownBlockData.ProposerIndex()
-		if err != nil {
-			return errors.Wrap(err, "failed to get own block proposer index")
-		}
-
-		ownBlockProposerIndex = proposerIndex
-	} else {
-		return fmt.Errorf("own data is neither block nor blinded block")
-	}
-
-	if blockSlot != ownBlockSlot {
-		return fmt.Errorf("validator duty block slot differs from own validator duty")
-	}
-
-	if blockProposerIndex != ownBlockProposerIndex {
-		return fmt.Errorf("validator duty block proposer index differs from own validator duty")
 	}
 
 	// TODO: check other fields
