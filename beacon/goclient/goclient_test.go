@@ -390,8 +390,7 @@ func runHealthyTest(
 		go func() {
 			defer wg.Done()
 
-			err := c.Healthy(t.Context())
-			if err != nil {
+			if err := c.Healthy(t.Context()); err != nil {
 				errMu.Lock()
 				errs = errors.Join(errs, err)
 				errMu.Unlock()
