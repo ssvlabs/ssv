@@ -2,9 +2,7 @@ package ssv
 
 import (
 	"bytes"
-	"fmt"
 	"math"
-	"slices"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -63,16 +61,12 @@ func BeaconVoteValueCheckF(
 				return errors.Wrap(err, "failed decoding own beacon vote")
 			}
 
-			if bv.BlockRoot != obv.BlockRoot {
-				return errors.New("beacon vote block root differs from own beacon vote")
+			if bv.Source == nil && obv.Source != nil || bv.Source != nil && obv.Source == nil || bv.Source.Epoch != obv.Source.Epoch {
+				return errors.New("beacon vote source epoch differs from own beacon vote")
 			}
 
-			if bv.Source == nil && obv.Source != nil || bv.Source != nil && obv.Source == nil || *bv.Source != *obv.Source {
-				return errors.New("beacon vote source differs from own beacon vote")
-			}
-
-			if bv.Target == nil && obv.Target != nil || bv.Target != nil && obv.Target == nil || *bv.Target != *obv.Target {
-				return errors.New("beacon vote target differs from own beacon vote")
+			if bv.Target == nil && obv.Target != nil || bv.Target != nil && obv.Target == nil || bv.Target.Epoch != obv.Target.Epoch {
+				return errors.New("beacon vote target epoch differs from own beacon vote")
 			}
 		}
 
@@ -121,21 +115,6 @@ func ProposerValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if ownData != nil {
-			ocd := &spectypes.ValidatorConsensusData{}
-			if err := ocd.Decode(ownData); err != nil {
-				return errors.Wrap(err, "failed decoding own consensus data")
-			}
-			if err := ocd.Validate(); err != nil {
-				// TODO: should we panic?
-				return errors.Wrap(err, "invalid own value")
-			}
-
-			if err := checkConsensusDataSameToOwn(cd, ocd); err != nil {
-				return fmt.Errorf("check if consensus data is same to own: %w", err)
-			}
-		}
-
 		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleProposer, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
@@ -177,20 +156,6 @@ func AggregatorValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if ownData != nil {
-			ocd := &spectypes.ValidatorConsensusData{}
-			if err := ocd.Decode(ownData); err != nil {
-				return errors.Wrap(err, "failed decoding own consensus data")
-			}
-			if err := ocd.Validate(); err != nil {
-				return errors.Wrap(err, "invalid own value")
-			}
-
-			if err := checkConsensusDataSameToOwn(cd, ocd); err != nil {
-				return fmt.Errorf("check if consensus data is same to own: %w", err)
-			}
-		}
-
 		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleAggregator, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
@@ -215,155 +180,10 @@ func SyncCommitteeContributionValueCheckF(
 			return errors.Wrap(err, "invalid value")
 		}
 
-		if ownData != nil {
-			ocd := &spectypes.ValidatorConsensusData{}
-			if err := ocd.Decode(ownData); err != nil {
-				return errors.Wrap(err, "failed decoding own consensus data")
-			}
-			if err := ocd.Validate(); err != nil {
-				return errors.Wrap(err, "invalid own value")
-			}
-
-			if err := checkConsensusDataSameToOwn(cd, ocd); err != nil {
-				return fmt.Errorf("check if consensus data is same to own: %w", err)
-			}
-		}
-
 		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleSyncCommitteeContribution, validatorPK, validatorIndex); err != nil {
 			return errors.Wrap(err, "duty invalid")
 		}
 
 		return nil
 	}
-}
-
-func checkConsensusDataSameToOwn(consensusData, ownConsensusData *spectypes.ValidatorConsensusData) error {
-	if consensusData.Duty.Type != ownConsensusData.Duty.Type {
-		return fmt.Errorf("validator duty Type differs from own validator duty")
-	}
-	if consensusData.Duty.PubKey != ownConsensusData.Duty.PubKey {
-		return fmt.Errorf("validator duty PubKey differs from own validator duty")
-	}
-	if consensusData.Duty.Slot != ownConsensusData.Duty.Slot {
-		return fmt.Errorf("validator duty Slot differs from own validator duty")
-	}
-	if consensusData.Duty.ValidatorIndex != ownConsensusData.Duty.ValidatorIndex {
-		return fmt.Errorf("validator duty ValidatorIndex differs from own validator duty")
-	}
-	if consensusData.Duty.CommitteeIndex != ownConsensusData.Duty.CommitteeIndex {
-		return fmt.Errorf("validator duty CommitteeIndex differs from own validator duty")
-	}
-	if consensusData.Duty.CommitteeLength != ownConsensusData.Duty.CommitteeLength {
-		return fmt.Errorf("validator duty CommitteeLength differs from own validator duty")
-	}
-	if consensusData.Duty.CommitteesAtSlot != ownConsensusData.Duty.CommitteesAtSlot {
-		return fmt.Errorf("validator duty CommitteesAtSlot differs from own validator duty")
-	}
-	if consensusData.Duty.ValidatorCommitteeIndex != ownConsensusData.Duty.ValidatorCommitteeIndex {
-		return fmt.Errorf("validator duty ValidatorCommitteeIndex differs from own validator duty")
-	}
-
-	validatorSyncCommitteeIndices := make([]uint64, 13)
-	copy(validatorSyncCommitteeIndices[:], consensusData.Duty.ValidatorSyncCommitteeIndices[:])
-
-	ownValidatorSyncCommitteeIndices := make([]uint64, 13)
-	copy(ownValidatorSyncCommitteeIndices[:], consensusData.Duty.ValidatorSyncCommitteeIndices[:])
-
-	slices.Sort(validatorSyncCommitteeIndices)
-	slices.Sort(ownValidatorSyncCommitteeIndices)
-
-	if slices.Compare(validatorSyncCommitteeIndices, ownValidatorSyncCommitteeIndices) != 0 {
-		return fmt.Errorf("validator duty ValidatorSyncCommitteeIndices differs from own validator duty")
-	}
-
-	if consensusData.Version != ownConsensusData.Version {
-		return errors.New("validator consensus data Version differs from own data")
-	}
-
-	var needBlockDataCheck bool
-
-	var blockSlot phase0.Slot
-	var blockProposerIndex phase0.ValidatorIndex
-
-	if blindedBlockData, _, err := consensusData.GetBlindedBlockData(); err == nil {
-		slot, err := blindedBlockData.Slot()
-		if err != nil {
-			return errors.Wrap(err, "failed to get slot from blinded block data")
-		}
-
-		blockSlot = slot
-
-		proposerIndex, err := blindedBlockData.ProposerIndex()
-		if err != nil {
-			return errors.Wrap(err, "failed to get block proposer index")
-		}
-
-		blockProposerIndex = proposerIndex
-		needBlockDataCheck = true
-	} else if blockData, _, err := consensusData.GetBlockData(); err == nil {
-		slot, err := blockData.Slot()
-		if err != nil {
-			return errors.Wrap(err, "failed to get slot from block data")
-		}
-
-		blockSlot = slot
-
-		proposerIndex, err := blockData.ProposerIndex()
-		if err != nil {
-			return errors.Wrap(err, "failed to get block proposer index")
-		}
-
-		blockProposerIndex = proposerIndex
-		needBlockDataCheck = true
-	} else {
-		// TODO: consider handling AggregateAndProof
-	}
-
-	if needBlockDataCheck {
-		var ownBlockSlot phase0.Slot
-		var ownBlockProposerIndex phase0.ValidatorIndex
-
-		if ownBlindedBlockData, _, err := ownConsensusData.GetBlindedBlockData(); err == nil {
-			slot, err := ownBlindedBlockData.Slot()
-			if err != nil {
-				return errors.Wrap(err, "failed to get slot from own blinded block data")
-			}
-
-			ownBlockSlot = slot
-
-			proposerIndex, err := ownBlindedBlockData.ProposerIndex()
-			if err != nil {
-				return errors.Wrap(err, "failed to get block proposer index")
-			}
-
-			ownBlockProposerIndex = proposerIndex
-		} else if ownBlockData, _, err := ownConsensusData.GetBlockData(); err == nil {
-			slot, err := ownBlockData.Slot()
-			if err != nil {
-				return errors.Wrap(err, "failed to get slot from own block data")
-			}
-
-			ownBlockSlot = slot
-
-			proposerIndex, err := ownBlockData.ProposerIndex()
-			if err != nil {
-				return errors.Wrap(err, "failed to get own block proposer index")
-			}
-
-			ownBlockProposerIndex = proposerIndex
-		} else {
-			// TODO: consider handling AggregateAndProof
-		}
-		if blockSlot != ownBlockSlot {
-			return fmt.Errorf("validator duty block slot differs from own validator duty")
-		}
-
-		if blockProposerIndex != ownBlockProposerIndex {
-			return fmt.Errorf("validator duty block proposer index differs from own validator duty")
-		}
-	}
-
-	// TODO: check other fields
-
-	return nil
 }
