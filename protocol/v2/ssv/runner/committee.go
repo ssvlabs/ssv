@@ -350,6 +350,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			default:
 				errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 				cancel()
+				return
 			}
 		}(ctx, validatorDuty)
 	}
