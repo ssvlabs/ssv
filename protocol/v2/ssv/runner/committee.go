@@ -290,14 +290,13 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 
 	span.AddEvent("signing validator duties")
 	for _, validatorDuty := range committeeDuty.ValidatorDuties {
-		wg.Add(1)
+		if ctx.Err() != nil {
+			break
+		}
 
+		wg.Add(1)
 		go func(ctx context.Context, validatorDuty *spectypes.ValidatorDuty) {
 			defer wg.Done()
-
-			if ctx.Err() != nil {
-				return
-			}
 
 			if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
 				const eventMsg = "duty is no longer valid"
