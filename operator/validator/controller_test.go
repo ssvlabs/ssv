@@ -79,7 +79,7 @@ func TestNewController(t *testing.T) {
 	operatorSigner, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	_, logger, _, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorSigner)
+	_, logger, _, network, keyManager, recipientStorage, bc := setupCommonTestComponents(t, operatorSigner)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
@@ -95,6 +95,7 @@ func TestNewController(t *testing.T) {
 		OperatorSigner:    types.NewSsvOperatorSigner(operatorSigner, operatorDataStore.GetOperatorID),
 		RegistryStorage:   registryStorage,
 		RecipientsStorage: recipientStorage,
+		KeyManager:        keyManager,
 		Context:           t.Context(),
 	}
 	control := NewController(logger, controllerOptions)
@@ -178,7 +179,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			operatorPrivateKey, err := keys.GeneratePrivateKey()
 			require.NoError(t, err)
 
-			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
+			ctrl, logger, sharesStorage, network, keyManager, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
 
 			defer ctrl.Finish()
 			mockValidatorsMap := validators.New(t.Context())
@@ -236,6 +237,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorStore:    mockValidatorStore,
+				keyManager:        keyManager,
 				validatorOptions: validator.Options{
 					Exporter: true,
 				},
@@ -820,6 +822,7 @@ func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOption
 		operatorsStorage:        opts.operatorStorage,
 		validatorsMap:           opts.validatorsMap,
 		validatorStore:          opts.validatorStore,
+		keyManager:              opts.keyManager,
 		ctx:                     t.Context(),
 		validatorOptions:        opts.validatorOptions,
 		recipientsStorage:       opts.recipientsStorage,
