@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -277,14 +278,14 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer cancel()
 
 	var (
-		errCh        = make(chan error, 1)
-		signaturesCh = make(chan *spectypes.PartialSignatureMessage, len(committeeDuty.ValidatorDuties))
+		wg    sync.WaitGroup
+		lock  sync.Mutex
+		errCh = make(chan error, 1)
 
 		beaconVote = decidedValue.(*spectypes.BeaconVote)
 		totalAttesterDuties,
 		totalSyncCommitteeDuties,
-		blockedAttesterDuties,
-		dutiesProcessed atomic.Uint32
+		blockedAttesterDuties atomic.Uint32
 	)
 
 	span.AddEvent("signing validator duties")
@@ -293,7 +294,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 			break
 		}
 
+		wg.Add(1)
 		go func(ctx context.Context, validatorDuty *spectypes.ValidatorDuty) {
+			defer wg.Done()
+
 			if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
 				const eventMsg = "duty is no longer valid"
 				span.AddEvent(eventMsg, trace.WithAttributes(
@@ -302,7 +306,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 					observability.BeaconRoleAttribute(validatorDuty.Type),
 				))
 				logger.Warn(eventMsg, fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
-				dutiesProcessed.Add(1)
 				return
 			}
 
@@ -317,13 +320,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				}
 				if isAttesterDutyBlocked {
 					blockedAttesterDuties.Add(1)
-					dutiesProcessed.Add(1)
 					return
 				}
 
-				signaturesCh <- partialSigMsg
-				dutiesProcessed.Add(1)
-
+				lock.Lock()
+				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialSigMsg)
+				lock.Unlock()
 			case spectypes.BNRoleSyncCommittee:
 				totalSyncCommitteeDuties.Add(1)
 
@@ -341,8 +343,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 					return
 				}
 
-				signaturesCh <- partialSigMsg
-				dutiesProcessed.Add(1)
+				lock.Lock()
+				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialSigMsg)
+				lock.Unlock()
+
 			default:
 				errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 				cancel()
@@ -351,20 +355,18 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		}(ctx, validatorDuty)
 	}
 
-listen:
-	for {
-		select {
-		case err := <-errCh:
-			return observability.Error(span, err)
-		case signature := <-signaturesCh:
-			postConsensusMsg.Messages = append(postConsensusMsg.Messages, signature)
-			if dutiesProcessed.Load() == uint32(len(committeeDuty.ValidatorDuties)) { //nolint:gosec
-				break listen
-			}
-		}
-	}
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneCh)
+	}()
 
-	span.AddEvent("finished signing validator duties")
+	select {
+	case err := <-errCh:
+		return observability.Error(span, err)
+	case <-doneCh:
+		span.AddEvent("finished signing validator duties")
+	}
 
 	var (
 		totalAttestations   = totalAttesterDuties.Load()
