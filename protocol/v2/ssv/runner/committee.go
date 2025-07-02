@@ -102,7 +102,7 @@ func (cr *CommitteeRunner) StartNewDuty(ctx context.Context, logger *zap.Logger,
 
 	d, ok := duty.(*spectypes.CommitteeDuty)
 	if !ok {
-		return fmt.Errorf("duty is not a CommitteeDuty: %T", duty)
+		return observability.Errorf(span, "duty is not a CommitteeDuty: %T", duty)
 	}
 
 	span.SetAttributes(observability.DutyCountAttribute(len(d.ValidatorDuties)))
@@ -262,11 +262,16 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	epoch := cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(duty.DutySlot())
 	version, _ := cr.BaseRunner.NetworkConfig.ForkAtEpoch(epoch)
 
+	committeeDuty, ok := duty.(*spectypes.CommitteeDuty)
+	if !ok {
+		return observability.Errorf(span, "duty is not a CommitteeDuty: %T", duty)
+	}
+
 	span.SetAttributes(
 		observability.BeaconSlotAttribute(duty.DutySlot()),
 		observability.BeaconEpochAttribute(epoch),
 		observability.BeaconVersionAttribute(version),
-		observability.DutyCountAttribute(len(duty.(*spectypes.CommitteeDuty).ValidatorDuties)),
+		observability.DutyCountAttribute(len(committeeDuty.ValidatorDuties)),
 	)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -284,7 +289,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	)
 
 	span.AddEvent("signing validator duties")
-	for _, validatorDuty := range duty.(*spectypes.CommitteeDuty).ValidatorDuties {
+	for _, validatorDuty := range committeeDuty.ValidatorDuties {
 		wg.Add(1)
 
 		go func(ctx context.Context, validatorDuty *spectypes.ValidatorDuty) {
