@@ -451,10 +451,9 @@ func (cr *CommitteeRunner) signAttesterDuty(
 		const eventMsg = "Signing not permitted due to Doppelganger protection"
 		span.AddEvent(eventMsg)
 		logger.Warn(eventMsg, fields.ValidatorIndex(validatorDuty.ValidatorIndex))
-		isBlocked = true
 
 		span.SetStatus(codes.Ok, "")
-		return
+		return true, nil, nil
 	}
 
 	attestationData := constructAttestationData(beaconVote, validatorDuty, version)
