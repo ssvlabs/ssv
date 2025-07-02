@@ -178,7 +178,11 @@ func New(
 	logger *zap.Logger,
 	opt Options,
 ) (*GoClient, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
+	logger.Info("consensus client: connecting",
+		fields.Address(opt.BeaconNodeAddr),
+		zap.Bool("with_weighted_attestation_data", opt.WithWeightedAttestationData),
+		zap.Bool("with_parallel_submissions", opt.WithParallelSubmissions),
+	)
 
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
