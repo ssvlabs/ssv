@@ -278,9 +278,9 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer cancel()
 
 	var (
-		wg    sync.WaitGroup
-		lock  sync.Mutex
-		errCh = make(chan error, 1)
+		wg       sync.WaitGroup
+		errCh    = make(chan error, len(committeeDuty.ValidatorDuties))
+		resultCh = make(chan *spectypes.PartialSignatureMessage)
 
 		beaconVote = decidedValue.(*spectypes.BeaconVote)
 		totalAttesterDuties,
@@ -315,7 +315,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				isAttesterDutyBlocked, partialSigMsg, err := cr.signAttesterDuty(ctx, validatorDuty, beaconVote, version, logger)
 				if err != nil {
 					errCh <- observability.Errorf(span, "failed signing attestation data: %w", err)
-					cancel()
 					return
 				}
 				if isAttesterDutyBlocked {
@@ -323,9 +322,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 					return
 				}
 
-				lock.Lock()
-				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialSigMsg)
-				lock.Unlock()
+				resultCh <- partialSigMsg
 			case spectypes.BNRoleSyncCommittee:
 				totalSyncCommitteeDuties.Add(1)
 
@@ -339,17 +336,12 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				)
 				if err != nil {
 					errCh <- observability.Errorf(span, "failed signing sync committee message: %w", err)
-					cancel()
 					return
 				}
 
-				lock.Lock()
-				postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialSigMsg)
-				lock.Unlock()
-
+				resultCh <- partialSigMsg
 			default:
 				errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
-				cancel()
 				return
 			}
 		}(ctx, validatorDuty)
@@ -361,11 +353,18 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		close(doneCh)
 	}()
 
-	select {
-	case err := <-errCh:
-		return observability.Error(span, err)
-	case <-doneCh:
-		span.AddEvent("finished signing validator duties")
+listener:
+	for {
+		select {
+		case err := <-errCh:
+			cancel()
+			return observability.Error(span, err)
+		case signature := <-resultCh:
+			postConsensusMsg.Messages = append(postConsensusMsg.Messages, signature)
+		case <-doneCh:
+			span.AddEvent("finished signing validator duties")
+			break listener
+		}
 	}
 
 	var (
