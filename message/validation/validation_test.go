@@ -212,7 +212,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			message.MsgType = specqbft.CommitMsgType
 		})
 		signedSSVMessage.FullData = nil
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration()))
 		require.NoError(t, err)
 
 		storedState = stateBySlot.GetSignerState(phase0.Slot(height) + 1)
@@ -220,11 +220,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, 1, storedState.Round)
 		require.EqualValues(t, SeenMsgTypes{v: 0b1000}, storedState.SeenMsgTypes)
 
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration()))
 		require.ErrorContains(t, err, ErrDuplicatedMessage.Error())
 
 		signedSSVMessage = generateMultiSignedMessage(ks, committeeIdentifier, slot+1)
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt.Add(netCfg.SlotDuration()))
 		require.NoError(t, err)
 		require.NotNil(t, stateBySlot)
 		require.EqualValues(t, 1, storedState.Round)

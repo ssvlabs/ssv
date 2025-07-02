@@ -49,7 +49,7 @@ func setupSyncCommitteeDutiesMock(
 		},
 	).AnyTimes()
 
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EpochFirstSlot(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
 			return phase0.Slot(uint64(epoch) * s.beaconConfig.SlotsPerEpoch())
 		},

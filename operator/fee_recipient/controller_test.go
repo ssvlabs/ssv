@@ -84,7 +84,7 @@ func TestSubmitProposal(t *testing.T) {
 			1,  // first time
 			2,  // should not call submit
 			20, // should not call submit
-			phase0.Slot(beaconConfig.slotsPerEpoch / 2), // halfway through epoch
+			phase0.Slot(beaconConfig.SlotsPerEpoch() / 2), // halfway through epoch
 			63, // should not call submit
 		}
 
