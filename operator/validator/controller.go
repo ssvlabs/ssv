@@ -289,6 +289,19 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageValidator: options.MessageValidator,
 	}
 
+	// Register lifecycle callbacks to centralize validator management
+	// TODO: move it to a separate method/file, dunno yet
+	options.ValidatorStore.RegisterLifecycleCallbacks(registrystorage.ValidatorLifecycleCallbacks{
+		OnValidatorAdded:   ctrl.onValidatorAdded,
+		OnValidatorStarted: ctrl.onValidatorStarted,
+		OnValidatorStopped: ctrl.onValidatorStopped,
+		OnValidatorUpdated: ctrl.onValidatorUpdated,
+		OnValidatorRemoved: ctrl.onValidatorRemoved,
+		OnValidatorExited:  ctrl.onValidatorExited,
+		OnCommitteeChanged: ctrl.onCommitteeChanged,
+		OnIndicesChanged:   ctrl.onIndicesChanged,
+	})
+
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.committeesObservers.Start()
 	// Delete old root and domain entries.
@@ -1234,4 +1247,92 @@ func SetupRunners(
 		}
 	}
 	return runners, nil
+}
+
+// Validator lifecycle callbacks
+// TODO: prolly these callback will be moved to different file
+
+// onValidatorAdded handles when a new validator is added to the system
+func (c *controller) onValidatorAdded(ctx context.Context, snapshot *registrystorage.ValidatorSnapshot) error {
+	c.logger.Debug("validator added via callback", fields.PubKey(snapshot.Share.ValidatorPubKey[:]))
+	return nil
+}
+
+// onValidatorStarted handles when a validator should start participating
+func (c *controller) onValidatorStarted(ctx context.Context, snapshot *registrystorage.ValidatorSnapshot) error {
+	c.logger.Debug("validator started via callback", fields.PubKey(snapshot.Share.ValidatorPubKey[:]))
+	// TODO: implement validator starting logic via ValidatorStore
+	return nil
+}
+
+// onValidatorStopped handles when a validator should stop participating
+func (c *controller) onValidatorStopped(ctx context.Context, pubKey spectypes.ValidatorPK) error {
+	c.logger.Debug("validator stopped via callback", fields.PubKey(pubKey[:]))
+	// TODO: implement validator stopping logic via ValidatorStore
+	return nil
+}
+
+// onValidatorUpdated handles when validator metadata changes
+func (c *controller) onValidatorUpdated(ctx context.Context, snapshot *registrystorage.ValidatorSnapshot) error {
+	c.logger.Debug("validator updated via callback", fields.PubKey(snapshot.Share.ValidatorPubKey[:]))
+	// TODO: implement validator update logic via ValidatorStore
+	return nil
+}
+
+// onValidatorRemoved handles when a validator is permanently removed
+func (c *controller) onValidatorRemoved(ctx context.Context, pubKey spectypes.ValidatorPK) error {
+	c.logger.Debug("validator removed via callback", fields.PubKey(pubKey[:]))
+
+	// Remove the validator share from the KeyManager
+	// TODO: we move it from event handler
+	if err := c.keyManager.RemoveShare(ctx, phase0.BLSPubKey(pubKey)); err != nil {
+		c.logger.Warn("failed to remove share from key manager",
+			fields.PubKey(pubKey[:]), zap.Error(err))
+	}
+
+	return nil
+}
+
+// onValidatorExited handles when a voluntary exit is initiated
+func (c *controller) onValidatorExited(ctx context.Context, descriptor registrystorage.ExitDescriptor) error {
+	c.logger.Debug("validator exited via callback",
+		fields.PubKey(descriptor.PubKey[:]),
+		zap.Uint64("block_number", descriptor.BlockNumber),
+		zap.Bool("own_validator", descriptor.OwnValidator))
+
+	// Signal validator exit via the exit channel
+	select {
+	case c.validatorExitCh <- descriptor:
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		c.logger.Warn("validator exit channel is full, dropping exit signal")
+	}
+
+	return nil
+}
+
+// onCommitteeChanged handles when committee membership changes
+func (c *controller) onCommitteeChanged(ctx context.Context, committeeID spectypes.CommitteeID, action registrystorage.CommitteeAction) error {
+	c.logger.Debug("committee changed via callback",
+		zap.String("committee_id", hex.EncodeToString(committeeID[:])),
+		zap.String("action", string(action)))
+	// TODO: implement committee change logic via ValidatorStore
+	return nil
+}
+
+// onIndicesChanged handles when validator indices require re-fetching duties
+func (c *controller) onIndicesChanged(ctx context.Context) error {
+	c.logger.Debug("indices changed via callback")
+
+	// Signal indices change via the indices change channel
+	select {
+	case c.indicesChangeCh <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		// Channel is full, but that's okay - we just need to signal once
+	}
+
+	return nil
 }

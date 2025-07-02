@@ -26,6 +26,7 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -70,6 +71,7 @@ type EventHandler struct {
 	operatorDecrypter   keys.OperatorDecrypter
 	keyManager          ekm.KeyManager
 	doppelgangerHandler DoppelgangerProvider
+	validatorStore      registrystorage.ValidatorStore
 
 	fullNode bool
 	logger   *zap.Logger
@@ -84,6 +86,7 @@ func New(
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler DoppelgangerProvider,
+	validatorStore registrystorage.ValidatorStore,
 	opts ...Option,
 ) (*EventHandler, error) {
 	eh := &EventHandler{
@@ -95,6 +98,7 @@ func New(
 		operatorDecrypter:   operatorDecrypter,
 		keyManager:          keyManager,
 		doppelgangerHandler: doppelgangerHandler,
+		validatorStore:      validatorStore,
 		logger:              zap.NewNop(),
 	}
 

@@ -528,6 +528,7 @@ var StartNodeCmd = &cobra.Command{
 			operatorPrivKey,
 			keyManager,
 			doppelgangerHandler,
+			validatorStore,
 		)
 		if len(cfg.LocalEventsPath) == 0 {
 			nodeProber.AddNode("event syncer", eventSyncer)
@@ -997,6 +998,7 @@ func syncContractEvents(
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler eventhandler.DoppelgangerProvider,
+	validatorStore registrystorage.ValidatorStore,
 ) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
@@ -1014,6 +1016,7 @@ func syncContractEvents(
 		operatorDecrypter,
 		keyManager,
 		doppelgangerHandler,
+		validatorStore,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)

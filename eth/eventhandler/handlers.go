@@ -15,7 +15,6 @@ import (
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/operator/duties"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -476,7 +475,7 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 	return r != nil, nil
 }
 
-func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*duties.ExitDescriptor, error) {
+func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*registrystorage.ExitDescriptor, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorExited),
 		fields.TxHash(event.Raw.TxHash),
@@ -507,7 +506,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], share.ValidatorPubKey[:])
 
-	ed := &duties.ExitDescriptor{
+	ed := &registrystorage.ExitDescriptor{
 		OwnValidator:   false,
 		PubKey:         pk,
 		ValidatorIndex: share.ValidatorIndex,
