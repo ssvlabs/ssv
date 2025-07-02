@@ -278,9 +278,9 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer cancel()
 
 	var (
-		wg       sync.WaitGroup
-		errCh    = make(chan error, len(committeeDuty.ValidatorDuties))
-		resultCh = make(chan *spectypes.PartialSignatureMessage)
+		wg           sync.WaitGroup
+		errCh        = make(chan error, len(committeeDuty.ValidatorDuties))
+		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
 
 		beaconVote = decidedValue.(*spectypes.BeaconVote)
 		totalAttesterDuties,
@@ -322,7 +322,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 					return
 				}
 
-				resultCh <- partialSigMsg
+				signaturesCh <- partialSigMsg
 			case spectypes.BNRoleSyncCommittee:
 				totalSyncCommitteeDuties.Add(1)
 
@@ -339,7 +339,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 					return
 				}
 
-				resultCh <- partialSigMsg
+				signaturesCh <- partialSigMsg
 			default:
 				errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
 				return
@@ -347,10 +347,9 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		}(ctx, validatorDuty)
 	}
 
-	doneCh := make(chan struct{})
 	go func() {
 		wg.Wait()
-		close(doneCh)
+		close(signaturesCh)
 	}()
 
 listener:
@@ -359,11 +358,11 @@ listener:
 		case err := <-errCh:
 			cancel()
 			return observability.Error(span, err)
-		case signature := <-resultCh:
+		case signature, ok := <-signaturesCh:
+			if !ok {
+				break listener
+			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, signature)
-		case <-doneCh:
-			span.AddEvent("finished signing validator duties")
-			break listener
 		}
 	}
 
