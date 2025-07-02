@@ -1,7 +1,7 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.24 AS preparer
+FROM golang:1.24@sha256:20a022e5112a144aa7b7aeb3f22ebf2cdaefcc4aac0d64e8deeee8cdc18b9c0f AS preparer
 
 RUN apt-get update && apt upgrade -y && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
