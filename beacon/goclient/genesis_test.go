@@ -16,6 +16,7 @@ import (
 const (
 	genesisPath = "/eth/v1/beacon/genesis"
 	specPath    = "/eth/v1/config/spec"
+	syncingPath = "/eth/v1/node/syncing"
 )
 
 func Test_genesisForClient(t *testing.T) {

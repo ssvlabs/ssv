@@ -1,68 +1,81 @@
 package goclient
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/beacon/goclient/tests"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestHealthy(t *testing.T) {
+	t.Run("sync distance larger than allowed", func(t *testing.T) {
+		syncData := &v1.SyncState{
+			SyncDistance: phase0.Slot(3),
+			IsSyncing:    true,
+		}
+		err := runHealthyTest(t, syncData, 2)
+		require.ErrorIs(t, err, errSyncing)
+	})
+
+	t.Run("sync distance within allowed limits", func(t *testing.T) {
+		syncData := &v1.SyncState{
+			SyncDistance: phase0.Slot(3),
+			IsSyncing:    true,
+		}
+
+		err := runHealthyTest(t, syncData, 3)
+		require.NoError(t, err)
+	})
+}
+
+func runHealthyTest(t *testing.T, syncData *v1.SyncState, syncDistanceTolerance uint64) error {
 	const (
 		commonTimeout = 100 * time.Millisecond
 		longTimeout   = 500 * time.Millisecond
 	)
 
-	undialableServer := tests.MockServer(nil)
-	c, err := mockClient(t.Context(), undialableServer.URL, commonTimeout, longTimeout)
-	require.NoError(t, err)
+	replaceSyncing := atomic.Bool{}
 
-	client := c.(*GoClient)
-	err = client.Healthy(t.Context())
-	require.NoError(t, err)
-
-	t.Run("sync distance larger than allowed", func(t *testing.T) {
-		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
-			r := new(api.Response[*v1.SyncState])
-			r.Data = &v1.SyncState{
-				SyncDistance: phase0.Slot(3),
-				IsSyncing:    true,
+	mockResponses := tests.MockResponses()
+	mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		if r.URL.Path == syncingPath && replaceSyncing.Load() {
+			output := struct {
+				Data *v1.SyncState `json:"data"`
+			}{
+				Data: syncData,
 			}
-			return r, nil
+			rawData, err := json.Marshal(output)
+			if err != nil {
+				return nil, err
+			}
+
+			return rawData, nil
 		}
 
-		client.syncDistanceTolerance = 2
-
-		err = client.Healthy(t.Context())
-		require.ErrorIs(t, err, errSyncing)
+		return mockResponses[r.URL.Path], nil
 	})
-
-	t.Run("sync distance within allowed limits", func(t *testing.T) {
-		client.nodeSyncingFn = func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*v1.SyncState], error) {
-			r := new(api.Response[*v1.SyncState])
-			r.Data = &v1.SyncState{
-				SyncDistance: phase0.Slot(3),
-				IsSyncing:    true,
-			}
-			return r, nil
-		}
-
-		client.syncDistanceTolerance = 3
-
-		err = client.Healthy(t.Context())
-		require.NoError(t, err)
+	c, err := New(t.Context(), zap.NewNop(), Options{
+		BeaconNodeAddr:        mockServer.URL,
+		CommonTimeout:         commonTimeout,
+		LongTimeout:           longTimeout,
+		SyncDistanceTolerance: syncDistanceTolerance,
 	})
+	require.NoError(t, err)
+
+	// Multi client library we depend on won't start if client is not synced,
+	// so we need to let it start with synced state and then get the state from the test data.
+	replaceSyncing.Store(true)
+
+	return c.Healthy(t.Context())
 }
 
 func TestTimeouts(t *testing.T) {
@@ -79,7 +92,11 @@ func TestTimeouts(t *testing.T) {
 			time.Sleep(commonTimeout * 2)
 			return resp, nil
 		})
-		_, err := mockClient(t.Context(), undialableServer.URL, commonTimeout, longTimeout)
+		_, err := New(t.Context(), zap.NewNop(), Options{
+			BeaconNodeAddr: undialableServer.URL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		})
 		require.ErrorContains(t, err, "client is not active")
 	}
 
@@ -94,7 +111,11 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(t.Context(), unresponsiveServer.URL, commonTimeout, longTimeout)
+		client, err := New(t.Context(), zap.NewNop(), Options{
+			BeaconNodeAddr: unresponsiveServer.URL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		})
 		require.NoError(t, err)
 
 		validators, err := client.GetValidatorData(t.Context(), nil) // Should call BeaconState internally.
@@ -122,7 +143,11 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(t.Context(), unresponsiveServer.URL, commonTimeout, longTimeout)
+		client, err := New(t.Context(), zap.NewNop(), Options{
+			BeaconNodeAddr: unresponsiveServer.URL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		})
 		require.NoError(t, err)
 
 		_, err = client.ProposerDuties(t.Context(), mockServerEpoch, nil)
@@ -143,7 +168,11 @@ func TestTimeouts(t *testing.T) {
 			}
 			return resp, nil
 		})
-		client, err := mockClient(t.Context(), fastServer.URL, commonTimeout, longTimeout)
+		client, err := New(t.Context(), zap.NewNop(), Options{
+			BeaconNodeAddr: fastServer.URL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		})
 		require.NoError(t, err)
 
 		validators, err := client.GetValidatorData(t.Context(), nil)
@@ -154,16 +183,4 @@ func TestTimeouts(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
-}
-
-func mockClient(ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
-	return New(
-		ctx,
-		zap.NewNop(),
-		Options{
-			BeaconNodeAddr: serverURL,
-			CommonTimeout:  commonTimeout,
-			LongTimeout:    longTimeout,
-		},
-	)
 }
