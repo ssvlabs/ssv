@@ -6,7 +6,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate sszgen -path ./migration_6_model.go --objs migration_6_OldStorageShare
+//go:generate go tool -modfile=../tool.mod sszgen -path ./migration_6_model.go --objs migration_6_OldStorageShare
 
 var oldSharesPrefix = []byte("shares_ssz/")
 
