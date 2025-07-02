@@ -486,6 +486,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Info("Doppelganger protection disabled.")
 		}
 		cfg.SSVOptions.ValidatorOptions.DoppelgangerHandler = doppelgangerHandler
+		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl

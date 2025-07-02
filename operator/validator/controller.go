@@ -91,6 +91,7 @@ type ControllerOptions struct {
 	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte
 	ProposerDelay              time.Duration
+	KeyManager                 ekm.KeyManager
 
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
@@ -163,6 +164,7 @@ type controller struct {
 	beacon         beaconprotocol.BeaconNode
 	beaconSigner   ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
+	keyManager     ekm.KeyManager
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
@@ -252,6 +254,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		operatorDataStore: options.OperatorDataStore,
 		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
+		keyManager:        options.KeyManager,
 		network:           options.Network,
 
 		validatorsMap:    options.ValidatorsMap,
