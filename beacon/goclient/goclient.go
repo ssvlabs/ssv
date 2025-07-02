@@ -129,7 +129,6 @@ type GoClient struct {
 	multiClient MultiClient
 
 	syncDistanceTolerance phase0.Slot
-	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
 	// registrationMu synchronises access to registrations
 	registrationMu sync.Mutex
@@ -179,7 +178,11 @@ func New(
 	logger *zap.Logger,
 	opt Options,
 ) (*GoClient, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
+	logger.Info("consensus client: connecting",
+		fields.Address(opt.BeaconNodeAddr),
+		zap.Bool("with_weighted_attestation_data", opt.WithWeightedAttestationData),
+		zap.Bool("with_parallel_submissions", opt.WithParallelSubmissions),
+	)
 
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
@@ -224,8 +227,6 @@ func New(
 
 		return nil, err
 	}
-
-	client.nodeSyncingFn = client.nodeSyncing
 
 	initCtx, initCtxCancel := context.WithTimeout(ctx, client.longTimeout)
 	defer initCtxCancel()
@@ -397,12 +398,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	}
 }
 
-func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkconfig.BeaconConfig) (networkconfig.BeaconConfig, error) {
+func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkconfig.BeaconConfig) (*networkconfig.BeaconConfig, error) {
 	gc.beaconConfigMu.Lock()
 	defer gc.beaconConfigMu.Unlock()
 
 	if gc.beaconConfig == nil {
-		gc.beaconConfig = &beaconConfig
+		gc.beaconConfig = beaconConfig
 		close(gc.beaconConfigInit)
 
 		gc.log.Info("beacon config has been initialized",
@@ -413,10 +414,10 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkco
 	}
 
 	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
-		return *gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
+		return gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
 	}
 
-	return *gc.beaconConfig, nil
+	return gc.beaconConfig, nil
 }
 
 func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
@@ -428,7 +429,7 @@ var errSyncing = errors.New("syncing")
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.nodeSyncingFn(ctx, &api.NodeSyncingOpts{})
+	nodeSyncingResp, err := gc.nodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		gc.log.Error(clResponseErrMsg,
 			zap.String("api", "NodeSyncing"),
