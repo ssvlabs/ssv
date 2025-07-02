@@ -231,7 +231,15 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 
 	// Set up certificate verification if fingerprints provided
 	if len(trustedFingerprints) > 0 {
-		tlsConfig.InsecureSkipVerify = true // We're doing manual verification
+		// InsecureSkipVerify is deliberately enabled to bypass Go's default certificate validation,
+		// including CA-based trust chains and hostname checks.
+		//
+		// This is required because we perform strict manual verification via VerifyConnection
+		// using pinned SHA-256 fingerprints of the expected server certificate.
+		//
+		// This does NOT disable security — instead, it replaces the traditional PKI trust model
+		// with explicit certificate pinning, which is simpler and stronger in this context.
+		tlsConfig.InsecureSkipVerify = true
 		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
 			return verifyServerCertificate(state, trustedFingerprints)
 		}
@@ -246,7 +254,7 @@ func createClientTLSConfig(certificate tls.Certificate, trustedFingerprints map[
 //
 // Parameters:
 // - certificate: server certificate to present to clients (required)
-// - trustedFingerprints: map of client common names to expected certificate fingerprints (optional)
+// - trustedFingerprints: map of client common names to expected certificate fingerprints (required unless insecure HTTP is enabled)
 func createServerTLSConfig(certificate tls.Certificate, trustedFingerprints map[string]string) (*tls.Config, error) {
 	if certificate.Certificate == nil {
 		return nil, fmt.Errorf("server certificate is required")

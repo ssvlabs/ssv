@@ -687,13 +687,17 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			logger.Error(errMsg, zap.Error(err))
 			return observability.Errorf(span, "%s: %w", errMsg, err)
 		}
-		recordDutyDuration(ctx, cr.measurements.DutyDurationTime(), spectypes.BNRoleAttester, cr.BaseRunner.State.RunningInstance.State.Round)
+
+		recordDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.BNRoleAttester, cr.BaseRunner.State.RunningInstance.State.Round)
+
 		attestationsCount := len(attestations)
 		if attestationsCount <= math.MaxUint32 {
-			recordSuccessfulSubmission(ctx,
+			recordSuccessfulSubmission(
+				ctx,
 				uint32(attestationsCount),
 				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
-				spectypes.BNRoleAttester)
+				spectypes.BNRoleAttester,
+			)
 		}
 
 		attData, err := attestations[0].Data()
@@ -714,6 +718,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.BlockRoot(attData.BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(cr.measurements.TotalDutyTime()),
 			fields.Count(attestationsCount),
 		)
 
@@ -738,13 +743,17 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			logger.Error(errMsg, zap.Error(err))
 			return observability.Errorf(span, "%s: %w", errMsg, err)
 		}
-		recordDutyDuration(ctx, cr.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
+
+		recordDutyDuration(ctx, cr.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommittee, cr.BaseRunner.State.RunningInstance.State.Round)
+
 		syncMsgsCount := len(syncCommitteeMessages)
 		if syncMsgsCount <= math.MaxUint32 {
-			recordSuccessfulSubmission(ctx,
+			recordSuccessfulSubmission(
+				ctx,
 				uint32(syncMsgsCount),
 				cr.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(cr.GetBaseRunner().State.StartingDuty.DutySlot()),
-				spectypes.BNRoleSyncCommittee)
+				spectypes.BNRoleSyncCommittee,
+			)
 		}
 		const eventMsg = "✅ successfully submitted sync committee"
 		span.AddEvent(eventMsg, trace.WithAttributes(
@@ -761,6 +770,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 			fields.BlockRoot(syncCommitteeMessages[0].BeaconBlockRoot),
 			fields.SubmissionTime(time.Since(submissionStart)),
 			fields.TotalConsensusTime(cr.measurements.TotalConsensusTime()),
+			fields.TotalDutyTime(cr.measurements.TotalDutyTime()),
 			fields.Count(syncMsgsCount),
 		)
 
@@ -851,14 +861,14 @@ func findValidators(
 }
 
 // Unneeded since no preconsensus phase
-func (cr CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+func (cr *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	return nil, spectypes.DomainError, errors.New("no pre consensus root for committee runner")
 }
 
 // This function signature returns only one domain type... but we can have mixed domains
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
-func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, spectypes.DomainError, errors.New("expected post consensus roots function is unused")
+func (cr *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) ([]ssz.HashRoot, phase0.DomainType, error) {
+	return nil, spectypes.DomainError, errors.New("unexpected expectedPostConsensusRootsAndDomain func call")
 }
 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (
