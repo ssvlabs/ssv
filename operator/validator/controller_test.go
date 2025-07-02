@@ -106,7 +106,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 	operators := buildOperators(t)
 
 	operatorDataStore := operatordatastore.New(buildOperatorData(0, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
-	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
@@ -191,28 +190,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			network.EXPECT().ActiveSubnets().Return(subnets).AnyTimes()
 			network.EXPECT().FixedSubnets().Return(commons.Subnets{}).AnyTimes()
 
-			if tc.shareStorageListResponse == nil {
-				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
-			} else {
-				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, pubKey []byte) (*types.SSVShare, bool) {
-					for _, share := range tc.shareStorageListResponse {
-						if hex.EncodeToString(share.Share.ValidatorPubKey[:]) == hex.EncodeToString(pubKey) {
-							return share, true
-						}
-					}
-					return nil, false
-				}).AnyTimes()
-				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).AnyTimes()
-				sharesStorage.EXPECT().Range(gomock.Any(), gomock.Any()).DoAndReturn(func(_ basedb.Reader, fn func(*types.SSVShare) bool) {
-					for _, share := range tc.shareStorageListResponse {
-						if !fn(share) {
-							break
-						}
-					}
-				}).AnyTimes()
-				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
-			}
-
 			mockValidatorStore := registrystoragemocks.NewMockValidatorStore(ctrl)
 			mockValidatorStore.EXPECT().OperatorValidators(gomock.Any()).Return(sharesWithMetadata).AnyTimes()
 
@@ -236,7 +213,8 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			}
 			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
-			ctr.StartValidators(t.Context())
+			err = ctr.StartValidators(t.Context())
+			require.NoError(t, err)
 		})
 	}
 }

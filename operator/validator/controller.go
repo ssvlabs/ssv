@@ -103,7 +103,7 @@ type ControllerOptions struct {
 // Controller represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
-	StartValidators(ctx context.Context)
+	StartValidators(ctx context.Context) error
 	HandleMetadataUpdates(ctx context.Context)
 	FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShare) bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
@@ -437,42 +437,58 @@ func (c *controller) handleNonCommitteeMessages(
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
-func (c *controller) StartValidators(ctx context.Context) {
+func (c *controller) StartValidators(ctx context.Context) error {
 	// TODO: Pass context whereever the execution flow may be blocked.
 
-	// Load non-liquidated shares.
-	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
-	if len(shares) == 0 {
-		close(c.committeeValidatorSetup)
-		c.logger.Info("could not find validators")
-		return
-	}
-
-	var ownShares []*ssvtypes.SSVShare
-	for _, share := range shares {
-		if c.operatorDataStore.GetOperatorID() != 0 && share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
-			ownShares = append(ownShares, share)
-		}
-	}
-
 	if c.validatorCommonOpts.ExporterOptions.Enabled {
-		// There are no committee validators to setup.
+		// There are no committee validators to set up.
 		close(c.committeeValidatorSetup)
-	} else {
-		// Setup committee validators.
-		inited, committees := c.setupValidators(ownShares)
-		if len(inited) == 0 {
-			// If no validators were started and therefore we're not subscribed to any subnets,
-			// then subscribe to a random subnet to participate in the network.
-			if err := c.network.SubscribeRandoms(1); err != nil {
-				c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
-			}
-		}
-		close(c.committeeValidatorSetup)
-
-		// Start validators.
-		c.startValidators(inited, committees)
+		return nil
 	}
+
+	init := func() ([]*validator.Validator, []*validator.Committee, error) {
+		defer close(c.committeeValidatorSetup)
+
+		// Load non-liquidated shares that belong to our own Operator.
+		ownShares := c.sharesStorage.List(
+			nil,
+			registrystorage.ByNotLiquidated(),
+			registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
+		)
+		if len(ownShares) == 0 {
+			c.logger.Info("no own non-liquidated validator shares found in DB")
+			return nil, nil, nil
+		}
+
+		// Setup committee validators.
+		validators, committees := c.setupValidators(ownShares)
+		if len(validators) == 0 {
+			return nil, nil, fmt.Errorf("none of %d validators were successfully initialized", len(ownShares))
+		}
+
+		return validators, committees, nil
+	}
+
+	// Initialize validators.
+	validators, committees, err := init()
+	if err != nil {
+		return fmt.Errorf("init validators: %w", err)
+	}
+	if len(validators) == 0 {
+		// If no validators were initialized - we're not subscribed to any subnets,
+		// we have to subscribe to 1 random subnet to participate in the network.
+		if err := c.network.SubscribeRandoms(1); err != nil {
+			c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
+		}
+		return nil
+	}
+
+	// Start validators.
+	started := c.startValidators(validators, committees)
+	if started == 0 {
+		return fmt.Errorf("none of %d validators were successfully started", len(validators))
+	}
+	return nil
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -502,9 +518,15 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) ([]*validator.
 			committees = append(committees, vc)
 		}
 	}
-	c.logger.Info("init validators done", zap.Int("validators_size", c.validatorsMap.SizeValidators()), zap.Int("committee_size", c.validatorsMap.SizeCommittees()),
-		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
-		zap.Int("shares", len(shares)), zap.Int("initialized", len(validators)))
+	c.logger.Info(
+		"init validators done",
+		zap.Int("validators_size", c.validatorsMap.SizeValidators()),
+		zap.Int("committee_size", c.validatorsMap.SizeCommittees()),
+		zap.Int("failures", len(errs)),
+		zap.Int("missing_metadata", len(fetchMetadata)),
+		zap.Int("shares", len(shares)),
+		zap.Int("initialized", len(validators)),
+	)
 	return validators, committees
 }
 
