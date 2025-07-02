@@ -25,11 +25,11 @@ func Test_verifyConfig(t *testing.T) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(network, logger, db)
 	require.NoError(t, err)
 
-	testNetworkName := network.NetworkName()
+	testNetworkType := networkconfig.NetworkType("testnet")
 
 	t.Run("no config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkType:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
@@ -45,7 +45,7 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has same config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkType:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
@@ -62,13 +62,13 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has different network name, events type, and ssv signer in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkType:      testNetworkName + "1",
+			NetworkType:      testNetworkType + "1",
 			UsingLocalEvents: false,
 			UsingSSVSigner:   false,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, true, true),
+			validateConfig(nodeStorage, testNetworkType, true, true),
 			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
@@ -82,13 +82,13 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has different network name in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkType:      testNetworkName + "1",
+			NetworkType:      testNetworkType + "1",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, c.UsingLocalEvents, c.UsingSSVSigner),
+			validateConfig(nodeStorage, testNetworkType, c.UsingLocalEvents, c.UsingSSVSigner),
 			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
@@ -102,7 +102,7 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has real events in DB but runs with local events", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkType:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: false,
 			UsingSSVSigner:   true,
 		}
@@ -122,7 +122,7 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has local events in DB but runs with real events", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkType:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
@@ -142,7 +142,7 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has local signer in DB but runs with remote signer", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkType:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
@@ -162,7 +162,7 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has remote signer in DB but runs with local signer", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkType:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   false,
 		}
