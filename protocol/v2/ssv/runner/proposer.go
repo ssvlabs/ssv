@@ -217,6 +217,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		))
 	defer span.End()
 
+	span.AddEvent("checking if instance is decided")
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(ctx, logger, r, signedMsg, &spectypes.ValidatorConsensusData{})
 	if err != nil {
 		return observability.Errorf(span, "failed processing consensus message: %w", err)
@@ -229,6 +230,7 @@ func (r *ProposerRunner) ProcessConsensus(ctx context.Context, logger *zap.Logge
 		return nil
 	}
 
+	span.AddEvent("instance is decided")
 	r.measurements.EndConsensus()
 	recordConsensusDuration(ctx, r.measurements.ConsensusTime(), spectypes.RoleProposer)
 
