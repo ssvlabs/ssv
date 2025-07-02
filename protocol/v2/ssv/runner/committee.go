@@ -445,10 +445,11 @@ func (cr *CommitteeRunner) signAttesterDuty(
 		))
 	defer span.End()
 
+	span.AddEvent("doppelganger: checking if signing is allowed")
 	// Doppelganger protection applies only to attester duties since they are slashable.
 	// Sync committee duties are not slashable, so they are always allowed.
 	if !cr.doppelgangerHandler.CanSign(validatorDuty.ValidatorIndex) {
-		const eventMsg = "Signing not permitted due to Doppelganger protection"
+		const eventMsg = "signing not permitted due to Doppelganger protection"
 		span.AddEvent(eventMsg)
 		logger.Warn(eventMsg, fields.ValidatorIndex(validatorDuty.ValidatorIndex))
 
@@ -458,6 +459,7 @@ func (cr *CommitteeRunner) signAttesterDuty(
 
 	attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 
+	span.AddEvent("signing beacon object")
 	partialMsg, err := cr.BaseRunner.signBeaconObject(
 		ctx,
 		cr,
@@ -475,7 +477,9 @@ func (cr *CommitteeRunner) signAttesterDuty(
 		return false, partialMsg, observability.Errorf(span, "failed to hash attestation data: %w", err)
 	}
 
-	logger.Debug("signed attestation data",
+	const eventMsg = "signed attestation data"
+	span.AddEvent(eventMsg, trace.WithAttributes(observability.BeaconBlockRootAttribute(attDataRoot)))
+	logger.Debug(eventMsg,
 		zap.Uint64("validator_index", uint64(validatorDuty.ValidatorIndex)),
 		zap.String("pub_key", hex.EncodeToString(validatorDuty.PubKey[:])),
 		zap.Any("attestation_data", attestationData),
