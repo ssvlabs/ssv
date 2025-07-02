@@ -278,7 +278,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	defer cancel()
 
 	var (
-		wg           sync.WaitGroup
+		wg sync.WaitGroup
+		// errCh is buffered because the receiver is only interested in the very 1st error sent to this channel
+		// and will not read any subsequent errors. Buffering ensures that senders can send their errors and terminate without being blocked,
+		// regardless of whether the receiver is still actively reading from the channel.
 		errCh        = make(chan error, len(committeeDuty.ValidatorDuties))
 		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
 
