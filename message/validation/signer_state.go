@@ -5,6 +5,8 @@ package validation
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // SignerState represents the state of a signer, including its start time, slot, round,
@@ -21,7 +23,7 @@ type SignerState struct {
 	//  7 (f=2): C(7,5)+C(7,6)+C(7,7)=29
 	// 10 (f=3): C(10,7)+C(10,8)+C(10,9)+C(10,10)=176
 	// 13 (f=4): C(13,9)+C(13,10)+C(13,11)+C(13,12)+C(13,13)=1093
-	SeenSigners map[SignersBitMask]struct{}
+	SeenSigners map[qbftstorage.SignersBitMask]struct{}
 }
 
 func newSignerState(slot phase0.Slot, round specqbft.Round) *SignerState {
