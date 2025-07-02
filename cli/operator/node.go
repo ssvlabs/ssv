@@ -175,7 +175,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		networkConfig := &networkconfig.NetworkConfig{
-			Name:         cfg.SSVOptions.NetworkName,
 			SSVConfig:    ssvNetworkConfig,
 			BeaconConfig: consensusClient.BeaconConfig(),
 		}
@@ -310,7 +309,7 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		if err := validateConfig(nodeStorage, networkConfig.NetworkName(), usingLocalEvents, usingSSVSigner); err != nil {
+		if err := validateConfig(nodeStorage, networkconfig.NetworkType(cfg.SSVOptions.NetworkName), usingLocalEvents, usingSSVSigner); err != nil {
 			logger.Fatal("failed to validate config", zap.Error(err))
 		}
 
@@ -778,14 +777,14 @@ func validateProposerDelayConfig(logger *zap.Logger) error {
 	return nil
 }
 
-func validateConfig(nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents, usingRemoteSigner bool) error {
+func validateConfig(nodeStorage operatorstorage.Storage, networkType string, usingLocalEvents, usingRemoteSigner bool) error {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
 		return fmt.Errorf("failed to get stored config: %w", err)
 	}
 
 	currentConfig := &operatorstorage.ConfigLock{
-		NetworkName:      networkName,
+		NetworkType:      networkType,
 		UsingLocalEvents: usingLocalEvents,
 		UsingSSVSigner:   usingRemoteSigner,
 	}

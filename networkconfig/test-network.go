@@ -13,9 +13,8 @@ import (
 )
 
 var TestNetwork = &NetworkConfig{
-	Name: "testnet",
 	BeaconConfig: &BeaconConfig{
-		networkName:                          string(spectypes.BeaconTestNetwork),
+		configName:                           string(spectypes.BeaconTestNetwork),
 		slotDuration:                         spectypes.BeaconTestNetwork.SlotDurationSec(),
 		slotsPerEpoch:                        spectypes.BeaconTestNetwork.SlotsPerEpoch(),
 		epochsPerSyncCommitteePeriod:         256,
@@ -73,9 +72,8 @@ var TestNetwork = &NetworkConfig{
 
 // TestRealNetwork is used in tests that require real network parameters.
 var TestRealNetwork = &NetworkConfig{
-	Name: "holesky",
 	BeaconConfig: &BeaconConfig{
-		networkName:                          string(spectypes.HoleskyNetwork),
+		configName:                           string(spectypes.HoleskyNetwork),
 		slotDuration:                         spectypes.HoleskyNetwork.SlotDurationSec(),
 		slotsPerEpoch:                        spectypes.HoleskyNetwork.SlotsPerEpoch(),
 		epochsPerSyncCommitteePeriod:         256,

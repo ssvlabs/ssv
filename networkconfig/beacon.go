@@ -14,6 +14,7 @@ import (
 //go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./beacon_mock.go -source=./beacon.go
 
 type Beacon interface {
+	ConfigName() string
 	SlotStartTime(slot phase0.Slot) time.Time
 	SlotEndTime(slot phase0.Slot) time.Time
 	EstimatedCurrentSlot() phase0.Slot
@@ -36,12 +37,11 @@ type Beacon interface {
 	GenesisTime() time.Time
 	SyncCommitteeSize() uint64
 	GenesisValidatorsRoot() phase0.Root
-	NetworkName() string
 	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, phase0.Fork)
 }
 
 type BeaconConfig struct {
-	networkName                          string
+	configName                           string
 	slotDuration                         time.Duration
 	slotsPerEpoch                        uint64
 	epochsPerSyncCommitteePeriod         uint64
@@ -57,7 +57,7 @@ type BeaconConfig struct {
 }
 
 func NewBeaconConfig(
-	networkName string,
+	configName string,
 	slotDuration time.Duration,
 	slotsPerEpoch uint64,
 	epochsPerSyncCommitteePeriod uint64,
@@ -72,7 +72,7 @@ func NewBeaconConfig(
 	forkData map[spec.DataVersion]phase0.Fork,
 ) *BeaconConfig {
 	return &BeaconConfig{
-		networkName:                          networkName,
+		configName:                           configName,
 		slotDuration:                         slotDuration,
 		slotsPerEpoch:                        slotsPerEpoch,
 		epochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,
@@ -234,8 +234,8 @@ func (b *BeaconConfig) GenesisValidatorsRoot() phase0.Root {
 	return b.genesisValidatorsRoot
 }
 
-func (b *BeaconConfig) NetworkName() string {
-	return b.networkName
+func (b *BeaconConfig) ConfigName() string {
+	return b.configName
 }
 
 func (b *BeaconConfig) Fork(version spec.DataVersion) phase0.Fork {
@@ -268,8 +268,8 @@ func (b *BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, phase0
 }
 
 func (b *BeaconConfig) AssertSame(other *BeaconConfig) error {
-	if b.networkName != other.networkName {
-		return fmt.Errorf("different NetworkName")
+	if b.configName != other.configName {
+		return fmt.Errorf("different ConfigName")
 	}
 	if b.slotDuration != other.slotDuration {
 		return fmt.Errorf("different SlotDuration")

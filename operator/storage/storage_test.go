@@ -166,7 +166,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	require.Nil(t, storedCfg)
 
 	c1 := &ConfigLock{
-		NetworkName:      networkconfig.TestNetwork.Name,
+		NetworkType:      "net1",
 		UsingLocalEvents: false,
 	}
 	require.NoError(t, storage.SaveConfig(nil, c1))
@@ -177,7 +177,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	require.Equal(t, c1, storedCfg)
 
 	c2 := &ConfigLock{
-		NetworkName:      networkconfig.TestNetwork.Name + "1",
+		NetworkType:      "net2",
 		UsingLocalEvents: false,
 	}
 	require.NoError(t, storage.SaveConfig(nil, c2))
@@ -230,7 +230,7 @@ func Test_Config(t *testing.T) {
 	require.NoError(t, err)
 
 	cfgData := &ConfigLock{
-		NetworkName:      "test",
+		NetworkType:      "test",
 		UsingLocalEvents: false,
 	}
 
@@ -241,7 +241,7 @@ func Test_Config(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, validAndFound)
 	require.NotNil(t, cfg)
-	require.Equal(t, cfgData.NetworkName, cfg.NetworkName)
+	require.Equal(t, cfgData.NetworkType, cfg.NetworkType)
 	require.Equal(t, cfgData.UsingLocalEvents, cfg.UsingLocalEvents)
 
 	require.NoError(t, operatorStorage.DeleteConfig(nil))

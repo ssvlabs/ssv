@@ -43,6 +43,20 @@ func (m *MockNetwork) EXPECT() *MockNetworkMockRecorder {
 	return m.recorder
 }
 
+// ConfigName mocks base method.
+func (m *MockNetwork) ConfigName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConfigName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ConfigName indicates an expected call of ConfigName.
+func (mr *MockNetworkMockRecorder) ConfigName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigName", reflect.TypeOf((*MockNetwork)(nil).ConfigName))
+}
+
 // EpochDuration mocks base method.
 func (m *MockNetwork) EpochDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -322,20 +336,6 @@ func (m *MockNetwork) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 func (mr *MockNetworkMockRecorder) LastSlotOfSyncPeriod(period any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastSlotOfSyncPeriod", reflect.TypeOf((*MockNetwork)(nil).LastSlotOfSyncPeriod), period)
-}
-
-// NetworkName mocks base method.
-func (m *MockNetwork) NetworkName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NetworkName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// NetworkName indicates an expected call of NetworkName.
-func (mr *MockNetworkMockRecorder) NetworkName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkName", reflect.TypeOf((*MockNetwork)(nil).NetworkName))
 }
 
 // SlotDuration mocks base method.
