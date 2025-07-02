@@ -387,7 +387,7 @@ func (c *controller) handleWorkerMessages(ctx context.Context, msg network.Decod
 		ncv = validator.NewCommitteeObserver(ssvMsg.GetID(), committeeObserverOptions)
 
 		ttlSlots := nonCommitteeValidatorTTLs[ssvMsg.MsgID.GetRoleType()]
-		ttl := time.Duration(ttlSlots) * c.networkConfig.GetSlotDuration()
+		ttl := time.Duration(ttlSlots) * c.networkConfig.SlotDuration()
 
 		c.committeesObservers.Set(ssvMsg.GetID(), ncv, ttl)
 	} else {
@@ -1032,7 +1032,7 @@ func (c *controller) handleMetadataUpdate(ctx context.Context, syncBatch metadat
 }
 
 func (c *controller) reportIndicesChange(ctx context.Context) bool {
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.GetSlotDuration())
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*c.networkConfig.SlotDuration())
 	defer cancel()
 
 	select {

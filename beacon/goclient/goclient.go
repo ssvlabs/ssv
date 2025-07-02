@@ -247,19 +247,19 @@ func New(
 	}
 
 	client.blockRootToSlotCache = ttlcache.New(
-		ttlcache.WithCapacity[phase0.Root, phase0.Slot](config.SlotsPerEpoch * BlockRootToSlotCacheCapacityEpochs),
+		ttlcache.WithCapacity[phase0.Root, phase0.Slot](config.SlotsPerEpoch() * BlockRootToSlotCacheCapacityEpochs),
 	)
 
 	client.attestationDataCache = ttlcache.New(
 		// we only fetch attestation data during the slot of the relevant duty (and never later),
 		// hence caching it for 2 slots is sufficient
-		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * config.SlotDuration),
+		ttlcache.WithTTL[phase0.Slot, *phase0.AttestationData](2 * config.SlotDuration()),
 	)
 
 	slotTickerProvider := func() slotticker.SlotTicker {
 		return slotticker.New(logger, slotticker.Config{
-			SlotDuration: config.SlotDuration,
-			GenesisTime:  config.GenesisTime,
+			SlotDuration: config.SlotDuration(),
+			GenesisTime:  config.GenesisTime(),
 		})
 	}
 
@@ -363,8 +363,6 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			if err != nil {
 				logger.Fatal("client returned unexpected beacon config, make sure all clients use the same Ethereum network",
 					zap.Error(err),
-					zap.Any("current_forks", currentConfig.Forks),
-					zap.Any("got_forks", beaconConfig.Forks),
 					zap.Stringer("client_config", beaconConfig),
 					zap.Stringer("expected_config", currentConfig),
 				)

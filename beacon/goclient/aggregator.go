@@ -191,7 +191,7 @@ func (gc *GoClient) SubmitSignedAggregateSelectionProof(
 //	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
 //	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
 func (gc *GoClient) isAggregator(committeeCount uint64, slotSig []byte) bool {
-	modulo := committeeCount / gc.beaconConfig.TargetAggregatorsPerCommittee
+	modulo := committeeCount / gc.beaconConfig.TargetAggregatorsPerCommittee()
 	if modulo == 0 {
 		// Modulo must be at least 1.
 		modulo = 1
@@ -205,7 +205,7 @@ func (gc *GoClient) isAggregator(committeeCount uint64, slotSig []byte) bool {
 func (gc *GoClient) waitToSlotTwoThirds(slot phase0.Slot) {
 	config := gc.getBeaconConfig()
 	oneInterval := config.IntervalDuration()
-	finalTime := config.GetSlotStartTime(slot).Add(2 * oneInterval)
+	finalTime := config.SlotStartTime(slot).Add(2 * oneInterval)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return

@@ -51,7 +51,7 @@ func TestTimeoutForRound(t *testing.T) {
 func setupMockBeaconConfig() *networkconfig.BeaconConfig {
 	config := networkconfig.TestNetwork.BeaconConfig
 	config.SlotDuration = 120 * time.Millisecond
-	config.GenesisTime = time.Now()
+	config.genesisTime = time.Now()
 
 	return config
 }

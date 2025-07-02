@@ -15,19 +15,19 @@ import (
 var TestNetwork = &NetworkConfig{
 	Name: "testnet",
 	BeaconConfig: &BeaconConfig{
-		NetworkName:                          string(spectypes.BeaconTestNetwork),
-		SlotDuration:                         spectypes.BeaconTestNetwork.SlotDurationSec(),
-		SlotsPerEpoch:                        spectypes.BeaconTestNetwork.SlotsPerEpoch(),
-		EpochsPerSyncCommitteePeriod:         256,
-		SyncCommitteeSize:                    512,
-		SyncCommitteeSubnetCount:             4,
-		TargetAggregatorsPerSyncSubcommittee: 16,
-		TargetAggregatorsPerCommittee:        16,
-		IntervalsPerSlot:                     3,
-		GenesisForkVersion:                   spectypes.BeaconTestNetwork.ForkVersion(),
-		GenesisTime:                          time.Unix(int64(spectypes.BeaconTestNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
-		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x043db0d9a83813551ee2f33450d23797757d430911a9320530ad8a0eabc43efb")),
-		Forks: map[spec.DataVersion]phase0.Fork{
+		networkName:                          string(spectypes.BeaconTestNetwork),
+		slotDuration:                         spectypes.BeaconTestNetwork.SlotDurationSec(),
+		slotsPerEpoch:                        spectypes.BeaconTestNetwork.SlotsPerEpoch(),
+		epochsPerSyncCommitteePeriod:         256,
+		syncCommitteeSize:                    512,
+		syncCommitteeSubnetCount:             4,
+		targetAggregatorsPerSyncSubcommittee: 16,
+		targetAggregatorsPerCommittee:        16,
+		intervalsPerSlot:                     3,
+		genesisForkVersion:                   spectypes.BeaconTestNetwork.ForkVersion(),
+		genesisTime:                          time.Unix(int64(spectypes.BeaconTestNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
+		genesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x043db0d9a83813551ee2f33450d23797757d430911a9320530ad8a0eabc43efb")),
+		forks: map[spec.DataVersion]phase0.Fork{
 			spec.DataVersionPhase0: {
 				Epoch:           phase0.Epoch(0),
 				PreviousVersion: phase0.Version{0, 0, 0, 0},
@@ -75,19 +75,19 @@ var TestNetwork = &NetworkConfig{
 var TestRealNetwork = &NetworkConfig{
 	Name: "holesky",
 	BeaconConfig: &BeaconConfig{
-		NetworkName:                          string(spectypes.HoleskyNetwork),
-		SlotDuration:                         spectypes.HoleskyNetwork.SlotDurationSec(),
-		SlotsPerEpoch:                        spectypes.HoleskyNetwork.SlotsPerEpoch(),
-		EpochsPerSyncCommitteePeriod:         256,
-		SyncCommitteeSize:                    512,
-		SyncCommitteeSubnetCount:             4,
-		TargetAggregatorsPerSyncSubcommittee: 16,
-		TargetAggregatorsPerCommittee:        16,
-		IntervalsPerSlot:                     3,
-		GenesisForkVersion:                   spectypes.HoleskyNetwork.ForkVersion(),
-		GenesisTime:                          time.Unix(int64(spectypes.HoleskyNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
-		GenesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1")),
-		Forks: map[spec.DataVersion]phase0.Fork{
+		networkName:                          string(spectypes.HoleskyNetwork),
+		slotDuration:                         spectypes.HoleskyNetwork.SlotDurationSec(),
+		slotsPerEpoch:                        spectypes.HoleskyNetwork.SlotsPerEpoch(),
+		epochsPerSyncCommitteePeriod:         256,
+		syncCommitteeSize:                    512,
+		syncCommitteeSubnetCount:             4,
+		targetAggregatorsPerSyncSubcommittee: 16,
+		targetAggregatorsPerCommittee:        16,
+		intervalsPerSlot:                     3,
+		genesisForkVersion:                   spectypes.HoleskyNetwork.ForkVersion(),
+		genesisTime:                          time.Unix(int64(spectypes.HoleskyNetwork.MinGenesisTime()), 0), // #nosec G115 -- time should not exceed int64
+		genesisValidatorsRoot:                phase0.Root(hexutil.MustDecode("0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1")),
+		forks: map[spec.DataVersion]phase0.Fork{
 			// Phase0
 			spec.DataVersionPhase0: {
 				Epoch:           phase0.Epoch(0),

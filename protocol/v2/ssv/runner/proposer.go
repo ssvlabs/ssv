@@ -150,7 +150,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 	)
 
 	// Sleep the remaining proposerDelay since slot start, ensuring on-time proposals even if duty began late.
-	slotTime := r.BaseRunner.NetworkConfig.GetSlotStartTime(duty.Slot)
+	slotTime := r.BaseRunner.NetworkConfig.SlotStartTime(duty.Slot)
 	proposeTime := slotTime.Add(r.proposerDelay)
 	if timeLeft := time.Until(proposeTime); timeLeft > 0 {
 		select {
