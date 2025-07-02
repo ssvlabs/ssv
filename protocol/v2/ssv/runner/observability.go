@@ -26,7 +26,7 @@ type submissionsMetric struct {
 
 var (
 	submissions = make(map[types.BeaconRole]submissionsMetric)
-	lock        sync.Mutex
+	metricLock  sync.Mutex
 )
 
 var (
@@ -75,8 +75,8 @@ var (
 )
 
 func recordSuccessfulSubmission(ctx context.Context, count uint32, epoch phase0.Epoch, role types.BeaconRole) {
-	lock.Lock()
-	defer lock.Unlock()
+	metricLock.Lock()
+	defer metricLock.Unlock()
 
 	var rolesToReset []types.BeaconRole
 	for r, submission := range submissions {
