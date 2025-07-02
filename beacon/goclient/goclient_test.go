@@ -1,9 +1,14 @@
 package goclient
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,54 +22,172 @@ import (
 )
 
 func TestHealthy(t *testing.T) {
-	t.Run("sync distance larger than allowed", func(t *testing.T) {
-		syncData := &v1.SyncState{
-			SyncDistance: phase0.Slot(3),
-			IsSyncing:    true,
-		}
-		err := runHealthyTest(t, syncData, 2)
-		require.ErrorIs(t, err, errSyncing)
-	})
+	t.Parallel()
 
-	t.Run("sync distance within allowed limits", func(t *testing.T) {
-		syncData := &v1.SyncState{
-			SyncDistance: phase0.Slot(3),
-			IsSyncing:    true,
-		}
+	tt := []struct {
+		name                  string
+		syncResponseList      []syncResponse
+		syncDistanceTolerance uint64
+		concurrentHealthCheck bool
+		expectedErr           error
+	}{
+		{
+			name:                  "single client: zero sync distance, not syncing",
+			syncResponseList:      []syncResponse{{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}}},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           nil,
+		},
+		{
+			name:                  "single client: sync distance within allowed limits",
+			syncResponseList:      []syncResponse{{state: &v1.SyncState{SyncDistance: 1, IsSyncing: true}}},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           nil,
+		},
+		{
+			name:                  "single client: sync distance larger than allowed",
+			syncResponseList:      []syncResponse{{state: &v1.SyncState{SyncDistance: 3, IsSyncing: true}}},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           errSyncing,
+		},
+		{
+			name: "multi client: both healthy",
+			syncResponseList: []syncResponse{
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
+			},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           nil,
+		},
+		{
+			name: "multi client: only first healthy",
+			syncResponseList: []syncResponse{
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
+				{state: &v1.SyncState{SyncDistance: 3, IsSyncing: true}},
+			},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           nil,
+		},
+		{
+			name: "multi client: only second healthy",
+			syncResponseList: []syncResponse{
+				{state: &v1.SyncState{SyncDistance: 3, IsSyncing: true}},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
+			},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           nil,
+		},
+		{
+			name: "multi client: no healthy",
+			syncResponseList: []syncResponse{
+				{state: &v1.SyncState{SyncDistance: 3, IsSyncing: true}},
+				{state: &v1.SyncState{SyncDistance: 4, IsSyncing: true}},
+			},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           errSyncing,
+		},
+		{
+			name: "multi client: both time out",
+			syncResponseList: []syncResponse{
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+			},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           context.DeadlineExceeded,
+		},
+		{
+			name: "multi client: first times out",
+			syncResponseList: []syncResponse{
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
+			},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           nil,
+		},
+		{
+			name: "multi client: second times out",
+			syncResponseList: []syncResponse{
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}},
+				{state: &v1.SyncState{SyncDistance: 0, IsSyncing: false}, delay: 2 * time.Second},
+			},
+			syncDistanceTolerance: 2,
+			concurrentHealthCheck: false,
+			expectedErr:           nil,
+		},
+	}
 
-		err := runHealthyTest(t, syncData, 3)
-		require.NoError(t, err)
-	})
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := runHealthyTest(t, tc.syncResponseList, tc.syncDistanceTolerance, tc.concurrentHealthCheck)
+			if tc.expectedErr == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tc.expectedErr)
+			}
+		})
+	}
 }
 
-func runHealthyTest(t *testing.T, syncData *v1.SyncState, syncDistanceTolerance uint64) error {
+type syncResponse struct {
+	state *v1.SyncState
+	delay time.Duration
+}
+
+func runHealthyTest(
+	t *testing.T,
+	syncResponseList []syncResponse,
+	syncDistanceTolerance uint64,
+	concurrentHealthCheck bool,
+) error {
 	const (
 		commonTimeout = 100 * time.Millisecond
 		longTimeout   = 500 * time.Millisecond
 	)
 
-	replaceSyncing := atomic.Bool{}
-
 	mockResponses := tests.MockResponses()
-	mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
-		if r.URL.Path == syncingPath && replaceSyncing.Load() {
-			output := struct {
-				Data *v1.SyncState `json:"data"`
-			}{
-				Data: syncData,
-			}
-			rawData, err := json.Marshal(output)
-			if err != nil {
-				return nil, err
+	replaceSyncing := atomic.Bool{}
+	var servers []*httptest.Server
+	var urls []string
+
+	for _, syncResp := range syncResponseList {
+		mockServer := tests.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+			if r.URL.Path == syncingPath && replaceSyncing.Load() {
+				output := struct {
+					Data *v1.SyncState `json:"data"`
+				}{
+					Data: syncResp.state,
+				}
+				rawData, err := json.Marshal(output)
+				if err != nil {
+					return nil, err
+				}
+
+				if syncResp.delay > 0 {
+					time.Sleep(syncResp.delay)
+				}
+
+				return rawData, nil
 			}
 
-			return rawData, nil
-		}
+			return mockResponses[r.URL.Path], nil
+		})
 
-		return mockResponses[r.URL.Path], nil
-	})
+		servers = append(servers, mockServer)
+		urls = append(urls, mockServer.URL)
+	}
+
 	c, err := New(t.Context(), zap.NewNop(), Options{
-		BeaconNodeAddr:        mockServer.URL,
+		BeaconNodeAddr:        strings.Join(urls, ";"),
 		CommonTimeout:         commonTimeout,
 		LongTimeout:           longTimeout,
 		SyncDistanceTolerance: syncDistanceTolerance,
@@ -75,7 +198,30 @@ func runHealthyTest(t *testing.T, syncData *v1.SyncState, syncDistanceTolerance 
 	// so we need to let it start with synced state and then get the state from the test data.
 	replaceSyncing.Store(true)
 
-	return c.Healthy(t.Context())
+	if !concurrentHealthCheck {
+		return c.Healthy(t.Context())
+	}
+
+	var wg sync.WaitGroup
+	var errMu sync.Mutex
+	var errs error
+	for range servers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			if err := c.Healthy(t.Context()); err != nil {
+				errMu.Lock()
+				errs = errors.Join(errs, err)
+				errMu.Unlock()
+				return
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	return errs
 }
 
 func TestTimeouts(t *testing.T) {
