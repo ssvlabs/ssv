@@ -468,12 +468,12 @@ func (cr *CommitteeRunner) signAttesterDuty(
 		spectypes.DomainAttester,
 	)
 	if err != nil {
-		return isBlocked, partialMsg, observability.Errorf(span, "failed signing attestation data: %w", err)
+		return false, partialMsg, observability.Errorf(span, "failed signing attestation data: %w", err)
 	}
 
 	attDataRoot, err := attestationData.HashTreeRoot()
 	if err != nil {
-		return isBlocked, partialMsg, observability.Errorf(span, "failed to hash attestation data: %w", err)
+		return false, partialMsg, observability.Errorf(span, "failed to hash attestation data: %w", err)
 	}
 
 	logger.Debug("signed attestation data",
@@ -487,7 +487,7 @@ func (cr *CommitteeRunner) signAttesterDuty(
 
 	span.SetStatus(codes.Ok, "")
 
-	return isBlocked, partialMsg, nil
+	return false, partialMsg, nil
 }
 
 // TODO finish edge case where some roots may be missing
