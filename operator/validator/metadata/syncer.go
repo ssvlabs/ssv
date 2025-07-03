@@ -33,7 +33,7 @@ const (
 	//       Exporters need to sync all validators across the entire SSV network,
 	//       while Non-Exporters sync only the validators that belong to their own committees
 	//       or to other committees within their subnets.
-	batchSize = 10_000
+	batchSize = 512
 )
 
 type Syncer struct {
