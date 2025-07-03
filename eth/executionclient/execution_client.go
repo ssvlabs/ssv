@@ -29,7 +29,6 @@ type Provider interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs
 	Filterer() (*contract.ContractFilterer, error)
-	BlockByNumber(ctx context.Context, number *big.Int) (*ethtypes.Block, error)
 	HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error)
 	ChainID(ctx context.Context) (*big.Int, error)
 	Healthy(ctx context.Context) error
@@ -328,18 +327,6 @@ func (ec *ExecutionClient) healthy(ctx context.Context) error {
 	ec.lastSyncedTime.Store(time.Now().Unix())
 
 	return nil
-}
-
-func (ec *ExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
-	b, err := ec.client.BlockByNumber(ctx, blockNumber)
-	if err != nil {
-		ec.logger.Error(elResponseErrMsg,
-			zap.String("method", "eth_getBlockByNumber"),
-			zap.Error(err))
-		return nil, err
-	}
-
-	return b, nil
 }
 
 func (ec *ExecutionClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {

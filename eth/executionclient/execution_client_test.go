@@ -941,62 +941,6 @@ func TestSubscribeFilterLogs(t *testing.T) {
 	})
 }
 
-// TestBlockByNumber tests the BlockByNumber method of the client.
-func TestBlockByNumber(t *testing.T) {
-	logger := zaptest.NewLogger(t)
-
-	t.Run("successfully gets block by number", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
-
-		// Deploy the contract
-		_, err := env.deployCallableContract()
-		require.NoError(t, err)
-
-		// Create a client and connect to the simulator
-		err = env.createClient(WithLogger(logger))
-		require.NoError(t, err)
-
-		// Create some blocks
-		for i := 0; i < 5; i++ {
-			env.sim.Commit()
-		}
-
-		// Test the BlockByNumber method with specific block number
-		block, err := env.client.BlockByNumber(env.ctx, big.NewInt(2))
-		require.NoError(t, err)
-		require.NotNil(t, block)
-		require.Equal(t, uint64(2), block.NumberU64())
-
-		// Test the BlockByNumber method with nil (latest block)
-		latestBlock, err := env.client.BlockByNumber(env.ctx, nil)
-		require.NoError(t, err)
-		require.NotNil(t, latestBlock)
-		require.Equal(t, uint64(6), latestBlock.NumberU64()) // Genesis + 1 from deploy + 5 from loop
-	})
-
-	t.Run("error when BlockByNumber fails", func(t *testing.T) {
-		env := setupTestEnv(t, 1*time.Second)
-		_, err := env.deployCallableContract()
-		require.NoError(t, err)
-
-		// Create a client - connection should succeed initially
-		err = env.createClient(
-			WithLogger(logger),
-			WithConnectionTimeout(100*time.Millisecond),
-		)
-		require.NoError(t, err) // Connection is established initially
-
-		// Create a context with a very short timeout to ensure BlockByNumber fails
-		timeoutCtx, cancel := context.WithTimeout(env.ctx, 1*time.Nanosecond)
-		defer cancel()
-
-		// BlockByNumber should fail because of the short timeout
-		block, err := env.client.BlockByNumber(timeoutCtx, big.NewInt(1))
-		require.Error(t, err)
-		require.Nil(t, block)
-	})
-}
-
 // TestHeaderByNumber tests the HeaderByNumber method of the client.
 func TestHeaderByNumber(t *testing.T) {
 	logger := zaptest.NewLogger(t)
