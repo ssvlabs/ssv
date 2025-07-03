@@ -175,14 +175,8 @@ func BaseCommitValidationVerifySignature(
 	return nil
 }
 
-func validateCommit(
-	msg *specqbft.ProcessingMessage,
-	height specqbft.Height,
-	round specqbft.Round,
-	proposedMsg *specqbft.ProcessingMessage,
-	operators []*spectypes.Operator,
-) error {
-	if err := baseCommitValidationIgnoreSignature(msg, height, operators); err != nil {
+func (i *Instance) validateCommit(msg *specqbft.ProcessingMessage) error {
+	if err := baseCommitValidationIgnoreSignature(msg, i.State.Height, i.State.CommitteeMember.Committee); err != nil {
 		return err
 	}
 
@@ -190,11 +184,11 @@ func validateCommit(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if msg.QBFTMessage.Round != round {
+	if msg.QBFTMessage.Round != i.State.Round {
 		return errors.New("wrong msg round")
 	}
 
-	if !bytes.Equal(proposedMsg.QBFTMessage.Root[:], msg.QBFTMessage.Root[:]) {
+	if !bytes.Equal(i.State.ProposalAcceptedForCurrentRound.QBFTMessage.Root[:], msg.QBFTMessage.Root[:]) {
 		return errors.New("proposed data mismatch")
 	}
 

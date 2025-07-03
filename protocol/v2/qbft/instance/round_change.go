@@ -362,19 +362,19 @@ func minRound(roundChangeMsgs []*specqbft.ProcessingMessage) specqbft.Round {
 	return ret
 }
 
-func getRoundChangeData(state *specqbft.State) (specqbft.Round, [32]byte, []byte, []*specqbft.ProcessingMessage, error) {
-	if state.LastPreparedRound != specqbft.NoRound && state.LastPreparedValue != nil {
-		justifications, err := getRoundChangeJustification(state, state.PrepareContainer)
+func (i *Instance) getRoundChangeData() (specqbft.Round, [32]byte, []byte, []*specqbft.ProcessingMessage, error) {
+	if i.State.LastPreparedRound != specqbft.NoRound && i.State.LastPreparedValue != nil {
+		justifications, err := i.getRoundChangeJustification()
 		if err != nil {
 			return specqbft.NoRound, [32]byte{}, nil, nil, errors.Wrap(err, "could not get round change justification")
 		}
 
-		r, err := specqbft.HashDataRoot(state.LastPreparedValue)
+		r, err := specqbft.HashDataRoot(i.State.LastPreparedValue)
 		if err != nil {
 			return specqbft.NoRound, [32]byte{}, nil, nil, errors.Wrap(err, "could not hash input data")
 		}
 
-		return state.LastPreparedRound, r, state.LastPreparedValue, justifications, nil
+		return i.State.LastPreparedRound, r, i.State.LastPreparedValue, justifications, nil
 	}
 	return specqbft.NoRound, [32]byte{}, nil, nil, nil
 }
@@ -394,7 +394,7 @@ RoundChange(
        )
 */
 func (i *Instance) CreateRoundChange(newRound specqbft.Round) (*spectypes.SignedSSVMessage, error) {
-	round, root, fullData, justifications, err := getRoundChangeData(i.State)
+	round, root, fullData, justifications, err := i.getRoundChangeData()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")
 	}

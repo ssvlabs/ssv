@@ -68,31 +68,29 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 
 // getRoundChangeJustification returns the round change justification for the current round.
 // The justification is a quorum of signed prepare messages that agree on state.LastPreparedValue
-func getRoundChangeJustification(state *specqbft.State, prepareMsgContainer *specqbft.MsgContainer) ([]*specqbft.ProcessingMessage, error) {
-	if state.LastPreparedValue == nil {
+func (i *Instance) getRoundChangeJustification() ([]*specqbft.ProcessingMessage, error) {
+	if i.State.LastPreparedValue == nil {
 		return nil, nil
 	}
 
-	r, err := specqbft.HashDataRoot(state.LastPreparedValue)
+	r, err := specqbft.HashDataRoot(i.State.LastPreparedValue)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not hash input data")
 	}
 
-	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
+	prepareMsgs := i.State.PrepareContainer.MessagesForRound(i.State.LastPreparedRound)
 	ret := make([]*specqbft.ProcessingMessage, 0)
 	for _, msg := range prepareMsgs {
-		if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(
+		if err := i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 			msg,
-			state.Height,
-			state.LastPreparedRound,
+			i.State.LastPreparedRound,
 			r,
-			state.CommitteeMember.Committee,
 		); err == nil {
 			ret = append(ret, msg)
 		}
 	}
 
-	if !specqbft.HasQuorum(state.CommitteeMember, ret) {
+	if !specqbft.HasQuorum(i.State.CommitteeMember, ret) {
 		return nil, nil
 	}
 
@@ -101,17 +99,15 @@ func getRoundChangeJustification(state *specqbft.State, prepareMsgContainer *spe
 
 // validSignedPrepareForHeightRoundAndRootIgnoreSignature known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
+func (i *Instance) validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	msg *specqbft.ProcessingMessage,
-	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator) error {
-
+) error {
 	if msg.QBFTMessage.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
-	if msg.QBFTMessage.Height != height {
+	if msg.QBFTMessage.Height != i.State.Height {
 		return errors.New("wrong msg height")
 	}
 	if msg.QBFTMessage.Round != round {
@@ -130,7 +126,7 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if !msg.SignedMessage.CheckSignersInCommittee(operators) {
+	if !msg.SignedMessage.CheckSignersInCommittee(i.State.CommitteeMember.Committee) {
 		return errors.New("signer not in committee")
 	}
 
@@ -143,7 +139,7 @@ func (i *Instance) validSignedPrepareForHeightRoundAndRootVerifySignature(
 	root [32]byte,
 ) error {
 
-	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, i.State.Height, round, root, i.State.CommitteeMember.Committee); err != nil {
+	if err := i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, round, root); err != nil {
 		return err
 	}
 

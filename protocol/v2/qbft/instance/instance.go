@@ -204,25 +204,17 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 			return errors.New("did not receive proposal for this round")
 		}
 
-		return validSignedPrepareForHeightRoundAndRootIgnoreSignature(
+		return i.validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 			msg,
-			i.State.Height,
 			i.State.Round,
 			proposedMsg.QBFTMessage.Root,
-			i.State.CommitteeMember.Committee,
 		)
 	case specqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
-		return validateCommit(
-			msg,
-			i.State.Height,
-			i.State.Round,
-			i.State.ProposalAcceptedForCurrentRound,
-			i.State.CommitteeMember.Committee,
-		)
+		return i.validateCommit(msg)
 	case specqbft.RoundChangeMsgType:
 		return i.validRoundChangeForDataIgnoreSignature(msg, msg.QBFTMessage.Round, msg.SignedMessage.FullData)
 	default:
