@@ -172,8 +172,10 @@ var StartNodeCmd = &cobra.Command{
 			logger := logger.With(zap.String("ssv_signer_endpoint", cfg.SSVSigner.Endpoint))
 			logger.Info("using ssv-signer for signing")
 
-			if _, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
+			if u, err := url.ParseRequestURI(cfg.SSVSigner.Endpoint); err != nil {
 				logger.Fatal("invalid ssv signer endpoint format", zap.Error(err))
+			} else {
+				logger.Info("ssv-signer endpoint is valid", zap.String("endpoint", u.String()))
 			}
 
 			ssvSignerOptions := []ssvsigner.ClientOption{
@@ -182,6 +184,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 
 			if cfg.SSVSigner.KeystoreFile != "" || cfg.SSVSigner.ServerCertFile != "" {
+				logger.Info("using TLS configuration for ssv-signer client")
 				tlsConfig := &ssvsignertls.Config{
 					ClientKeystoreFile:         cfg.SSVSigner.KeystoreFile,
 					ClientKeystorePasswordFile: cfg.SSVSigner.KeystorePasswordFile,
@@ -194,6 +197,9 @@ var StartNodeCmd = &cobra.Command{
 				}
 				fmt.Printf("DEBUG: Loaded TLS config: %#v\n", tlsConfig)
 				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
+			} else {
+				logger.Info("didnt find  configured TLS configuration for ssv-signer client")
+				fmt.Printf("DEBUG DUMP cfg.SSVSigner: %#v\n", cfg.SSVSigner)
 			}
 
 			ssvSignerClient = ssvsigner.NewClient(
