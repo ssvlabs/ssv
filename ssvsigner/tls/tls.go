@@ -106,7 +106,7 @@ func (c *Config) LoadServerTLSConfig() (*tls.Config, error) {
 		return nil, err
 	}
 
-	// For Case 3: Load client fingerprints if provided
+	// For Case 3: Load client fingerprints
 	var trustedFingerprints map[string]string
 	if c.ServerKnownClientsFile != "" {
 		trustedFingerprints, err = loadFingerprintsFile(c.ServerKnownClientsFile)
