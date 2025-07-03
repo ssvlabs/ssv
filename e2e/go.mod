@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/attestantio/go-eth2-client v0.21.9
-	github.com/go-chi/chi/v5 v5.0.10
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.32.0
 	github.com/sourcegraph/conc v0.3.0
