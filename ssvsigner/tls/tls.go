@@ -299,7 +299,8 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 	} else if host == "" {
 		host = cert.Subject.CommonName
 	}
-
+	fmt.Printf("DEBUG DUMP: trustedFingerprints: %v\n", trustedFingerprints)
+	fmt.Printf("DEBUG DUMP: host: |%s|, fingerprintHex: |%s|\n", host, fingerprintHex)
 	// Check fingerprint against our trusted list
 	if expectedFingerprint, ok := trustedFingerprints[host]; ok {
 		expectedFingerprint = normalizeFingerprint(expectedFingerprint)
@@ -311,8 +312,6 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 			formatFingerprint(expectedFingerprint),
 			formatFingerprint(fingerprintHex))
 	}
-	fmt.Printf("DEBUG DUMP: trustedFingerprints: %v\n", trustedFingerprints)
-	fmt.Printf("DEBUG DUMP: host: |%s|, fingerprintHex: |%s|\n", host, fingerprintHex)
 	// If we reach here, the server certificate is not trusted
 	return fmt.Errorf("server certificate fingerprint for host %q not trusted: %s", host, formatFingerprint(fingerprintHex))
 }
