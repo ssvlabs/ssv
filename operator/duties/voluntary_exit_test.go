@@ -142,11 +142,11 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 }
 
 func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
-	var blockByNumberCalls atomic.Uint64
+	var headerByNumberCalls atomic.Uint64
 
 	scheduler.executionClient.(*MockExecutionClient).EXPECT().HeaderByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
-			blockByNumberCalls.Add(1)
+			headerByNumberCalls.Add(1)
 			return &ethtypes.Header{Time: blockNumber.Uint64()}, nil
 		},
 	).AnyTimes()
@@ -156,7 +156,7 @@ func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 		},
 	).AnyTimes()
 
-	return &blockByNumberCalls
+	return &headerByNumberCalls
 }
 
 func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
