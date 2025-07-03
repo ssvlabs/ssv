@@ -44,21 +44,6 @@ func (m *MockProvider) EXPECT() *MockProviderMockRecorder {
 	return m.recorder
 }
 
-// BlockByNumber mocks base method.
-func (m *MockProvider) BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BlockByNumber", ctx, number)
-	ret0, _ := ret[0].(*types.Block)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// BlockByNumber indicates an expected call of BlockByNumber.
-func (mr *MockProviderMockRecorder) BlockByNumber(ctx, number any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByNumber", reflect.TypeOf((*MockProvider)(nil).BlockByNumber), ctx, number)
-}
-
 // ChainID mocks base method.
 func (m *MockProvider) ChainID(ctx context.Context) (*big.Int, error) {
 	m.ctrl.T.Helper()
@@ -214,21 +199,6 @@ func NewMockSingleClientProvider(ctrl *gomock.Controller) *MockSingleClientProvi
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockSingleClientProvider) EXPECT() *MockSingleClientProviderMockRecorder {
 	return m.recorder
-}
-
-// BlockByNumber mocks base method.
-func (m *MockSingleClientProvider) BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BlockByNumber", ctx, number)
-	ret0, _ := ret[0].(*types.Block)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// BlockByNumber indicates an expected call of BlockByNumber.
-func (mr *MockSingleClientProviderMockRecorder) BlockByNumber(ctx, number any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByNumber", reflect.TypeOf((*MockSingleClientProvider)(nil).BlockByNumber), ctx, number)
 }
 
 // ChainID mocks base method.
