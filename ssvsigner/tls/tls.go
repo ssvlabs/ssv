@@ -106,12 +106,16 @@ func (c *Config) LoadServerTLSConfig() (*tls.Config, error) {
 		return nil, err
 	}
 
-	// For Case 3: Load client fingerprints if provided
+	// For Case 3: Load client fingerprints
 	var trustedFingerprints map[string]string
 	if c.ServerKnownClientsFile != "" {
 		trustedFingerprints, err = loadFingerprintsFile(c.ServerKnownClientsFile)
 		if err != nil {
 			return nil, fmt.Errorf("load known clients: %w", err)
+		}
+
+		if len(trustedFingerprints) == 0 {
+			return nil, fmt.Errorf("no client fingerprints found; mutual TLS required")
 		}
 	}
 
