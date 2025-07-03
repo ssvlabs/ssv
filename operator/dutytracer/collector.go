@@ -504,7 +504,11 @@ func (c *Collector) collectLateMessage(ctx context.Context, msg *queue.SSVMessag
 			return
 		}
 		tries++
-		time.Sleep(time.Second)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
 	}
 	c.logger.Warn("exhausted retries for late message", fields.MessageID(msg.MsgID), zap.Int("tries", tries))
 }

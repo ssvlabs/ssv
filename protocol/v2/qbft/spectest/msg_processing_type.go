@@ -67,7 +67,11 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	require.NoError(t, err)
 
 	// broadcasting is asynchronic, so need to wait a bit before checking
-	time.Sleep(time.Millisecond * 5)
+	select {
+	case <-t.Context().Done():
+		return
+	case <-time.After(5 * time.Millisecond):
+	}
 
 	// test output message
 	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs

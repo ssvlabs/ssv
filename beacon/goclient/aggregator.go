@@ -27,7 +27,7 @@ func (gc *GoClient) SubmitAggregateSelectionProof(
 	// As specified in spec, an aggregator should wait until two thirds of the way through slot
 	// to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
-	gc.waitToSlotTwoThirds(slot)
+	gc.waitToSlotTwoThirds(ctx, slot)
 
 	// differ from spec because we need to subscribe to subnet
 	isAggregator := gc.isAggregator(committeeLength, slotSig)
@@ -202,7 +202,7 @@ func (gc *GoClient) isAggregator(committeeCount uint64, slotSig []byte) bool {
 }
 
 // waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after slot start time)
-func (gc *GoClient) waitToSlotTwoThirds(slot phase0.Slot) {
+func (gc *GoClient) waitToSlotTwoThirds(ctx context.Context, slot phase0.Slot) {
 	config := gc.getBeaconConfig()
 	oneInterval := config.IntervalDuration()
 	finalTime := config.GetSlotStartTime(slot).Add(2 * oneInterval)
@@ -210,5 +210,10 @@ func (gc *GoClient) waitToSlotTwoThirds(slot phase0.Slot) {
 	if wait <= 0 {
 		return
 	}
-	time.Sleep(wait)
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(wait):
+	}
 }
