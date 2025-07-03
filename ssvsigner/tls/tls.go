@@ -312,7 +312,7 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 			formatFingerprint(fingerprintHex))
 	}
 
-	return fmt.Errorf("server certificate fingerprint not trusted: %s", formatFingerprint(fingerprintHex))
+	return fmt.Errorf("server certificate fingerprint for host %q not trusted: %s", host, formatFingerprint(fingerprintHex))
 }
 
 // verifyClientCertificate verifies a client certificate using fingerprints.
