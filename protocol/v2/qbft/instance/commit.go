@@ -121,16 +121,16 @@ Commit(
                         )
                     );
 */
-func CreateCommit(state *specqbft.State, signer ssvtypes.OperatorSigner, root [32]byte) (*spectypes.SignedSSVMessage, error) {
+func (i *Instance) CreateCommit(root [32]byte) (*spectypes.SignedSSVMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
-		Height:     state.Height,
-		Round:      state.Round,
-		Identifier: state.ID,
+		Height:     i.State.Height,
+		Round:      i.State.Round,
+		Identifier: i.State.ID,
 
 		Root: root,
 	}
-	return ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	return ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
 }
 
 func baseCommitValidationIgnoreSignature(

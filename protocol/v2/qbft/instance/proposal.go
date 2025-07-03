@@ -45,7 +45,7 @@ func (i *Instance) uponProposal(ctx context.Context, logger *zap.Logger, msg *sp
 		return errors.Wrap(err, "could not hash input data")
 	}
 
-	prepare, err := CreatePrepare(i.State, i.signer, newRound, r)
+	prepare, err := i.CreatePrepare(newRound, r)
 	if err != nil {
 		return errors.Wrap(err, "could not create prepare msg")
 	}
@@ -231,7 +231,7 @@ func (i *Instance) proposer(round specqbft.Round) spectypes.OperatorID {
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *specqbft.State, signer ssvtypes.OperatorSigner, fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
+func (i *Instance) CreateProposal(fullData []byte, roundChanges, prepares []*specqbft.ProcessingMessage) (*spectypes.SignedSSVMessage, error) {
 	r, err := specqbft.HashDataRoot(fullData)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not hash input data")
@@ -257,16 +257,16 @@ func CreateProposal(state *specqbft.State, signer ssvtypes.OperatorSigner, fullD
 
 	msg := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
-		Height:     state.Height,
-		Round:      state.Round,
-		Identifier: state.ID,
+		Height:     i.State.Height,
+		Round:      i.State.Round,
+		Identifier: i.State.ID,
 
 		Root:                     r,
 		RoundChangeJustification: roundChangesData,
 		PrepareJustification:     preparesData,
 	}
 
-	signedMsg, err := ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	signedMsg, err := ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not wrap proposal message")
 	}

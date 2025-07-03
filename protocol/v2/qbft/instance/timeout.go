@@ -31,7 +31,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
-	roundChange, err := CreateRoundChange(i.State, i.signer, newRound)
+	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
 		return observability.Errorf(span, "could not generate round change msg: %w", err)
 	}

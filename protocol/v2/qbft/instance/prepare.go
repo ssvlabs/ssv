@@ -49,7 +49,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 		fields.Round(i.State.Round),
 		zap.Any("prepare_signers", allSigners(i.State.PrepareContainer.MessagesForRound(i.State.Round))))
 
-	commitMsg, err := CreateCommit(i.State, i.signer, proposedRoot)
+	commitMsg, err := i.CreateCommit(proposedRoot)
 	if err != nil {
 		return errors.Wrap(err, "could not create commit msg")
 	}
@@ -167,15 +167,15 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, signer ssvtypes.OperatorSigner, newRound specqbft.Round, root [32]byte) (*spectypes.SignedSSVMessage, error) {
+func (i *Instance) CreatePrepare(newRound specqbft.Round, root [32]byte) (*spectypes.SignedSSVMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
-		Height:     state.Height,
+		Height:     i.State.Height,
 		Round:      newRound,
-		Identifier: state.ID,
+		Identifier: i.State.ID,
 
 		Root: root,
 	}
 
-	return ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	return ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
 }

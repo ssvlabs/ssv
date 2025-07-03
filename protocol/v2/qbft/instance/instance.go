@@ -100,7 +100,7 @@ func (i *Instance) Start(ctx context.Context, logger *zap.Logger, value []byte, 
 
 		// propose if this node is the proposer
 		if proposerID == i.State.CommitteeMember.OperatorID {
-			proposal, err := CreateProposal(i.State, i.signer, i.StartValue, nil, nil)
+			proposal, err := i.CreateProposal(i.StartValue, nil, nil)
 			if err != nil {
 				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				span.SetStatus(codes.Error, err.Error())

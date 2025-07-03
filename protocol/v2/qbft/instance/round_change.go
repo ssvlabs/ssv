@@ -61,9 +61,7 @@ func (i *Instance) uponRoundChange(
 			roundChangeJustification = append(roundChangeJustification, rc)
 		}
 
-		proposal, err := CreateProposal(
-			i.State,
-			i.signer,
+		proposal, err := i.CreateProposal(
 			valueToPropose,
 			i.State.RoundChangeContainer.MessagesForRound(i.State.Round), // TODO - might be optimized to include only necessary quorum
 			roundChangeJustification,
@@ -106,7 +104,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 
 	i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 
-	roundChange, err := CreateRoundChange(i.State, i.signer, newRound)
+	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
 		return errors.Wrap(err, "failed to create round change message")
 	}
@@ -395,8 +393,8 @@ RoundChange(
            getRoundChangeJustification(current)
        )
 */
-func CreateRoundChange(state *specqbft.State, signer ssvtypes.OperatorSigner, newRound specqbft.Round) (*spectypes.SignedSSVMessage, error) {
-	round, root, fullData, justifications, err := getRoundChangeData(state)
+func (i *Instance) CreateRoundChange(newRound specqbft.Round) (*spectypes.SignedSSVMessage, error) {
+	round, root, fullData, justifications, err := getRoundChangeData(i.State)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")
 	}
@@ -412,16 +410,16 @@ func CreateRoundChange(state *specqbft.State, signer ssvtypes.OperatorSigner, ne
 	}
 	msg := &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
-		Height:     state.Height,
+		Height:     i.State.Height,
 		Round:      newRound,
-		Identifier: state.ID,
+		Identifier: i.State.ID,
 
 		Root:                     root,
 		DataRound:                round,
 		RoundChangeJustification: justificationsData,
 	}
 
-	signedMsg, err := ssvtypes.Sign(msg, state.CommitteeMember.OperatorID, signer)
+	signedMsg, err := ssvtypes.Sign(msg, i.State.CommitteeMember.OperatorID, i.signer)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign round change message")
 	}
