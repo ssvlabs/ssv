@@ -198,18 +198,10 @@ func (km *RemoteKeyManager) IsAttestationSlashable(pubKey phase0.BLSPubKey, attD
 	attLock.Lock()
 	defer attLock.Unlock()
 
-	propLock := km.lock(pubKey, lockProposal)
-	propLock.Lock()
-	defer propLock.Unlock()
-
 	return km.slashingProtector.IsAttestationSlashable(pubKey, attData)
 }
 
 func (km *RemoteKeyManager) IsBeaconBlockSlashable(pubKey phase0.BLSPubKey, slot phase0.Slot) error {
-	attLock := km.lock(pubKey, lockAttestation)
-	attLock.Lock()
-	defer attLock.Unlock()
-
 	propLock := km.lock(pubKey, lockProposal)
 	propLock.Lock()
 	defer propLock.Unlock()
@@ -234,18 +226,10 @@ func (km *RemoteKeyManager) removeHighestAttestation(txn basedb.Txn, pubKey phas
 	attLock.Lock()
 	defer attLock.Unlock()
 
-	propLock := km.lock(pubKey, lockProposal)
-	propLock.Lock()
-	defer propLock.Unlock()
-
 	return km.slashingProtector.RemoveHighestAttestationTxn(txn, pubKey)
 }
 
 func (km *RemoteKeyManager) removeHighestProposal(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
-	attLock := km.lock(pubKey, lockAttestation)
-	attLock.Lock()
-	defer attLock.Unlock()
-
 	propLock := km.lock(pubKey, lockProposal)
 	propLock.Lock()
 	defer propLock.Unlock()
