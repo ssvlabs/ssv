@@ -118,5 +118,5 @@ func createRoundChange(test *CreateMsgSpecTest) (*spectypes.SignedSSVMessage, er
 		}
 	}
 
-	return instance.CreateRoundChange(state, signer, 1, test.Value[:])
+	return instance.CreateRoundChange(state, signer, 1)
 }

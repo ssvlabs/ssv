@@ -10,16 +10,15 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
-func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage, prepareMsgContainer *specqbft.MsgContainer) error {
-	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round))
+func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *specqbft.ProcessingMessage) error {
+	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, i.State.PrepareContainer.MessagesForRound(i.State.Round))
 
-	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(msg)
+	addedMsg, err := i.State.PrepareContainer.AddFirstMsgForSignerAndRound(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not add prepare msg to container")
 	}
@@ -37,7 +36,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 		return nil // already moved to commit stage
 	}
 
-	if !specqbft.HasQuorum(i.State.CommitteeMember, prepareMsgContainer.MessagesForRound(i.State.Round)) {
+	if !specqbft.HasQuorum(i.State.CommitteeMember, i.State.PrepareContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
 
@@ -48,7 +47,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 
 	logger.Debug("🎯 got prepare quorum",
 		fields.Round(i.State.Round),
-		zap.Any("prepare_signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))))
+		zap.Any("prepare_signers", allSigners(i.State.PrepareContainer.MessagesForRound(i.State.Round))))
 
 	commitMsg, err := CreateCommit(i.State, i.signer, proposedRoot)
 	if err != nil {
@@ -60,7 +59,7 @@ func (i *Instance) uponPrepare(ctx context.Context, logger *zap.Logger, msg *spe
 		zap.Any("commit_signers", commitMsg.OperatorIDs),
 		fields.Root(proposedRoot))
 
-	if err := i.Broadcast(logger, commitMsg); err != nil {
+	if err := i.Broadcast(commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")
 	}
 
@@ -138,20 +137,18 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	return nil
 }
 
-func validSignedPrepareForHeightRoundAndRootVerifySignature(
-	config qbft.IConfig,
+func (i *Instance) validSignedPrepareForHeightRoundAndRootVerifySignature(
 	msg *specqbft.ProcessingMessage,
-	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator) error {
+) error {
 
-	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, height, round, root, operators); err != nil {
+	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, i.State.Height, round, root, i.State.CommitteeMember.Committee); err != nil {
 		return err
 	}
 
 	// Verify signature
-	if err := spectypes.Verify(msg.SignedMessage, operators); err != nil {
+	if err := spectypes.Verify(msg.SignedMessage, i.State.CommitteeMember.Committee); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}
 
