@@ -27,7 +27,13 @@ const (
 	defaultSyncInterval      = 12 * time.Minute
 	defaultStreamInterval    = 2 * time.Second
 	defaultUpdateSendTimeout = 30 * time.Second
-	batchSize                = 512
+	// NOTE: A higher value of 'batchSize' means fewer HTTP calls to the Consensus Node,
+	//       but larger payloads and responses, which can potentially lead to HTTP request timeouts.
+	// TODO: This value should differ depending on whether the node is an Exporter or Non-Exporter.
+	//       Exporters need to sync all validators across the entire SSV network,
+	//       while Non-Exporters sync only the validators that belong to their own committees
+	//       or to other committees within their subnets.
+	batchSize = 10_000
 )
 
 type Syncer struct {
