@@ -8,7 +8,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/trie"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -143,11 +142,10 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 	var blockByNumberCalls atomic.Uint64
 
-	scheduler.executionClient.(*MockExecutionClient).EXPECT().BlockByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
+	scheduler.executionClient.(*MockExecutionClient).EXPECT().HeaderByNumber(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
 			blockByNumberCalls.Add(1)
-			expectedBlock := ethtypes.NewBlock(&ethtypes.Header{Time: blockNumber.Uint64()}, nil, nil, trie.NewStackTrie(nil))
-			return expectedBlock, nil
+			return &ethtypes.Header{Time: blockNumber.Uint64()}, nil
 		},
 	).AnyTimes()
 	scheduler.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(
@@ -162,11 +160,11 @@ func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 func assert1to1BlockSlotMapping(t *testing.T, scheduler *Scheduler) {
 	const blockNumber = 123
 
-	block, err := scheduler.executionClient.BlockByNumber(context.TODO(), new(big.Int).SetUint64(blockNumber))
+	header, err := scheduler.executionClient.HeaderByNumber(context.TODO(), new(big.Int).SetUint64(blockNumber))
 	require.NoError(t, err)
-	require.NotNil(t, block)
+	require.NotNil(t, header)
 
-	slot := scheduler.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+	slot := scheduler.network.Beacon.EstimatedSlotAtTime(int64(header.Time))
 	require.EqualValues(t, blockNumber, slot)
 }
 

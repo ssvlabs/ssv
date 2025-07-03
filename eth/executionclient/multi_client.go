@@ -333,19 +333,6 @@ func (mc *MultiClient) Healthy(ctx context.Context) error {
 	return fmt.Errorf("no healthy clients: %w", err)
 }
 
-// BlockByNumber retrieves a block by its number.
-func (mc *MultiClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error) {
-	f := func(client SingleClientProvider) (any, error) {
-		return client.BlockByNumber(ctx, blockNumber)
-	}
-	res, err := mc.call(contextWithMethod(ctx, "BlockByNumber"), f, len(mc.clients))
-	if err != nil {
-		return nil, err
-	}
-
-	return res.(*ethtypes.Block), nil
-}
-
 // HeaderByNumber retrieves a block header by its number.
 func (mc *MultiClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Header, error) {
 	f := func(client SingleClientProvider) (any, error) {
