@@ -167,7 +167,7 @@ func (s *operatorsStorage) getOperatorData(
 	}
 
 	var operatorInformation OperatorData
-	err = json.Unmarshal(obj.Value, &operatorInformation)
+	err = json.Unmarshal(obj.Value(), &operatorInformation)
 	return &operatorInformation, found, err
 }
 
@@ -197,7 +197,7 @@ func (s *operatorsStorage) listOperators(r basedb.Reader, from, to uint64) ([]Op
 	err := s.db.UsingReader(r).
 		GetAll(append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
 			var od OperatorData
-			if err := json.Unmarshal(obj.Value, &od); err != nil {
+			if err := json.Unmarshal(obj.Value(), &od); err != nil {
 				return err
 			}
 			if (od.ID >= from && od.ID <= to) || (to == 0) {
