@@ -84,12 +84,18 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
+
 				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 				defer cancel()
+
 				var peers []peer.ID
 				for len(peers) < options.MinConnected && ctx.Err() == nil {
 					peers = node.(HostProvider).Host().Network().Peers()
-					time.Sleep(time.Millisecond * 100)
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(100 * time.Millisecond):
+					}
 				}
 				if ctx.Err() != nil {
 					return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, options.Nodes, len(peers))
