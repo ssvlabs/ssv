@@ -192,7 +192,7 @@ var StartNodeCmd = &cobra.Command{
 				if err != nil {
 					logger.Fatal("failed to load ssv-signer TLS config", zap.Error(err))
 				}
-
+				fmt.Printf("DEBUG: Loaded TLS config: %#v\n", tlsConfig)
 				ssvSignerOptions = append(ssvSignerOptions, ssvsigner.WithTLSConfig(clientConfig))
 			}
 
