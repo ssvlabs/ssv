@@ -1257,8 +1257,8 @@ func TestMultiClient_Call_Concurrency(t *testing.T) {
 	mockClient.
 		EXPECT().
 		HeaderByNumber(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, num *big.Int) (*ethtypes.Block, error) {
-			return &ethtypes.Block{}, nil
+		DoAndReturn(func(ctx context.Context, num *big.Int) (*ethtypes.Header, error) {
+			return &ethtypes.Header{}, nil
 		}).
 		Times(10)
 
