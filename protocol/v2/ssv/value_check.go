@@ -14,7 +14,220 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
-type ProposedValueCheckF func(data, ownData []byte) error
+type ValueChecker interface {
+	CheckValue(value []byte) error
+}
+
+type VoteChecker interface {
+	ValueChecker
+	CheckValueWithOwn(value, own []byte) error
+}
+
+type voteChecker struct {
+	signer                ekm.BeaconSigner
+	slot                  phase0.Slot
+	sharePublicKeys       []phase0.BLSPubKey
+	estimatedCurrentEpoch phase0.Epoch
+}
+
+func NewVoteChecker(
+	signer ekm.BeaconSigner,
+	slot phase0.Slot,
+	sharePublicKeys []phase0.BLSPubKey,
+	estimatedCurrentEpoch phase0.Epoch,
+) VoteChecker {
+	return &voteChecker{
+		signer:                signer,
+		slot:                  slot,
+		sharePublicKeys:       sharePublicKeys,
+		estimatedCurrentEpoch: estimatedCurrentEpoch,
+	}
+}
+
+func (v *voteChecker) CheckValue(value []byte) error {
+	_, err := v.checkValue(value)
+	return err
+}
+
+func (v *voteChecker) CheckValueWithOwn(value, own []byte) error {
+	bv, err := v.checkValue(value)
+	if err != nil {
+		return err
+	}
+
+	obv := spectypes.BeaconVote{}
+	if err := obv.Decode(own); err != nil {
+		return errors.Wrap(err, "failed decoding own beacon vote")
+	}
+
+	if bv.Source == nil && obv.Source != nil || bv.Source != nil && obv.Source == nil || bv.Source.Epoch != obv.Source.Epoch {
+		return errors.New("beacon vote source epoch differs from own beacon vote")
+	}
+
+	if bv.Target == nil && obv.Target != nil || bv.Target != nil && obv.Target == nil || bv.Target.Epoch != obv.Target.Epoch {
+		return errors.New("beacon vote target epoch differs from own beacon vote")
+	}
+
+	return nil
+}
+
+func (v *voteChecker) checkValue(value []byte) (*spectypes.BeaconVote, error) {
+	bv := spectypes.BeaconVote{}
+	if err := bv.Decode(value); err != nil {
+		return nil, errors.Wrap(err, "failed decoding beacon vote")
+	}
+
+	if bv.Target.Epoch > v.estimatedCurrentEpoch+1 {
+		return nil, errors.New("attestation data target epoch is into far future")
+	}
+
+	if bv.Source.Epoch >= bv.Target.Epoch {
+		return nil, errors.New("attestation data source >= target")
+	}
+
+	attestationData := &phase0.AttestationData{
+		Slot: v.slot,
+		// Consensus data is unaware of CommitteeIndex
+		// We use -1 to not run into issues with the duplicate value slashing check:
+		// (data_1 != data_2 and data_1.target.epoch == data_2.target.epoch)
+		Index:           math.MaxUint64,
+		BeaconBlockRoot: bv.BlockRoot,
+		Source:          bv.Source,
+		Target:          bv.Target,
+	}
+
+	for _, sharePublicKey := range v.sharePublicKeys {
+		if err := v.signer.IsAttestationSlashable(sharePublicKey, attestationData); err != nil {
+			return nil, err
+		}
+	}
+	return &bv, nil
+}
+
+type proposerChecker struct {
+	signer         ekm.BeaconSigner
+	beaconConfig   networkconfig.Beacon
+	validatorPK    spectypes.ValidatorPK
+	validatorIndex phase0.ValidatorIndex
+	sharePublicKey phase0.BLSPubKey
+}
+
+func NewProposerChecker(
+	signer ekm.BeaconSigner,
+	beaconConfig networkconfig.Beacon,
+	validatorPK spectypes.ValidatorPK,
+	validatorIndex phase0.ValidatorIndex,
+	sharePublicKey phase0.BLSPubKey,
+) ValueChecker {
+	return &proposerChecker{
+		signer:         signer,
+		beaconConfig:   beaconConfig,
+		validatorPK:    validatorPK,
+		validatorIndex: validatorIndex,
+		sharePublicKey: sharePublicKey,
+	}
+}
+
+func (v *proposerChecker) CheckValue(value []byte) error {
+	cd := &spectypes.ValidatorConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return errors.Wrap(err, "failed decoding consensus data")
+	}
+	if err := cd.Validate(); err != nil {
+		return errors.Wrap(err, "invalid value")
+	}
+
+	if err := dutyValueCheck(&cd.Duty, v.beaconConfig, spectypes.BNRoleProposer, v.validatorPK, v.validatorIndex); err != nil {
+		return errors.Wrap(err, "duty invalid")
+	}
+
+	if blockData, _, err := cd.GetBlindedBlockData(); err == nil {
+		slot, err := blockData.Slot()
+		if err != nil {
+			return errors.Wrap(err, "failed to get slot from blinded block data")
+		}
+
+		return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
+	}
+	if blockData, _, err := cd.GetBlockData(); err == nil {
+		slot, err := blockData.Slot()
+		if err != nil {
+			return errors.Wrap(err, "failed to get slot from block data")
+		}
+
+		return v.signer.IsBeaconBlockSlashable(v.sharePublicKey, slot)
+	}
+
+	return errors.New("no block data")
+}
+
+type aggregatorChecker struct {
+	beaconConfig   networkconfig.Beacon
+	validatorPK    spectypes.ValidatorPK
+	validatorIndex phase0.ValidatorIndex
+}
+
+func NewAggregatorChecker(
+	beaconConfig networkconfig.Beacon,
+	validatorPK spectypes.ValidatorPK,
+	validatorIndex phase0.ValidatorIndex,
+) ValueChecker {
+	return &aggregatorChecker{
+		beaconConfig:   beaconConfig,
+		validatorPK:    validatorPK,
+		validatorIndex: validatorIndex,
+	}
+}
+
+func (v *aggregatorChecker) CheckValue(value []byte) error {
+	cd := &spectypes.ValidatorConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return errors.Wrap(err, "failed decoding consensus data")
+	}
+	if err := cd.Validate(); err != nil {
+		return errors.Wrap(err, "invalid value")
+	}
+
+	if err := dutyValueCheck(&cd.Duty, v.beaconConfig, spectypes.BNRoleAggregator, v.validatorPK, v.validatorIndex); err != nil {
+		return errors.Wrap(err, "duty invalid")
+	}
+
+	return nil
+}
+
+type syncCommitteeContributionChecker struct {
+	beaconConfig   networkconfig.Beacon
+	validatorPK    spectypes.ValidatorPK
+	validatorIndex phase0.ValidatorIndex
+}
+
+func NewSyncCommitteeContributionChecker(
+	beaconConfig networkconfig.Beacon,
+	validatorPK spectypes.ValidatorPK,
+	validatorIndex phase0.ValidatorIndex,
+) ValueChecker {
+	return &syncCommitteeContributionChecker{
+		beaconConfig:   beaconConfig,
+		validatorPK:    validatorPK,
+		validatorIndex: validatorIndex,
+	}
+}
+
+func (v *syncCommitteeContributionChecker) CheckValue(value []byte) error {
+	cd := &spectypes.ValidatorConsensusData{}
+	if err := cd.Decode(value); err != nil {
+		return errors.Wrap(err, "failed decoding consensus data")
+	}
+	if err := cd.Validate(); err != nil {
+		return errors.Wrap(err, "invalid value")
+	}
+
+	if err := dutyValueCheck(&cd.Duty, v.beaconConfig, spectypes.BNRoleSyncCommitteeContribution, v.validatorPK, v.validatorIndex); err != nil {
+		return errors.Wrap(err, "duty invalid")
+	}
+
+	return nil
+}
 
 func dutyValueCheck(
 	duty *spectypes.ValidatorDuty,
@@ -40,150 +253,4 @@ func dutyValueCheck(
 	}
 
 	return nil
-}
-
-func BeaconVoteValueCheckF(
-	signer ekm.BeaconSigner,
-	slot phase0.Slot,
-	sharePublicKeys []phase0.BLSPubKey,
-	estimatedCurrentEpoch phase0.Epoch,
-) ProposedValueCheckF {
-	// TODO: consider passing ownData unmarshaled to avoid redundant encoding/decoding
-	return func(data, ownData []byte) error {
-		bv := spectypes.BeaconVote{}
-		if err := bv.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding beacon vote")
-		}
-
-		if ownData != nil {
-			obv := spectypes.BeaconVote{}
-			if err := obv.Decode(ownData); err != nil {
-				return errors.Wrap(err, "failed decoding own beacon vote")
-			}
-
-			if bv.Source == nil && obv.Source != nil || bv.Source != nil && obv.Source == nil || bv.Source.Epoch != obv.Source.Epoch {
-				return errors.New("beacon vote source epoch differs from own beacon vote")
-			}
-
-			if bv.Target == nil && obv.Target != nil || bv.Target != nil && obv.Target == nil || bv.Target.Epoch != obv.Target.Epoch {
-				return errors.New("beacon vote target epoch differs from own beacon vote")
-			}
-		}
-
-		if bv.Target.Epoch > estimatedCurrentEpoch+1 {
-			return errors.New("attestation data target epoch is into far future")
-		}
-
-		if bv.Source.Epoch >= bv.Target.Epoch {
-			return errors.New("attestation data source >= target")
-		}
-
-		attestationData := &phase0.AttestationData{
-			Slot: slot,
-			// Consensus data is unaware of CommitteeIndex
-			// We use -1 to not run into issues with the duplicate value slashing check:
-			// (data_1 != data_2 and data_1.target.epoch == data_2.target.epoch)
-			Index:           math.MaxUint64,
-			BeaconBlockRoot: bv.BlockRoot,
-			Source:          bv.Source,
-			Target:          bv.Target,
-		}
-
-		for _, sharePublicKey := range sharePublicKeys {
-			if err := signer.IsAttestationSlashable(sharePublicKey, attestationData); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-}
-
-func ProposerValueCheckF(
-	signer ekm.BeaconSigner,
-	beaconConfig networkconfig.Beacon,
-	validatorPK spectypes.ValidatorPK,
-	validatorIndex phase0.ValidatorIndex,
-	sharePublicKey phase0.BLSPubKey,
-) ProposedValueCheckF {
-	// TODO: consider passing ownData unmarshaled to avoid redundant encoding/decoding
-	return func(data, ownData []byte) error {
-		cd := &spectypes.ValidatorConsensusData{}
-		if err := cd.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding consensus data")
-		}
-		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
-		}
-
-		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleProposer, validatorPK, validatorIndex); err != nil {
-			return errors.Wrap(err, "duty invalid")
-		}
-
-		if blockData, _, err := cd.GetBlindedBlockData(); err == nil {
-			slot, err := blockData.Slot()
-			if err != nil {
-				return errors.Wrap(err, "failed to get slot from blinded block data")
-			}
-
-			return signer.IsBeaconBlockSlashable(sharePublicKey, slot)
-		}
-		if blockData, _, err := cd.GetBlockData(); err == nil {
-			slot, err := blockData.Slot()
-			if err != nil {
-				return errors.Wrap(err, "failed to get slot from block data")
-			}
-
-			return signer.IsBeaconBlockSlashable(sharePublicKey, slot)
-		}
-
-		return errors.New("no block data")
-	}
-}
-
-func AggregatorValueCheckF(
-	signer ekm.BeaconSigner,
-	beaconConfig networkconfig.Beacon,
-	validatorPK spectypes.ValidatorPK,
-	validatorIndex phase0.ValidatorIndex,
-) ProposedValueCheckF {
-	// TODO: consider passing ownData unmarshaled to avoid redundant encoding/decoding
-	return func(data, ownData []byte) error {
-		cd := &spectypes.ValidatorConsensusData{}
-		if err := cd.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding consensus data")
-		}
-		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
-		}
-
-		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleAggregator, validatorPK, validatorIndex); err != nil {
-			return errors.Wrap(err, "duty invalid")
-		}
-
-		return nil
-	}
-}
-
-func SyncCommitteeContributionValueCheckF(
-	signer ekm.BeaconSigner,
-	beaconConfig networkconfig.Beacon,
-	validatorPK spectypes.ValidatorPK,
-	validatorIndex phase0.ValidatorIndex,
-) ProposedValueCheckF {
-	// TODO: consider passing ownData unmarshaled to avoid redundant encoding/decoding
-	return func(data, ownData []byte) error {
-		cd := &spectypes.ValidatorConsensusData{}
-		if err := cd.Decode(data); err != nil {
-			return errors.Wrap(err, "failed decoding consensus data")
-		}
-		if err := cd.Validate(); err != nil {
-			return errors.Wrap(err, "invalid value")
-		}
-
-		if err := dutyValueCheck(&cd.Duty, beaconConfig, spectypes.BNRoleSyncCommitteeContribution, validatorPK, validatorIndex); err != nil {
-			return errors.Wrap(err, "duty invalid")
-		}
-
-		return nil
-	}
 }

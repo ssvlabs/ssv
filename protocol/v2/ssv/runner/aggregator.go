@@ -36,7 +36,7 @@ type AggregatorRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       ssv.ProposedValueCheckF
+	valCheck       ssv.ValueChecker
 	measurements   measurementsStore
 }
 
@@ -50,7 +50,7 @@ func NewAggregatorRunner(
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	highestDecidedSlot phase0.Slot,
 ) (Runner, error) {
 	if len(share) != 1 {
@@ -454,7 +454,7 @@ func (r *AggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *AggregatorRunner) GetValCheckF() ssv.ProposedValueCheckF {
+func (r *AggregatorRunner) GetValChecker() ssv.ValueChecker {
 	return r.valCheck
 }
 

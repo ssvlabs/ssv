@@ -16,21 +16,25 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 )
 
+type testingValueChecker struct{}
+
+func (testingValueChecker) CheckValue(data []byte) error {
+	if bytes.Equal(data, TestingInvalidValueCheck) {
+		return errors.New("invalid value")
+	}
+
+	// as a base validation we do not accept nil values
+	if len(data) == 0 {
+		return errors.New("invalid value")
+	}
+	return nil
+}
+
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet) *qbft.Config {
 	return &qbft.Config{
 		BeaconSigner: ekm.NewTestingKeyManagerAdapter(testingutils.NewTestingKeyManager()),
 		Domain:       testingutils.TestingSSVDomainType,
-		ValueCheckF: func(data, ownData []byte) error {
-			if bytes.Equal(data, TestingInvalidValueCheck) {
-				return errors.New("invalid value")
-			}
-
-			// as a base validation we do not accept nil values
-			if len(data) == 0 {
-				return errors.New("invalid value")
-			}
-			return nil
-		},
+		ValueChecker: testingValueChecker{},
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},

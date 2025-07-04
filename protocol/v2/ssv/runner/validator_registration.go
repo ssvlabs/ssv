@@ -36,7 +36,7 @@ type ValidatorRegistrationRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       ssv.ProposedValueCheckF
+	valCheck       ssv.ValueChecker
 
 	gasLimit uint64
 }
@@ -289,7 +289,7 @@ func (r *ValidatorRegistrationRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ValidatorRegistrationRunner) GetValCheckF() ssv.ProposedValueCheckF {
+func (r *ValidatorRegistrationRunner) GetValChecker() ssv.ValueChecker {
 	return r.valCheck
 }
 

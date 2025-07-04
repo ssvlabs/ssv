@@ -23,7 +23,7 @@ func (i *Instance) uponRoundChange(
 	instanceStartValue []byte,
 	msg *specqbft.ProcessingMessage,
 	roundChangeMsgContainer *specqbft.MsgContainer,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 ) error {
 	hasQuorumBefore := specqbft.HasQuorum(i.State.CommitteeMember, roundChangeMsgContainer.MessagesForRound(msg.QBFTMessage.Round))
 	// Currently, even if we have a quorum of round change messages, we update the container
@@ -164,7 +164,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 	instanceStartValue []byte,
 	roundChangeMessage *specqbft.ProcessingMessage,
 	roundChangeMsgContainer *specqbft.MsgContainer,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 ) (*specqbft.ProcessingMessage, []byte, error) {
 	roundChanges := roundChangeMsgContainer.MessagesForRound(roundChangeMessage.QBFTMessage.Round)
 	// optimization, if no round change quorum can return false
@@ -219,7 +219,7 @@ func isProposalJustificationForLeadingRound(
 	roundChanges []*specqbft.ProcessingMessage,
 	roundChangeJustifications []*specqbft.ProcessingMessage,
 	value []byte,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	newRound specqbft.Round,
 ) error {
 	if err := isReceivedProposalJustification(
@@ -254,7 +254,7 @@ func isReceivedProposalJustification(
 	roundChanges, prepares []*specqbft.ProcessingMessage,
 	newRound specqbft.Round,
 	value []byte,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 ) error {
 	if err := isProposalJustification(
 		state,

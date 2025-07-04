@@ -68,7 +68,7 @@ func isValidProposal(
 	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
 	ownData []byte,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 ) error {
 	if msg.QBFTMessage.MsgType != specqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
@@ -143,30 +143,6 @@ func isValidProposal(
 	return errors.New("proposal is not valid with current state")
 }
 
-func IsProposalJustification(
-	config qbft.IConfig,
-	committeeMember *spectypes.CommitteeMember,
-	roundChangeMsgs []*specqbft.ProcessingMessage,
-	prepareMsgs []*specqbft.ProcessingMessage,
-	height specqbft.Height,
-	round specqbft.Round,
-	fullData, ownData []byte,
-) error {
-	return isProposalJustification(
-		&specqbft.State{
-			CommitteeMember: committeeMember,
-			Height:          height,
-		},
-		config,
-		roundChangeMsgs,
-		prepareMsgs,
-		height,
-		round,
-		fullData, ownData,
-		func(data, ownData []byte) error { return nil },
-	)
-}
-
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
 func isProposalJustification(
 	state *specqbft.State,
@@ -176,10 +152,16 @@ func isProposalJustification(
 	height specqbft.Height,
 	round specqbft.Round,
 	fullData, ownData []byte,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 ) error {
-	if err := valCheck(fullData, ownData); err != nil {
-		return errors.Wrap(err, "proposal fullData invalid")
+	if voteChecker, ok := valCheck.(ssv.VoteChecker); ok && ownData != nil {
+		if err := voteChecker.CheckValueWithOwn(fullData, ownData); err != nil {
+			return errors.Wrap(err, "proposal fullData invalid")
+		}
+	} else {
+		if err := valCheck.CheckValue(fullData); err != nil {
+			return errors.Wrap(err, "proposal fullData invalid")
+		}
 	}
 
 	if round == specqbft.FirstRound {

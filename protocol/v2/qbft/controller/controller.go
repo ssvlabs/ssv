@@ -65,7 +65,7 @@ func (c *Controller) StartNewInstance(ctx context.Context, logger *zap.Logger, h
 		trace.WithAttributes(observability.BeaconSlotAttribute(phase0.Slot(height))))
 	defer span.End()
 
-	if err := c.GetConfig().GetValueCheckF()(value, nil); err != nil {
+	if err := c.GetConfig().GetValueChecker().CheckValue(value); err != nil {
 		return observability.Errorf(span, "value invalid: %w", err)
 	}
 

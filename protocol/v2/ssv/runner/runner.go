@@ -28,7 +28,7 @@ import (
 type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() beacon.BeaconNode
-	GetValCheckF() ssv.ProposedValueCheckF
+	GetValChecker() ssv.ValueChecker
 	GetSigner() ekm.BeaconSigner
 	GetOperatorSigner() ssvtypes.OperatorSigner
 	GetNetwork() specqbft.Network
@@ -328,7 +328,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		return observability.Errorf(span, "could not encode input data for consensus: %w", err)
 	}
 
-	if err := runner.GetValCheckF()(byts, nil); err != nil {
+	if err := runner.GetValChecker().CheckValue(byts); err != nil {
 		return observability.Errorf(span, "input data invalid: %w", err)
 	}
 

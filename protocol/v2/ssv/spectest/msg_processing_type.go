@@ -285,7 +285,7 @@ var baseCommitteeWithRunnerSample = func(
 			runnerSample.GetNetwork(),
 			runnerSample.GetSigner(),
 			runnerSample.GetOperatorSigner(),
-			runnerSample.GetValCheckF(),
+			runnerSample.GetValChecker(),
 			committeeDutyGuard,
 			runnerSample.GetDoppelgangerHandler(),
 		)

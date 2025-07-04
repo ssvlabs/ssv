@@ -171,7 +171,7 @@ func (i *Instance) ProcessMsg(ctx context.Context, logger *zap.Logger, msg *spec
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(ctx, logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(ctx, logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueChecker())
 		default:
 			return errors.New("signed message type not supported")
 		}
@@ -202,7 +202,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.ProcessingMessage) error {
 			i.config,
 			msg,
 			i.StartValue,
-			i.config.GetValueCheckF(),
+			i.config.GetValueChecker(),
 		)
 	case specqbft.PrepareMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound

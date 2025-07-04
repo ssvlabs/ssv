@@ -22,7 +22,7 @@ type signing interface {
 type IConfig interface {
 	signing
 	// GetValueCheckF returns value check function
-	GetValueCheckF() ssv.ProposedValueCheckF
+	GetValueChecker() ssv.ValueChecker
 	// GetProposerF returns func used to calculate proposer
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
@@ -36,7 +36,7 @@ type IConfig interface {
 type Config struct {
 	BeaconSigner ekm.BeaconSigner
 	Domain       spectypes.DomainType
-	ValueCheckF  ssv.ProposedValueCheckF
+	ValueChecker ssv.ValueChecker
 	ProposerF    specqbft.ProposerF
 	Network      specqbft.Network
 	Timer        roundtimer.Timer
@@ -53,9 +53,9 @@ func (c *Config) GetSignatureDomainType() spectypes.DomainType {
 	return c.Domain
 }
 
-// GetValueCheckF returns value check instance
-func (c *Config) GetValueCheckF() ssv.ProposedValueCheckF {
-	return c.ValueCheckF
+// GetValueChecker returns value checker
+func (c *Config) GetValueChecker() ssv.ValueChecker {
+	return c.ValueChecker
 }
 
 // GetProposerF returns func used to calculate proposer

@@ -49,7 +49,7 @@ type CommitteeRunner struct {
 	beacon              beacon.BeaconNode
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
-	valCheck            ssv.ProposedValueCheckF
+	valCheck            ssv.ValueChecker
 	DutyGuard           CommitteeDutyGuard
 	doppelgangerHandler DoppelgangerProvider
 	measurements        measurementsStore
@@ -65,7 +65,7 @@ func NewCommitteeRunner(
 	network specqbft.Network,
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	dutyGuard CommitteeDutyGuard,
 	doppelgangerHandler DoppelgangerProvider,
 ) (Runner, error) {
@@ -150,7 +150,7 @@ func (cr *CommitteeRunner) MarshalJSON() ([]byte, error) {
 		network        specqbft.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
-		valCheck       ssv.ProposedValueCheckF
+		valCheck       ssv.ValueChecker
 	}
 
 	// Create object and marshal
@@ -175,7 +175,7 @@ func (cr *CommitteeRunner) UnmarshalJSON(data []byte) error {
 		network        specqbft.Network
 		signer         ekm.BeaconSigner
 		operatorSigner ssvtypes.OperatorSigner
-		valCheck       ssv.ProposedValueCheckF
+		valCheck       ssv.ValueChecker
 	}
 
 	// Unmarshal the JSON data into the auxiliary struct
@@ -202,7 +202,7 @@ func (cr *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return cr.beacon
 }
 
-func (cr *CommitteeRunner) GetValCheckF() ssv.ProposedValueCheckF {
+func (cr *CommitteeRunner) GetValChecker() ssv.ValueChecker {
 	return cr.valCheck
 }
 

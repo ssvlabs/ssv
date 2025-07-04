@@ -43,7 +43,7 @@ type ProposerRunner struct {
 	signer              ekm.BeaconSigner
 	operatorSigner      ssvtypes.OperatorSigner
 	doppelgangerHandler DoppelgangerProvider
-	valCheck            ssv.ProposedValueCheckF
+	valCheck            ssv.ValueChecker
 	measurements        measurementsStore
 	graffiti            []byte
 
@@ -63,7 +63,7 @@ func NewProposerRunner(
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	doppelgangerHandler DoppelgangerProvider,
-	valCheck ssv.ProposedValueCheckF,
+	valCheck ssv.ValueChecker,
 	highestDecidedSlot phase0.Slot,
 	graffiti []byte,
 	proposerDelay time.Duration,
@@ -589,7 +589,7 @@ func (r *ProposerRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ProposerRunner) GetValCheckF() ssv.ProposedValueCheckF {
+func (r *ProposerRunner) GetValChecker() ssv.ValueChecker {
 	return r.valCheck
 }
 
