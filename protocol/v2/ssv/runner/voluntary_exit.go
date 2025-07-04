@@ -26,7 +26,7 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-// ValidatorDuty runner for validator voluntary exit duty
+// VoluntaryExitRunner runner for validator voluntary exit duty
 type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 

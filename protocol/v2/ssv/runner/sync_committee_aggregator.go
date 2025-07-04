@@ -140,9 +140,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	if len(selectionProofs) == 0 {
-		r.GetState().Finished = true
 		span.AddEvent("no selection proofs")
 		span.SetStatus(codes.Ok, "")
+		r.GetState().Finished = true
+		r.measurements.EndDutyFlow()
 		return nil
 	}
 
@@ -362,20 +363,26 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 
 			const eventMsg = "✅ successfully submitted sync committee aggregator"
 			span.AddEvent(eventMsg)
-			logger.Debug(eventMsg, fields.SubmissionTime(time.Since(start)), fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
+			logger.Debug(
+				eventMsg,
+				fields.SubmissionTime(time.Since(start)),
+				fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+			)
 			break
 		}
 	}
 
 	r.GetState().Finished = true
-
 	r.measurements.EndDutyFlow()
 
-	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx,
+	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(
+		ctx,
 		successfullySubmittedContributions,
 		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleSyncCommitteeContribution)
+		spectypes.BNRoleSyncCommitteeContribution,
+	)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
