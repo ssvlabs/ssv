@@ -13,11 +13,14 @@ func NetworkType(networkName string) string {
 	return fmt.Sprintf("%s:%s", networkName, forkName)
 }
 
+// Network represents aggregate network configuration combining Ethereum-specific and SSV-specific settings all in
+// one place.
 type Network interface {
 	Beacon
 	SSV
 }
 
+// NetworkConfig implements Network.
 type NetworkConfig struct {
 	*BeaconConfig
 	*SSVConfig

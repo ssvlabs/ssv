@@ -14,7 +14,7 @@ import (
 //go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./beacon_mock.go -source=./beacon.go
 
 type Beacon interface {
-	ConfigName() string
+	NetworkName() string
 	SlotStartTime(slot phase0.Slot) time.Time
 	SlotEndTime(slot phase0.Slot) time.Time
 	EstimatedCurrentSlot() phase0.Slot
@@ -41,7 +41,7 @@ type Beacon interface {
 }
 
 type BeaconConfig struct {
-	configName                           string
+	networkName                          string
 	slotDuration                         time.Duration
 	slotsPerEpoch                        uint64
 	epochsPerSyncCommitteePeriod         uint64
@@ -57,7 +57,7 @@ type BeaconConfig struct {
 }
 
 func NewBeaconConfig(
-	configName string,
+	networkName string,
 	slotDuration time.Duration,
 	slotsPerEpoch uint64,
 	epochsPerSyncCommitteePeriod uint64,
@@ -72,7 +72,7 @@ func NewBeaconConfig(
 	forkData map[spec.DataVersion]phase0.Fork,
 ) *BeaconConfig {
 	return &BeaconConfig{
-		configName:                           configName,
+		networkName:                          networkName,
 		slotDuration:                         slotDuration,
 		slotsPerEpoch:                        slotsPerEpoch,
 		epochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,
@@ -234,8 +234,8 @@ func (b *BeaconConfig) GenesisValidatorsRoot() phase0.Root {
 	return b.genesisValidatorsRoot
 }
 
-func (b *BeaconConfig) ConfigName() string {
-	return b.configName
+func (b *BeaconConfig) NetworkName() string {
+	return b.networkName
 }
 
 func (b *BeaconConfig) Fork(version spec.DataVersion) phase0.Fork {
@@ -268,8 +268,8 @@ func (b *BeaconConfig) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, phase0
 }
 
 func (b *BeaconConfig) AssertSame(other *BeaconConfig) error {
-	if b.configName != other.configName {
-		return fmt.Errorf("different ConfigName")
+	if b.networkName != other.networkName {
+		return fmt.Errorf("different NetworkName")
 	}
 	if b.slotDuration != other.slotDuration {
 		return fmt.Errorf("different SlotDuration")

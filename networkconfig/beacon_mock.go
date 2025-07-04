@@ -42,20 +42,6 @@ func (m *MockBeacon) EXPECT() *MockBeaconMockRecorder {
 	return m.recorder
 }
 
-// ConfigName mocks base method.
-func (m *MockBeacon) ConfigName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConfigName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// ConfigName indicates an expected call of ConfigName.
-func (mr *MockBeaconMockRecorder) ConfigName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigName", reflect.TypeOf((*MockBeacon)(nil).ConfigName))
-}
-
 // EpochDuration mocks base method.
 func (m *MockBeacon) EpochDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -307,6 +293,20 @@ func (m *MockBeacon) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 func (mr *MockBeaconMockRecorder) LastSlotOfSyncPeriod(period any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastSlotOfSyncPeriod", reflect.TypeOf((*MockBeacon)(nil).LastSlotOfSyncPeriod), period)
+}
+
+// NetworkName mocks base method.
+func (m *MockBeacon) NetworkName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NetworkName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// NetworkName indicates an expected call of NetworkName.
+func (mr *MockBeaconMockRecorder) NetworkName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkName", reflect.TypeOf((*MockBeacon)(nil).NetworkName))
 }
 
 // SlotDuration mocks base method.
