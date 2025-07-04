@@ -21,7 +21,7 @@ type signing interface {
 
 type IConfig interface {
 	signing
-	// GetValueCheckF returns value check function
+	// GetValueChecker returns value checker
 	GetValueChecker() ssv.ValueChecker
 	// GetProposerF returns func used to calculate proposer
 	GetProposerF() specqbft.ProposerF
