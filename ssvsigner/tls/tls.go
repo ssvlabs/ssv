@@ -303,7 +303,7 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 	if cert.Subject.CommonName != "" {
 		hosts = append(hosts, cert.Subject.CommonName)
 	}
-	if cert.IPAddresses != nil {
+	if len(cert.IPAddresses) > 0 {
 		for _, ip := range cert.IPAddresses {
 			hosts = append(hosts, ip.String())
 		}
