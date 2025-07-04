@@ -811,7 +811,7 @@ func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOption
 		ctx:                     t.Context(),
 		validatorCommonOpts:     opts.validatorCommonOpts,
 		recipientsStorage:       opts.recipientsStorage,
-		networkConfig:           opts.networkConfig,
+		networkConfig:           opts.networkConfig.Adapt(),
 		messageRouter:           newMessageRouter(logger),
 		committeeValidatorSetup: make(chan struct{}),
 		indicesChangeCh:         make(chan struct{}, 32),

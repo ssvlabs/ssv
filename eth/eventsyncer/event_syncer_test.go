@@ -21,6 +21,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+
 	"github.com/ssvlabs/ssv/doppelganger"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/eth/eventhandler"
@@ -35,9 +39,6 @@ import (
 	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validators"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -162,7 +163,7 @@ func setupEventHandler(
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
-		NetworkConfig:     testNetworkConfig,
+		NetworkConfig:     testNetworkConfig.Adapt(),
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,
@@ -180,7 +181,7 @@ func setupEventHandler(
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		testNetworkConfig,
+		testNetworkConfig.Adapt(),
 		operatorDataStore,
 		privateKey,
 		keyManager,
