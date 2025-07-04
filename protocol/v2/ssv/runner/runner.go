@@ -315,7 +315,14 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, signedMessage *spectyp
 	return true, nil
 }
 
-func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runner, slot phase0.Slot, input spectypes.Encoder) error {
+func (b *BaseRunner) decide(
+	ctx context.Context,
+	logger *zap.Logger,
+	runner Runner,
+	slot phase0.Slot,
+	input spectypes.Encoder,
+	spData *ssvtypes.SlashingProtectionData,
+) error {
 	ctx, span := tracer.Start(ctx,
 		observability.InstrumentName(observabilityNamespace, "base_runner.decide"),
 		trace.WithAttributes(
@@ -338,6 +345,7 @@ func (b *BaseRunner) decide(ctx context.Context, logger *zap.Logger, runner Runn
 		logger,
 		specqbft.Height(slot),
 		byts,
+		spData,
 	); err != nil {
 		return observability.Errorf(span, "could not start new QBFT instance: %w", err)
 	}

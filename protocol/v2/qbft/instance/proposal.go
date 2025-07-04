@@ -67,7 +67,7 @@ func isValidProposal(
 	state *specqbft.State,
 	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
-	ownData []byte,
+	spData *ssvtypes.SlashingProtectionData,
 	valCheck ssv.ValueChecker,
 ) error {
 	if msg.QBFTMessage.MsgType != specqbft.ProposalMsgType {
@@ -130,7 +130,7 @@ func isValidProposal(
 		state.Height,
 		msg.QBFTMessage.Round,
 		msg.SignedMessage.FullData,
-		ownData,
+		spData,
 		valCheck,
 	); err != nil {
 		return errors.Wrap(err, "proposal not justified")
@@ -151,11 +151,12 @@ func isProposalJustification(
 	prepareMsgs []*specqbft.ProcessingMessage,
 	height specqbft.Height,
 	round specqbft.Round,
-	fullData, ownData []byte,
+	fullData []byte,
+	spData *ssvtypes.SlashingProtectionData,
 	valCheck ssv.ValueChecker,
 ) error {
-	if voteChecker, ok := valCheck.(ssv.VoteChecker); ok && ownData != nil {
-		if err := voteChecker.CheckValueWithOwn(fullData, ownData); err != nil {
+	if voteChecker, ok := valCheck.(ssv.VoteChecker); ok && spData != nil {
+		if err := voteChecker.CheckValueWithSP(fullData, spData); err != nil {
 			return errors.Wrap(err, "proposal fullData invalid")
 		}
 	} else {

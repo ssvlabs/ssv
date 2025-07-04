@@ -200,7 +200,7 @@ func (r *ProposerRunner) ProcessPreConsensus(ctx context.Context, logger *zap.Lo
 
 	r.measurements.StartConsensus()
 
-	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input); err != nil {
+	if err := r.BaseRunner.decide(ctx, logger, r, duty.Slot, input, nil); err != nil {
 		return observability.Errorf(span, "can't start new duty runner instance for duty: %w", err)
 	}
 

@@ -908,7 +908,12 @@ func (cr *CommitteeRunner) executeDuty(ctx context.Context, logger *zap.Logger, 
 		Target:    attData.Target,
 	}
 
-	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote); err != nil {
+	spData := &ssvtypes.SlashingProtectionData{
+		SourceEpoch: attData.Source.Epoch,
+		TargetEpoch: attData.Target.Epoch,
+	}
+
+	if err := cr.BaseRunner.decide(ctx, logger, cr, duty.DutySlot(), vote, spData); err != nil {
 		return observability.Errorf(span, "failed to start new duty runner instance: %w", err)
 	}
 

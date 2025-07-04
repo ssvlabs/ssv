@@ -147,7 +147,7 @@ func testBroadcastedDecided(
 }
 
 func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue)
+	err := contr.StartNewInstance(context.TODO(), logger, height, runData.InputValue, nil)
 	var lastErr error
 	if err != nil {
 		lastErr = err

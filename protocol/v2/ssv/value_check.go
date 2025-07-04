@@ -10,6 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/networkconfig"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
@@ -20,7 +21,7 @@ type ValueChecker interface {
 
 type VoteChecker interface {
 	ValueChecker
-	CheckValueWithOwn(value, own []byte) error
+	CheckValueWithSP(value []byte, spData *ssvtypes.SlashingProtectionData) error
 }
 
 type voteChecker struct {
@@ -49,24 +50,21 @@ func (v *voteChecker) CheckValue(value []byte) error {
 	return err
 }
 
-func (v *voteChecker) CheckValueWithOwn(value, own []byte) error {
+func (v *voteChecker) CheckValueWithSP(value []byte, spData *ssvtypes.SlashingProtectionData) error {
 	bv, err := v.checkValue(value)
 	if err != nil {
 		return err
 	}
 
-	obv := spectypes.BeaconVote{}
-	if err := obv.Decode(own); err != nil {
-		return errors.Wrap(err, "failed decoding own beacon vote")
+	if bv.Source.Epoch != spData.SourceEpoch {
+		return errors.New("beacon vote source epoch doesn't satisfy slashing protection data")
 	}
 
-	if bv.Source == nil && obv.Source != nil || bv.Source != nil && obv.Source == nil || bv.Source.Epoch != obv.Source.Epoch {
-		return errors.New("beacon vote source epoch differs from own beacon vote")
+	if bv.Target.Epoch != spData.TargetEpoch {
+		return errors.New("beacon vote target epoch doesn't satisfy slashing protection data")
 	}
 
-	if bv.Target == nil && obv.Target != nil || bv.Target != nil && obv.Target == nil || bv.Target.Epoch != obv.Target.Epoch {
-		return errors.New("beacon vote target epoch differs from own beacon vote")
-	}
+	// TODO: handle possible lag case
 
 	return nil
 }
