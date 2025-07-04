@@ -303,6 +303,12 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 	if cert.Subject.CommonName != "" {
 		hosts = append(hosts, cert.Subject.CommonName)
 	}
+	if cert.IPAddresses != nil {
+		for _, ip := range cert.IPAddresses {
+			hosts = append(hosts, ip.String())
+		}
+	}
+
 	fmt.Printf("DEBUG DUMP: trustedFingerprints: %v\n", trustedFingerprints)
 	fmt.Printf("DEBUG DUMP: fingerprintHex: |%s|\n", fingerprintHex)
 	fmt.Printf("DEBUG DUMP: state.ServerName: |%s|, cert.Subject.CommonName |%s|\n", state.ServerName, cert.Subject.CommonName)
