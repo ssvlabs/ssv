@@ -365,7 +365,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
-	base.NetworkConfig = networkconfig.TestNetwork
+	base.NetworkConfig = networkconfig.TestNetwork.Adapt()
 
 	logger := logging.TestLogger(t)
 
@@ -381,7 +381,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		}
 	}
 
-	ret.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
+	ret.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork.Adapt()
 
 	return ret
 }

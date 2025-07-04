@@ -21,10 +21,11 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/threshold"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 const (
@@ -33,7 +34,7 @@ const (
 )
 
 func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) KeyManager {
-	km, _ := testKeyManagerImpl(t, networkconfig.TestNetwork, operatorPrivateKey)
+	km, _ := testKeyManagerImpl(t, networkconfig.TestNetwork.Adapt(), operatorPrivateKey)
 	return km
 }
 

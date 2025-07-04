@@ -41,7 +41,7 @@ func (m *MockSSV) EXPECT() *MockSSVMockRecorder {
 	return m.recorder
 }
 
-// GetDomainType mocks base method.
+// DomainType mocks base method.
 func (m *MockSSV) DomainType() types.DomainType {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DomainType")
@@ -49,13 +49,13 @@ func (m *MockSSV) DomainType() types.DomainType {
 	return ret0
 }
 
-// GetDomainType indicates an expected call of GetDomainType.
-func (mr *MockSSVMockRecorder) GetDomainType() *gomock.Call {
+// DomainType indicates an expected call of DomainType.
+func (mr *MockSSVMockRecorder) DomainType() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainType", reflect.TypeOf((*MockSSV)(nil).DomainType))
 }
 
-// GetGasLimit36Epoch mocks base method.
+// GasLimit36Epoch mocks base method.
 func (m *MockSSV) GasLimit36Epoch() phase0.Epoch {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GasLimit36Epoch")
@@ -63,8 +63,8 @@ func (m *MockSSV) GasLimit36Epoch() phase0.Epoch {
 	return ret0
 }
 
-// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
-func (mr *MockSSVMockRecorder) GetGasLimit36Epoch() *gomock.Call {
+// GasLimit36Epoch indicates an expected call of GasLimit36Epoch.
+func (mr *MockSSVMockRecorder) GasLimit36Epoch() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit36Epoch", reflect.TypeOf((*MockSSV)(nil).GasLimit36Epoch))
 }

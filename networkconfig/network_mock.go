@@ -43,6 +43,20 @@ func (m *MockNetwork) EXPECT() *MockNetworkMockRecorder {
 	return m.recorder
 }
 
+// DomainType mocks base method.
+func (m *MockNetwork) DomainType() types.DomainType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DomainType")
+	ret0, _ := ret[0].(types.DomainType)
+	return ret0
+}
+
+// DomainType indicates an expected call of DomainType.
+func (mr *MockNetworkMockRecorder) DomainType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainType", reflect.TypeOf((*MockNetwork)(nil).DomainType))
+}
+
 // EpochDuration mocks base method.
 func (m *MockNetwork) EpochDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -226,6 +240,20 @@ func (mr *MockNetworkMockRecorder) ForkAtEpoch(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkAtEpoch", reflect.TypeOf((*MockNetwork)(nil).ForkAtEpoch), epoch)
 }
 
+// GasLimit36Epoch mocks base method.
+func (m *MockNetwork) GasLimit36Epoch() phase0.Epoch {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GasLimit36Epoch")
+	ret0, _ := ret[0].(phase0.Epoch)
+	return ret0
+}
+
+// GasLimit36Epoch indicates an expected call of GasLimit36Epoch.
+func (mr *MockNetworkMockRecorder) GasLimit36Epoch() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit36Epoch", reflect.TypeOf((*MockNetwork)(nil).GasLimit36Epoch))
+}
+
 // GenesisTime mocks base method.
 func (m *MockNetwork) GenesisTime() time.Time {
 	m.ctrl.T.Helper()
@@ -252,34 +280,6 @@ func (m *MockNetwork) GenesisValidatorsRoot() phase0.Root {
 func (mr *MockNetworkMockRecorder) GenesisValidatorsRoot() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenesisValidatorsRoot", reflect.TypeOf((*MockNetwork)(nil).GenesisValidatorsRoot))
-}
-
-// GetDomainType mocks base method.
-func (m *MockNetwork) DomainType() types.DomainType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DomainType")
-	ret0, _ := ret[0].(types.DomainType)
-	return ret0
-}
-
-// GetDomainType indicates an expected call of GetDomainType.
-func (mr *MockNetworkMockRecorder) GetDomainType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainType", reflect.TypeOf((*MockNetwork)(nil).DomainType))
-}
-
-// GetGasLimit36Epoch mocks base method.
-func (m *MockNetwork) GasLimit36Epoch() phase0.Epoch {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GasLimit36Epoch")
-	ret0, _ := ret[0].(phase0.Epoch)
-	return ret0
-}
-
-// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
-func (mr *MockNetworkMockRecorder) GetGasLimit36Epoch() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit36Epoch", reflect.TypeOf((*MockNetwork)(nil).GasLimit36Epoch))
 }
 
 // IntervalDuration mocks base method.
