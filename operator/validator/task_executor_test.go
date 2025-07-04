@@ -204,7 +204,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 		networkConfig:     networkconfig.TestNetwork,
 		validatorCommonOpts: &validator.CommonOptions{
 			Storage:       storageMap,
-			NetworkConfig: networkconfig.TestNetwork,
+			NetworkConfig: networkconfig.TestNetwork.Adapt(),
 		},
 		signer: signer,
 	}

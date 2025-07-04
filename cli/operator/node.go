@@ -404,7 +404,7 @@ var StartNodeCmd = &cobra.Command{
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
 		messageValidator := validation.New(
-			networkConfig,
+			networkConfig.Adapt(),
 			nodeStorage.ValidatorStore(),
 			nodeStorage,
 			dutyStore,
@@ -424,7 +424,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.NetworkConfig = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
+		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig.Adapt()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
@@ -1096,7 +1096,7 @@ func syncContractEvents(
 		nodeStorage,
 		eventParser,
 		validatorCtrl,
-		networkConfig,
+		networkConfig.Adapt(),
 		operatorDataStore,
 		operatorDecrypter,
 		keyManager,

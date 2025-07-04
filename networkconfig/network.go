@@ -20,8 +20,25 @@ type Network interface {
 	SSV
 }
 
-// NetworkConfig implements Network.
+// network implements Network.
+type network struct {
+	*BeaconConfig
+	*ssvConfigAdaptor
+}
+
+// NetworkConfig is a helper-struct to keep BeaconConfig and SSVConfig together for convenience purposes.
 type NetworkConfig struct {
 	*BeaconConfig
 	*SSVConfig
+}
+
+// Adapt adapts NetworkConfig to the Network instance.
+// NetworkConfig itself cannot implement the Network interface directly due to func-name/field-name collisions.
+func (cfg *NetworkConfig) Adapt() Network {
+	return &network{
+		BeaconConfig: cfg.BeaconConfig,
+		ssvConfigAdaptor: &ssvConfigAdaptor{
+			SSVConfig: cfg.SSVConfig,
+		},
+	}
 }

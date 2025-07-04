@@ -179,7 +179,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 	cfg.Subnets = "00000000000000000100000400000400" // calculated for topics 64, 90, 114; PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = nodeStorage
 	cfg.MessageValidator = validation.New(
-		networkconfig.TestNetwork,
+		networkconfig.TestNetwork.Adapt(),
 		nodeStorage.ValidatorStore(),
 		nodeStorage,
 		dutyStore,
@@ -206,7 +206,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
 		cfg.MessageValidator = validation.New(
-			networkconfig.TestNetwork,
+			networkconfig.TestNetwork.Adapt(),
 			nodeStorage.ValidatorStore(),
 			nodeStorage,
 			dutyStore,

@@ -272,7 +272,7 @@ var baseCommitteeWithRunnerSample = func(
 
 	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
+			networkconfig.TestNetwork.Adapt(),
 			shareMap,
 			controller.NewController(
 				runnerSample.BaseRunner.QBFTController.Identifier,

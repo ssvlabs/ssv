@@ -87,7 +87,7 @@ func TestTopicManager(t *testing.T) {
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
 		validator := validation.New(
-			networkconfig.TestNetwork,
+			networkconfig.TestNetwork.Adapt(),
 			validatorStore,
 			operators,
 			dutyStore,

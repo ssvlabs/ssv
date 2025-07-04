@@ -87,7 +87,7 @@ func TestNewController(t *testing.T) {
 	require.NoError(t, newStorageErr)
 
 	controllerOptions := ControllerOptions{
-		NetworkConfig:     networkconfig.TestNetwork,
+		NetworkConfig:     networkconfig.TestNetwork.Adapt(),
 		Beacon:            bc,
 		FullNode:          true,
 		Network:           network,
@@ -547,7 +547,7 @@ func TestSetupValidators(t *testing.T) {
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorCommonOpts: &validator.CommonOptions{
-					NetworkConfig: networkconfig.TestNetwork,
+					NetworkConfig: networkconfig.TestNetwork.Adapt(),
 					Storage:       storageMap,
 				},
 			}
@@ -1214,10 +1214,10 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 		recipientsStorage: mockRecipientsStorage,
 		sharesStorage:     mockSharesStorage,
 		validatorsMap:     mockValidatorsMap,
-		networkConfig:     networkconfig.TestNetwork,
+		networkConfig:     networkconfig.TestNetwork.Adapt(),
 		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
 		validatorCommonOpts: &validator.CommonOptions{
-			NetworkConfig: networkconfig.TestNetwork,
+			NetworkConfig: networkconfig.TestNetwork.Adapt(),
 		},
 		validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 			return true, nil
