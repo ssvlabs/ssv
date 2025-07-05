@@ -2,12 +2,16 @@ package network
 
 import (
 	"context"
+	"crypto/rsa"
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
@@ -54,6 +58,12 @@ type P2PNetwork interface {
 	// used for tests and api
 	PeersByTopic() map[string][]peer.ID
 	Peers() []peer.ID
+	// Returns the pubsub object
+	GetPubSub() *pubsub.PubSub
+	// Get discovery service
+	GetDiscoveryService() discovery.Service
+	// Just for simulator
+	BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.PrivateKey, id spectypes.OperatorID) error
 }
 
 // GetValidatorStats returns stats of validators, including the following:

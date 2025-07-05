@@ -20,6 +20,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -83,6 +84,7 @@ type p2pNetwork struct {
 	idx          peers.Index
 	isIdxSet     atomic.Bool
 	disc         discovery.Service
+	pubsub       *pubsub.PubSub
 	topicsCtrl   topics.Controller
 	msgRouter    network.MessageRouter
 	msgResolver  topics.MsgPeersResolver
@@ -675,4 +677,14 @@ func score(desired, actual int) float64 {
 		result *= float64(2.0 + i)
 	}
 	return result
+}
+
+// Implements the interface GetPubSub method
+func (n *p2pNetwork) GetPubSub() *pubsub.PubSub {
+	return n.pubsub
+}
+
+// Implements the interface GetDiscoveryService method
+func (n *p2pNetwork) GetDiscoveryService() discovery.Service {
+	return n.disc
 }
