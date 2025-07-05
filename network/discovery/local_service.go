@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/ethereum/go-ethereum/p2p/enode"
+
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -130,4 +132,9 @@ func (md *localDiscovery) Close() error {
 func (dvs *localDiscovery) UpdateDomainType(logger *zap.Logger, domain spectypes.DomainType) error {
 	// TODO
 	return nil
+}
+
+// Mock method to follow interface.
+func (md *localDiscovery) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.Node, error) {
+	return nil, nil
 }
