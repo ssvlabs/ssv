@@ -79,7 +79,7 @@ func NewValidatorStore(
 	shares := sharesStorage.List(nil)
 	for _, share := range shares {
 		state := &validatorState{
-			share:               s.copyShare(share),
+			share:               share.Copy(),
 			lastUpdated:         time.Now(),
 			participationStatus: s.calculateParticipationStatus(share),
 		}
@@ -141,7 +141,7 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 		return fmt.Errorf("validator already exists: %s", key)
 	}
 
-	shareCopy := s.copyShare(share)
+	shareCopy := share.Copy()
 
 	state := &validatorState{
 		share:               shareCopy,
@@ -219,7 +219,7 @@ func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SS
 	}
 
 	wasParticipating := s.shouldStart(state)
-	shareCopy := s.copyShare(share)
+	shareCopy := share.Copy()
 
 	state.share = shareCopy
 	state.lastUpdated = time.Now()
@@ -980,6 +980,114 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 	return changedMetadata, nil
 }
 
+// IsParticipating checks if a validator should participate in the given epoch.
+func (s *validatorStoreImpl) IsParticipating(id ValidatorID, epoch phase0.Epoch, opts ParticipationOptions) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var key string
+
+	// Resolve ValidatorID to internal key
+	switch v := id.(type) {
+	case ValidatorPubKey:
+		key = hex.EncodeToString(v[:])
+	case ValidatorIndex:
+		pubKey, exists := s.indices[phase0.ValidatorIndex(v)]
+		if !exists {
+			return false, fmt.Errorf("validator not found by index: %s", id)
+		}
+		key = hex.EncodeToString(pubKey[:])
+	default:
+		return false, fmt.Errorf("unsupported validator ID type: %T", id)
+	}
+
+	state, exists := s.validators[key]
+	if !exists {
+		return false, fmt.Errorf("validator not found: %s", id)
+	}
+
+	// Check liquidation
+	if state.share.Liquidated && !opts.IncludeLiquidated {
+		return false, nil
+	}
+
+	// Check basic participation status
+	if state.participationStatus.IsParticipating {
+		// Additional filters for participating validators
+		if opts.OnlyAttesting && !state.share.IsAttesting(epoch) {
+			return false, nil
+		}
+
+		if opts.OnlySyncCommittee {
+			period := s.beaconCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			return s.isInSyncCommittee(state.share.ValidatorIndex, period), nil
+		}
+
+		return true, nil
+	}
+
+	// For non-participating validators, check special cases
+
+	// Check if exited validator with sync committee duties
+	if state.share.Exited() {
+		if !opts.IncludeExited {
+			// But always include if they have sync committee duty
+			period := s.beaconCfg.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			if s.isInSyncCommittee(state.share.ValidatorIndex, period) {
+				// Sync committee validators participate even after exit
+				if !opts.OnlyAttesting { // They don't attest normally
+					return true, nil
+				}
+			}
+			return false, nil
+		}
+		// IncludeExited is true, so include them
+		return true, nil
+	}
+
+	// Not participating and no special cases apply
+	return false, nil
+}
+
+// IsCommitteeParticipating checks if any validator in a committee should participate.
+// A committee participates if at least one of its validators is eligible to participate.
+func (s *validatorStoreImpl) IsCommitteeParticipating(
+	committeeID spectypes.CommitteeID,
+	epoch phase0.Epoch,
+	opts ParticipationOptions,
+) (bool, error) {
+	s.mu.RLock()
+	committee, exists := s.committees[committeeID]
+	s.mu.RUnlock()
+
+	if !exists {
+		return false, fmt.Errorf("committee not found: %x", committeeID)
+	}
+
+	// Check each validator in the committee
+	for validatorPK := range committee.validators {
+		participating, err := s.IsParticipating(
+			ValidatorPubKey(validatorPK),
+			epoch,
+			opts,
+		)
+		if err != nil {
+			// Log but continue checking other validators
+			s.logger.Debug("error checking validator participation",
+				zap.String("validator", hex.EncodeToString(validatorPK[:])),
+				zap.Error(err))
+			continue
+		}
+
+		if participating {
+			// At least one validator participates
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // createCommitteeSnapshot creates an immutable snapshot of committee state.
 // Requires: caller must hold read lock.
 func (s *validatorStoreImpl) createCommitteeSnapshot(committee *committeeState) *CommitteeSnapshot {
@@ -1105,40 +1213,6 @@ func (s *validatorStoreImpl) removeShareFromCommittee(share *types.SSVShare) err
 	return nil
 }
 
-// copyShare creates a deep copy of the SSVShare object to ensure the immutability
-// of the shares stored and passed around within the ValidatorStore.
-func (s *validatorStoreImpl) copyShare(share *types.SSVShare) *types.SSVShare {
-	newShare := &types.SSVShare{
-		Share: spectypes.Share{
-			ValidatorIndex:      share.ValidatorIndex,
-			ValidatorPubKey:     share.ValidatorPubKey,
-			SharePubKey:         share.SharePubKey,
-			DomainType:          share.DomainType,
-			FeeRecipientAddress: share.FeeRecipientAddress,
-			Graffiti:            share.Graffiti,
-		},
-		Status:                    share.Status,
-		ActivationEpoch:           share.ActivationEpoch,
-		ExitEpoch:                 share.ExitEpoch,
-		OwnerAddress:              share.OwnerAddress,
-		Liquidated:                share.Liquidated,
-		BeaconMetadataLastUpdated: share.BeaconMetadataLastUpdated,
-	}
-
-	// Deep copy committee
-	newShare.Committee = make([]*spectypes.ShareMember, len(share.Committee))
-	for i, member := range share.Committee {
-		newShare.Committee[i] = &spectypes.ShareMember{
-			Signer:      member.Signer,
-			SharePubKey: append([]byte(nil), member.SharePubKey...),
-		}
-	}
-
-	newShare.SetMinParticipationEpoch(share.MinParticipationEpoch())
-
-	return newShare
-}
-
 // calculateParticipationStatus determines the current participation status
 // of a validator based on its share data, beacon configuration, and estimated current epoch.
 // It considers factors like liquidation, beacon metadata, attestation eligibility,
@@ -1210,7 +1284,7 @@ func (s *validatorStoreImpl) shouldStart(state *validatorState) bool {
 // making it safe to be used by callbacks and external queries.
 func (s *validatorStoreImpl) createSnapshot(state *validatorState) *ValidatorSnapshot {
 	return &ValidatorSnapshot{
-		Share:               *s.copyShare(state.share),
+		Share:               *state.share.Copy(),
 		LastUpdated:         state.lastUpdated,
 		IsOwnValidator:      state.share.BelongsToOperator(s.operatorIDFn()),
 		ParticipationStatus: state.participationStatus,

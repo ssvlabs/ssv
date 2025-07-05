@@ -188,6 +188,36 @@ func (mr *MockValidatorStoreMockRecorder) GetValidator(id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockValidatorStore)(nil).GetValidator), id)
 }
 
+// IsCommitteeParticipating mocks base method.
+func (m *MockValidatorStore) IsCommitteeParticipating(committeeID types.CommitteeID, epoch phase0.Epoch, opts storage.ParticipationOptions) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsCommitteeParticipating", committeeID, epoch, opts)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsCommitteeParticipating indicates an expected call of IsCommitteeParticipating.
+func (mr *MockValidatorStoreMockRecorder) IsCommitteeParticipating(committeeID, epoch, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsCommitteeParticipating", reflect.TypeOf((*MockValidatorStore)(nil).IsCommitteeParticipating), committeeID, epoch, opts)
+}
+
+// IsParticipating mocks base method.
+func (m *MockValidatorStore) IsParticipating(id storage.ValidatorID, epoch phase0.Epoch, opts storage.ParticipationOptions) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsParticipating", id, epoch, opts)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsParticipating indicates an expected call of IsParticipating.
+func (mr *MockValidatorStoreMockRecorder) IsParticipating(id, epoch, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsParticipating", reflect.TypeOf((*MockValidatorStore)(nil).IsParticipating), id, epoch, opts)
+}
+
 // OnClusterLiquidated mocks base method.
 func (m *MockValidatorStore) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
 	m.ctrl.T.Helper()

@@ -45,6 +45,12 @@ type ValidatorStore interface {
 
 	GetSelfValidators() []*ValidatorSnapshot
 	GetSelfParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot
+
+	// IsParticipating checks if a validator should participate in the given epoch
+	IsParticipating(id ValidatorID, epoch phase0.Epoch, opts ParticipationOptions) (bool, error)
+
+	// IsCommitteeParticipating checks if any validator in a committee should participate
+	IsCommitteeParticipating(committeeID spectypes.CommitteeID, epoch phase0.Epoch, opts ParticipationOptions) (bool, error)
 }
 
 // ParticipationOptions filters participating validators.
