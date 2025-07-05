@@ -200,7 +200,7 @@ func (s *SSVShare) Quorum() uint64 {
 	return q
 }
 
-// ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
+// ComputeClusterIDHash will compute cluster ID hash with the given owner address and operator ids
 func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 	sort.Slice(operatorIds, func(i, j int) bool {
 		return operatorIds[i] < operatorIds[j]
@@ -234,7 +234,7 @@ func ValidCommitteeSize(committeeSize uint64) bool {
 	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4
 }
 
-// Return a 32 bytes ID for the committee of operators
+// ComputeCommitteeID return a 32-byte ID for the committee of operators
 func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID {
 	// sort
 	sort.Slice(committee, func(i, j int) bool {
@@ -247,4 +247,46 @@ func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID 
 	}
 	// Hash
 	return sha256.Sum256(bytes)
+}
+
+// Copy creates a deep copy of the SSVShare.
+func (s *SSVShare) Copy() *SSVShare {
+	if s == nil {
+		return nil
+	}
+
+	newShare := &SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:      s.ValidatorIndex,
+			ValidatorPubKey:     s.ValidatorPubKey,
+			SharePubKey:         append([]byte(nil), s.SharePubKey...),
+			DomainType:          s.DomainType,
+			FeeRecipientAddress: s.FeeRecipientAddress,
+			Graffiti:            append([]byte(nil), s.Graffiti...),
+		},
+		Status:                    s.Status,
+		ActivationEpoch:           s.ActivationEpoch,
+		ExitEpoch:                 s.ExitEpoch,
+		OwnerAddress:              s.OwnerAddress,
+		Liquidated:                s.Liquidated,
+		BeaconMetadataLastUpdated: s.BeaconMetadataLastUpdated,
+		minParticipationEpoch:     s.minParticipationEpoch,
+	}
+
+	// Deep copy committee
+	newShare.Committee = make([]*spectypes.ShareMember, len(s.Committee))
+	for i, member := range s.Committee {
+		newShare.Committee[i] = &spectypes.ShareMember{
+			Signer:      member.Signer,
+			SharePubKey: append([]byte(nil), member.SharePubKey...),
+		}
+	}
+
+	// Copy cached committee ID if it exists
+	if ptr := s.committeeID.Load(); ptr != nil {
+		committeeID := *ptr
+		newShare.committeeID.Store(&committeeID)
+	}
+
+	return newShare
 }

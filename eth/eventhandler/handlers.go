@@ -216,6 +216,12 @@ func (eh *EventHandler) handleValidatorAdded(
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
+	// Notify ValidatorStore about the new share
+	// TODO: rename this method, maybe create a new struct with observer pattern
+	if err := eh.validatorStore.OnShareAdded(ctx, validatorShare); err != nil {
+		return nil, fmt.Errorf("notify validator store of share addition: %w", err)
+	}
+
 	if validatorShare.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		ownShare = validatorShare
 		logger = logger.With(zap.Bool("own_validator", true))
@@ -378,6 +384,11 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		return share.ValidatorPubKey, nil
 	}
 
+	// Notify ValidatorStore - it will handle stopping the validator
+	if err := eh.validatorStore.OnShareRemoved(ctx, share.ValidatorPubKey); err != nil {
+		return emptyPK, fmt.Errorf("notify validator store of share removal: %w", err)
+	}
+
 	logger.Debug("processed event")
 	return emptyPK, nil
 }
@@ -403,6 +414,12 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 
 	if len(liquidatedPubKeys) > 0 {
 		logger = logger.With(zap.Strings("liquidated_validators", liquidatedPubKeys))
+	}
+
+	// Notify ValidatorStore about cluster liquidation
+	// TODO: pass ctx to this method
+	if err := eh.validatorStore.OnClusterLiquidated(context.Background(), event.Owner, event.OperatorIds); err != nil {
+		return nil, fmt.Errorf("notify validator store of cluster liquidation: %w", err)
 	}
 
 	logger.Debug("processed event")
@@ -440,6 +457,12 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 		logger = logger.With(zap.Strings("enabled_validators", enabledPubKeys))
 	}
 
+	// Notify ValidatorStore about cluster reactivation
+	// TODO: pass ctx to this method
+	if err := eh.validatorStore.OnClusterReactivated(context.Background(), event.Owner, event.OperatorIds); err != nil {
+		return nil, fmt.Errorf("notify validator store of cluster reactivation: %w", err)
+	}
+
 	logger.Debug("processed event")
 	return toReactivate, nil
 }
@@ -469,6 +492,12 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 	r, err := eh.nodeStorage.SaveRecipientData(txn, recipientData)
 	if err != nil {
 		return false, fmt.Errorf("could not save recipient data: %w", err)
+	}
+
+	// Notify ValidatorStore about fee recipient update
+	// TODO: pass ctx to this method
+	if err := eh.validatorStore.OnFeeRecipientUpdated(context.Background(), event.Owner, event.RecipientAddress); err != nil {
+		return false, fmt.Errorf("notify validator store of fee recipient update: %w", err)
 	}
 
 	logger.Debug("processed event")
@@ -514,6 +543,12 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	}
 	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		ed.OwnValidator = true
+	}
+
+	// Notify ValidatorStore about validator exit
+	// TODO: pass ctx to this method
+	if err := eh.validatorStore.OnValidatorExited(context.Background(), share.ValidatorPubKey, event.Raw.BlockNumber); err != nil {
+		return nil, fmt.Errorf("notify validator store of validator exit: %w", err)
 	}
 
 	return ed, nil

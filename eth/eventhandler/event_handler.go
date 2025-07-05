@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 
@@ -25,7 +23,6 @@ import (
 	"github.com/ssvlabs/ssv/observability"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	nodestorage "github.com/ssvlabs/ssv/operator/storage"
-	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 	"github.com/ssvlabs/ssv/ssvsigner/keys"
@@ -50,21 +47,12 @@ var (
 	ErrInferiorBlock = errors.New("block is not higher than the last processed block")
 )
 
-type taskExecutor interface {
-	StopValidator(pubKey spectypes.ValidatorPK) error
-	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
-	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
-	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
-}
-
 type DoppelgangerProvider interface {
 	RemoveValidatorState(validatorIndex phase0.ValidatorIndex)
 }
 
 type EventHandler struct {
 	nodeStorage         nodestorage.Storage
-	taskExecutor        taskExecutor
 	eventParser         eventparser.Parser
 	networkConfig       networkconfig.Network
 	operatorDataStore   operatordatastore.OperatorDataStore
@@ -80,7 +68,6 @@ type EventHandler struct {
 func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
-	taskExecutor taskExecutor,
 	networkConfig networkconfig.Network,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
@@ -91,7 +78,6 @@ func New(
 ) (*EventHandler, error) {
 	eh := &EventHandler{
 		nodeStorage:         nodeStorage,
-		taskExecutor:        taskExecutor,
 		eventParser:         eventParser,
 		networkConfig:       networkConfig,
 		operatorDataStore:   operatorDataStore,
@@ -109,12 +95,12 @@ func New(
 	return eh, nil
 }
 
-func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs, executeTasks bool) (lastProcessedBlock uint64, err error) {
+func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan executionclient.BlockLogs) (lastProcessedBlock uint64, err error) {
 	for blockLogs := range logs {
 		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
-		tasks, err := eh.processBlockEvents(ctx, blockLogs)
+		err := eh.processBlockEvents(ctx, blockLogs)
 		logger.Debug("processed events from block",
 			fields.Count(len(blockLogs.Logs)),
 			fields.Took(time.Since(start)),
@@ -126,40 +112,23 @@ func (eh *EventHandler) HandleBlockEventsStream(ctx context.Context, logs <-chan
 		lastProcessedBlock = blockLogs.BlockNumber
 
 		observability.RecordUint64Value(ctx, lastProcessedBlock, lastProcessedBlockGauge.Record)
-
-		if !executeTasks || len(tasks) == 0 {
-			continue
-		}
-
-		logger.Debug("executing tasks", fields.Count(len(tasks)))
-
-		for _, task := range tasks {
-			logger = logger.With(fields.Type(task))
-			logger.Debug("executing task")
-			if err := task.Execute(); err != nil {
-				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
-				logger.Error("failed to execute task", zap.Error(err))
-			} else {
-				logger.Debug("executed task")
-			}
-		}
 	}
 
 	return
 }
 
-func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) ([]Task, error) {
+func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionclient.BlockLogs) error {
 	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
 	lastProcessedBlock, found, err := eh.nodeStorage.GetLastProcessedBlock(txn)
 	if err != nil {
-		return nil, fmt.Errorf("get last processed block: %w", err)
+		return fmt.Errorf("get last processed block: %w", err)
 	}
 	if !found {
 		lastProcessedBlock = new(big.Int).SetUint64(0)
 	} else if lastProcessedBlock == nil {
-		return nil, fmt.Errorf("last processed block is nil")
+		return fmt.Errorf("last processed block is nil")
 	}
 	if lastProcessedBlock.Uint64() >= block.BlockNumber {
 		// Same or higher block has already been processed, this should never happen!
@@ -168,36 +137,31 @@ func (eh *EventHandler) processBlockEvents(ctx context.Context, block executionc
 		//
 		// TODO: this may happen during reorgs, and we should either
 		// implement reorg support or only process finalized blocks.
-		return nil, ErrInferiorBlock
+		return ErrInferiorBlock
 	}
 
-	var tasks []Task
 	for _, log := range block.Logs {
-		task, err := eh.processEvent(ctx, txn, log)
-		if err != nil {
-			return nil, err
-		}
-		if task != nil {
-			tasks = append(tasks, task)
+		if err := eh.processEvent(ctx, txn, log); err != nil {
+			return err
 		}
 	}
 
 	if err := eh.nodeStorage.SaveLastProcessedBlock(txn, new(big.Int).SetUint64(block.BlockNumber)); err != nil {
-		return nil, fmt.Errorf("set last processed block: %w", err)
+		return fmt.Errorf("set last processed block: %w", err)
 	}
 
 	if err := txn.Commit(); err != nil {
-		return nil, fmt.Errorf("commit transaction: %w", err)
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
-	return tasks, nil
+	return nil
 }
 
-func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event ethtypes.Log) (Task, error) {
+func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event ethtypes.Log) error {
 	abiEvent, err := eh.eventParser.EventByID(event.Topics[0])
 	if err != nil {
 		eh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
-		return nil, nil
+		return nil
 	}
 
 	switch abiEvent.Name {
@@ -208,22 +172,20 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
 			recordEventProcessFailure(ctx, abiEvent.Name)
-			return nil, nil
+			return nil
 		}
 
 		if err := eh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				return nil, nil
+				return nil
 			}
-			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
+			return fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 
 		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
-
-		return nil, nil
+		return nil
 
 	case OperatorRemoved:
 		operatorRemovedEvent, err := eh.eventParser.ParseOperatorRemoved(event)
@@ -231,24 +193,21 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-
 			recordEventProcessFailure(ctx, abiEvent.Name)
-			return nil, nil
+			return nil
 		}
 
 		if err := eh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				return nil, nil
+				return nil
 			}
-			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
+			return fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 
 		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
-
-		return nil, nil
+		return nil
 
 	case ValidatorAdded:
 		validatorAddedEvent, err := eh.eventParser.ParseValidatorAdded(event)
@@ -256,29 +215,22 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-
 			recordEventProcessFailure(ctx, abiEvent.Name)
-			return nil, nil
+			return nil
 		}
 
-		share, err := eh.handleValidatorAdded(ctx, txn, validatorAddedEvent)
+		_, err = eh.handleValidatorAdded(ctx, txn, validatorAddedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				return nil, nil
+				return nil
 			}
-			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
+			return fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 
 		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
-
-		if share == nil {
-			return nil, nil
-		}
-
-		return nil, nil
+		return nil
 
 	case ValidatorRemoved:
 		validatorRemovedEvent, err := eh.eventParser.ParseValidatorRemoved(event)
@@ -286,29 +238,22 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-
 			recordEventProcessFailure(ctx, abiEvent.Name)
-			return nil, nil
+			return nil
 		}
 
-		validatorPubKey, err := eh.handleValidatorRemoved(ctx, txn, validatorRemovedEvent)
+		_, err = eh.handleValidatorRemoved(ctx, txn, validatorRemovedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				return nil, nil
+				return nil
 			}
-			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
+			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 
 		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
-
-		if validatorPubKey != emptyPK {
-			return NewStopValidatorTask(eh.taskExecutor, validatorPubKey), nil
-		}
-
-		return nil, nil
+		return nil
 
 	case ClusterLiquidated:
 		clusterLiquidatedEvent, err := eh.eventParser.ParseClusterLiquidated(event)
@@ -316,31 +261,22 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-
 			recordEventProcessFailure(ctx, abiEvent.Name)
-			return nil, nil
+			return nil
 		}
 
-		sharesToLiquidate, err := eh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
+		_, err = eh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				return nil, nil
+				return nil
 			}
-			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
+			return fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
 		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
-
-		if len(sharesToLiquidate) == 0 {
-			return nil, nil
-		}
-
-		task := NewLiquidateClusterTask(eh.taskExecutor, clusterLiquidatedEvent.Owner, clusterLiquidatedEvent.OperatorIds, sharesToLiquidate)
-
-		return task, nil
+		return nil
 
 	case ClusterReactivated:
 		clusterReactivatedEvent, err := eh.eventParser.ParseClusterReactivated(event)
@@ -348,31 +284,22 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-
 			recordEventProcessFailure(ctx, abiEvent.Name)
-			return nil, nil
+			return nil
 		}
 
-		sharesToReactivate, err := eh.handleClusterReactivated(txn, clusterReactivatedEvent)
+		_, err = eh.handleClusterReactivated(txn, clusterReactivatedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				return nil, nil
+				return nil
 			}
-			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
+			return fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
 		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
-
-		if len(sharesToReactivate) == 0 {
-			return nil, nil
-		}
-
-		task := NewReactivateClusterTask(eh.taskExecutor, clusterReactivatedEvent.Owner, clusterReactivatedEvent.OperatorIds, sharesToReactivate)
-
-		return task, nil
+		return nil
 
 	case FeeRecipientAddressUpdated:
 		feeRecipientAddressUpdatedEvent, err := eh.eventParser.ParseFeeRecipientAddressUpdated(event)
@@ -380,30 +307,22 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-
 			recordEventProcessFailure(ctx, abiEvent.Name)
-			return nil, nil
+			return nil
 		}
 
-		updated, err := eh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
+		_, err = eh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				return nil, nil
+				return nil
 			}
-			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
+			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 
 		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
-
-		if !updated {
-			return nil, nil
-		}
-
-		task := NewUpdateFeeRecipientTask(eh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
-		return task, nil
+		return nil
 
 	case ValidatorExited:
 		validatorExitedEvent, err := eh.eventParser.ParseValidatorExited(event)
@@ -411,40 +330,26 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-
 			recordEventProcessFailure(ctx, abiEvent.Name)
-			return nil, nil
+			return nil
 		}
 
-		exitDescriptor, err := eh.handleValidatorExited(txn, validatorExitedEvent)
+		_, err = eh.handleValidatorExited(txn, validatorExitedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				return nil, nil
+				return nil
 			}
-			return nil, fmt.Errorf("handle ValidatorExited: %w", err)
+			return fmt.Errorf("handle ValidatorExited: %w", err)
 		}
 
 		eventsProcessSuccessCounter.Add(ctx, 1, metric.WithAttributes(eventNameAttribute(abiEvent.Name)))
-
-		if exitDescriptor == nil {
-			return nil, nil
-		}
-
-		task := NewExitValidatorTask(
-			eh.taskExecutor,
-			exitDescriptor.PubKey,
-			exitDescriptor.BlockNumber,
-			exitDescriptor.ValidatorIndex,
-			exitDescriptor.OwnValidator,
-		)
-		return task, nil
+		return nil
 
 	default:
 		eh.logger.Warn("unknown event name", fields.Name(abiEvent.Name))
-		return nil, nil
+		return nil
 	}
 }
 
