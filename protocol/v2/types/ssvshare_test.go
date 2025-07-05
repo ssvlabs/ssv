@@ -308,3 +308,52 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 		})
 	}
 }
+
+func TestSSVShare_Copy(t *testing.T) {
+	originalShare := &SSVShare{
+		Share: spectypes.Share{
+			ValidatorIndex:  1,
+			ValidatorPubKey: [48]byte{1},
+			SharePubKey:     []byte{2, 3, 4},
+			Committee: []*spectypes.ShareMember{
+				{Signer: 1, SharePubKey: []byte{5, 6}},
+				{Signer: 2, SharePubKey: []byte{7, 8}},
+			},
+			Graffiti: []byte("original"),
+		},
+		Liquidated: true,
+	}
+	// Pre-cache the committee ID
+	originalShare.CommitteeID()
+
+	copiedShare := originalShare.Copy()
+
+	// 1. Test for initial equality
+	require.Equal(t, originalShare.ValidatorIndex, copiedShare.ValidatorIndex)
+	require.Equal(t, originalShare.ValidatorPubKey, copiedShare.ValidatorPubKey)
+	require.Equal(t, originalShare.SharePubKey, copiedShare.SharePubKey)
+	require.Equal(t, originalShare.Committee, copiedShare.Committee)
+	require.Equal(t, originalShare.Graffiti, copiedShare.Graffiti)
+	require.Equal(t, originalShare.Liquidated, copiedShare.Liquidated)
+	require.Equal(t, originalShare.CommitteeID(), copiedShare.CommitteeID())
+
+	// 2. Test for deep copy by modifying the original and checking the copy
+	originalShare.Liquidated = false
+	require.True(t, copiedShare.Liquidated)
+
+	originalShare.Graffiti[0] = 'X'
+	require.Equal(t, "original", string(copiedShare.Graffiti))
+
+	originalShare.Committee[0].SharePubKey[0] = 99
+	require.Equal(t, byte(5), copiedShare.Committee[0].SharePubKey[0])
+
+	// 3. Test that pointers are different for slices
+	require.False(t, &originalShare.SharePubKey == &copiedShare.SharePubKey)
+	require.False(t, &originalShare.Graffiti == &copiedShare.Graffiti)
+	require.False(t, &originalShare.Committee == &copiedShare.Committee)
+	require.False(t, &originalShare.Committee[0].SharePubKey == &copiedShare.Committee[0].SharePubKey)
+
+	// 4. Test nil case
+	var nilShare *SSVShare
+	require.Nil(t, nilShare.Copy())
+}
