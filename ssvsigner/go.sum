@@ -344,6 +344,8 @@ github.com/ssvlabs/ssv v1.2.1-0.20250704161918-0b4a77074c00 h1:oYf1zsah0NUARBzgd
 github.com/ssvlabs/ssv v1.2.1-0.20250704161918-0b4a77074c00/go.mod h1:87OPqOuqgVQi5Vrj868V/OOO8pC/E/BpEpSgTQJIKhM=
 github.com/ssvlabs/ssv v1.2.1-0.20250704162904-d62be45ed5e3 h1:5wYwhCloTDfj2AHerC62S29g4SgEuqES32fELAjRBfw=
 github.com/ssvlabs/ssv v1.2.1-0.20250704162904-d62be45ed5e3/go.mod h1:u+4S+oZw48Wbx3fs2X3z+mIvnrdOiUyupPGrM40T0YE=
+github.com/ssvlabs/ssv v1.2.1-0.20250705105512-9bf1cec9e9d8 h1:pYNLJ906kSc34yPoTeHn9zdzDSi6UUbVyuEFv4YUUlQ=
+github.com/ssvlabs/ssv v1.2.1-0.20250705105512-9bf1cec9e9d8/go.mod h1:OldC8b0XSWYyM92q6WV+Wo6nZ+WZ09X2mwW2DJioZBU=
 github.com/ssvlabs/ssv-spec v1.1.3 h1:46K31kI4/vA7Vp3DaOuN7t2IABAmzeiMniCqYfzzpo8=
 github.com/ssvlabs/ssv-spec v1.1.3/go.mod h1:pto7dDv99uVfCZidiLrrKgFR6VYy6WY3PGI1TiGCsIU=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
