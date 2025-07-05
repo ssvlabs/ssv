@@ -187,6 +187,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		phase0.Epoch(0),
 	)
 	cfg.BeaconConfig = networkconfig.TestBeaconConfig
+	cfg.SSVConfig = networkconfig.TestSSVConfig
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return options.TotalValidators, options.ActiveValidators, options.MyValidators, nil
