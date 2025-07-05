@@ -28,12 +28,12 @@ const (
 )
 
 type rateCalculator struct {
-	netCfg                                                           *networkconfig.NetworkConfig
+	netCfg                                                           networkconfig.Network
 	generatedExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation []float64
 	generatedExpectedSingleSCCommitteeDutiesPerEpoch                 []float64
 }
 
-func newRateCalculator(netCfg *networkconfig.NetworkConfig) *rateCalculator {
+func newRateCalculator(netCfg networkconfig.Network) *rateCalculator {
 	rc := &rateCalculator{
 		netCfg: netCfg,
 		generatedExpectedNumberOfCommitteeDutiesPerEpochDueToAttestation: []float64{},
@@ -142,11 +142,11 @@ func (rc *rateCalculator) AggregatorProbability() float64 {
 }
 
 func (rc *rateCalculator) ProposalProbability() float64 {
-	return 1.0 / float64(rc.netCfg.TotalEthereumValidators)
+	return 1.0 / float64(rc.netCfg.TotalEthereumValidators())
 }
 
 func (rc *rateCalculator) SyncCommitteeProbability() float64 {
-	return float64(rc.netCfg.SyncCommitteeSize()) / float64(rc.netCfg.TotalEthereumValidators)
+	return float64(rc.netCfg.SyncCommitteeSize()) / float64(rc.netCfg.TotalEthereumValidators())
 }
 
 func (rc *rateCalculator) SyncCommitteeAggProb() float64 {
@@ -158,7 +158,7 @@ func (rc *rateCalculator) MaxAttestationDutiesPerEpochForCommittee() uint64 {
 }
 
 func (rc *rateCalculator) EstimatedAttestationCommitteeSize() float64 {
-	return float64(rc.netCfg.TotalEthereumValidators) / 2048.0
+	return float64(rc.netCfg.TotalEthereumValidators()) / 2048.0
 }
 
 // Expected number of messages per duty step

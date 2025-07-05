@@ -154,7 +154,7 @@ func setupEventHandler(
 	privateKey keys.OperatorPrivateKey,
 ) *eventhandler.EventHandler {
 	operatorDataStore := operatordatastore.New(operatorData)
-	testNetworkConfig := networkconfig.TestNetwork
+	testNetworkConfig := networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig)
 
 	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig, privateKey)
 	if err != nil {
@@ -163,7 +163,7 @@ func setupEventHandler(
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:           ctx,
-		NetworkConfig:     testNetworkConfig.Adapt(),
+		NetworkConfig:     testNetworkConfig,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,
@@ -181,7 +181,7 @@ func setupEventHandler(
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		testNetworkConfig.Adapt(),
+		testNetworkConfig,
 		operatorDataStore,
 		privateKey,
 		keyManager,
@@ -204,7 +204,7 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig), logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

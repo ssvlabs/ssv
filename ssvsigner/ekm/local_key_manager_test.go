@@ -34,7 +34,7 @@ const (
 )
 
 func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) KeyManager {
-	km, _ := testKeyManagerImpl(t, networkconfig.TestNetwork.Adapt(), operatorPrivateKey)
+	km, _ := testKeyManagerImpl(t, networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig), operatorPrivateKey)
 	return km
 }
 
@@ -51,7 +51,7 @@ func testKeyManagerImpl(t *testing.T, network networkconfig.Network, operatorPri
 	require.NoError(t, err)
 
 	if network == nil {
-		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, nil)
+		network = utils.SetupMockNetworkConfig(t, networkconfig.TestSSVConfig.DomainType, nil)
 	}
 
 	km, err := NewLocalKeyManager(logger, db, network, operatorPrivateKey)
@@ -159,7 +159,7 @@ func TestSignBeaconObject(t *testing.T) {
 
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	currentSlot := networkconfig.TestBeaconConfig.EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	t.Run("Sign Deneb block", func(t *testing.T) {

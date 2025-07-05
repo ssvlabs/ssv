@@ -36,6 +36,8 @@ func GetSSVConfigByName(name string) (*SSVConfig, error) {
 type SSV interface {
 	DomainType() spectypes.DomainType
 	GasLimit36Epoch() phase0.Epoch
+	TotalEthereumValidators() int
+	RegistrySyncOffset() *big.Int
 }
 
 type SSVConfig struct {
@@ -146,4 +148,12 @@ func (s *ssvConfigAdaptor) DomainType() spectypes.DomainType {
 
 func (s *ssvConfigAdaptor) GasLimit36Epoch() phase0.Epoch {
 	return s.SSVConfig.GasLimit36Epoch
+}
+
+func (s *ssvConfigAdaptor) TotalEthereumValidators() int {
+	return s.SSVConfig.TotalEthereumValidators
+}
+
+func (s *ssvConfigAdaptor) RegistrySyncOffset() *big.Int {
+	return s.SSVConfig.RegistrySyncOffset
 }

@@ -71,7 +71,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	operatorsCount += uint64(len(ops))
 
 	currentSlot := &utils.SlotValue{}
-	mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
+	mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestSSVConfig.DomainType, currentSlot)
 
 	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
 	if err != nil {
@@ -1362,7 +1362,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	operatorDataStore := operatordatastore.New(operatorData)
 
 	if network == nil {
-		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, &utils.SlotValue{})
+		network = utils.SetupMockNetworkConfig(t, networkconfig.TestSSVConfig.DomainType, &utils.SlotValue{})
 	}
 
 	keyManager, err := ekm.NewLocalKeyManager(logger, db, network, operator.privateKey)
@@ -1440,7 +1440,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig), logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

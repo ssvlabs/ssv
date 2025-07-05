@@ -12,8 +12,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-var TestNetwork = &NetworkConfig{
-	BeaconConfig: &BeaconConfig{
+// Beacon and SSV configs used exclusively for testing (unit-tests, integration tests, etc.).
+var (
+	TestBeaconConfig = &BeaconConfig{
 		networkName:                          string(spectypes.BeaconTestNetwork),
 		slotDuration:                         spectypes.BeaconTestNetwork.SlotDurationSec(),
 		slotsPerEpoch:                        spectypes.BeaconTestNetwork.SlotsPerEpoch(),
@@ -58,8 +59,9 @@ var TestNetwork = &NetworkConfig{
 				CurrentVersion:  phase0.Version{5, 0, 0, 0},
 			},
 		},
-	},
-	SSVConfig: &SSVConfig{
+	}
+
+	TestSSVConfig = &SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},
 		RegistrySyncOffset:   new(big.Int).SetInt64(9015219),
 		RegistryContractAddr: ethcommon.HexToAddress("0x4B133c68A084B8A88f72eDCd7944B69c8D545f03"),
@@ -67,12 +69,12 @@ var TestNetwork = &NetworkConfig{
 			"enr:-Li4QFIQzamdvTxGJhvcXG_DFmCeyggSffDnllY5DiU47pd_K_1MRnSaJimWtfKJ-MD46jUX9TwgW5Jqe0t4pH41RYWGAYuFnlyth2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQN4v-N9zFYwEqzGPBBX37q24QPFvAVUtokIo1fblIsmTIN0Y3CCE4uDdWRwgg-j",
 		},
 		TotalEthereumValidators: 1_000_000, // just some high enough value, so we never accidentally reach the message-limits derived from it while testing something with local testnet
-	},
-}
+	}
+)
 
-// TestRealNetwork is used in tests that require real network parameters.
-var TestRealNetwork = &NetworkConfig{
-	BeaconConfig: &BeaconConfig{
+// Beacon and SSV configs used exclusively for testing (in tests that require real network parameters).
+var (
+	TestRealBeaconConfig = &BeaconConfig{
 		networkName:                          string(spectypes.HoleskyNetwork),
 		slotDuration:                         spectypes.HoleskyNetwork.SlotDurationSec(),
 		slotsPerEpoch:                        spectypes.HoleskyNetwork.SlotsPerEpoch(),
@@ -123,8 +125,9 @@ var TestRealNetwork = &NetworkConfig{
 				CurrentVersion:  phase0.Version{0x06, 0x01, 0x70, 0x00}, // ELECTRA_FORK_VERSION: 0x06017000
 			},
 		},
-	},
-	SSVConfig: &SSVConfig{
+	}
+
+	TestRealSSVConfig = &SSVConfig{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x2},
 		RegistrySyncOffset:   new(big.Int).SetInt64(181612),
 		RegistryContractAddr: ethcommon.HexToAddress("0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA"),
@@ -134,5 +137,5 @@ var TestRealNetwork = &NetworkConfig{
 			"enr:-Ja4QKFD3u5tZob7xukp-JKX9QJMFqqI68cItsE4tBbhsOyDR0M_1UUjb35hbrqvTP3bnXO_LnKh-jNLTeaUqN4xiduGAZKaP_sagmlkgnY0gmlwhDb0fh6Jc2VjcDI1NmsxoQMw_H2anuiqP9NmEaZwbUfdvPFog7PvcKmoVByDa576SINzc3YBg3RjcIITioN1ZHCCD6I",
 		},
 		TotalEthereumValidators: 1757795, // active_validators from https://holesky.beaconcha.in/index/data on Nov 20, 2024
-	},
-}
+	}
+)

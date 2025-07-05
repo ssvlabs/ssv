@@ -36,8 +36,8 @@ func TestSlashing(t *testing.T) {
 
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
-	currentEpoch := networkconfig.TestNetwork.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := networkconfig.TestBeaconConfig.EstimatedCurrentSlot()
+	currentEpoch := networkconfig.TestBeaconConfig.EstimatedEpochAtSlot(currentSlot)
 
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
@@ -255,8 +255,8 @@ func TestConcurrentSlashingProtectionAttData(t *testing.T) {
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
-	currentEpoch := networkconfig.TestNetwork.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := networkconfig.TestBeaconConfig.EstimatedCurrentSlot()
+	currentEpoch := networkconfig.TestBeaconConfig.EstimatedEpochAtSlot(currentSlot)
 
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
@@ -335,7 +335,7 @@ func TestConcurrentSlashingProtectionBeaconBlock(t *testing.T) {
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	currentSlot := networkconfig.TestBeaconConfig.EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	blockContents := testingutils.TestingBlockContentsDeneb
@@ -430,8 +430,8 @@ func TestConcurrentSlashingProtectionWithMultipleKeysAttData(t *testing.T) {
 		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
-	currentEpoch := networkconfig.TestNetwork.EstimatedEpochAtSlot(currentSlot)
+	currentSlot := networkconfig.TestBeaconConfig.EstimatedCurrentSlot()
+	currentEpoch := networkconfig.TestBeaconConfig.EstimatedEpochAtSlot(currentSlot)
 
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
@@ -534,7 +534,7 @@ func TestConcurrentSlashingProtectionWithMultipleKeysBeaconBlock(t *testing.T) {
 		require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(validator.sk.GetPublicKey().Serialize())))
 	}
 
-	currentSlot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	currentSlot := networkconfig.TestBeaconConfig.EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	blockContents := testingutils.TestingBlockContentsDeneb
@@ -620,7 +620,7 @@ func TestComprehensiveSlashingBlockProposal(t *testing.T) {
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedPrivKey, sharePubKey))
 
 	// --- First Block Proposal ---
-	slotToSign := networkconfig.TestNetwork.EstimatedCurrentSlot() + 5 // Sign a block slightly in the future
+	slotToSign := networkconfig.TestBeaconConfig.EstimatedCurrentSlot() + 5 // Sign a block slightly in the future
 
 	// Check directly with IsBeaconBlockSlashable
 	err = km.IsBeaconBlockSlashable(sharePubKey, slotToSign)

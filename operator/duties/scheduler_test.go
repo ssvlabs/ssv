@@ -351,7 +351,7 @@ func TestScheduler_Run(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.BeaconConfig,
+		BeaconConfig:      networkconfig.TestBeaconConfig,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
@@ -399,7 +399,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.BeaconConfig,
+		BeaconConfig:      networkconfig.TestBeaconConfig,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker

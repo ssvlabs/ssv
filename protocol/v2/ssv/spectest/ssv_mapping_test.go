@@ -365,7 +365,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
-	base.NetworkConfig = networkconfig.TestNetwork.Adapt()
+	base.NetworkConfig = networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig)
 
 	logger := logging.TestLogger(t)
 
@@ -381,7 +381,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *spectes
 		}
 	}
 
-	ret.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork.Adapt()
+	ret.GetBaseRunner().NetworkConfig = networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig)
 
 	return ret
 }
@@ -552,7 +552,7 @@ func fixCommitteeForRun(t *testing.T, ctx context.Context, logger *zap.Logger, c
 		ctx,
 		cancel,
 		logger,
-		networkconfig.TestNetwork,
+		networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig),
 		&specCommittee.CommitteeMember,
 		func(slot phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 			r := ssvtesting.CommitteeRunnerWithShareMap(logger, shareMap)

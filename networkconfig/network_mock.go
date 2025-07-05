@@ -10,6 +10,7 @@
 package networkconfig
 
 import (
+	big "math/big"
 	reflect "reflect"
 	time "time"
 
@@ -338,6 +339,20 @@ func (mr *MockNetworkMockRecorder) NetworkName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkName", reflect.TypeOf((*MockNetwork)(nil).NetworkName))
 }
 
+// RegistrySyncOffset mocks base method.
+func (m *MockNetwork) RegistrySyncOffset() *big.Int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegistrySyncOffset")
+	ret0, _ := ret[0].(*big.Int)
+	return ret0
+}
+
+// RegistrySyncOffset indicates an expected call of RegistrySyncOffset.
+func (mr *MockNetworkMockRecorder) RegistrySyncOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegistrySyncOffset", reflect.TypeOf((*MockNetwork)(nil).RegistrySyncOffset))
+}
+
 // SlotDuration mocks base method.
 func (m *MockNetwork) SlotDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -406,4 +421,18 @@ func (m *MockNetwork) SyncCommitteeSize() uint64 {
 func (mr *MockNetworkMockRecorder) SyncCommitteeSize() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeSize", reflect.TypeOf((*MockNetwork)(nil).SyncCommitteeSize))
+}
+
+// TotalEthereumValidators mocks base method.
+func (m *MockNetwork) TotalEthereumValidators() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TotalEthereumValidators")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// TotalEthereumValidators indicates an expected call of TotalEthereumValidators.
+func (mr *MockNetworkMockRecorder) TotalEthereumValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TotalEthereumValidators", reflect.TypeOf((*MockNetwork)(nil).TotalEthereumValidators))
 }

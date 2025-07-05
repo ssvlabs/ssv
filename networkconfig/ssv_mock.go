@@ -10,6 +10,7 @@
 package networkconfig
 
 import (
+	big "math/big"
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -67,4 +68,32 @@ func (m *MockSSV) GasLimit36Epoch() phase0.Epoch {
 func (mr *MockSSVMockRecorder) GasLimit36Epoch() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit36Epoch", reflect.TypeOf((*MockSSV)(nil).GasLimit36Epoch))
+}
+
+// RegistrySyncOffset mocks base method.
+func (m *MockSSV) RegistrySyncOffset() *big.Int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegistrySyncOffset")
+	ret0, _ := ret[0].(*big.Int)
+	return ret0
+}
+
+// RegistrySyncOffset indicates an expected call of RegistrySyncOffset.
+func (mr *MockSSVMockRecorder) RegistrySyncOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegistrySyncOffset", reflect.TypeOf((*MockSSV)(nil).RegistrySyncOffset))
+}
+
+// TotalEthereumValidators mocks base method.
+func (m *MockSSV) TotalEthereumValidators() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TotalEthereumValidators")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// TotalEthereumValidators indicates an expected call of TotalEthereumValidators.
+func (mr *MockSSVMockRecorder) TotalEthereumValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TotalEthereumValidators", reflect.TypeOf((*MockSSV)(nil).TotalEthereumValidators))
 }

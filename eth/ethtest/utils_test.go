@@ -164,7 +164,7 @@ func setupEventHandler(
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
 	operatorDataStore := operatordatastore.New(operatorData)
-	testNetworkConfig := networkconfig.TestNetwork
+	testNetworkConfig := networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig)
 
 	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig, operator.privateKey)
 	if err != nil {
@@ -189,7 +189,7 @@ func setupEventHandler(
 			nodeStorage,
 			parser,
 			validatorCtrl,
-			testNetworkConfig.Adapt(),
+			testNetworkConfig,
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
@@ -220,7 +220,7 @@ func setupEventHandler(
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		testNetworkConfig.Adapt(),
+		testNetworkConfig,
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
@@ -245,7 +245,7 @@ func setupOperatorStorage(
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig), logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

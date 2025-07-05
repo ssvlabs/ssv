@@ -21,7 +21,7 @@ func Test_verifyConfig(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	network := networkconfig.TestNetwork
+	network := networkconfig.NewNetwork(networkconfig.TestBeaconConfig, networkconfig.TestSSVConfig)
 	nodeStorage, err := operatorstorage.NewNodeStorage(network, logger, db)
 	require.NoError(t, err)
 
