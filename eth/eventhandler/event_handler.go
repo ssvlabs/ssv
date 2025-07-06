@@ -265,7 +265,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil
 		}
 
-		_, err = eh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
+		_, err = eh.handleClusterLiquidated(ctx, txn, clusterLiquidatedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 			var malformedEventError *MalformedEventError
@@ -288,7 +288,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil
 		}
 
-		_, err = eh.handleClusterReactivated(txn, clusterReactivatedEvent)
+		_, err = eh.handleClusterReactivated(ctx, txn, clusterReactivatedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 			var malformedEventError *MalformedEventError
@@ -311,7 +311,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil
 		}
 
-		_, err = eh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
+		_, err = eh.handleFeeRecipientAddressUpdated(ctx, txn, feeRecipientAddressUpdatedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 			var malformedEventError *MalformedEventError
@@ -334,7 +334,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil
 		}
 
-		_, err = eh.handleValidatorExited(txn, validatorExitedEvent)
+		_, err = eh.handleValidatorExited(ctx, txn, validatorExitedEvent)
 		if err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 			var malformedEventError *MalformedEventError
@@ -398,28 +398,28 @@ func (eh *EventHandler) processLocalEvent(ctx context.Context, txn basedb.Txn, e
 		return nil
 	case ClusterLiquidated:
 		data := event.Data.(contract.ContractClusterLiquidated)
-		_, err := eh.handleClusterLiquidated(txn, &data)
+		_, err := eh.handleClusterLiquidated(ctx, txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 		return nil
 	case ClusterReactivated:
 		data := event.Data.(contract.ContractClusterReactivated)
-		_, err := eh.handleClusterReactivated(txn, &data)
+		_, err := eh.handleClusterReactivated(ctx, txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 		return nil
 	case FeeRecipientAddressUpdated:
 		data := event.Data.(contract.ContractFeeRecipientAddressUpdated)
-		_, err := eh.handleFeeRecipientAddressUpdated(txn, &data)
+		_, err := eh.handleFeeRecipientAddressUpdated(ctx, txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 		return nil
 	case ValidatorExited:
 		data := event.Data.(contract.ContractValidatorExited)
-		_, err := eh.handleValidatorExited(txn, &data)
+		_, err := eh.handleValidatorExited(ctx, txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle ValidatorExited: %w", err)
 		}

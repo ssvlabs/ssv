@@ -393,7 +393,7 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 	return emptyPK, nil
 }
 
-func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
+func (eh *EventHandler) handleClusterLiquidated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
 		fields.EventName(ClusterLiquidated),
 		fields.TxHash(event.Raw.TxHash),
@@ -417,8 +417,7 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 	}
 
 	// Notify ValidatorStore about cluster liquidation
-	// TODO: pass ctx to this method
-	if err := eh.validatorStore.OnClusterLiquidated(context.Background(), event.Owner, event.OperatorIds); err != nil {
+	if err := eh.validatorStore.OnClusterLiquidated(ctx, event.Owner, event.OperatorIds); err != nil {
 		return nil, fmt.Errorf("notify validator store of cluster liquidation: %w", err)
 	}
 
@@ -426,7 +425,7 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 	return toLiquidate, nil
 }
 
-func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
+func (eh *EventHandler) handleClusterReactivated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
 		fields.EventName(ClusterReactivated),
 		fields.TxHash(event.Raw.TxHash),
@@ -458,8 +457,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 	}
 
 	// Notify ValidatorStore about cluster reactivation
-	// TODO: pass ctx to this method
-	if err := eh.validatorStore.OnClusterReactivated(context.Background(), event.Owner, event.OperatorIds); err != nil {
+	if err := eh.validatorStore.OnClusterReactivated(ctx, event.Owner, event.OperatorIds); err != nil {
 		return nil, fmt.Errorf("notify validator store of cluster reactivation: %w", err)
 	}
 
@@ -467,7 +465,7 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 	return toReactivate, nil
 }
 
-func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
+func (eh *EventHandler) handleFeeRecipientAddressUpdated(ctx context.Context, txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
 	logger := eh.logger.With(
 		fields.EventName(FeeRecipientAddressUpdated),
 		fields.TxHash(event.Raw.TxHash),
@@ -495,8 +493,7 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 	}
 
 	// Notify ValidatorStore about fee recipient update
-	// TODO: pass ctx to this method
-	if err := eh.validatorStore.OnFeeRecipientUpdated(context.Background(), event.Owner, event.RecipientAddress); err != nil {
+	if err := eh.validatorStore.OnFeeRecipientUpdated(ctx, event.Owner, event.RecipientAddress); err != nil {
 		return false, fmt.Errorf("notify validator store of fee recipient update: %w", err)
 	}
 
@@ -504,7 +501,7 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 	return r != nil, nil
 }
 
-func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*registrystorage.ExitDescriptor, error) {
+func (eh *EventHandler) handleValidatorExited(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorExited) (*registrystorage.ExitDescriptor, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorExited),
 		fields.TxHash(event.Raw.TxHash),
@@ -546,8 +543,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	}
 
 	// Notify ValidatorStore about validator exit
-	// TODO: pass ctx to this method
-	if err := eh.validatorStore.OnValidatorExited(context.Background(), share.ValidatorPubKey, event.Raw.BlockNumber); err != nil {
+	if err := eh.validatorStore.OnValidatorExited(ctx, share.ValidatorPubKey, event.Raw.BlockNumber); err != nil {
 		return nil, fmt.Errorf("notify validator store of validator exit: %w", err)
 	}
 
