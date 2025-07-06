@@ -436,7 +436,7 @@ func (c *controller) handleNonCommitteeMessages(
 	return nil
 }
 
-// StartValidators loads all persisted shares and setup the corresponding validators
+// StartValidators loads all persisted shares and sets up the corresponding validators
 func (c *controller) StartValidators(ctx context.Context) error {
 	// TODO: Pass context whereever the execution flow may be blocked.
 
