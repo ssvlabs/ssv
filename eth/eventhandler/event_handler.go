@@ -395,6 +395,7 @@ func (eh *EventHandler) processLocalEvent(ctx context.Context, txn basedb.Txn, e
 		if _, err := eh.handleValidatorRemoved(ctx, txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
+
 		return nil
 	case ClusterLiquidated:
 		data := event.Data.(contract.ContractClusterLiquidated)

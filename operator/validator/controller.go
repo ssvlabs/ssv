@@ -115,6 +115,7 @@ type Controller interface {
 	IndicesChangeChan() chan struct{}
 	ValidatorExitChan() <-chan registrystorage.ExitDescriptor
 
+	// TODO: remove it and use callbacks?
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
@@ -820,7 +821,6 @@ func (c *controller) FilterIndices(afterInit bool, filter func(*ssvtypes.SSVShar
 		<-c.committeeValidatorSetup
 	}
 
-	// Use ValidatorStore to get all validators
 	allValidators := c.validatorStore.GetAllValidators()
 	var indices []phase0.ValidatorIndex
 
