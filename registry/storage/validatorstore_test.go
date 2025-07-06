@@ -74,7 +74,7 @@ var updatedShare2 = &ssvtypes.SSVShare{
 	Liquidated:      true,
 }
 
-var networkConfig = networkconfig.TestNetwork
+var networkConfig = networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV)
 
 func TestValidatorStore(t *testing.T) {
 	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}

@@ -23,7 +23,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 0 validators",
 			func() *Options {
 				validators := uint64(0)
-				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, []*storage.Committee{})
+				opts := NewSubnetTopicOpts(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), validators, 128, []*storage.Committee{})
 				return opts
 			},
 			nil,
@@ -32,7 +32,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 1k validators",
 			func() *Options {
 				validators := uint64(1000)
-				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -41,7 +41,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 10k validators",
 			func() *Options {
 				validators := uint64(10_000)
-				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -50,7 +50,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 51k validators",
 			func() *Options {
 				validators := uint64(51_000)
-				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, createTestingSingleCommittees(validators))
+				opts := NewSubnetTopicOpts(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), validators, 128, createTestingSingleCommittees(validators))
 				return opts
 			},
 			nil,
@@ -77,7 +77,7 @@ func TestTopicScoreParams(t *testing.T) {
 }
 
 func TestPeerScoreParams(t *testing.T) {
-	peerScoreParams := PeerScoreParams(networkconfig.TestNetwork, 550*(time.Millisecond*700), false)
+	peerScoreParams := PeerScoreParams(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), 550*(time.Millisecond*700), false)
 	raw, err := peerScoreParamsString(peerScoreParams)
 	require.NoError(t, err)
 	require.NotNil(t, raw)

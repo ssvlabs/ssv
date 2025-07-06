@@ -5,14 +5,15 @@ import (
 )
 
 type ConfigLock struct {
-	NetworkName      string `json:"network_name"`
+	// NetworkType has `network_name` annotation (and not `network_type`) for backward-compatibility with existing DBs.
+	NetworkType      string `json:"network_name"`
 	UsingLocalEvents bool   `json:"using_local_events"`
 	UsingSSVSigner   bool   `json:"using_ssv_signer"`
 }
 
 func (stored *ConfigLock) ValidateCompatibility(current *ConfigLock) error {
-	if stored.NetworkName != current.NetworkName {
-		return fmt.Errorf("network mismatch. Stored network %s does not match current network %s. The database must be removed or reinitialized", stored.NetworkName, current.NetworkName)
+	if stored.NetworkType != current.NetworkType {
+		return fmt.Errorf("network mismatch. Stored network %s does not match current network %s. The database must be removed or reinitialized", stored.NetworkType, current.NetworkType)
 	}
 
 	if stored.UsingLocalEvents && !current.UsingLocalEvents {

@@ -43,7 +43,7 @@ func TestSubmitProposal(t *testing.T) {
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
 
-	beaconConfig := networkconfig.TestNetwork.BeaconConfig
+	beaconConfig := networkconfig.TestBeacon
 	populateStorage(t, shareStorage, operatorData)
 
 	frCtrl := NewController(logger, &ControllerOptions{
@@ -84,7 +84,7 @@ func TestSubmitProposal(t *testing.T) {
 			1,  // first time
 			2,  // should not call submit
 			20, // should not call submit
-			phase0.Slot(beaconConfig.SlotsPerEpoch / 2), // halfway through epoch
+			phase0.Slot(beaconConfig.SlotsPerEpoch() / 2), // halfway through epoch
 			63, // should not call submit
 		}
 
@@ -131,7 +131,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, regis
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
+	shareStorage, _, err := registrystorage.NewSharesStorage(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}

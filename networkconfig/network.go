@@ -1,35 +1,37 @@
 package networkconfig
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
 //go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./network_mock.go -source=./network.go
 
-const forkName = "alan"
+// NetworkType returns network type which is a combination of some specific Ethereum network (mainnet, hoodi, etc.) +
+// SSV-specific version (alan, etc.).
+func NetworkType(networkName string) string {
+	const forkName = "alan"
+	return fmt.Sprintf("%s:%s", networkName, forkName)
+}
 
+// Network represents aggregate network configuration combining Ethereum-specific and SSV-specific settings all in
+// one place.
 type Network interface {
-	NetworkName() string
 	Beacon
 	SSV
 }
 
-type NetworkConfig struct {
-	Name string
+// network implements Network.
+type network struct {
 	*BeaconConfig
-	*SSVConfig
+	*ssvConfigAdaptor
 }
 
-func (n NetworkConfig) String() string {
-	jsonBytes, err := json.Marshal(n)
-	if err != nil {
-		panic(err)
+// NewNetwork returns new Network instance.
+func NewNetwork(beaconCfg *BeaconConfig, ssvCfg *SSVConfig) Network {
+	return &network{
+		BeaconConfig: beaconCfg,
+		ssvConfigAdaptor: &ssvConfigAdaptor{
+			SSVConfig: ssvCfg,
+		},
 	}
-
-	return string(jsonBytes)
-}
-
-func (n NetworkConfig) NetworkName() string {
-	return fmt.Sprintf("%s:%s", n.Name, forkName)
 }

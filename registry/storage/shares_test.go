@@ -205,7 +205,7 @@ func TestSharesStorage(t *testing.T) {
 	})
 
 	t.Run("KV_reuse_works", func(t *testing.T) {
-		storageDuplicate, _, err := NewSharesStorage(networkconfig.TestNetwork, storage.db, []byte("test"))
+		storageDuplicate, _, err := NewSharesStorage(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), storage.db, []byte("test"))
 		require.NoError(t, err)
 		existingValidators := storageDuplicate.List(nil)
 
@@ -597,7 +597,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) *S
 		ValidatorPubKey:     sk1.GetPublicKey().Serialize(),
 		SharePubKey:         sk2.GetPublicKey().Serialize(),
 		Committee:           ibftCommittee,
-		DomainType:          networkconfig.TestNetwork.DomainType,
+		DomainType:          networkconfig.TestSSV.DomainType,
 		FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 		Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		Status:              2,
@@ -632,7 +632,7 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey, state v1.Validator
 			ValidatorPubKey:     spectypes.ValidatorPK(sk1.GetPublicKey().Serialize()),
 			SharePubKey:         sk2.GetPublicKey().Serialize(),
 			Committee:           ibftCommittee,
-			DomainType:          networkconfig.TestNetwork.DomainType,
+			DomainType:          networkconfig.TestSSV.DomainType,
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
@@ -670,7 +670,7 @@ func fakeParticipatingShare(index phase0.ValidatorIndex, pk spectypes.ValidatorP
 			ValidatorIndex:      index,
 			SharePubKey:         committee[0].SharePubKey,
 			Committee:           committee,
-			DomainType:          networkconfig.TestNetwork.DomainType,
+			DomainType:          networkconfig.TestSSV.DomainType,
 			FeeRecipientAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
 			Graffiti:            bytes.Repeat([]byte{0x01}, 32),
 		},
@@ -718,7 +718,7 @@ func newTestStorage(logger *zap.Logger) (*testStorage, error) {
 
 func (t *testStorage) open(logger *zap.Logger) error {
 	var err error
-	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.TestNetwork, t.db, []byte("test"))
+	t.Shares, t.ValidatorStore, err = NewSharesStorage(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), t.db, []byte("test"))
 	if err != nil {
 		return err
 	}

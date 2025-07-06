@@ -30,13 +30,13 @@ func setupSyncCommitteeDutiesMock(
 
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) uint64 {
-			return uint64(epoch) / s.beaconConfig.GetEpochsPerSyncCommitteePeriod()
+			return uint64(epoch) / s.beaconConfig.EpochsPerSyncCommitteePeriod()
 		},
 	).AnyTimes()
 
 	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Epoch {
-			return phase0.Epoch(period * s.beaconConfig.GetEpochsPerSyncCommitteePeriod())
+			return phase0.Epoch(period * s.beaconConfig.EpochsPerSyncCommitteePeriod())
 		},
 	).AnyTimes()
 
@@ -45,13 +45,13 @@ func setupSyncCommitteeDutiesMock(
 			lastEpoch := s.beaconConfig.FirstEpochOfSyncPeriod(period+1) - 1
 			// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 			// as it will never be included, hence -1.
-			return s.beaconConfig.GetEpochFirstSlot(lastEpoch+1) - 2
+			return s.beaconConfig.EpochFirstSlot(lastEpoch+1) - 2
 		},
 	).AnyTimes()
 
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
+	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EpochFirstSlot(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
-			return phase0.Slot(uint64(epoch) * s.beaconConfig.GetSlotsPerEpoch())
+			return phase0.Slot(uint64(epoch) * s.beaconConfig.SlotsPerEpoch())
 		},
 	).AnyTimes()
 
@@ -169,7 +169,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.beaconConfig.GetEpochFirstSlot(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.beaconConfig.EpochFirstSlot(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
 	currentSlot.Set(firstSlotOfNextPeriod)
 	ticker.Send(currentSlot.Get())
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -584,7 +584,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.GetSlotDuration()/3)*0.90)) // 10% margin due to flakiness of the test
+	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.SlotDuration()/3)*0.90)) // 10% margin due to flakiness of the test
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

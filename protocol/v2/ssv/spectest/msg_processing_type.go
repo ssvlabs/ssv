@@ -19,6 +19,8 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/integration/qbft/tests"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
@@ -28,7 +30,6 @@ import (
 	ssvprotocoltesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type MsgProcessingSpecTest struct {
@@ -240,7 +241,7 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
-	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
+	r.GetBaseRunner().NetworkConfig = networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV)
 
 	// override
 	test.PostDutyRunnerState = r
@@ -272,7 +273,7 @@ var baseCommitteeWithRunnerSample = func(
 
 	createRunnerF := func(_ phase0.Slot, shareMap map[phase0.ValidatorIndex]*spectypes.Share, _ []phase0.BLSPubKey, _ runner.CommitteeDutyGuard) (*runner.CommitteeRunner, error) {
 		r, err := runner.NewCommitteeRunner(
-			networkconfig.TestNetwork,
+			networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 			shareMap,
 			controller.NewController(
 				runnerSample.BaseRunner.QBFTController.Identifier,

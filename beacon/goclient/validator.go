@@ -104,9 +104,9 @@ func (gc *GoClient) registrationSubmitter(ctx context.Context, slotTickerProvide
 
 				// Distribute the registrations evenly across the epoch based on the pubkeys.
 				config := gc.getBeaconConfig()
-				slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch
+				slotInEpoch := uint64(currentSlot) % config.SlotsPerEpoch()
 				validatorDescriptor := xxhash.Sum64(validatorPk[:])
-				shouldSubmit := validatorDescriptor%config.SlotsPerEpoch == slotInEpoch
+				shouldSubmit := validatorDescriptor%config.SlotsPerEpoch() == slotInEpoch
 
 				if r.new || shouldSubmit {
 					r.new = false

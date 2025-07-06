@@ -46,7 +46,7 @@ func PeerScoreThresholds() *pubsub.PeerScoreThresholds {
 }
 
 // PeerScoreParams returns peer score params according to the given options
-func PeerScoreParams(netCfg *networkconfig.NetworkConfig, msgIDCacheTTL time.Duration, disableColocation bool, ipWhitelist ...*net.IPNet) *pubsub.PeerScoreParams {
+func PeerScoreParams(netCfg networkconfig.Network, msgIDCacheTTL time.Duration, disableColocation bool, ipWhitelist ...*net.IPNet) *pubsub.PeerScoreParams {
 	// P7 calculation
 	behaviourPenaltyDecay := scoreDecay(netCfg.EpochDuration()*10, netCfg.EpochDuration())
 	maxAllowedRatePerDecayInterval := 10.0

@@ -10,6 +10,7 @@
 package networkconfig
 
 import (
+	big "math/big"
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -41,30 +42,58 @@ func (m *MockSSV) EXPECT() *MockSSVMockRecorder {
 	return m.recorder
 }
 
-// GetDomainType mocks base method.
-func (m *MockSSV) GetDomainType() types.DomainType {
+// DomainType mocks base method.
+func (m *MockSSV) DomainType() types.DomainType {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDomainType")
+	ret := m.ctrl.Call(m, "DomainType")
 	ret0, _ := ret[0].(types.DomainType)
 	return ret0
 }
 
-// GetDomainType indicates an expected call of GetDomainType.
-func (mr *MockSSVMockRecorder) GetDomainType() *gomock.Call {
+// DomainType indicates an expected call of DomainType.
+func (mr *MockSSVMockRecorder) DomainType() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainType", reflect.TypeOf((*MockSSV)(nil).GetDomainType))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainType", reflect.TypeOf((*MockSSV)(nil).DomainType))
 }
 
-// GetGasLimit36Epoch mocks base method.
-func (m *MockSSV) GetGasLimit36Epoch() phase0.Epoch {
+// GasLimit36Epoch mocks base method.
+func (m *MockSSV) GasLimit36Epoch() phase0.Epoch {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGasLimit36Epoch")
+	ret := m.ctrl.Call(m, "GasLimit36Epoch")
 	ret0, _ := ret[0].(phase0.Epoch)
 	return ret0
 }
 
-// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
-func (mr *MockSSVMockRecorder) GetGasLimit36Epoch() *gomock.Call {
+// GasLimit36Epoch indicates an expected call of GasLimit36Epoch.
+func (mr *MockSSVMockRecorder) GasLimit36Epoch() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGasLimit36Epoch", reflect.TypeOf((*MockSSV)(nil).GetGasLimit36Epoch))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit36Epoch", reflect.TypeOf((*MockSSV)(nil).GasLimit36Epoch))
+}
+
+// RegistrySyncOffset mocks base method.
+func (m *MockSSV) RegistrySyncOffset() *big.Int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegistrySyncOffset")
+	ret0, _ := ret[0].(*big.Int)
+	return ret0
+}
+
+// RegistrySyncOffset indicates an expected call of RegistrySyncOffset.
+func (mr *MockSSVMockRecorder) RegistrySyncOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegistrySyncOffset", reflect.TypeOf((*MockSSV)(nil).RegistrySyncOffset))
+}
+
+// TotalEthereumValidators mocks base method.
+func (m *MockSSV) TotalEthereumValidators() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TotalEthereumValidators")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// TotalEthereumValidators indicates an expected call of TotalEthereumValidators.
+func (mr *MockSSVMockRecorder) TotalEthereumValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TotalEthereumValidators", reflect.TypeOf((*MockSSV)(nil).TotalEthereumValidators))
 }

@@ -201,10 +201,10 @@ func TestController_ReactivateCluster(t *testing.T) {
 		sharesStorage:     sharesStorage,
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
-		networkConfig:     networkconfig.TestNetwork,
+		networkConfig:     networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 		validatorCommonOpts: &validator.CommonOptions{
 			Storage:       storageMap,
-			NetworkConfig: networkconfig.TestNetwork,
+			NetworkConfig: networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 		},
 		signer: signer,
 	}

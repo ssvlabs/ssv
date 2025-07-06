@@ -76,7 +76,7 @@ func (rc *recipientController) listenToTicker(ctx context.Context) {
 		<-ticker.Next()
 		slot := ticker.Slot()
 		// submit if first time or if first slot in epoch
-		if firstTimeSubmitted && uint64(slot)%rc.beaconConfig.SlotsPerEpoch != (rc.beaconConfig.SlotsPerEpoch/2) {
+		if firstTimeSubmitted && uint64(slot)%rc.beaconConfig.SlotsPerEpoch() != (rc.beaconConfig.SlotsPerEpoch()/2) {
 			continue
 		}
 		firstTimeSubmitted = true

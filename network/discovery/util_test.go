@@ -31,8 +31,7 @@ import (
 )
 
 var (
-	testLogger    = zap.NewNop()
-	testNetConfig = networkconfig.TestNetwork
+	testLogger = zap.NewNop()
 
 	testIP             = "127.0.0.1"
 	testBindIP         = "127.0.0.1"
@@ -74,7 +73,7 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSVConfig) *
 	}
 }
 
-// Testing discovery with a given NetworkConfig
+// Testing discovery with a given SSVConfig
 func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SSVConfig) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, ssvConfig)
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
@@ -85,7 +84,7 @@ func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SS
 
 // Testing discovery service
 func testingDiscovery(t *testing.T) *DiscV5Service {
-	return testingDiscoveryWithNetworkConfig(t, testNetConfig.SSVConfig)
+	return testingDiscoveryWithNetworkConfig(t, networkconfig.TestSSV)
 }
 
 // Testing LocalNode
@@ -99,9 +98,9 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 	require.NoError(t, err)
 
 	// Set entries
-	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, testNetConfig.DomainType)
+	err = records.SetDomainTypeEntry(localNode, records.KeyDomainType, networkconfig.TestSSV.DomainType)
 	require.NoError(t, err)
-	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, testNetConfig.DomainType)
+	err = records.SetDomainTypeEntry(localNode, records.KeyNextDomainType, networkconfig.TestSSV.DomainType)
 	require.NoError(t, err)
 	err = records.SetSubnetsEntry(localNode, mockSubnets(1))
 	require.NoError(t, err)
@@ -111,7 +110,7 @@ func NewLocalNode(t *testing.T) *enode.LocalNode {
 
 // Testing node
 func NewTestingNode(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, mockSubnets(1))
+	return CustomNode(t, true, networkconfig.TestSSV.DomainType, true, networkconfig.TestSSV.DomainType, true, mockSubnets(1))
 }
 
 func NewTestingNodes(t *testing.T, count int) []*enode.Node {
@@ -123,15 +122,15 @@ func NewTestingNodes(t *testing.T, count int) []*enode.Node {
 }
 
 func NodeWithoutDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, false, spectypes.DomainType{}, true, testNetConfig.DomainType, true, mockSubnets(1))
+	return CustomNode(t, false, spectypes.DomainType{}, true, networkconfig.TestSSV.DomainType, true, mockSubnets(1))
 }
 
 func NodeWithoutNextDomain(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, false, spectypes.DomainType{}, true, mockSubnets(1))
+	return CustomNode(t, true, networkconfig.TestSSV.DomainType, false, spectypes.DomainType{}, true, mockSubnets(1))
 }
 
 func NodeWithoutSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, false, commons.Subnets{})
+	return CustomNode(t, true, networkconfig.TestSSV.DomainType, true, networkconfig.TestSSV.DomainType, false, commons.Subnets{})
 }
 
 func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDomainType spectypes.DomainType) *enode.Node {
@@ -139,11 +138,11 @@ func NodeWithCustomDomains(t *testing.T, domainType spectypes.DomainType, nextDo
 }
 
 func NodeWithZeroSubnets(t *testing.T) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, commons.ZeroSubnets)
+	return CustomNode(t, true, networkconfig.TestSSV.DomainType, true, networkconfig.TestSSV.DomainType, true, commons.ZeroSubnets)
 }
 
 func NodeWithCustomSubnets(t *testing.T, subnets commons.Subnets) *enode.Node {
-	return CustomNode(t, true, testNetConfig.DomainType, true, testNetConfig.DomainType, true, subnets)
+	return CustomNode(t, true, networkconfig.TestSSV.DomainType, true, networkconfig.TestSSV.DomainType, true, subnets)
 }
 
 func CustomNode(t *testing.T,

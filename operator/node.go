@@ -33,7 +33,8 @@ type Options struct {
 	NetworkName         string                   `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Ethereum network to connect to (mainnet, holesky, sepolia, etc.). For backwards compatibility it's ignored if CustomNetwork is set"`
 	CustomNetwork       *networkconfig.SSVConfig `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom SSV network configuration"`
 	CustomDomainType    string                   `yaml:"CustomDomainType" env:"CUSTOM_DOMAIN_TYPE" env-default:"" env-description:"Override SSV domain type for network isolation. Warning: Please modify only if you are certain of the implications. This would be incremented by 1 after Alan fork (e.g., 0x01020304 → 0x01020305 post-fork)"` // DEPRECATED: use CustomNetwork instead.
-	NetworkConfig       *networkconfig.NetworkConfig
+	BeaconConfig        *networkconfig.BeaconConfig
+	SSVConfig           *networkconfig.SSVConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     executionclient.Provider
 	P2PNetwork          network.P2PNetwork
@@ -49,7 +50,7 @@ type Options struct {
 
 type Node struct {
 	logger           *zap.Logger
-	network          *networkconfig.NetworkConfig
+	ssvConfig        *networkconfig.SSVConfig
 	context          context.Context
 	validatorsCtrl   validator.Controller
 	validatorOptions validator.ControllerOptions
@@ -74,7 +75,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		validatorsCtrl:   opts.ValidatorController,
 		validatorOptions: opts.ValidatorOptions,
 		exporterOptions:  exporterOpts,
-		network:          opts.NetworkConfig,
+		ssvConfig:        opts.SSVConfig,
 		consensusClient:  opts.BeaconNode,
 		executionClient:  opts.ExecutionClient,
 		net:              opts.P2PNetwork,
@@ -84,7 +85,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			Ctx:                 opts.Context,
 			BeaconNode:          opts.BeaconNode,
 			ExecutionClient:     opts.ExecutionClient,
-			BeaconConfig:        opts.NetworkConfig,
+			BeaconConfig:        opts.BeaconConfig,
 			ValidatorProvider:   opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
 			ValidatorController: opts.ValidatorController,
 			DutyExecutor:        opts.ValidatorController,
@@ -97,7 +98,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 		feeRecipientCtrl: fee_recipient.NewController(logger, &fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,
 			BeaconClient:       opts.BeaconNode,
-			BeaconConfig:       opts.NetworkConfig.BeaconConfig,
+			BeaconConfig:       opts.BeaconConfig,
 			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
 			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
 			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
@@ -195,7 +196,7 @@ func (n *Node) handleQueryRequests(nm *api.NetworkMessage) {
 
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		h.HandleParticipantsQuery(n.qbftStorage, nm, n.network.DomainType)
+		h.HandleParticipantsQuery(n.qbftStorage, nm, n.ssvConfig.DomainType)
 	case api.TypeError:
 		h.HandleErrorQuery(nm)
 	default:

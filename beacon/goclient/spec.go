@@ -169,21 +169,21 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 		return nil, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
 
-	beaconConfig := &networkconfig.BeaconConfig{
-		NetworkName:                          networkName,
-		SlotDuration:                         slotDuration,
-		SlotsPerEpoch:                        slotsPerEpoch,
-		EpochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,
-		SyncCommitteeSize:                    syncCommitteeSize,
-		SyncCommitteeSubnetCount:             syncCommitteeSubnetCount,
-		TargetAggregatorsPerSyncSubcommittee: targetAggregatorsPerSyncSubcommittee,
-		TargetAggregatorsPerCommittee:        targetAggregatorsPerCommittee,
-		IntervalsPerSlot:                     intervalsPerSlot,
-		GenesisForkVersion:                   genesisResponse.GenesisForkVersion,
-		GenesisTime:                          genesisResponse.GenesisTime,
-		GenesisValidatorsRoot:                genesisResponse.GenesisValidatorsRoot,
-		Forks:                                forkData,
-	}
+	beaconConfig := networkconfig.NewBeaconConfig(
+		networkName,
+		slotDuration,
+		slotsPerEpoch,
+		epochsPerSyncCommitteePeriod,
+		syncCommitteeSize,
+		syncCommitteeSubnetCount,
+		targetAggregatorsPerSyncSubcommittee,
+		targetAggregatorsPerCommittee,
+		intervalsPerSlot,
+		genesisResponse.GenesisForkVersion,
+		genesisResponse.GenesisTime,
+		genesisResponse.GenesisValidatorsRoot,
+		forkData,
+	)
 
 	return beaconConfig, nil
 }

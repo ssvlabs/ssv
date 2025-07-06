@@ -45,7 +45,7 @@ func TestRouter(t *testing.T) {
 		msg := &queue.SSVMessage{
 			SSVMessage: &spectypes.SSVMessage{
 				MsgType: spectypes.MsgType(i % 3),
-				MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
+				MsgID:   spectypes.NewMsgID(networkconfig.TestSSV.DomainType, []byte{1, 1, 1, 1, 1}, spectypes.RoleCommittee),
 				Data:    []byte(fmt.Sprintf("data-%d", i)),
 			},
 		}

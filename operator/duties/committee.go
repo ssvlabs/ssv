@@ -206,7 +206,7 @@ func (h *CommitteeHandler) shouldExecuteAtt(duty *eth2apiv1.AttesterDuty, epoch 
 	}
 
 	// execute task if slot already began and not pass 1 epoch
-	var attestationPropagationSlotRange = h.beaconConfig.GetSlotsPerEpoch()
+	var attestationPropagationSlotRange = h.beaconConfig.SlotsPerEpoch()
 	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= attestationPropagationSlotRange {
 		return true
 	}

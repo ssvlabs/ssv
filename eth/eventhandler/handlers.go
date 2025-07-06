@@ -322,7 +322,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		encryptedKey = encryptedKeys[i]
 	}
 
-	validatorShare.DomainType = eh.networkConfig.GetDomainType()
+	validatorShare.DomainType = eh.networkConfig.DomainType()
 	validatorShare.Committee = shareMembers
 
 	return &validatorShare, encryptedKey, nil

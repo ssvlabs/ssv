@@ -9,13 +9,13 @@ import (
 func TestConfigLock(t *testing.T) {
 	t.Run("same configs", func(t *testing.T) {
 		c1 := &ConfigLock{
-			NetworkName:      "test",
+			NetworkType:      "test",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
 
 		c2 := &ConfigLock{
-			NetworkName:      "test",
+			NetworkType:      "test",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
@@ -25,13 +25,13 @@ func TestConfigLock(t *testing.T) {
 
 	t.Run("all fields are different", func(t *testing.T) {
 		c1 := &ConfigLock{
-			NetworkName:      "test",
+			NetworkType:      "test",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   false,
 		}
 
 		c2 := &ConfigLock{
-			NetworkName:      "test2",
+			NetworkType:      "test2",
 			UsingLocalEvents: false,
 			UsingSSVSigner:   true,
 		}
@@ -41,13 +41,13 @@ func TestConfigLock(t *testing.T) {
 
 	t.Run("only network name is different", func(t *testing.T) {
 		c1 := &ConfigLock{
-			NetworkName:      "test",
+			NetworkType:      "test",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
 
 		c2 := &ConfigLock{
-			NetworkName:      "test2",
+			NetworkType:      "test2",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
@@ -57,12 +57,12 @@ func TestConfigLock(t *testing.T) {
 
 	t.Run("only local events usage is different", func(t *testing.T) {
 		c1 := &ConfigLock{
-			NetworkName:      "test",
+			NetworkType:      "test",
 			UsingLocalEvents: true,
 		}
 
 		c2 := &ConfigLock{
-			NetworkName:      "test",
+			NetworkType:      "test",
 			UsingLocalEvents: false,
 		}
 
@@ -71,13 +71,13 @@ func TestConfigLock(t *testing.T) {
 
 	t.Run("only ssv-signer usage is different", func(t *testing.T) {
 		c1 := &ConfigLock{
-			NetworkName:      "test",
+			NetworkType:      "test",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
 
 		c2 := &ConfigLock{
-			NetworkName:      "test",
+			NetworkType:      "test",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   false,
 		}

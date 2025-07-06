@@ -189,7 +189,7 @@ func overrideStateComparisonCommitteeSpecTest(t *testing.T, test *CommitteeSpecT
 	committee.Shares = specCommittee.Share
 	committee.CommitteeMember = &specCommittee.CommitteeMember
 	for _, r := range committee.Runners {
-		r.BaseRunner.NetworkConfig = networkconfig.TestNetwork
+		r.BaseRunner.NetworkConfig = networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV)
 	}
 
 	root, err := committee.GetRoot()

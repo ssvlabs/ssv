@@ -27,9 +27,9 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(nil, db, nil)
 
-	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestBeacon)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -134,9 +134,9 @@ func TestCommitteeDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(nil, db, nil)
 
-	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestBeacon)
 
 	var committeeID1 spectypes.CommitteeID
 	committeeID1[0] = 1
@@ -325,9 +325,9 @@ func TestValidatorDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK1[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(nil, db, nil)
 
-	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestBeacon)
 
 	slot4 := phase0.Slot(4)
 

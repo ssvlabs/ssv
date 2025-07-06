@@ -31,7 +31,7 @@ import (
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
 )
 
-var testNetCfg = networkconfig.TestNetwork.BeaconConfig
+var testNetCfg = networkconfig.TestBeacon
 
 type RemoteKeyManagerTestSuite struct {
 	suite.Suite

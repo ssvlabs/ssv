@@ -23,6 +23,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
@@ -44,8 +47,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	registrystoragemocks "github.com/ssvlabs/ssv/registry/storage/mocks"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -70,7 +71,7 @@ type MockControllerOptions struct {
 	validatorStore      registrystorage.ValidatorStore
 	operatorDataStore   operatordatastore.OperatorDataStore
 	operatorStorage     registrystorage.Operators
-	networkConfig       *networkconfig.NetworkConfig
+	networkConfig       networkconfig.Network
 }
 
 func TestNewController(t *testing.T) {
@@ -83,11 +84,11 @@ func TestNewController(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), logger, db)
 	require.NoError(t, newStorageErr)
 
 	controllerOptions := ControllerOptions{
-		NetworkConfig:     networkconfig.TestNetwork,
+		NetworkConfig:     networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 		Beacon:            bc,
 		FullNode:          true,
 		Network:           network,
@@ -263,7 +264,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	logger.Debug("starting to send messages")
 
-	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
+	identifier := spectypes.NewMsgID(networkconfig.TestSSV.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
 	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
@@ -540,14 +541,14 @@ func TestSetupValidators(t *testing.T) {
 			controllerOptions := MockControllerOptions{
 				beacon:            bc,
 				network:           network,
-				networkConfig:     networkconfig.TestNetwork,
+				networkConfig:     networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 				sharesStorage:     sharesStorage,
 				operatorDataStore: operatorDataStore,
 				recipientsStorage: recipientStorage,
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorCommonOpts: &validator.CommonOptions{
-					NetworkConfig: networkconfig.TestNetwork,
+					NetworkConfig: networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 					Storage:       storageMap,
 				},
 			}
@@ -795,7 +796,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOptions) controller {
 	// Default to test network config if not provided.
 	if opts.networkConfig == nil {
-		opts.networkConfig = networkconfig.TestNetwork
+		opts.networkConfig = networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV)
 	}
 
 	return controller{
@@ -954,7 +955,7 @@ func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivat
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewLocalKeyManager(logger, db, networkconfig.TestNetwork, operatorPrivKey)
+	km, err := ekm.NewLocalKeyManager(logger, db, networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), operatorPrivKey)
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }
@@ -1214,10 +1215,10 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 		recipientsStorage: mockRecipientsStorage,
 		sharesStorage:     mockSharesStorage,
 		validatorsMap:     mockValidatorsMap,
-		networkConfig:     networkconfig.TestNetwork,
+		networkConfig:     networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
 		validatorCommonOpts: &validator.CommonOptions{
-			NetworkConfig: networkconfig.TestNetwork,
+			NetworkConfig: networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 		},
 		validatorStartFunc: func(validator *validator.Validator) (bool, error) {
 			return true, nil

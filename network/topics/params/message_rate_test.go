@@ -80,7 +80,7 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rc := newRateCalculator(networkconfig.TestNetwork)
+			rc := newRateCalculator(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV))
 			msgRate := rc.calculateMessageRateForTopic(tt.args.committees)
 			require.InDelta(t, tt.want, msgRate, tt.want*0.001)
 		})

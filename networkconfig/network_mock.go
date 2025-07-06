@@ -10,6 +10,7 @@
 package networkconfig
 
 import (
+	big "math/big"
 	reflect "reflect"
 	time "time"
 
@@ -43,6 +44,20 @@ func (m *MockNetwork) EXPECT() *MockNetworkMockRecorder {
 	return m.recorder
 }
 
+// DomainType mocks base method.
+func (m *MockNetwork) DomainType() types.DomainType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DomainType")
+	ret0, _ := ret[0].(types.DomainType)
+	return ret0
+}
+
+// DomainType indicates an expected call of DomainType.
+func (mr *MockNetworkMockRecorder) DomainType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainType", reflect.TypeOf((*MockNetwork)(nil).DomainType))
+}
+
 // EpochDuration mocks base method.
 func (m *MockNetwork) EpochDuration() time.Duration {
 	m.ctrl.T.Helper()
@@ -57,6 +72,20 @@ func (mr *MockNetworkMockRecorder) EpochDuration() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochDuration", reflect.TypeOf((*MockNetwork)(nil).EpochDuration))
 }
 
+// EpochFirstSlot mocks base method.
+func (m *MockNetwork) EpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EpochFirstSlot", epoch)
+	ret0, _ := ret[0].(phase0.Slot)
+	return ret0
+}
+
+// EpochFirstSlot indicates an expected call of EpochFirstSlot.
+func (mr *MockNetworkMockRecorder) EpochFirstSlot(epoch any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochFirstSlot", reflect.TypeOf((*MockNetwork)(nil).EpochFirstSlot), epoch)
+}
+
 // EpochStartTime mocks base method.
 func (m *MockNetwork) EpochStartTime(epoch phase0.Epoch) time.Time {
 	m.ctrl.T.Helper()
@@ -69,6 +98,20 @@ func (m *MockNetwork) EpochStartTime(epoch phase0.Epoch) time.Time {
 func (mr *MockNetworkMockRecorder) EpochStartTime(epoch any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochStartTime", reflect.TypeOf((*MockNetwork)(nil).EpochStartTime), epoch)
+}
+
+// EpochsPerSyncCommitteePeriod mocks base method.
+func (m *MockNetwork) EpochsPerSyncCommitteePeriod() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EpochsPerSyncCommitteePeriod")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// EpochsPerSyncCommitteePeriod indicates an expected call of EpochsPerSyncCommitteePeriod.
+func (mr *MockNetworkMockRecorder) EpochsPerSyncCommitteePeriod() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockNetwork)(nil).EpochsPerSyncCommitteePeriod))
 }
 
 // EstimatedCurrentEpoch mocks base method.
@@ -184,11 +227,11 @@ func (mr *MockNetworkMockRecorder) FirstSlotAtEpoch(epoch any) *gomock.Call {
 }
 
 // ForkAtEpoch mocks base method.
-func (m *MockNetwork) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {
+func (m *MockNetwork) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, phase0.Fork) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ForkAtEpoch", epoch)
 	ret0, _ := ret[0].(spec.DataVersion)
-	ret1, _ := ret[1].(*phase0.Fork)
+	ret1, _ := ret[1].(phase0.Fork)
 	return ret0, ret1
 }
 
@@ -198,172 +241,46 @@ func (mr *MockNetworkMockRecorder) ForkAtEpoch(epoch any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkAtEpoch", reflect.TypeOf((*MockNetwork)(nil).ForkAtEpoch), epoch)
 }
 
-// GetDomainType mocks base method.
-func (m *MockNetwork) GetDomainType() types.DomainType {
+// GasLimit36Epoch mocks base method.
+func (m *MockNetwork) GasLimit36Epoch() phase0.Epoch {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDomainType")
-	ret0, _ := ret[0].(types.DomainType)
-	return ret0
-}
-
-// GetDomainType indicates an expected call of GetDomainType.
-func (mr *MockNetworkMockRecorder) GetDomainType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDomainType", reflect.TypeOf((*MockNetwork)(nil).GetDomainType))
-}
-
-// GetEpochFirstSlot mocks base method.
-func (m *MockNetwork) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEpochFirstSlot", epoch)
-	ret0, _ := ret[0].(phase0.Slot)
-	return ret0
-}
-
-// GetEpochFirstSlot indicates an expected call of GetEpochFirstSlot.
-func (mr *MockNetworkMockRecorder) GetEpochFirstSlot(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochFirstSlot", reflect.TypeOf((*MockNetwork)(nil).GetEpochFirstSlot), epoch)
-}
-
-// GetEpochsPerSyncCommitteePeriod mocks base method.
-func (m *MockNetwork) GetEpochsPerSyncCommitteePeriod() uint64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEpochsPerSyncCommitteePeriod")
-	ret0, _ := ret[0].(uint64)
-	return ret0
-}
-
-// GetEpochsPerSyncCommitteePeriod indicates an expected call of GetEpochsPerSyncCommitteePeriod.
-func (mr *MockNetworkMockRecorder) GetEpochsPerSyncCommitteePeriod() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockNetwork)(nil).GetEpochsPerSyncCommitteePeriod))
-}
-
-// GetGasLimit36Epoch mocks base method.
-func (m *MockNetwork) GetGasLimit36Epoch() phase0.Epoch {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGasLimit36Epoch")
+	ret := m.ctrl.Call(m, "GasLimit36Epoch")
 	ret0, _ := ret[0].(phase0.Epoch)
 	return ret0
 }
 
-// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
-func (mr *MockNetworkMockRecorder) GetGasLimit36Epoch() *gomock.Call {
+// GasLimit36Epoch indicates an expected call of GasLimit36Epoch.
+func (mr *MockNetworkMockRecorder) GasLimit36Epoch() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGasLimit36Epoch", reflect.TypeOf((*MockNetwork)(nil).GetGasLimit36Epoch))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GasLimit36Epoch", reflect.TypeOf((*MockNetwork)(nil).GasLimit36Epoch))
 }
 
-// GetGenesisTime mocks base method.
-func (m *MockNetwork) GetGenesisTime() time.Time {
+// GenesisTime mocks base method.
+func (m *MockNetwork) GenesisTime() time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGenesisTime")
+	ret := m.ctrl.Call(m, "GenesisTime")
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
-// GetGenesisTime indicates an expected call of GetGenesisTime.
-func (mr *MockNetworkMockRecorder) GetGenesisTime() *gomock.Call {
+// GenesisTime indicates an expected call of GenesisTime.
+func (mr *MockNetworkMockRecorder) GenesisTime() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenesisTime", reflect.TypeOf((*MockNetwork)(nil).GetGenesisTime))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenesisTime", reflect.TypeOf((*MockNetwork)(nil).GenesisTime))
 }
 
-// GetGenesisValidatorsRoot mocks base method.
-func (m *MockNetwork) GetGenesisValidatorsRoot() phase0.Root {
+// GenesisValidatorsRoot mocks base method.
+func (m *MockNetwork) GenesisValidatorsRoot() phase0.Root {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGenesisValidatorsRoot")
+	ret := m.ctrl.Call(m, "GenesisValidatorsRoot")
 	ret0, _ := ret[0].(phase0.Root)
 	return ret0
 }
 
-// GetGenesisValidatorsRoot indicates an expected call of GetGenesisValidatorsRoot.
-func (mr *MockNetworkMockRecorder) GetGenesisValidatorsRoot() *gomock.Call {
+// GenesisValidatorsRoot indicates an expected call of GenesisValidatorsRoot.
+func (mr *MockNetworkMockRecorder) GenesisValidatorsRoot() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGenesisValidatorsRoot", reflect.TypeOf((*MockNetwork)(nil).GetGenesisValidatorsRoot))
-}
-
-// GetNetworkName mocks base method.
-func (m *MockNetwork) GetNetworkName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNetworkName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetNetworkName indicates an expected call of GetNetworkName.
-func (mr *MockNetworkMockRecorder) GetNetworkName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetworkName", reflect.TypeOf((*MockNetwork)(nil).GetNetworkName))
-}
-
-// GetSlotDuration mocks base method.
-func (m *MockNetwork) GetSlotDuration() time.Duration {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSlotDuration")
-	ret0, _ := ret[0].(time.Duration)
-	return ret0
-}
-
-// GetSlotDuration indicates an expected call of GetSlotDuration.
-func (mr *MockNetworkMockRecorder) GetSlotDuration() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotDuration", reflect.TypeOf((*MockNetwork)(nil).GetSlotDuration))
-}
-
-// GetSlotEndTime mocks base method.
-func (m *MockNetwork) GetSlotEndTime(slot phase0.Slot) time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSlotEndTime", slot)
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GetSlotEndTime indicates an expected call of GetSlotEndTime.
-func (mr *MockNetworkMockRecorder) GetSlotEndTime(slot any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotEndTime", reflect.TypeOf((*MockNetwork)(nil).GetSlotEndTime), slot)
-}
-
-// GetSlotStartTime mocks base method.
-func (m *MockNetwork) GetSlotStartTime(slot phase0.Slot) time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSlotStartTime", slot)
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GetSlotStartTime indicates an expected call of GetSlotStartTime.
-func (mr *MockNetworkMockRecorder) GetSlotStartTime(slot any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotStartTime", reflect.TypeOf((*MockNetwork)(nil).GetSlotStartTime), slot)
-}
-
-// GetSlotsPerEpoch mocks base method.
-func (m *MockNetwork) GetSlotsPerEpoch() uint64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSlotsPerEpoch")
-	ret0, _ := ret[0].(uint64)
-	return ret0
-}
-
-// GetSlotsPerEpoch indicates an expected call of GetSlotsPerEpoch.
-func (mr *MockNetworkMockRecorder) GetSlotsPerEpoch() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotsPerEpoch", reflect.TypeOf((*MockNetwork)(nil).GetSlotsPerEpoch))
-}
-
-// GetSyncCommitteeSize mocks base method.
-func (m *MockNetwork) GetSyncCommitteeSize() uint64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncCommitteeSize")
-	ret0, _ := ret[0].(uint64)
-	return ret0
-}
-
-// GetSyncCommitteeSize indicates an expected call of GetSyncCommitteeSize.
-func (mr *MockNetworkMockRecorder) GetSyncCommitteeSize() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeSize", reflect.TypeOf((*MockNetwork)(nil).GetSyncCommitteeSize))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenesisValidatorsRoot", reflect.TypeOf((*MockNetwork)(nil).GenesisValidatorsRoot))
 }
 
 // IntervalDuration mocks base method.
@@ -420,4 +337,102 @@ func (m *MockNetwork) NetworkName() string {
 func (mr *MockNetworkMockRecorder) NetworkName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkName", reflect.TypeOf((*MockNetwork)(nil).NetworkName))
+}
+
+// RegistrySyncOffset mocks base method.
+func (m *MockNetwork) RegistrySyncOffset() *big.Int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegistrySyncOffset")
+	ret0, _ := ret[0].(*big.Int)
+	return ret0
+}
+
+// RegistrySyncOffset indicates an expected call of RegistrySyncOffset.
+func (mr *MockNetworkMockRecorder) RegistrySyncOffset() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegistrySyncOffset", reflect.TypeOf((*MockNetwork)(nil).RegistrySyncOffset))
+}
+
+// SlotDuration mocks base method.
+func (m *MockNetwork) SlotDuration() time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SlotDuration")
+	ret0, _ := ret[0].(time.Duration)
+	return ret0
+}
+
+// SlotDuration indicates an expected call of SlotDuration.
+func (mr *MockNetworkMockRecorder) SlotDuration() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotDuration", reflect.TypeOf((*MockNetwork)(nil).SlotDuration))
+}
+
+// SlotEndTime mocks base method.
+func (m *MockNetwork) SlotEndTime(slot phase0.Slot) time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SlotEndTime", slot)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// SlotEndTime indicates an expected call of SlotEndTime.
+func (mr *MockNetworkMockRecorder) SlotEndTime(slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotEndTime", reflect.TypeOf((*MockNetwork)(nil).SlotEndTime), slot)
+}
+
+// SlotStartTime mocks base method.
+func (m *MockNetwork) SlotStartTime(slot phase0.Slot) time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SlotStartTime", slot)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// SlotStartTime indicates an expected call of SlotStartTime.
+func (mr *MockNetworkMockRecorder) SlotStartTime(slot any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotStartTime", reflect.TypeOf((*MockNetwork)(nil).SlotStartTime), slot)
+}
+
+// SlotsPerEpoch mocks base method.
+func (m *MockNetwork) SlotsPerEpoch() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SlotsPerEpoch")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// SlotsPerEpoch indicates an expected call of SlotsPerEpoch.
+func (mr *MockNetworkMockRecorder) SlotsPerEpoch() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotsPerEpoch", reflect.TypeOf((*MockNetwork)(nil).SlotsPerEpoch))
+}
+
+// SyncCommitteeSize mocks base method.
+func (m *MockNetwork) SyncCommitteeSize() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncCommitteeSize")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// SyncCommitteeSize indicates an expected call of SyncCommitteeSize.
+func (mr *MockNetworkMockRecorder) SyncCommitteeSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeSize", reflect.TypeOf((*MockNetwork)(nil).SyncCommitteeSize))
+}
+
+// TotalEthereumValidators mocks base method.
+func (m *MockNetwork) TotalEthereumValidators() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TotalEthereumValidators")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// TotalEthereumValidators indicates an expected call of TotalEthereumValidators.
+func (mr *MockNetworkMockRecorder) TotalEthereumValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TotalEthereumValidators", reflect.TypeOf((*MockNetwork)(nil).TotalEthereumValidators))
 }

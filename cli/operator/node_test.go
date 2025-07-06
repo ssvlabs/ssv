@@ -21,19 +21,19 @@ func Test_verifyConfig(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	network := networkconfig.TestNetwork
+	network := networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV)
 	nodeStorage, err := operatorstorage.NewNodeStorage(network, logger, db)
 	require.NoError(t, err)
 
-	testNetworkName := network.NetworkName()
+	testNetworkType := networkconfig.NetworkType("testnet")
 
 	t.Run("no config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner))
+		require.NoError(t, validateConfig(nodeStorage, c.NetworkType, c.UsingLocalEvents, c.UsingSSVSigner))
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -45,12 +45,12 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has same config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
-		require.NoError(t, validateConfig(nodeStorage, c.NetworkName, c.UsingLocalEvents, c.UsingSSVSigner))
+		require.NoError(t, validateConfig(nodeStorage, c.NetworkType, c.UsingLocalEvents, c.UsingSSVSigner))
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -62,13 +62,13 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has different network name, events type, and ssv signer in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName + "1",
+			NetworkType:      testNetworkType + "1",
 			UsingLocalEvents: false,
 			UsingSSVSigner:   false,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, true, true),
+			validateConfig(nodeStorage, testNetworkType, true, true),
 			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
@@ -82,13 +82,13 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has different network name in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName + "1",
+			NetworkType:      testNetworkType + "1",
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, testNetworkName, c.UsingLocalEvents, c.UsingSSVSigner),
+			validateConfig(nodeStorage, testNetworkType, c.UsingLocalEvents, c.UsingSSVSigner),
 			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
@@ -102,13 +102,13 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has real events in DB but runs with local events", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: false,
 			UsingSSVSigner:   true,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, true),
+			validateConfig(nodeStorage, c.NetworkType, true, true),
 			"incompatible config change: enabling local events is not allowed. The database must be removed or reinitialized",
 		)
 
@@ -122,13 +122,13 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has local events in DB but runs with real events", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, false, true),
+			validateConfig(nodeStorage, c.NetworkType, false, true),
 			"incompatible config change: disabling local events is not allowed. The database must be removed or reinitialized",
 		)
 
@@ -142,13 +142,13 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has local signer in DB but runs with remote signer", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   true,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, false),
+			validateConfig(nodeStorage, c.NetworkType, true, false),
 			"incompatible config change: disabling ssv-signer is not allowed. The database must be removed or reinitialized",
 		)
 
@@ -162,13 +162,13 @@ func Test_verifyConfig(t *testing.T) {
 
 	t.Run("has remote signer in DB but runs with local signer", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{
-			NetworkName:      testNetworkName,
+			NetworkType:      testNetworkType,
 			UsingLocalEvents: true,
 			UsingSSVSigner:   false,
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
-			validateConfig(nodeStorage, c.NetworkName, true, true),
+			validateConfig(nodeStorage, c.NetworkType, true, true),
 			"incompatible config change: enabling ssv-signer is not allowed. The database must be removed or reinitialized",
 		)
 
