@@ -13,6 +13,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	networkcommons "github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -27,7 +28,13 @@ const (
 	defaultSyncInterval      = 12 * time.Minute
 	defaultStreamInterval    = 2 * time.Second
 	defaultUpdateSendTimeout = 30 * time.Second
-	batchSize                = 512
+	// NOTE: A higher value of 'batchSize' means fewer HTTP calls to the Consensus Node,
+	//       but larger payloads and responses, which can potentially lead to HTTP request timeouts.
+	// TODO: This value should differ depending on whether the node is an Exporter or Non-Exporter.
+	//       Exporters need to sync all validators across the entire SSV network,
+	//       while Non-Exporters sync only the validators that belong to their own committees
+	//       or to other committees within their subnets.
+	batchSize = 512
 )
 
 type Syncer struct {
@@ -60,7 +67,7 @@ func NewSyncer(
 	opts ...Option,
 ) *Syncer {
 	u := &Syncer{
-		logger:            logger,
+		logger:            logger.Named(logging.NameShareMetadataSyncer),
 		shareStorage:      shareStorage,
 		validatorStore:    validatorStore,
 		beaconNode:        beaconNode,
@@ -85,7 +92,7 @@ func WithSyncInterval(interval time.Duration) Option {
 	}
 }
 
-func (s *Syncer) SyncOnStartup(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
+func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -200,32 +207,28 @@ func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 			}
 
 			if len(batch.After) == 0 {
+				s.logger.Info("sleeping because no metadata was updated in the latest batch")
 				if slept := s.sleep(ctx, s.streamInterval); !slept {
 					return
 				}
 				continue
 			}
 
-			// TODO: use time.After when Go is updated to 1.23
-			timer := time.NewTimer(s.updateSendTimeout)
 			select {
 			case metadataUpdates <- batch:
 				// Only sleep if there aren't more validators to fetch metadata for.
 				// It's done to wait for some data to appear. Without sleep, the next batch would likely be empty.
 				if done {
+					s.logger.Info("sleeping because all validators metadata was updated", zap.Duration("duration", s.streamInterval))
 					if slept := s.sleep(ctx, s.streamInterval); !slept {
-						// canceled context
-						timer.Stop()
 						return
 					}
 				}
 			case <-ctx.Done():
-				timer.Stop()
 				return
-			case <-timer.C:
+			case <-time.After(s.updateSendTimeout):
 				s.logger.Warn("timed out waiting for sending update")
 			}
-			timer.Stop()
 		}
 	}()
 
@@ -307,14 +310,10 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.
 }
 
 func (s *Syncer) sleep(ctx context.Context, d time.Duration) (slept bool) {
-	// TODO: use time.After when Go is updated to 1.23
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
 	select {
 	case <-ctx.Done():
 		return false
-	case <-timer.C:
+	case <-time.After(d):
 		return true
 	}
 }

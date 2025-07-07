@@ -95,7 +95,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			}).AnyTimes()
 
 			syncer := NewSyncer(logger, sharesStorage, validatorStore, beaconNode, commons.ZeroSubnets)
-			_, err := syncer.Sync(context.TODO(), []spectypes.ValidatorPK{tc.testPublicKey})
+			_, err := syncer.Sync(t.Context(), []spectypes.ValidatorPK{tc.testPublicKey})
 			if tc.sharesStorageErr != nil {
 				require.ErrorIs(t, err, tc.sharesStorageErr)
 			} else {
@@ -240,7 +240,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{}).AnyTimes()
 
 		// Call method
-		result, err := syncer.SyncOnStartup(t.Context())
+		result, err := syncer.SyncAll(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -281,7 +281,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockValidatorStore.EXPECT().SelfValidators().Return(shares).AnyTimes()
 
 		// Call method
-		result, err := syncer.SyncOnStartup(t.Context())
+		result, err := syncer.SyncAll(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -326,7 +326,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		}, nil)
 
 		// Call method
-		result, err := syncer.SyncOnStartup(t.Context())
+		result, err := syncer.SyncAll(t.Context())
 
 		// Assert
 		require.NoError(t, err)
@@ -375,7 +375,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{share1}).AnyTimes()
 
 		// Call method
-		result, err := syncer.SyncOnStartup(t.Context())
+		result, err := syncer.SyncAll(t.Context())
 
 		// Assert
 		require.Error(t, err)
