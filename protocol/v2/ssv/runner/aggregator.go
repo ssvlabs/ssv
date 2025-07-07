@@ -20,13 +20,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type AggregatorRunner struct {
@@ -39,7 +40,18 @@ type AggregatorRunner struct {
 	valCheck       specqbft.ProposedValueCheckF
 	measurements   measurementsStore
 
-	// IsAggregator is a struct field, so it can be mocked out for easy testing
+	// IsAggregator returns true if the signature is from the input validator. The committee
+	// count is provided as an argument rather than imported implementation from spec. Having
+	// committee count as an argument allows cheaper computation at run time.
+	//
+	// Spec pseudocode definition:
+	//
+	//	def is_aggregator(state: BeaconState, slot: Slot, index: CommitteeIndex, slot_signature: BLSSignature) -> bool:
+	//	 committee = get_beacon_committee(state, slot, index)
+	//	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
+	//	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
+	//
+	// IsAggregator is an exported struct field, so it can be mocked out for easy testing.
 	IsAggregator func(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool `json:"-"`
 }
 
@@ -76,7 +88,7 @@ func NewAggregatorRunner(
 		valCheck:       valCheck,
 		measurements:   NewMeasurementsStore(),
 
-		IsAggregator: isAggregator,
+		IsAggregator: isAggregatorFn(),
 	}, nil
 }
 
@@ -548,40 +560,43 @@ func constructVersionedSignedAggregateAndProof(aggregateAndProof spec.VersionedA
 	return ret, nil
 }
 
-// isAggregator returns true if the signature is from the input validator. The committee
-// count is provided as an argument rather than imported implementation from spec. Having
-// committee count as an argument allows cheaper computation at run time.
-//
-// Spec pseudocode definition:
-//
-//	def is_aggregator(state: BeaconState, slot: Slot, index: CommitteeIndex, slot_signature: BLSSignature) -> bool:
-//	 committee = get_beacon_committee(state, slot, index)
-//	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
-//	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
-func isAggregator(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool {
-	modulo := committeeCount / targetAggregatorsPerCommittee
-	if modulo == 0 {
-		// Modulo must be at least 1.
-		modulo = 1
-	}
+// isAggregatorFn returns IsAggregator func that performs hashing in an allocation-efficient manner.
+func isAggregatorFn() func(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool {
+	h := newHasher()
+	return func(targetAggregatorsPerCommittee uint64, committeeCount uint64, slotSig []byte) bool {
+		modulo := committeeCount / targetAggregatorsPerCommittee
+		if modulo == 0 {
+			// Modulo must be at least 1.
+			modulo = 1
+		}
 
-	b := hashSha256(slotSig)
-	return binary.LittleEndian.Uint64(b[:8])%modulo == 0
+		b := h.hashSha256(slotSig)
+		return binary.LittleEndian.Uint64(b[:8])%modulo == 0
+	}
 }
 
-var sha256Pool = sync.Pool{New: func() interface{} {
-	return sha256.New()
-}}
+// hasher implements efficient thread-safe data-hashing functionality by re-using the same hash.Hash
+// instance for different hash-requests.
+type hasher struct {
+	sha256 hash.Hash
+	// mtx synchronizes access to sha256 so that only 1 go-routine at a time can use it for hashing,
+	// this is necessary since sha256 object is stateful.
+	mtx sync.Mutex
+}
+
+func newHasher() *hasher {
+	return &hasher{
+		sha256: sha256.New(),
+	}
+}
 
 // hashSha256 defines a function that returns the sha256 checksum of the data passed in.
 // https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/core/0_beacon-chain.md#hash
-func hashSha256(data []byte) [32]byte {
-	h, ok := sha256Pool.Get().(hash.Hash)
-	if !ok {
-		h = sha256.New()
-	}
-	defer sha256Pool.Put(h)
-	h.Reset()
+func (h *hasher) hashSha256(data []byte) [32]byte {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
+	h.sha256.Reset()
 
 	var b [32]byte
 
@@ -590,8 +605,8 @@ func hashSha256(data []byte) [32]byte {
 	// stated here https://golang.org/pkg/hash/#Hash
 
 	// #nosec G104
-	h.Write(data)
-	h.Sum(b[:0])
+	h.sha256.Write(data)
+	h.sha256.Sum(b[:0])
 
 	return b
 }
