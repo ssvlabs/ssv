@@ -2,7 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-
 ## Project Overview
 
 SSV (Secret Shared Validators) is a secure and scalable staking infrastructure for distributed Ethereum validators. It uses MPC threshold schemes with Byzantine fault-tolerant consensus to enable decentralized validator operations.
