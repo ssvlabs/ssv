@@ -296,7 +296,10 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int, batchSi
 			newShares = append(newShares, share)
 		} else if time.Since(share.BeaconMetadataLastUpdated) > s.syncInterval {
 			// Metadata hasn't been fetched for a while, so it's considered stale.
-			s.logger.Info("share was not updated. Adding to the list", fields.PubKey(share.SharePubKey))
+			s.logger.Info("share was not updated. Adding to the list",
+				zap.Time("last_updated", share.BeaconMetadataLastUpdated),
+				zap.Duration("sync_interval", s.syncInterval),
+				fields.PubKey(share.SharePubKey))
 			staleShares = append(staleShares, share)
 		}
 
