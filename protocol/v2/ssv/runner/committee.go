@@ -19,12 +19,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 var (
@@ -252,6 +253,8 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				continue
 			}
 
+			start := time.Now()
+
 			attestationData := constructAttestationData(beaconVote, validatorDuty, version)
 			partialMsg, err := cr.BaseRunner.signBeaconObject(
 				ctx,
@@ -278,6 +281,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 				zap.String("attestation_data_root", hex.EncodeToString(attDataRoot[:])),
 				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
 				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+				zap.Duration("took", time.Since(start)),
 			)
 		case spectypes.BNRoleSyncCommittee:
 			totalSyncCommitteeDuties++
