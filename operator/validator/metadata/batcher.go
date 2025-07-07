@@ -55,15 +55,17 @@ func (b *batcher) launch(ctx context.Context) {
 
 	b.logger.Info("initial batch size was set", zap.Uint32("size", b.batchSize.Load()))
 
-	for {
-		select {
-		case <-ctx.Done():
-			b.logger.Debug("context is Done. Returning...")
-			return
-		case <-time.After(evaluationInterval):
-			b.updateBatchSize()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				b.logger.Debug("context is Done. Returning...")
+				return
+			case <-time.After(evaluationInterval):
+				b.updateBatchSize()
+			}
 		}
-	}
+	}()
 }
 
 func (b *batcher) updateBatchSize() {
