@@ -575,28 +575,29 @@ func isAggregatorFn() func(targetAggregatorsPerCommittee uint64, committeeCount 
 	}
 }
 
-// hasher implements efficient thread-safe data-hashing functionality by re-using the same hash.Hash
-// instance for different hash-requests.
+// hasher implements efficient thread-safe data-hashing functionality by pooling hash.Hash
+// instances to re-use them for different hash-requests.
 type hasher struct {
-	sha256 hash.Hash
-	// mtx synchronizes access to sha256 so that only 1 go-routine at a time can use it for hashing,
-	// this is necessary since sha256 object is stateful.
-	mtx sync.Mutex
+	sha256Pool sync.Pool
 }
 
 func newHasher() *hasher {
 	return &hasher{
-		sha256: sha256.New(),
+		sha256Pool: sync.Pool{
+			New: func() interface{} {
+				return sha256.New()
+			},
+		},
 	}
 }
 
 // hashSha256 defines a function that returns the sha256 checksum of the data passed in.
 // https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/core/0_beacon-chain.md#hash
 func (h *hasher) hashSha256(data []byte) [32]byte {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
+	hsr := h.sha256Pool.Get().(hash.Hash)
+	defer h.sha256Pool.Put(hsr)
 
-	h.sha256.Reset()
+	hsr.Reset()
 
 	var b [32]byte
 
@@ -605,8 +606,8 @@ func (h *hasher) hashSha256(data []byte) [32]byte {
 	// stated here https://golang.org/pkg/hash/#Hash
 
 	// #nosec G104
-	h.sha256.Write(data)
-	h.sha256.Sum(b[:0])
+	hsr.Write(data)
+	hsr.Sum(b[:0])
 
 	return b
 }
