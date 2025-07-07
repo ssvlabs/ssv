@@ -327,7 +327,7 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 		}
 	}
 	// If we reach here, the server certificate is not trusted
-	return fmt.Errorf("server certificate fingerprint for hosts %q not trusted: %#v", hosts, formatFingerprint(fingerprintHex))
+	return fmt.Errorf("server certificate fingerprint for hosts %s not trusted: %q", hosts, formatFingerprint(fingerprintHex))
 }
 
 // verifyClientCertificate verifies a client certificate using fingerprints.
