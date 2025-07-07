@@ -20,7 +20,7 @@ func Test_verifyConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	network := networkconfig.TestNetwork
-	nodeStorage, err := operatorstorage.NewNodeStorage(network, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
 	testNetworkName := network.NetworkName()
