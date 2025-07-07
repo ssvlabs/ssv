@@ -292,9 +292,11 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int, batchSi
 		// Fetch new and stale shares only.
 		if !share.HasBeaconMetadata() && share.BeaconMetadataLastUpdated.IsZero() {
 			// Metadata was never fetched for this share, so it's considered new.
+			s.logger.Info("share is a new share. Adding to the list", fields.PubKey(share.SharePubKey))
 			newShares = append(newShares, share)
 		} else if time.Since(share.BeaconMetadataLastUpdated) > s.syncInterval {
 			// Metadata hasn't been fetched for a while, so it's considered stale.
+			s.logger.Info("share was not updated. Adding to the list", fields.PubKey(share.SharePubKey))
 			staleShares = append(staleShares, share)
 		}
 
@@ -303,6 +305,7 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int, batchSi
 
 	// Combine validators up to batchSize, prioritizing the new ones.
 	shares := append(newShares, staleShares...)
+	s.logger.Info("shares fetched", zap.Int("len", len(shares)))
 	if len(shares) > int(batchSize) {
 		shares = shares[:batchSize]
 	}
@@ -311,6 +314,8 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int, batchSi
 	for _, share := range shares {
 		metadataMap[share.ValidatorPubKey] = share.BeaconMetadata()
 	}
+
+	s.logger.Info("metadata map constructed", zap.Int("len", len(metadataMap)))
 
 	return metadataMap
 }
