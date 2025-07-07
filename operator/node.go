@@ -143,10 +143,16 @@ func (n *Node) Start() error {
 	}
 	go n.net.UpdateSubnets()
 	go n.net.UpdateScoreParams()
-	n.validatorsCtrl.StartValidators(ctx)
+
+	err := n.validatorsCtrl.StartValidators(ctx)
+	if err != nil {
+		return fmt.Errorf("start validators: %w", err)
+	}
+
 	go n.reportOperators()
 
 	go n.feeRecipientCtrl.Start(ctx)
+
 	go n.validatorsCtrl.HandleMetadataUpdates(ctx)
 	go n.validatorsCtrl.ReportValidatorStatuses(ctx)
 
