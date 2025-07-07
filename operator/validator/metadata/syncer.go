@@ -212,12 +212,22 @@ func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 				continue
 			}
 
+			if len(batch.Before) == 0 {
+				s.logger.Info("sleeping because all validators’ metadata has been refreshed.",
+					zap.Duration("sleep_for", s.streamInterval),
+					zap.Duration("refresh_interval", s.syncInterval))
+				if slept := s.sleep(ctx, s.streamInterval); !slept {
+					return
+				}
+				continue
+			}
+
 			select {
 			case metadataUpdates <- batch:
 				// Only sleep if there aren't more validators to fetch metadata for.
 				// It's done to wait for some data to appear. Without sleep, the next batch would likely be empty.
 				if done {
-					s.logger.Info("sleeping because all validators’ metadata has been refreshed.",
+					s.logger.Info("sleeping after batch was streamed because all validators’ metadata has been refreshed.",
 						zap.Duration("sleep_for", s.streamInterval),
 						zap.Duration("refresh_interval", s.syncInterval))
 					if slept := s.sleep(ctx, s.streamInterval); !slept {
