@@ -269,10 +269,14 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 				}
 
 				_, err := mc.call(contextWithMethod(ctx, "StreamLogs"), f, 0)
-				if err != nil && !isInterruptedError(err) {
-					// NOTE: There are unit tests that trigger Fatal and override its behavior.
-					// Therefore, the code must call `return` afterward.
-					mc.logger.Fatal("failed to stream registry events", zap.Error(err))
+				if err != nil {
+					if isInterruptedError(err) {
+						mc.logger.Debug("stream logs interrupted", zap.Error(err))
+					} else {
+						// NOTE: There are unit tests that trigger Fatal and override its behavior.
+						// Therefore, the code must call `return` afterward.
+						mc.logger.Fatal("failed to stream registry events", zap.Error(err))
+					}
 				}
 				return
 			}
