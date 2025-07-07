@@ -163,7 +163,7 @@ func NewOpts(epochDuration time.Duration, activeValidators uint64, subnets int) 
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
+func NewSubnetTopicOpts(netCfg *networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.Committee) *Options {
 	// Create options with default values
 	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
 	opts.defaults()
@@ -175,23 +175,6 @@ func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uin
 
 	// Set the expected message rate for the topic
 	opts.Topic.ExpectedMsgRate = rc.calculateMessageRateForTopic(committees)
-
-	return opts
-}
-
-// NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOptsValidators(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int) *Options {
-	// Create options with default values
-	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
-	opts.defaults()
-
-	// Set topic weight with equal weights
-	opts.Topic.TopicWeight = opts.Network.TotalTopicsWeight / float64(opts.Network.Subnets)
-
-	// Set expected message rate based on stage metrics
-	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
-	msgsPerValidatorPerSecond := 600.0 / 10000.0
-	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerValidatorPerSecond
 
 	return opts
 }

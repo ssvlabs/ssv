@@ -167,11 +167,12 @@ func (n *p2pNetwork) SetupServices() error {
 	if err := n.setupPeerServices(); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
-	_, err := n.setupPubsub()
 
+	_, err := n.setupPubsub()
 	if err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
+
 	if err := n.setupDiscovery(); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
 	}
