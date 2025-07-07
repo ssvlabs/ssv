@@ -16,10 +16,16 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+)
+
+const (
+	DefaultGasLimit    = uint64(36_000_000)
+	DefaultGasLimitOld = uint64(30_000_000)
 )
 
 type ValidatorRegistrationRunner struct {
@@ -32,6 +38,10 @@ type ValidatorRegistrationRunner struct {
 	valCheck       specqbft.ProposedValueCheckF
 
 	gasLimit uint64
+	// TODO: gasLimit36Epoch is temporarily living here on main branch, on stage branch ValidatorRegistrationRunner
+	// has access to SSV-config from where it can just reference GasLimit36Epoch - so, eventually, we'll want to get
+	// rid of this field here and replace it with SSV-config usage instead.
+	gasLimit36Epoch phase0.Epoch
 }
 
 func NewValidatorRegistrationRunner(
@@ -43,6 +53,7 @@ func NewValidatorRegistrationRunner(
 	signer ekm.BeaconSigner,
 	operatorSigner ssvtypes.OperatorSigner,
 	gasLimit uint64,
+	gasLimit36Epoch phase0.Epoch,
 ) (Runner, error) {
 	if len(share) != 1 {
 		return nil, errors.New("must have one share")
@@ -56,11 +67,12 @@ func NewValidatorRegistrationRunner(
 			Share:          share,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		operatorSigner: operatorSigner,
-		gasLimit:       gasLimit,
+		beacon:          beacon,
+		network:         network,
+		signer:          signer,
+		operatorSigner:  operatorSigner,
+		gasLimit:        gasLimit,
+		gasLimit36Epoch: gasLimit36Epoch,
 	}, nil
 }
 
@@ -225,9 +237,20 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(slot)
 
+	// Set the default GasLimit value if it hasn't been specified already, use 36 or 30 depending
+	// on the current epoch as compared to when this transition is supposed to happen.
+	gasLimit := r.gasLimit
+	if gasLimit == 0 {
+		defaultGasLimit := DefaultGasLimit
+		if r.BaseRunner.BeaconNetwork.EstimatedCurrentEpoch() < r.gasLimit36Epoch {
+			defaultGasLimit = DefaultGasLimitOld
+		}
+		gasLimit = defaultGasLimit
+	}
+
 	return &v1.ValidatorRegistration{
 		FeeRecipient: share.FeeRecipientAddress,
-		GasLimit:     r.gasLimit,
+		GasLimit:     gasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
