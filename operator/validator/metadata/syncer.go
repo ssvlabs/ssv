@@ -52,6 +52,7 @@ type Syncer struct {
 	syncInterval      time.Duration
 	streamInterval    time.Duration
 	updateSendTimeout time.Duration
+	batcher           *batcher
 }
 
 type shareStorage interface {
@@ -87,6 +88,8 @@ func NewSyncer(
 		opt(u)
 	}
 
+	u.batcher = newBatcher(shareStorage, validatorStore, fixedSubnets, u.syncInterval, logger.Named(logging.NameShareMetadataBatcher))
+
 	return u
 }
 
@@ -99,6 +102,8 @@ func WithSyncInterval(interval time.Duration) Option {
 }
 
 func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
+	s.batcher.launch(ctx)
+
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
