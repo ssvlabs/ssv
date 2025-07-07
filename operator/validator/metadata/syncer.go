@@ -28,19 +28,6 @@ const (
 	defaultSyncInterval      = 12 * time.Minute
 	defaultStreamInterval    = 2 * time.Second
 	defaultUpdateSendTimeout = 30 * time.Second
-	// NOTE:
-	// A higher value of `batchSize` results in fewer HTTP calls to the Consensus Node,
-	// but each call will have larger payloads and responses. While this speeds up
-	// metadata synchronization, it also increases the risk of timeouts.
-	//
-	// The value of `batchSize` should depend on the number of validators the node handles
-	// (especially relevant when comparing Exporter vs. Non-Exporter nodes)
-	// and the sync interval (how often metadata should be refreshed).
-	//
-	// ⚠️ Caution: Since there is no prioritization implemented, if the node cannot
-	// sync all validator shares within the given sync interval, there is a high risk
-	// that some validators will not be refreshed for an unpredictable amount of time.
-	batchSize = 512
 )
 
 type Syncer struct {
@@ -88,7 +75,7 @@ func NewSyncer(
 		opt(u)
 	}
 
-	u.batcher = newBatcher(shareStorage, validatorStore, fixedSubnets, u.syncInterval, logger.Named(logging.NameShareMetadataBatcher))
+	u.batcher = newBatcher(shareStorage, validatorStore, fixedSubnets, u.syncInterval, u.streamInterval, logger.Named(logging.NameShareMetadataBatcher))
 
 	return u
 }
@@ -262,7 +249,9 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 	default:
 	}
 
-	beforeMetadata := s.nextBatchFromDB(ctx, subnetsBuf)
+	batchSize := s.batcher.size()
+
+	beforeMetadata := s.nextBatchFromDB(ctx, subnetsBuf, batchSize)
 	if len(beforeMetadata) == 0 {
 		return SyncBatch{}, false, nil
 	}
@@ -277,12 +266,12 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 		After:  afterMetadata,
 	}
 
-	return syncBatch, len(beforeMetadata) < batchSize, nil
+	return syncBatch, len(beforeMetadata) < int(batchSize), nil
 }
 
 // nextBatchFromDB returns metadata for non-liquidated shares from DB that are most deserving of an update.
 // It prioritizes shares whose metadata was never fetched or became stale based on BeaconMetadataLastUpdated.
-func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.ValidatorMetadataMap {
+func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int, batchSize uint32) beacon.ValidatorMetadataMap {
 	// TODO: use context, return if it's done
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
@@ -307,12 +296,12 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int) beacon.
 			staleShares = append(staleShares, share)
 		}
 
-		return len(newShares) < batchSize
+		return len(newShares) < int(batchSize)
 	})
 
 	// Combine validators up to batchSize, prioritizing the new ones.
 	shares := append(newShares, staleShares...)
-	if len(shares) > batchSize {
+	if len(shares) > int(batchSize) {
 		shares = shares[:batchSize]
 	}
 

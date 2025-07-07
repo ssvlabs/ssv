@@ -2,10 +2,12 @@ package metadata
 
 import (
 	"context"
+	"math"
 	"math/big"
 	"sync/atomic"
 	"time"
 
+	"github.com/ssvlabs/ssv/logging"
 	commons "github.com/ssvlabs/ssv/network/commons"
 	types "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
@@ -17,6 +19,7 @@ type batcher struct {
 	validatorStore  selfValidatorStore
 	fixedSubnets    commons.Subnets
 	refreshInterval time.Duration
+	streamInterval  time.Duration
 	logger          *zap.Logger
 
 	batchSize atomic.Uint32
@@ -27,13 +30,16 @@ func newBatcher(
 	validatorStore selfValidatorStore,
 	fixedSubnets commons.Subnets,
 	refreshInterval time.Duration,
+	streamInterval time.Duration,
 	logger *zap.Logger) *batcher {
 	return &batcher{
 		shareStorage:    shareStorage,
 		validatorStore:  validatorStore,
 		fixedSubnets:    fixedSubnets,
 		refreshInterval: refreshInterval,
-		logger:          logger,
+		streamInterval:  streamInterval,
+
+		logger: logger.Named(logging.NameShareMetadataBatcher),
 	}
 }
 
@@ -49,18 +55,19 @@ func (b *batcher) launch(ctx context.Context) {
 			b.logger.Debug("context is Done. Returning...")
 			return
 		case <-time.After(time.Minute * 15):
+			b.logger.Info("batch size evaluation started. Fetching total number of validators")
 			totalValidators := b.totalValidators()
-			itemsPerSecond := float64(totalValidators) * 0.05 //5%
 
-			intervalSeconds := b.refreshInterval.Seconds()
-
-			batchSize := int(itemsPerSecond * intervalSeconds)
-
-			if batchSize == 0 && totalValidators > 0 {
-				batchSize = 1
+			b.logger.Info("total number of validators was fetched. Calculating the batch size", zap.Uint32("count", totalValidators))
+			ticks := int(b.refreshInterval / b.streamInterval)
+			if ticks == 0 {
+				ticks = 1
 			}
 
-			b.batchSize.Store(1)
+			batchSize := uint32(math.Ceil(float64(totalValidators) / float64(ticks)))
+
+			b.logger.Info("new batch size was calculated.", zap.Uint32("size", batchSize))
+			b.batchSize.Store(batchSize)
 		}
 	}
 }
