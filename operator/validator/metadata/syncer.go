@@ -150,6 +150,7 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 		fields.Took(time.Since(updateStart)),
 		zap.Int("received_count", len(metadata)),
 		zap.Int("updated_count", len(updatedValidators)),
+		zap.Any("pub_keys", pubKeys),
 	)
 
 	return updatedValidators, nil
@@ -274,6 +275,8 @@ func (s *Syncer) syncNextBatch(ctx context.Context, subnetsBuf *big.Int) (SyncBa
 func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int, batchSize uint32) beacon.ValidatorMetadataMap {
 	// TODO: use context, return if it's done
 	ownSubnets := s.selfSubnets(subnetsBuf)
+
+	s.logger.Info("own subnets fetched", zap.Any("subnets", ownSubnets))
 
 	var staleShares, newShares []*ssvtypes.SSVShare
 	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {

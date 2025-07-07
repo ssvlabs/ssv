@@ -81,11 +81,16 @@ func (b *batcher) updateBatchSize() {
 	batchSize := uint32(math.Ceil(float64(totalValidators) / float64(ticks)))
 
 	b.logger.Info("new batch size was calculated.", zap.Uint32("size", batchSize))
+
+	batchSize = 1_000 //TODO:remove
+
 	b.batchSize.Store(batchSize)
 }
 
 func (b *batcher) totalValidators() uint32 {
 	totalSubnets := b.totalSubnets()
+
+	b.logger.Info("own subnets fetched", zap.Any("subnets", totalSubnets))
 
 	nonLiquidatedShares := big.NewInt(0)
 	totalValidators := b.shareStorage.List(nil, storage.ByNotLiquidated(), func(share *types.SSVShare) bool {
