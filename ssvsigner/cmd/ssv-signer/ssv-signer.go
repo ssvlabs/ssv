@@ -30,7 +30,8 @@ type CLI struct {
 	RequestTimeout     time.Duration `env:"REQUEST_TIMEOUT" default:"10s" help:"Timeout for outgoing HTTP requests (e.g. 500ms, 10s)"`
 
 	// AllowInsecureHTTP allows ssv-signer to work without using TLS. Note that it allows "partial" TLS as well such as only server or only client.
-	AllowInsecureHTTP bool `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"Allow insecure HTTP requests. Do not use in production"`
+	AllowInsecureHTTP     bool `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"Allow insecure HTTP requests. Do not use in production"`
+	AllowInsecureNetworks bool `env:"ALLOW_INSECURE_NETWORKS" name:"allow-insecure-networks" default:"false" help:"Allow insecure networks. Unused"`
 
 	// Server TLS configuration (for incoming connections to SSV Signer)
 	KeystoreFile         string `env:"KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for server TLS connections"`
