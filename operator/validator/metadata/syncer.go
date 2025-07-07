@@ -28,12 +28,18 @@ const (
 	defaultSyncInterval      = 12 * time.Minute
 	defaultStreamInterval    = 2 * time.Second
 	defaultUpdateSendTimeout = 30 * time.Second
-	// NOTE: A higher value of 'batchSize' means fewer HTTP calls to the Consensus Node,
-	//       but larger payloads and responses, which can potentially lead to HTTP request timeouts.
-	// TODO: This value should differ depending on whether the node is an Exporter or Non-Exporter.
-	//       Exporters need to sync all validators across the entire SSV network,
-	//       while Non-Exporters sync only the validators that belong to their own committees
-	//       or to other committees within their subnets.
+	// NOTE:
+	// A higher value of `batchSize` results in fewer HTTP calls to the Consensus Node,
+	// but each call will have larger payloads and responses. While this speeds up
+	// metadata synchronization, it also increases the risk of timeouts.
+	//
+	// The value of `batchSize` should depend on the number of validators the node handles
+	// (especially relevant when comparing Exporter vs. Non-Exporter nodes)
+	// and the sync interval (how often metadata should be refreshed).
+	//
+	// ⚠️ Caution: Since there is no prioritization implemented, if the node cannot
+	// sync all validator shares within the given sync interval, there is a high risk
+	// that some validators will not be refreshed for an unpredictable amount of time.
 	batchSize = 512
 )
 
