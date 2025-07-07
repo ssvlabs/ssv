@@ -4,11 +4,12 @@ import (
 	"math"
 	"time"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 const (
@@ -37,12 +38,6 @@ const (
 	// P4
 	invalidMessageDecayEpochs = time.Duration(100)
 	maxInvalidMessagesAllowed = 20
-)
-
-var (
-	// ErrLowValidatorsCount is returned in case the amount of validators is not sufficient
-	// for calculating score params
-	ErrLowValidatorsCount = errors.New("low validators count")
 )
 
 // NetworkOpts is the config struct for network configurations
@@ -163,7 +158,7 @@ func NewOpts(epochDuration time.Duration, activeValidators uint64, subnets int) 
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*storage.CommitteeSnapshot) *Options {
+func NewSubnetTopicOpts(netCfg networkconfig.NetworkConfig, activeValidators uint64, subnets int, committees []*registrystorage.CommitteeSnapshot) *Options {
 	// Create options with default values
 	opts := NewOpts(netCfg.EpochDuration(), activeValidators, subnets)
 	opts.defaults()

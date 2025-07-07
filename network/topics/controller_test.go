@@ -81,7 +81,7 @@ func TestTopicManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
 		dutyStore := dutystore.New()
-		validatorStore := mocks.NewMockValidatorIndices(ctrl)
+		validatorStore := mocks.NewMockValidatorStore(ctrl)
 		operators := mocks.NewMockOperators(ctrl)
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
@@ -408,7 +408,8 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
+	// FIXME: use real validatorstore
+	_, validatorStore, err := registrystorage.NewSharesStorage(db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}

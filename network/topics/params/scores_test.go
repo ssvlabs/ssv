@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestTopicScoreParams(t *testing.T) {
@@ -23,7 +24,7 @@ func TestTopicScoreParams(t *testing.T) {
 			"subnet topic 0 validators",
 			func() *Options {
 				validators := uint64(0)
-				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, []*storage.IndexedCommittee{})
+				opts := NewSubnetTopicOpts(networkconfig.TestNetwork, validators, 128, []*registrystorage.CommitteeSnapshot{})
 				return opts
 			},
 			nil,
