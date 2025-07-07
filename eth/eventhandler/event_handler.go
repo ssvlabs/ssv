@@ -9,6 +9,9 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/localevents"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.opentelemetry.io/otel/metric"
@@ -347,6 +350,86 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 
 	default:
 		eh.logger.Warn("unknown event name", fields.Name(abiEvent.Name))
+		return nil
+	}
+}
+
+func (eh *EventHandler) HandleLocalEvents(ctx context.Context, localEvents []localevents.Event) error {
+	txn := eh.nodeStorage.Begin()
+	defer txn.Discard()
+
+	for _, event := range localEvents {
+		if err := eh.processLocalEvent(ctx, txn, event); err != nil {
+			return fmt.Errorf("process local event: %w", err)
+		}
+	}
+
+	if err := txn.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (eh *EventHandler) processLocalEvent(ctx context.Context, txn basedb.Txn, event localevents.Event) error {
+	const triggerCallbacks = true // Local events always trigger callbacks
+
+	switch event.Name {
+	case OperatorAdded:
+		data := event.Data.(contract.ContractOperatorAdded)
+		if err := eh.handleOperatorAdded(txn, &data); err != nil {
+			return fmt.Errorf("handle OperatorAdded: %w", err)
+		}
+		return nil
+	case OperatorRemoved:
+		data := event.Data.(contract.ContractOperatorRemoved)
+		if err := eh.handleOperatorRemoved(txn, &data); err != nil {
+			return fmt.Errorf("handle OperatorRemoved: %w", err)
+		}
+		return nil
+	case ValidatorAdded:
+		data := event.Data.(contract.ContractValidatorAdded)
+		if _, err := eh.handleValidatorAdded(ctx, txn, &data, triggerCallbacks); err != nil {
+			return fmt.Errorf("handle ValidatorAdded: %w", err)
+		}
+		return nil
+	case ValidatorRemoved:
+		data := event.Data.(contract.ContractValidatorRemoved)
+		if _, err := eh.handleValidatorRemoved(ctx, txn, &data, triggerCallbacks); err != nil {
+			return fmt.Errorf("handle ValidatorRemoved: %w", err)
+		}
+
+		return nil
+	case ClusterLiquidated:
+		data := event.Data.(contract.ContractClusterLiquidated)
+		_, err := eh.handleClusterLiquidated(ctx, txn, &data, triggerCallbacks)
+		if err != nil {
+			return fmt.Errorf("handle ClusterLiquidated: %w", err)
+		}
+		return nil
+	case ClusterReactivated:
+		data := event.Data.(contract.ContractClusterReactivated)
+		_, err := eh.handleClusterReactivated(ctx, txn, &data, triggerCallbacks)
+		if err != nil {
+			return fmt.Errorf("handle ClusterReactivated: %w", err)
+		}
+		return nil
+	case FeeRecipientAddressUpdated:
+		data := event.Data.(contract.ContractFeeRecipientAddressUpdated)
+		_, err := eh.handleFeeRecipientAddressUpdated(ctx, txn, &data, triggerCallbacks)
+		if err != nil {
+			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
+		}
+		return nil
+	case ValidatorExited:
+		data := event.Data.(contract.ContractValidatorExited)
+		_, err := eh.handleValidatorExited(ctx, txn, &data, triggerCallbacks)
+		if err != nil {
+			return fmt.Errorf("handle ValidatorExited: %w", err)
+		}
+		return nil
+	default:
+		eh.logger.Warn("unknown local event name", fields.Name(event.Name))
 		return nil
 	}
 }
