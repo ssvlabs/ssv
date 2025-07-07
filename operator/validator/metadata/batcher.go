@@ -48,28 +48,38 @@ func (b *batcher) size() uint32 {
 }
 
 func (b *batcher) launch(ctx context.Context) {
-	b.logger.Info("launching batcher")
+	const evaluationInterval = time.Minute
+	b.logger.Info("launching batcher", zap.Duration("evaluation_interval", evaluationInterval))
+
+	b.updateBatchSize()
+
+	b.logger.Info("initial batch size was set", zap.Uint32("size", b.batchSize.Load()))
+
 	for {
 		select {
 		case <-ctx.Done():
 			b.logger.Debug("context is Done. Returning...")
 			return
-		case <-time.After(time.Minute * 15):
-			b.logger.Info("batch size evaluation started. Fetching total number of validators")
-			totalValidators := b.totalValidators()
-
-			b.logger.Info("total number of validators was fetched. Calculating the batch size", zap.Uint32("count", totalValidators))
-			ticks := int(b.refreshInterval / b.streamInterval)
-			if ticks == 0 {
-				ticks = 1
-			}
-
-			batchSize := uint32(math.Ceil(float64(totalValidators) / float64(ticks)))
-
-			b.logger.Info("new batch size was calculated.", zap.Uint32("size", batchSize))
-			b.batchSize.Store(batchSize)
+		case <-time.After(evaluationInterval):
+			b.updateBatchSize()
 		}
 	}
+}
+
+func (b *batcher) updateBatchSize() {
+	b.logger.Info("batch size evaluation started. Fetching total number of validators")
+	totalValidators := b.totalValidators()
+
+	b.logger.Info("total number of validators was fetched. Calculating the batch size", zap.Uint32("count", totalValidators))
+	ticks := int(b.refreshInterval / b.streamInterval)
+	if ticks == 0 {
+		ticks = 1
+	}
+
+	batchSize := uint32(math.Ceil(float64(totalValidators) / float64(ticks)))
+
+	b.logger.Info("new batch size was calculated.", zap.Uint32("size", batchSize))
+	b.batchSize.Store(batchSize)
 }
 
 func (b *batcher) totalValidators() uint32 {
