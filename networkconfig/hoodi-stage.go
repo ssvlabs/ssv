@@ -3,6 +3,7 @@ package networkconfig
 import (
 	"math/big"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -22,6 +23,6 @@ var HoodiStage = NetworkConfig{
 			// SSV Labs
 			"enr:-Ja4QJZcaYfS0GpX-5xREVBa26a-E-QHMFek-EndsJdgM6loIM7pfbJwPDCNK1VzPkUhMjwcTTuNASiHU6X-sjsrxFmGAZWjNu06gmlkgnY0gmlwhErcGnyJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 		},
-		GasLimit36Epoch: 0,
+		GasLimit36Epoch: phase0.Epoch(25228), // Test - Yoaz
 	},
 }
