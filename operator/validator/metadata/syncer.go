@@ -298,7 +298,7 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int, batchSi
 			staleShares = append(staleShares, share)
 		}
 
-		return len(newShares) < int(batchSize)
+		return len(newShares)+len(staleShares) < int(batchSize)
 	})
 
 	// Combine validators up to batchSize, prioritizing the new ones.
