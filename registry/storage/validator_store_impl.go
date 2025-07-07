@@ -115,10 +115,10 @@ func (s *validatorStoreImpl) RegisterLifecycleCallbacks(callbacks ValidatorLifec
 // OnShareAdded handles the addition of a new validator share to the store.
 // It validates operators exist, creates an immutable copy of the share, updates internal state
 // including validator maps, indices, and committee memberships, and persists to storage.
-// If registered, OnValidatorAdded and OnValidatorStarted (if applicable) callbacks
+// If registered and opts.TriggerCallbacks is true, OnValidatorAdded and OnValidatorStarted (if applicable) callbacks
 // are triggered asynchronously.
 // Returns an error if the share is nil, operators don't exist, or if the validator already exists.
-func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVShare) error {
+func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVShare, opts UpdateOptions) error {
 	if share == nil {
 		return fmt.Errorf("nil share")
 	}
@@ -174,25 +174,27 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 		return fmt.Errorf("persist share: %w", err)
 	}
 
-	// Create snapshot for callbacks
-	snapshot := s.createSnapshot(state)
+	if opts.TriggerCallbacks {
+		// Create snapshot for callbacks
+		snapshot := s.createSnapshot(state)
 
-	// Call lifecycle callback
-	if s.callbacks.OnValidatorAdded != nil {
-		go func() {
-			if err := s.callbacks.OnValidatorAdded(ctx, snapshot); err != nil {
-				s.logger.Error("validator added callback failed", zap.Error(err))
-			}
-		}()
-	}
+		// Call lifecycle callback
+		if s.callbacks.OnValidatorAdded != nil {
+			go func() {
+				if err := s.callbacks.OnValidatorAdded(ctx, snapshot); err != nil {
+					s.logger.Error("validator added callback failed", zap.Error(err))
+				}
+			}()
+		}
 
-	// Check if should start
-	if s.shouldStart(state) && s.callbacks.OnValidatorStarted != nil {
-		go func() {
-			if err := s.callbacks.OnValidatorStarted(ctx, snapshot); err != nil {
-				s.logger.Error("validator started callback failed", zap.Error(err))
-			}
-		}()
+		// Check if should start
+		if s.shouldStart(state) && s.callbacks.OnValidatorStarted != nil {
+			go func() {
+				if err := s.callbacks.OnValidatorStarted(ctx, snapshot); err != nil {
+					s.logger.Error("validator started callback failed", zap.Error(err))
+				}
+			}()
+		}
 	}
 
 	return nil
@@ -201,10 +203,10 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 // OnShareUpdated handles updates to an existing validator share.
 // It updates the validator's state, including its participation status and beacon metadata,
 // and persists changes to storage.
-// Relevant lifecycle callbacks (OnValidatorUpdated, OnValidatorStarted, or OnValidatorStopped)
+// If opts.TriggerCallbacks is true, relevant lifecycle callbacks (OnValidatorUpdated, OnValidatorStarted, or OnValidatorStopped)
 // are triggered based on the change in participation status.
 // Returns an error if the share is nil or if the validator is not found.
-func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SSVShare) error {
+func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SSVShare, opts UpdateOptions) error {
 	if share == nil {
 		return fmt.Errorf("nil share")
 	}
@@ -240,32 +242,34 @@ func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SS
 		return fmt.Errorf("persist share: %w", err)
 	}
 
-	// Capture new participation state after update
-	isParticipating := s.shouldStart(state)
-	newSnapshot := s.createSnapshot(state)
+	if opts.TriggerCallbacks {
+		// Capture new participation state after update
+		isParticipating := s.shouldStart(state)
+		newSnapshot := s.createSnapshot(state)
 
-	// Always trigger update callback
-	if s.callbacks.OnValidatorUpdated != nil {
-		go func() {
-			if err := s.callbacks.OnValidatorUpdated(ctx, newSnapshot); err != nil {
-				s.logger.Error("validator updated callback failed", zap.Error(err))
-			}
-		}()
-	}
+		// Always trigger update callback
+		if s.callbacks.OnValidatorUpdated != nil {
+			go func() {
+				if err := s.callbacks.OnValidatorUpdated(ctx, newSnapshot); err != nil {
+					s.logger.Error("validator updated callback failed", zap.Error(err))
+				}
+			}()
+		}
 
-	// Handle participation state changes
-	if !wasParticipating && isParticipating && s.callbacks.OnValidatorStarted != nil {
-		go func() {
-			if err := s.callbacks.OnValidatorStarted(ctx, newSnapshot); err != nil {
-				s.logger.Error("validator started callback failed", zap.Error(err))
-			}
-		}()
-	} else if wasParticipating && !isParticipating && s.callbacks.OnValidatorStopped != nil {
-		go func() {
-			if err := s.callbacks.OnValidatorStopped(ctx, share.ValidatorPubKey); err != nil {
-				s.logger.Error("validator stopped callback failed", zap.Error(err))
-			}
-		}()
+		// Handle participation state changes
+		if !wasParticipating && isParticipating && s.callbacks.OnValidatorStarted != nil {
+			go func() {
+				if err := s.callbacks.OnValidatorStarted(ctx, newSnapshot); err != nil {
+					s.logger.Error("validator started callback failed", zap.Error(err))
+				}
+			}()
+		} else if wasParticipating && !isParticipating && s.callbacks.OnValidatorStopped != nil {
+			go func() {
+				if err := s.callbacks.OnValidatorStopped(ctx, share.ValidatorPubKey); err != nil {
+					s.logger.Error("validator stopped callback failed", zap.Error(err))
+				}
+			}()
+		}
 	}
 
 	return nil
@@ -274,10 +278,10 @@ func (s *validatorStoreImpl) OnShareUpdated(ctx context.Context, share *types.SS
 // OnShareRemoved handles the removal of a validator share from the store.
 // It cleans up the validator's state from internal maps, indices, and committees,
 // and removes it from storage.
-// If registered, OnValidatorRemoved and OnValidatorStopped (if the validator was active)
+// If registered and opts.TriggerCallbacks is true, OnValidatorRemoved and OnValidatorStopped (if the validator was active)
 // callbacks are triggered asynchronously.
 // Returns an error if the validator is not found.
-func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectypes.ValidatorPK) error {
+func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectypes.ValidatorPK, opts UpdateOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -312,22 +316,24 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 			zap.Error(err))
 	}
 
-	// Call callbacks
-	if s.callbacks.OnValidatorRemoved != nil {
-		go func() {
-			if err := s.callbacks.OnValidatorRemoved(ctx, pubKey); err != nil {
-				s.logger.Error("validator removed callback failed", zap.Error(err))
-			}
-		}()
-	}
+	if opts.TriggerCallbacks {
+		// Call callbacks
+		if s.callbacks.OnValidatorRemoved != nil {
+			go func() {
+				if err := s.callbacks.OnValidatorRemoved(ctx, pubKey); err != nil {
+					s.logger.Error("validator removed callback failed", zap.Error(err))
+				}
+			}()
+		}
 
-	// If was participating, also call stop callback
-	if wasParticipating && s.callbacks.OnValidatorStopped != nil {
-		go func() {
-			if err := s.callbacks.OnValidatorStopped(ctx, pubKey); err != nil {
-				s.logger.Error("validator stopped callback failed", zap.Error(err))
-			}
-		}()
+		// If was participating, also call stop callback
+		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
+			go func() {
+				if err := s.callbacks.OnValidatorStopped(ctx, pubKey); err != nil {
+					s.logger.Error("validator stopped callback failed", zap.Error(err))
+				}
+			}()
+		}
 	}
 
 	return nil
@@ -336,8 +342,8 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 // OnClusterLiquidated handles the event of a cluster being liquidated.
 // It identifies all validators belonging to the specified cluster (by owner and operator IDs),
 // marks them as liquidated, updates their participation status, persists changes to storage,
-// and triggers relevant OnValidatorStopped and OnValidatorUpdated callbacks.
-func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
+// and if opts.TriggerCallbacks is true, triggers relevant OnValidatorStopped and OnValidatorUpdated callbacks.
+func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64, opts UpdateOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -369,27 +375,29 @@ func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner comm
 
 		affectedShares = append(affectedShares, state.share)
 
-		pubKey := state.share.ValidatorPubKey
+		if opts.TriggerCallbacks {
+			pubKey := state.share.ValidatorPubKey
 
-		// Trigger stop callback if was participating
-		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
-			go func(pk spectypes.ValidatorPK) {
-				if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
-					s.logger.Error("validator stopped callback failed",
-						zap.String("pubkey", hex.EncodeToString(pk[:])),
-						zap.Error(err))
-				}
-			}(pubKey)
-		}
+			// Trigger stop callback if was participating
+			if wasParticipating && s.callbacks.OnValidatorStopped != nil {
+				go func(pk spectypes.ValidatorPK) {
+					if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
+						s.logger.Error("validator stopped callback failed",
+							zap.String("pubkey", hex.EncodeToString(pk[:])),
+							zap.Error(err))
+					}
+				}(pubKey)
+			}
 
-		// Trigger updated callback
-		if s.callbacks.OnValidatorUpdated != nil {
-			snapshot := s.createSnapshot(state)
-			go func(snap *ValidatorSnapshot) {
-				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
-					s.logger.Error("validator updated callback failed", zap.Error(err))
-				}
-			}(snapshot)
+			// Trigger updated callback
+			if s.callbacks.OnValidatorUpdated != nil {
+				snapshot := s.createSnapshot(state)
+				go func(snap *ValidatorSnapshot) {
+					if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
+						s.logger.Error("validator updated callback failed", zap.Error(err))
+					}
+				}(snapshot)
+			}
 		}
 	}
 
@@ -408,9 +416,9 @@ func (s *validatorStoreImpl) OnClusterLiquidated(ctx context.Context, owner comm
 
 // OnClusterReactivated handles the event of a cluster being reactivated.
 // It identifies all validators belonging to the specified cluster, unmarks them
-// as liquidated, updates their participation status, and triggers relevant
-// OnValidatorStarted and OnValidatorUpdated callbacks.
-func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
+// as liquidated, updates their participation status, and if opts.TriggerCallbacks is true,
+// triggers relevant OnValidatorStarted and OnValidatorUpdated callbacks.
+func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64, opts UpdateOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -439,26 +447,28 @@ func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner com
 		state.lastUpdated = time.Now()
 		state.participationStatus = s.calculateParticipationStatus(state.share)
 
-		isParticipating := s.shouldStart(state)
+		if opts.TriggerCallbacks {
+			isParticipating := s.shouldStart(state)
 
-		// Trigger start callback if now participating
-		if !wasParticipating && isParticipating && s.callbacks.OnValidatorStarted != nil {
-			snapshot := s.createSnapshot(state)
-			go func(snap *ValidatorSnapshot) {
-				if err := s.callbacks.OnValidatorStarted(ctx, snap); err != nil {
-					s.logger.Error("validator started callback failed", zap.Error(err))
-				}
-			}(snapshot)
-		}
+			// Trigger start callback if now participating
+			if !wasParticipating && isParticipating && s.callbacks.OnValidatorStarted != nil {
+				snapshot := s.createSnapshot(state)
+				go func(snap *ValidatorSnapshot) {
+					if err := s.callbacks.OnValidatorStarted(ctx, snap); err != nil {
+						s.logger.Error("validator started callback failed", zap.Error(err))
+					}
+				}(snapshot)
+			}
 
-		// Trigger updated callback
-		if s.callbacks.OnValidatorUpdated != nil {
-			snapshot := s.createSnapshot(state)
-			go func(snap *ValidatorSnapshot) {
-				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
-					s.logger.Error("validator updated callback failed", zap.Error(err))
-				}
-			}(snapshot)
+			// Trigger updated callback
+			if s.callbacks.OnValidatorUpdated != nil {
+				snapshot := s.createSnapshot(state)
+				go func(snap *ValidatorSnapshot) {
+					if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
+						s.logger.Error("validator updated callback failed", zap.Error(err))
+					}
+				}(snapshot)
+			}
 		}
 	}
 
@@ -472,8 +482,8 @@ func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner com
 
 // OnOperatorRemoved handles the removal of an operator from the system.
 // It identifies all validators associated with the removed operator, removes them
-// from the store, and triggers OnValidatorRemoved and OnValidatorStopped callbacks.
-func (s *validatorStoreImpl) OnOperatorRemoved(ctx context.Context, operatorID spectypes.OperatorID) error {
+// from the store, and if opts.TriggerCallbacks is true, triggers OnValidatorRemoved and OnValidatorStopped callbacks.
+func (s *validatorStoreImpl) OnOperatorRemoved(ctx context.Context, operatorID spectypes.OperatorID, opts UpdateOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -516,26 +526,28 @@ func (s *validatorStoreImpl) OnOperatorRemoved(ctx context.Context, operatorID s
 		// Remove from validators map
 		delete(s.validators, key)
 
-		// Trigger callbacks
-		if s.callbacks.OnValidatorRemoved != nil {
-			go func(pk spectypes.ValidatorPK) {
-				if err := s.callbacks.OnValidatorRemoved(ctx, pk); err != nil {
-					s.logger.Error("validator removed callback failed",
-						zap.String("pubkey", hex.EncodeToString(pk[:])),
-						zap.Error(err))
-				}
-			}(pubKey)
-		}
+		if opts.TriggerCallbacks {
+			// Trigger callbacks
+			if s.callbacks.OnValidatorRemoved != nil {
+				go func(pk spectypes.ValidatorPK) {
+					if err := s.callbacks.OnValidatorRemoved(ctx, pk); err != nil {
+						s.logger.Error("validator removed callback failed",
+							zap.String("pubkey", hex.EncodeToString(pk[:])),
+							zap.Error(err))
+					}
+				}(pubKey)
+			}
 
-		// If was participating, also call stop callback
-		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
-			go func(pk spectypes.ValidatorPK) {
-				if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
-					s.logger.Error("validator stopped callback failed",
-						zap.String("pubkey", hex.EncodeToString(pk[:])),
-						zap.Error(err))
-				}
-			}(pubKey)
+			// If was participating, also call stop callback
+			if wasParticipating && s.callbacks.OnValidatorStopped != nil {
+				go func(pk spectypes.ValidatorPK) {
+					if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
+						s.logger.Error("validator stopped callback failed",
+							zap.String("pubkey", hex.EncodeToString(pk[:])),
+							zap.Error(err))
+					}
+				}(pubKey)
+			}
 		}
 	}
 
@@ -547,7 +559,8 @@ func (s *validatorStoreImpl) OnOperatorRemoved(ctx context.Context, operatorID s
 }
 
 // OnFeeRecipientUpdated handles updates to a validator's fee recipient.
-func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner common.Address, recipient common.Address) error {
+// If opts.TriggerCallbacks is true, it triggers OnValidatorUpdated callbacks.
+func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner common.Address, recipient common.Address, opts UpdateOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -569,14 +582,16 @@ func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner co
 		state.share.SetFeeRecipient(bellatrix.ExecutionAddress(recipient))
 		state.lastUpdated = time.Now()
 
-		// Trigger updated callback
-		if s.callbacks.OnValidatorUpdated != nil {
-			snapshot := s.createSnapshot(state)
-			go func(snap *ValidatorSnapshot) {
-				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
-					s.logger.Error("validator updated callback failed", zap.Error(err))
-				}
-			}(snapshot)
+		if opts.TriggerCallbacks {
+			// Trigger updated callback
+			if s.callbacks.OnValidatorUpdated != nil {
+				snapshot := s.createSnapshot(state)
+				go func(snap *ValidatorSnapshot) {
+					if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
+						s.logger.Error("validator updated callback failed", zap.Error(err))
+					}
+				}(snapshot)
+			}
 		}
 	}
 
@@ -589,8 +604,9 @@ func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner co
 }
 
 // OnValidatorExited handles the event of a validator initiating a voluntary exit.
+// If opts.TriggerCallbacks is true, it triggers OnValidatorExited callbacks.
 // TODO: rethink it
-func (s *validatorStoreImpl) OnValidatorExited(ctx context.Context, pubKey spectypes.ValidatorPK, blockNumber uint64) error {
+func (s *validatorStoreImpl) OnValidatorExited(ctx context.Context, pubKey spectypes.ValidatorPK, blockNumber uint64, opts UpdateOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -600,19 +616,21 @@ func (s *validatorStoreImpl) OnValidatorExited(ctx context.Context, pubKey spect
 		return fmt.Errorf("validator not found: %s", key)
 	}
 
-	// Trigger validator exited callback if exists
-	if s.callbacks.OnValidatorExited != nil {
-		exitDescriptor := ExitDescriptor{
-			PubKey:         phase0.BLSPubKey(pubKey),
-			ValidatorIndex: state.share.ValidatorIndex,
-			BlockNumber:    blockNumber,
-			OwnValidator:   state.share.BelongsToOperator(s.operatorIDFn()),
-		}
-		go func(desc ExitDescriptor) {
-			if err := s.callbacks.OnValidatorExited(ctx, desc); err != nil {
-				s.logger.Error("validator exited callback failed", zap.Error(err))
+	if opts.TriggerCallbacks {
+		// Trigger validator exited callback if exists
+		if s.callbacks.OnValidatorExited != nil {
+			exitDescriptor := ExitDescriptor{
+				PubKey:         phase0.BLSPubKey(pubKey),
+				ValidatorIndex: state.share.ValidatorIndex,
+				BlockNumber:    blockNumber,
+				OwnValidator:   state.share.BelongsToOperator(s.operatorIDFn()),
 			}
-		}(exitDescriptor)
+			go func(desc ExitDescriptor) {
+				if err := s.callbacks.OnValidatorExited(ctx, desc); err != nil {
+					s.logger.Error("validator exited callback failed", zap.Error(err))
+				}
+			}(exitDescriptor)
+		}
 	}
 
 	s.logger.Info("validator exit initiated",

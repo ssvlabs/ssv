@@ -14,17 +14,22 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/validator_store.go -source=./validator_store.go
 
+// UpdateOptions controls behavior of state updates.
+type UpdateOptions struct {
+	TriggerCallbacks bool
+}
+
 // ValidatorStore is the authoritative source for all validator state management.
 // It handles all state transitions and provides thread-safe access to validator data.
 type ValidatorStore interface {
-	OnShareAdded(ctx context.Context, share *types.SSVShare) error
-	OnShareUpdated(ctx context.Context, share *types.SSVShare) error
-	OnShareRemoved(ctx context.Context, pubKey spectypes.ValidatorPK) error
-	OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error
-	OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64) error
-	OnFeeRecipientUpdated(ctx context.Context, owner common.Address, recipient common.Address) error
-	OnValidatorExited(ctx context.Context, pubKey spectypes.ValidatorPK, blockNumber uint64) error
-	OnOperatorRemoved(ctx context.Context, operatorID spectypes.OperatorID) error
+	OnShareAdded(ctx context.Context, share *types.SSVShare, opts UpdateOptions) error
+	OnShareUpdated(ctx context.Context, share *types.SSVShare, opts UpdateOptions) error
+	OnShareRemoved(ctx context.Context, pubKey spectypes.ValidatorPK, opts UpdateOptions) error
+	OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64, opts UpdateOptions) error
+	OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64, opts UpdateOptions) error
+	OnFeeRecipientUpdated(ctx context.Context, owner common.Address, recipient common.Address, opts UpdateOptions) error
+	OnValidatorExited(ctx context.Context, pubKey spectypes.ValidatorPK, blockNumber uint64, opts UpdateOptions) error
+	OnOperatorRemoved(ctx context.Context, operatorID spectypes.OperatorID, opts UpdateOptions) error
 
 	RegisterLifecycleCallbacks(callbacks ValidatorLifecycleCallbacks)
 

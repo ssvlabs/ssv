@@ -1158,7 +1158,10 @@ func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 
 	// ValidatorStore will handle the removal and trigger OnValidatorStopped callback
 	// which will call onShareStop asynchronously
-	err := c.validatorStore.OnShareRemoved(c.ctx, pubKey)
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	err := c.validatorStore.OnShareRemoved(c.ctx, pubKey, opts)
 	if err != nil {
 		logger.Error("failed to remove validator", zap.Error(err))
 		return err
@@ -1176,7 +1179,10 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []uint64
 		fields.OperatorIDs(operatorIDs))
 
 	// ValidatorStore will handle the liquidation and trigger callbacks
-	err := c.validatorStore.OnClusterLiquidated(c.ctx, owner, operatorIDs)
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	err := c.validatorStore.OnClusterLiquidated(c.ctx, owner, operatorIDs, opts)
 	if err != nil {
 		logger.Error("failed to liquidate cluster", zap.Error(err))
 		return err
@@ -1193,7 +1199,10 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 		fields.OperatorIDs(operatorIDs))
 
 	// ValidatorStore will handle the reactivation and trigger callbacks
-	err := c.validatorStore.OnClusterReactivated(c.ctx, owner, operatorIDs)
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	err := c.validatorStore.OnClusterReactivated(c.ctx, owner, operatorIDs, opts)
 	if err != nil {
 		logger.Error("failed to reactivate cluster", zap.Error(err))
 		return err
@@ -1210,7 +1219,10 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("fee_recipient", recipient.String()))
 
 	// ValidatorStore will handle the update and trigger OnValidatorUpdated callbacks
-	err := c.validatorStore.OnFeeRecipientUpdated(c.ctx, owner, recipient)
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	err := c.validatorStore.OnFeeRecipientUpdated(c.ctx, owner, recipient, opts)
 	if err != nil {
 		logger.Error("failed to update fee recipient", zap.Error(err))
 		return err
@@ -1232,7 +1244,10 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 	var pk spectypes.ValidatorPK
 	copy(pk[:], pubKey[:])
 
-	err := c.validatorStore.OnValidatorExited(c.ctx, pk, blockNumber)
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	err := c.validatorStore.OnValidatorExited(c.ctx, pk, blockNumber, opts)
 	if err != nil {
 		logger.Error("failed to process validator exit", zap.Error(err))
 		return err

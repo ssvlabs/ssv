@@ -132,6 +132,7 @@ func (eh *EventHandler) handleValidatorAdded(
 	ctx context.Context,
 	txn basedb.Txn,
 	event *contract.ContractValidatorAdded,
+	triggerCallbacks bool,
 ) (ownShare *ssvtypes.SSVShare, err error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorAdded),
@@ -216,9 +217,13 @@ func (eh *EventHandler) handleValidatorAdded(
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: triggerCallbacks,
+	}
+
 	// Notify ValidatorStore about the new share
 	// TODO: rename this method, maybe create a new struct with observer pattern
-	if err := eh.validatorStore.OnShareAdded(ctx, validatorShare); err != nil {
+	if err := eh.validatorStore.OnShareAdded(ctx, validatorShare, opts); err != nil {
 		return nil, fmt.Errorf("notify validator store of share addition: %w", err)
 	}
 
@@ -333,7 +338,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 var emptyPK = [48]byte{}
 
-func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
+func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorRemoved, triggerCallbacks bool) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
@@ -384,8 +389,8 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 		return share.ValidatorPubKey, nil
 	}
 
-	// Notify ValidatorStore - it will handle stopping the validator
-	if err := eh.validatorStore.OnShareRemoved(ctx, share.ValidatorPubKey); err != nil {
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnShareRemoved(ctx, share.ValidatorPubKey, opts); err != nil {
 		return emptyPK, fmt.Errorf("notify validator store of share removal: %w", err)
 	}
 
@@ -393,7 +398,7 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 	return emptyPK, nil
 }
 
-func (eh *EventHandler) handleClusterLiquidated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
+func (eh *EventHandler) handleClusterLiquidated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterLiquidated, triggerCallbacks bool) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
 		fields.EventName(ClusterLiquidated),
 		fields.TxHash(event.Raw.TxHash),
@@ -417,7 +422,8 @@ func (eh *EventHandler) handleClusterLiquidated(ctx context.Context, txn basedb.
 	}
 
 	// Notify ValidatorStore about cluster liquidation
-	if err := eh.validatorStore.OnClusterLiquidated(ctx, event.Owner, event.OperatorIds); err != nil {
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnClusterLiquidated(ctx, event.Owner, event.OperatorIds, opts); err != nil {
 		return nil, fmt.Errorf("notify validator store of cluster liquidation: %w", err)
 	}
 
@@ -425,7 +431,7 @@ func (eh *EventHandler) handleClusterLiquidated(ctx context.Context, txn basedb.
 	return toLiquidate, nil
 }
 
-func (eh *EventHandler) handleClusterReactivated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
+func (eh *EventHandler) handleClusterReactivated(ctx context.Context, txn basedb.Txn, event *contract.ContractClusterReactivated, triggerCallbacks bool) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
 		fields.EventName(ClusterReactivated),
 		fields.TxHash(event.Raw.TxHash),
@@ -457,7 +463,8 @@ func (eh *EventHandler) handleClusterReactivated(ctx context.Context, txn basedb
 	}
 
 	// Notify ValidatorStore about cluster reactivation
-	if err := eh.validatorStore.OnClusterReactivated(ctx, event.Owner, event.OperatorIds); err != nil {
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnClusterReactivated(ctx, event.Owner, event.OperatorIds, opts); err != nil {
 		return nil, fmt.Errorf("notify validator store of cluster reactivation: %w", err)
 	}
 
@@ -465,7 +472,7 @@ func (eh *EventHandler) handleClusterReactivated(ctx context.Context, txn basedb
 	return toReactivate, nil
 }
 
-func (eh *EventHandler) handleFeeRecipientAddressUpdated(ctx context.Context, txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
+func (eh *EventHandler) handleFeeRecipientAddressUpdated(ctx context.Context, txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated, triggerCallbacks bool) (bool, error) {
 	logger := eh.logger.With(
 		fields.EventName(FeeRecipientAddressUpdated),
 		fields.TxHash(event.Raw.TxHash),
@@ -493,7 +500,8 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(ctx context.Context, tx
 	}
 
 	// Notify ValidatorStore about fee recipient update
-	if err := eh.validatorStore.OnFeeRecipientUpdated(ctx, event.Owner, event.RecipientAddress); err != nil {
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnFeeRecipientUpdated(ctx, event.Owner, event.RecipientAddress, opts); err != nil {
 		return false, fmt.Errorf("notify validator store of fee recipient update: %w", err)
 	}
 
@@ -501,7 +509,7 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(ctx context.Context, tx
 	return r != nil, nil
 }
 
-func (eh *EventHandler) handleValidatorExited(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorExited) (*registrystorage.ExitDescriptor, error) {
+func (eh *EventHandler) handleValidatorExited(ctx context.Context, txn basedb.Txn, event *contract.ContractValidatorExited, triggerCallbacks bool) (*registrystorage.ExitDescriptor, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorExited),
 		fields.TxHash(event.Raw.TxHash),
@@ -543,7 +551,8 @@ func (eh *EventHandler) handleValidatorExited(ctx context.Context, txn basedb.Tx
 	}
 
 	// Notify ValidatorStore about validator exit
-	if err := eh.validatorStore.OnValidatorExited(ctx, share.ValidatorPubKey, event.Raw.BlockNumber); err != nil {
+	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
+	if err := eh.validatorStore.OnValidatorExited(ctx, share.ValidatorPubKey, event.Raw.BlockNumber, opts); err != nil {
 		return nil, fmt.Errorf("notify validator store of validator exit: %w", err)
 	}
 
