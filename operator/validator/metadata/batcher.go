@@ -90,7 +90,7 @@ func (b *batcher) updateBatchSize() {
 func (b *batcher) totalValidators() uint32 {
 	totalSubnets := b.totalSubnets()
 
-	b.logger.Info("own subnets fetched", zap.Any("subnets", totalSubnets))
+	b.logger.Info("own subnets fetched", zap.Any("subnets", totalSubnets.SubnetList()))
 
 	nonLiquidatedShares := big.NewInt(0)
 	totalValidators := b.shareStorage.List(nil, storage.ByNotLiquidated(), func(share *types.SSVShare) bool {

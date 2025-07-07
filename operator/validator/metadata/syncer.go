@@ -75,7 +75,7 @@ func NewSyncer(
 		opt(u)
 	}
 
-	u.batcher = newBatcher(shareStorage, validatorStore, fixedSubnets, u.syncInterval, u.streamInterval, logger.Named(logging.NameShareMetadataBatcher))
+	u.batcher = newBatcher(shareStorage, validatorStore, fixedSubnets, u.syncInterval, u.streamInterval, logger)
 
 	return u
 }
@@ -150,7 +150,6 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 		fields.Took(time.Since(updateStart)),
 		zap.Int("received_count", len(metadata)),
 		zap.Int("updated_count", len(updatedValidators)),
-		zap.Any("pub_keys", pubKeys),
 	)
 
 	return updatedValidators, nil
@@ -276,7 +275,7 @@ func (s *Syncer) nextBatchFromDB(_ context.Context, subnetsBuf *big.Int, batchSi
 	// TODO: use context, return if it's done
 	ownSubnets := s.selfSubnets(subnetsBuf)
 
-	s.logger.Info("own subnets fetched", zap.Any("subnets", ownSubnets))
+	s.logger.Info("own subnets fetched", zap.Any("subnets", ownSubnets.SubnetList()))
 
 	var staleShares, newShares []*ssvtypes.SSVShare
 	s.shareStorage.Range(nil, func(share *ssvtypes.SSVShare) bool {
