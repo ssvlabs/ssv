@@ -1010,13 +1010,12 @@ func syncContractEvents(
 	eventHandler, err := eventhandler.New(
 		nodeStorage,
 		eventParser,
-		validatorCtrl,
 		networkConfig,
+		validatorStore,
 		operatorDataStore,
 		operatorDecrypter,
 		keyManager,
 		doppelgangerHandler,
-		validatorStore,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)

@@ -1386,11 +1386,11 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			nodeStorage,
 			parser,
 			network,
+			validatorCtrl,
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
 			dgHandler,
-			validatorCtrl,
 			WithFullNode(),
 			WithLogger(logger),
 		)

@@ -69,11 +69,11 @@ func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
 	networkConfig networkconfig.Network,
+	validatorStore registrystorage.ValidatorStore,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager ekm.KeyManager,
 	doppelgangerHandler DoppelgangerProvider,
-	validatorStore registrystorage.ValidatorStore,
 	opts ...Option,
 ) (*EventHandler, error) {
 	eh := &EventHandler{

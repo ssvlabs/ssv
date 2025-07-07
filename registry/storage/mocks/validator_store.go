@@ -188,146 +188,116 @@ func (mr *MockValidatorStoreMockRecorder) GetValidator(id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockValidatorStore)(nil).GetValidator), id)
 }
 
-// IsCommitteeParticipating mocks base method.
-func (m *MockValidatorStore) IsCommitteeParticipating(committeeID types.CommitteeID, epoch phase0.Epoch, opts storage.ParticipationOptions) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsCommitteeParticipating", committeeID, epoch, opts)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsCommitteeParticipating indicates an expected call of IsCommitteeParticipating.
-func (mr *MockValidatorStoreMockRecorder) IsCommitteeParticipating(committeeID, epoch, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsCommitteeParticipating", reflect.TypeOf((*MockValidatorStore)(nil).IsCommitteeParticipating), committeeID, epoch, opts)
-}
-
-// IsParticipating mocks base method.
-func (m *MockValidatorStore) IsParticipating(id storage.ValidatorID, epoch phase0.Epoch, opts storage.ParticipationOptions) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsParticipating", id, epoch, opts)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// IsParticipating indicates an expected call of IsParticipating.
-func (mr *MockValidatorStoreMockRecorder) IsParticipating(id, epoch, opts any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsParticipating", reflect.TypeOf((*MockValidatorStore)(nil).IsParticipating), id, epoch, opts)
-}
-
 // OnClusterLiquidated mocks base method.
-func (m *MockValidatorStore) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
+func (m *MockValidatorStore) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64, triggerCallbacks bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnClusterLiquidated", ctx, owner, operatorIDs)
+	ret := m.ctrl.Call(m, "OnClusterLiquidated", ctx, owner, operatorIDs, triggerCallbacks)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnClusterLiquidated indicates an expected call of OnClusterLiquidated.
-func (mr *MockValidatorStoreMockRecorder) OnClusterLiquidated(ctx, owner, operatorIDs any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) OnClusterLiquidated(ctx, owner, operatorIDs, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnClusterLiquidated", reflect.TypeOf((*MockValidatorStore)(nil).OnClusterLiquidated), ctx, owner, operatorIDs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnClusterLiquidated", reflect.TypeOf((*MockValidatorStore)(nil).OnClusterLiquidated), ctx, owner, operatorIDs, triggerCallbacks)
 }
 
 // OnClusterReactivated mocks base method.
-func (m *MockValidatorStore) OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64) error {
+func (m *MockValidatorStore) OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64, triggerCallbacks bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnClusterReactivated", ctx, owner, operatorIDs)
+	ret := m.ctrl.Call(m, "OnClusterReactivated", ctx, owner, operatorIDs, triggerCallbacks)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnClusterReactivated indicates an expected call of OnClusterReactivated.
-func (mr *MockValidatorStoreMockRecorder) OnClusterReactivated(ctx, owner, operatorIDs any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) OnClusterReactivated(ctx, owner, operatorIDs, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnClusterReactivated", reflect.TypeOf((*MockValidatorStore)(nil).OnClusterReactivated), ctx, owner, operatorIDs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnClusterReactivated", reflect.TypeOf((*MockValidatorStore)(nil).OnClusterReactivated), ctx, owner, operatorIDs, triggerCallbacks)
 }
 
 // OnFeeRecipientUpdated mocks base method.
-func (m *MockValidatorStore) OnFeeRecipientUpdated(ctx context.Context, owner, recipient common.Address) error {
+func (m *MockValidatorStore) OnFeeRecipientUpdated(ctx context.Context, owner, recipient common.Address, triggerCallbacks bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnFeeRecipientUpdated", ctx, owner, recipient)
+	ret := m.ctrl.Call(m, "OnFeeRecipientUpdated", ctx, owner, recipient, triggerCallbacks)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnFeeRecipientUpdated indicates an expected call of OnFeeRecipientUpdated.
-func (mr *MockValidatorStoreMockRecorder) OnFeeRecipientUpdated(ctx, owner, recipient any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) OnFeeRecipientUpdated(ctx, owner, recipient, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnFeeRecipientUpdated", reflect.TypeOf((*MockValidatorStore)(nil).OnFeeRecipientUpdated), ctx, owner, recipient)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnFeeRecipientUpdated", reflect.TypeOf((*MockValidatorStore)(nil).OnFeeRecipientUpdated), ctx, owner, recipient, triggerCallbacks)
 }
 
 // OnOperatorRemoved mocks base method.
-func (m *MockValidatorStore) OnOperatorRemoved(ctx context.Context, operatorID types.OperatorID) error {
+func (m *MockValidatorStore) OnOperatorRemoved(ctx context.Context, operatorID types.OperatorID, triggerCallbacks bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnOperatorRemoved", ctx, operatorID)
+	ret := m.ctrl.Call(m, "OnOperatorRemoved", ctx, operatorID, triggerCallbacks)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnOperatorRemoved indicates an expected call of OnOperatorRemoved.
-func (mr *MockValidatorStoreMockRecorder) OnOperatorRemoved(ctx, operatorID any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) OnOperatorRemoved(ctx, operatorID, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnOperatorRemoved", reflect.TypeOf((*MockValidatorStore)(nil).OnOperatorRemoved), ctx, operatorID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnOperatorRemoved", reflect.TypeOf((*MockValidatorStore)(nil).OnOperatorRemoved), ctx, operatorID, triggerCallbacks)
 }
 
 // OnShareAdded mocks base method.
-func (m *MockValidatorStore) OnShareAdded(ctx context.Context, share *types0.SSVShare) error {
+func (m *MockValidatorStore) OnShareAdded(ctx context.Context, share *types0.SSVShare, triggerCallbacks bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnShareAdded", ctx, share)
+	ret := m.ctrl.Call(m, "OnShareAdded", ctx, share, triggerCallbacks)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnShareAdded indicates an expected call of OnShareAdded.
-func (mr *MockValidatorStoreMockRecorder) OnShareAdded(ctx, share any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) OnShareAdded(ctx, share, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareAdded", reflect.TypeOf((*MockValidatorStore)(nil).OnShareAdded), ctx, share)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareAdded", reflect.TypeOf((*MockValidatorStore)(nil).OnShareAdded), ctx, share, triggerCallbacks)
 }
 
 // OnShareRemoved mocks base method.
-func (m *MockValidatorStore) OnShareRemoved(ctx context.Context, pubKey types.ValidatorPK) error {
+func (m *MockValidatorStore) OnShareRemoved(ctx context.Context, pubKey types.ValidatorPK, triggerCallbacks bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnShareRemoved", ctx, pubKey)
+	ret := m.ctrl.Call(m, "OnShareRemoved", ctx, pubKey, triggerCallbacks)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnShareRemoved indicates an expected call of OnShareRemoved.
-func (mr *MockValidatorStoreMockRecorder) OnShareRemoved(ctx, pubKey any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) OnShareRemoved(ctx, pubKey, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareRemoved", reflect.TypeOf((*MockValidatorStore)(nil).OnShareRemoved), ctx, pubKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareRemoved", reflect.TypeOf((*MockValidatorStore)(nil).OnShareRemoved), ctx, pubKey, triggerCallbacks)
 }
 
 // OnShareUpdated mocks base method.
-func (m *MockValidatorStore) OnShareUpdated(ctx context.Context, share *types0.SSVShare) error {
+func (m *MockValidatorStore) OnShareUpdated(ctx context.Context, share *types0.SSVShare, triggerCallbacks bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnShareUpdated", ctx, share)
+	ret := m.ctrl.Call(m, "OnShareUpdated", ctx, share, triggerCallbacks)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnShareUpdated indicates an expected call of OnShareUpdated.
-func (mr *MockValidatorStoreMockRecorder) OnShareUpdated(ctx, share any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) OnShareUpdated(ctx, share, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareUpdated", reflect.TypeOf((*MockValidatorStore)(nil).OnShareUpdated), ctx, share)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareUpdated", reflect.TypeOf((*MockValidatorStore)(nil).OnShareUpdated), ctx, share, triggerCallbacks)
 }
 
 // OnValidatorExited mocks base method.
-func (m *MockValidatorStore) OnValidatorExited(ctx context.Context, pubKey types.ValidatorPK, blockNumber uint64) error {
+func (m *MockValidatorStore) OnValidatorExited(ctx context.Context, pubKey types.ValidatorPK, blockNumber uint64, triggerCallbacks bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnValidatorExited", ctx, pubKey, blockNumber)
+	ret := m.ctrl.Call(m, "OnValidatorExited", ctx, pubKey, blockNumber, triggerCallbacks)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // OnValidatorExited indicates an expected call of OnValidatorExited.
-func (mr *MockValidatorStoreMockRecorder) OnValidatorExited(ctx, pubKey, blockNumber any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) OnValidatorExited(ctx, pubKey, blockNumber, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnValidatorExited", reflect.TypeOf((*MockValidatorStore)(nil).OnValidatorExited), ctx, pubKey, blockNumber)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnValidatorExited", reflect.TypeOf((*MockValidatorStore)(nil).OnValidatorExited), ctx, pubKey, blockNumber, triggerCallbacks)
 }
 
 // RegisterLifecycleCallbacks mocks base method.
@@ -357,16 +327,16 @@ func (mr *MockValidatorStoreMockRecorder) RegisterSyncCommitteeInfo(info any) *g
 }
 
 // UpdateValidatorsMetadata mocks base method.
-func (m *MockValidatorStore) UpdateValidatorsMetadata(ctx context.Context, metadata beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+func (m *MockValidatorStore) UpdateValidatorsMetadata(ctx context.Context, metadata beacon.ValidatorMetadataMap, triggerCallbacks bool) (beacon.ValidatorMetadataMap, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", ctx, metadata)
+	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", ctx, metadata, triggerCallbacks)
 	ret0, _ := ret[0].(beacon.ValidatorMetadataMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateValidatorsMetadata indicates an expected call of UpdateValidatorsMetadata.
-func (mr *MockValidatorStoreMockRecorder) UpdateValidatorsMetadata(ctx, metadata any) *gomock.Call {
+func (mr *MockValidatorStoreMockRecorder) UpdateValidatorsMetadata(ctx, metadata, triggerCallbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockValidatorStore)(nil).UpdateValidatorsMetadata), ctx, metadata)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockValidatorStore)(nil).UpdateValidatorsMetadata), ctx, metadata, triggerCallbacks)
 }
