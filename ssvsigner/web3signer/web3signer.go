@@ -140,6 +140,7 @@ func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, r
 		Post().
 		Accept("application/json").
 		ToJSON(&resp).
+		AddValidator(nil).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err)
 }
