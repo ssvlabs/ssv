@@ -15,7 +15,7 @@ import (
 
 // TODO: add missing tests
 
-//go:generate mockgen -package=beacon -destination=./mock_client.go -source=./client.go
+//go:generate go tool -modfile=../../../../tool.mod mockgen -package=beacon -destination=./mock_client.go -source=./client.go
 
 // AttesterCalls interface has all attester duty specific calls
 type AttesterCalls interface {

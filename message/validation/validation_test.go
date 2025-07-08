@@ -21,13 +21,14 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	libp2ptest "github.com/libp2p/go-libp2p/core/test"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap/zaptest"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
 	"github.com/ssvlabs/ssv/message/signatureverifier"
@@ -40,8 +41,8 @@ import (
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/registry/storage/mocks"
+	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils"
 )
 
@@ -594,25 +595,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot+4))
 		require.NoError(t, err)
 
-		// Second duty (another message).
-		signedSSVMessage = generateSignedMessage(ks, identifier, slot+4, func(qbftMessage *specqbft.Message) {
-			qbftMessage.MsgType = specqbft.RoundChangeMsgType
-		})
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot+4))
-		require.NoError(t, err)
-
-		// Third duty.
-		// TODO: this should fail, see https://github.com/ssvlabs/ssv/pull/1758
+		// Third duty (exceeds the limit).
 		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot+8))
-		require.NoError(t, err)
-
-		// Third duty (another message).
-		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8, func(qbftMessage *specqbft.Message) {
-			qbftMessage.MsgType = specqbft.RoundChangeMsgType
-		})
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, netCfg.GetSlotStartTime(slot+8))
-		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
+		require.ErrorIs(t, err, ErrTooManyDutiesPerEpoch)
 	})
 
 	// Throw error if getting a message for proposal and see there is no message from beacon
@@ -1877,7 +1863,7 @@ type shareSet struct {
 	noMetadata                  *ssvtypes.SSVShare
 }
 
-func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg networkconfig.NetworkConfig) shareSet {
+func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg *networkconfig.NetworkConfig) shareSet {
 	activeShare := &ssvtypes.SSVShare{
 		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:     eth2apiv1.ValidatorStateActiveOngoing,

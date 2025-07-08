@@ -86,7 +86,7 @@ func (mr *MockOperatorsMockRecorder) GetOperatorData(r, id any) *gomock.Call {
 }
 
 // GetOperatorDataByPubKey mocks base method.
-func (m *MockOperators) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*storage.OperatorData, bool, error) {
+func (m *MockOperators) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey string) (*storage.OperatorData, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOperatorDataByPubKey", r, operatorPubKey)
 	ret0, _ := ret[0].(*storage.OperatorData)

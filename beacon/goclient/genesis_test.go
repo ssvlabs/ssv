@@ -16,6 +16,7 @@ import (
 const (
 	genesisPath = "/eth/v1/beacon/genesis"
 	specPath    = "/eth/v1/config/spec"
+	syncingPath = "/eth/v1/node/syncing"
 )
 
 func Test_genesisForClient(t *testing.T) {
@@ -24,7 +25,7 @@ func Test_genesisForClient(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{
 					"data": {
@@ -88,7 +89,7 @@ func Test_genesisForClient(t *testing.T) {
 	})
 
 	t.Run("nil_data", func(t *testing.T) {
-		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`{"data": null}`), nil
 			}
@@ -112,7 +113,7 @@ func Test_genesisForClient(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
-		mockServer := mocks.MockServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
+		mockServer := mocks.NewServer(func(r *http.Request, resp json.RawMessage) (json.RawMessage, error) {
 			if r.URL.Path == genesisPath {
 				return json.RawMessage(`malformed`), nil
 			}

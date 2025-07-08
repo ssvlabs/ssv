@@ -121,6 +121,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(ctx context.Context, l
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
+
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
@@ -343,7 +344,7 @@ type ValidatorRegistrationSubmitter interface {
 type VRSubmitter struct {
 	logger *zap.Logger
 
-	beaconConfig   networkconfig.BeaconConfig
+	beaconConfig   *networkconfig.BeaconConfig
 	beacon         beacon.BeaconNode
 	validatorStore validatorStore
 
@@ -358,7 +359,7 @@ type VRSubmitter struct {
 func NewVRSubmitter(
 	ctx context.Context,
 	logger *zap.Logger,
-	beaconConfig networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.BeaconConfig,
 	beacon beacon.BeaconNode,
 	validatorStore validatorStore,
 ) *VRSubmitter {

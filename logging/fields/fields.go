@@ -15,10 +15,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields/stringer"
@@ -85,6 +86,7 @@ const (
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubmissionTime      = "submission_time"
 	FieldTotalConsensusTime  = "total_consensus_time"
+	FieldTotalDutyTime       = "total_duty_time"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "sync_offset"
 	FieldSyncResults         = "sync_results"
@@ -317,8 +319,13 @@ func BeaconDataTime(val time.Duration) zap.Field {
 func SubmissionTime(val time.Duration) zap.Field {
 	return zap.String(FieldSubmissionTime, FormatDuration(val))
 }
+
 func TotalConsensusTime(val time.Duration) zap.Field {
 	return zap.String(FieldTotalConsensusTime, FormatDuration(val))
+}
+
+func TotalDutyTime(val time.Duration) zap.Field {
+	return zap.String(FieldTotalDutyTime, FormatDuration(val))
 }
 
 func DutyID(val string) zap.Field {

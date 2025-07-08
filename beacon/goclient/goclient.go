@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
-	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 	"tailscale.com/util/singleflight"
@@ -128,7 +128,6 @@ type GoClient struct {
 	multiClient MultiClient
 
 	syncDistanceTolerance phase0.Slot
-	nodeSyncingFn         func(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error)
 
 	// attestationReqInflight helps prevent duplicate attestation data requests
 	// from running in parallel.
@@ -171,7 +170,11 @@ func New(
 	logger *zap.Logger,
 	opt Options,
 ) (*GoClient, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr))
+	logger.Info("consensus client: connecting",
+		fields.Address(opt.BeaconNodeAddr),
+		zap.Bool("with_weighted_attestation_data", opt.WithWeightedAttestationData),
+		zap.Bool("with_parallel_submissions", opt.WithParallelSubmissions),
+	)
 
 	commonTimeout := opt.CommonTimeout
 	if commonTimeout == 0 {
@@ -216,8 +219,6 @@ func New(
 		return nil, err
 	}
 
-	client.nodeSyncingFn = client.nodeSyncing
-
 	initCtx, initCtxCancel := context.WithTimeout(ctx, client.longTimeout)
 	defer initCtxCancel()
 
@@ -251,7 +252,7 @@ func New(
 
 	logger.Info("starting event listener")
 	if err := client.startEventListener(ctx); err != nil {
-		return nil, errors.Wrap(err, "failed to launch event listener")
+		return nil, fmt.Errorf("failed to launch event listener: %w", err)
 	}
 
 	return client, nil
@@ -380,12 +381,12 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 	}
 }
 
-func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkconfig.BeaconConfig) (networkconfig.BeaconConfig, error) {
+func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig *networkconfig.BeaconConfig) (*networkconfig.BeaconConfig, error) {
 	gc.beaconConfigMu.Lock()
 	defer gc.beaconConfigMu.Unlock()
 
 	if gc.beaconConfig == nil {
-		gc.beaconConfig = &beaconConfig
+		gc.beaconConfig = beaconConfig
 		close(gc.beaconConfigInit)
 
 		gc.log.Info("beacon config has been initialized",
@@ -396,59 +397,99 @@ func (gc *GoClient) applyBeaconConfig(nodeAddress string, beaconConfig networkco
 	}
 
 	if err := gc.beaconConfig.AssertSame(beaconConfig); err != nil {
-		return *gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
+		return gc.beaconConfig, fmt.Errorf("beacon config misalign: %w", err)
 	}
 
-	return *gc.beaconConfig, nil
-}
-
-func (gc *GoClient) nodeSyncing(ctx context.Context, opts *api.NodeSyncingOpts) (*api.Response[*apiv1.SyncState], error) {
-	return gc.multiClient.NodeSyncing(ctx, opts)
+	return gc.beaconConfig, nil
 }
 
 var errSyncing = errors.New("syncing")
 
-// Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
+// Healthy returns if the consensus client (for single client) or at least one of consensus clients (for multi client)
+// is currently healthy. It's healthy if it: responds to requests, is not in the syncing state, is not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *GoClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.nodeSyncingFn(ctx, &api.NodeSyncingOpts{})
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var hasHealthy atomic.Bool
+	errCh := make(chan error, len(gc.clients))
+
+	for _, client := range gc.clients {
+		go func() {
+			if err := gc.checkNodeHealth(ctx, client); err != nil {
+				errCh <- err
+				return
+			}
+
+			if hasHealthy.CompareAndSwap(false, true) {
+				cancel() // one healthy node is enough
+			}
+		}()
+	}
+
+	// Wait only for the result: either one success, or all errors
+	var errs error
+	for i := 0; i < len(gc.clients); i++ {
+		select {
+		case <-ctx.Done():
+			// If we have a healthy client, return no error
+			if hasHealthy.Load() {
+				return nil
+			}
+			// Otherwise, collect errors and keep going
+		case err := <-errCh:
+			errs = errors.Join(errs, err)
+		}
+	}
+
+	if !hasHealthy.Load() {
+		return errs
+	}
+
+	return nil
+}
+
+// checkNodeHealth checks client's healthiness by checking if it's synced.
+func (gc *GoClient) checkNodeHealth(ctx context.Context, client Client) error {
+	logger := gc.log.With(
+		zap.String("api", "NodeSyncing"),
+		zap.String("address", client.Address()),
+	)
+
+	nodeSyncingResp, err := client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
-		gc.log.Error(clResponseErrMsg,
-			zap.String("api", "NodeSyncing"),
-			zap.Error(err),
-		)
-		// TODO: get rid of global variable, pass metrics to goClient
-		recordBeaconClientStatus(ctx, statusUnknown, gc.multiClient.Address())
+		if errors.Is(err, context.Canceled) {
+			return nil // already found healthy nodes
+		}
+		logger.Error(clResponseErrMsg, zap.Error(err))
+		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
 		return fmt.Errorf("failed to obtain node syncing status: %w", err)
 	}
 	if nodeSyncingResp == nil {
-		gc.log.Error(clNilResponseErrMsg,
-			zap.String("api", "NodeSyncing"),
-		)
-		recordBeaconClientStatus(ctx, statusUnknown, gc.multiClient.Address())
+		logger.Error(clNilResponseErrMsg)
+		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
 		return fmt.Errorf("node syncing response is nil")
 	}
 	if nodeSyncingResp.Data == nil {
-		gc.log.Error(clNilResponseDataErrMsg,
-			zap.String("api", "NodeSyncing"),
-		)
-		recordBeaconClientStatus(ctx, statusUnknown, gc.multiClient.Address())
+		logger.Error(clNilResponseDataErrMsg)
+		recordBeaconClientStatus(ctx, statusUnknown, client.Address())
 		return fmt.Errorf("node syncing data is nil")
 	}
 	syncState := nodeSyncingResp.Data
-	recordBeaconClientStatus(ctx, statusSyncing, gc.multiClient.Address())
-	recordSyncDistance(ctx, syncState.SyncDistance, gc.multiClient.Address())
+	recordBeaconClientStatus(ctx, statusSyncing, client.Address())
+	recordSyncDistance(ctx, syncState.SyncDistance, client.Address())
 
 	if syncState.IsSyncing && syncState.SyncDistance > gc.syncDistanceTolerance {
-		gc.log.Error("Consensus client is not synced")
+		logger.Error("Consensus client is not synced")
 		return errSyncing
 	}
 	if syncState.IsOptimistic {
-		gc.log.Error("Consensus client is in optimistic mode")
+		logger.Error("Consensus client is in optimistic mode")
 		return fmt.Errorf("optimistic")
 	}
 
-	recordBeaconClientStatus(ctx, statusSynced, gc.multiClient.Address())
+	recordBeaconClientStatus(ctx, statusSynced, client.Address())
 
 	return nil
 }

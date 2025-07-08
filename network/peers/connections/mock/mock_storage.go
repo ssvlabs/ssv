@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/operator/storage"
@@ -16,7 +17,7 @@ import (
 var _ storage.Storage = NodeStorage{}
 
 type NodeStorage struct {
-	MockPrivateKeyHash              string
+	MockPrivateKeyHash              []byte
 	MockPublicKey                   string
 	RegisteredOperatorPublicKeyPEMs []string
 }
@@ -123,15 +124,15 @@ func (m NodeStorage) DropShares() error {
 	panic("unexpected DropShares call")
 }
 
-func (m NodeStorage) GetPrivateKeyHash() (string, bool, error) {
-	if m.MockPrivateKeyHash != "" {
+func (m NodeStorage) GetPrivateKeyHash() ([]byte, bool, error) {
+	if m.MockPrivateKeyHash != nil {
 		return m.MockPrivateKeyHash, true, nil
 	} else {
-		return "", false, errors.New("error")
+		return nil, false, errors.New("error")
 	}
 }
 
-func (m NodeStorage) SavePrivateKeyHash(privKeyHash string) error {
+func (m NodeStorage) SavePrivateKeyHash(privKeyHash []byte) error {
 	panic("unexpected SavePrivateKeyHash call")
 }
 

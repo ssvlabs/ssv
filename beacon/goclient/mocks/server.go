@@ -10,16 +10,8 @@ import (
 
 type requestCallback = func(r *http.Request, resp json.RawMessage) (json.RawMessage, error)
 
-func MockServer(onRequestFn requestCallback) *httptest.Server {
-	var mockResponses map[string]json.RawMessage
-	f, err := os.Open("./mocks/mock-beacon-responses.json")
-	if err != nil {
-		panic(fmt.Sprintf("os.Open returned error: %v", err))
-	}
-	err = json.NewDecoder(f).Decode(&mockResponses)
-	if err != nil {
-		panic(fmt.Sprintf("couldn't decode json file: %v", err))
-	}
+func NewServer(onRequestFn requestCallback) *httptest.Server {
+	mockResponses := ServerResponses()
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp, ok := mockResponses[r.URL.Path]
@@ -40,4 +32,21 @@ func MockServer(onRequestFn requestCallback) *httptest.Server {
 			panic(fmt.Sprintf("got error writing response: %v", err))
 		}
 	}))
+}
+
+func ServerResponses() map[string]json.RawMessage {
+	var responses map[string]json.RawMessage
+	f, err := os.Open("./mocks/mock-beacon-responses.json")
+	defer func() {
+		_ = f.Close()
+	}()
+
+	if err != nil {
+		panic(fmt.Sprintf("os.Open returned error: %v", err))
+	}
+	err = json.NewDecoder(f).Decode(&responses)
+	if err != nil {
+		panic(fmt.Sprintf("couldn't decode json file: %v", err))
+	}
+	return responses
 }

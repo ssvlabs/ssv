@@ -18,7 +18,7 @@ func Test_computeVoluntaryExitDomain(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("success", func(t *testing.T) {
-		mockServer := mocks.MockServer(nil)
+		mockServer := mocks.NewServer(nil)
 		defer mockServer.Close()
 
 		client, err := New(

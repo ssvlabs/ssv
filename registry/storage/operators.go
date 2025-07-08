@@ -8,14 +8,15 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/operators.go -source=./operators.go
 
 var (
 	operatorsPrefix = []byte("operators")

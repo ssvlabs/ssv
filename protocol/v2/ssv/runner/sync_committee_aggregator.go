@@ -18,13 +18,14 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/ssvsigner/ekm"
+
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/ekm"
 )
 
 type SyncCommitteeAggregatorRunner struct {
@@ -138,9 +139,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	}
 
 	if len(selectionProofs) == 0 {
-		r.GetState().Finished = true
 		span.AddEvent("no selection proofs")
 		span.SetStatus(codes.Ok, "")
+		r.GetState().Finished = true
+		r.measurements.EndDutyFlow()
 		return nil
 	}
 
@@ -353,27 +355,33 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(ctx context.Context
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
-				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
+				return observability.Errorf(span, "could not submit to Beacon chain reconstructed contribution and proof: %w", err)
 			}
 
 			successfullySubmittedContributions++
 
 			const eventMsg = "✅ successfully submitted sync committee aggregator"
 			span.AddEvent(eventMsg)
-			logger.Debug(eventMsg, fields.SubmissionTime(time.Since(start)), fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
+			logger.Debug(
+				eventMsg,
+				fields.SubmissionTime(time.Since(start)),
+				fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+				fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+			)
 			break
 		}
 	}
 
 	r.GetState().Finished = true
-
 	r.measurements.EndDutyFlow()
 
-	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx,
+	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleSyncCommitteeContribution, r.GetState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(
+		ctx,
 		successfullySubmittedContributions,
 		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleSyncCommitteeContribution)
+		spectypes.BNRoleSyncCommitteeContribution,
+	)
 
 	span.SetStatus(codes.Ok, "")
 	return nil

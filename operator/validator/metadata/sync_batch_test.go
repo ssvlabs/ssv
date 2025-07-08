@@ -4,8 +4,9 @@ import (
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )

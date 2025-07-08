@@ -54,9 +54,7 @@ type Validator struct {
 }
 
 // NewValidator creates a new instance of Validator.
-func NewValidator(pctx context.Context, cancel func(), options Options) *Validator {
-	options.defaults()
-
+func NewValidator(pctx context.Context, cancel func(), options *Options) *Validator {
 	v := &Validator{
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
