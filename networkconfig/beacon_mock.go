@@ -337,6 +337,20 @@ func (mr *MockBeaconMockRecorder) GetSyncCommitteeSize() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeSize", reflect.TypeOf((*MockBeacon)(nil).GetSyncCommitteeSize))
 }
 
+// GetTargetAggregatorsPerCommittee mocks base method.
+func (m *MockBeacon) GetTargetAggregatorsPerCommittee() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTargetAggregatorsPerCommittee")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// GetTargetAggregatorsPerCommittee indicates an expected call of GetTargetAggregatorsPerCommittee.
+func (mr *MockBeaconMockRecorder) GetTargetAggregatorsPerCommittee() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTargetAggregatorsPerCommittee", reflect.TypeOf((*MockBeacon)(nil).GetTargetAggregatorsPerCommittee))
+}
+
 // IntervalDuration mocks base method.
 func (m *MockBeacon) IntervalDuration() time.Duration {
 	m.ctrl.T.Helper()

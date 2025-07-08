@@ -247,7 +247,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	recordConsensusDuration(ctx, cr.measurements.ConsensusTime(), spectypes.RoleCommittee)
 
 	cr.measurements.StartPostConsensus()
-	// decided means consensus is done
 
 	duty := cr.BaseRunner.State.StartingDuty
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
