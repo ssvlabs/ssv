@@ -169,6 +169,32 @@ func TestSyncer_Sync(t *testing.T) {
 		require.Nil(t, result)
 	})
 
+	// Subtest: Fetch empty response from beacon
+	t.Run("FetchEmptyResponse", func(t *testing.T) {
+		validatorPK1 := spectypes.ValidatorPK{0x1}
+		validatorPK2 := spectypes.ValidatorPK{0x2}
+
+		mockShareStorage := NewMockshareStorage(ctrl)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(beacon.ValidatorMetadataMap{
+			validatorPK1: &beacon.ValidatorMetadata{},
+			validatorPK2: &beacon.ValidatorMetadata{},
+		}).Times(1)
+
+		mockBeaconNode := beacon.NewMockBeaconNode(ctrl)
+		mockBeaconNode.EXPECT().GetValidatorData(gomock.Any(), gomock.Any()).Return(make(map[phase0.ValidatorIndex]*eth2apiv1.Validator), nil)
+
+		syncer := &Syncer{
+			logger:       logger,
+			shareStorage: mockShareStorage,
+			beaconNode:   mockBeaconNode,
+		}
+
+		pubKeys := []spectypes.ValidatorPK{validatorPK1, validatorPK2}
+		result, err := syncer.Sync(t.Context(), pubKeys)
+		require.NoError(t, err)
+		require.Nil(t, result)
+	})
+
 	// Subtest: UpdateValidatorsMetadata error
 	t.Run("UpdateValidatorsMetadataError", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
@@ -188,7 +214,7 @@ func TestSyncer_Sync(t *testing.T) {
 	// Subtest: Empty pubKeys
 	t.Run("EmptyPubKeys", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(nil, nil)
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Times(0)
 
 		unusedMockBeaconNode := beacon.NewMockBeaconNode(ctrl)
 		// GetValidatorData should not be called in this case

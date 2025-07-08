@@ -179,7 +179,7 @@ func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.Validato
 	results := make(beacon.ValidatorMetadataMap, len(pubKeys))
 
 	for _, key := range pubKeys {
-		results[spectypes.ValidatorPK(key)] = &beacon.ValidatorMetadata{}
+		results[key] = &beacon.ValidatorMetadata{}
 	}
 
 	for _, v := range validatorsIndexMap {
