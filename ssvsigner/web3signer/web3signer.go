@@ -126,12 +126,18 @@ type SignRequest struct {
 }
 
 type SignResponse struct {
-	Signature phase0.BLSSignature `json:"signature"`
+	Signature phase0.BLSSignature `json:"signature,omitempty"`
+	Error     string              `json:"error,omitempty"`
+}
+
+func emptyValidator(*http.Response) error {
+	return nil
 }
 
 // Sign signs using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Signing/operation/ETH2_SIGN
 func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, req SignRequest) (SignResponse, error) {
 	var resp SignResponse
+
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
@@ -140,7 +146,7 @@ func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, r
 		Post().
 		Accept("application/json").
 		ToJSON(&resp).
-		AddValidator(nil).
+		AddValidator(requests.ValidatorHandler(emptyValidator, requests.ToString(&resp.Error))).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err)
 }
