@@ -9,6 +9,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -432,6 +433,7 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	var (
 		changedShares   []*types.SSVShare
+		unchangedShares []*types.SSVShare
 		changedMetadata beacon.ValidatorMetadataMap
 	)
 
@@ -456,6 +458,8 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 			}
 
 			if metadata.Equals(share.BeaconMetadata()) {
+				share.BeaconMetadataLastUpdated = time.Now()
+				unchangedShares = append(unchangedShares, share)
 				continue
 			}
 
@@ -479,8 +483,10 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 		return nil, err
 	}
 
+	totalShares := append(unchangedShares, changedShares...)
+
 	if len(changedShares) > 0 {
-		if err := s.saveToDB(nil, changedShares...); err != nil {
+		if err := s.saveToDB(nil, totalShares...); err != nil {
 			return nil, err
 		}
 	}
