@@ -207,7 +207,7 @@ func TestSyncer_Sync(t *testing.T) {
 	})
 }
 
-func TestSyncer_UpdateOnStartup(t *testing.T) {
+func TestSyncer_SyncAll(t *testing.T) {
 	logger := zap.NewNop()
 
 	ctrl := gomock.NewController(t)
@@ -247,49 +247,8 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		require.Nil(t, result)
 	})
 
-	// Subtest: All shares are non-liquidated and have BeaconMetadata
-	t.Run("AllSharesHaveMetadata", func(t *testing.T) {
-		mockShareStorage := NewMockshareStorage(ctrl)
-		mockValidatorStore := NewMockselfValidatorStore(ctrl)
-
-		syncer := &Syncer{
-			logger:         logger,
-			shareStorage:   mockShareStorage,
-			validatorStore: mockValidatorStore,
-		}
-
-		// Create shares that are non-liquidated and have BeaconMetadata
-		share1 := &ssvtypes.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK{0x1},
-			},
-			Status:     eth2apiv1.ValidatorStatePendingInitialized,
-			Liquidated: false,
-		}
-		share2 := &ssvtypes.SSVShare{
-			Share: spectypes.Share{
-				ValidatorPubKey: spectypes.ValidatorPK{0x2},
-			},
-			Status:     eth2apiv1.ValidatorStatePendingInitialized,
-			Liquidated: false,
-		}
-
-		shares := []*ssvtypes.SSVShare{share1, share2}
-
-		// Set expectations
-		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
-		mockValidatorStore.EXPECT().SelfValidators().Return(shares).AnyTimes()
-
-		// Call method
-		result, err := syncer.SyncAll(t.Context())
-
-		// Assert
-		require.NoError(t, err)
-		require.Nil(t, result)
-	})
-
-	// Subtest: At least one share lacks BeaconMetadata
-	t.Run("ShareLacksBeaconMetadata", func(t *testing.T) {
+	// Subtest: Shares returned by shareStorage.List
+	t.Run("SharesMetadataUpdated", func(t *testing.T) {
 		mockShareStorage := NewMockshareStorage(ctrl)
 		mockValidatorStore := NewMockselfValidatorStore(ctrl)
 
@@ -312,7 +271,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 			Share: spectypes.Share{
 				ValidatorPubKey: spectypes.ValidatorPK{0x2},
 			},
-			Status:     eth2apiv1.ValidatorStateUnknown, // Lacks BeaconMetadata
+			Status:     eth2apiv1.ValidatorStateUnknown,
 			Liquidated: false,
 		}
 
@@ -321,8 +280,10 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		// Set expectations
 		mockShareStorage.EXPECT().List(nil, gomock.Any()).Return(shares)
 		mockValidatorStore.EXPECT().SelfValidators().Return([]*ssvtypes.SSVShare{share1}).AnyTimes()
-		mockShareStorage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).Return(beacon.ValidatorMetadataMap{
+		mockShareStorage.EXPECT().UpdateValidatorsMetadata(
+			gomock.Any()).Return(beacon.ValidatorMetadataMap{
 			share1.ValidatorPubKey: share1.BeaconMetadata(),
+			share2.ValidatorPubKey: share2.BeaconMetadata(),
 		}, nil)
 
 		// Call method
@@ -332,6 +293,7 @@ func TestSyncer_UpdateOnStartup(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, beacon.ValidatorMetadataMap{
 			share1.ValidatorPubKey: share1.BeaconMetadata(),
+			share2.ValidatorPubKey: share2.BeaconMetadata(),
 		}, result)
 	})
 
@@ -667,7 +629,7 @@ func generatePubKey() ([]byte, error) {
 	return pubKey, err
 }
 
-func TestSyncer_sleep(t *testing.T) {
+func TestSyncer_Sleep(t *testing.T) {
 	// Initialize a no-operation logger to avoid actual logging during tests.
 	logger := zap.NewNop()
 

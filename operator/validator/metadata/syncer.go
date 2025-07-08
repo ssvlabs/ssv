@@ -113,19 +113,9 @@ func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, erro
 		return nil, nil
 	}
 
-	// Skip syncing if metadata was already fetched before
-	// to prevent blocking startup after first sync.
-	needToSync := false
 	pubKeysToFetch := make([]spectypes.ValidatorPK, 0, len(shares))
 	for _, share := range shares {
 		pubKeysToFetch = append(pubKeysToFetch, share.ValidatorPubKey)
-		if !share.HasBeaconMetadata() {
-			needToSync = true
-		}
-	}
-	if !needToSync {
-		// Stream should take it over from here.
-		return nil, nil
 	}
 
 	// Sync all pubkeys that belong to own subnets. We don't need to batch them because we need to wait here until all of them are synced.
