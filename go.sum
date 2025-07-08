@@ -762,6 +762,8 @@ github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250707225321-19cce3858c47 h1:5fKYIv3YI
 github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250707225321-19cce3858c47/go.mod h1:7rs/vQPwSuW+tNhp8rYgn7wrzC/qbaT+uDvovHah8N0=
 github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250708013309-ecf582c5fe1c h1:Gfsp9X2ZWP+22TH4GbgM8HpzdmdW0uRbPY1gFZvgMa8=
 github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250708013309-ecf582c5fe1c/go.mod h1:7rs/vQPwSuW+tNhp8rYgn7wrzC/qbaT+uDvovHah8N0=
+github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250708014423-813c2841eb6c h1:gMEx7v+JW70dQ1UCkhDVmlSXZFn62heDD/t0ldCTKFU=
+github.com/ssvlabs/ssv/ssvsigner v0.0.0-20250708014423-813c2841eb6c/go.mod h1:7rs/vQPwSuW+tNhp8rYgn7wrzC/qbaT+uDvovHah8N0=
 github.com/status-im/keycard-go v0.2.0 h1:QDLFswOQu1r5jsycloeQh3bVU8n/NatHHaZobtDnDzA=
 github.com/status-im/keycard-go v0.2.0/go.mod h1:wlp8ZLbsmrF6g6WjugPAx+IzoLrkdf9+mHxBEeo3Hbg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
