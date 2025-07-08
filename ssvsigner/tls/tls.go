@@ -296,24 +296,42 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 	fingerprint := sha256.Sum256(cert.Raw)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
-	// Get the hostname from multiple possible sources
-	host := state.ServerName
-	if host == "" && len(cert.DNSNames) > 0 {
-		host = cert.DNSNames[0]
-	} else if host == "" {
-		host = cert.Subject.CommonName
+	// Get the possible hostnames from multiple possible sources
+	// using a map to avoid duplicates
+	hosts := make(map[string]struct{})
+	// load ServerName from TLS state
+	if state.ServerName != "" {
+		hosts[state.ServerName] = struct{}{}
 	}
-
-	// Check fingerprint against our trusted list
-	if expectedFingerprint, ok := trustedFingerprints[host]; ok {
-		expectedFingerprint = normalizeFingerprint(expectedFingerprint)
-		if expectedFingerprint == fingerprintHex {
-			return nil
+	// load certificate CommonName
+	if cert.Subject.CommonName != "" {
+		hosts[cert.Subject.CommonName] = struct{}{}
+	}
+	// load certificate Alternative DNS Names
+	if len(cert.DNSNames) > 0 {
+		for _, dnsName := range cert.DNSNames {
+			hosts[dnsName] = struct{}{}
 		}
-		return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
-			host,
-			formatFingerprint(expectedFingerprint),
-			formatFingerprint(fingerprintHex))
+	}
+	// load certificate IP Sans
+	if len(cert.IPAddresses) > 0 {
+		for _, ip := range cert.IPAddresses {
+			hosts[ip.String()] = struct{}{}
+		}
+	}
+	// iterate over all possible hostnames in certificate
+	for host := range hosts {
+		// Check fingerprint against our trusted list
+		if expectedFingerprint, ok := trustedFingerprints[host]; ok {
+			expectedFingerprint = normalizeFingerprint(expectedFingerprint)
+			if expectedFingerprint == fingerprintHex {
+				return nil
+			}
+			return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
+				host,
+				formatFingerprint(expectedFingerprint),
+				formatFingerprint(fingerprintHex))
+		}
 	}
 
 	return fmt.Errorf("server certificate fingerprint not trusted: %s", formatFingerprint(fingerprintHex))
