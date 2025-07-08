@@ -130,10 +130,6 @@ type SignResponse struct {
 	Error     string              `json:"error,omitempty"`
 }
 
-func emptyValidator(*http.Response) error {
-	return nil
-}
-
 // Sign signs using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Signing/operation/ETH2_SIGN
 func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, req SignRequest) (SignResponse, error) {
 	var resp SignResponse
@@ -146,7 +142,7 @@ func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, r
 		Post().
 		Accept("application/json").
 		ToJSON(&resp).
-		AddValidator(requests.ValidatorHandler(emptyValidator, requests.ToString(&resp.Error))).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&resp.Error))).
 		Fetch(ctx)
 	return resp, w3s.handleWeb3SignerErr(err)
 }
