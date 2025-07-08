@@ -9,6 +9,7 @@ import (
 	"maps"
 	"slices"
 	"sync"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -434,6 +435,7 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	var (
 		changedShares   []*types.SSVShare
+		unchangedShares []*types.SSVShare
 		changedMetadata beacon.ValidatorMetadataMap
 	)
 	logger := zap.L().Named("debug_logger")
@@ -461,7 +463,9 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 			}
 
 			if metadata.Equals(share.BeaconMetadata()) {
-				shareLogger.Info("share's metadata hasn't changed, skipping", zap.Any("metadata", metadata))
+				shareLogger.Info("share's metadata hasn't changed, will only update last updated", zap.Any("metadata", metadata))
+				share.BeaconMetadataLastUpdated = time.Now()
+				unchangedShares = append(unchangedShares, share)
 				continue
 			}
 
@@ -486,9 +490,12 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 		return nil, err
 	}
 
-	logger.Info("saving to DB", zap.Int("changed_shares_count", len(changedShares)))
+	logger.Info("saving to DB",
+		zap.Int("changed_shares_count", len(changedShares)),
+		zap.Int("unchanged_shares_count", len(unchangedShares)),
+	)
 	if len(changedShares) > 0 {
-		if err := s.saveToDB(nil, changedShares...); err != nil {
+		if err := s.saveToDB(nil, append(changedShares, unchangedShares...)...); err != nil {
 			return nil, err
 		}
 	}

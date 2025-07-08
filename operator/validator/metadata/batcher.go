@@ -82,6 +82,8 @@ func (b *batcher) updateBatchSize() {
 
 	b.logger.Info("new batch size was calculated.", zap.Uint32("size", batchSize))
 
+	batchSize = 1000
+
 	b.batchSize.Store(batchSize)
 }
 
