@@ -91,7 +91,8 @@ func NewValidatorStore(
 			s.indices[share.ValidatorIndex] = share.ValidatorPubKey
 		}
 
-		if err := s.addShareToCommittee(share); err != nil {
+		// TODO: fix this context usage
+		if err := s.addShareToCommittee(context.Background(), share); err != nil {
 			return nil, fmt.Errorf("add share to committee: %w", err)
 		}
 	}
@@ -155,7 +156,7 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 		s.indices[share.ValidatorIndex] = share.ValidatorPubKey
 	}
 
-	if err := s.addShareToCommittee(shareCopy); err != nil {
+	if err := s.addShareToCommittee(ctx, shareCopy); err != nil {
 		delete(s.validators, key)
 		if share.HasBeaconMetadata() {
 			delete(s.indices, share.ValidatorIndex)
@@ -170,7 +171,7 @@ func (s *validatorStoreImpl) OnShareAdded(ctx context.Context, share *types.SSVS
 			delete(s.indices, share.ValidatorIndex)
 		}
 
-		_ = s.removeShareFromCommittee(shareCopy)
+		_ = s.removeShareFromCommittee(ctx, shareCopy)
 		return fmt.Errorf("persist share: %w", err)
 	}
 
@@ -299,7 +300,7 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 	}
 
 	// Remove from committee
-	if err := s.removeShareFromCommittee(state.share); err != nil {
+	if err := s.removeShareFromCommittee(ctx, state.share); err != nil {
 		s.logger.Warn("failed to remove share from committee",
 			zap.String("pubkey", hex.EncodeToString(pubKey[:])),
 			zap.Error(err))
@@ -517,7 +518,7 @@ func (s *validatorStoreImpl) OnOperatorRemoved(ctx context.Context, operatorID s
 		}
 
 		// Remove from committee
-		if err := s.removeShareFromCommittee(state.share); err != nil {
+		if err := s.removeShareFromCommittee(ctx, state.share); err != nil {
 			s.logger.Warn("failed to remove share from committee",
 				zap.String("pubkey", hex.EncodeToString(pubKey[:])),
 				zap.Error(err))
@@ -786,113 +787,6 @@ func (s *validatorStoreImpl) GetOperatorCommittees(operatorID spectypes.Operator
 	return snapshots
 }
 
-// RegisterSyncCommitteeInfo registers sync committee assignments.
-func (s *validatorStoreImpl) RegisterSyncCommitteeInfo(info []SyncCommitteeInfo) error {
-	if len(info) == 0 {
-		return nil
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, sci := range info {
-		if len(sci.Indices) == 0 {
-			continue
-		}
-
-		// Ensure the period map exists
-		if _, exists := s.syncCommittees[sci.Period]; !exists {
-			s.syncCommittees[sci.Period] = make(map[phase0.ValidatorIndex][]phase0.CommitteeIndex)
-		}
-
-		// Store the committee indices for this validator
-		indicesCopy := make([]phase0.CommitteeIndex, len(sci.Indices))
-		copy(indicesCopy, sci.Indices)
-		s.syncCommittees[sci.Period][sci.ValidatorIndex] = indicesCopy
-
-		// Update participation status for the affected validator
-		for _, state := range s.validators {
-			if state.share.ValidatorIndex == sci.ValidatorIndex {
-				oldStatus := state.participationStatus
-				state.participationStatus = s.calculateParticipationStatus(state.share)
-
-				// If participation changed, trigger callbacks
-				if oldStatus.IsParticipating != state.participationStatus.IsParticipating {
-					if state.participationStatus.IsParticipating && s.callbacks.OnValidatorStarted != nil {
-						snapshot := s.createSnapshot(state)
-						go func(snap *ValidatorSnapshot) {
-							ctx := context.Background()
-							if err := s.callbacks.OnValidatorStarted(ctx, snap); err != nil {
-								s.logger.Error("validator started callback failed", zap.Error(err))
-							}
-						}(snapshot)
-					} else if !state.participationStatus.IsParticipating && s.callbacks.OnValidatorStopped != nil {
-						go func(pk spectypes.ValidatorPK) {
-							ctx := context.Background()
-							if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
-								s.logger.Error("validator stopped callback failed", zap.Error(err))
-							}
-						}(state.share.ValidatorPubKey)
-					}
-				}
-				break
-			}
-		}
-	}
-
-	// Clean up old periods (keep only current and next period)
-	currentEpoch := s.beaconCfg.EstimatedCurrentEpoch()
-	currentPeriod := s.beaconCfg.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
-
-	for period := range s.syncCommittees {
-		if period < currentPeriod-1 {
-			delete(s.syncCommittees, period)
-		}
-	}
-
-	s.logger.Debug("registered sync committee info",
-		zap.Int("info_count", len(info)),
-		zap.Int("periods_tracked", len(s.syncCommittees)))
-
-	return nil
-}
-
-// GetSyncCommitteeValidators returns validators in the sync committee for a period.
-func (s *validatorStoreImpl) GetSyncCommitteeValidators(period uint64) []*ValidatorSnapshot {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	periodCommittees, exists := s.syncCommittees[period]
-	if !exists {
-		return nil
-	}
-
-	var snapshots []*ValidatorSnapshot
-	processedValidators := make(map[phase0.ValidatorIndex]bool)
-
-	for validatorIndex := range periodCommittees {
-		if processedValidators[validatorIndex] {
-			continue
-		}
-		processedValidators[validatorIndex] = true
-
-		pubKey, validatorExists := s.indices[validatorIndex]
-		if !validatorExists {
-			continue
-		}
-
-		key := hex.EncodeToString(pubKey[:])
-		state, validatorExists := s.validators[key]
-		if !validatorExists {
-			continue
-		}
-
-		snapshots = append(snapshots, s.createSnapshot(state))
-	}
-
-	return snapshots
-}
-
 // UpdateValidatorsMetadata updates the metadata for multiple validators.
 // It returns only metadata entries that actually changed the stored shares.
 // The returned map is nil if no changes occurred.
@@ -1037,7 +931,7 @@ func (s *validatorStoreImpl) isInSyncCommittee(validatorIndex phase0.ValidatorIn
 // If the committee does not exist, it is created.
 // An OnCommitteeChanged callback is triggered if a new committee is created.
 // This method requires the caller to hold the write lock.
-func (s *validatorStoreImpl) addShareToCommittee(share *types.SSVShare) error {
+func (s *validatorStoreImpl) addShareToCommittee(ctx context.Context, share *types.SSVShare) error {
 	committeeID := share.CommitteeID()
 
 	committee, exists := s.committees[committeeID]
@@ -1053,7 +947,7 @@ func (s *validatorStoreImpl) addShareToCommittee(share *types.SSVShare) error {
 		// Schedule callback
 		if s.callbacks.OnCommitteeChanged != nil {
 			go func() {
-				if err := s.callbacks.OnCommitteeChanged(context.Background(), committeeID, CommitteeActionCreated); err != nil {
+				if err := s.callbacks.OnCommitteeChanged(ctx, committeeID, CommitteeActionCreated); err != nil {
 					s.logger.Error("committee created callback failed",
 						zap.String("committee_id", hex.EncodeToString(committeeID[:])),
 						zap.Error(err))
@@ -1092,7 +986,7 @@ func (s *validatorStoreImpl) updateShareInCommittee(share *types.SSVShare) error
 // If the committee becomes empty after the removal, the committee itself is deleted.
 // An OnCommitteeChanged callback is triggered if a committee is removed.
 // This method requires the caller to hold the write lock.
-func (s *validatorStoreImpl) removeShareFromCommittee(share *types.SSVShare) error {
+func (s *validatorStoreImpl) removeShareFromCommittee(ctx context.Context, share *types.SSVShare) error {
 	committeeID := share.CommitteeID()
 
 	committee, exists := s.committees[committeeID]
@@ -1111,7 +1005,7 @@ func (s *validatorStoreImpl) removeShareFromCommittee(share *types.SSVShare) err
 
 		if s.callbacks.OnCommitteeChanged != nil {
 			go func() {
-				if err := s.callbacks.OnCommitteeChanged(context.Background(), committeeID, CommitteeActionRemoved); err != nil {
+				if err := s.callbacks.OnCommitteeChanged(ctx, committeeID, CommitteeActionRemoved); err != nil {
 					s.logger.Error("committee removed callback failed",
 						zap.String("committee_id", hex.EncodeToString(committeeID[:])),
 						zap.Error(err))

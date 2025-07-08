@@ -17,6 +17,7 @@ import (
 )
 
 //go:generate go tool -modfile=../../tool.mod sszgen -path ./shares.go --objs Share
+//go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/shares.go -source=./shares.go
 
 // sharesPrefix specifies the prefix used for storing Share(s) in the DB.
 // During database migrations, records often need to be moved to a different prefix,

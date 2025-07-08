@@ -14,7 +14,7 @@ import (
 
 //go:generate go tool -modfile=../../tool.mod mockgen -package=mocks -destination=./mocks/validator_store.go -source=./validator_store.go
 
-// UpdateOptions controls behavior of state updates.
+// UpdateOptions controls the behavior of state updates.
 type UpdateOptions struct {
 	TriggerCallbacks bool
 }
@@ -40,9 +40,6 @@ type ValidatorStore interface {
 	GetParticipatingValidators(epoch phase0.Epoch, opts ParticipationOptions) []*ValidatorSnapshot
 	GetCommittees() []*CommitteeSnapshot
 	GetOperatorCommittees(operatorID spectypes.OperatorID) []*CommitteeSnapshot
-
-	RegisterSyncCommitteeInfo(info []SyncCommitteeInfo) error
-	GetSyncCommitteeValidators(period uint64) []*ValidatorSnapshot
 
 	// UpdateValidatorsMetadata updates the metadata for multiple validators.
 	// Returns only the metadata that actually changed the stored shares.

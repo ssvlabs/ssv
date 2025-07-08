@@ -159,20 +159,6 @@ func (mr *MockValidatorStoreMockRecorder) GetSelfValidators() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfValidators", reflect.TypeOf((*MockValidatorStore)(nil).GetSelfValidators))
 }
 
-// GetSyncCommitteeValidators mocks base method.
-func (m *MockValidatorStore) GetSyncCommitteeValidators(period uint64) []*storage.ValidatorSnapshot {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncCommitteeValidators", period)
-	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
-	return ret0
-}
-
-// GetSyncCommitteeValidators indicates an expected call of GetSyncCommitteeValidators.
-func (mr *MockValidatorStoreMockRecorder) GetSyncCommitteeValidators(period any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeValidators", reflect.TypeOf((*MockValidatorStore)(nil).GetSyncCommitteeValidators), period)
-}
-
 // GetValidator mocks base method.
 func (m *MockValidatorStore) GetValidator(id storage.ValidatorID) (*storage.ValidatorSnapshot, bool) {
 	m.ctrl.T.Helper()
@@ -310,20 +296,6 @@ func (m *MockValidatorStore) RegisterLifecycleCallbacks(callbacks storage.Valida
 func (mr *MockValidatorStoreMockRecorder) RegisterLifecycleCallbacks(callbacks any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterLifecycleCallbacks", reflect.TypeOf((*MockValidatorStore)(nil).RegisterLifecycleCallbacks), callbacks)
-}
-
-// RegisterSyncCommitteeInfo mocks base method.
-func (m *MockValidatorStore) RegisterSyncCommitteeInfo(info []storage.SyncCommitteeInfo) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterSyncCommitteeInfo", info)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RegisterSyncCommitteeInfo indicates an expected call of RegisterSyncCommitteeInfo.
-func (mr *MockValidatorStoreMockRecorder) RegisterSyncCommitteeInfo(info any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterSyncCommitteeInfo", reflect.TypeOf((*MockValidatorStore)(nil).RegisterSyncCommitteeInfo), info)
 }
 
 // UpdateValidatorsMetadata mocks base method.
