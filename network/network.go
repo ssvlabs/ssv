@@ -59,6 +59,8 @@ type P2PNetwork interface {
 	GetPubSub() *pubsub.PubSub
 	// Get discovery service
 	GetDiscoveryService() discovery.Service
+	// BroadcastRaw sends an encoded raw message to the topics
+	BroadcastRaw([]string, []byte) error
 }
 
 // GetValidatorStats returns stats of validators, including the following:

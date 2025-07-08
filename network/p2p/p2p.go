@@ -111,7 +111,7 @@ type p2pNetwork struct {
 	libConnManager connmgrcore.ConnManager
 
 	nodeStorage             operatorstorage.Storage
-	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
+	operatorPKHashToPKCache *hashmap.Map[string, string] // used for metrics
 	operatorSigner          keys.OperatorSigner
 	operatorDataStore       operatordatastore.OperatorDataStore
 
@@ -142,7 +142,7 @@ func New(
 		state:                   stateClosed,
 		activeCommittees:        hashmap.New[string, validatorStatus](),
 		nodeStorage:             cfg.NodeStorage,
-		operatorPKHashToPKCache: hashmap.New[string, []byte](),
+		operatorPKHashToPKCache: hashmap.New[string, string](),
 		operatorSigner:          cfg.OperatorSigner,
 		operatorDataStore:       cfg.OperatorDataStore,
 		discoveredPeersPool:     ttl.New[peer.ID, discovery.DiscoveredPeer](30*time.Minute, 3*time.Minute),
