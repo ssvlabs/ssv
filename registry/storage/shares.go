@@ -461,7 +461,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 			}
 
 			if metadata.Equals(share.BeaconMetadata()) {
-				shareLogger.Info("share's metadata hasn't changed, skipping")
+				shareLogger.Info("share's metadata hasn't changed, skipping", zap.Any("metadata", metadata))
 				continue
 			}
 
