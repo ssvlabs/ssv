@@ -170,7 +170,7 @@ func (s *Syncer) fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (be
 	// NOTE: The response is sometimes empty for some validators,
 	// which eventually leads the Syncer to keep picking them up for synchronization.
 	// Presumably, sooner or later the CL will respond with data,
-	// and BeaconMetadataLastUpdated will be updated.
+	// and validator's metadata will be updated.
 	validatorsIndexMap, err := s.beaconNode.GetValidatorData(ctx, blsPubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
