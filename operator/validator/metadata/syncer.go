@@ -126,7 +126,7 @@ func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, erro
 // Returns updated metadata for keys that had changes. Returns nil if no keys were provided or no updates occurred.
 func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	fetchStart := time.Now()
-	metadata, err := s.Fetch(ctx, pubKeys)
+	metadata, err := s.fetch(ctx, pubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
@@ -136,6 +136,10 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 		zap.Int("requested_count", len(pubKeys)),
 		zap.Int("received_count", len(metadata)),
 	)
+
+	if len(metadata) == 0 {
+		return nil, nil
+	}
 
 	updateStart := time.Now()
 	// TODO: Refactor share storage to support passing context.
@@ -153,7 +157,7 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 	return updatedValidators, nil
 }
 
-func (s *Syncer) Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
+func (s *Syncer) fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -163,6 +167,10 @@ func (s *Syncer) Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (be
 		blsPubKeys[i] = phase0.BLSPubKey(pk)
 	}
 
+	// NOTE: The response is sometimes empty for some validators,
+	// which eventually leads the Syncer to keep picking them up for synchronization.
+	// Presumably, sooner or later the CL will respond with data,
+	// and BeaconMetadataLastUpdated will be updated.
 	validatorsIndexMap, err := s.beaconNode.GetValidatorData(ctx, blsPubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
