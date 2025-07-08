@@ -63,7 +63,7 @@ func main() {
 }
 
 func run(logger *zap.Logger, cli CLI) error {
-	logger.Debug("starting ssv-signer",
+	logger.Info("starting ssv-signer",
 		zap.String("listen_addr", cli.ListenAddr),
 		zap.String("web3signer_endpoint", cli.Web3SignerEndpoint),
 		zap.Bool("got_private_key", cli.PrivateKey != ""),
