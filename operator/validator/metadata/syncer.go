@@ -126,7 +126,7 @@ func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, erro
 // Returns updated metadata for keys that had changes. Returns nil if no keys were provided or no updates occurred.
 func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	fetchStart := time.Now()
-	metadata, err := s.fetch(ctx, pubKeys)
+	metadata, err := s.fetchMetadata(ctx, pubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("fetch metadata: %w", err)
 	}
@@ -157,7 +157,7 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 	return updatedValidators, nil
 }
 
-func (s *Syncer) fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
+func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -176,7 +176,12 @@ func (s *Syncer) fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (be
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
 	}
 
-	results := make(beacon.ValidatorMetadataMap, len(validatorsIndexMap))
+	results := make(beacon.ValidatorMetadataMap, len(pubKeys))
+
+	for _, key := range pubKeys {
+		results[spectypes.ValidatorPK(key)] = &beacon.ValidatorMetadata{}
+	}
+
 	for _, v := range validatorsIndexMap {
 		meta := &beacon.ValidatorMetadata{
 			Status:          v.Status,
