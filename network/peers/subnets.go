@@ -121,12 +121,12 @@ func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubne
 		if s < uint64(len(stats.Connected)) {
 			connected = stats.Connected[s]
 		}
-		scores[s] = activeSubnetBoost + scoreSubnet(connected, minPerSubnet, topicMaxPeers)
+		scores[s] = activeSubnetBoost + ScoreSubnet(connected, minPerSubnet, topicMaxPeers)
 	}
 	return scores
 }
 
-func scoreSubnet(connected, min, max int) float64 {
+func ScoreSubnet(connected, min, max int) float64 {
 	// scarcityFactor is the factor by which the score is increased for
 	// subnets with fewer than the desired minimum number of peers.
 	const scarcityFactor = 2.0
