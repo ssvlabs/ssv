@@ -12,9 +12,11 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -434,6 +436,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 		changedShares   []*types.SSVShare
 		changedMetadata beacon.ValidatorMetadataMap
 	)
+	logger := zap.L().Named("debug_logger")
 
 	s.storageMtx.Lock()
 	defer s.storageMtx.Unlock()
@@ -446,20 +449,24 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 		defer s.memoryMtx.RUnlock()
 
 		for pk, metadata := range data {
+			shareLogger := logger.With(fields.PubKey(pk[:]))
 			if metadata == nil {
 				continue
 			}
 
 			share, exists := s.unsafeGet(pk[:])
 			if !exists {
+				shareLogger.Info("share does not exist, skipping")
 				continue
 			}
 
 			if metadata.Equals(share.BeaconMetadata()) {
+				shareLogger.Info("share's metadata hasn't changed, skipping")
 				continue
 			}
 
 			// Update the share with the new metadata
+			shareLogger.Info("updating metadata", zap.Any("metadata", metadata))
 			share.SetBeaconMetadata(metadata)
 			changedShares = append(changedShares, share)
 
@@ -479,6 +486,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 		return nil, err
 	}
 
+	logger.Info("saving to DB", zap.Int("changed_shares_count", len(changedShares)))
 	if len(changedShares) > 0 {
 		if err := s.saveToDB(nil, changedShares...); err != nil {
 			return nil, err

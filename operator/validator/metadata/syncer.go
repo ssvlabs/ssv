@@ -178,6 +178,10 @@ func (s *Syncer) Fetch(ctx context.Context, pubKeys []spectypes.ValidatorPK) (be
 			ActivationEpoch: v.Validator.ActivationEpoch,
 			ExitEpoch:       v.Validator.ExitEpoch,
 		}
+		s.logger.Info("fetched metadata for validator",
+			fields.PubKey(v.Validator.PublicKey[:]),
+			zap.Any("meta", meta),
+		)
 		results[spectypes.ValidatorPK(v.Validator.PublicKey)] = meta
 	}
 
