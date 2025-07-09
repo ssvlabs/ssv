@@ -274,9 +274,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		observability.DutyCountAttribute(len(committeeDuty.ValidatorDuties)),
 	)
 
+	span.AddEvent("signing validator duties")
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
 	var (
 		wg sync.WaitGroup
 		// errCh is buffered because the receiver is only interested in the very 1st error sent to this channel
@@ -297,7 +298,6 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	// These calls should be limited to a certain degree to reduce the pressure on the Consensus Node.
 	const workerCount = 30
 
-	span.AddEvent("signing validator duties")
 	go func() {
 		for _, duty := range committeeDuty.ValidatorDuties {
 			if ctx.Err() != nil {
@@ -311,13 +311,10 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 	for range workerCount {
 		wg.Add(1)
 
-		go func(ctx context.Context) {
+		go func() {
 			defer wg.Done()
 
 			for validatorDuty := range dutiesCh {
-				if ctx.Err() != nil {
-					return
-				}
 				if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
 					const eventMsg = "duty is no longer valid"
 					span.AddEvent(eventMsg, trace.WithAttributes(
@@ -365,7 +362,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 					return
 				}
 			}
-		}(ctx)
+		}()
 	}
 
 	go func() {
