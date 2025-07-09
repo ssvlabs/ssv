@@ -323,12 +323,8 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 		// Check fingerprint against our trusted list
 		if expectedFingerprint, ok := trustedFingerprints[host]; ok {
 			expectedFingerprint = normalizeFingerprint(expectedFingerprint)
-			if expectedFingerprint != fingerprintHex {
-				// All entries in hosts must be in trusted fingerprints
-				return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
-					host,
-					formatFingerprint(expectedFingerprint),
-					formatFingerprint(fingerprintHex))
+			if expectedFingerprint == fingerprintHex {
+				return nil
 			}
 		}
 	}
