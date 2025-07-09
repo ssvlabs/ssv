@@ -13,11 +13,10 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	gomock "go.uber.org/mock/gomock"
-
 	types "github.com/ssvlabs/ssv-spec/types"
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockBaseValidatorStore is a mock of BaseValidatorStore interface.

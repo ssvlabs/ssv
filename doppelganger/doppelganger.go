@@ -19,7 +19,7 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
-//go:generate mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
+//go:generate go tool -modfile=../tool.mod mockgen -package=doppelganger -destination=./mock.go -source=./doppelganger.go
 
 // initialRemainingDetectionEpochs represents the starting number of epochs
 // a validator must pass without liveness detection before being considered safe to sign.

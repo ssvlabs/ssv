@@ -755,20 +755,6 @@ func (mr *MockBeaconNodeMockRecorder) ComputeSigningRoot(object, domain any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ComputeSigningRoot", reflect.TypeOf((*MockBeaconNode)(nil).ComputeSigningRoot), object, domain)
 }
 
-// DataVersion mocks base method.
-func (m *MockBeaconNode) DataVersion(epoch phase0.Epoch) spec.DataVersion {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DataVersion", epoch)
-	ret0, _ := ret[0].(spec.DataVersion)
-	return ret0
-}
-
-// DataVersion indicates an expected call of DataVersion.
-func (mr *MockBeaconNodeMockRecorder) DataVersion(epoch any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DataVersion", reflect.TypeOf((*MockBeaconNode)(nil).DataVersion), epoch)
-}
-
 // DomainData mocks base method.
 func (m *MockBeaconNode) DomainData(ctx context.Context, epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	m.ctrl.T.Helper()
