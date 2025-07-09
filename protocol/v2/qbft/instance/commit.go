@@ -139,7 +139,6 @@ func baseCommitValidationIgnoreSignature(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-
 	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "signed commit invalid")
 	}
@@ -164,7 +163,6 @@ func BaseCommitValidationVerifySignature(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-
 	if err := baseCommitValidationIgnoreSignature(msg, height, operators); err != nil {
 		return err
 	}

@@ -557,7 +557,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 				syncMsg.Signature = specSig
 
 				syncCommitteeMessagesToSubmit[validator] = syncMsg
-
 			} else if role == spectypes.BNRoleAttester {
 				// Only mark as safe if this is an attester role
 				// We want to mark the validator as safe as soon as possible to minimize unnecessary delays in enabling signing.
@@ -793,7 +792,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndDomain(context.Context) 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects(ctx context.Context, logger *zap.Logger) (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, error error,
+	beaconObjects map[phase0.ValidatorIndex]map[[32]byte]interface{}, err error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)

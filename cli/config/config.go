@@ -33,5 +33,4 @@ func ProcessArgs(cfg interface{}, a *Args, cmd *cobra.Command) {
 
 	envHelp, _ := cleanenv.GetDescription(cfg, nil)
 	cmd.SetUsageTemplate(envHelp + "\n" + cmd.UsageTemplate())
-
 }

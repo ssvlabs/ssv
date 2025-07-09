@@ -119,8 +119,8 @@ func assertMigratedShares(t *testing.T, db basedb.Database, key []byte, seededSh
 
 func seedDatabase(numOfItems int, db basedb.Database, storageKey []byte) ([]*migration_6_OldStorageShare, error) {
 	var (
-		dbShares     []basedb.Obj
-		seededShares []*migration_6_OldStorageShare
+		dbShares     = make([]basedb.Obj, 0, numOfItems)
+		seededShares = make([]*migration_6_OldStorageShare, 0, numOfItems)
 	)
 	for range numOfItems {
 		var share *migration_6_OldStorageShare
@@ -165,35 +165,35 @@ func generateValidatorPublicKey() []byte {
 	return b
 }
 
-func sharesEqual(old *migration_6_OldStorageShare, new *storage.Share) bool {
-	if old.ValidatorIndex != new.ValidatorIndex ||
-		old.Status != new.Status ||
-		old.ActivationEpoch != new.ActivationEpoch ||
-		old.Liquidated != new.Liquidated ||
-		!bytes.Equal(old.ValidatorPubKey, new.ValidatorPubKey) ||
-		!bytes.Equal(old.SharePubKey, new.SharePubKey) ||
-		!bytes.Equal(old.Graffiti, new.Graffiti) ||
-		!bytes.Equal(old.DomainType[:], new.DomainType[:]) ||
-		!bytes.Equal(old.FeeRecipientAddress[:], new.FeeRecipientAddress[:]) ||
-		!bytes.Equal(old.OwnerAddress[:], new.OwnerAddress[:]) {
+func sharesEqual(left *migration_6_OldStorageShare, right *storage.Share) bool {
+	if left.ValidatorIndex != right.ValidatorIndex ||
+		left.Status != right.Status ||
+		left.ActivationEpoch != right.ActivationEpoch ||
+		left.Liquidated != right.Liquidated ||
+		!bytes.Equal(left.ValidatorPubKey, right.ValidatorPubKey) ||
+		!bytes.Equal(left.SharePubKey, right.SharePubKey) ||
+		!bytes.Equal(left.Graffiti, right.Graffiti) ||
+		!bytes.Equal(left.DomainType[:], right.DomainType[:]) ||
+		!bytes.Equal(left.FeeRecipientAddress[:], right.FeeRecipientAddress[:]) ||
+		!bytes.Equal(left.OwnerAddress[:], right.OwnerAddress[:]) {
 		return false
 	}
 
-	if len(old.Committee) != len(new.Committee) {
+	if len(left.Committee) != len(right.Committee) {
 		return false
 	}
 
-	oldCommitteeMap := make(map[uint64][]byte, len(old.Committee))
-	for _, member := range old.Committee {
+	oldCommitteeMap := make(map[uint64][]byte, len(left.Committee))
+	for _, member := range left.Committee {
 		oldCommitteeMap[member.OperatorID] = member.PubKey
 	}
 
-	for _, member := range new.Committee {
+	for _, member := range right.Committee {
 		oldPubKey, exists := oldCommitteeMap[member.OperatorID]
 		if !exists || !bytes.Equal(oldPubKey, member.PubKey) {
 			return false
 		}
 	}
 
-	return new.ExitEpoch == 0
+	return right.ExitEpoch == 0
 }

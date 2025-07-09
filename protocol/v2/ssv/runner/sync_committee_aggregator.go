@@ -106,6 +106,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(ctx context.Context,
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleSyncCommitteeContribution)
 
 	// collect selection proofs and subnets
+	//nolint: prealloc
 	var (
 		selectionProofs []phase0.BLSSignature
 		subnets         []uint64

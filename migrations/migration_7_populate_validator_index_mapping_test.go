@@ -126,7 +126,7 @@ func bytesToUint64(b []byte) uint64 {
 }
 
 func seedDatabase7(t *testing.T, numOfItems int, db basedb.Database, storageKey []byte) []*storage.Share {
-	var shares []*storage.Share
+	shares := make([]*storage.Share, 0, numOfItems)
 	for index := range numOfItems {
 		var share storage.Share
 		share.ValidatorPubKey = generateValidatorPublicKey()

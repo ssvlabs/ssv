@@ -17,7 +17,7 @@ type Provider func() SlotTicker
 // Note, the caller is RESPONSIBLE for calling Next method periodically in order for
 // SlotTicker to advance forward (to keep ticking) to newer slots.
 type SlotTicker interface {
-	// Next returns a channel that will relay 1 tick signalling that "freshest" slot has started.
+	// Next returns a channel that will relay 1 tick signaling that "freshest" slot has started.
 	// It advances slot number SlotTicker keeps track of (potentially jumping several slots ahead)
 	// and returns a channel that will signal once the time corresponding to that "freshest" slot
 	// comes.
@@ -70,7 +70,7 @@ func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvi
 		timer:        timerProvider(initialDelay),
 		slotDuration: cfg.SlotDuration,
 		genesisTime:  cfg.GenesisTime,
-		nextSlot:     phase0.Slot(initialSlot), // nolint: gosec
+		nextSlot:     phase0.Slot(initialSlot), //nolint: gosec
 	}
 }
 
@@ -79,7 +79,7 @@ func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvi
 func (s *slotTicker) Next() <-chan time.Time {
 	timeSinceGenesis := time.Since(s.genesisTime)
 	if timeSinceGenesis < 0 {
-		// we are waiting for slotTicker to tick at s.genesisTime (signalling 0th slot start)
+		// we are waiting for slotTicker to tick at s.genesisTime (signaling 0th slot start)
 		return s.timer.C()
 	}
 	if !s.timer.Stop() {

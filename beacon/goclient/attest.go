@@ -95,7 +95,6 @@ func (gc *GoClient) GetAttestationData(ctx context.Context, slot phase0.Slot) (*
 	}
 
 	return result, spec.DataVersionPhase0, nil
-
 }
 
 func (gc *GoClient) weightedAttestationData(ctx context.Context, slot phase0.Slot) (*phase0.AttestationData, error) {

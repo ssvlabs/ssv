@@ -1194,7 +1194,6 @@ func TestMultiClient_Filterer_Integration(t *testing.T) {
 	logs, err := filterer.ParseValidatorAdded(log)
 	require.NoError(t, err)
 	require.NotNil(t, logs)
-
 }
 
 func TestMultiClient_ChainID(t *testing.T) {

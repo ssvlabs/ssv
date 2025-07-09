@@ -730,5 +730,5 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		summary.Version = spec.DataVersionElectra
 	}
 
-	return
+	return summary, nil
 }

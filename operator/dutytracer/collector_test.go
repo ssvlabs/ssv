@@ -1153,7 +1153,6 @@ func TestCollector_saveLateValidatorToCommiteeLinks(t *testing.T) {
 		require.Equal(t, zap.Uint64("validator_index", uint64(phase0.ValidatorIndex(1))), entry.Context[2])
 		require.Equal(t, zap.String("committee_id", hex.EncodeToString(committeeID[:])), entry.Context[3])
 	})
-
 }
 
 func TestCollector_lateMessage(t *testing.T) {
