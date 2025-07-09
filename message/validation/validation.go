@@ -64,11 +64,11 @@ type messageValidator struct {
 	signatureVerifier signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
 	// validationLockCache is a map of locks (SSV message ID -> lock) to ensure messages with
-	// same ID apply any state modifications (during message validation - which is not
-	// stateless) in isolated synchronised manner with respect to each other.
+	// the same ID apply any state modifications (during message validation - which is not
+	// stateless) in an isolated synchronized manner with respect to each other.
 	validationLockCache *ttlcache.Cache[peerIDWithMessageID, *sync.Mutex]
 	// validationLocksInflight helps us prevent generating 2 different validation locks
-	// for messages that must lock on the same lock (messages with same ID) when undergoing
+	// for messages that must lock on the same lock (messages with the same ID) when undergoing
 	// validation (that validation is not stateless - it often requires messageValidator to
 	// update some state).
 	validationLocksInflight singleflight.Group[peerIDWithMessageID, *sync.Mutex]
@@ -305,7 +305,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return CommitteeInfo{}, e
 	}
 
-	var operators []spectypes.OperatorID
+	operators := make([]spectypes.OperatorID, 0, len(share.Committee))
 	for _, c := range share.Committee {
 		operators = append(operators, c.Signer)
 	}

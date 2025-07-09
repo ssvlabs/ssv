@@ -81,9 +81,9 @@ func (h *ZapHandler) Handle(ctx context.Context, record slog.Record) error {
 		}
 		checked.Write(fields...)
 		return nil
-	} else {
-		h.option.Logger.Log(level, record.Message, fields...)
 	}
+
+	h.option.Logger.Log(level, record.Message, fields...)
 
 	return nil
 }

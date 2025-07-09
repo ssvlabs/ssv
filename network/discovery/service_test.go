@@ -19,7 +19,6 @@ import (
 )
 
 func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig *networkconfig.NetworkConfig) {
-
 	require.Len(t, dvs.bootnodes, len(netConfig.Bootnodes))
 
 	for _, bootnode := range netConfig.Bootnodes {

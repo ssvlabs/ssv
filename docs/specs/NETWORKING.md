@@ -438,7 +438,7 @@ which will reduce the overhead created by hashing the entire message:
 
 `gossipsub v1.1` introduced pubsub [scoring](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#peer-scoring),
 the idea is that each individual peer maintains a score for other peers.
-The score is locally computed by each individual peer based on observed behaviour and is not shared.
+The score is locally computed by each individual peer based on observed behavior and is not shared.
 
 An application specific scoring is used to apply scoring asynchronously as specified below in [consensus scoring](#consensus-scoring).
 

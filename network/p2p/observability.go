@@ -103,18 +103,18 @@ func recordPeerCountPerTopic(ctx context.Context, logger *zap.Logger, ctrl topic
 		// Calculate min, median, max
 		if shouldLog {
 			sort.Ints(subnetPeerCounts)
-			var min, median, max int
+			var minCount, medianCount, maxCount int
 			if len(subnetPeerCounts) > 0 {
-				min = subnetPeerCounts[0]
-				median = subnetPeerCounts[len(subnetPeerCounts)/2]
-				max = subnetPeerCounts[len(subnetPeerCounts)-1]
+				minCount = subnetPeerCounts[0]
+				medianCount = subnetPeerCounts[len(subnetPeerCounts)/2]
+				maxCount = subnetPeerCounts[len(subnetPeerCounts)-1]
 			}
 			logger.Debug(
 				"topic peers distribution",
 				zap.Int("subnets_subscribed_total", len(ctrl.Topics())),
-				zap.Int("min", min),
-				zap.Int("median", median),
-				zap.Int("max", max),
+				zap.Int("min", minCount),
+				zap.Int("median", medianCount),
+				zap.Int("max", maxCount),
 				zap.Int("dead_subnets", deadSubnets),
 				zap.Int("unhealthy_subnets", unhealthySubnets),
 			)

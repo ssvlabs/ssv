@@ -45,8 +45,8 @@ func (m *Map[Key, Value]) GetOrSet(key Key, value Value) (Value, bool) {
 	return result, loaded
 }
 
-func (m *Map[Key, Value]) CompareAndSwap(key Key, old, new Value) (swapped bool) {
-	swapped = m.Map.CompareAndSwap(key, old, new)
+func (m *Map[Key, Value]) CompareAndSwap(key Key, oldValue, newValue Value) (swapped bool) {
+	swapped = m.Map.CompareAndSwap(key, oldValue, newValue)
 	if swapped {
 		// gotta update timestamp sine we've just set value for this key
 		m.idxLastUpdatedAt.Set(key, time.Now())

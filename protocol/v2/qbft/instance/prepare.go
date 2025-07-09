@@ -108,7 +108,6 @@ func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	round specqbft.Round,
 	root [32]byte,
 	operators []*spectypes.Operator) error {
-
 	if msg.QBFTMessage.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
@@ -145,7 +144,6 @@ func validSignedPrepareForHeightRoundAndRootVerifySignature(
 	round specqbft.Round,
 	root [32]byte,
 	operators []*spectypes.Operator) error {
-
 	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(msg, height, round, root, operators); err != nil {
 		return err
 	}

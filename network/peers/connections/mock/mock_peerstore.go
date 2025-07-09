@@ -146,9 +146,8 @@ func (p Peerstore) SupportsProtocols(id peer.ID, s ...libp2p_protocol.ID) ([]lib
 func (p Peerstore) FirstSupportedProtocol(id peer.ID, s ...libp2p_protocol.ID) (libp2p_protocol.ID, error) {
 	if len(p.MockFirstSupportedProtocol) != 0 {
 		return p.MockFirstSupportedProtocol, nil
-	} else {
-		return "", errors.New("error")
 	}
+	return "", errors.New("error")
 }
 
 func (p Peerstore) RemovePeer(id peer.ID) {

@@ -44,7 +44,6 @@ func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []
 }
 
 func (s *SignatureVerifier) VerifySignatureForSigner(root []byte, signature []byte, signer spectypes.OperatorID, operators []*spectypes.Operator) error {
-
 	for _, op := range operators {
 		// Find signer
 		if signer == op.OperatorID {

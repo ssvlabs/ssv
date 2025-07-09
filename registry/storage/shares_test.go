@@ -581,7 +581,7 @@ func generateRandomValidatorStorageShare(splitKeys map[uint64]*bls.SecretKey) *S
 	sk2 := bls.SecretKey{}
 	sk2.SetByCSPRNG()
 
-	var ibftCommittee []*storageOperator
+	ibftCommittee := make([]*storageOperator, 0, len(splitKeys))
 	for operatorID, sk := range splitKeys {
 		ibftCommittee = append(ibftCommittee, &storageOperator{
 			OperatorID: operatorID,
@@ -615,7 +615,7 @@ func generateRandomShare(splitKeys map[uint64]*bls.SecretKey, state v1.Validator
 	sk2 := bls.SecretKey{}
 	sk2.SetByCSPRNG()
 
-	var ibftCommittee []*spectypes.ShareMember
+	ibftCommittee := make([]*spectypes.ShareMember, 0, len(splitKeys))
 	for operatorID, sk := range splitKeys {
 		ibftCommittee = append(ibftCommittee, &spectypes.ShareMember{
 			Signer:      operatorID,

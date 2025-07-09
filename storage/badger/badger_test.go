@@ -253,7 +253,6 @@ func TestGetMany(t *testing.T) {
 			encodeUint64(5),
 			encodeUint64(10),
 		}, func(obj basedb.Obj) error {
-
 			require.True(t, bytes.Equal(obj.Key, obj.Value))
 			results = append(results, obj)
 

@@ -200,8 +200,7 @@ func TestSyncer_Sync(t *testing.T) {
 			beaconNode:   unusedMockBeaconNode,
 		}
 
-		var pubKeys []spectypes.ValidatorPK
-		result, err := syncer.Sync(t.Context(), pubKeys)
+		result, err := syncer.Sync(t.Context(), nil)
 		require.NoError(t, err)
 		require.Nil(t, result)
 	})
