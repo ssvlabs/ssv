@@ -125,6 +125,10 @@ func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, erro
 // Sync retrieves metadata for the provided public keys and updates storage accordingly.
 // Returns updated metadata for keys that had changes. Returns nil if no keys were provided or no updates occurred.
 func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
+	if len(pubKeys) == 0 {
+		return nil, nil
+	}
+
 	fetchStart := time.Now()
 	metadata, err := s.fetchMetadata(ctx, pubKeys)
 	if err != nil {
@@ -136,10 +140,6 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 		zap.Int("requested_count", len(pubKeys)),
 		zap.Int("received_count", len(metadata)),
 	)
-
-	if len(metadata) == 0 {
-		return nil, nil
-	}
 
 	updateStart := time.Now()
 	// TODO: Refactor share storage to support passing context.
@@ -157,20 +157,15 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 	return updatedValidators, nil
 }
 
+// This method is responsible for fetching validator metadata from the beacon node for the provided public keys.
+// The beacon node response is sometimes empty for certain public keys — for such validators,
+// the ValidatorMetadataMap will contain empty metadata objects.
 func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
-	if len(pubKeys) == 0 {
-		return nil, nil
-	}
-
 	blsPubKeys := make([]phase0.BLSPubKey, len(pubKeys))
 	for i, pk := range pubKeys {
 		blsPubKeys[i] = phase0.BLSPubKey(pk)
 	}
 
-	// NOTE: The response is sometimes empty for some validators,
-	// which eventually leads the Syncer to keep picking them up for synchronization.
-	// Presumably, sooner or later the CL will respond with data,
-	// and validator's metadata will be updated.
 	validatorsIndexMap, err := s.beaconNode.GetValidatorData(ctx, blsPubKeys)
 	if err != nil {
 		return nil, fmt.Errorf("get validator data from beacon node: %w", err)
