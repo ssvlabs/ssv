@@ -51,13 +51,15 @@ type ListKeysResponse []phase0.BLSPubKey
 // ListKeys lists keys in Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Public-Key/operation/ETH2_LIST
 func (w3s *Web3Signer) ListKeys(ctx context.Context) (ListKeysResponse, error) {
 	var resp ListKeysResponse
+	var errResp string
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
 		Path(pathPublicKeys).
 		ToJSON(&resp).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
 		Fetch(ctx)
-	return resp, w3s.handleWeb3SignerErr(err)
+	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
 
 type ImportKeystoreRequest struct {
@@ -74,6 +76,7 @@ type ImportKeystoreResponse struct {
 // ImportKeystore adds a key to Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Keymanager/operation/KEYMANAGER_IMPORT
 func (w3s *Web3Signer) ImportKeystore(ctx context.Context, req ImportKeystoreRequest) (ImportKeystoreResponse, error) {
 	var resp ImportKeystoreResponse
+	var errResp string
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
@@ -81,8 +84,9 @@ func (w3s *Web3Signer) ImportKeystore(ctx context.Context, req ImportKeystoreReq
 		BodyJSON(req).
 		Post().
 		ToJSON(&resp).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
 		Fetch(ctx)
-	return resp, w3s.handleWeb3SignerErr(err)
+	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
 
 type DeleteKeystoreRequest struct {
@@ -98,6 +102,7 @@ type DeleteKeystoreResponse struct {
 // DeleteKeystore removes a key from Web3Signer using https://consensys.github.io/web3signer/web3signer-eth2.html#operation/KEYMANAGER_DELETE
 func (w3s *Web3Signer) DeleteKeystore(ctx context.Context, req DeleteKeystoreRequest) (DeleteKeystoreResponse, error) {
 	var resp DeleteKeystoreResponse
+	var errResp string
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
@@ -105,8 +110,9 @@ func (w3s *Web3Signer) DeleteKeystore(ctx context.Context, req DeleteKeystoreReq
 		BodyJSON(req).
 		Delete().
 		ToJSON(&resp).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
 		Fetch(ctx)
-	return resp, w3s.handleWeb3SignerErr(err)
+	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
 
 type SignRequest struct {
@@ -126,12 +132,13 @@ type SignRequest struct {
 }
 
 type SignResponse struct {
-	Signature phase0.BLSSignature `json:"signature"`
+	Signature phase0.BLSSignature `json:"signature,omitempty"`
 }
 
 // Sign signs using https://consensys.github.io/web3signer/web3signer-eth2.html#tag/Signing/operation/ETH2_SIGN
 func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, req SignRequest) (SignResponse, error) {
 	var resp SignResponse
+	var errResp string
 	err := requests.
 		URL(w3s.baseURL).
 		Client(w3s.httpClient).
@@ -140,20 +147,21 @@ func (w3s *Web3Signer) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, r
 		Post().
 		Accept("application/json").
 		ToJSON(&resp).
+		AddValidator(requests.ValidatorHandler(requests.DefaultValidator, requests.ToString(&errResp))).
 		Fetch(ctx)
-	return resp, w3s.handleWeb3SignerErr(err)
+	return resp, w3s.handleWeb3SignerErr(err, errResp)
 }
 
-func (w3s *Web3Signer) handleWeb3SignerErr(err error) error {
+func (w3s *Web3Signer) handleWeb3SignerErr(err error, errResp string) error {
 	if err == nil {
 		return nil
 	}
 
-	if se := new(requests.ResponseError); errors.As(err, &se) {
-		return HTTPResponseError{Err: err, Status: se.StatusCode}
+	if re := new(requests.ResponseError); errors.As(err, &re) {
+		return HTTPResponseError{Err: err, Status: re.StatusCode, ErrText: errResp}
 	}
 
-	return HTTPResponseError{Err: err, Status: http.StatusInternalServerError}
+	return HTTPResponseError{Err: err, Status: http.StatusInternalServerError, ErrText: errResp}
 }
 
 // applyTLSConfig clones the existing transport and applies the TLS configuration to the HTTP client.
