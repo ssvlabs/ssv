@@ -179,7 +179,8 @@ func TestValidatorStore_Integrity(t *testing.T) {
 	}
 }
 
-// requireValidatorStoreIntegrity checks that every method returns expected results
+// requireValidatorStoreIntegrity checks that every function of the ValidatorStore returns the expected results
+// by reconstructing the expected state from the given shares and comparing it to the actual state of the store.
 func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares []*types.SSVShare) {
 	// Check that there are no false positives.
 	const nonExistingIndex = phase0.ValidatorIndex(math.MaxUint64 - 1)
@@ -407,18 +408,6 @@ func requireEqualShare(t *testing.T, expected *types.SSVShare, actual *types.SSV
 		require.True(t, exists, "missing committee member %d", operatorID)
 		require.Equal(t, expectedPubKey, actualPubKey, "share pubkey mismatch for operator %d", operatorID)
 	}
-}
-
-func buildExpectedCommittees(shares []*types.SSVShare) map[spectypes.CommitteeID]map[spectypes.ValidatorPK]struct{} {
-	committees := make(map[spectypes.CommitteeID]map[spectypes.ValidatorPK]struct{})
-	for _, share := range shares {
-		committeeID := share.CommitteeID()
-		if committees[committeeID] == nil {
-			committees[committeeID] = make(map[spectypes.ValidatorPK]struct{})
-		}
-		committees[committeeID][share.ValidatorPubKey] = struct{}{}
-	}
-	return committees
 }
 
 func sameOperators(a, b []spectypes.OperatorID) bool {

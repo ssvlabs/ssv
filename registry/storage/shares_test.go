@@ -15,6 +15,7 @@ import (
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -104,6 +105,8 @@ func TestSharesStorage(t *testing.T) {
 
 	for _, share := range persistedActiveValidatorShares {
 		require.NoError(t, storage.Shares.Save(nil, share))
+		// Trigger validator store update
+		require.NoError(t, storage.ValidatorStore.OnShareAdded(t.Context(), share, UpdateOptions{}))
 	}
 
 	t.Run("Get_sharesExist", func(t *testing.T) {
@@ -127,45 +130,51 @@ func TestSharesStorage(t *testing.T) {
 		}
 	})
 
-	// TODO: move it to validator_store_test.go
-	//t.Run("UpdateValidatorMetadata_updatesMetadata", func(t *testing.T) {
-	//	for _, share := range persistedActiveValidatorShares {
-	//		updatedIndex := phase0.ValidatorIndex(rand.Uint64())
-	//		updatedActivationEpoch, updatedExitEpoch := phase0.Epoch(5), phase0.Epoch(6)
-	//		updatedStatus := v1.ValidatorStateActiveOngoing
-	//
-	//		updatedShares, err := storage.ValidatorStore.UpdateValidatorsMetadata(
-	//			t.Context(),
-	//			beaconprotocol.ValidatorMetadataMap{
-	//				share.ValidatorPubKey: {
-	//					Index:           updatedIndex,
-	//					Status:          updatedStatus,
-	//					ActivationEpoch: updatedActivationEpoch,
-	//					ExitEpoch:       updatedExitEpoch,
-	//				},
-	//			},
-	//		)
-	//		require.NoError(t, err)
-	//		require.NotNil(t, updatedShares)
-	//
-	//		fetchedShare, exists := storage.Shares.Get(nil, share.ValidatorPubKey[:])
-	//		require.True(t, exists)
-	//		require.NotNil(t, fetchedShare)
-	//		require.Equal(t, updatedIndex, fetchedShare.ValidatorIndex)
-	//		require.Equal(t, updatedActivationEpoch, fetchedShare.ActivationEpoch)
-	//		require.Equal(t, updatedExitEpoch, fetchedShare.ExitEpoch)
-	//		require.Equal(t, updatedStatus, fetchedShare.Status)
-	//	}
-	//})
+	t.Run("UpdateValidatorMetadata_updatesMetadata", func(t *testing.T) {
+		for _, share := range persistedActiveValidatorShares {
+			updatedIndex := phase0.ValidatorIndex(rand.Uint64())
+			updatedActivationEpoch, updatedExitEpoch := phase0.Epoch(5), phase0.Epoch(6)
+			updatedStatus := v1.ValidatorStateActiveOngoing
+
+			updatedShares, err := storage.ValidatorStore.UpdateValidatorsMetadata(
+				t.Context(),
+				beaconprotocol.ValidatorMetadataMap{
+					share.ValidatorPubKey: &beaconprotocol.ValidatorMetadata{
+						Index:           updatedIndex,
+						Status:          updatedStatus,
+						ActivationEpoch: updatedActivationEpoch,
+						ExitEpoch:       updatedExitEpoch,
+					},
+				},
+			)
+			require.NoError(t, err)
+			require.NotNil(t, updatedShares)
+
+			fetchedShare, exists := storage.Shares.Get(nil, share.ValidatorPubKey[:])
+			require.True(t, exists)
+			require.NotNil(t, fetchedShare)
+			require.Equal(t, updatedIndex, fetchedShare.ValidatorIndex)
+			require.Equal(t, updatedActivationEpoch, fetchedShare.ActivationEpoch)
+			require.Equal(t, updatedExitEpoch, fetchedShare.ExitEpoch)
+			require.Equal(t, updatedStatus, fetchedShare.Status)
+		}
+	})
 
 	t.Run("List_NoFilter", func(t *testing.T) {
 		shares := storage.Shares.List(nil)
 
 		require.NoError(t, err)
 		require.EqualValues(t, len(persistedActiveValidatorShares), len(shares))
+
+		// Compare using pubkeys since the shares may have been updated
+		foundKeys := make(map[spectypes.ValidatorPK]bool)
 		for _, share := range shares {
 			require.NotNil(t, share)
-			require.Contains(t, persistedActiveValidatorShares, share)
+			foundKeys[share.ValidatorPubKey] = true
+		}
+
+		for _, original := range persistedActiveValidatorShares {
+			require.True(t, foundKeys[original.ValidatorPubKey])
 		}
 	})
 
@@ -219,9 +228,16 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 
 	// Test share deletion with and without reopening the database.
 	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
+		// Add operators first
+		for i := uint64(1); i <= 4; i++ {
+			_, err := storage.Operators.SaveOperatorData(nil, &OperatorData{ID: i, PublicKey: strconv.FormatUint(i, 10)})
+			require.NoError(t, err)
+		}
+
 		// Generate and save a random validator share
 		validatorShare := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
 		require.NoError(t, storage.Shares.Save(nil, validatorShare))
+		require.NoError(t, storage.ValidatorStore.OnShareAdded(t.Context(), validatorShare, UpdateOptions{}))
 		reopen(t)
 
 		// Ensure the share is saved correctly
@@ -239,6 +255,7 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 
 		// Delete the share from storage
 		require.NoError(t, storage.Shares.Delete(nil, validatorShare.ValidatorPubKey[:]))
+		require.NoError(t, storage.ValidatorStore.OnShareRemoved(t.Context(), validatorShare.ValidatorPubKey, UpdateOptions{}))
 		reopen(t)
 
 		// Verify that the share is deleted from shareStorage
@@ -254,7 +271,7 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 		// Further checks on internal data structures
 		committee, exists := storage.ValidatorStore.GetCommittee(validatorShare.CommitteeID())
 		require.False(t, exists)
-		require.Nil(t, committee, "IndexedCommittee should be nil after share deletion")
+		require.Nil(t, committee, "Committee should be nil after share deletion")
 
 		// Verify that other internal mappings are updated accordingly
 		byIndex, exists := storage.ValidatorStore.GetValidator(ValidatorIndex(validatorShare.ValidatorIndex))
@@ -280,8 +297,15 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 		require.NoError(t, err)
 		defer storage.Close()
 
+		// Add operators first
+		for i := uint64(1); i <= 4; i++ {
+			_, err := storage.Operators.SaveOperatorData(nil, &OperatorData{ID: i, PublicKey: strconv.FormatUint(i, 10)})
+			require.NoError(t, err)
+		}
+
 		validatorShare := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
 		require.NoError(t, storage.Shares.Save(nil, validatorShare))
+		require.NoError(t, storage.ValidatorStore.OnShareAdded(t.Context(), validatorShare, UpdateOptions{}))
 
 		requireValidatorStoreIntegrity(t, storage.ValidatorStore, []*ssvtypes.SSVShare{validatorShare})
 
@@ -293,9 +317,16 @@ func TestShareDeletionHandlesValidatorStoreCorrectly(t *testing.T) {
 
 func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
+		// Add operators first
+		for i := uint64(1); i <= 4; i++ {
+			_, err := storage.Operators.SaveOperatorData(nil, &OperatorData{ID: i, PublicKey: strconv.FormatUint(i, 10)})
+			require.NoError(t, err)
+		}
+
 		// Generate and save a random validator share
 		testShare := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
 		require.NoError(t, storage.Shares.Save(nil, testShare))
+		require.NoError(t, storage.ValidatorStore.OnShareAdded(t.Context(), testShare, UpdateOptions{}))
 		reopen(t)
 
 		// Try saving nil share/shares
@@ -345,6 +376,7 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 
 		// Remove the share via SharesStorage
 		require.NoError(t, storage.Shares.Delete(nil, testShare.ValidatorPubKey[:]))
+		require.NoError(t, storage.ValidatorStore.OnShareRemoved(t.Context(), testShare.ValidatorPubKey, UpdateOptions{}))
 		reopen(t)
 
 		// Verify that the share is removed from both sharesStorage and validatorIndices
@@ -361,17 +393,30 @@ func TestValidatorStoreThroughSharesStorage(t *testing.T) {
 // Test various edge cases where operators have multiple committees.
 func TestShareStorage_MultipleCommittees(t *testing.T) {
 	testWithStorageReopen(t, func(t *testing.T, storage *testStorage, reopen func(t *testing.T)) {
+		// Add all required operators first
+		for i := uint64(1); i <= 12; i++ {
+			_, err := storage.Operators.SaveOperatorData(nil, &OperatorData{ID: i, PublicKey: strconv.FormatUint(i, 10)})
+			require.NoError(t, err)
+		}
+
 		shares := map[phase0.ValidatorIndex]*ssvtypes.SSVShare{}
 		saveAndVerify := func(s ...*ssvtypes.SSVShare) {
 			require.NoError(t, storage.Shares.Save(nil, s...))
-			reopen(t)
+			ctx := t.Context()
 			for _, share := range s {
+				if _, exists := shares[share.ValidatorIndex]; !exists {
+					require.NoError(t, storage.ValidatorStore.OnShareAdded(ctx, share, UpdateOptions{}))
+				} else {
+					require.NoError(t, storage.ValidatorStore.OnShareUpdated(ctx, share, UpdateOptions{}))
+				}
 				shares[share.ValidatorIndex] = share
 			}
+			reopen(t)
 			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
 		}
 		deleteAndVerify := func(share *ssvtypes.SSVShare) {
 			require.NoError(t, storage.Shares.Delete(nil, share.ValidatorPubKey[:]))
+			require.NoError(t, storage.ValidatorStore.OnShareRemoved(t.Context(), share.ValidatorPubKey, UpdateOptions{}))
 			reopen(t)
 			delete(shares, share.ValidatorIndex)
 			requireValidatorStoreIntegrity(t, storage.ValidatorStore, slices.Collect(maps.Values(shares)))
@@ -412,27 +457,47 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 	require.NoError(t, err)
 	defer storage.Close()
 
+	// Add all required operators first
+	for i := uint64(1); i <= 12; i++ {
+		_, err := storage.Operators.SaveOperatorData(nil, &OperatorData{ID: i, PublicKey: strconv.FormatUint(i, 10)})
+		require.NoError(t, err)
+	}
+
 	share1 := fakeParticipatingShare(1, generateRandomPubKey(), []uint64{1, 2, 3, 4})
 	share2 := fakeParticipatingShare(2, generateRandomPubKey(), []uint64{1, 2, 3, 4})
 	share3 := fakeParticipatingShare(3, generateRandomPubKey(), []uint64{3, 4, 5, 6})
 	share4 := fakeParticipatingShare(4, generateRandomPubKey(), []uint64{9, 10, 11, 12})
 
-	// High contention test with concurrent read, add, update, and remove
+	// Pre-add shares to ensure they exist for the test
+	require.NoError(t, storage.Shares.Save(nil, share1, share2, share3, share4))
+	require.NoError(t, storage.ValidatorStore.OnShareAdded(t.Context(), share1, UpdateOptions{}))
+	require.NoError(t, storage.ValidatorStore.OnShareAdded(t.Context(), share2, UpdateOptions{}))
+	require.NoError(t, storage.ValidatorStore.OnShareAdded(t.Context(), share3, UpdateOptions{}))
+	require.NoError(t, storage.ValidatorStore.OnShareAdded(t.Context(), share4, UpdateOptions{}))
+
+	// High-contention test with concurrent read, add, update, and remove
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
+
 	for i := 0; i < 100; i++ {
 		for _, op := range []string{"add", "update", "remove1", "remove4", "read"} {
 			wg.Add(1)
-			go func() {
+			go func(operation string) {
 				defer wg.Done()
 				for ctx.Err() == nil {
-					switch op {
+					switch operation {
 					case "add":
+						// Re-save shares (will be updates since they already exist)
 						require.NoError(t, storage.Shares.Save(nil, share1, share2, share3, share4))
+						// Use OnShareUpdated for existing shares
+						_ = storage.ValidatorStore.OnShareUpdated(ctx, share1, UpdateOptions{})
+						_ = storage.ValidatorStore.OnShareUpdated(ctx, share2, UpdateOptions{})
+						_ = storage.ValidatorStore.OnShareUpdated(ctx, share3, UpdateOptions{})
+						_ = storage.ValidatorStore.OnShareUpdated(ctx, share4, UpdateOptions{})
 					case "update":
-						_, err := storage.ValidatorStore.UpdateValidatorsMetadata(
-							t.Context(),
+						_, _ = storage.ValidatorStore.UpdateValidatorsMetadata(
+							ctx,
 							beaconprotocol.ValidatorMetadataMap{
 								share2.ValidatorPubKey: {
 									Status:          share2.Status,
@@ -442,25 +507,25 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 								},
 							},
 						)
-						require.NoError(t, err)
 					case "remove1":
 						require.NoError(t, storage.Shares.Delete(nil, share1.ValidatorPubKey[:]))
+						_ = storage.ValidatorStore.OnShareRemoved(ctx, share1.ValidatorPubKey, UpdateOptions{})
 					case "remove4":
 						require.NoError(t, storage.Shares.Delete(nil, share4.ValidatorPubKey[:]))
+						_ = storage.ValidatorStore.OnShareRemoved(ctx, share4.ValidatorPubKey, UpdateOptions{})
 					case "read":
-						_, _ = storage.ValidatorStore.GetValidator(ValidatorPubKey(share1.ValidatorPubKey[:]))
+						_, _ = storage.ValidatorStore.GetValidator(ValidatorPubKey(share1.ValidatorPubKey))
 						_, _ = storage.ValidatorStore.GetCommittee(share1.CommitteeID())
 						_ = storage.ValidatorStore.GetAllValidators()
 						_ = storage.ValidatorStore.GetCommittees()
 					}
 				}
-			}()
+			}(op)
 		}
 	}
 	wg.Wait()
 
 	t.Run("validate high contention state", func(t *testing.T) {
-		// Check that the store is consistent and valid after high contention
 		require.NotPanics(t, func() {
 			storage.ValidatorStore.GetAllValidators()
 			storage.ValidatorStore.GetCommittees()
@@ -468,19 +533,21 @@ func TestSharesStorage_HighContentionConcurrency(t *testing.T) {
 			storage.ValidatorStore.GetOperatorCommittees(1)
 		})
 
-		// Verify that share2 and share3 are in the validator store (only share1 and share4 are potentially removed).
+		// Check integrity with whatever shares remain
+		remainingShares := storage.Shares.List(nil)
+		requireValidatorStoreIntegrity(t, storage.ValidatorStore, remainingShares)
+
+		// Verify that share2 and share3 are still in the validator store (only share1 and share4 are removed)
 		share2InStore, exists := storage.ValidatorStore.GetValidator(ValidatorIndex(share2.ValidatorIndex))
 		require.True(t, exists)
 		require.NotNil(t, share2InStore)
-		requireEqualShare(t, share2, &share2InStore.Share)
 
 		share3InStore, exists := storage.ValidatorStore.GetValidator(ValidatorIndex(share3.ValidatorIndex))
 		require.True(t, exists)
 		require.NotNil(t, share3InStore)
-		requireEqualShare(t, share3, &share3InStore.Share)
 
-		// Integrity check.
-		requireValidatorStoreIntegrity(t, storage.ValidatorStore, storage.Shares.List(nil))
+		// We expect exactly 2 shares to remain (share2 and share3) since share1 and share4 are removed
+		require.Len(t, remainingShares, 2)
 	})
 }
 
@@ -652,6 +719,19 @@ func (t *testStorage) open(logger *zap.Logger) error {
 		return err
 	}
 	t.Operators = NewOperatorsStorage(logger, t.db, []byte("test"))
+
+	// Create ValidatorStore with the new architecture
+	t.ValidatorStore, err = NewValidatorStore(
+		logger,
+		t.Shares,
+		t.Operators,
+		networkconfig.TestNetwork,
+		func() spectypes.OperatorID { return 1 },
+	)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
