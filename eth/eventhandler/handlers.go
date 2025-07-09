@@ -97,7 +97,11 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	return nil
 }
 
-func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.ContractOperatorRemoved) error {
+func (eh *EventHandler) handleOperatorRemoved(
+	ctx context.Context,
+	txn basedb.Txn,
+	event *contract.ContractOperatorRemoved,
+) error {
 	logger := eh.logger.With(
 		fields.EventName(OperatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
@@ -122,6 +126,15 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 	// Permanently remove operator data to prevent further message validation.
 	if err := eh.nodeStorage.DeleteOperatorData(txn, event.OperatorId); err != nil {
 		return fmt.Errorf("could not delete operator data: %w", err)
+	}
+
+	// Notify ValidatorStore about operator removal
+	opts := registrystorage.UpdateOptions{
+		TriggerCallbacks: true,
+	}
+	if err := eh.validatorStore.OnOperatorRemoved(ctx, event.OperatorId, opts); err != nil {
+		logger.Error("failed to notify validator store of operator removal", zap.Error(err))
+		return fmt.Errorf("notify validator store of operator removal: %w", err)
 	}
 
 	logger.Debug("processed event")

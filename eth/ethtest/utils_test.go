@@ -187,8 +187,8 @@ func setupEventHandler(
 		eh, err := eventhandler.New(
 			nodeStorage,
 			parser,
-			validatorCtrl,
 			testNetworkConfig,
+			validatorCtrl,
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,

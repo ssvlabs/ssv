@@ -198,7 +198,7 @@ func (eh *EventHandler) processEvent(ctx context.Context, txn basedb.Txn, event 
 			return nil
 		}
 
-		if err := eh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
+		if err := eh.handleOperatorRemoved(ctx, txn, operatorRemovedEvent); err != nil {
 			recordEventProcessFailure(ctx, abiEvent.Name)
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -383,7 +383,7 @@ func (eh *EventHandler) processLocalEvent(ctx context.Context, txn basedb.Txn, e
 		return nil
 	case OperatorRemoved:
 		data := event.Data.(contract.ContractOperatorRemoved)
-		if err := eh.handleOperatorRemoved(txn, &data); err != nil {
+		if err := eh.handleOperatorRemoved(ctx, txn, &data); err != nil {
 			return fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 		return nil
