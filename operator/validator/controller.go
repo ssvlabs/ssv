@@ -1150,7 +1150,6 @@ func SetupRunners(
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
-		spectypes.RoleCommittee,
 		spectypes.RoleProposer,
 		spectypes.RoleAggregator,
 		spectypes.RoleSyncCommitteeContribution,
