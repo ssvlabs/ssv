@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,7 +13,7 @@ func TestExecQueue(t *testing.T) {
 	var i int64
 	q := NewExecutionQueue(1 * time.Millisecond)
 
-	go q.Start(context.Background())
+	go q.Start(t.Context())
 
 	count := 100
 	for count > 0 {
@@ -52,7 +51,7 @@ func TestExecQueue_Stop(t *testing.T) {
 	})
 	require.Equal(t, 1, len(q.(*executionQueue).getWaiting()))
 
-	go q.Start(context.Background())
+	go q.Start(t.Context())
 	wg.Wait()
 	require.Equal(t, 0, len(q.(*executionQueue).getWaiting()))
 
@@ -81,7 +80,7 @@ func TestExecQueue_QueueDistinct(t *testing.T) {
 	q.QueueDistinct(inc, "1")
 	q.QueueDistinct(inc, "1")
 	require.Equal(t, 1, len(q.(*executionQueue).getWaiting()))
-	go q.Start(context.Background())
+	go q.Start(t.Context())
 	defer q.Stop()
 	// waiting for function to execute
 	time.Sleep(4 * time.Millisecond)
@@ -90,7 +89,7 @@ func TestExecQueue_QueueDistinct(t *testing.T) {
 
 func TestExecQueue_Empty(t *testing.T) {
 	q := NewExecutionQueue(1 * time.Millisecond)
-	go q.Start(context.Background())
+	go q.Start(t.Context())
 	time.Sleep(time.Millisecond)
 	q.Stop()
 	require.True(t, q.(*executionQueue).isStopped())
