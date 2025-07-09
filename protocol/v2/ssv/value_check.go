@@ -56,6 +56,9 @@ func (v *voteChecker) CheckValueWithSP(value []byte, spData *ssvtypes.SlashingPr
 		return err
 	}
 
+	// The lagging tolerance check has not been agreed by the spec team,
+	// so we are currently checking exact source and target only.
+
 	if bv.Source.Epoch != spData.SourceEpoch {
 		return errors.New("beacon vote source epoch doesn't satisfy slashing protection data")
 	}
@@ -63,8 +66,6 @@ func (v *voteChecker) CheckValueWithSP(value []byte, spData *ssvtypes.SlashingPr
 	if bv.Target.Epoch != spData.TargetEpoch {
 		return errors.New("beacon vote target epoch doesn't satisfy slashing protection data")
 	}
-
-	// TODO: handle possible lag case
 
 	return nil
 }
