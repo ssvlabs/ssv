@@ -23,6 +23,6 @@ var HoodiStage = NetworkConfig{
 			// SSV Labs
 			"enr:-Ja4QJZcaYfS0GpX-5xREVBa26a-E-QHMFek-EndsJdgM6loIM7pfbJwPDCNK1VzPkUhMjwcTTuNASiHU6X-sjsrxFmGAZWjNu06gmlkgnY0gmlwhErcGnyJc2VjcDI1NmsxoQP_bBE-ZYvaXKBR3dRYMN5K_lZP-q-YsBzDZEtxH_4T_YNzc3YBg3RjcIITioN1ZHCCD6I",
 		},
-		GasLimit36Epoch: phase0.Epoch(25228), // Test - Yoaz
+		GasLimit36Epoch: phase0.Epoch(25653), // Test - Yoaz
 	},
 }
