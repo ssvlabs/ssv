@@ -296,6 +296,7 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 	fingerprint := sha256.Sum256(cert.Raw)
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
+	// Get the hostname from multiple possible sources
 	hosts := make(map[string]struct{})
 
 	if state.ServerName != "" {
@@ -319,6 +320,7 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 	}
 
 	for host := range hosts {
+		// Check fingerprint against our trusted list
 		if expectedFingerprint, ok := trustedFingerprints[host]; ok {
 			expectedFingerprint = normalizeFingerprint(expectedFingerprint)
 			if expectedFingerprint != fingerprintHex {
