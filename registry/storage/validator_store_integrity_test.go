@@ -336,7 +336,9 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 	currentEpoch := testNetworkConfig.EstimatedCurrentEpoch()
 	var expectedParticipating []*types.SSVShare
 	for _, share := range shares {
-		if share.IsParticipating(testNetworkConfig, currentEpoch) {
+		if share.IsParticipating(testNetworkConfig, currentEpoch) &&
+			share.ActivationEpoch <= currentEpoch &&
+			share.Status != eth2apiv1.ValidatorStatePendingQueued {
 			expectedParticipating = append(expectedParticipating, share)
 		}
 	}

@@ -10,7 +10,6 @@ import (
 	"github.com/ssvlabs/ssv/storage/basedb"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -532,8 +531,8 @@ func TestValidatorStore_OnShareRemoved(t *testing.T) {
 		tracker.mu.Lock()
 		require.Contains(t, tracker.validatorRemoved, testShare1.ValidatorPubKey)
 		require.Contains(t, tracker.validatorStopped, testShare1.ValidatorPubKey)
-		require.Len(t, tracker.committeeChanged, 2) // Created + Removed
-		require.Equal(t, CommitteeActionRemoved, tracker.committeeChanged[1].Action)
+		require.Len(t, tracker.committeeChanged, 1) // Only Removed (creation happens during initialization)
+		require.Equal(t, CommitteeActionRemoved, tracker.committeeChanged[0].Action)
 		tracker.mu.Unlock()
 	})
 
@@ -628,7 +627,7 @@ func TestValidatorStore_OnFeeRecipientUpdated(t *testing.T) {
 		// Verify update
 		v1, exists := store.GetValidator(ValidatorPubKey(testShare1.ValidatorPubKey))
 		require.True(t, exists)
-		require.Equal(t, bellatrix.ExecutionAddress(newRecipient), v1.Share.FeeRecipientAddress)
+		require.Equal(t, newRecipient[:], v1.Share.FeeRecipientAddress[:])
 
 		// Share2 should not be affected
 		v2, exists := store.GetValidator(ValidatorPubKey(testShare2.ValidatorPubKey))
@@ -704,7 +703,7 @@ func TestValidatorStore_GetParticipatingValidators(t *testing.T) {
 			name:     "all participating",
 			epoch:    250,
 			opts:     ParticipationOptions{},
-			expected: 1, // Only testShare1 is active
+			expected: 1, // Only testShare1 should be participating
 		},
 		{
 			name:  "include exited",
@@ -720,7 +719,7 @@ func TestValidatorStore_GetParticipatingValidators(t *testing.T) {
 			opts: ParticipationOptions{
 				OnlyAttesting: true,
 			},
-			expected: 1, // testShare1
+			expected: 1, // Only testShare1
 		},
 	}
 
@@ -763,7 +762,7 @@ func TestValidatorStore_UpdateValidatorsMetadata(t *testing.T) {
 	// Update with same metadata (no change)
 	changed, err = store.UpdateValidatorsMetadata(ctx, metadata)
 	require.NoError(t, err)
-	require.Nil(t, changed)
+	require.Empty(t, changed)
 }
 
 func TestValidatorStore_Concurrency(t *testing.T) {
@@ -880,7 +879,7 @@ func TestValidatorStore_GetSelfOperators(t *testing.T) {
 
 	// Get self participating validators
 	selfParticipating := store.GetSelfParticipatingValidators(250, ParticipationOptions{})
-	require.Len(t, selfParticipating, 1) // Only testShare1 is active
+	require.Len(t, selfParticipating, 1) // Only testShare1 is participating at epoch 250 (testShare2 is pending)
 }
 
 func TestValidatorStore_CommitteeManagement(t *testing.T) {
@@ -957,6 +956,7 @@ func TestValidatorStore_ParticipationStatus(t *testing.T) {
 			expected: ParticipationStatus{
 				IsParticipating:     false,
 				HasBeaconMetadata:   true,
+				IsAttesting:         true,
 				MinParticipationMet: true,
 				Reason:              "pending activation",
 			},
@@ -997,111 +997,3 @@ func TestValidatorStore_ParticipationStatus(t *testing.T) {
 		})
 	}
 }
-
-// Benchmarks
-
-//func BenchmarkValidatorStore_OnShareAdded(b *testing.B) {
-//	ctx := t.Context()
-//	store, _, _ := createTestStore(b)
-//
-//	shares := make([]*types.SSVShare, b.N)
-//	for i := range shares {
-//		shares[i] = &types.SSVShare{
-//			Share: spectypes.Share{
-//				ValidatorIndex:  phase0.ValidatorIndex(i + 1),
-//				ValidatorPubKey: spectypes.ValidatorPK{byte(i), byte(i + 1), byte(i + 2)},
-//				SharePubKey:     spectypes.ShareValidatorPK{byte(i + 3), byte(i + 4), byte(i + 5)},
-//				Committee:       []*spectypes.ShareMember{{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4}},
-//			},
-//		}
-//	}
-//
-//	b.ResetTimer()
-//	for i := 0; i < b.N; i++ {
-//		_ = store.OnShareAdded(ctx, shares[i], UpdateOptions{})
-//	}
-//}
-
-//func BenchmarkValidatorStore_GetParticipatingValidators(b *testing.B) {
-//	store, _, _ := createTestStore(b)
-//	ctx := t.Context()
-//
-//	// Add many validators
-//	for i := 0; i < 1000; i++ {
-//		share := &types.SSVShare{
-//			Share: spectypes.Share{
-//				ValidatorIndex:  phase0.ValidatorIndex(i + 1),
-//				ValidatorPubKey: spectypes.ValidatorPK{byte(i), byte(i + 1), byte(i + 2)},
-//				SharePubKey:     spectypes.ShareValidatorPK{byte(i + 3), byte(i + 4), byte(i + 5)},
-//				Committee:       []*spectypes.ShareMember{{Signer: uint64(i%4 + 1)}},
-//			},
-//			Status:          eth2apiv1.ValidatorStateActiveOngoing,
-//			ActivationEpoch: 0,
-//			ExitEpoch:       phase0.Epoch(^uint64(0) >> 1),
-//			OwnerAddress:    common.HexToAddress("0x12345"),
-//			Liquidated:      false,
-//		}
-//		if i%10 == 0 {
-//			share.Liquidated = true
-//		}
-//		_ = store.OnShareAdded(ctx, share, UpdateOptions{})
-//	}
-//
-//	b.ResetTimer()
-//	for i := 0; i < b.N; i++ {
-//		_ = store.GetParticipatingValidators(100, ParticipationOptions{})
-//	}
-//}
-
-//func BenchmarkValidatorStore_ConcurrentReadWrite(b *testing.B) {
-//	ctx := b.Context()
-//	store, _, _ := createTestStore(b)
-//
-//	// Pre-populate with some validators
-//	for i := 0; i < 100; i++ {
-//		share := &types.SSVShare{
-//			Share: spectypes.Share{
-//				ValidatorIndex:  phase0.ValidatorIndex(i + 1),
-//				ValidatorPubKey: spectypes.ValidatorPK{byte(i), byte(i + 1), byte(i + 2)},
-//				SharePubKey:     spectypes.ShareValidatorPK{byte(i + 3), byte(i + 4), byte(i + 5)},
-//				Committee:       []*spectypes.ShareMember{{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4}},
-//			},
-//		}
-//		_ = store.OnShareAdded(ctx, share, UpdateOptions{})
-//	}
-//
-//	var readOps atomic.Int64
-//	var writeOps atomic.Int64
-//
-//	b.ResetTimer()
-//	b.RunParallel(func(pb *testing.PB) {
-//		i := 0
-//		for pb.Next() {
-//			if i%10 == 0 {
-//				// Write operation
-//				share := &types.SSVShare{
-//					Share: spectypes.Share{
-//						ValidatorIndex:  phase0.ValidatorIndex(1000 + i),
-//						ValidatorPubKey: spectypes.ValidatorPK{byte(i), byte(i + 1), byte(i + 2)},
-//						SharePubKey:     spectypes.ShareValidatorPK{byte(i + 3), byte(i + 4), byte(i + 5)},
-//						Committee:       []*spectypes.ShareMember{{Signer: 1}},
-//					},
-//					Status:          eth2apiv1.ValidatorStateActiveOngoing,
-//					ActivationEpoch: 0,
-//					ExitEpoch:       phase0.Epoch(^uint64(0) >> 1),
-//					OwnerAddress:    common.HexToAddress("0x12345"),
-//					Liquidated:      false,
-//				}
-//				_ = store.OnShareAdded(ctx, share, UpdateOptions{})
-//				writeOps.Add(1)
-//			} else {
-//				// Read operation
-//				_ = store.GetAllValidators()
-//				readOps.Add(1)
-//			}
-//			i++
-//		}
-//	})
-//
-//	b.Logf("Read ops: %d, Write ops: %d", readOps.Load(), writeOps.Load())
-//}

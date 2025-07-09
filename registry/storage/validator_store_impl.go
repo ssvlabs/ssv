@@ -427,6 +427,7 @@ func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner com
 
 	// Find all shares in this cluster
 	var affectedValidators []*validatorState
+	var affectedShares []*types.SSVShare
 	for _, state := range s.validators {
 		shareClusterID := types.ComputeClusterIDHash(state.share.OwnerAddress, state.share.OperatorIDs())
 		if bytes.Equal(shareClusterID, clusterID) {
@@ -447,6 +448,8 @@ func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner com
 		state.share.Liquidated = false
 		state.lastUpdated = time.Now()
 		state.participationStatus = s.calculateParticipationStatus(state.share)
+
+		affectedShares = append(affectedShares, state.share)
 
 		if opts.TriggerCallbacks {
 			isParticipating := s.shouldStart(state)
@@ -471,6 +474,10 @@ func (s *validatorStoreImpl) OnClusterReactivated(ctx context.Context, owner com
 				}(snapshot)
 			}
 		}
+	}
+
+	if err := s.sharesStorage.Save(nil, affectedShares...); err != nil {
+		return fmt.Errorf("persist reactivated shares: %w", err)
 	}
 
 	s.logger.Info("cluster reactivated",
@@ -566,6 +573,7 @@ func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner co
 	defer s.mu.Unlock()
 
 	var affectedValidators []*validatorState
+	var affectedShares []*types.SSVShare
 	for _, state := range s.validators {
 		if state.share.OwnerAddress == owner {
 			affectedValidators = append(affectedValidators, state)
@@ -583,6 +591,8 @@ func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner co
 		state.share.SetFeeRecipient(bellatrix.ExecutionAddress(recipient))
 		state.lastUpdated = time.Now()
 
+		affectedShares = append(affectedShares, state.share)
+
 		if opts.TriggerCallbacks {
 			// Trigger updated callback
 			if s.callbacks.OnValidatorUpdated != nil {
@@ -594,6 +604,10 @@ func (s *validatorStoreImpl) OnFeeRecipientUpdated(ctx context.Context, owner co
 				}(snapshot)
 			}
 		}
+	}
+
+	if err := s.sharesStorage.Save(nil, affectedShares...); err != nil {
+		return fmt.Errorf("persist fee recipient updates: %w", err)
 	}
 
 	s.logger.Info("fee recipient updated",
@@ -717,14 +731,7 @@ func (s *validatorStoreImpl) GetParticipatingValidators(epoch phase0.Epoch, opts
 
 	var snapshots []*ValidatorSnapshot
 	for _, state := range s.validators {
-		// Early exit if not participating and no override flags
-		if !state.participationStatus.IsParticipating &&
-			!opts.IncludeLiquidated &&
-			!opts.IncludeExited {
-			continue
-		}
-
-		// Check liquidation filter
+		// Check liquidation filter first
 		if state.share.Liquidated && !opts.IncludeLiquidated {
 			continue
 		}
@@ -747,8 +754,15 @@ func (s *validatorStoreImpl) GetParticipatingValidators(epoch phase0.Epoch, opts
 			}
 		}
 
-		// Check if participating (unless filtered out above)
-		if state.participationStatus.IsParticipating || opts.IncludeLiquidated || opts.IncludeExited {
+		// Calculate participation for the specific epoch (not the stored status which uses EstimatedCurrentEpoch)
+		isParticipatingAtEpoch := state.share.IsParticipating(s.beaconCfg, epoch) &&
+			state.share.ActivationEpoch <= epoch &&
+			state.share.Status != eth2apiv1.ValidatorStatePendingQueued
+
+		// Default participation check: must be participating unless override flags allow non-participating validators
+		if isParticipatingAtEpoch ||
+			(state.share.Liquidated && opts.IncludeLiquidated) ||
+			(state.share.Exited() && opts.IncludeExited) {
 			snapshots = append(snapshots, s.createSnapshot(state))
 		}
 	}
@@ -825,6 +839,11 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 		state.share.SetBeaconMetadata(newMetadata)
 		state.lastUpdated = time.Now()
 
+		// Update indices if beacon metadata changed
+		if state.share.HasBeaconMetadata() {
+			s.indices[state.share.ValidatorIndex] = state.share.ValidatorPubKey
+		}
+
 		// Recalculate participation status as it may have changed
 		oldParticipationStatus := state.participationStatus
 		state.participationStatus = s.calculateParticipationStatus(state.share)
@@ -838,10 +857,17 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 		}
 		changedMetadata[pk] = newMetadata
 
-		// Check if participation status changed
-		if oldParticipationStatus.IsParticipating != state.participationStatus.IsParticipating {
-			snapshot := s.createSnapshot(state)
+		// Handle participation status change callbacks
+		participationChanged := oldParticipationStatus.IsParticipating != state.participationStatus.IsParticipating
 
+		// Only create snapshot if we need it for callbacks
+		var snapshot *ValidatorSnapshot
+		if participationChanged || s.callbacks.OnValidatorUpdated != nil {
+			snapshot = s.createSnapshot(state)
+		}
+
+		// Check if participation status changed
+		if participationChanged {
 			if state.participationStatus.IsParticipating && s.shouldStart(state) {
 				// Validator became eligible to participate
 				if s.callbacks.OnValidatorStarted != nil {
@@ -869,7 +895,6 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 
 		// Always trigger update callback for metadata changes
 		if s.callbacks.OnValidatorUpdated != nil {
-			snapshot := s.createSnapshot(state)
 			go func(snap *ValidatorSnapshot) {
 				if err := s.callbacks.OnValidatorUpdated(ctx, snap); err != nil {
 					s.logger.Error("validator updated callback failed", zap.Error(err))
@@ -1050,7 +1075,10 @@ func (s *validatorStoreImpl) calculateParticipationStatus(share *types.SSVShare)
 	status.IsAttesting = share.IsAttesting(epoch)
 	status.IsSyncCommittee = share.IsSyncCommitteeEligible(s.beaconCfg, epoch)
 
-	status.IsParticipating = share.IsParticipating(s.beaconCfg, epoch)
+	// Only participate if activated and not just pending
+	status.IsParticipating = share.IsParticipating(s.beaconCfg, epoch) &&
+		share.ActivationEpoch <= epoch &&
+		share.Status != eth2apiv1.ValidatorStatePendingQueued
 
 	if status.IsParticipating {
 		if status.IsAttesting {
@@ -1137,8 +1165,15 @@ func (s *validatorStoreImpl) GetSelfParticipatingValidators(epoch phase0.Epoch, 
 			}
 		}
 
-		// Check if participating (unless filtered out above)
-		if state.participationStatus.IsParticipating || opts.IncludeLiquidated || opts.IncludeExited {
+		// Calculate participation for the specific epoch (not the stored status which uses EstimatedCurrentEpoch)
+		isParticipatingAtEpoch := state.share.IsParticipating(s.beaconCfg, epoch) &&
+			state.share.ActivationEpoch <= epoch &&
+			state.share.Status != eth2apiv1.ValidatorStatePendingQueued
+
+		// Default participation check: must be participating unless override flags allow non-participating validators
+		if isParticipatingAtEpoch ||
+			(state.share.Liquidated && opts.IncludeLiquidated) ||
+			(state.share.Exited() && opts.IncludeExited) {
 			snapshots = append(snapshots, s.createSnapshot(state))
 		}
 	}
