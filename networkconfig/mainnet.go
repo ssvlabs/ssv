@@ -1,10 +1,8 @@
 package networkconfig
 
 import (
-	"math"
 	"math/big"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
@@ -33,7 +31,6 @@ var Mainnet = NetworkConfig{
 			// CryptoManufaktur
 			"enr:-Li4QH7FwJcL8gJj0zHAITXqghMkG-A5bfWh2-3Q7vosy9D1BS8HZk-1ITuhK_rfzG3v_UtBDI6uNJZWpdcWfrQFCxKGAYnQ1DRCh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQKeSDcZWSaY9FC723E9yYX1Li18bswhLNlxBZdLfgOKp4N0Y3CCE4mDdWRwgg-h",
 		},
-		// TODO - set proper value for mainnet
-		GasLimit36Epoch: phase0.Epoch(math.MaxUint64),
+		GasLimit36Epoch: 385150, // Aug-09-2025 06:40:23 AM UTC
 	},
 }
