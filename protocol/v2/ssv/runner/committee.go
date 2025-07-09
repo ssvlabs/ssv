@@ -284,6 +284,7 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		// regardless of whether the receiver is still actively reading from the channel.
 		errCh        = make(chan error, len(committeeDuty.ValidatorDuties))
 		signaturesCh = make(chan *spectypes.PartialSignatureMessage)
+		dutiesCh     = make(chan *spectypes.ValidatorDuty)
 
 		beaconVote = decidedValue.(*spectypes.BeaconVote)
 		totalAttesterDuties,
@@ -291,63 +292,80 @@ func (cr *CommitteeRunner) ProcessConsensus(ctx context.Context, logger *zap.Log
 		blockedAttesterDuties atomic.Uint32
 	)
 
-	span.AddEvent("signing validator duties")
-	for _, validatorDuty := range committeeDuty.ValidatorDuties {
-		if ctx.Err() != nil {
-			break
-		}
+	// The worker pool will throttle the parallel processing of validator duties.
+	// This is mainly needed because the processing involves several outgoing HTTP calls to the Consensus Client.
+	// These calls should be limited to a certain degree to reduce the pressure on the Consensus Node.
+	const workerCount = 30
 
+	span.AddEvent("signing validator duties")
+	go func() {
+		for _, duty := range committeeDuty.ValidatorDuties {
+			if ctx.Err() != nil {
+				break
+			}
+			dutiesCh <- duty
+		}
+		close(dutiesCh)
+	}()
+
+	for range workerCount {
 		wg.Add(1)
-		go func(ctx context.Context, validatorDuty *spectypes.ValidatorDuty) {
+
+		go func(ctx context.Context) {
 			defer wg.Done()
 
-			if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
-				const eventMsg = "duty is no longer valid"
-				span.AddEvent(eventMsg, trace.WithAttributes(
-					observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
-					observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
-					observability.BeaconRoleAttribute(validatorDuty.Type),
-				))
-				logger.Warn(eventMsg, fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
-				return
+			for validatorDuty := range dutiesCh {
+				if ctx.Err() != nil {
+					return
+				}
+				if err := cr.DutyGuard.ValidDuty(validatorDuty.Type, spectypes.ValidatorPK(validatorDuty.PubKey), validatorDuty.DutySlot()); err != nil {
+					const eventMsg = "duty is no longer valid"
+					span.AddEvent(eventMsg, trace.WithAttributes(
+						observability.ValidatorIndexAttribute(validatorDuty.ValidatorIndex),
+						observability.ValidatorPublicKeyAttribute(validatorDuty.PubKey),
+						observability.BeaconRoleAttribute(validatorDuty.Type),
+					))
+					logger.Warn(eventMsg, fields.Validator(validatorDuty.PubKey[:]), fields.BeaconRole(validatorDuty.Type), zap.Error(err))
+					return
+				}
+
+				switch validatorDuty.Type {
+				case spectypes.BNRoleAttester:
+					totalAttesterDuties.Add(1)
+					isAttesterDutyBlocked, partialSigMsg, err := cr.signAttesterDuty(ctx, validatorDuty, beaconVote, version, logger)
+					if err != nil {
+						errCh <- observability.Errorf(span, "failed signing attestation data: %w", err)
+						return
+					}
+					if isAttesterDutyBlocked {
+						blockedAttesterDuties.Add(1)
+						return
+					}
+
+					signaturesCh <- partialSigMsg
+				case spectypes.BNRoleSyncCommittee:
+					totalSyncCommitteeDuties.Add(1)
+
+					partialSigMsg, err := cr.BaseRunner.signBeaconObject(
+						ctx,
+						cr,
+						validatorDuty,
+						spectypes.SSZBytes(beaconVote.BlockRoot[:]),
+						validatorDuty.DutySlot(),
+						spectypes.DomainSyncCommittee,
+					)
+					if err != nil {
+						errCh <- observability.Errorf(span, "failed signing sync committee message: %w", err)
+						return
+					}
+
+					signaturesCh <- partialSigMsg
+				default:
+					errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
+					return
+				}
 			}
-
-			switch validatorDuty.Type {
-			case spectypes.BNRoleAttester:
-				totalAttesterDuties.Add(1)
-				isAttesterDutyBlocked, partialSigMsg, err := cr.signAttesterDuty(ctx, validatorDuty, beaconVote, version, logger)
-				if err != nil {
-					errCh <- observability.Errorf(span, "failed signing attestation data: %w", err)
-					return
-				}
-				if isAttesterDutyBlocked {
-					blockedAttesterDuties.Add(1)
-					return
-				}
-
-				signaturesCh <- partialSigMsg
-			case spectypes.BNRoleSyncCommittee:
-				totalSyncCommitteeDuties.Add(1)
-
-				partialSigMsg, err := cr.BaseRunner.signBeaconObject(
-					ctx,
-					cr,
-					validatorDuty,
-					spectypes.SSZBytes(beaconVote.BlockRoot[:]),
-					validatorDuty.DutySlot(),
-					spectypes.DomainSyncCommittee,
-				)
-				if err != nil {
-					errCh <- observability.Errorf(span, "failed signing sync committee message: %w", err)
-					return
-				}
-
-				signaturesCh <- partialSigMsg
-			default:
-				errCh <- fmt.Errorf("invalid duty type: %s", validatorDuty.Type)
-				return
-			}
-		}(ctx, validatorDuty)
+		}(ctx)
 	}
 
 	go func() {
