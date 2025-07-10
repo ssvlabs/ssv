@@ -47,10 +47,19 @@ func TestMsgValidator(t *testing.T) {
 
 	committeeID := share.CommitteeID()
 
+	validatorStore, err := storage.NewValidatorStore(
+		logger,
+		ns.Shares(),
+		ns,
+		networkconfig.TestNetwork,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
+
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
 	mv := validation.New(
 		networkconfig.TestNetwork,
-		ns.ValidatorStore(),
+		validatorStore,
 		ns,
 		dutystore.New(),
 		signatureVerifier,

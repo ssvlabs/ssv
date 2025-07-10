@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -33,7 +34,6 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/registry/storage/mocks"
 	"github.com/ssvlabs/ssv/storage/basedb"
 	"github.com/ssvlabs/ssv/storage/kv"
 )
@@ -81,17 +81,35 @@ func TestTopicManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
 		dutyStore := dutystore.New()
-		validatorStore := mocks.NewMockValidatorStore(ctrl)
-		operators := mocks.NewMockOperators(ctrl)
+
+		db, err := kv.NewInMemory(logger, basedb.Options{})
+		require.NoError(t, err)
+
+		sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+		require.NoError(t, err)
+
+		operatorsStorage := registrystorage.NewOperatorsStorage(logger, db, []byte("operators"))
+
+		// TODO: check this
+		validatorStore, err := registrystorage.NewValidatorStore(
+			logger,
+			sharesStorage,
+			operatorsStorage,
+			networkconfig.TestNetwork,
+			func() spectypes.OperatorID { return 1 },
+		)
+		require.NoError(t, err)
+
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
 		validator := validation.New(
 			networkconfig.TestNetwork,
 			validatorStore,
-			operators,
+			operatorsStorage,
 			dutyStore,
 			signatureVerifier,
 			phase0.Epoch(0))
+
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
 
@@ -408,11 +426,20 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	// FIXME: use real validatorstore
-	_, validatorStore, err := registrystorage.NewSharesStorage(db, []byte("test"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Create real ValidatorStore for topics
+	sharesStorage, err := registrystorage.NewSharesStorage(db, []byte("test"))
+	require.NoError(t, err)
+
+	operatorsStorage := registrystorage.NewOperatorsStorage(logger, db, []byte("operators"))
+
+	validatorStore, err := registrystorage.NewValidatorStore(
+		logger,
+		sharesStorage,
+		operatorsStorage,
+		networkconfig.TestNetwork,
+		func() spectypes.OperatorID { return 1 },
+	)
+	require.NoError(t, err)
 
 	ps, tm, err := topics.NewPubSub(ctx, logger, cfg, validatorStore, nil)
 	require.NoError(t, err)
