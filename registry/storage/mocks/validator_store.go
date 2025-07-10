@@ -312,3 +312,330 @@ func (mr *MockValidatorStoreMockRecorder) UpdateValidatorsMetadata(ctx, metadata
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockValidatorStore)(nil).UpdateValidatorsMetadata), ctx, metadata)
 }
+
+// MockValidatorStateManager is a mock of ValidatorStateManager interface.
+type MockValidatorStateManager struct {
+	ctrl     *gomock.Controller
+	recorder *MockValidatorStateManagerMockRecorder
+	isgomock struct{}
+}
+
+// MockValidatorStateManagerMockRecorder is the mock recorder for MockValidatorStateManager.
+type MockValidatorStateManagerMockRecorder struct {
+	mock *MockValidatorStateManager
+}
+
+// NewMockValidatorStateManager creates a new mock instance.
+func NewMockValidatorStateManager(ctrl *gomock.Controller) *MockValidatorStateManager {
+	mock := &MockValidatorStateManager{ctrl: ctrl}
+	mock.recorder = &MockValidatorStateManagerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockValidatorStateManager) EXPECT() *MockValidatorStateManagerMockRecorder {
+	return m.recorder
+}
+
+// OnClusterLiquidated mocks base method.
+func (m *MockValidatorStateManager) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64, opts storage.UpdateOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnClusterLiquidated", ctx, owner, operatorIDs, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnClusterLiquidated indicates an expected call of OnClusterLiquidated.
+func (mr *MockValidatorStateManagerMockRecorder) OnClusterLiquidated(ctx, owner, operatorIDs, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnClusterLiquidated", reflect.TypeOf((*MockValidatorStateManager)(nil).OnClusterLiquidated), ctx, owner, operatorIDs, opts)
+}
+
+// OnClusterReactivated mocks base method.
+func (m *MockValidatorStateManager) OnClusterReactivated(ctx context.Context, owner common.Address, operatorIDs []uint64, opts storage.UpdateOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnClusterReactivated", ctx, owner, operatorIDs, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnClusterReactivated indicates an expected call of OnClusterReactivated.
+func (mr *MockValidatorStateManagerMockRecorder) OnClusterReactivated(ctx, owner, operatorIDs, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnClusterReactivated", reflect.TypeOf((*MockValidatorStateManager)(nil).OnClusterReactivated), ctx, owner, operatorIDs, opts)
+}
+
+// OnFeeRecipientUpdated mocks base method.
+func (m *MockValidatorStateManager) OnFeeRecipientUpdated(ctx context.Context, owner, recipient common.Address, opts storage.UpdateOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnFeeRecipientUpdated", ctx, owner, recipient, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnFeeRecipientUpdated indicates an expected call of OnFeeRecipientUpdated.
+func (mr *MockValidatorStateManagerMockRecorder) OnFeeRecipientUpdated(ctx, owner, recipient, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnFeeRecipientUpdated", reflect.TypeOf((*MockValidatorStateManager)(nil).OnFeeRecipientUpdated), ctx, owner, recipient, opts)
+}
+
+// OnOperatorRemoved mocks base method.
+func (m *MockValidatorStateManager) OnOperatorRemoved(ctx context.Context, operatorID types.OperatorID, opts storage.UpdateOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnOperatorRemoved", ctx, operatorID, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnOperatorRemoved indicates an expected call of OnOperatorRemoved.
+func (mr *MockValidatorStateManagerMockRecorder) OnOperatorRemoved(ctx, operatorID, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnOperatorRemoved", reflect.TypeOf((*MockValidatorStateManager)(nil).OnOperatorRemoved), ctx, operatorID, opts)
+}
+
+// OnShareAdded mocks base method.
+func (m *MockValidatorStateManager) OnShareAdded(ctx context.Context, share *types0.SSVShare, opts storage.UpdateOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnShareAdded", ctx, share, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnShareAdded indicates an expected call of OnShareAdded.
+func (mr *MockValidatorStateManagerMockRecorder) OnShareAdded(ctx, share, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareAdded", reflect.TypeOf((*MockValidatorStateManager)(nil).OnShareAdded), ctx, share, opts)
+}
+
+// OnShareRemoved mocks base method.
+func (m *MockValidatorStateManager) OnShareRemoved(ctx context.Context, pubKey types.ValidatorPK, opts storage.UpdateOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnShareRemoved", ctx, pubKey, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnShareRemoved indicates an expected call of OnShareRemoved.
+func (mr *MockValidatorStateManagerMockRecorder) OnShareRemoved(ctx, pubKey, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareRemoved", reflect.TypeOf((*MockValidatorStateManager)(nil).OnShareRemoved), ctx, pubKey, opts)
+}
+
+// OnShareUpdated mocks base method.
+func (m *MockValidatorStateManager) OnShareUpdated(ctx context.Context, share *types0.SSVShare, opts storage.UpdateOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnShareUpdated", ctx, share, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnShareUpdated indicates an expected call of OnShareUpdated.
+func (mr *MockValidatorStateManagerMockRecorder) OnShareUpdated(ctx, share, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnShareUpdated", reflect.TypeOf((*MockValidatorStateManager)(nil).OnShareUpdated), ctx, share, opts)
+}
+
+// OnValidatorExited mocks base method.
+func (m *MockValidatorStateManager) OnValidatorExited(ctx context.Context, pubKey types.ValidatorPK, blockNumber uint64, opts storage.UpdateOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnValidatorExited", ctx, pubKey, blockNumber, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnValidatorExited indicates an expected call of OnValidatorExited.
+func (mr *MockValidatorStateManagerMockRecorder) OnValidatorExited(ctx, pubKey, blockNumber, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnValidatorExited", reflect.TypeOf((*MockValidatorStateManager)(nil).OnValidatorExited), ctx, pubKey, blockNumber, opts)
+}
+
+// UpdateValidatorsMetadata mocks base method.
+func (m *MockValidatorStateManager) UpdateValidatorsMetadata(ctx context.Context, metadata beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", ctx, metadata)
+	ret0, _ := ret[0].(beacon.ValidatorMetadataMap)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateValidatorsMetadata indicates an expected call of UpdateValidatorsMetadata.
+func (mr *MockValidatorStateManagerMockRecorder) UpdateValidatorsMetadata(ctx, metadata any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockValidatorStateManager)(nil).UpdateValidatorsMetadata), ctx, metadata)
+}
+
+// MockValidatorQuerier is a mock of ValidatorQuerier interface.
+type MockValidatorQuerier struct {
+	ctrl     *gomock.Controller
+	recorder *MockValidatorQuerierMockRecorder
+	isgomock struct{}
+}
+
+// MockValidatorQuerierMockRecorder is the mock recorder for MockValidatorQuerier.
+type MockValidatorQuerierMockRecorder struct {
+	mock *MockValidatorQuerier
+}
+
+// NewMockValidatorQuerier creates a new mock instance.
+func NewMockValidatorQuerier(ctrl *gomock.Controller) *MockValidatorQuerier {
+	mock := &MockValidatorQuerier{ctrl: ctrl}
+	mock.recorder = &MockValidatorQuerierMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockValidatorQuerier) EXPECT() *MockValidatorQuerierMockRecorder {
+	return m.recorder
+}
+
+// GetAllValidators mocks base method.
+func (m *MockValidatorQuerier) GetAllValidators() []*storage.ValidatorSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllValidators")
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
+	return ret0
+}
+
+// GetAllValidators indicates an expected call of GetAllValidators.
+func (mr *MockValidatorQuerierMockRecorder) GetAllValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllValidators", reflect.TypeOf((*MockValidatorQuerier)(nil).GetAllValidators))
+}
+
+// GetOperatorValidators mocks base method.
+func (m *MockValidatorQuerier) GetOperatorValidators(operatorID types.OperatorID) []*storage.ValidatorSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorValidators", operatorID)
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
+	return ret0
+}
+
+// GetOperatorValidators indicates an expected call of GetOperatorValidators.
+func (mr *MockValidatorQuerierMockRecorder) GetOperatorValidators(operatorID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorValidators", reflect.TypeOf((*MockValidatorQuerier)(nil).GetOperatorValidators), operatorID)
+}
+
+// GetParticipatingValidators mocks base method.
+func (m *MockValidatorQuerier) GetParticipatingValidators(epoch phase0.Epoch, opts storage.ParticipationOptions) []*storage.ValidatorSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetParticipatingValidators", epoch, opts)
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
+	return ret0
+}
+
+// GetParticipatingValidators indicates an expected call of GetParticipatingValidators.
+func (mr *MockValidatorQuerierMockRecorder) GetParticipatingValidators(epoch, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParticipatingValidators", reflect.TypeOf((*MockValidatorQuerier)(nil).GetParticipatingValidators), epoch, opts)
+}
+
+// GetSelfParticipatingValidators mocks base method.
+func (m *MockValidatorQuerier) GetSelfParticipatingValidators(epoch phase0.Epoch, opts storage.ParticipationOptions) []*storage.ValidatorSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSelfParticipatingValidators", epoch, opts)
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
+	return ret0
+}
+
+// GetSelfParticipatingValidators indicates an expected call of GetSelfParticipatingValidators.
+func (mr *MockValidatorQuerierMockRecorder) GetSelfParticipatingValidators(epoch, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfParticipatingValidators", reflect.TypeOf((*MockValidatorQuerier)(nil).GetSelfParticipatingValidators), epoch, opts)
+}
+
+// GetSelfValidators mocks base method.
+func (m *MockValidatorQuerier) GetSelfValidators() []*storage.ValidatorSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSelfValidators")
+	ret0, _ := ret[0].([]*storage.ValidatorSnapshot)
+	return ret0
+}
+
+// GetSelfValidators indicates an expected call of GetSelfValidators.
+func (mr *MockValidatorQuerierMockRecorder) GetSelfValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSelfValidators", reflect.TypeOf((*MockValidatorQuerier)(nil).GetSelfValidators))
+}
+
+// GetValidator mocks base method.
+func (m *MockValidatorQuerier) GetValidator(id storage.ValidatorID) (*storage.ValidatorSnapshot, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidator", id)
+	ret0, _ := ret[0].(*storage.ValidatorSnapshot)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetValidator indicates an expected call of GetValidator.
+func (mr *MockValidatorQuerierMockRecorder) GetValidator(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockValidatorQuerier)(nil).GetValidator), id)
+}
+
+// MockCommitteeQuerier is a mock of CommitteeQuerier interface.
+type MockCommitteeQuerier struct {
+	ctrl     *gomock.Controller
+	recorder *MockCommitteeQuerierMockRecorder
+	isgomock struct{}
+}
+
+// MockCommitteeQuerierMockRecorder is the mock recorder for MockCommitteeQuerier.
+type MockCommitteeQuerierMockRecorder struct {
+	mock *MockCommitteeQuerier
+}
+
+// NewMockCommitteeQuerier creates a new mock instance.
+func NewMockCommitteeQuerier(ctrl *gomock.Controller) *MockCommitteeQuerier {
+	mock := &MockCommitteeQuerier{ctrl: ctrl}
+	mock.recorder = &MockCommitteeQuerierMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCommitteeQuerier) EXPECT() *MockCommitteeQuerierMockRecorder {
+	return m.recorder
+}
+
+// GetCommittee mocks base method.
+func (m *MockCommitteeQuerier) GetCommittee(id types.CommitteeID) (*storage.CommitteeSnapshot, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCommittee", id)
+	ret0, _ := ret[0].(*storage.CommitteeSnapshot)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetCommittee indicates an expected call of GetCommittee.
+func (mr *MockCommitteeQuerierMockRecorder) GetCommittee(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommittee", reflect.TypeOf((*MockCommitteeQuerier)(nil).GetCommittee), id)
+}
+
+// GetCommittees mocks base method.
+func (m *MockCommitteeQuerier) GetCommittees() []*storage.CommitteeSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCommittees")
+	ret0, _ := ret[0].([]*storage.CommitteeSnapshot)
+	return ret0
+}
+
+// GetCommittees indicates an expected call of GetCommittees.
+func (mr *MockCommitteeQuerierMockRecorder) GetCommittees() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommittees", reflect.TypeOf((*MockCommitteeQuerier)(nil).GetCommittees))
+}
+
+// GetOperatorCommittees mocks base method.
+func (m *MockCommitteeQuerier) GetOperatorCommittees(operatorID types.OperatorID) []*storage.CommitteeSnapshot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorCommittees", operatorID)
+	ret0, _ := ret[0].([]*storage.CommitteeSnapshot)
+	return ret0
+}
+
+// GetOperatorCommittees indicates an expected call of GetOperatorCommittees.
+func (mr *MockCommitteeQuerierMockRecorder) GetOperatorCommittees(operatorID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorCommittees", reflect.TypeOf((*MockCommitteeQuerier)(nil).GetOperatorCommittees), operatorID)
+}
