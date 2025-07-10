@@ -94,6 +94,8 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address, blockNu
 
 			go func() {
 				select {
+				case <-c.ctx.Done():
+					logger.Debug("context is done - not gonna schedule validator registration")
 				case c.validatorRegistrationCh <- regDesc:
 					logger.Debug("added validator registration task to pipeline")
 				case <-time.After(2 * c.networkConfig.GetSlotDuration()):

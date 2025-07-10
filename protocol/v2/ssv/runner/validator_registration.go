@@ -268,7 +268,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration(slot phase0
 		return nil, fmt.Errorf("get recipient data from storage: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("get recipient data from storage: not found")
+		return nil, fmt.Errorf("recipient data not found for owner %s", r.validatorOwnerAddress.Hex())
 	}
 
 	return &v1.ValidatorRegistration{
@@ -352,7 +352,7 @@ type VRSubmitter struct {
 	registrationMu sync.Mutex
 	// registrations is a set of validator-registrations (their latest versions) to be sent to
 	// Beacon node to ensure various entities in Ethereum network, such as Relays, are aware of
-	// participating validators
+	// participating validators and their chosen preferences (gas limit, fee recipient, etc.)
 	registrations map[phase0.BLSPubKey]*validatorRegistration
 }
 
@@ -401,15 +401,18 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 			// Select registrations to submit.
 			targetRegs := make(map[phase0.BLSPubKey]*validatorRegistration, 0)
 			s.registrationMu.Lock()
-			// 1. find and add validators participating in the 10th epoch from now
-			shares := s.validatorStore.SelfParticipatingValidators(currentEpoch + 10)
+			// 1. find and add validators participating & attesting in the 10th epoch from now
+			shares := s.validatorStore.SelfValidators()
 			for _, share := range shares {
+				if !share.IsParticipatingAndAttesting(currentEpoch + 10) {
+					continue
+				}
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey[:])
 				r, ok := s.registrations[pk]
 				if !ok {
 					// we haven't constructed the corresponding validator registration for submission yet,
-					// so just skip it for now
+					// so skip it for now
 					continue
 				}
 				targetRegs[pk] = r
@@ -480,5 +483,5 @@ type validatorRegistration struct {
 }
 
 type validatorStore interface {
-	SelfParticipatingValidators(epoch phase0.Epoch) []*ssvtypes.SSVShare
+	SelfValidators() []*ssvtypes.SSVShare
 }
