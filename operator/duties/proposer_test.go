@@ -71,9 +71,10 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
+	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 		{
@@ -89,8 +90,8 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(0))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -102,9 +103,10 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
+	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 		{
@@ -116,12 +118,12 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(phase0.Slot(0))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	ticker.Send(phase0.Slot(1))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: wait for proposer duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
@@ -130,7 +132,7 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(2))
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -143,18 +145,19 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
+	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	// STEP 1: wait for no action to be taken
 	ticker.Send(phase0.Slot(0))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	ticker.Send(phase0.Slot(1))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
@@ -176,14 +179,14 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 		},
 	})
 	// no execution should happen in slot 1
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for proposer duties to be fetched again
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	ticker.Send(phase0.Slot(2))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 2
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for proposer duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(3))
@@ -192,7 +195,7 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(3))
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -204,9 +207,10 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
+	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(0), []*eth2apiv1.ProposerDuty{
 		{
@@ -218,11 +222,11 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(phase0.Slot(0))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.ProposerDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
@@ -232,7 +236,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 	// STEP 3: trigger a change in active indices in the same slot
 	scheduler.indicesChg <- struct{}{}
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
 	dutiesMap.Set(phase0.Epoch(0), append(duties, &eth2apiv1.ProposerDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 5},
@@ -243,7 +247,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	// STEP 4: wait for proposer duties to be fetched again
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	ticker.Send(phase0.Slot(1))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for proposer duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
@@ -252,7 +256,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(2))
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 6: wait for proposer duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(3))
@@ -261,7 +265,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(3))
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 7: wait for proposer duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(4))
@@ -270,7 +274,7 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(4))
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -283,10 +287,11 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
 	waitForSlotN(scheduler.beaconConfig, 34)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
+	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.ProposerDuty{
 		{
@@ -298,7 +303,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(phase0.Slot(34))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
@@ -308,12 +313,12 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(35))
 	ticker.Send(phase0.Slot(35))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
@@ -330,13 +335,13 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 		},
 	})
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for proposer duties to be fetched again for the current epoch.
 	// The first assigned duty should not be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(36))
 	ticker.Send(phase0.Slot(36))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The second assigned duty should be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(37))
@@ -345,7 +350,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(37))
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -358,10 +363,11 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
 	)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler})
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
 	waitForSlotN(scheduler.beaconConfig, 34)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
-	startFn()
+	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	dutiesMap.Set(phase0.Epoch(1), []*eth2apiv1.ProposerDuty{
 		{
@@ -373,7 +379,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 
 	// STEP 1: wait for proposer duties to be fetched
 	ticker.Send(phase0.Slot(34))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
@@ -383,12 +389,12 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(35))
 	ticker.Send(phase0.Slot(35))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
@@ -405,7 +411,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		},
 	})
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: trigger a change in active indices in the same slot
 	scheduler.indicesChg <- struct{}{}
@@ -415,13 +421,13 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 		Slot:           phase0.Slot(38),
 		ValidatorIndex: phase0.ValidatorIndex(2),
 	}))
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for proposer duties to be fetched again for the current epoch.
 	// The first assigned duty should not be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(36))
 	ticker.Send(phase0.Slot(36))
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForDutiesFetch(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The second assigned duty should be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(37))
@@ -430,7 +436,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(37))
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 8: The second assigned duty should be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(38))
@@ -439,7 +445,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(38))
-	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
+	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

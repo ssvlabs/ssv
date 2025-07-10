@@ -21,6 +21,9 @@ import (
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 )
 
+// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
+const timeout = 200 * time.Millisecond
+
 type MockSlotTicker interface {
 	Next() <-chan time.Time
 	Slot() phase0.Slot
@@ -80,22 +83,17 @@ func waitForSlotN(beaconCfg *networkconfig.BeaconConfig, slots phase0.Slot) {
 }
 
 func setupSchedulerAndMocks(
+	ctx context.Context,
 	t *testing.T,
 	handlers []dutyHandler,
+	startSlot phase0.Slot,
 ) (
 	*Scheduler,
-	*zap.Logger,
 	*mockSlotTickerService,
-	time.Duration,
-	context.CancelFunc,
 	*pool.ContextPool,
-	func(),
 ) {
 	ctrl := gomock.NewController(t)
-	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 200 * time.Millisecond
 
-	ctx, cancel := context.WithCancel(t.Context())
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := NewMockBeaconNode(ctrl)
@@ -107,7 +105,7 @@ func setupSchedulerAndMocks(
 
 	beaconCfg := *networkconfig.TestNetwork.BeaconConfig
 	beaconCfg.SlotDuration = 150 * time.Millisecond
-	beaconCfg.GenesisTime = time.Now()
+	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration * time.Duration(startSlot))
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
@@ -134,16 +132,16 @@ func setupSchedulerAndMocks(
 	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)
 
-	startFunction := func() {
-		err := s.Start(ctx)
-		require.NoError(t, err)
+	return s, mockSlotService, schedulerPool
+}
 
-		schedulerPool.Go(func(ctx context.Context) error {
-			return s.Wait()
-		})
-	}
+func startScheduler(ctx context.Context, t *testing.T, s *Scheduler, schedulerPool *pool.ContextPool) {
+	err := s.Start(ctx)
+	require.NoError(t, err)
 
-	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
+	schedulerPool.Go(func(ctx context.Context) error {
+		return s.Wait()
+	})
 }
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
@@ -205,7 +203,14 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 	).AnyTimes()
 }
 
-func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
+func waitForDutiesFetch(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan []*spectypes.ValidatorDuty,
+	timeout time.Duration,
+) {
+	logger := logging.TestLogger(t)
+
 	select {
 	case <-fetchDutiesCall:
 		logger.Debug("duties fetched")
@@ -216,7 +221,12 @@ func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan s
 	}
 }
 
-func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
+func waitForNoAction(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan []*spectypes.ValidatorDuty,
+	timeout time.Duration,
+) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -227,7 +237,15 @@ func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan stru
 	}
 }
 
-func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration, expectedDuties []*spectypes.ValidatorDuty) {
+func waitForDutiesExecution(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan []*spectypes.ValidatorDuty,
+	timeout time.Duration,
+	expectedDuties []*spectypes.ValidatorDuty,
+) {
+	logger := logging.TestLogger(t)
+
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -251,7 +269,12 @@ func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 	}
 }
 
-func waitForDutiesFetchCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration) {
+func waitForDutiesFetchCommittee(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan committeeDutiesMap,
+	timeout time.Duration,
+) {
 	select {
 	case <-fetchDutiesCall:
 		break
@@ -262,7 +285,12 @@ func waitForDutiesFetchCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCa
 	}
 }
 
-func waitForNoActionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration) {
+func waitForNoActionCommittee(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan committeeDutiesMap,
+	timeout time.Duration,
+) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -273,7 +301,13 @@ func waitForNoActionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall 
 	}
 }
 
-func waitForDutiesExecutionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration, expectedDuties committeeDutiesMap) {
+func waitForDutiesExecutionCommittee(
+	t *testing.T,
+	fetchDutiesCall chan struct{},
+	executeDutiesCall chan committeeDutiesMap,
+	timeout time.Duration,
+	expectedDuties committeeDutiesMap,
+) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
