@@ -20,7 +20,7 @@ func TestBuildLoggerFields(t *testing.T) {
 
 	t.Run("nil decoded message", func(t *testing.T) {
 		fields := mv.buildLoggerFields(nil)
-		
+
 		require.NotNil(t, fields)
 		require.Nil(t, fields.DutyExecutorID)
 		require.Equal(t, spectypes.RunnerRole(0), fields.Role)
@@ -34,9 +34,9 @@ func TestBuildLoggerFields(t *testing.T) {
 		decodedMessage := &queue.SSVMessage{
 			SSVMessage: nil,
 		}
-		
+
 		fields := mv.buildLoggerFields(decodedMessage)
-		
+
 		require.NotNil(t, fields)
 		require.Nil(t, fields.DutyExecutorID)
 		require.Equal(t, spectypes.RunnerRole(0), fields.Role)
@@ -236,11 +236,11 @@ func TestBuildLoggerFields_RegressionConsensusFieldsOnlyForConsensus(t *testing.
 
 	// This test ensures that the bug where partial signature messages showed
 	// consensus fields like "qbft_message_type: proposal" does not resurface
-	
+
 	t.Run("bug_regression_partial_sig_no_consensus_fields", func(t *testing.T) {
 		// Before the fix, this would have consensus fields initialized to zero values
 		// which resulted in logs showing: qbft_message_type: "proposal" (because 0 = proposal)
-		
+
 		partialSigMsg := &spectypes.PartialSignatureMessages{
 			Type: spectypes.SelectionProofPartialSig,
 			Slot: 12345,
@@ -267,16 +267,16 @@ func TestBuildLoggerFields_RegressionConsensusFieldsOnlyForConsensus(t *testing.
 		}
 
 		fields := mv.buildLoggerFields(decodedMessage)
-		
+
 		// The fix: consensus fields MUST be nil for partial signature messages
-		require.Nil(t, fields.Consensus, 
+		require.Nil(t, fields.Consensus,
 			"BUG REGRESSION: Consensus fields appeared for partial signature message! "+
-			"This would cause logs to show qbft_message_type for non-consensus messages.")
-		
+				"This would cause logs to show qbft_message_type for non-consensus messages.")
+
 		// Verify the fields that should be present
 		require.Equal(t, phase0.Slot(12345), fields.Slot)
 		require.Equal(t, spectypes.SSVPartialSignatureMsgType, fields.SSVMessageType)
-		
+
 		// Double-check by converting to zap fields
 		zapFields := fields.AsZapFields()
 		for _, field := range zapFields {
@@ -310,7 +310,7 @@ func TestBuildLoggerFields_RegressionConsensusFieldsOnlyForConsensus(t *testing.
 		}
 
 		fields := mv.buildLoggerFields(decodedMessage)
-		
+
 		require.NotNil(t, fields.Consensus, "Consensus fields must be present for consensus messages")
 		require.Equal(t, specqbft.ProposalMsgType, fields.Consensus.QBFTMessageType)
 		require.Equal(t, specqbft.Round(1), fields.Consensus.Round)
