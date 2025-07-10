@@ -140,7 +140,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex uint64, key
 		return nil, err
 	}
 
-	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
 	if err != nil {
 		return nil, err
 	}

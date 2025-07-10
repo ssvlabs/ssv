@@ -34,7 +34,7 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	NetworkConfig networkconfig.Network
+	NetworkConfig *networkconfig.NetworkConfig
 	DutyRunners   runner.ValidatorDutyRunners
 	Network       specqbft.Network
 

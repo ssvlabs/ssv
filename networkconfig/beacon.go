@@ -11,35 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./beacon_mock.go -source=./beacon.go
-
-type Beacon interface {
-	GetSlotStartTime(slot phase0.Slot) time.Time
-	GetSlotEndTime(slot phase0.Slot) time.Time
-	EstimatedCurrentSlot() phase0.Slot
-	EstimatedSlotAtTime(time time.Time) phase0.Slot
-	EstimatedCurrentEpoch() phase0.Epoch
-	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
-	IsFirstSlotOfEpoch(slot phase0.Slot) bool
-	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
-	GetEpochsPerSyncCommitteePeriod() uint64
-	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
-	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
-	LastSlotOfSyncPeriod(period uint64) phase0.Slot
-	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
-	EpochStartTime(epoch phase0.Epoch) time.Time
-	EstimatedTimeAtSlot(slot phase0.Slot) time.Time
-	IntervalDuration() time.Duration
-	EpochDuration() time.Duration
-	GetSlotDuration() time.Duration
-	GetSlotsPerEpoch() uint64
-	GetGenesisTime() time.Time
-	GetSyncCommitteeSize() uint64
-	GetGenesisValidatorsRoot() phase0.Root
-	GetNetworkName() string
-	ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork)
-}
-
 type BeaconConfig struct {
 	NetworkName                          string
 	SlotDuration                         time.Duration

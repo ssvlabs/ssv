@@ -39,7 +39,7 @@ type VoluntaryExitRunner struct {
 }
 
 func NewVoluntaryExitRunner(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.NetworkConfig,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
 	network specqbft.Network,

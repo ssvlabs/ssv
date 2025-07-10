@@ -12,8 +12,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./ssv_mock.go -source=./ssv.go
-
 var supportedSSVConfigs = map[string]*SSVConfig{
 	MainnetName:      MainnetSSV,
 	HoleskyName:      HoleskySSV,
@@ -31,11 +29,6 @@ func GetSSVConfigByName(name string) (*SSVConfig, error) {
 	}
 
 	return nil, fmt.Errorf("network not supported: %v", name)
-}
-
-type SSV interface {
-	GetDomainType() spectypes.DomainType
-	GetGasLimit36Epoch() phase0.Epoch
 }
 
 type SSVConfig struct {

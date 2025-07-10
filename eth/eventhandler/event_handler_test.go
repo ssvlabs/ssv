@@ -1361,7 +1361,7 @@ func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
 	logger *zap.Logger,
-	network networkconfig.Network,
+	network *networkconfig.NetworkConfig,
 	operator *testOperator,
 	useMockCtrl bool,
 ) (*EventHandler, *mocks.MockController, error) {
@@ -1375,7 +1375,7 @@ func setupEventHandler(
 
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, network, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, network.BeaconConfig, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}

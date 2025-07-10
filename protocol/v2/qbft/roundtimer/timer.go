@@ -61,11 +61,11 @@ type RoundTimer struct {
 	// role is the role of the instance
 	role spectypes.RunnerRole
 	// beaconConfig is the beacon config
-	beaconConfig networkconfig.Beacon
+	beaconConfig *networkconfig.BeaconConfig
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, beaconConfig networkconfig.Beacon, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
+func New(pctx context.Context, beaconConfig *networkconfig.BeaconConfig, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},

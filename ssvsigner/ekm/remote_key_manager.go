@@ -40,7 +40,7 @@ import (
 // RemoteKeyManager doesn't use operator private key as it's stored externally in the remote signer.
 type RemoteKeyManager struct {
 	logger       *zap.Logger
-	beaconConfig networkconfig.Beacon
+	beaconConfig *networkconfig.BeaconConfig
 	signerClient signerClient
 
 	getOperatorId     func() spectypes.OperatorID
@@ -64,7 +64,7 @@ type signerClient interface {
 func NewRemoteKeyManager(
 	ctx context.Context,
 	logger *zap.Logger,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.BeaconConfig,
 	signerClient signerClient,
 	db basedb.Database,
 	getOperatorId func() spectypes.OperatorID,

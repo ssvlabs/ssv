@@ -5,15 +5,7 @@ import (
 	"fmt"
 )
 
-//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./network_mock.go -source=./network.go
-
 const forkName = "alan"
-
-type Network interface {
-	NetworkName() string
-	Beacon
-	SSV
-}
 
 type NetworkConfig struct {
 	Name string

@@ -66,7 +66,7 @@ func TestDropRegistryData(t *testing.T) {
 		_ = db.Close()
 	}()
 
-	storage, err := NewNodeStorage(network, logger, db)
+	storage, err := NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 
 	sharePubkey := func(id int) []byte {
@@ -133,7 +133,7 @@ func TestDropRegistryData(t *testing.T) {
 
 	// Re-open storage and check again that everything is still saved.
 	// Re-opening helps ensure that the changes were persisted and not just cached.
-	storage, err = NewNodeStorage(network, logger, db)
+	storage, err = NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 	requireSaved(t, len(operatorIDs), len(sharePubKeys), len(recipientOwners))
 
@@ -145,7 +145,7 @@ func TestDropRegistryData(t *testing.T) {
 	requireSaved(t, 0, 0, 0)
 
 	// Re-open storage and check again that everything is still dropped.
-	storage, err = NewNodeStorage(network, logger, db)
+	storage, err = NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 }
 
@@ -157,7 +157,7 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 		_ = db.Close()
 	}()
 
-	storage, err := NewNodeStorage(network, logger, db)
+	storage, err := NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 
 	storedCfg, found, err := storage.GetConfig(nil)
@@ -197,7 +197,7 @@ func TestGetOperatorsPrefix(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 	require.Equal(t, []byte("operators"), operatorStorage.GetOperatorsPrefix())
 }
@@ -211,7 +211,7 @@ func TestGetRecipientsPrefix(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 
 	require.Equal(t, []byte("recipients"), operatorStorage.GetRecipientsPrefix())
@@ -226,7 +226,7 @@ func Test_Config(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 
 	cfgData := &ConfigLock{
@@ -261,7 +261,7 @@ func Test_LastProcessedBlock(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 
 	_, found, err := operatorStorage.GetLastProcessedBlock(nil)
@@ -286,7 +286,7 @@ func Test_OperatorData(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 
 	operatorIDs := []uint64{1, 2, 3}
@@ -332,7 +332,7 @@ func Test_NonceBumping(t *testing.T) {
 
 	require.NoError(t, err)
 
-	operatorStorage, err := NewNodeStorage(network, logger, db)
+	operatorStorage, err := NewNodeStorage(network.BeaconConfig, logger, db)
 	require.NoError(t, err)
 
 	owner := common.Address{1}

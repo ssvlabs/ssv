@@ -77,13 +77,13 @@ type SlashingStoreTxn interface {
 // (walletPrefix, highestAttPrefix, etc.).
 type storage struct {
 	db            basedb.Database
-	beaconConfig  networkconfig.Beacon
+	beaconConfig  *networkconfig.BeaconConfig
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.Database, beaconConfig networkconfig.Beacon, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, beaconConfig *networkconfig.BeaconConfig, logger *zap.Logger) Storage {
 	return &storage{
 		db:           db,
 		beaconConfig: beaconConfig,
