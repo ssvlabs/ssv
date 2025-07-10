@@ -1,8 +1,15 @@
 package tls
 
 import (
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/hex"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -225,4 +232,159 @@ func TestServerTLSConfigWithCompleteConfig(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read keystore file")
+}
+
+func makeCert(raw []byte, subjectCN string, dnsNames []string, ipAddresses []net.IP) *x509.Certificate {
+	return &x509.Certificate{
+		Raw:         raw,
+		Subject:     pkixName(subjectCN),
+		DNSNames:    dnsNames,
+		IPAddresses: ipAddresses,
+	}
+}
+
+func pkixName(cn string) pkix.Name {
+	return pkix.Name{CommonName: cn}
+}
+
+func TestVerifyServerCertificate(t *testing.T) {
+	certRaw := []byte("dummy-cert")
+	fingerprint := sha256.Sum256(certRaw)
+	fingerprintHex := hex.EncodeToString(fingerprint[:])
+	formattedFingerprint := formatFingerprint(fingerprintHex)
+
+	tests := []struct {
+		name                string
+		state               tls.ConnectionState
+		trustedFingerprints map[string]string
+		wantErr             bool
+		errContains         string
+	}{
+		{
+			name: "no certificates provided",
+			state: tls.ConnectionState{
+				PeerCertificates: nil,
+			},
+			trustedFingerprints: map[string]string{},
+			wantErr:             true,
+			errContains:         "no server certificate provided",
+		},
+		{
+			name: "matching ServerName",
+			state: tls.ConnectionState{
+				ServerName:       "example.com",
+				PeerCertificates: []*x509.Certificate{makeCert(certRaw, "", nil, nil)},
+			},
+			trustedFingerprints: map[string]string{
+				"example.com": formattedFingerprint,
+			},
+			wantErr: false,
+		},
+		{
+			name: "matching CommonName",
+			state: tls.ConnectionState{
+				ServerName: "",
+				PeerCertificates: []*x509.Certificate{
+					makeCert(certRaw, "myhost", nil, nil),
+				},
+			},
+			trustedFingerprints: map[string]string{
+				"myhost": formattedFingerprint,
+			},
+			wantErr: false,
+		},
+		{
+			name: "matching DNS name",
+			state: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{
+					makeCert(certRaw, "", []string{"alt.example.com"}, nil),
+				},
+			},
+			trustedFingerprints: map[string]string{
+				"alt.example.com": formattedFingerprint,
+			},
+			wantErr: false,
+		},
+		{
+			name: "matching IP address",
+			state: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{
+					makeCert(certRaw, "", nil, []net.IP{net.ParseIP("127.0.0.1")}),
+				},
+			},
+			trustedFingerprints: map[string]string{
+				"127.0.0.1": formattedFingerprint,
+			},
+			wantErr: false,
+		},
+		{
+			name: "mismatch in all fields",
+			state: tls.ConnectionState{
+				ServerName: "example.com",
+				PeerCertificates: []*x509.Certificate{
+					makeCert(certRaw, "wrong-cn", []string{"wrong-dns"}, []net.IP{net.ParseIP("192.168.0.1")}),
+				},
+			},
+			trustedFingerprints: map[string]string{
+				"other.com": formattedFingerprint,
+			},
+			wantErr:     true,
+			errContains: "server certificate fingerprint not trusted",
+		},
+		{
+			name: "one match out of many possible names",
+			state: tls.ConnectionState{
+				ServerName: "good.com",
+				PeerCertificates: []*x509.Certificate{
+					makeCert(certRaw, "ignored.cn", []string{"bad.com", "another.com"}, []net.IP{net.ParseIP("10.0.0.1")}),
+				},
+			},
+			trustedFingerprints: map[string]string{
+				"good.com": formattedFingerprint,
+			},
+			wantErr: false,
+		},
+		{
+			name: "normalized fingerprint match (with colons)",
+			state: tls.ConnectionState{
+				ServerName: "normalize.com",
+				PeerCertificates: []*x509.Certificate{
+					makeCert(certRaw, "", nil, nil),
+				},
+			},
+			trustedFingerprints: map[string]string{
+				"normalize.com": formatFingerprint(fingerprintHex),
+			},
+			wantErr: false,
+		},
+		{
+			name: "case-insensitive fingerprint match",
+			state: tls.ConnectionState{
+				ServerName: "casetest.com",
+				PeerCertificates: []*x509.Certificate{
+					makeCert(certRaw, "", nil, nil),
+				},
+			},
+			trustedFingerprints: map[string]string{
+				"casetest.com": strings.ToUpper(fingerprintHex),
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := verifyServerCertificate(tt.state, tt.trustedFingerprints)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

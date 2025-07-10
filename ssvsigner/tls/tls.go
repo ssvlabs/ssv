@@ -297,23 +297,36 @@ func verifyServerCertificate(state tls.ConnectionState, trustedFingerprints map[
 	fingerprintHex := hex.EncodeToString(fingerprint[:])
 
 	// Get the hostname from multiple possible sources
-	host := state.ServerName
-	if host == "" && len(cert.DNSNames) > 0 {
-		host = cert.DNSNames[0]
-	} else if host == "" {
-		host = cert.Subject.CommonName
+	hosts := make(map[string]struct{})
+
+	if state.ServerName != "" {
+		hosts[state.ServerName] = struct{}{}
 	}
 
-	// Check fingerprint against our trusted list
-	if expectedFingerprint, ok := trustedFingerprints[host]; ok {
-		expectedFingerprint = normalizeFingerprint(expectedFingerprint)
-		if expectedFingerprint == fingerprintHex {
-			return nil
+	if cert.Subject.CommonName != "" {
+		hosts[cert.Subject.CommonName] = struct{}{}
+	}
+
+	if len(cert.DNSNames) > 0 {
+		for _, dnsName := range cert.DNSNames {
+			hosts[dnsName] = struct{}{}
 		}
-		return fmt.Errorf("server certificate fingerprint mismatch for %s: expected %s, got %s",
-			host,
-			formatFingerprint(expectedFingerprint),
-			formatFingerprint(fingerprintHex))
+	}
+
+	if len(cert.IPAddresses) > 0 {
+		for _, ip := range cert.IPAddresses {
+			hosts[ip.String()] = struct{}{}
+		}
+	}
+
+	for host := range hosts {
+		// Check fingerprint against our trusted list
+		if expectedFingerprint, ok := trustedFingerprints[host]; ok {
+			expectedFingerprint = normalizeFingerprint(expectedFingerprint)
+			if expectedFingerprint == fingerprintHex {
+				return nil
+			}
+		}
 	}
 
 	return fmt.Errorf("server certificate fingerprint not trusted: %s", formatFingerprint(fingerprintHex))
