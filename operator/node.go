@@ -84,7 +84,7 @@ func New(logger *zap.Logger, opts Options, exporterOpts exporter.Options, slotTi
 			Ctx:                 opts.Context,
 			BeaconNode:          opts.BeaconNode,
 			ExecutionClient:     opts.ExecutionClient,
-			BeaconConfig:        opts.NetworkConfig,
+			BeaconConfig:        opts.NetworkConfig.BeaconConfig,
 			ValidatorProvider:   opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
 			ValidatorController: opts.ValidatorController,
 			DutyExecutor:        opts.ValidatorController,
