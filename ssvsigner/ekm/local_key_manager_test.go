@@ -21,10 +21,10 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/threshold"
+
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
 )
 
 const (
@@ -33,15 +33,6 @@ const (
 )
 
 func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) KeyManager {
-	km, _ := testKeyManagerImpl(t, networkconfig.TestNetwork, operatorPrivateKey)
-	return km
-}
-
-func testKeyManagerWithMockNetwork(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
-	return testKeyManagerImpl(t, nil, operatorPrivateKey)
-}
-
-func testKeyManagerImpl(t *testing.T, network networkconfig.Network, operatorPrivateKey keys.OperatorPrivateKey) (KeyManager, networkconfig.Network) {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -49,9 +40,7 @@ func testKeyManagerImpl(t *testing.T, network networkconfig.Network, operatorPri
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	if network == nil {
-		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, nil)
-	}
+	network := networkconfig.TestNetwork
 
 	km, err := NewLocalKeyManager(logger, db, network, operatorPrivateKey)
 	require.NoError(t, err)
@@ -71,7 +60,7 @@ func testKeyManagerImpl(t *testing.T, network networkconfig.Network, operatorPri
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK1, phase0.BLSPubKey(sk1.GetPublicKey().Serialize())))
 	require.NoError(t, km.AddShare(t.Context(), nil, encryptedSK2, phase0.BLSPubKey(sk2.GetPublicKey().Serialize())))
 
-	return km, network
+	return km
 }
 
 func TestEncryptedKeyManager(t *testing.T) {
