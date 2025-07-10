@@ -47,7 +47,6 @@ import (
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
-	"github.com/ssvlabs/ssv/utils"
 	"github.com/ssvlabs/ssv/utils/blskeygen"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
@@ -1358,7 +1357,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network networkconfig.Network, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandler(
+	t *testing.T,
+	ctx context.Context,
+	logger *zap.Logger,
+	network networkconfig.Network,
+	operator *testOperator,
+	useMockCtrl bool,
+) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -1368,10 +1374,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)
 
 	operatorDataStore := operatordatastore.New(operatorData)
-
-	if network == nil {
-		network = utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, &utils.SlotValue{})
-	}
 
 	keyManager, err := ekm.NewLocalKeyManager(logger, db, network, operator.privateKey)
 	if err != nil {
