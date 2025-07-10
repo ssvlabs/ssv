@@ -29,8 +29,7 @@ type CLI struct {
 	LogFormat          string        `env:"LOG_FORMAT" default:"console" enum:"console,json" help:"Set log format (console, json)"`
 	RequestTimeout     time.Duration `env:"REQUEST_TIMEOUT" default:"10s" help:"Timeout for outgoing HTTP requests (e.g. 500ms, 10s)"`
 
-	// AllowInsecureHTTP allows ssv-signer to work without using TLS. Note that it allows "partial" TLS as well such as only server or only client.
-	AllowInsecureHTTP bool `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"Allow insecure HTTP requests. Do not use in production"`
+	AllowInsecureHTTP bool `env:"ALLOW_INSECURE_HTTP" name:"allow-insecure-http" default:"false" help:"TESTING ONLY: Allow insecure HTTP requests. DO NOT USE IN PRODUCTION!"`
 
 	// Server TLS configuration (for incoming connections to SSV Signer)
 	KeystoreFile         string `env:"KEYSTORE_FILE" env-description:"Path to PKCS12 keystore file for server TLS connections"`
@@ -75,8 +74,7 @@ func run(logger *zap.Logger, cli CLI) error {
 	)
 
 	if cli.AllowInsecureHTTP {
-		logger.Warn("ssv-signer started with an insecure mode that allows HTTP and doesn't enforce HTTPS, " +
-			"do not use this option in production")
+		logger.Warn("SECURITY WARNING: ALLOW_INSECURE_HTTP disables TLS security! This should ONLY be used for testing. DO NOT USE IN PRODUCTION!")
 	}
 
 	if err := validateConfig(cli); err != nil {

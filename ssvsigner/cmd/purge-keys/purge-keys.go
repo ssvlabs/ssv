@@ -17,7 +17,6 @@ import (
 	"github.com/ssvlabs/ssv/logging/fields"
 
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/logger"
-
 	"github.com/ssvlabs/ssv/ssvsigner/cmd/internal/validation"
 	ssvsignertls "github.com/ssvlabs/ssv/ssvsigner/tls"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
