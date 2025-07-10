@@ -629,33 +629,39 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
-		currentSlot := &utils.SlotValue{}
-		mockNetworkConfig := utils.SetupMockNetworkConfig(t, networkconfig.TestNetwork.DomainType, currentSlot)
-
 		const epoch = 1
-		currentSlot.SetSlot(netCfg.FirstSlotAtEpoch(epoch))
+
+		netCfgEpoch1 := &networkconfig.NetworkConfig{
+			Name:         networkconfig.TestNetwork.Name,
+			BeaconConfig: &networkconfig.BeaconConfig{},
+			SSVConfig:    &networkconfig.SSVConfig{},
+		}
+
+		*netCfgEpoch1.BeaconConfig = *networkconfig.TestNetwork.BeaconConfig
+		*netCfgEpoch1.SSVConfig = *networkconfig.TestNetwork.SSVConfig
+		netCfgEpoch1.BeaconConfig.GenesisTime = time.Now().Add(-epoch * netCfgEpoch1.EpochDuration())
 
 		ds := dutystore.New()
 
-		validator := New(mockNetworkConfig, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
+		validator := New(netCfgEpoch1, validatorStore, operators, ds, signatureVerifier, phase0.Epoch(0)).(*messageValidator)
 
-		messages := generateRandaoMsg(ks.Shares[1], 1, epoch, currentSlot.GetSlot())
+		messages := generateRandaoMsg(ks.Shares[1], 1, netCfgEpoch1.EstimatedCurrentEpoch(), netCfgEpoch1.EstimatedCurrentSlot())
 		encodedMessages, err := messages.Encode()
 		require.NoError(t, err)
 
 		dutyExecutorID := shares.active.ValidatorPubKey[:]
 		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
-			MsgID:   spectypes.NewMsgID(mockNetworkConfig.GetDomainType(), dutyExecutorID, spectypes.RoleProposer),
+			MsgID:   spectypes.NewMsgID(netCfgEpoch1.GetDomainType(), dutyExecutorID, spectypes.RoleProposer),
 			Data:    encodedMessages,
 		}
 
 		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
-		receivedAt := mockNetworkConfig.GetSlotStartTime(currentSlot.GetSlot())
+		receivedAt := netCfgEpoch1.GetSlotStartTime(netCfgEpoch1.EstimatedCurrentSlot())
 		topicID := commons.CommitteeTopicID(committeeID)[0]
 
-		require.False(t, ds.Proposer.IsEpochSet(epoch))
+		require.False(t, ds.Proposer.IsEpochSet(netCfgEpoch1.EstimatedCurrentEpoch()))
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.NoError(t, err)
