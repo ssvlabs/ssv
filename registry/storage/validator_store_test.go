@@ -997,3 +997,221 @@ func TestValidatorStore_ParticipationStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatorStore_GetValidatorStatusReport(t *testing.T) {
+	t.Run("empty store", func(t *testing.T) {
+		store, _, _ := createTestStore(t)
+
+		report := store.GetValidatorStatusReport()
+		require.Empty(t, report)
+	})
+
+	t.Run("single validator statuses", func(t *testing.T) {
+		// Create shares that belong to operator 1
+		activeShare := testShare1.Copy() // ActiveOngoing, belongs to operator 1
+
+		pendingShare := testShare2.Copy()                                                                     // PendingQueued
+		pendingShare.Committee = []*spectypes.ShareMember{{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4}} // Make it belong to operator 1
+
+		exitingShare := testShare3.Copy() // ActiveExiting, belongs to operator 1
+
+		noMetadataShare := testShareNoMetadata.Copy() // No metadata, belongs to operator 1
+
+		tests := []struct {
+			name             string
+			share            *types.SSVShare
+			expectedStatuses map[ValidatorStatus]uint32
+		}{
+			{
+				name:  "active participating validator",
+				share: activeShare, // IsParticipating: true, IsActive: true
+				expectedStatuses: map[ValidatorStatus]uint32{
+					ValidatorStatusParticipating: 1,
+					ValidatorStatusActive:        1,
+				},
+			},
+			{
+				name:  "pending validator",
+				share: pendingShare, // IsParticipating: true, Pending: true, Activated: false
+				expectedStatuses: map[ValidatorStatus]uint32{
+					ValidatorStatusParticipating: 1,
+					ValidatorStatusNotActivated:  1, // Because Activated() returns false
+				},
+			},
+			{
+				name:  "exiting validator",
+				share: exitingShare, // IsParticipating: true, IsActive: false, Exited: false
+				expectedStatuses: map[ValidatorStatus]uint32{
+					ValidatorStatusParticipating: 1,
+					ValidatorStatusUnknown:       1, // Falls through to unknown since it's not active/slashed/exited/etc
+				},
+			},
+			{
+				name:  "validator without metadata",
+				share: noMetadataShare, // HasBeaconMetadata: false
+				expectedStatuses: map[ValidatorStatus]uint32{
+					ValidatorStatusNotFound: 1,
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				store, _, _ := createTestStore(t, tt.share)
+
+				report := store.GetValidatorStatusReport()
+				t.Logf("Actual report for %s: %+v", tt.name, report)
+
+				// Verify all expected statuses are present with correct counts
+				for expectedStatus, expectedCount := range tt.expectedStatuses {
+					actualCount, exists := report[expectedStatus]
+					require.True(t, exists)
+					require.Equal(t, expectedCount, actualCount)
+				}
+
+				// Verify no other statuses have counts (except the expected ones)
+				for status, count := range report {
+					if count > 0 {
+						_, expected := tt.expectedStatuses[status]
+						require.True(t, expected)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("multiple validators mixed statuses", func(t *testing.T) {
+		activeShare := testShare1.Copy() // ActiveOngoing
+
+		pendingShare := testShare2.Copy() // PendingQueued
+		pendingShare.Committee = []*spectypes.ShareMember{{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4}}
+
+		exitingShare := testShare3.Copy() // ActiveExiting
+
+		noMetadataShare := testShareNoMetadata.Copy() // Status=Unknown, no metadata
+
+		liquidatedShare := testShare1.Copy()
+		liquidatedShare.ValidatorPubKey = spectypes.ValidatorPK{50, 51, 52}
+		liquidatedShare.ValidatorIndex = 50
+		liquidatedShare.Liquidated = true
+
+		slashedShare := testShare1.Copy()
+		slashedShare.ValidatorPubKey = spectypes.ValidatorPK{60, 61, 62}
+		slashedShare.ValidatorIndex = 60
+		slashedShare.Status = eth2apiv1.ValidatorStateActiveSlashed
+
+		noIndexShare := &types.SSVShare{
+			Share: spectypes.Share{
+				ValidatorIndex:  0,
+				ValidatorPubKey: spectypes.ValidatorPK{70, 71, 72},
+				SharePubKey:     spectypes.ShareValidatorPK{73, 74, 75},
+				Committee:       []*spectypes.ShareMember{{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4}},
+			},
+			Status:          eth2apiv1.ValidatorStateUnknown, // No metadata = Unknown status
+			ActivationEpoch: 0,
+			ExitEpoch:       0,
+			OwnerAddress:    common.HexToAddress("0x12345"),
+			Liquidated:      false,
+		}
+
+		store, _, _ := createTestStore(t,
+			activeShare,
+			pendingShare,
+			exitingShare,
+			noMetadataShare,
+			liquidatedShare,
+			slashedShare,
+			noIndexShare,
+		)
+
+		report := store.GetValidatorStatusReport()
+
+		expected := map[ValidatorStatus]uint32{
+			ValidatorStatusParticipating: 3, // activeShare, exitingShare, slashedShare
+			ValidatorStatusActive:        2, // activeShare + liquidatedShare
+			ValidatorStatusNotActivated:  1, // pendingShare
+			ValidatorStatusUnknown:       1, // exitingShare (ActiveExiting falls through)
+			ValidatorStatusNotFound:      2, // noMetadataShare + noIndexShare
+			ValidatorStatusSlashed:       1, // slashedShare
+		}
+
+		for status, expectedCount := range expected {
+			actualCount := report[status]
+			require.Equal(t, expectedCount, actualCount,
+				"Status %v: expected %d, got %d", status, expectedCount, actualCount)
+		}
+	})
+
+	t.Run("only self validators included", func(t *testing.T) {
+		logger := zaptest.NewLogger(t)
+		sharesStorage := newMockSharesStorage()
+		operatorsStorage := newMockOperatorsStorage()
+
+		// Create shares belonging to different operators
+		ownShare := testShare1.Copy() // Has operator 1 in committee
+		ownShare.ValidatorPubKey = spectypes.ValidatorPK{80, 81, 82}
+
+		otherShare := testShare1.Copy() // Replace committee to not include operator 1
+		otherShare.ValidatorPubKey = spectypes.ValidatorPK{90, 91, 92}
+		otherShare.Committee = []*spectypes.ShareMember{{Signer: 5}, {Signer: 6}, {Signer: 7}, {Signer: 8}}
+
+		require.NoError(t, sharesStorage.Save(nil, ownShare, otherShare))
+
+		store, err := NewValidatorStore(
+			logger,
+			sharesStorage,
+			operatorsStorage,
+			testNetworkConfig,
+			func() spectypes.OperatorID { return 1 }, // Only operator 1
+		)
+		require.NoError(t, err)
+
+		report := store.GetValidatorStatusReport()
+
+		// Should only count validators belonging to operator 1
+		selfValidators := store.GetSelfValidators()
+		require.Len(t, selfValidators, 1)
+
+		totalCount := uint32(0)
+		for _, count := range report {
+			totalCount += count
+		}
+
+		// Since one validator can have multiple statuses, the total count can be > number of validators
+		require.Greater(t, totalCount, uint32(0))
+
+		// Should be the own share status (participating + active)
+		require.Greater(t, report[ValidatorStatusParticipating], uint32(0))
+		require.Greater(t, report[ValidatorStatusActive], uint32(0))
+	})
+
+	t.Run("status report consistency", func(t *testing.T) {
+		pendingShare := testShare2.Copy()
+		pendingShare.Committee = []*spectypes.ShareMember{{Signer: 1}, {Signer: 2}, {Signer: 3}, {Signer: 4}}
+
+		store, _, _ := createTestStore(t, testShare1, pendingShare, testShare3, testShareNoMetadata)
+
+		// Get report multiple times to ensure consistency
+		report1 := store.GetValidatorStatusReport()
+		report2 := store.GetValidatorStatusReport()
+		report3 := store.GetValidatorStatusReport()
+
+		require.Equal(t, report1, report2)
+		require.Equal(t, report2, report3)
+
+		// Verify that all self-validators are counted (though they may appear in multiple categories)
+		selfValidators := store.GetSelfValidators()
+		require.Len(t, selfValidators, 4) // All test shares belong to operator 1
+
+		// Each validator should appear in at least one status category
+		require.Greater(t, len(report1), 0)
+
+		totalUniqueStatuses := 0
+		for _, count := range report1 {
+			if count > 0 {
+				totalUniqueStatuses++
+			}
+		}
+		require.Greater(t, totalUniqueStatuses, 0)
+	})
+}

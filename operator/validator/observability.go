@@ -9,25 +9,12 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/ssvlabs/ssv/observability"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 const (
 	observabilityName      = "github.com/ssvlabs/ssv/operator/validator"
 	observabilityNamespace = "ssv.validator"
-)
-
-type validatorStatus string
-
-const (
-	statusParticipating validatorStatus = "participating"
-	statusNotFound      validatorStatus = "not_found"
-	statusActive        validatorStatus = "active"
-	statusSlashed       validatorStatus = "slashed"
-	statusExiting       validatorStatus = "exiting"
-	statusNotActivated  validatorStatus = "not_activated"
-	statusPending       validatorStatus = "pending"
-	statusNoIndex       validatorStatus = "no_index"
-	statusUnknown       validatorStatus = "unknown"
 )
 
 var (
@@ -52,12 +39,12 @@ var (
 			metric.WithDescription("total number of validator errors")))
 )
 
-func validatorStatusAttribute(value validatorStatus) attribute.KeyValue {
+func validatorStatusAttribute(value registrystorage.ValidatorStatus) attribute.KeyValue {
 	attrName := fmt.Sprintf("%s.status", observabilityNamespace)
 	return attribute.String(attrName, string(value))
 }
 
-func recordValidatorStatus(ctx context.Context, count uint32, status validatorStatus) {
+func recordValidatorStatus(ctx context.Context, count uint32, status registrystorage.ValidatorStatus) {
 	validatorStatusGauge.Record(ctx, int64(count),
 		metric.WithAttributes(validatorStatusAttribute(status)),
 	)

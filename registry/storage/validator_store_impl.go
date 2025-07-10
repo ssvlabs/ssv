@@ -320,20 +320,24 @@ func (s *validatorStoreImpl) OnShareRemoved(ctx context.Context, pubKey spectype
 	if opts.TriggerCallbacks {
 		// Call callbacks
 		if s.callbacks.OnValidatorRemoved != nil {
-			go func() {
-				if err := s.callbacks.OnValidatorRemoved(ctx, pubKey); err != nil {
-					s.logger.Error("validator removed callback failed", zap.Error(err))
+			go func(pk spectypes.ValidatorPK) {
+				if err := s.callbacks.OnValidatorRemoved(ctx, pk); err != nil {
+					s.logger.Error("validator removed callback failed",
+						zap.String("pubkey", hex.EncodeToString(pk[:])),
+						zap.Error(err))
 				}
-			}()
+			}(pubKey)
 		}
 
 		// If was participating, also call stop callback
 		if wasParticipating && s.callbacks.OnValidatorStopped != nil {
-			go func() {
-				if err := s.callbacks.OnValidatorStopped(ctx, pubKey); err != nil {
-					s.logger.Error("validator stopped callback failed", zap.Error(err))
+			go func(pk spectypes.ValidatorPK) {
+				if err := s.callbacks.OnValidatorStopped(ctx, pk); err != nil {
+					s.logger.Error("validator stopped callback failed",
+						zap.String("pubkey", hex.EncodeToString(pk[:])),
+						zap.Error(err))
 				}
-			}()
+			}(pubKey)
 		}
 	}
 
@@ -1178,4 +1182,46 @@ func (s *validatorStoreImpl) GetSelfParticipatingValidators(epoch phase0.Epoch, 
 		}
 	}
 	return snapshots
+}
+
+// GetValidatorStatusReport returns aggregated counts of validators by their current status.
+// This method calculates the status for all validators owned by the current operator.
+func (s *validatorStoreImpl) GetValidatorStatusReport() ValidatorStatusReport {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	report := make(ValidatorStatusReport)
+	operatorID := s.operatorIDFn()
+	currentEpoch := s.beaconCfg.EstimatedCurrentEpoch()
+
+	for _, state := range s.validators {
+		if !state.share.BelongsToOperator(operatorID) {
+			continue
+		}
+
+		share := state.share
+
+		if share.IsParticipating(s.beaconCfg, currentEpoch) {
+			report[ValidatorStatusParticipating]++
+		}
+		if !share.HasBeaconMetadata() {
+			report[ValidatorStatusNotFound]++
+		} else if share.IsActive() {
+			report[ValidatorStatusActive]++
+		} else if share.Slashed() {
+			report[ValidatorStatusSlashed]++
+		} else if share.Exited() {
+			report[ValidatorStatusExiting]++
+		} else if !share.Activated() {
+			report[ValidatorStatusNotActivated]++
+		} else if share.Pending() {
+			report[ValidatorStatusPending]++
+		} else if share.ValidatorIndex == 0 {
+			report[ValidatorStatusNoIndex]++
+		} else {
+			report[ValidatorStatusUnknown]++
+		}
+	}
+
+	return report
 }

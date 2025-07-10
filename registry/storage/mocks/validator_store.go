@@ -174,6 +174,20 @@ func (mr *MockValidatorStoreMockRecorder) GetValidator(id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockValidatorStore)(nil).GetValidator), id)
 }
 
+// GetValidatorStatusReport mocks base method.
+func (m *MockValidatorStore) GetValidatorStatusReport() storage.ValidatorStatusReport {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidatorStatusReport")
+	ret0, _ := ret[0].(storage.ValidatorStatusReport)
+	return ret0
+}
+
+// GetValidatorStatusReport indicates an expected call of GetValidatorStatusReport.
+func (mr *MockValidatorStoreMockRecorder) GetValidatorStatusReport() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStatusReport", reflect.TypeOf((*MockValidatorStore)(nil).GetValidatorStatusReport))
+}
+
 // OnClusterLiquidated mocks base method.
 func (m *MockValidatorStore) OnClusterLiquidated(ctx context.Context, owner common.Address, operatorIDs []uint64, opts storage.UpdateOptions) error {
 	m.ctrl.T.Helper()
@@ -638,4 +652,42 @@ func (m *MockCommitteeQuerier) GetOperatorCommittees(operatorID types.OperatorID
 func (mr *MockCommitteeQuerierMockRecorder) GetOperatorCommittees(operatorID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorCommittees", reflect.TypeOf((*MockCommitteeQuerier)(nil).GetOperatorCommittees), operatorID)
+}
+
+// MockValidatorReporter is a mock of ValidatorReporter interface.
+type MockValidatorReporter struct {
+	ctrl     *gomock.Controller
+	recorder *MockValidatorReporterMockRecorder
+	isgomock struct{}
+}
+
+// MockValidatorReporterMockRecorder is the mock recorder for MockValidatorReporter.
+type MockValidatorReporterMockRecorder struct {
+	mock *MockValidatorReporter
+}
+
+// NewMockValidatorReporter creates a new mock instance.
+func NewMockValidatorReporter(ctrl *gomock.Controller) *MockValidatorReporter {
+	mock := &MockValidatorReporter{ctrl: ctrl}
+	mock.recorder = &MockValidatorReporterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockValidatorReporter) EXPECT() *MockValidatorReporterMockRecorder {
+	return m.recorder
+}
+
+// GetValidatorStatusReport mocks base method.
+func (m *MockValidatorReporter) GetValidatorStatusReport() storage.ValidatorStatusReport {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidatorStatusReport")
+	ret0, _ := ret[0].(storage.ValidatorStatusReport)
+	return ret0
+}
+
+// GetValidatorStatusReport indicates an expected call of GetValidatorStatusReport.
+func (mr *MockValidatorReporterMockRecorder) GetValidatorStatusReport() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStatusReport", reflect.TypeOf((*MockValidatorReporter)(nil).GetValidatorStatusReport))
 }

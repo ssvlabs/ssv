@@ -26,6 +26,7 @@ type ValidatorStore interface {
 	ValidatorStateManager
 	ValidatorQuerier
 	CommitteeQuerier
+	ValidatorReporter
 
 	// RegisterLifecycleCallbacks registers a set of callback functions that are invoked in response to
 	// specific validator lifecycle events, such as a validator being added, updated, or removed.
@@ -126,4 +127,30 @@ type CommitteeQuerier interface {
 	// GetOperatorCommittees returns a slice of snapshots for all committees that a specific
 	// operator is a member of.
 	GetOperatorCommittees(operatorID spectypes.OperatorID) []*CommitteeSnapshot
+}
+
+// ValidatorStatus represents the current status of a validator.
+type ValidatorStatus string
+
+const (
+	ValidatorStatusParticipating ValidatorStatus = "participating"
+	ValidatorStatusNotFound      ValidatorStatus = "not_found"
+	ValidatorStatusActive        ValidatorStatus = "active"
+	ValidatorStatusSlashed       ValidatorStatus = "slashed"
+	ValidatorStatusExiting       ValidatorStatus = "exiting"
+	ValidatorStatusNotActivated  ValidatorStatus = "not_activated"
+	ValidatorStatusPending       ValidatorStatus = "pending"
+	ValidatorStatusNoIndex       ValidatorStatus = "no_index"
+	ValidatorStatusUnknown       ValidatorStatus = "unknown"
+)
+
+// ValidatorStatusReport contains aggregated counts of validators by status
+type ValidatorStatusReport map[ValidatorStatus]uint32
+
+// ValidatorReporter defines the interface for getting validator status reports
+type ValidatorReporter interface {
+	// GetValidatorStatusReport returns aggregated counts of validators by their current status.
+	// This method calculates the status for all validators owned by the current operator
+	// and returns a map with counts for each status type.
+	GetValidatorStatusReport() ValidatorStatusReport
 }

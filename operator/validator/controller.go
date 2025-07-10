@@ -1106,38 +1106,16 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			start := time.Now()
-			validatorsPerStatus := make(map[validatorStatus]uint32)
 
-			// Use ValidatorStore to get operator's validators
-			for _, snapshot := range c.validatorStore.GetSelfValidators() {
-				share := &snapshot.Share
-				if share.IsParticipating(c.networkConfig, c.networkConfig.EstimatedCurrentEpoch()) {
-					validatorsPerStatus[statusParticipating]++
-				}
-				if !share.HasBeaconMetadata() {
-					validatorsPerStatus[statusNotFound]++
-				} else if share.IsActive() {
-					validatorsPerStatus[statusActive]++
-				} else if share.Slashed() {
-					validatorsPerStatus[statusSlashed]++
-				} else if share.Exited() {
-					validatorsPerStatus[statusExiting]++
-				} else if !share.Activated() {
-					validatorsPerStatus[statusNotActivated]++
-				} else if share.Pending() {
-					validatorsPerStatus[statusPending]++
-				} else if share.ValidatorIndex == 0 {
-					validatorsPerStatus[statusNoIndex]++
-				} else {
-					validatorsPerStatus[statusUnknown]++
-				}
-			}
-			for status, count := range validatorsPerStatus {
+			statusReport := c.validatorStore.GetValidatorStatusReport()
+
+			for status, count := range statusReport {
 				c.logger.
 					With(zap.String("status", string(status))).
 					With(zap.Uint32("count", count)).
 					With(zap.Duration("elapsed_time", time.Since(start))).
 					Info("recording validator status")
+
 				recordValidatorStatus(ctx, count, status)
 			}
 		case <-ctx.Done():
@@ -1145,7 +1123,6 @@ func (c *controller) ReportValidatorStatuses(ctx context.Context) {
 			return
 		}
 	}
-
 }
 
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
