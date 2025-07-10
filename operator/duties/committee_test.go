@@ -133,8 +133,8 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 		},
 	})
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(1)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
+	waitForSlotN(scheduler.beaconConfig, 1)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -175,8 +175,8 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 		},
 	})
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(1)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
+	waitForSlotN(scheduler.beaconConfig, 1)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -187,7 +187,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
 	startTime := time.Now()
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(1))
 
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
@@ -224,8 +224,8 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 		},
 	})
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(1)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
+	waitForSlotN(scheduler.beaconConfig, 1)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -237,7 +237,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
 	startTime := time.Now()
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(1))
 
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
@@ -269,18 +269,17 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(0)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
 	// STEP 2: wait for no action to be taken
-	setCurrentSlot(phase0.Slot(1))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	ticker.Send(phase0.Slot(1))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: wait for committee duties to be executed
-	setCurrentSlot(phase0.Slot(2))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	aDuties, _ := attDuties.Get(0)
 	sDuties, _ := syncDuties.Get(0)
 	committeeMap := commHandler.buildCommitteeDuties(aDuties, sDuties, 0, 2)
@@ -310,8 +309,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2), activeShare(3)}
 	)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(0)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -342,7 +340,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	})
 
 	// STEP 3: wait for attester duties to be fetched
-	setCurrentSlot(phase0.Slot(1))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	waitForDuties.Set(true)
 	ticker.Send(phase0.Slot(1))
 	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
@@ -358,7 +356,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for committee duties to be executed
-	setCurrentSlot(phase0.Slot(2))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	aDuties, _ := attDuties.Get(0)
 	committeeMap := commHandler.buildCommitteeDuties([]*eth2apiv1.AttesterDuty{aDuties[2]}, nil, 0, scheduler.beaconConfig.EstimatedCurrentSlot())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
@@ -387,8 +385,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2), activeShare(3)}
 	)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(0)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -419,7 +416,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 	})
 
 	// STEP 3: wait for attester duties to be fetched
-	setCurrentSlot(phase0.Slot(1))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	waitForDuties.Set(true)
 	ticker.Send(phase0.Slot(1))
 	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
@@ -435,7 +432,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for committee duties to be executed
-	setCurrentSlot(phase0.Slot(2))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	aDuties, _ := attDuties.Get(0)
 	committeeMap := commHandler.buildCommitteeDuties([]*eth2apiv1.AttesterDuty{aDuties[1], aDuties[2]}, nil, 0, scheduler.beaconConfig.EstimatedCurrentSlot())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
@@ -472,8 +469,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(0)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -494,7 +490,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	})
 
 	// STEP 3: wait for attester duties to be fetched
-	setCurrentSlot(phase0.Slot(1))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	waitForDuties.Set(true)
 	ticker.Send(phase0.Slot(1))
 	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
@@ -510,7 +506,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: wait for committee duties to be executed
-	setCurrentSlot(phase0.Slot(2))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	aDuties, _ := attDuties.Get(0)
 	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, scheduler.beaconConfig.EstimatedCurrentSlot())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
@@ -540,8 +536,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		activeShares  = []*ssvtypes.SSVShare{activeShare(1)}
 	)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(63)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
+	waitForSlotN(scheduler.beaconConfig, 63)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -555,7 +551,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
 	waitForDuties.Set(true)
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(63))
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -571,8 +567,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	setCurrentSlot(phase0.Slot(64))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(64))
+	ticker.Send(phase0.Slot(64))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger reorg on epoch transition
@@ -596,17 +592,17 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: execute reorged duty
-	setCurrentSlot(phase0.Slot(65))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(65))
 	aDuties, _ := attDuties.Get(phase0.Epoch(2))
 	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, scheduler.beaconConfig.EstimatedCurrentSlot())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(65))
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// STEP 6: The first assigned duty should not be executed
-	setCurrentSlot(phase0.Slot(66))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(66))
+	ticker.Send(phase0.Slot(66))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// Stop scheduler & wait for graceful exit.
@@ -627,8 +623,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		activeShares  = []*ssvtypes.SSVShare{activeShare(1), activeShare(2)}
 	)
 
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(63)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
+	waitForSlotN(scheduler.beaconConfig, 63)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -642,7 +638,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 
 	// STEP 1: wait for attester duties to be fetched for next epoch
 	waitForDuties.Set(true)
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(63))
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -658,8 +654,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	setCurrentSlot(phase0.Slot(64))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(64))
+	ticker.Send(phase0.Slot(64))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger reorg on epoch transition
@@ -688,8 +684,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	attDuties.Delete(phase0.Epoch(2))
 
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
-	setCurrentSlot(phase0.Slot(65))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(65))
+	ticker.Send(phase0.Slot(65))
 	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
 	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
 	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
@@ -701,13 +697,13 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	waitForDutiesFetchCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: The first assigned duty should not be executed
-	setCurrentSlot(phase0.Slot(66))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(66))
+	ticker.Send(phase0.Slot(66))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 8: The reorg assigned duty should not be executed
-	setCurrentSlot(phase0.Slot(67))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(67))
+	ticker.Send(phase0.Slot(67))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// Stop scheduler & wait for graceful exit.
@@ -737,8 +733,8 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(32)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
+	waitForSlotN(scheduler.beaconConfig, 32)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -754,8 +750,8 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: Ticker with no action
-	setCurrentSlot(phase0.Slot(33))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(33))
+	ticker.Send(phase0.Slot(33))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger reorg
@@ -779,22 +775,22 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: Ticker with no action
-	setCurrentSlot(phase0.Slot(34))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(34))
+	ticker.Send(phase0.Slot(34))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: The first assigned duty should not be executed
-	setCurrentSlot(phase0.Slot(35))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(35))
+	ticker.Send(phase0.Slot(35))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: execute reorged duty
-	setCurrentSlot(phase0.Slot(36))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(36))
 	aDuties, _ := attDuties.Get(phase0.Epoch(1))
 	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, scheduler.beaconConfig.EstimatedCurrentSlot())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(36))
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// Stop scheduler & wait for graceful exit.
@@ -821,27 +817,26 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 		},
 	})
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(0)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(0))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
-	setCurrentSlot(phase0.Slot(1))
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
+	ticker.Send(phase0.Slot(1))
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: wait for attester duties to be executed faster than 1/3 of the slot duration when
 	// Beacon head event is observed (block arrival)
-	setCurrentSlot(phase0.Slot(2))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	aDuties, _ := attDuties.Get(0)
 	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 0, scheduler.beaconConfig.EstimatedCurrentSlot())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 	startTime := time.Now()
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(2))
 
 	// STEP 4: trigger head event (block arrival)
 	e := &eth2apiv1.Event{
@@ -883,8 +878,8 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 		},
 	})
 	// STEP 1: wait for attester & sync committee duties to be fetched (handle initial duties)
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
-	setCurrentSlot(1)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
+	waitForSlotN(scheduler.beaconConfig, 1)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startFn()
 
@@ -895,7 +890,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
 	startTime := time.Now()
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(1))
 	waitForDutiesExecutionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 
 	// validate the 1/3 of the slot waiting time
@@ -903,11 +898,11 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be executed faster than 1/3 of the slot duration when
 	// Beacon head event is observed (block arrival)
-	setCurrentSlot(phase0.Slot(2))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	committeeMap = commHandler.buildCommitteeDuties(nil, sDuties, 0, scheduler.beaconConfig.EstimatedCurrentSlot())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 	startTime = time.Now()
-	ticker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	ticker.Send(phase0.Slot(2))
 
 	// STEP 4: trigger head event (block arrival)
 	e := &eth2apiv1.Event{
@@ -955,9 +950,8 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 	})
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
-	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn, setCurrentSlot := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
-	setCurrentSlot(phase0.Slot(0))
 	startFn()
 
 	// STEP 1: wait for no action to be taken
@@ -966,7 +960,7 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
-	setCurrentSlot(phase0.Slot(31))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(31))
 	ticker.Send(phase0.Slot(31))
 	// no execution should happen in slot 31
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -976,7 +970,7 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 	waitForNoActionCommittee(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: the first slot of the next epoch duties should be executed as expected
-	setCurrentSlot(phase0.Slot(32))
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(32))
 
 	aDuties, _ := attDuties.Get(1)
 	committeeMap := commHandler.buildCommitteeDuties(aDuties, nil, 1, scheduler.beaconConfig.EstimatedCurrentSlot())

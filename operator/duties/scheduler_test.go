@@ -72,6 +72,13 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
+func waitForSlotN(beaconCfg *networkconfig.BeaconConfig, slots phase0.Slot) {
+	waitUntil := beaconCfg.GenesisTime.Add(beaconCfg.SlotDuration * time.Duration(slots))
+	if waitUntil.After(time.Now()) {
+		time.Sleep(time.Until(waitUntil))
+	}
+}
+
 func setupSchedulerAndMocks(
 	t *testing.T,
 	handlers []dutyHandler,
@@ -83,7 +90,6 @@ func setupSchedulerAndMocks(
 	context.CancelFunc,
 	*pool.ContextPool,
 	func(),
-	func(slot phase0.Slot),
 ) {
 	ctrl := gomock.NewController(t)
 	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
@@ -101,10 +107,7 @@ func setupSchedulerAndMocks(
 
 	beaconCfg := *networkconfig.TestNetwork.BeaconConfig
 	beaconCfg.SlotDuration = 150 * time.Millisecond
-
-	setCurrentSlot := func(slot phase0.Slot) {
-		beaconCfg.GenesisTime = time.Now().Add(-time.Duration(slot) * beaconCfg.SlotDuration)
-	}
+	beaconCfg.GenesisTime = time.Now()
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
@@ -140,7 +143,7 @@ func setupSchedulerAndMocks(
 		})
 	}
 
-	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction, setCurrentSlot
+	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
 }
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
