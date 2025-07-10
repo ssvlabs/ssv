@@ -13,7 +13,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/hashmap"
@@ -27,33 +26,6 @@ func setupSyncCommitteeDutiesMock(
 ) (chan struct{}, chan []*spectypes.ValidatorDuty) {
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch) uint64 {
-			return uint64(epoch) / s.beaconConfig.GetEpochsPerSyncCommitteePeriod()
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
-		func(period uint64) phase0.Epoch {
-			return phase0.Epoch(period * s.beaconConfig.GetEpochsPerSyncCommitteePeriod())
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
-		func(period uint64) phase0.Slot {
-			lastEpoch := s.beaconConfig.FirstEpochOfSyncPeriod(period+1) - 1
-			// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
-			// as it will never be included, hence -1.
-			return s.beaconConfig.GetEpochFirstSlot(lastEpoch+1) - 2
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch) phase0.Slot {
-			return phase0.Slot(uint64(epoch) * s.beaconConfig.GetSlotsPerEpoch())
-		},
-	).AnyTimes()
 
 	s.beaconNode.(*MockBeaconNode).EXPECT().SyncCommitteeDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {

@@ -43,7 +43,7 @@ func BenchmarkTracer(b *testing.B) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.BeaconConfig, db, nil)
 
 	// Define different message counts to test
 	messageCounts := []int{10, 20, 50, 100, 200, 500, 1000, 2000, 4000, 8000}

@@ -78,7 +78,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	*netCfgVariableEpoch.BeaconConfig = *networkconfig.TestNetwork.BeaconConfig
 	*netCfgVariableEpoch.SSVConfig = *networkconfig.TestNetwork.SSVConfig
-	netCfgVariableEpoch.BeaconConfig.GenesisTime = time.Now().Add(-32 * netCfgVariableEpoch.SlotDuration)
+	netCfgVariableEpoch.GenesisTime = time.Now().Add(-32 * netCfgVariableEpoch.SlotDuration)
 
 	eh, _, err := setupEventHandler(t, ctx, logger, netCfgVariableEpoch, ops[0], false)
 	if err != nil {
@@ -151,7 +151,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 
 	blockNum := uint64(0x1)
-	netCfgVariableEpoch.BeaconConfig.GenesisTime = time.Now().Add(-100 * netCfgVariableEpoch.SlotDuration)
+	netCfgVariableEpoch.GenesisTime = time.Now().Add(-100 * netCfgVariableEpoch.SlotDuration)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 		for _, op := range ops {
@@ -897,7 +897,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		netCfgVariableEpoch.BeaconConfig.GenesisTime = time.Now().Add(-1000 * netCfgVariableEpoch.SlotDuration)
+		netCfgVariableEpoch.GenesisTime = time.Now().Add(-1000 * netCfgVariableEpoch.SlotDuration)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
@@ -988,7 +988,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, exists)
 		require.NotNil(t, share)
 		require.True(t, share.Liquidated)
-		netCfgVariableEpoch.BeaconConfig.GenesisTime = time.Now().Add(-100 * netCfgVariableEpoch.SlotDuration)
+		netCfgVariableEpoch.GenesisTime = time.Now().Add(-100 * netCfgVariableEpoch.SlotDuration)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
@@ -1450,7 +1450,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

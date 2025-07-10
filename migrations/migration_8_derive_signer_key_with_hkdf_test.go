@@ -31,7 +31,7 @@ func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
@@ -98,7 +98,7 @@ func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 
@@ -130,7 +130,7 @@ func TestMigration8DeriveSignerKeyWithHKDF(t *testing.T) {
 		operatorPrivKey, err := keys.GeneratePrivateKey()
 		require.NoError(t, err)
 
-		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+		nodeStorage, err := storage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
 		require.NoError(t, err)
 		require.NoError(t, nodeStorage.SavePrivateKeyHash(operatorPrivKey.StorageHash()))
 

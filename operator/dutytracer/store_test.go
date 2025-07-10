@@ -27,7 +27,7 @@ func TestValidatorCommitteeMapping(t *testing.T) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.BeaconConfig, db, nil)
 
 	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
@@ -134,7 +134,7 @@ func TestCommitteeDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.BeaconConfig, db, nil)
 
 	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 
@@ -325,7 +325,7 @@ func TestValidatorDutyStore(t *testing.T) {
 	err = db.Set([]byte("val_pki"), validatorPK1[:], value)
 	require.NoError(t, err)
 
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.BeaconConfig, db, nil)
 
 	collector := New(t.Context(), zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
 

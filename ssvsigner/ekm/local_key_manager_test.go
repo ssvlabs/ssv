@@ -42,7 +42,7 @@ func testKeyManager(t *testing.T, operatorPrivateKey keys.OperatorPrivateKey) Ke
 
 	network := networkconfig.TestNetwork
 
-	km, err := NewLocalKeyManager(logger, db, network, operatorPrivateKey)
+	km, err := NewLocalKeyManager(logger, db, network.BeaconConfig, operatorPrivateKey)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -82,7 +82,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork, logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.BeaconConfig, logger)
 	signerStorage.SetEncryptionKey(encryptionKey)
 
 	defer func(db basedb.Database, logger *zap.Logger) {

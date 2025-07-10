@@ -86,13 +86,12 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	mockValidatorController := NewMockValidatorController(ctrl)
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
-	mockBeaconConfig := networkconfig.NewMockBeacon(ctrl)
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		ExecutionClient:     mockExecutionClient,
-		BeaconConfig:        mockBeaconConfig,
+		BeaconConfig:        networkconfig.TestNetwork.BeaconConfig,
 		ValidatorProvider:   mockValidatorProvider,
 		ValidatorController: mockValidatorController,
 		DutyExecutor:        mockDutyExecutor,
@@ -109,35 +108,6 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 	s.handlers = handlers
 
 	mockBeaconNode.EXPECT().SubscribeToHeadEvents(ctx, "duty_scheduler", gomock.Any()).Return(nil)
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotDuration().Return(150 * time.Millisecond).AnyTimes()
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotsPerEpoch().Return(uint64(32)).AnyTimes()
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) time.Time {
-			return time.Now()
-		},
-	).AnyTimes()
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
-		func(slot phase0.Slot) phase0.Epoch {
-			return phase0.Epoch(uint64(slot) / s.beaconConfig.GetSlotsPerEpoch())
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedCurrentSlot().DoAndReturn(
-		func() phase0.Slot {
-			return currentSlot.Get()
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
-		func() phase0.Epoch {
-			return phase0.Epoch(uint64(currentSlot.Get()) / s.beaconConfig.GetSlotsPerEpoch())
-		},
-	).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().GetEpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
-
-	s.beaconConfig.(*networkconfig.MockBeacon).EXPECT().IntervalDuration().Return(s.beaconConfig.GetSlotDuration() / 3).AnyTimes()
 
 	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)

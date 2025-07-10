@@ -841,7 +841,7 @@ func TestCollector_getOrCreateCommitteeTrace(t *testing.T) {
 	require.NoError(t, err)
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.BeaconConfig, db, nil)
 
 	var committeeID = spectypes.CommitteeID{1}
 
@@ -946,7 +946,7 @@ func TestCollector_getOrCreateValidatorTrace(t *testing.T) {
 	require.NoError(t, err)
 
 	dutyStore := store.New(db)
-	_, vstore, _ := storage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	_, vstore, _ := storage.NewSharesStorage(networkconfig.TestNetwork.BeaconConfig, db, nil)
 
 	var vPubKey = spectypes.ValidatorPK{1}
 	var role = spectypes.BNRoleAggregator

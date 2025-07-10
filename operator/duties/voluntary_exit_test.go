@@ -15,7 +15,6 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
@@ -150,11 +149,6 @@ func create1to1BlockSlotMapping(scheduler *Scheduler) *atomic.Uint64 {
 			blockByNumberCalls.Add(1)
 			expectedBlock := ethtypes.NewBlock(&ethtypes.Header{Time: blockNumber.Uint64()}, nil, nil, trie.NewStackTrie(nil))
 			return expectedBlock, nil
-		},
-	).AnyTimes()
-	scheduler.beaconConfig.(*networkconfig.MockBeacon).EXPECT().EstimatedSlotAtTime(gomock.Any()).DoAndReturn(
-		func(time time.Time) phase0.Slot {
-			return phase0.Slot(time.Unix())
 		},
 	).AnyTimes()
 
