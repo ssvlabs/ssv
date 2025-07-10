@@ -117,9 +117,6 @@ type Controller interface {
 
 	// TODO: remove it and use callbacks?
 	StopValidator(pubKey spectypes.ValidatorPK) error
-	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
-	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient common.Address) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
@@ -1169,66 +1166,6 @@ func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
 
 	validatorsRemovedCounter.Add(c.ctx, 1)
 	logger.Info("validator removal initiated")
-	return nil
-}
-
-func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error {
-	logger := c.logger.Named("TaskExecutor").With(
-		zap.String("task", "LiquidateCluster"),
-		fields.Owner(owner),
-		fields.OperatorIDs(operatorIDs))
-
-	// ValidatorStore will handle the liquidation and trigger callbacks
-	opts := registrystorage.UpdateOptions{
-		TriggerCallbacks: true,
-	}
-	err := c.validatorStore.OnClusterLiquidated(c.ctx, owner, operatorIDs, opts)
-	if err != nil {
-		logger.Error("failed to liquidate cluster", zap.Error(err))
-		return err
-	}
-
-	logger.Info("cluster liquidation initiated", zap.Int("validators_count", len(toLiquidate)))
-	return nil
-}
-
-func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error {
-	logger := c.logger.Named("TaskExecutor").With(
-		zap.String("task", "ReactivateCluster"),
-		fields.Owner(owner),
-		fields.OperatorIDs(operatorIDs))
-
-	// ValidatorStore will handle the reactivation and trigger callbacks
-	opts := registrystorage.UpdateOptions{
-		TriggerCallbacks: true,
-	}
-	err := c.validatorStore.OnClusterReactivated(c.ctx, owner, operatorIDs, opts)
-	if err != nil {
-		logger.Error("failed to reactivate cluster", zap.Error(err))
-		return err
-	}
-
-	logger.Info("cluster reactivation initiated", zap.Int("validators_count", len(toReactivate)))
-	return nil
-}
-
-func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
-	logger := c.logger.Named("TaskExecutor").With(
-		zap.String("task", "UpdateFeeRecipient"),
-		zap.String("owner", owner.String()),
-		zap.String("fee_recipient", recipient.String()))
-
-	// ValidatorStore will handle the update and trigger OnValidatorUpdated callbacks
-	opts := registrystorage.UpdateOptions{
-		TriggerCallbacks: true,
-	}
-	err := c.validatorStore.OnFeeRecipientUpdated(c.ctx, owner, recipient, opts)
-	if err != nil {
-		logger.Error("failed to update fee recipient", zap.Error(err))
-		return err
-	}
-
-	logger.Info("fee recipient update initiated")
 	return nil
 }
 

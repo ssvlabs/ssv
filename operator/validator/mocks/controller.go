@@ -160,34 +160,6 @@ func (mr *MockControllerMockRecorder) IndicesChangeChan() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndicesChangeChan", reflect.TypeOf((*MockController)(nil).IndicesChangeChan))
 }
 
-// LiquidateCluster mocks base method.
-func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types0.SSVShare) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LiquidateCluster", owner, operatorIDs, toLiquidate)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// LiquidateCluster indicates an expected call of LiquidateCluster.
-func (mr *MockControllerMockRecorder) LiquidateCluster(owner, operatorIDs, toLiquidate any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LiquidateCluster", reflect.TypeOf((*MockController)(nil).LiquidateCluster), owner, operatorIDs, toLiquidate)
-}
-
-// ReactivateCluster mocks base method.
-func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*types0.SSVShare) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReactivateCluster", owner, operatorIDs, toReactivate)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ReactivateCluster indicates an expected call of ReactivateCluster.
-func (mr *MockControllerMockRecorder) ReactivateCluster(owner, operatorIDs, toReactivate any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReactivateCluster", reflect.TypeOf((*MockController)(nil).ReactivateCluster), owner, operatorIDs, toReactivate)
-}
-
 // ReportValidatorStatuses mocks base method.
 func (m *MockController) ReportValidatorStatuses(ctx context.Context) {
 	m.ctrl.T.Helper()
@@ -236,20 +208,6 @@ func (m *MockController) StopValidator(pubKey types.ValidatorPK) error {
 func (mr *MockControllerMockRecorder) StopValidator(pubKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), pubKey)
-}
-
-// UpdateFeeRecipient mocks base method.
-func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateFeeRecipient", owner, recipient)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateFeeRecipient indicates an expected call of UpdateFeeRecipient.
-func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient)
 }
 
 // ValidatorExitChan mocks base method.
