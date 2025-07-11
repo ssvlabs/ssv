@@ -36,7 +36,7 @@ type Options struct {
 
 // CommonOptions represents options that all validators share.
 type CommonOptions struct {
-	NetworkConfig       networkconfig.Network
+	NetworkConfig       *networkconfig.Network
 	Network             specqbft.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
@@ -54,7 +54,7 @@ type CommonOptions struct {
 }
 
 func NewCommonOptions(
-	networkConfig networkconfig.Network,
+	networkConfig *networkconfig.Network,
 	network specqbft.Network,
 	beacon beacon.BeaconNode,
 	storage *storage.ParticipantStores,
@@ -97,7 +97,7 @@ func NewCommonOptions(
 	// on the current epoch as compared to when this transition is supposed to happen.
 	if result.GasLimit == 0 {
 		defaultGasLimit := DefaultGasLimit
-		if result.NetworkConfig.EstimatedCurrentEpoch() < result.NetworkConfig.GetGasLimit36Epoch() {
+		if result.NetworkConfig.EstimatedCurrentEpoch() < result.NetworkConfig.GasLimit36Epoch {
 			defaultGasLimit = DefaultGasLimitOld
 		}
 		result.GasLimit = defaultGasLimit

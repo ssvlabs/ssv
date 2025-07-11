@@ -54,7 +54,7 @@ var StartBootNodeCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
-		networkConfig, err := networkconfig.GetSSVConfigByName(cfg.Options.Network)
+		networkConfig, err := networkconfig.SSVConfigByName(cfg.Options.Network)
 		if err != nil {
 			logger.Fatal("failed to get network config", zap.Error(err))
 		}

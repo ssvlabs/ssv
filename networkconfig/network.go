@@ -5,23 +5,12 @@ import (
 	"fmt"
 )
 
-//go:generate go tool -modfile=../tool.mod mockgen -package=networkconfig -destination=./network_mock.go -source=./network.go
-
-const forkName = "alan"
-
-type Network interface {
-	NetworkName() string
-	Beacon
-	SSV
+type Network struct {
+	*Beacon
+	*SSV
 }
 
-type NetworkConfig struct {
-	Name string
-	*BeaconConfig
-	*SSVConfig
-}
-
-func (n NetworkConfig) String() string {
+func (n Network) String() string {
 	jsonBytes, err := json.Marshal(n)
 	if err != nil {
 		panic(err)
@@ -30,6 +19,12 @@ func (n NetworkConfig) String() string {
 	return string(jsonBytes)
 }
 
-func (n NetworkConfig) NetworkName() string {
-	return fmt.Sprintf("%s:%s", n.Name, forkName)
+// StorageName returns a config name used to make sure the stored network doesn't differ.
+// It combines the network name with fork name.
+func (n Network) StorageName() string {
+	return fmt.Sprintf("%s:%s", n.SSV.Name, n.CurrentSSVFork().Name)
+}
+
+func (n Network) CurrentSSVFork() SSVFork {
+	return n.SSV.ForkAtEpoch(n.EstimatedCurrentEpoch())
 }

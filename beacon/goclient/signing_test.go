@@ -26,7 +26,7 @@ func Test_computeVoluntaryExitDomain(t *testing.T) {
 			ctx,
 			zap.NewNop(),
 			Options{
-				BeaconConfig:   networkconfig.TestNetwork.BeaconConfig,
+				BeaconConfig:   networkconfig.TestNetwork.Beacon,
 				BeaconNodeAddr: mockServer.URL,
 				CommonTimeout:  100 * time.Millisecond,
 				LongTimeout:    500 * time.Millisecond,

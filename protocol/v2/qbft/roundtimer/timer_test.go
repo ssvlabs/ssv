@@ -48,8 +48,8 @@ func TestTimeoutForRound(t *testing.T) {
 	}
 }
 
-func setupMockBeaconConfig() *networkconfig.BeaconConfig {
-	config := networkconfig.TestNetwork.BeaconConfig
+func setupTestBeaconConfig() *networkconfig.Beacon {
+	config := networkconfig.TestNetwork.Beacon
 	config.SlotDuration = 120 * time.Millisecond
 	config.GenesisTime = time.Now()
 
@@ -58,7 +58,7 @@ func setupMockBeaconConfig() *networkconfig.BeaconConfig {
 
 func setupTimer(
 	t *testing.T,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	onTimeout OnRoundTimeoutF,
 	role spectypes.RunnerRole,
 	round specqbft.Round,
@@ -74,14 +74,14 @@ func setupTimer(
 }
 
 func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	mockBeaconNetwork := setupMockBeaconConfig()
+	testBeaconNetwork := setupTestBeaconConfig()
 
 	count := int32(0)
 	onTimeout := func(round specqbft.Round) {
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(t, mockBeaconNetwork, onTimeout, role, threshold)
+	timer := setupTimer(t, testBeaconNetwork, onTimeout, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
@@ -90,7 +90,7 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 }
 
 func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	mockBeaconNetwork := setupMockBeaconConfig()
+	mockBeaconNetwork := setupTestBeaconConfig()
 
 	count := int32(0)
 	onTimeout := func(round specqbft.Round) {
@@ -108,7 +108,7 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 }
 
 func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	mockBeaconConfig := setupMockBeaconConfig()
+	mockBeaconConfig := setupTestBeaconConfig()
 
 	var count int32
 	var timestamps = make([]int64, 4)

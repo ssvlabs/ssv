@@ -6,9 +6,8 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
-const HoleskyStageName = "holesky-stage"
-
-var HoleskyStageSSV = &SSVConfig{
+var HoleskyStageSSV = &SSV{
+	Name:                 "holesky-stage",
 	DomainType:           [4]byte{0x00, 0x00, 0x31, 0x13},
 	RegistrySyncOffset:   new(big.Int).SetInt64(84599),
 	RegistryContractAddr: ethcommon.HexToAddress("0x0d33801785340072C452b994496B19f196b7eE15"),
@@ -22,4 +21,10 @@ var HoleskyStageSSV = &SSVConfig{
 	},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
 	GasLimit36Epoch:         0,
+	Forks: []SSVFork{
+		{
+			Name:  "alan",
+			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
+		},
+	},
 }

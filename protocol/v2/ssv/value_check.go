@@ -17,7 +17,7 @@ import (
 
 func dutyValueCheck(
 	duty *spectypes.ValidatorDuty,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	expectedType spectypes.BeaconRole,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
@@ -83,7 +83,7 @@ func BeaconVoteValueCheckF(
 
 func ProposerValueCheckF(
 	signer ekm.BeaconSigner,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 	sharePublicKey phase0.BLSPubKey,
@@ -122,7 +122,7 @@ func ProposerValueCheckF(
 
 func AggregatorValueCheckF(
 	signer ekm.BeaconSigner,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 ) specqbft.ProposedValueCheckF {
@@ -144,7 +144,7 @@ func AggregatorValueCheckF(
 
 func SyncCommitteeContributionValueCheckF(
 	signer ekm.BeaconSigner,
-	beaconConfig networkconfig.Beacon,
+	beaconConfig *networkconfig.Beacon,
 	validatorPK spectypes.ValidatorPK,
 	validatorIndex phase0.ValidatorIndex,
 ) specqbft.ProposedValueCheckF {
