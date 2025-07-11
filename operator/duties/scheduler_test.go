@@ -22,12 +22,14 @@ import (
 )
 
 const (
-	timeout               = 50 * time.Millisecond
-	noActionTimeout       = 7 * time.Millisecond
-	slotDuration          = 15 * time.Millisecond
-	clockError            = 5 * time.Millisecond
-	testEpochsPerSCPeriod = 4
-	testSlotsPerEpoch     = 12
+	baseDuration            = 1 * time.Millisecond
+	slotDuration            = 15 * baseDuration
+	timeout                 = 50 * baseDuration
+	noActionTimeout         = 7 * baseDuration
+	clockError              = 5 * baseDuration
+	testBlockPropagateDelay = baseDuration
+	testEpochsPerSCPeriod   = 4
+	testSlotsPerEpoch       = 12
 )
 
 type MockSlotTicker interface {
@@ -157,7 +159,7 @@ func setupSchedulerAndMocksWithParams(
 	}
 
 	s := NewScheduler(logger, opts)
-	s.blockPropagateDelay = 1 * time.Millisecond
+	s.blockPropagateDelay = testBlockPropagateDelay
 	s.indicesChg = make(chan struct{})
 	s.handlers = handlers
 
@@ -480,8 +482,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	select {
 	case s.indicesChg <- struct{}{}: // second send should hang
 		break
-	case <-time.After(1 * time.Second):
+	case <-time.After(timeout):
 		t.Fatal("Channel is jammed")
 	}
-
 }
