@@ -20,6 +20,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -33,7 +35,6 @@ import (
 	"github.com/ssvlabs/ssv/network/topics"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/hashmap"
 	"github.com/ssvlabs/ssv/utils/tasks"
@@ -228,11 +229,17 @@ func (n *p2pNetwork) Close() error {
 func (n *p2pNetwork) getConnector() (chan peer.AddrInfo, error) {
 	connector := make(chan peer.AddrInfo, connectorQueueSize)
 	go func() {
-		// Wait for own subnets to be subscribed to and updated.
-		// TODO: wait more intelligently with a channel.
-		time.Sleep(8 * time.Second)
 		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
+
+		// Wait for own subnets to be subscribed to and updated.
+		// TODO: wait more intelligently with a channel.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(8 * time.Second):
+		}
+
 		n.backoffConnector.Connect(ctx, connector)
 	}()
 

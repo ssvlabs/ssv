@@ -34,7 +34,7 @@ func TestExecWithInterval(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ExecWithInterval(addToList, 20*time.Millisecond, time.Second)
+		ExecWithInterval(t.Context(), addToList, 20*time.Millisecond, time.Second)
 	}()
 	wg.Wait()
 	require.Equal(t, 10, len(list))
