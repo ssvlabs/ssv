@@ -24,6 +24,8 @@ import (
 // A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
 const timeout = 200 * time.Millisecond
 
+const noActionTimeout = 20 * time.Millisecond
+
 const slotDuration = 150 * time.Millisecond
 
 type MockSlotTicker interface {

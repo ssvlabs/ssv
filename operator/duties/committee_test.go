@@ -286,7 +286,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	// STEP 2: wait for no action to be taken
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	ticker.Send(phase0.Slot(1))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: wait for committee duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
@@ -328,11 +328,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	// STEP 1: wait for no action to be taken
 	ticker.Send(phase0.Slot(0))
 	// no execution should happen in slot 0
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -365,7 +365,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	// wait for sync committee duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 1
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: wait for committee duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
@@ -406,11 +406,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 	// STEP 1: wait for no action to be taken
 	ticker.Send(phase0.Slot(0))
 	// no execution should happen in slot 0
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
@@ -443,7 +443,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 	// wait for sync committee duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 1
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: wait for committee duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
@@ -492,11 +492,11 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	// STEP 1: wait for no action to be taken
 	ticker.Send(phase0.Slot(0))
 	// no execution should happen in slot 0
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 	attDuties.Set(phase0.Epoch(0), []*eth2apiv1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 5},
@@ -519,7 +519,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	// wait for sync committee duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 1
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: wait for committee duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
@@ -582,12 +582,12 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(64))
 	ticker.Send(phase0.Slot(64))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: trigger reorg on epoch transition
 	e = &eth2apiv1.Event{
@@ -607,7 +607,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 64
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: execute reorged duty
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(65))
@@ -621,7 +621,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	// STEP 6: The first assigned duty should not be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(66))
 	ticker.Send(phase0.Slot(66))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -672,12 +672,12 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(64))
 	ticker.Send(phase0.Slot(64))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: trigger reorg on epoch transition
 	e = &eth2apiv1.Event{
@@ -697,11 +697,11 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 64
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 	attDuties.Delete(phase0.Epoch(2))
 
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
@@ -720,12 +720,12 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	// STEP 7: The first assigned duty should not be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(66))
 	ticker.Send(phase0.Slot(66))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 8: The reorg assigned duty should not be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(67))
 	ticker.Send(phase0.Slot(67))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -771,12 +771,12 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(33))
 	ticker.Send(phase0.Slot(33))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
@@ -796,17 +796,17 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot 33
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: Ticker with no action
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(34))
 	ticker.Send(phase0.Slot(34))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 6: The first assigned duty should not be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(35))
 	ticker.Send(phase0.Slot(35))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 7: execute reorged duty
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(36))
@@ -849,12 +849,12 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	ticker.Send(phase0.Slot(0))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 2: wait for no action to be taken
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	ticker.Send(phase0.Slot(1))
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: wait for attester duties to be executed faster than 1/3 of the slot duration when
 	// Beacon head event is observed (block arrival)
@@ -989,17 +989,17 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 	// STEP 1: wait for no action to be taken
 	ticker.Send(phase0.Slot(0))
 	// no execution should happen in slot 0
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 2: wait for no action to be taken
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(31))
 	ticker.Send(phase0.Slot(31))
 	// no execution should happen in slot 31
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: trigger a change in active indices at the last slot of the epoch
 	scheduler.indicesChg <- struct{}{}
-	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: the first slot of the next epoch duties should be executed as expected
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(32))

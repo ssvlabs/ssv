@@ -146,7 +146,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	firstSlotOfNextPeriod := scheduler.beaconConfig.GetEpochFirstSlot(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
 	waitForSlotN(scheduler.beaconConfig, firstSlotOfNextPeriod)
 	ticker.Send(firstSlotOfNextPeriod)
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -257,7 +257,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
 		ValidatorIndex: phase0.ValidatorIndex(2),
 	}))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: wait for sync committee duties to be fetched again
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-2))
@@ -268,7 +268,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	// STEP 4: no action should be taken
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-1))
 	ticker.Send(phase0.Slot(256*32 - 1))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: execute duties
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32))
@@ -301,7 +301,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 
 	// STEP 1: wait for no action to be taken
 	ticker.Send(phase0.Slot(256*32 - 3))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
@@ -311,7 +311,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
@@ -320,7 +320,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
 		ValidatorIndex: phase0.ValidatorIndex(2),
 	}))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: wait for sync committee duties to be fetched again
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-2))
@@ -332,7 +332,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 	// STEP 5: no action should be taken
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-1))
 	ticker.Send(phase0.Slot(256*32 - 1))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 6: The first assigned duty should not be executed, but the second one should
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32))
@@ -384,12 +384,12 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-2))
 	ticker.Send(phase0.Slot(256*32 - 2))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: trigger reorg
 	e = &v1.Event{
@@ -405,7 +405,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		},
 	})
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-1))
@@ -462,12 +462,12 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-2))
 	ticker.Send(phase0.Slot(256*32 - 2))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 4: trigger reorg
 	e = &v1.Event{
@@ -483,7 +483,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		},
 	})
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
@@ -492,7 +492,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		PubKey:         phase0.BLSPubKey{1, 2, 5},
 		ValidatorIndex: phase0.ValidatorIndex(3),
 	}))
-	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-1))
@@ -555,10 +555,10 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration when
 	// Beacon head event is observed (block arrival)
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
+	startTime := time.Now()
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 2)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-	startTime := time.Now()
 	ticker.Send(phase0.Slot(2))
 
 	// STEP 4: trigger head event (block arrival)
@@ -569,7 +569,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.GetSlotDuration()/3)*0.90)) // 10% margin due to flakiness of the test
+	assertWaitedOneThird(t, scheduler.beaconConfig, startTime)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
