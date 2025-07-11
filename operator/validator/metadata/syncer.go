@@ -98,6 +98,9 @@ func WithSyncInterval(interval time.Duration) Option {
 	}
 }
 
+// SyncAll loads all non-liquidated validator shares that belong to operator's subnets,
+// and triggers a full metadata synchronization for them.
+// It returns a mapping of validator public keys to their updated metadata.
 func (s *Syncer) SyncAll(ctx context.Context) (beacon.ValidatorMetadataMap, error) {
 	subnetsBuf := new(big.Int)
 	ownSubnets := s.selfSubnets(subnetsBuf)
@@ -157,7 +160,7 @@ func (s *Syncer) Sync(ctx context.Context, pubKeys []spectypes.ValidatorPK) (bea
 	return updatedValidators, nil
 }
 
-// This method is responsible for fetching validator metadata from the beacon node for the provided public keys.
+// fetchMetadata is responsible for fetching validator metadata from the beacon node for the provided public keys.
 // The beacon node response is sometimes empty for certain public keys — for such validators,
 // the ValidatorMetadataMap will contain empty metadata objects.
 func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.ValidatorPK) (beacon.ValidatorMetadataMap, error) {
@@ -190,6 +193,9 @@ func (s *Syncer) fetchMetadata(ctx context.Context, pubKeys []spectypes.Validato
 	return results, nil
 }
 
+// Stream continuously fetches and streams batches of validator metadata updates as they become available.
+// It yields updates through a channel (`SyncBatch`) and handles retries, sleeping between sync attempts
+// when all metadata is up to date. The loop respects the provided context and stops gracefully when canceled.
 func (s *Syncer) Stream(ctx context.Context) <-chan SyncBatch {
 	metadataUpdates := make(chan SyncBatch)
 

@@ -480,7 +480,7 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if len(changedShares) > 0 {
 		if err := s.saveToDB(nil, changedShares...); err != nil {
 			return nil, err
