@@ -22,15 +22,9 @@ import (
 )
 
 const (
-	// A generous timeout helps avoid flakes when the test suite is executed with
-	// high parallelism and additional scheduler overhead on busy CI runners.
-	// 500 ms has proven to be reliable while keeping the tests reasonably fast.
-	timeout = 500 * time.Millisecond
-
-	noActionTimeout = 20 * time.Millisecond
-
-	testSlotDuration = 150 * time.Millisecond
-
+	timeout               = 500 * time.Millisecond
+	noActionTimeout       = 20 * time.Millisecond
+	slotDuration          = 45 * time.Millisecond
 	testEpochsPerSCPeriod = 4
 )
 
@@ -101,7 +95,7 @@ func setupSchedulerAndMocks(
 	*mockSlotTickerService,
 	*pool.ContextPool,
 ) {
-	return setupSchedulerAndMocksWithParams(ctx, t, handlers, 0, testSlotDuration)
+	return setupSchedulerAndMocksWithParams(ctx, t, handlers, 0, slotDuration)
 }
 
 func setupSchedulerAndMocksWithStartSlot(
@@ -114,7 +108,7 @@ func setupSchedulerAndMocksWithStartSlot(
 	*mockSlotTickerService,
 	*pool.ContextPool,
 ) {
-	return setupSchedulerAndMocksWithParams(ctx, t, handlers, startSlot, testSlotDuration)
+	return setupSchedulerAndMocksWithParams(ctx, t, handlers, startSlot, slotDuration)
 }
 
 func setupSchedulerAndMocksWithParams(

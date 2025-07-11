@@ -1029,9 +1029,7 @@ func activeShare(index phase0.ValidatorIndex) *ssvtypes.SSVShare {
 }
 
 func assertWaitedOneThird(t *testing.T, beaconConfig *networkconfig.BeaconConfig, startTime time.Time) {
-	// Allow for substantial variance on shared CI runners and when the test
-	// suite is executed with -race or high parallelism.
-	const clockError = 100 * time.Millisecond
+	const clockError = 15 * time.Millisecond
 
 	// validate the 1/3 of the slot waiting time
 	require.Less(t, beaconConfig.GetSlotDuration()/3, time.Since(startTime)+clockError)
