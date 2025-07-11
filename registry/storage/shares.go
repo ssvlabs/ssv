@@ -433,7 +433,6 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMap) (beacon.ValidatorMetadataMap, error) {
 	var (
 		changedShares   []*types.SSVShare
-		unchangedShares []*types.SSVShare
 		changedMetadata beacon.ValidatorMetadataMap
 	)
 
@@ -459,7 +458,6 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 
 			if metadata.Equals(share.BeaconMetadata()) {
 				share.BeaconMetadataLastUpdated = time.Now()
-				unchangedShares = append(unchangedShares, share)
 				continue
 			}
 
@@ -482,11 +480,9 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data beacon.ValidatorMetadataMa
 	if err != nil {
 		return nil, err
 	}
-
-	totalShares := append(unchangedShares, changedShares...)
-
-	if len(totalShares) > 0 {
-		if err := s.saveToDB(nil, totalShares...); err != nil {
+	
+	if len(changedShares) > 0 {
+		if err := s.saveToDB(nil, changedShares...); err != nil {
 			return nil, err
 		}
 	}
