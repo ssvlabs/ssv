@@ -315,7 +315,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 	dutyStore := store.New(db)
 	err = db.Set([]byte("val_pki"), validatorPK7[:], encodeLittleEndian(index1))
 	require.NoError(t, err)
-	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.NetworkConfig{}, db, nil)
+	shares, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
 	shares.Save(db, &types.SSVShare{
 		Status: eth2apiv1.ValidatorStateActiveOngoing,
 		Share: spectypes.Share{
@@ -323,7 +323,7 @@ func TestCommitteeDutyStore_GetAllCommitteeDecideds(t *testing.T) {
 			ValidatorPubKey: validatorPK7,
 		},
 	})
-	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+	collector := New(zap.NewNop(), vstore, nil, dutyStore, networkconfig.TestNetwork.Beacon)
 
 	// Create a new trace
 	dutyTrace, _, err := collector.getOrCreateCommitteeTrace(slot4, committeeID1)
