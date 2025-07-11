@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	timeout               = 500 * time.Millisecond
+	timeout               = 200 * time.Millisecond
 	noActionTimeout       = 20 * time.Millisecond
 	slotDuration          = 45 * time.Millisecond
 	testEpochsPerSCPeriod = 4
