@@ -73,7 +73,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh <- normalExit
 
 	t.Run("slot = 0, block = 1 - no execution", func(t *testing.T) {
-		ticker.Send(0)
+		ticker.Send(phase0.Slot(0))
 		waitForNoAction(t, nil, executeDutiesCall, timeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})

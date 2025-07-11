@@ -253,7 +253,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 	// STEP 2: wait for no action to be taken
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
-	mockTicker.Send(scheduler.beaconConfig.EstimatedCurrentSlot())
+	mockTicker.Send(phase0.Slot(1))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: trigger a change in active indices
@@ -334,7 +334,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                      scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                      63,
 			CurrentDutyDependentRoot:  phase0.Root{0x01},
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
@@ -350,7 +350,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	// STEP 4: trigger reorg on epoch transition
 	e = &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                      scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                      64,
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -418,7 +418,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                      scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                      63,
 			CurrentDutyDependentRoot:  phase0.Root{0x01},
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
@@ -434,7 +434,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	// STEP 4: trigger reorg on epoch transition
 	e = &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                      scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                      64,
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -510,7 +510,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                      scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                      32,
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -526,7 +526,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                      scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                      33,
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -592,7 +592,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                      scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                      32,
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -608,7 +608,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                      scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                      33,
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -685,7 +685,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                     scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                     48,
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -700,7 +700,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                     scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                     49,
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -775,7 +775,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	// STEP 2: trigger head event
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                     scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                     48,
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -790,7 +790,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	// STEP 4: trigger reorg
 	e = &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot:                     scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                     49,
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -886,7 +886,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	// STEP 4: trigger head event (block arrival)
 	e := &eth2apiv1.Event{
 		Data: &eth2apiv1.HeadEvent{
-			Slot: scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot: 2,
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))

@@ -116,7 +116,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 1)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(1))
@@ -125,7 +125,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	// STEP 2: expect sync committee duties to be executed at the same period
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 2)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(2))
@@ -134,7 +134,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	// STEP 3: expect sync committee duties to be executed at the last slot of the period
 	waitForSlotN(scheduler.beaconConfig, scheduler.beaconConfig.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.LastSlotOfSyncPeriod(0))
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(scheduler.beaconConfig.LastSlotOfSyncPeriod(0))
@@ -179,7 +179,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 256*32-49)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(256*32 - 49))
@@ -188,7 +188,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	// STEP 2: wait for sync committee duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-48))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 256*32-48)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(256*32 - 48))
@@ -197,7 +197,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	// STEP 3: wait for sync committee duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32-47))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 256*32-47)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(256*32 - 47))
@@ -208,7 +208,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	// STEP 4: new period, wait for sync committee duties to be executed
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32))
 	duties, _ = dutiesMap.Get(1)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 256*32)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(256 * 32))
@@ -267,7 +267,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	// STEP 5: execute duties
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32))
 	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 256*32)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(256 * 32))
@@ -329,7 +329,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 	// STEP 6: The first assigned duty should not be executed, but the second one should
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32))
 	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 256*32)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(256 * 32))
@@ -369,7 +369,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 	// STEP 2: trigger head event
 	e := &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                     scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                     256*32 - 3,
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -384,7 +384,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 	// STEP 4: trigger reorg
 	e = &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                     scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                     256*32 - 2,
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -405,7 +405,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 	// STEP 6: The first assigned duty should not be executed, but the second one should
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32))
 	duties, _ := dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 256*32)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(256 * 32))
@@ -445,7 +445,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	// STEP 2: trigger head event
 	e := &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                     scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                     256*32 - 3,
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -460,7 +460,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	// STEP 4: trigger reorg
 	e = &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                     scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot:                     256*32 - 2,
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -491,7 +491,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	// STEP 6: The first assigned duty should not be executed, but the second and the new from indices change should
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(256*32))
 	duties, _ = dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 256*32)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(256 * 32))
@@ -522,17 +522,17 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	duties, _ := dutiesMap.Get(0)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, 0)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
-	ticker.Send(0)
+	ticker.Send(phase0.Slot(0))
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 2: expect sync committee duties to be executed at the same period
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(1))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 1)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(phase0.Slot(1))
@@ -542,7 +542,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	// Beacon head event is observed (block arrival)
 	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, scheduler.beaconConfig.EstimatedCurrentSlot())
+	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 2)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 	startTime := time.Now()
 	ticker.Send(phase0.Slot(2))
@@ -550,7 +550,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	// STEP 4: trigger head event (block arrival)
 	e := &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot: scheduler.beaconConfig.EstimatedCurrentSlot(),
+			Slot: 2,
 		},
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
