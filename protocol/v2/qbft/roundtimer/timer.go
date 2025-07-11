@@ -15,8 +15,6 @@ import (
 	"github.com/ssvlabs/ssv/utils/casts"
 )
 
-//go:generate go tool -modfile=../../../../tool.mod mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
-
 type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
@@ -31,11 +29,6 @@ var CutOffRound specqbft.Round = specqbft.Round(specqbft.CutoffRound)
 type Timer interface {
 	// TimeoutForRound will reset running timer if exists and will start a new timer for a specific round
 	TimeoutForRound(height specqbft.Height, round specqbft.Round)
-}
-
-type BeaconNetwork interface {
-	GetSlotStartTime(slot phase0.Slot) time.Time
-	SlotDurationSec() time.Duration
 }
 
 type TimeoutOptions struct {
@@ -112,10 +105,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	switch t.role {
 	case spectypes.RoleCommittee:
 		// third of the slot time
-		baseDuration = t.beaconConfig.GetSlotDuration() / 3
+		baseDuration = t.beaconConfig.SlotDuration() / 3
 	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
 		// two-third of the slot time
-		baseDuration = t.beaconConfig.GetSlotDuration() / 3 * 2
+		baseDuration = t.beaconConfig.SlotDuration() / 3 * 2
 	default:
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
@@ -137,7 +130,7 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	timeoutDuration := baseDuration + additionalTimeout
 
 	// Get the start time of the duty
-	dutyStartTime := t.beaconConfig.GetSlotStartTime(phase0.Slot(height))
+	dutyStartTime := t.beaconConfig.SlotStartTime(phase0.Slot(height))
 
 	// Calculate the time until the duty should start plus the timeout duration
 	return time.Until(dutyStartTime.Add(timeoutDuration))

@@ -34,8 +34,10 @@ func GetSSVConfigByName(name string) (*SSVConfig, error) {
 }
 
 type SSV interface {
-	GetDomainType() spectypes.DomainType
-	GetGasLimit36Epoch() phase0.Epoch
+	DomainType() spectypes.DomainType
+	GasLimit36Epoch() phase0.Epoch
+	TotalEthereumValidators() int
+	RegistrySyncOffset() *big.Int
 }
 
 type SSVConfig struct {
@@ -133,10 +135,25 @@ func (s *SSVConfig) UnmarshalJSON(data []byte) error {
 	return s.unmarshalFromConfig(aux)
 }
 
-func (s *SSVConfig) GetDomainType() spectypes.DomainType {
-	return s.DomainType
+// ssvConfigAdaptor wraps SSVConfig to provide the SSV interface implementation.
+// SSVConfig itself cannot implement the SSV interface because of name-collisions between its field names
+// and the SSV interface method names.
+type ssvConfigAdaptor struct {
+	*SSVConfig
 }
 
-func (s *SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
-	return s.GasLimit36Epoch
+func (s *ssvConfigAdaptor) DomainType() spectypes.DomainType {
+	return s.SSVConfig.DomainType
+}
+
+func (s *ssvConfigAdaptor) GasLimit36Epoch() phase0.Epoch {
+	return s.SSVConfig.GasLimit36Epoch
+}
+
+func (s *ssvConfigAdaptor) TotalEthereumValidators() int {
+	return s.SSVConfig.TotalEthereumValidators
+}
+
+func (s *ssvConfigAdaptor) RegistrySyncOffset() *big.Int {
+	return s.SSVConfig.RegistrySyncOffset
 }

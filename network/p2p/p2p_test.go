@@ -141,12 +141,12 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 	if nonCommitteeRole == spectypes.RoleCommittee {
 		panic("committee role shouldn't be used here")
 	}
-	netCfg := networkconfig.TestNetwork
+	netCfg := networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV)
 	height := specqbft.Height(netCfg.EstimatedCurrentSlot())
 
 	fullData := spectestingutils.TestingQBFTFullData
 
-	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType, ks.ValidatorPK.Serialize(), nonCommitteeRole)
+	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.DomainType(), ks.ValidatorPK.Serialize(), nonCommitteeRole)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -167,7 +167,7 @@ func generateValidatorMsg(ks *spectestingutils.TestKeySet, round specqbft.Round,
 }
 
 func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round) *spectypes.SignedSSVMessage {
-	netCfg := networkconfig.TestNetwork
+	netCfg := networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV)
 	height := specqbft.Height(netCfg.EstimatedCurrentSlot())
 
 	share := &ssvtypes.SSVShare{
@@ -180,7 +180,7 @@ func generateCommitteeMsg(ks *spectestingutils.TestKeySet, round specqbft.Round)
 	fullData := spectestingutils.TestingQBFTFullData
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
-	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType, encodedCommitteeID, spectypes.RoleCommittee)
+	committeeIdentifier := spectypes.NewMsgID(netCfg.DomainType(), encodedCommitteeID, spectypes.RoleCommittee)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
@@ -220,7 +220,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole)
 		committeeID := ssvtypes.ComputeCommitteeID([]spectypes.OperatorID{1, 2, 3, 4})
 		dutyExecutorID = append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	}
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, dutyExecutorID, role)
+	id := spectypes.NewMsgID(networkconfig.TestSSV.DomainType, dutyExecutorID, role)
 
 	qbftMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,

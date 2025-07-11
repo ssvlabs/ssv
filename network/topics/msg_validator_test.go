@@ -15,6 +15,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
+
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/network/commons"
@@ -23,7 +25,6 @@ import (
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/registry/storage"
-	"github.com/ssvlabs/ssv/ssvsigner/keys/rsaencryption"
 	kv "github.com/ssvlabs/ssv/storage/badger"
 	"github.com/ssvlabs/ssv/storage/basedb"
 )
@@ -41,7 +42,7 @@ func TestMsgValidator(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork, logger, db)
+	ns, err := operatorstorage.NewNodeStorage(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), logger, db)
 	require.NoError(t, err)
 
 	require.NoError(t, ns.Shares().Save(nil, share))
@@ -50,7 +51,7 @@ func TestMsgValidator(t *testing.T) {
 
 	signatureVerifier := signatureverifier.NewSignatureVerifier(ns)
 	mv := validation.New(
-		networkconfig.TestNetwork,
+		networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 		ns.ValidatorStore(),
 		ns,
 		dutystore.New(),
@@ -61,7 +62,7 @@ func TestMsgValidator(t *testing.T) {
 
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.EstimatedCurrentSlot()
+	slot := networkconfig.TestBeacon.EstimatedCurrentSlot()
 
 	operatorID := uint64(1)
 	operatorPrivateKey := ks.OperatorKeys[operatorID]
@@ -183,7 +184,7 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 }
 
 func dummySSVConsensusMsg(dutyExecutorID []byte, height qbft.Height) (*spectypes.SSVMessage, error) {
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, dutyExecutorID, spectypes.RoleCommittee)
+	id := spectypes.NewMsgID(networkconfig.TestSSV.DomainType, dutyExecutorID, spectypes.RoleCommittee)
 	qbftMsg := &qbft.Message{
 		MsgType:    qbft.RoundChangeMsgType,
 		Height:     height,

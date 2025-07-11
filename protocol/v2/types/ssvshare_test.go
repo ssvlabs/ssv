@@ -210,7 +210,7 @@ func TestSSVShare_IsParticipating(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsParticipating(networkconfig.TestNetwork, tc.Epoch)
+			result := tc.Share.IsParticipating(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}
@@ -304,7 +304,7 @@ func TestIsSyncCommitteeEligible(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsSyncCommitteeEligible(networkconfig.TestNetwork, tc.Epoch)
+			result := tc.Share.IsSyncCommitteeEligible(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}

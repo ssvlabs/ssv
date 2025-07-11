@@ -36,8 +36,8 @@ func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
 	beaconConfig := gc.getBeaconConfig()
 
 	forkData := &phase0.ForkData{
-		CurrentVersion:        beaconConfig.Forks[spec.DataVersionCapella].CurrentVersion,
-		GenesisValidatorsRoot: beaconConfig.GenesisValidatorsRoot,
+		CurrentVersion:        beaconConfig.Fork(spec.DataVersionCapella).CurrentVersion,
+		GenesisValidatorsRoot: beaconConfig.GenesisValidatorsRoot(),
 	}
 
 	root, err := forkData.HashTreeRoot()
@@ -63,7 +63,7 @@ func (gc *GoClient) DomainData(
 		// to (Mainnet, Hoodi, etc.)
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
-			CurrentVersion:        gc.getBeaconConfig().GenesisForkVersion,
+			CurrentVersion:        gc.getBeaconConfig().GenesisForkVersion(),
 			GenesisValidatorsRoot: phase0.Root{},
 		}
 		root, err := forkData.HashTreeRoot()

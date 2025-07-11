@@ -31,7 +31,7 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 
 // messageEarliness returns how early message is or 0 if it's not
 func (mv *messageValidator) messageEarliness(slot phase0.Slot, receivedAt time.Time) time.Duration {
-	return mv.netCfg.GetSlotStartTime(slot).Sub(receivedAt)
+	return mv.netCfg.SlotStartTime(slot).Sub(receivedAt)
 }
 
 // messageLateness returns how late message is or 0 if it's not
@@ -46,7 +46,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 		return 0
 	}
 
-	deadline := mv.netCfg.GetSlotStartTime(slot + phase0.Slot(ttl)).
+	deadline := mv.netCfg.SlotStartTime(slot + phase0.Slot(ttl)).
 		Add(lateMessageMargin)
 
 	return receivedAt.Sub(deadline)
@@ -95,7 +95,7 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, slot phase0.Slo
 
 	case spectypes.RoleCommittee:
 		validatorIndexCount := uint64(len(validatorIndices))
-		slotsPerEpoch := mv.netCfg.GetSlotsPerEpoch()
+		slotsPerEpoch := mv.netCfg.SlotsPerEpoch()
 
 		// Skip duty search if validators * 2 exceeds slots per epoch,
 		// as the maximum duties per epoch is capped at the number of slots.

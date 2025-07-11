@@ -26,7 +26,7 @@ require (
 	github.com/microsoft/go-crypto-openssl v0.2.9
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20240618144021-706c95b2dd15
 	github.com/ssvlabs/eth2-key-manager v1.5.5
-	github.com/ssvlabs/ssv v1.2.1-0.20250630180114-f47c33a3b2c7
+	github.com/ssvlabs/ssv v1.2.1-0.20250706075931-184abe302b0f
 	github.com/ssvlabs/ssv-spec v1.1.3
 	github.com/stretchr/testify v1.10.0
 	github.com/valyala/fasthttp v1.58.0
@@ -99,6 +99,7 @@ require (
 	github.com/prometheus/common v0.64.0 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/prysmaticlabs/prysm/v4 v4.0.8 // indirect
+	github.com/sanity-io/litter v1.5.6 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect

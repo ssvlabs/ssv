@@ -30,6 +30,7 @@ import (
 	"github.com/ssvlabs/ssv/network/records"
 	"github.com/ssvlabs/ssv/network/streams"
 	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/utils/commons"
 )
 
@@ -190,7 +191,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	if err != nil {
 		return err
 	}
-	d := n.cfg.NetworkConfig.DomainType
+	d := n.cfg.SSVConfig.DomainType
 	domain := "0x" + hex.EncodeToString(d[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
@@ -219,7 +220,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	// Handshake filters
 	filters := func() []connections.HandshakeFilter {
-		newDomain := n.cfg.NetworkConfig.DomainType
+		newDomain := n.cfg.SSVConfig.DomainType
 		newDomainString := "0x" + hex.EncodeToString(newDomain[:])
 		return []connections.HandshakeFilter{
 			connections.NetworkIDFilter(newDomainString),
@@ -238,7 +239,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 			SubnetsIdx:      n.idx,
 			IDService:       ids,
 			Network:         n.host.Network(),
-			DomainType:      n.cfg.NetworkConfig.DomainType,
+			DomainType:      n.cfg.SSVConfig.DomainType,
 			SubnetsProvider: n.ActiveSubnets,
 		}, filters)
 
@@ -295,7 +296,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		SubnetsIdx:          n.idx,
 		HostAddress:         n.cfg.HostAddress,
 		HostDNS:             n.cfg.HostDNS,
-		SSVConfig:           n.cfg.NetworkConfig.SSVConfig,
+		SSVConfig:           n.cfg.SSVConfig,
 		DiscoveredPeersPool: n.discoveredPeersPool,
 		TrimmedRecently:     n.trimmedRecently,
 	}
@@ -312,7 +313,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	cfg := &topics.PubSubConfig{
-		NetworkConfig: n.cfg.NetworkConfig,
+		NetworkConfig: networkconfig.NewNetwork(n.cfg.BeaconConfig, n.cfg.SSVConfig),
 		Host:          n.host,
 		TraceLog:      n.cfg.PubSubTrace,
 		MsgValidator:  n.msgValidator,

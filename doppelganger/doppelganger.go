@@ -176,7 +176,7 @@ func (h *handler) Start(ctx context.Context) error {
 	var startEpoch, previousEpoch phase0.Epoch
 	firstRun := true
 	ticker := h.slotTickerProvider()
-	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch
+	slotsPerEpoch := h.beaconConfig.SlotsPerEpoch()
 
 	for {
 		select {
@@ -233,7 +233,7 @@ func (h *handler) Start(ctx context.Context) error {
 
 func (h *handler) checkLiveness(ctx context.Context, slot phase0.Slot, epoch phase0.Epoch) {
 	// Set a deadline until the start of the next slot, with a 100ms safety margin
-	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	h.mu.RLock()

@@ -21,7 +21,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 	ctx, cancel := context.WithCancel(context.TODO())
 
 	commonOpts := &validator.CommonOptions{
-		NetworkConfig: networkconfig.TestNetwork,
+		NetworkConfig: networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 		Network:       spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Beacon:        tests.NewTestingBeaconNodeWrapped(),
 		Storage:       testing.TestingStores(logger),

@@ -67,7 +67,7 @@ func New(ctx context.Context,
 	beaconNetwork *networkconfig.BeaconConfig,
 ) *Collector {
 
-	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration
+	ttl := time.Duration(slotTTL) * beaconNetwork.SlotDuration()
 
 	collector := &Collector{
 		logger:                         logger,

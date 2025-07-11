@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -48,17 +49,19 @@ func TestTimeoutForRound(t *testing.T) {
 	}
 }
 
-func setupMockBeaconConfig() *networkconfig.BeaconConfig {
-	config := networkconfig.TestNetwork.BeaconConfig
-	config.SlotDuration = 120 * time.Millisecond
-	config.GenesisTime = time.Now()
+func setupMockBeaconConfig(ctrl *gomock.Controller) networkconfig.Beacon {
+	config := networkconfig.NewMockBeacon(ctrl)
+
+	config.EXPECT().SlotStartTime(gomock.Any()).Return(time.Now()).AnyTimes()
+	config.EXPECT().SlotDuration().Return(120 * time.Millisecond).AnyTimes()
+	config.EXPECT().GenesisTime().Return(time.Now()).AnyTimes()
 
 	return config
 }
 
 func setupTimer(
 	t *testing.T,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig networkconfig.Beacon,
 	onTimeout OnRoundTimeoutF,
 	role spectypes.RunnerRole,
 	round specqbft.Round,
@@ -74,7 +77,9 @@ func setupTimer(
 }
 
 func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	mockBeaconNetwork := setupMockBeaconConfig()
+	ctrl := gomock.NewController(t)
+
+	mockBeaconNetwork := setupMockBeaconConfig(ctrl)
 
 	count := int32(0)
 	onTimeout := func(round specqbft.Round) {
@@ -90,7 +95,9 @@ func testTimeoutForRound(t *testing.T, role spectypes.RunnerRole, threshold spec
 }
 
 func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	mockBeaconNetwork := setupMockBeaconConfig()
+	ctrl := gomock.NewController(t)
+
+	mockBeaconNetwork := setupMockBeaconConfig(ctrl)
 
 	count := int32(0)
 	onTimeout := func(round specqbft.Round) {
@@ -108,7 +115,9 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.RunnerRole, thresho
 }
 
 func testTimeoutForRoundMulti(t *testing.T, role spectypes.RunnerRole, threshold specqbft.Round) {
-	mockBeaconConfig := setupMockBeaconConfig()
+	ctrl := gomock.NewController(t)
+
+	mockBeaconConfig := setupMockBeaconConfig(ctrl)
 
 	var count int32
 	var timestamps = make([]int64, 4)

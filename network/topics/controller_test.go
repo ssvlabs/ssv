@@ -87,7 +87,7 @@ func TestTopicManager(t *testing.T) {
 		signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 
 		validator := validation.New(
-			networkconfig.TestNetwork,
+			networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV),
 			validatorStore,
 			operators,
 			dutyStore,
@@ -409,7 +409,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork, db, []byte("test"))
+	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV), db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +458,7 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SignedSSVMes
 		return nil, err
 	}
 
-	id := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, pk, spectypes.RoleCommittee)
+	id := spectypes.NewMsgID(networkconfig.TestSSV.DomainType, pk, spectypes.RoleCommittee)
 	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
 	if err != nil {
 		return nil, err

@@ -165,7 +165,7 @@ func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *St
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)
 
-	r.GetBaseRunner().NetworkConfig = networkconfig.TestNetwork
+	r.GetBaseRunner().NetworkConfig = networkconfig.NewNetwork(networkconfig.TestBeacon, networkconfig.TestSSV)
 
 	// override
 	test.PostDutyRunnerState = r

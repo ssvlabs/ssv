@@ -18,11 +18,10 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig *networkconfig.NetworkConfig) {
+func CheckBootnodes(t *testing.T, dvs *DiscV5Service, ssvConfig *networkconfig.SSVConfig) {
+	require.Len(t, dvs.bootnodes, len(ssvConfig.Bootnodes))
 
-	require.Len(t, dvs.bootnodes, len(netConfig.Bootnodes))
-
-	for _, bootnode := range netConfig.Bootnodes {
+	for _, bootnode := range ssvConfig.Bootnodes {
 		nodes, err := ParseENR(nil, false, bootnode)
 		require.NoError(t, err)
 		require.Contains(t, dvs.bootnodes, nodes[0])
@@ -38,7 +37,7 @@ func TestNewDiscV5Service(t *testing.T) {
 	assert.NotNil(t, dvs.ssvConfig)
 
 	// Check bootnodes
-	CheckBootnodes(t, dvs, testNetConfig)
+	CheckBootnodes(t, dvs, networkconfig.TestSSV)
 
 	// Close
 	err := dvs.Close()
@@ -121,7 +120,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, netConfig *networkconfig.NetworkConfig) {
+func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, ssvConfig *networkconfig.SSVConfig) {
 	// Check domain entry
 	domainEntry := records.DomainTypeEntry{
 		Key:        records.KeyDomainType,
@@ -129,7 +128,7 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	}
 	err := localNode.Node().Record().Load(&domainEntry)
 	require.NoError(t, err)
-	require.Equal(t, netConfig.DomainType, domainEntry.DomainType)
+	require.Equal(t, ssvConfig.DomainType, domainEntry.DomainType)
 
 	// Check next domain entry
 	nextDomainEntry := records.DomainTypeEntry{
@@ -138,14 +137,14 @@ func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode,
 	}
 	err = localNode.Node().Record().Load(&nextDomainEntry)
 	require.NoError(t, err)
-	require.Equal(t, netConfig.DomainType, nextDomainEntry.DomainType)
+	require.Equal(t, ssvConfig.DomainType, nextDomainEntry.DomainType)
 }
 
 func TestDiscV5Service_PublishENR(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+	opts := testingDiscoveryOptions(t, networkconfig.TestSSV)
 	dvs, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 
@@ -156,22 +155,22 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	dvs.dv5Listener = NewMockListener(localNode, []*enode.Node{NewTestingNode(t)})
 
 	// Check LocalNode has the correct domain and next domain entries
-	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
+	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.TestSSV)
 
 	// Change network config
-	dvs.ssvConfig = networkconfig.TestNetwork.SSVConfig
+	dvs.ssvConfig = networkconfig.TestSSV
 	// Test PublishENR method
 	dvs.PublishENR()
 
 	// Check LocalNode has been updated
-	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.TestNetwork)
+	checkLocalNodeDomainTypeAlignment(t, localNode, networkconfig.TestSSV)
 }
 
 func TestDiscV5Service_Bootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+	opts := testingDiscoveryOptions(t, networkconfig.TestSSV)
 
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
@@ -252,11 +251,11 @@ func TestDiscV5Service_checkPeer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Matching main domain
-	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, testNetConfig.DomainType, spectypes.DomainType{})))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, networkconfig.TestSSV.DomainType, spectypes.DomainType{})))
 	require.NoError(t, err)
 
 	// Matching next domain
-	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, testNetConfig.DomainType)))
+	err = dvs.checkPeer(context.TODO(), ToPeerEvent(NodeWithCustomDomains(t, spectypes.DomainType{}, networkconfig.TestSSV.DomainType)))
 	require.ErrorContains(t, err, "domain type 00000000 doesn't match 00000302")
 
 	// Mismatching domains
@@ -295,7 +294,7 @@ func TestDiscV5ServiceListenerType(t *testing.T) {
 	require.True(t, ok)
 
 	// Check bootnodes
-	CheckBootnodes(t, dvs, testNetConfig)
+	CheckBootnodes(t, dvs, networkconfig.TestSSV)
 
 	// Close
 	err := dvs.Close()
@@ -366,7 +365,7 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			defer cancel()
 
 			// create options with unique ports for parallel testing
-			opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+			opts := testingDiscoveryOptions(t, networkconfig.TestSSV)
 			opts.DiscV5Opts.Port = uint16(13000 + i*10)
 			opts.DiscV5Opts.TCPPort = uint16(14000 + i*10)
 			opts.HostAddress = tc.hostAddress

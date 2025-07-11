@@ -70,7 +70,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 	// Prepare relevant duties 1.5 epochs (48 slots) ahead of the sync committee period change.
 	// The 1.5 epochs timing helps ensure setup occurs when the beacon node is likely less busy.
-	h.preparationSlots = h.beaconConfig.GetSlotsPerEpoch() * 3 / 2
+	h.preparationSlots = h.beaconConfig.SlotsPerEpoch() * 3 / 2
 
 	if h.shouldFetchNextPeriod(h.beaconConfig.EstimatedCurrentSlot()) {
 		h.fetchNextPeriod = true
@@ -90,7 +90,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+			ctx, cancel := context.WithDeadline(ctx, h.beaconConfig.SlotStartTime(slot+1).Add(100*time.Millisecond))
 			h.processExecution(ctx, period, slot)
 			h.processFetching(ctx, epoch, period, true)
 			cancel()
@@ -137,7 +137,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.GetSlotDuration()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.beaconConfig.SlotDuration()/2)
 	defer cancel()
 
 	epoch := h.beaconConfig.EstimatedCurrentEpoch()
@@ -389,5 +389,5 @@ func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
 }
 
 func (h *SyncCommitteeHandler) slotsPerPeriod() uint64 {
-	return h.beaconConfig.GetEpochsPerSyncCommitteePeriod() * h.beaconConfig.GetSlotsPerEpoch()
+	return h.beaconConfig.EpochsPerSyncCommitteePeriod() * h.beaconConfig.SlotsPerEpoch()
 }
