@@ -21,12 +21,14 @@ import (
 func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	// Create a sample SSVConfig
 	originalConfig := SSVConfig{
-		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
-		RegistrySyncOffset:   big.NewInt(123456),
-		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
-		Bootnodes:            []string{"bootnode1", "bootnode2"},
-		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		GasLimit36Epoch:      0,
+		DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+		RegistrySyncOffset:      big.NewInt(123456),
+		RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+		Bootnodes:               []string{"bootnode1", "bootnode2"},
+		DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		MaxF:                    4,
+		TotalEthereumValidators: 1000,
+		GasLimit36Epoch:         0,
 	}
 
 	// Marshal to JSON
@@ -51,17 +53,21 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	assert.Equal(t, originalConfig.RegistryContractAddr, unmarshaledConfig.RegistryContractAddr)
 	assert.Equal(t, originalConfig.Bootnodes, unmarshaledConfig.Bootnodes)
 	assert.Equal(t, originalConfig.DiscoveryProtocolID, unmarshaledConfig.DiscoveryProtocolID)
+	assert.Equal(t, originalConfig.TotalEthereumValidators, unmarshaledConfig.TotalEthereumValidators)
+	assert.Equal(t, originalConfig.MaxF, unmarshaledConfig.MaxF)
 }
 
 func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	// Create a sample SSVConfig
 	originalConfig := SSVConfig{
-		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
-		RegistrySyncOffset:   big.NewInt(123456),
-		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
-		Bootnodes:            []string{"bootnode1", "bootnode2"},
-		DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-		GasLimit36Epoch:      0,
+		DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+		RegistrySyncOffset:      big.NewInt(123456),
+		RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+		Bootnodes:               []string{"bootnode1", "bootnode2"},
+		DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+		MaxF:                    4,
+		TotalEthereumValidators: 1000,
+		GasLimit36Epoch:         0,
 	}
 
 	// Marshal to YAML
@@ -83,6 +89,8 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	assert.Equal(t, originalConfig.RegistryContractAddr, unmarshaledConfig.RegistryContractAddr)
 	assert.Equal(t, originalConfig.Bootnodes, unmarshaledConfig.Bootnodes)
 	assert.Equal(t, originalConfig.DiscoveryProtocolID, unmarshaledConfig.DiscoveryProtocolID)
+	assert.Equal(t, originalConfig.TotalEthereumValidators, unmarshaledConfig.TotalEthereumValidators)
+	assert.Equal(t, originalConfig.MaxF, unmarshaledConfig.MaxF)
 
 	// Compare the original and remarshaled YAML bytes
 	// YAML doesn't preserve order by default, so we need to compare the unmarshaled content
@@ -145,12 +153,14 @@ func TestFieldPreservation(t *testing.T) {
 	t.Run("hash comparison JSON", func(t *testing.T) {
 		// Create a sample config
 		config := SSVConfig{
-			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
-			RegistrySyncOffset:   big.NewInt(123456),
-			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
-			Bootnodes:            []string{"bootnode1", "bootnode2"},
-			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			GasLimit36Epoch:      0,
+			DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+			RegistrySyncOffset:      big.NewInt(123456),
+			RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+			Bootnodes:               []string{"bootnode1", "bootnode2"},
+			DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+			MaxF:                    4,
+			TotalEthereumValidators: 1000,
+			GasLimit36Epoch:         0,
 		}
 
 		// Marshal and unmarshal to test preservation
@@ -172,7 +182,7 @@ func TestFieldPreservation(t *testing.T) {
 		assert.Equal(t, originalHash, unmarshaledHash, "Hash mismatch indicates fields weren't properly preserved in JSON")
 
 		// Store the expected hash - this will fail if a new field is added without updating the tests
-		expectedJSONHash := "3afe88f355185266dfd842df18a096ea8f40dd28f8b022710aedca1d09d59cef"
+		expectedJSONHash := "a7a62e8d329b5dfc2688cbabd6310f43697c93b2fe5026829e9aa28c9ce67897"
 		assert.Equal(t, expectedJSONHash, originalHash,
 			"Hash has changed. If you've added a new field, please update the expected hash in this test.")
 	})
@@ -180,12 +190,14 @@ func TestFieldPreservation(t *testing.T) {
 	t.Run("hash comparison YAML", func(t *testing.T) {
 		// Create a sample config
 		config := SSVConfig{
-			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
-			RegistrySyncOffset:   big.NewInt(123456),
-			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
-			Bootnodes:            []string{"bootnode1", "bootnode2"},
-			DiscoveryProtocolID:  [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
-			GasLimit36Epoch:      0,
+			DomainType:              spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
+			RegistrySyncOffset:      big.NewInt(123456),
+			RegistryContractAddr:    ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
+			Bootnodes:               []string{"bootnode1", "bootnode2"},
+			DiscoveryProtocolID:     [6]byte{0x05, 0x06, 0x07, 0x08, 0x09, 0x0a},
+			MaxF:                    4,
+			TotalEthereumValidators: 1000,
+			GasLimit36Epoch:         0,
 		}
 
 		// Marshal and unmarshal to test preservation
