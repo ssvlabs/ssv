@@ -554,7 +554,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithFirstSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 63)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 63)
 	waitForSlotN(scheduler.beaconConfig, 63)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -644,7 +644,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithFirstSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 63)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 63)
 	waitForSlotN(scheduler.beaconConfig, 63)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -757,7 +757,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithFirstSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 32)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 32)
 	waitForSlotN(scheduler.beaconConfig, 32)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -982,7 +982,7 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithFirstSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 31)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 31)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 

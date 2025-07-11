@@ -101,20 +101,20 @@ func setupSchedulerAndMocks(
 	*mockSlotTickerService,
 	*pool.ContextPool,
 ) {
-	return setupSchedulerAndMocksWithParams(ctx, t, handlers, 0, testSlotDuration, 256)
+	return setupSchedulerAndMocksWithParams(ctx, t, handlers, 0, testSlotDuration)
 }
 
-func setupSchedulerAndMocksWithFirstSlot(
+func setupSchedulerAndMocksWithStartSlot(
 	ctx context.Context,
 	t *testing.T,
 	handlers []dutyHandler,
-	firstSlot phase0.Slot,
+	startSlot phase0.Slot,
 ) (
 	*Scheduler,
 	*mockSlotTickerService,
 	*pool.ContextPool,
 ) {
-	return setupSchedulerAndMocksWithParams(ctx, t, handlers, firstSlot, testSlotDuration, 256)
+	return setupSchedulerAndMocksWithParams(ctx, t, handlers, startSlot, testSlotDuration)
 }
 
 func setupSchedulerAndMocksWithParams(
@@ -123,7 +123,6 @@ func setupSchedulerAndMocksWithParams(
 	handlers []dutyHandler,
 	startSlot phase0.Slot,
 	slotDuration time.Duration,
-	epochsPerSCPeriod uint64,
 ) (
 	*Scheduler,
 	*mockSlotTickerService,
@@ -143,7 +142,7 @@ func setupSchedulerAndMocksWithParams(
 	beaconCfg := *networkconfig.TestNetwork.BeaconConfig
 	beaconCfg.SlotDuration = slotDuration
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration * time.Duration(startSlot))
-	beaconCfg.EpochsPerSyncCommitteePeriod = epochsPerSCPeriod
+	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
