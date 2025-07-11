@@ -157,7 +157,7 @@ func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *S
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.ValidatorDuty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.ValidatorDuty, executeDutiesCallSize)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
 		func(_ context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 
@@ -181,6 +181,8 @@ func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Valida
 func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *committeeDuty, executeDutiesCallSize)
 
+	// We are not super interested in checking the exact number of ExecuteDuty calls, hence allow
+	// AnyTimes of these calls here.
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
 		func(ctx context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
@@ -188,7 +190,7 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 		},
 	)
 
-	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
+	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(executeDutiesCallSize).DoAndReturn(
 		func(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 			logger.Debug("🏃 Executing committee duty", zap.Any("duty", duty))
 			executeDutiesBuffer <- &committeeDuty{id: committeeID, duty: duty}

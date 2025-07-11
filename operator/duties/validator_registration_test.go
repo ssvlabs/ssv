@@ -12,25 +12,25 @@ import (
 )
 
 func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
+	regCh := make(chan RegistrationDescriptor)
+	handler := NewValidatorRegistrationHandler(regCh)
+
+	currentSlot := &SafeValue[phase0.Slot]{}
+	currentSlot.Set(0)
+
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
+	startFn()
+	defer func() {
+		cancel()
+		close(regCh)
+		require.NoError(t, schedulerPool.Wait())
+	}()
+
+	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
+	assert1to1BlockSlotMapping(t, scheduler)
+	require.EqualValues(t, 1, blockByNumberCalls.Load())
+
 	t.Run("duty triggered by ticker", func(t *testing.T) {
-		regCh := make(chan RegistrationDescriptor)
-		handler := NewValidatorRegistrationHandler(regCh)
-
-		currentSlot := &SafeValue[phase0.Slot]{}
-		currentSlot.Set(0)
-
-		scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
-		startFn()
-		defer func() {
-			cancel()
-			close(regCh)
-			require.NoError(t, schedulerPool.Wait())
-		}()
-
-		blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
-		assert1to1BlockSlotMapping(t, scheduler)
-		require.EqualValues(t, 1, blockByNumberCalls.Load())
-
 		const slot = 1
 
 		validatorIndex1 := phase0.ValidatorIndex(1)
@@ -95,24 +95,6 @@ func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
 	})
 
 	t.Run("duty triggered via validatorRegistrationCh", func(t *testing.T) {
-		regCh := make(chan RegistrationDescriptor)
-		handler := NewValidatorRegistrationHandler(regCh)
-
-		currentSlot := &SafeValue[phase0.Slot]{}
-		currentSlot.Set(0)
-
-		scheduler, logger, _, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, []dutyHandler{handler}, currentSlot)
-		startFn()
-		defer func() {
-			cancel()
-			close(regCh)
-			require.NoError(t, schedulerPool.Wait())
-		}()
-
-		blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
-		assert1to1BlockSlotMapping(t, scheduler)
-		require.EqualValues(t, 1, blockByNumberCalls.Load())
-
 		const slot = 1
 
 		validatorIndex := phase0.ValidatorIndex(1)

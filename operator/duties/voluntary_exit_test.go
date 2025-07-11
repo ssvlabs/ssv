@@ -35,9 +35,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	assert1to1BlockSlotMapping(t, scheduler)
 	require.EqualValues(t, 1, blockByNumberCalls.Load())
 
-	executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
-
 	const blockNumber = uint64(1)
 
 	normalExit := ExitDescriptor{
@@ -80,25 +77,28 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	t.Run("slot = 0, block = 1 - no execution", func(t *testing.T) {
 		currentSlot.Set(0)
 		ticker.Send(currentSlot.Get())
-		waitForNoAction(t, logger, nil, executeDutiesCall, timeout)
+		waitForNoAction(t, logger, nil, nil, timeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	t.Run("slot = 1, block = 1 - no execution", func(t *testing.T) {
 		currentSlot.Set(phase0.Slot(normalExit.BlockNumber))
 		ticker.Send(currentSlot.Get())
-		waitForNoAction(t, logger, nil, executeDutiesCall, timeout)
+		waitForNoAction(t, logger, nil, nil, timeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	t.Run("slot = 4, block = 1 - no execution", func(t *testing.T) {
 		currentSlot.Set(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone - 1)
 		ticker.Send(currentSlot.Get())
-		waitForNoAction(t, logger, nil, executeDutiesCall, timeout)
+		waitForNoAction(t, logger, nil, nil, timeout)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
 	t.Run("slot = 5, block = 1 - executing duty, fetching block number", func(t *testing.T) {
+		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
+
 		currentSlot.Set(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.Get())
 		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[:1])
@@ -108,6 +108,9 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh <- sameBlockExit
 
 	t.Run("slot = 5, block = 1 - executing another duty, no block number fetch", func(t *testing.T) {
+		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
+
 		currentSlot.Set(phase0.Slot(sameBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.Get())
 		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[1:2])
@@ -119,11 +122,14 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	t.Run("slot = 5, block = 2 - no execution", func(t *testing.T) {
 		currentSlot.Set(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.Get())
-		waitForNoAction(t, logger, nil, executeDutiesCall, timeout)
+		waitForNoAction(t, logger, nil, nil, timeout)
 		require.EqualValues(t, 3, blockByNumberCalls.Load())
 	})
 
 	t.Run("slot = 6, block = 1 - executing new duty, fetching block number", func(t *testing.T) {
+		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
+
 		currentSlot.Set(phase0.Slot(newBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.Get())
 		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[2:3])
@@ -133,6 +139,9 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	exitCh <- pastBlockExit
 
 	t.Run("slot = 10, block = 5 - executing past duty, fetching block number", func(t *testing.T) {
+		executeDutiesCall := make(chan []*spectypes.ValidatorDuty)
+		setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
+
 		currentSlot.Set(phase0.Slot(pastBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone + 1)
 		ticker.Send(currentSlot.Get())
 		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[3:4])
