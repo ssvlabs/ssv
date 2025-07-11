@@ -26,7 +26,7 @@ const (
 	noActionTimeout       = 20 * time.Millisecond
 	slotDuration          = 45 * time.Millisecond
 	testEpochsPerSCPeriod = 4
-	testSlotsPerEpoch     = 32
+	testSlotsPerEpoch     = 12
 )
 
 type MockSlotTicker interface {
