@@ -106,8 +106,9 @@ func (r *AggregatorRunner) ProcessPreConsensus(ctx context.Context, logger *zap.
 	r.measurements.EndPreConsensus()
 	recordPreConsensusDuration(ctx, r.measurements.PreConsensusTime(), spectypes.RoleAggregator)
 
-	// only 1 root, verified by basePreConsensusMsgProcessing
+	// only 1 root, verified by expectedPreConsensusRootsAndDomain
 	root := roots[0]
+
 	// reconstruct selection proof sig
 	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
@@ -280,60 +281,60 @@ func (r *AggregatorRunner) ProcessPostConsensus(ctx context.Context, logger *zap
 	r.measurements.EndPostConsensus()
 	recordPostConsensusDuration(ctx, r.measurements.PostConsensusTime(), spectypes.RoleAggregator)
 
-	var successfullySubmittedAggregates uint32
-	for _, root := range roots {
-		span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
-		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
-		if err != nil {
-			// If the reconstructed signature verification failed, fall back to verifying each partial signature
-			for _, root := range roots {
-				r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
-			}
-			return observability.Errorf(span, "got post-consensus quorum but it has invalid signatures: %w", err)
-		}
-		specSig := phase0.BLSSignature{}
-		copy(specSig[:], sig)
+	// only 1 root, verified by expectedPostConsensusRootsAndDomain
+	root := roots[0]
 
-		cd := &spectypes.ValidatorConsensusData{}
-		err = cd.Decode(r.GetState().DecidedValue)
-		if err != nil {
-			return observability.Errorf(span, "could not decode consensus data: %w", err)
-		}
-		aggregateAndProof, _, err := cd.GetAggregateAndProof()
-		if err != nil {
-			return observability.Errorf(span, "could not get aggregate and proof: %w", err)
-		}
+	span.AddEvent("reconstructing beacon signature", trace.WithAttributes(observability.BeaconBlockRootAttribute(root)))
+	sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
+	if err != nil {
+		// If the reconstructed signature verification failed, fall back to verifying each partial signature
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PostConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
+		return observability.Errorf(span, "got post-consensus quorum but it has invalid signatures: %w", err)
+	}
+	specSig := phase0.BLSSignature{}
+	copy(specSig[:], sig)
 
-		msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
-		if err != nil {
-			return observability.Errorf(span, "could not construct versioned aggregate and proof: %w", err)
-		}
-
-		start := time.Now()
-
-		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(ctx, msg); err != nil {
-			recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
-
-			const errMsg = "could not submit to Beacon chain reconstructed contribution and proof"
-			logger.Error(errMsg, fields.SubmissionTime(time.Since(start)), zap.Error(err))
-			return observability.Errorf(span, "%s: %w", errMsg, err)
-		}
-		successfullySubmittedAggregates++
-
-		const eventMsg = "✅ successful submitted aggregate"
-		span.AddEvent(eventMsg)
-		logger.Debug(eventMsg, fields.SubmissionTime(time.Since(start)), fields.TotalConsensusTime(r.measurements.TotalConsensusTime()))
+	cd := &spectypes.ValidatorConsensusData{}
+	err = cd.Decode(r.GetState().DecidedValue)
+	if err != nil {
+		return observability.Errorf(span, "could not decode consensus data: %w", err)
+	}
+	aggregateAndProof, _, err := cd.GetAggregateAndProof()
+	if err != nil {
+		return observability.Errorf(span, "could not get aggregate and proof: %w", err)
 	}
 
-	r.GetState().Finished = true
+	msg, err := constructVersionedSignedAggregateAndProof(*aggregateAndProof, specSig)
+	if err != nil {
+		return observability.Errorf(span, "could not construct versioned aggregate and proof: %w", err)
+	}
 
+	start := time.Now()
+	if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(ctx, msg); err != nil {
+		recordFailedSubmission(ctx, spectypes.BNRoleAggregator)
+		const errMsg = "could not submit to Beacon chain reconstructed contribution and proof"
+		logger.Error(errMsg, fields.SubmissionTime(time.Since(start)), zap.Error(err))
+		return observability.Errorf(span, "%s: %w", errMsg, err)
+	}
+	const eventMsg = "✅ successful submitted aggregate"
+	span.AddEvent(eventMsg)
+	logger.Debug(
+		eventMsg,
+		fields.SubmissionTime(time.Since(start)),
+		fields.TotalConsensusTime(r.measurements.TotalConsensusTime()),
+		fields.TotalDutyTime(r.measurements.TotalDutyTime()),
+	)
+
+	r.GetState().Finished = true
 	r.measurements.EndDutyFlow()
 
-	recordDutyDuration(ctx, r.measurements.DutyDurationTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
-	recordSuccessfulSubmission(ctx,
-		successfullySubmittedAggregates,
+	recordDutyDuration(ctx, r.measurements.TotalDutyTime(), spectypes.BNRoleAggregator, r.GetState().RunningInstance.State.Round)
+	recordSuccessfulSubmission(
+		ctx,
+		1,
 		r.BaseRunner.NetworkConfig.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot()),
-		spectypes.BNRoleAggregator)
+		spectypes.BNRoleAggregator,
+	)
 
 	span.SetStatus(codes.Ok, "")
 	return nil
