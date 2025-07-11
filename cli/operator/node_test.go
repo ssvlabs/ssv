@@ -25,7 +25,7 @@ func Test_verifyConfig(t *testing.T) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 
-	testNetworkName := network.NetworkName()
+	testNetworkName := network.StorageName()
 
 	t.Run("no config in DB", func(t *testing.T) {
 		c := &operatorstorage.ConfigLock{

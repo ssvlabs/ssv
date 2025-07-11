@@ -22,6 +22,8 @@ func (n Network) String() string {
 	return string(jsonBytes)
 }
 
-func (n Network) NetworkName() string {
+// StorageName returns a config name used to make sure the stored network doesn't differ.
+// It combines the network name with fork name.
+func (n Network) StorageName() string {
 	return fmt.Sprintf("%s:%s", n.Name, forkName)
 }
