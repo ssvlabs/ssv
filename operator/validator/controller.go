@@ -67,32 +67,33 @@ type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
-	Context                    context.Context
-	DB                         basedb.Database
-	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
-	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating validator metadata"` // used outside of validator controller, left for compatibility
-	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
-	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"Minimum number of peers required for sync"`
-	Network                    P2PNetwork
-	Beacon                     beaconprotocol.BeaconNode
-	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
-	BeaconSigner               ekm.BeaconSigner
-	OperatorSigner             ssvtypes.OperatorSigner
-	OperatorDataStore          operatordatastore.OperatorDataStore
-	RegistryStorage            nodestorage.Storage
-	RecipientsStorage          Recipients
-	NewDecidedHandler          qbftcontroller.NewDecidedHandler
-	DutyRoles                  []spectypes.BeaconRole
-	DutyTraceCollector         *dutytracer.Collector
-	StorageMap                 *storage.ParticipantStores
-	ValidatorStore             registrystorage.ValidatorStore
-	MessageValidator           validation.MessageValidator
-	ValidatorsMap              *validators.ValidatorsMap
-	DoppelgangerHandler        doppelganger.Provider
-	NetworkConfig              networkconfig.Network
-	ValidatorSyncer            *metadata.Syncer
-	Graffiti                   []byte
-	ProposerDelay              time.Duration
+	Context                        context.Context
+	DB                             basedb.Database
+	SignatureCollectionTimeout     time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
+	MetadataUpdateInterval         time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating validator metadata"` // used outside of validator controller, left for compatibility
+	HistorySyncBatchSize           int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
+	MinPeers                       int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"Minimum number of peers required for sync"`
+	Network                        P2PNetwork
+	Beacon                         beaconprotocol.BeaconNode
+	FullNode                       bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Store complete message history instead of just latest messages"`
+	BeaconSigner                   ekm.BeaconSigner
+	OperatorSigner                 ssvtypes.OperatorSigner
+	OperatorDataStore              operatordatastore.OperatorDataStore
+	RegistryStorage                nodestorage.Storage
+	ValidatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
+	RecipientsStorage              Recipients
+	NewDecidedHandler              qbftcontroller.NewDecidedHandler
+	DutyRoles                      []spectypes.BeaconRole
+	DutyTraceCollector             *dutytracer.Collector
+	StorageMap                     *storage.ParticipantStores
+	ValidatorStore                 registrystorage.ValidatorStore
+	MessageValidator               validation.MessageValidator
+	ValidatorsMap                  *validators.ValidatorsMap
+	DoppelgangerHandler            doppelganger.Provider
+	NetworkConfig                  networkconfig.Network
+	ValidatorSyncer                *metadata.Syncer
+	Graffiti                       []byte
+	ProposerDelay                  time.Duration
 
 	// worker flags
 	WorkersCount    int    `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of message processing workers"`
@@ -114,12 +115,13 @@ type Controller interface {
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	IndicesChangeChan() chan struct{}
+	ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
-	UpdateFeeRecipient(owner, recipient common.Address) error
+	UpdateFeeRecipient(owner, recipient common.Address, blockNumber uint64) error
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex, ownValidator bool) error
 	ReportValidatorStatuses(ctx context.Context)
 	duties.DutyExecutor
@@ -151,11 +153,12 @@ type controller struct {
 
 	logger *zap.Logger
 
-	networkConfig     networkconfig.Network
-	sharesStorage     SharesStorage
-	operatorsStorage  registrystorage.Operators
-	recipientsStorage Recipients
-	ibftStorageMap    *storage.ParticipantStores
+	networkConfig                  networkconfig.Network
+	sharesStorage                  SharesStorage
+	operatorsStorage               registrystorage.Operators
+	recipientsStorage              Recipients
+	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter
+	ibftStorageMap                 *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
 	beaconSigner   ekm.BeaconSigner
@@ -189,8 +192,9 @@ type controller struct {
 
 	domainCache *validator.DomainCache
 
-	indicesChangeCh chan struct{}
-	validatorExitCh chan duties.ExitDescriptor
+	indicesChangeCh         chan struct{}
+	validatorRegistrationCh chan duties.RegistrationDescriptor
+	validatorExitCh         chan duties.ExitDescriptor
 
 	traceCollector *dutytracer.Collector
 }
@@ -229,20 +233,21 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 	cacheTTL := 2 * options.NetworkConfig.EpochDuration() // #nosec G115
 
 	ctrl := controller{
-		logger:            logger.Named(logging.NameController),
-		networkConfig:     options.NetworkConfig,
-		sharesStorage:     options.RegistryStorage.Shares(),
-		operatorsStorage:  options.RegistryStorage,
-		recipientsStorage: options.RegistryStorage,
-		ibftStorageMap:    options.StorageMap,
-		validatorStore:    options.ValidatorStore,
-		ctx:               options.Context,
-		beacon:            options.Beacon,
-		operatorDataStore: options.OperatorDataStore,
-		beaconSigner:      options.BeaconSigner,
-		operatorSigner:    options.OperatorSigner,
-		network:           options.Network,
-		traceCollector:    options.DutyTraceCollector,
+		logger:                         logger.Named(logging.NameController),
+		networkConfig:                  options.NetworkConfig,
+		sharesStorage:                  options.RegistryStorage.Shares(),
+		operatorsStorage:               options.RegistryStorage,
+		recipientsStorage:              options.RegistryStorage,
+		validatorRegistrationSubmitter: options.ValidatorRegistrationSubmitter,
+		ibftStorageMap:                 options.StorageMap,
+		validatorStore:                 options.ValidatorStore,
+		ctx:                            options.Context,
+		beacon:                         options.Beacon,
+		operatorDataStore:              options.OperatorDataStore,
+		beaconSigner:                   options.BeaconSigner,
+		operatorSigner:                 options.OperatorSigner,
+		network:                        options.Network,
+		traceCollector:                 options.DutyTraceCollector,
 
 		validatorsMap:       options.ValidatorsMap,
 		validatorCommonOpts: validatorCommonOpts,
@@ -269,6 +274,7 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 			ttlcache.WithTTL[validator.BeaconVoteCacheKey, struct{}](cacheTTL),
 		),
 		indicesChangeCh:         make(chan struct{}),
+		validatorRegistrationCh: make(chan duties.RegistrationDescriptor),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
 		dutyGuard:               validator.NewCommitteeDutyGuard(),
@@ -289,6 +295,10 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 
 func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChangeCh
+}
+
+func (c *controller) ValidatorRegistrationChan() <-chan duties.RegistrationDescriptor {
+	return c.validatorRegistrationCh
 }
 
 func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
@@ -818,7 +828,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		// so that when the validator is stopped, the runners are stopped as well.
 		validatorCtx, validatorCancel := context.WithCancel(c.ctx)
 
-		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.validatorCommonOpts)
+		dutyRunners, err := SetupRunners(validatorCtx, c.logger, share, operator, c.recipientsStorage, c.validatorRegistrationSubmitter, c.validatorCommonOpts)
 		if err != nil {
 			validatorCancel()
 			return nil, nil, fmt.Errorf("could not setup runners: %w", err)
@@ -956,7 +966,7 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 			fields.Validator(share.ValidatorPubKey[:]), fields.FeeRecipient(data.FeeRecipient[:]))
 		feeRecipient = data.FeeRecipient
 	}
-	share.SetFeeRecipient(feeRecipient)
+	share.FeeRecipientAddress = feeRecipient
 
 	return nil
 }
@@ -1148,6 +1158,8 @@ func SetupRunners(
 	logger *zap.Logger,
 	share *ssvtypes.SSVShare,
 	operator *spectypes.CommitteeMember,
+	recipientsStorage Recipients,
+	validatorRegistrationSubmitter runner.ValidatorRegistrationSubmitter,
 	options *validator.CommonOptions,
 ) (runner.ValidatorDutyRunners, error) {
 	runnersType := []spectypes.RunnerRole{
@@ -1199,7 +1211,7 @@ func SetupRunners(
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role], err = runner.NewSyncCommitteeAggregatorRunner(options.NetworkConfig, shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.RoleValidatorRegistration:
-			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner, options.GasLimit)
+			runners[role], err = runner.NewValidatorRegistrationRunner(options.NetworkConfig, shareMap, share.OwnerAddress, options.Beacon, options.Network, options.Signer, options.OperatorSigner, recipientsStorage, validatorRegistrationSubmitter, options.GasLimit)
 		case spectypes.RoleVoluntaryExit:
 			runners[role], err = runner.NewVoluntaryExitRunner(options.NetworkConfig, shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		}

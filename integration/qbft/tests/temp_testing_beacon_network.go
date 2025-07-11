@@ -64,8 +64,14 @@ func (bn *TestingBeaconNodeWrapped) GetBeaconNetwork() spectypes.BeaconNetwork {
 func (bn *TestingBeaconNodeWrapped) GetBeaconBlock(ctx context.Context, slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	return bn.Bn.GetBeaconBlock(slot, graffiti, randao)
 }
-func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistration(registration *api.VersionedSignedValidatorRegistration) error {
-	return bn.Bn.SubmitValidatorRegistration(registration)
+func (bn *TestingBeaconNodeWrapped) SubmitValidatorRegistrations(ctx context.Context, registrations []*api.VersionedSignedValidatorRegistration) error {
+	for _, registration := range registrations {
+		err := bn.Bn.SubmitValidatorRegistration(registration)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 func (bn *TestingBeaconNodeWrapped) SubmitVoluntaryExit(ctx context.Context, voluntaryExit *phase0.SignedVoluntaryExit) error {
 	return bn.Bn.SubmitVoluntaryExit(voluntaryExit)

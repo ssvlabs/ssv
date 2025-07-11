@@ -30,8 +30,8 @@ func createTestingSingleCommittees(n uint64) []*storage.Committee {
 	for i := uint64(0); i <= n; i++ {
 		opRef := i*4 + 1
 		ret = append(ret, &storage.Committee{
-			Operators:  []uint64{opRef, opRef + 1, opRef + 2, opRef + 3},
-			Validators: createTestingValidators(1),
+			Operators: []uint64{opRef, opRef + 1, opRef + 2, opRef + 3},
+			Shares:    createTestingValidators(1),
 		})
 	}
 	return ret
@@ -58,12 +58,12 @@ func TestCalculateMessageRateForTopic(t *testing.T) {
 			args: args{
 				committees: []*storage.Committee{
 					{
-						Operators:  []uint64{1, 2, 3, 4},
-						Validators: createTestingValidators(500),
+						Operators: []uint64{1, 2, 3, 4},
+						Shares:    createTestingValidators(500),
 					},
 					{
-						Operators:  []uint64{5, 6, 7, 8},
-						Validators: createTestingValidators(500),
+						Operators: []uint64{5, 6, 7, 8},
+						Shares:    createTestingValidators(500),
 					},
 				},
 			},
