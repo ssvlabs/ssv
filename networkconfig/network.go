@@ -22,7 +22,7 @@ func (n Network) String() string {
 // StorageName returns a config name used to make sure the stored network doesn't differ.
 // It combines the network name with fork name.
 func (n Network) StorageName() string {
-	return fmt.Sprintf("%s:%s", n.SSVName, n.CurrentSSVFork().Name)
+	return fmt.Sprintf("%s:%s", n.SSV.Name, n.CurrentSSVFork().Name)
 }
 
 func (n Network) CurrentSSVFork() SSVFork {

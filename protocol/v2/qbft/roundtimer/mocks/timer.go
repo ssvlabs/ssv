@@ -54,7 +54,7 @@ func (mr *MockTimerMockRecorder) TimeoutForRound(height, round any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeoutForRound", reflect.TypeOf((*MockTimer)(nil).TimeoutForRound), height, round)
 }
 
-// MockBeaconNetwork is a mock of BeaconNetwork interface.
+// MockBeaconNetwork is a mock of Name interface.
 type MockBeaconNetwork struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconNetworkMockRecorder

@@ -9,7 +9,7 @@ import (
 )
 
 var HoleskySSV = &SSV{
-	SSVName:              "holesky",
+	Name:                 "holesky",
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x2},
 	RegistrySyncOffset:   new(big.Int).SetInt64(181612),
 	RegistryContractAddr: ethcommon.HexToAddress("0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA"),
@@ -20,7 +20,7 @@ var HoleskySSV = &SSV{
 	},
 	TotalEthereumValidators: 1757795, // active_validators from https://holesky.beaconcha.in/index/data on Nov 20, 2024
 	GasLimit36Epoch:         0,
-	SSVForks: []SSVFork{
+	Forks: []SSVFork{
 		{
 			Name:  "alan",
 			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine

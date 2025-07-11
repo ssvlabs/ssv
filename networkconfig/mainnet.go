@@ -11,7 +11,7 @@ import (
 )
 
 var MainnetSSV = &SSV{
-	SSVName:              "mainnet",
+	Name:                 "mainnet",
 	DomainType:           spectypes.AlanMainnet,
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
@@ -32,7 +32,7 @@ var MainnetSSV = &SSV{
 	TotalEthereumValidators: 1064860, // active_validators from https://mainnet.beaconcha.in/index/data on Apr 18, 2025
 	// TODO - set proper value for mainnet
 	GasLimit36Epoch: phase0.Epoch(math.MaxUint64),
-	SSVForks: []SSVFork{
+	Forks: []SSVFork{
 		{
 			Name:  "alan",
 			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine

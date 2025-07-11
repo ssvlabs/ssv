@@ -363,8 +363,8 @@ func (gc *GoClient) singleClientHooks() *eth2clienthttp.Hooks {
 			if err != nil {
 				logger.Fatal("client returned unexpected beacon config, make sure all clients use the same Ethereum network",
 					zap.Error(err),
-					zap.Any("current_forks", currentConfig.BeaconForks),
-					zap.Any("got_forks", beaconConfig.BeaconForks),
+					zap.Any("current_forks", currentConfig.Forks),
+					zap.Any("got_forks", beaconConfig.Forks),
 					zap.Stringer("client_config", beaconConfig),
 					zap.Stringer("expected_config", currentConfig),
 				)

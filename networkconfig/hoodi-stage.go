@@ -7,7 +7,7 @@ import (
 )
 
 var HoodiStageSSV = &SSV{
-	SSVName:              "hoodi-stage",
+	Name:                 "hoodi-stage",
 	DomainType:           [4]byte{0x00, 0x00, 0x31, 0x14},
 	RegistrySyncOffset:   new(big.Int).SetInt64(1004),
 	RegistryContractAddr: ethcommon.HexToAddress("0x0aaace4e8affc47c6834171c88d342a4abd8f105"),
@@ -18,7 +18,7 @@ var HoodiStageSSV = &SSV{
 	},
 	TotalEthereumValidators: HoodiSSV.TotalEthereumValidators,
 	GasLimit36Epoch:         0,
-	SSVForks: []SSVFork{
+	Forks: []SSVFork{
 		{
 			Name:  "alan",
 			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine

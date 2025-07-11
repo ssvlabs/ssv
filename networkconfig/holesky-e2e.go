@@ -9,14 +9,14 @@ import (
 )
 
 var HoleskyE2ESSV = &SSV{
-	SSVName:                 "holesky-e2e",
+	Name:                    "holesky-e2e",
 	DomainType:              spectypes.DomainType{0x0, 0x0, 0xee, 0x1},
 	RegistryContractAddr:    ethcommon.HexToAddress("0x58410bef803ecd7e63b23664c586a6db72daf59c"),
 	RegistrySyncOffset:      big.NewInt(405579),
 	Bootnodes:               []string{},
 	TotalEthereumValidators: HoleskySSV.TotalEthereumValidators,
 	GasLimit36Epoch:         0,
-	SSVForks: []SSVFork{
+	Forks: []SSVFork{
 		{
 			Name:  "alan",
 			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine

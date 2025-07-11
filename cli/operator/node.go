@@ -409,7 +409,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			dutyStore,
 			signatureVerifier,
-			networkConfig.BeaconForks[spec.DataVersionElectra].Epoch,
+			networkConfig.SSV.Forks[spec.DataVersionElectra].Epoch,
 			validation.WithLogger(logger),
 		)
 

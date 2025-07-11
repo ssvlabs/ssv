@@ -11,7 +11,7 @@ import (
 // TestForkAtEpoch verifies that ForkAtEpoch returns the correct version and fork data based on fork epochs.
 func TestForkAtEpoch(t *testing.T) {
 	config := &Beacon{
-		BeaconForks: map[spec.DataVersion]phase0.Fork{
+		Forks: map[spec.DataVersion]phase0.Fork{
 			spec.DataVersionPhase0: {
 				Epoch:           phase0.Epoch(0),
 				PreviousVersion: phase0.Version{0},

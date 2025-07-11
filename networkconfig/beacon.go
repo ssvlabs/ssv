@@ -12,9 +12,8 @@ import (
 )
 
 // Beacon defines beacon network configuration. It is fetched from the consensus client during the node runtime.
-// Some fields have Beacon prefix because it's embedded to avoid ambiguity.
 type Beacon struct {
-	BeaconNetwork                        string
+	Name                                 string
 	SlotDuration                         time.Duration
 	SlotsPerEpoch                        uint64
 	EpochsPerSyncCommitteePeriod         uint64
@@ -26,7 +25,7 @@ type Beacon struct {
 	GenesisForkVersion                   phase0.Version
 	GenesisTime                          time.Time
 	GenesisValidatorsRoot                phase0.Root
-	BeaconForks                          map[spec.DataVersion]phase0.Fork
+	Forks                                map[spec.DataVersion]phase0.Fork
 }
 
 func (b *Beacon) String() string {
@@ -149,25 +148,25 @@ func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 	}
 
 	for i, v := range versions {
-		if epoch < b.BeaconForks[v].Epoch {
+		if epoch < b.Forks[v].Epoch {
 			if i == 0 {
 				panic("epoch before genesis")
 			}
 
 			version := versions[i-1]
-			fork := b.BeaconForks[version]
+			fork := b.Forks[version]
 			return version, &fork
 		}
 	}
 
 	version := versions[len(versions)-1]
-	fork := b.BeaconForks[version]
+	fork := b.Forks[version]
 	return version, &fork
 }
 
 func (b *Beacon) AssertSame(other *Beacon) error {
-	if b.BeaconNetwork != other.BeaconNetwork {
-		return fmt.Errorf("different BeaconNetwork")
+	if b.Name != other.Name {
+		return fmt.Errorf("different Name")
 	}
 	if b.SlotDuration != other.SlotDuration {
 		return fmt.Errorf("different SlotDuration")
@@ -202,9 +201,9 @@ func (b *Beacon) AssertSame(other *Beacon) error {
 	if b.GenesisValidatorsRoot != other.GenesisValidatorsRoot {
 		return fmt.Errorf("different GenesisValidatorsRoot")
 	}
-
-	if !maps.Equal(b.BeaconForks, other.BeaconForks) {
-		return fmt.Errorf("different BeaconForks")
+	if !maps.Equal(b.Forks, other.Forks) {
+		return fmt.Errorf("different Forks")
 	}
+
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 )
 
 var HoodiSSV = &SSV{
-	SSVName:              "hoodi",
+	Name:                 "hoodi",
 	DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x3},
 	RegistrySyncOffset:   new(big.Int).SetInt64(1065),
 	RegistryContractAddr: ethcommon.HexToAddress("0x58410Bef803ECd7E63B23664C586A6DB72DAf59c"),
@@ -20,7 +20,7 @@ var HoodiSSV = &SSV{
 	},
 	TotalEthereumValidators: 1107955, // active_validators from https://hoodi.beaconcha.in/index/data on Apr 18, 2025
 	GasLimit36Epoch:         0,
-	SSVForks: []SSVFork{
+	Forks: []SSVFork{
 		{
 			Name:  "alan",
 			Epoch: 0, // Alan fork happened on another epoch, but we won't ever run pre-Alan fork again, so 0 should work fine
