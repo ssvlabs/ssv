@@ -89,7 +89,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 				defer cancel()
 
 				var peers []peer.ID
-				for len(peers) < options.MinConnected && ctx.Err() == nil {
+				for len(peers) < options.MinConnected {
 					peers = node.(HostProvider).Host().Network().Peers()
 					select {
 					case <-ctx.Done():

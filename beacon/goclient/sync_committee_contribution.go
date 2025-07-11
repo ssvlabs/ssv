@@ -81,7 +81,9 @@ func (gc *GoClient) GetSyncCommitteeContribution(
 
 	blockRoot := beaconBlockRootResp.Data
 
-	gc.waitToSlotTwoThirds(ctx, slot)
+	if err := gc.waitToSlotTwoThirds(ctx, slot); err != nil {
+		return nil, 0, fmt.Errorf("wait for 2/3 of slot: %w", err)
+	}
 
 	// Fetch sync committee contributions for each subnet in parallel.
 	var (

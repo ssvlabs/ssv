@@ -66,7 +66,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	postRoot, err := preInstance.State.GetRoot()
 	require.NoError(t, err)
 
-	// broadcasting is asynchronic, so need to wait a bit before checking
+	// broadcasting is asynchronous, so need to wait a bit before checking
 	select {
 	case <-t.Context().Done():
 		return
