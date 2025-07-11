@@ -121,7 +121,7 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 1)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -153,7 +153,7 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0, slotDuration)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -184,7 +184,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 	)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0, slotDuration)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -243,7 +243,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 	)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0, slotDuration)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -313,7 +313,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 	)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 63, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 63)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -396,7 +396,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 		waitForDuties = &SafeValue[bool]{}
 	)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 63, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 63)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -499,7 +499,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 32, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 32)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -581,7 +581,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 32, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 32)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -664,7 +664,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 	)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 48, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 48)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -754,7 +754,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 	)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 48, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 48)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -862,7 +862,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0, slotDuration)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -905,7 +905,7 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 	)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 31, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 31)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -944,7 +944,7 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		waitForDuties = &SafeValue[bool]{}
 	)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, mockTicker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 13, slotDuration)
 	waitForSlotN(scheduler.beaconConfig, 13)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)

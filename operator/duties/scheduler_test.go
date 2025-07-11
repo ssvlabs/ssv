@@ -24,6 +24,8 @@ import (
 // A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
 const timeout = 200 * time.Millisecond
 
+const slotDuration = 150 * time.Millisecond
+
 type MockSlotTicker interface {
 	Next() <-chan time.Time
 	Slot() phase0.Slot
@@ -87,6 +89,7 @@ func setupSchedulerAndMocks(
 	t *testing.T,
 	handlers []dutyHandler,
 	startSlot phase0.Slot,
+	slotDuration time.Duration,
 ) (
 	*Scheduler,
 	*mockSlotTickerService,
@@ -104,7 +107,7 @@ func setupSchedulerAndMocks(
 	mockSlotService := &mockSlotTickerService{}
 
 	beaconCfg := *networkconfig.TestNetwork.BeaconConfig
-	beaconCfg.SlotDuration = 150 * time.Millisecond
+	beaconCfg.SlotDuration = slotDuration
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration * time.Duration(startSlot))
 
 	opts := &SchedulerOptions{

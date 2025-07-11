@@ -23,7 +23,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler}, 0, slotDuration)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
 	blockByNumberCalls := create1to1BlockSlotMapping(scheduler)
