@@ -22,6 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/observability"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -33,7 +34,7 @@ type VoluntaryExitRunner struct {
 	network        specqbft.Network
 	signer         ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
-	valCheck       specqbft.ProposedValueCheckF
+	valCheck       ssv.ValueChecker
 
 	voluntaryExit *phase0.VoluntaryExit
 }
@@ -266,7 +267,7 @@ func (r *VoluntaryExitRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+func (r *VoluntaryExitRunner) GetValChecker() ssv.ValueChecker {
 	return r.valCheck
 }
 

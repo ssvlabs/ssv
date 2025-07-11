@@ -11,6 +11,7 @@ import (
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
@@ -66,7 +67,8 @@ func isValidProposal(
 	state *specqbft.State,
 	config qbft.IConfig,
 	msg *specqbft.ProcessingMessage,
-	valCheck specqbft.ProposedValueCheckF,
+	spData *ssvtypes.SlashingProtectionData,
+	valCheck ssv.ValueChecker,
 ) error {
 	if msg.QBFTMessage.MsgType != specqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
@@ -128,6 +130,7 @@ func isValidProposal(
 		state.Height,
 		msg.QBFTMessage.Round,
 		msg.SignedMessage.FullData,
+		spData,
 		valCheck,
 	); err != nil {
 		return errors.Wrap(err, "proposal not justified")
@@ -140,30 +143,6 @@ func isValidProposal(
 	return errors.New("proposal is not valid with current state")
 }
 
-func IsProposalJustification(
-	config qbft.IConfig,
-	committeeMember *spectypes.CommitteeMember,
-	roundChangeMsgs []*specqbft.ProcessingMessage,
-	prepareMsgs []*specqbft.ProcessingMessage,
-	height specqbft.Height,
-	round specqbft.Round,
-	fullData []byte,
-) error {
-	return isProposalJustification(
-		&specqbft.State{
-			CommitteeMember: committeeMember,
-			Height:          height,
-		},
-		config,
-		roundChangeMsgs,
-		prepareMsgs,
-		height,
-		round,
-		fullData,
-		func(data []byte) error { return nil },
-	)
-}
-
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
 func isProposalJustification(
 	state *specqbft.State,
@@ -173,10 +152,17 @@ func isProposalJustification(
 	height specqbft.Height,
 	round specqbft.Round,
 	fullData []byte,
-	valCheck specqbft.ProposedValueCheckF,
+	spData *ssvtypes.SlashingProtectionData,
+	valCheck ssv.ValueChecker,
 ) error {
-	if err := valCheck(fullData); err != nil {
-		return errors.Wrap(err, "proposal fullData invalid")
+	if voteChecker, ok := valCheck.(ssv.VoteChecker); ok && spData != nil {
+		if err := voteChecker.CheckValueWithSP(fullData, spData); err != nil {
+			return errors.Wrap(err, "proposal fullData invalid")
+		}
+	} else {
+		if err := valCheck.CheckValue(fullData); err != nil {
+			return errors.Wrap(err, "proposal fullData invalid")
+		}
 	}
 
 	if round == specqbft.FirstRound {
