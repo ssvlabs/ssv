@@ -159,7 +159,7 @@ func (gc *GoClient) SubmitSignedContributionAndProof(
 func (gc *GoClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
 	config := gc.getBeaconConfig()
 	delay := config.IntervalDuration()
-	finalTime := config.GetSlotStartTime(slot).Add(delay)
+	finalTime := config.SlotStartTime(slot).Add(delay)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return

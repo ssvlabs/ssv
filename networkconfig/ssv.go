@@ -23,7 +23,7 @@ var supportedSSVConfigs = map[string]*SSV{
 	SepoliaName:      SepoliaSSV,
 }
 
-func GetSSVConfigByName(name string) (*SSV, error) {
+func SSVConfigByName(name string) (*SSV, error) {
 	if network, ok := supportedSSVConfigs[name]; ok {
 		return network, nil
 	}
@@ -124,12 +124,4 @@ func (s *SSV) UnmarshalJSON(data []byte) error {
 	}
 
 	return s.unmarshalFromConfig(aux)
-}
-
-func (s *SSV) GetDomainType() spectypes.DomainType {
-	return s.DomainType
-}
-
-func (s *SSV) GetGasLimit36Epoch() phase0.Epoch {
-	return s.GasLimit36Epoch
 }

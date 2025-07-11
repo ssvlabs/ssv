@@ -143,7 +143,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// STEP 4: expect no action to be taken as we are in the next period
-	firstSlotOfNextPeriod := scheduler.beaconConfig.GetEpochFirstSlot(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
+	firstSlotOfNextPeriod := scheduler.beaconConfig.EpochFirstSlot(scheduler.beaconConfig.FirstEpochOfSyncPeriod(1))
 	waitForSlotN(scheduler.beaconConfig, firstSlotOfNextPeriod)
 	ticker.Send(firstSlotOfNextPeriod)
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
@@ -569,7 +569,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.GetSlotDuration()/3)*0.90))
+	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.SlotDuration/3)*0.90))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

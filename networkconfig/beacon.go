@@ -36,8 +36,14 @@ func (b *Beacon) String() string {
 	return string(marshaled)
 }
 
-// GetSlotStartTime returns the start time for the given slot
-func (b *Beacon) GetSlotStartTime(slot phase0.Slot) time.Time {
+// StorageName returns a config name used to make sure the stored network doesn't differ.
+// It combines the network name with fork name.
+func (b *Beacon) StorageName() string {
+	return fmt.Sprintf("%s:%s", b.NetworkName, forkName)
+}
+
+// SlotStartTime returns the start time for the given slot
+func (b *Beacon) SlotStartTime(slot phase0.Slot) time.Time {
 	if slot > math.MaxInt64 {
 		panic(fmt.Sprintf("slot %d out of range", slot))
 	}
@@ -46,9 +52,9 @@ func (b *Beacon) GetSlotStartTime(slot phase0.Slot) time.Time {
 	return start
 }
 
-// GetSlotEndTime returns the end time for the given slot
-func (b *Beacon) GetSlotEndTime(slot phase0.Slot) time.Time {
-	return b.GetSlotStartTime(slot + 1)
+// SlotEndTime returns the end time for the given slot
+func (b *Beacon) SlotEndTime(slot phase0.Slot) time.Time {
+	return b.SlotStartTime(slot + 1)
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot
@@ -81,24 +87,19 @@ func (b *Beacon) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 	return uint64(slot)%b.SlotsPerEpoch == 0
 }
 
-// GetEpochFirstSlot returns the beacon node first slot in epoch
-func (b *Beacon) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
+// EpochFirstSlot returns the beacon node first slot in epoch
+func (b *Beacon) EpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 	return phase0.Slot(uint64(epoch) * b.SlotsPerEpoch)
-}
-
-// GetEpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
-func (b *Beacon) GetEpochsPerSyncCommitteePeriod() uint64 {
-	return b.EpochsPerSyncCommitteePeriod
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
 func (b *Beacon) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
-	return uint64(epoch) / b.GetEpochsPerSyncCommitteePeriod()
+	return uint64(epoch) / b.EpochsPerSyncCommitteePeriod
 }
 
 // FirstEpochOfSyncPeriod calculates the first epoch of the given sync period.
 func (b *Beacon) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
-	return phase0.Epoch(period * b.GetEpochsPerSyncCommitteePeriod())
+	return phase0.Epoch(period * b.EpochsPerSyncCommitteePeriod)
 }
 
 // LastSlotOfSyncPeriod calculates the first epoch of the given sync period.
@@ -106,7 +107,7 @@ func (b *Beacon) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 	lastEpoch := b.FirstEpochOfSyncPeriod(period+1) - 1
 	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 	// as it will never be included, hence -1.
-	return b.GetEpochFirstSlot(lastEpoch+1) - 2
+	return b.EpochFirstSlot(lastEpoch+1) - 2
 }
 
 func (b *Beacon) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
@@ -139,30 +140,6 @@ func (b *Beacon) EpochDuration() time.Duration {
 		panic("slots per epoch out of range")
 	}
 	return b.SlotDuration * time.Duration(b.SlotsPerEpoch) // #nosec G115: slot cannot exceed math.MaxInt64
-}
-
-func (b *Beacon) GetSlotDuration() time.Duration {
-	return b.SlotDuration
-}
-
-func (b *Beacon) GetSlotsPerEpoch() uint64 {
-	return b.SlotsPerEpoch
-}
-
-func (b *Beacon) GetGenesisTime() time.Time {
-	return b.GenesisTime
-}
-
-func (b *Beacon) GetSyncCommitteeSize() uint64 {
-	return b.SyncCommitteeSize
-}
-
-func (b *Beacon) GetGenesisValidatorsRoot() phase0.Root {
-	return b.GenesisValidatorsRoot
-}
-
-func (b *Beacon) GetNetworkName() string {
-	return b.NetworkName
 }
 
 func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork) {

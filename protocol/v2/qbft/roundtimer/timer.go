@@ -34,7 +34,7 @@ type Timer interface {
 }
 
 type BeaconNetwork interface {
-	GetSlotStartTime(slot phase0.Slot) time.Time
+	SlotStartTime(slot phase0.Slot) time.Time
 	SlotDurationSec() time.Duration
 }
 
@@ -112,10 +112,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	switch t.role {
 	case spectypes.RoleCommittee:
 		// third of the slot time
-		baseDuration = t.beaconConfig.GetSlotDuration() / 3
+		baseDuration = t.beaconConfig.SlotDuration / 3
 	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
 		// two-third of the slot time
-		baseDuration = t.beaconConfig.GetSlotDuration() / 3 * 2
+		baseDuration = t.beaconConfig.SlotDuration / 3 * 2
 	default:
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
@@ -137,7 +137,7 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	timeoutDuration := baseDuration + additionalTimeout
 
 	// Get the start time of the duty
-	dutyStartTime := t.beaconConfig.GetSlotStartTime(phase0.Slot(height))
+	dutyStartTime := t.beaconConfig.SlotStartTime(phase0.Slot(height))
 
 	// Calculate the time until the duty should start plus the timeout duration
 	return time.Until(dutyStartTime.Add(timeoutDuration))

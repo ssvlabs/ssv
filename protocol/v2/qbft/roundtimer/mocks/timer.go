@@ -78,18 +78,18 @@ func (m *MockBeaconNetwork) EXPECT() *MockBeaconNetworkMockRecorder {
 	return m.recorder
 }
 
-// GetSlotStartTime mocks base method.
-func (m *MockBeaconNetwork) GetSlotStartTime(slot phase0.Slot) time.Time {
+// SlotStartTime mocks base method.
+func (m *MockBeaconNetwork) SlotStartTime(slot phase0.Slot) time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSlotStartTime", slot)
+	ret := m.ctrl.Call(m, "SlotStartTime", slot)
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
-// GetSlotStartTime indicates an expected call of GetSlotStartTime.
-func (mr *MockBeaconNetworkMockRecorder) GetSlotStartTime(slot any) *gomock.Call {
+// SlotStartTime indicates an expected call of SlotStartTime.
+func (mr *MockBeaconNetworkMockRecorder) SlotStartTime(slot any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotStartTime", reflect.TypeOf((*MockBeaconNetwork)(nil).GetSlotStartTime), slot)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotStartTime", reflect.TypeOf((*MockBeaconNetwork)(nil).SlotStartTime), slot)
 }
 
 // SlotDurationSec mocks base method.

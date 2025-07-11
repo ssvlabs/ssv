@@ -873,7 +873,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecutionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-	require.Less(t, time.Since(startTime), scheduler.beaconConfig.GetSlotDuration()/3)
+	require.Less(t, time.Since(startTime), scheduler.beaconConfig.SlotDuration/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -941,7 +941,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecutionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
-	require.Less(t, time.Since(startTime), scheduler.beaconConfig.GetSlotDuration()/3)
+	require.Less(t, time.Since(startTime), scheduler.beaconConfig.SlotDuration/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -1030,5 +1030,5 @@ func activeShare(index phase0.ValidatorIndex) *ssvtypes.SSVShare {
 
 func assertWaitedOneThird(t *testing.T, beaconConfig *networkconfig.Beacon, startTime time.Time) {
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, beaconConfig.GetSlotDuration()/3, time.Since(startTime)+clockError)
+	require.Less(t, beaconConfig.SlotDuration/3, time.Since(startTime)+clockError)
 }

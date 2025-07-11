@@ -1012,7 +1012,7 @@ func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
 		ssvConfig = cfg.SSVOptions.CustomNetwork
 		logger.Info("using custom network config")
 	} else if cfg.SSVOptions.NetworkName != "" {
-		snc, err := networkconfig.GetSSVConfigByName(cfg.SSVOptions.NetworkName)
+		snc, err := networkconfig.SSVConfigByName(cfg.SSVOptions.NetworkName)
 		if err != nil {
 			return ssvConfig, err
 		}

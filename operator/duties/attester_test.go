@@ -915,7 +915,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.beaconConfig.GetSlotDuration()/3)
+	require.Less(t, time.Since(startTime), scheduler.beaconConfig.SlotDuration/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

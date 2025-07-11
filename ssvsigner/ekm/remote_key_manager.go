@@ -540,7 +540,7 @@ func (km *RemoteKeyManager) getForkInfo(epoch phase0.Epoch) web3signer.ForkInfo 
 
 	return web3signer.ForkInfo{
 		Fork:                  currentFork,
-		GenesisValidatorsRoot: km.beaconConfig.GetGenesisValidatorsRoot(),
+		GenesisValidatorsRoot: km.beaconConfig.GenesisValidatorsRoot,
 	}
 }
 
