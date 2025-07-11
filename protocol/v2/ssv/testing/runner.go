@@ -182,7 +182,7 @@ var ConstructBaseRunner = func(
 			net,
 			km,
 			opSigner,
-			validator.DefaultGasLimitOld,
+			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
@@ -434,7 +434,7 @@ var ConstructBaseRunnerWithShareMap = func(
 			net,
 			km,
 			opSigner,
-			validator.DefaultGasLimitOld,
+			runner.DefaultGasLimitOld,
 		)
 	case spectypes.RoleVoluntaryExit:
 		r, err = runner.NewVoluntaryExitRunner(
