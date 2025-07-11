@@ -22,14 +22,15 @@ import (
 )
 
 const (
-	baseDuration            = 1 * time.Millisecond
-	slotDuration            = 15 * baseDuration
-	timeout                 = 50 * baseDuration
-	noActionTimeout         = 7 * baseDuration
-	clockError              = 5 * baseDuration
-	testBlockPropagateDelay = baseDuration
-	testEpochsPerSCPeriod   = 4
-	testSlotsPerEpoch       = 12
+	baseDuration               = 1 * time.Millisecond
+	slotDuration               = 15 * baseDuration
+	timeout                    = 50 * baseDuration
+	noActionTimeout            = 7 * baseDuration
+	clockError                 = baseDuration
+	testBlockPropagateDelay    = baseDuration
+	testSlotTickerTriggerDelay = baseDuration
+	testEpochsPerSCPeriod      = 4
+	testSlotsPerEpoch          = 12
 )
 
 type MockSlotTicker interface {

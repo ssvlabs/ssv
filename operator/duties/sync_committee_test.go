@@ -554,8 +554,8 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 
 	// STEP 3: wait for sync committee duties to be executed faster than 1/3 of the slot duration when
 	// Beacon head event is observed (block arrival)
-	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	startTime := time.Now()
+	waitForSlotN(scheduler.beaconConfig, phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, 2)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))

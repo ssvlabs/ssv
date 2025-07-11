@@ -358,7 +358,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
 	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
 	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-	time.Sleep(testBlockPropagateDelay)
+	time.Sleep(testSlotTickerTriggerDelay)
 
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -436,7 +436,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
 	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
 	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-	time.Sleep(testBlockPropagateDelay)
+	time.Sleep(testSlotTickerTriggerDelay)
 
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -512,7 +512,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
 	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
 	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-	time.Sleep(testBlockPropagateDelay)
+	time.Sleep(testSlotTickerTriggerDelay)
 
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
@@ -710,7 +710,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	// Wait for the slot ticker to be triggered in the attester, sync committee, and cluster handlers.
 	// This ensures that no attester duties are fetched before the cluster ticker is triggered,
 	// preventing a scenario where the cluster handler executes duties in the same slot as the attester fetching them.
-	time.Sleep(testBlockPropagateDelay)
+	time.Sleep(testSlotTickerTriggerDelay)
 
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
