@@ -94,6 +94,8 @@ func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties [
 }
 
 func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		waitForDuties = &SafeValue[bool]{}
@@ -152,6 +154,8 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 }
 
 func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler        = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		waitForDuties  = &SafeValue[bool]{}
@@ -220,6 +224,8 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 }
 
 func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		waitForDuties = &SafeValue[bool]{}
@@ -279,6 +285,8 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 }
 
 func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		waitForDuties = &SafeValue[bool]{}
@@ -342,6 +350,8 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 
 // reorg current dependent root changed
 func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		waitForDuties = &SafeValue[bool]{}
@@ -418,6 +428,8 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 
 // reorg current dependent root changed including indices change in the same slot
 func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		waitForDuties = &SafeValue[bool]{}
@@ -503,6 +515,8 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 }
 
 func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewSyncCommitteeHandler(dutystore.NewSyncCommitteeDuties())
 		waitForDuties = &SafeValue[bool]{}

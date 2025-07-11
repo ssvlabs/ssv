@@ -67,6 +67,8 @@ func expectedExecutedProposerDuties(handler *ProposerHandler, duties []*eth2apiv
 }
 
 func TestScheduler_Proposer_Same_Slot(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
@@ -99,6 +101,8 @@ func TestScheduler_Proposer_Same_Slot(t *testing.T) {
 }
 
 func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
@@ -141,6 +145,8 @@ func TestScheduler_Proposer_Diff_Slots(t *testing.T) {
 
 // execute duty after two slots after the indices changed
 func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
@@ -203,6 +209,8 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 }
 
 func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
@@ -283,6 +291,8 @@ func TestScheduler_Proposer_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 // reorg current dependent root changed
 func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()
@@ -359,6 +369,8 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 
 // reorg current dependent root changed
 func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler   = NewProposerHandler(dutystore.NewDuties[eth2apiv1.ProposerDuty]())
 		dutiesMap = hashmap.New[phase0.Epoch, []*eth2apiv1.ProposerDuty]()

@@ -107,6 +107,8 @@ func expectedExecutedAttesterDuties(handler *AttesterHandler, duties []*eth2apiv
 }
 
 func TestScheduler_Attester_Same_Slot(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -139,6 +141,8 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 }
 
 func TestScheduler_Attester_Diff_Slots(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -178,6 +182,8 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 }
 
 func TestScheduler_Attester_Indices_Changed(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -237,6 +243,8 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 }
 
 func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -307,6 +315,8 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 // reorg previous dependent root changed
 func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -390,6 +400,8 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 
 // reorg previous dependent root changed and the indices changed as well
 func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -484,6 +496,8 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 
 // reorg previous dependent root changed
 func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -566,6 +580,8 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 
 // reorg previous dependent root changed and the indices changed the same slot
 func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -658,6 +674,8 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 
 // reorg current dependent root changed
 func TestScheduler_Attester_Reorg_Current(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -748,6 +766,8 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 
 // reorg current dependent root changed including indices change in the same slot
 func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -847,6 +867,8 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 }
 
 func TestScheduler_Attester_Early_Block(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -899,6 +921,8 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 }
 
 func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
@@ -938,6 +962,8 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 }
 
 func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
+	t.Parallel()
+
 	var (
 		handler       = NewAttesterHandler(dutystore.NewDuties[eth2apiv1.AttesterDuty]())
 		dutiesMap     = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()

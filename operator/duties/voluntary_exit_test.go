@@ -19,6 +19,8 @@ import (
 )
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
+	t.Parallel()
+
 	exitCh := make(chan ExitDescriptor)
 	handler := NewVoluntaryExitHandler(dutystore.NewVoluntaryExit(), exitCh)
 

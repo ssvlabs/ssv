@@ -116,6 +116,8 @@ func setupCommitteeDutiesMock(
 }
 
 func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -159,6 +161,8 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 }
 
 func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -201,6 +205,8 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 }
 
 func TestScheduler_Committee_Same_Slot(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -251,6 +257,8 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 }
 
 func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -299,6 +307,8 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 }
 
 func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -375,6 +385,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 }
 
 func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -451,6 +463,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 }
 
 func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -526,6 +540,8 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 
 // reorg previous dependent root changed
 func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -614,6 +630,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 
 // reorg previous dependent root changed and the indices changed as well
 func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Attester_only(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -716,6 +734,8 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 
 // reorg previous dependent root changed
 func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -803,6 +823,8 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 }
 
 func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -859,6 +881,8 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 }
 
 func TestScheduler_Committee_Early_Block(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
@@ -927,6 +951,8 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 // The purpose of the test is to ensure that the scheduler can handle the case where the indices change
 // at the last slot of the epoch, and it does not affect the execution of the duties for the next epoch first slot.
 func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *testing.T) {
+	t.Parallel()
+
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
