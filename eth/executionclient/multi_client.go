@@ -280,7 +280,7 @@ func (mc *MultiClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan 
 
 				// NOTE: There are unit tests that trigger Fatal and override its behavior.
 				// Therefore, the code must call `return` afterward.
-				mc.logger.Fatal("failed to stream registry events", zap.Error(err))
+				mc.logger.Fatal("failed to stream logs", zap.Error(err))
 			}
 		}
 	}()
