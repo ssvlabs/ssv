@@ -531,7 +531,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithStartSlot(ctx, t, []dutyHandler{handler}, 0)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{handler})
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, activeShares, dutiesMap, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -569,7 +569,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	assertWaitedOneThird(t, scheduler.beaconConfig, startTime)
+	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.GetSlotDuration()/3)*0.90))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
