@@ -74,8 +74,8 @@ type mockSlotTickerService struct {
 
 func setupSchedulerAndMocks(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot]) (*Scheduler, *zap.Logger, *mockSlotTickerService, time.Duration, context.CancelFunc, *pool.ContextPool, func()) {
 	ctrl := gomock.NewController(t)
-	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 200 * time.Millisecond
+	// A 2s timeout ensures the test passes, even with mockSlotTicker overhead.
+	timeout := 2 * time.Second
 
 	ctx, cancel := context.WithCancel(t.Context())
 	logger := logging.TestLogger(t)
@@ -160,23 +160,22 @@ func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Valida
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteDuty(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
 		func(_ context.Context, logger *zap.Logger, duty *spectypes.ValidatorDuty) error {
 			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+
 			executeDutiesBuffer <- duty
 
-			// Check if all expected duties have been received
+			// Once all expected duties have been received, build an array of duties and send it
+			// over executeDutiesCall channel.
 			if len(executeDutiesBuffer) == executeDutiesCallSize {
-				// Build the array of duties
 				var duties []*spectypes.ValidatorDuty
 				for i := 0; i < executeDutiesCallSize; i++ {
 					d := <-executeDutiesBuffer
 					duties = append(duties, d)
 				}
-
-				// Send the array of duties to executeDutiesCall
 				executeDutiesCall <- duties
 			}
 			return nil
 		},
-	).AnyTimes()
+	)
 }
 
 func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap, executeDutiesCallSize int) {
@@ -187,7 +186,7 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 			return nil
 		},
-	).AnyTimes()
+	)
 
 	s.dutyExecutor.(*MockDutyExecutor).EXPECT().ExecuteCommitteeDuty(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(
 		func(ctx context.Context, logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
@@ -210,7 +209,7 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 				executeDutiesCall <- duties
 			}
 		},
-	).AnyTimes()
+	)
 }
 
 func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration) {
@@ -238,10 +237,10 @@ func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan stru
 func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.ValidatorDuty, timeout time.Duration, expectedDuties []*spectypes.ValidatorDuty) {
 	select {
 	case <-fetchDutiesCall:
-		require.FailNow(t, "unexpected duties call")
+		require.FailNow(t, "unexpected fetch-duties call")
 	case duties := <-executeDutiesCall:
 		logger.Debug("duties executed", zap.Any("duties", duties))
-		logger.Debug("expected duties", zap.Any("duties", expectedDuties))
+		logger.Debug("duties expected", zap.Any("duties", expectedDuties))
 		require.Len(t, duties, len(expectedDuties))
 		for _, e := range expectedDuties {
 			found := false
@@ -253,7 +252,9 @@ func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 			}
 			require.True(t, found)
 		}
-
+		// Wait a tiny bit more to make sure no more duties are coming (if they are - setExecuteDutyFunc will panic
+		// - we just need to give it some time to check for that).
+		time.Sleep(1 * time.Millisecond)
 	case <-time.After(timeout):
 		require.FailNow(t, "timed out waiting for duty to be executed")
 	}

@@ -401,7 +401,7 @@ func (s *VRSubmitter) start(ctx context.Context, ticker slotticker.SlotTicker) {
 			// Select registrations to submit.
 			targetRegs := make(map[phase0.BLSPubKey]*validatorRegistration, 0)
 			s.registrationMu.Lock()
-			// 1. find and add validators participating & attesting in the 10th epoch from now
+			// 1. find and add validators attesting in the 10th epoch from now
 			shares := s.validatorStore.SelfValidators()
 			for _, share := range shares {
 				if !share.IsParticipatingAndAttesting(currentEpoch + 10) {

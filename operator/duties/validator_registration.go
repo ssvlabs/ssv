@@ -12,8 +12,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// frequencyEpochs defines how frequently we want to submit validator-registrations.
-const frequencyEpochs = 10
+const (
+	// frequencyEpochs defines how frequently we want to submit validator-registrations.
+	frequencyEpochs = 10
+
+	// validatorRegistrationSlotsToPostpone defines how many slots we want to wait out before
+	// executing validator registration duty.
+	validatorRegistrationSlotsToPostpone = phase0.Slot(4)
+)
 
 type RegistrationDescriptor struct {
 	ValidatorIndex  phase0.ValidatorIndex
@@ -60,8 +66,8 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			next = h.ticker.Next()
 			epoch := h.beaconConfig.EstimatedEpochAtSlot(slot)
-			shares := h.validatorProvider.SelfValidators()
 
+			shares := h.validatorProvider.SelfValidators()
 			for _, share := range shares {
 				if !share.IsParticipatingAndAttesting(epoch + phase0.Epoch(frequencyEpochs)) {
 					// Only attesting validators are eligible for registration duties.
@@ -95,7 +101,6 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			// slot value for this duty. Additionally, add validatorRegistrationSlotsToPostpone slots on
 			// top to ensure the duty is scheduled with a slot number never in the past since several slots
 			// might have passed by the time we are processing this event here.
-			const validatorRegistrationSlotsToPostpone = phase0.Slot(4)
 			blockSlot, err := h.blockSlot(ctx, regDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn(
