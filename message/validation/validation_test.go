@@ -629,14 +629,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	const epoch1 = 1
 
-	netCfgEpoch1 := &networkconfig.Network{
-		Beacon: &networkconfig.Beacon{},
-		SSV:    &networkconfig.SSV{},
-	}
+	beaconConfigEpoch1 := *networkconfig.TestNetwork.Beacon
+	beaconConfigEpoch1.GenesisTime = time.Now().Add(-epoch1 * beaconConfigEpoch1.EpochDuration())
 
-	*netCfgEpoch1.Beacon = *networkconfig.TestNetwork.Beacon
-	*netCfgEpoch1.SSV = *networkconfig.TestNetwork.SSV
-	netCfgEpoch1.GenesisTime = time.Now().Add(-epoch1 * netCfgEpoch1.EpochDuration())
+	netCfgEpoch1 := &networkconfig.Network{
+		Beacon: &beaconConfigEpoch1,
+		SSV:    networkconfig.TestNetwork.SSV,
+	}
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {
 		ds := dutystore.New()

@@ -70,16 +70,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 	operatorsCount += uint64(len(ops))
 
-	netCfgVariableEpoch := &networkconfig.Network{
-		Beacon: &networkconfig.Beacon{},
-		SSV:    &networkconfig.SSV{},
+	beaconConfigVarEpoch := *networkconfig.TestNetwork.Beacon
+	beaconConfigVarEpoch.GenesisTime = time.Now().Add(-32 * beaconConfigVarEpoch.SlotDuration)
+
+	netCfgVarEpoch := &networkconfig.Network{
+		Beacon: &beaconConfigVarEpoch,
+		SSV:    networkconfig.TestNetwork.SSV,
 	}
 
-	*netCfgVariableEpoch.Beacon = *networkconfig.TestNetwork.Beacon
-	*netCfgVariableEpoch.SSV = *networkconfig.TestNetwork.SSV
-	netCfgVariableEpoch.GenesisTime = time.Now().Add(-32 * netCfgVariableEpoch.SlotDuration)
-
-	eh, _, err := setupEventHandler(t, ctx, logger, netCfgVariableEpoch, ops[0], false)
+	eh, _, err := setupEventHandler(t, ctx, logger, netCfgVarEpoch, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +149,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 
 	blockNum := uint64(0x1)
-	netCfgVariableEpoch.GenesisTime = time.Now().Add(-100 * netCfgVariableEpoch.SlotDuration)
+	netCfgVarEpoch.GenesisTime = time.Now().Add(-100 * netCfgVarEpoch.SlotDuration)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 		for _, op := range ops {
@@ -859,13 +858,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
 
-		require.Equal(t, highestAttestation.Source.Epoch, netCfgVariableEpoch.EstimatedEpochAtSlot(netCfgVariableEpoch.EstimatedCurrentSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, netCfgVariableEpoch.EstimatedEpochAtSlot(netCfgVariableEpoch.EstimatedCurrentSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot()))
 
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, netCfgVariableEpoch.EstimatedCurrentSlot())
+		require.Equal(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -896,7 +895,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		netCfgVariableEpoch.GenesisTime = time.Now().Add(-1000 * netCfgVariableEpoch.SlotDuration)
+		netCfgVarEpoch.GenesisTime = time.Now().Add(-1000 * netCfgVarEpoch.SlotDuration)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
@@ -908,13 +907,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Equal(t, highestAttestation.Source.Epoch, netCfgVariableEpoch.EstimatedEpochAtSlot(netCfgVariableEpoch.EstimatedCurrentSlot())-1)
-		require.Equal(t, highestAttestation.Target.Epoch, netCfgVariableEpoch.EstimatedEpochAtSlot(netCfgVariableEpoch.EstimatedCurrentSlot()))
+		require.Equal(t, highestAttestation.Source.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot()))
 
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, highestProposal, netCfgVariableEpoch.EstimatedCurrentSlot())
+		require.Equal(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 
 		blockNum++
 	})
@@ -987,7 +986,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.True(t, exists)
 		require.NotNil(t, share)
 		require.True(t, share.Liquidated)
-		netCfgVariableEpoch.GenesisTime = time.Now().Add(-100 * netCfgVariableEpoch.SlotDuration)
+		netCfgVarEpoch.GenesisTime = time.Now().Add(-100 * netCfgVarEpoch.SlotDuration)
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(ctx, eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
@@ -999,13 +998,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, highestAttestation)
-		require.Greater(t, highestAttestation.Source.Epoch, netCfgVariableEpoch.EstimatedEpochAtSlot(netCfgVariableEpoch.EstimatedCurrentSlot())-1)
-		require.Greater(t, highestAttestation.Target.Epoch, netCfgVariableEpoch.EstimatedEpochAtSlot(netCfgVariableEpoch.EstimatedCurrentSlot()))
+		require.Greater(t, highestAttestation.Source.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot())-1)
+		require.Greater(t, highestAttestation.Target.Epoch, netCfgVarEpoch.EstimatedEpochAtSlot(netCfgVarEpoch.EstimatedCurrentSlot()))
 
 		highestProposal, found, err := eh.keyManager.(*ekm.LocalKeyManager).RetrieveHighestProposal(phase0.BLSPubKey(sharePubKey))
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Greater(t, highestProposal, netCfgVariableEpoch.EstimatedCurrentSlot())
+		require.Greater(t, highestProposal, netCfgVarEpoch.EstimatedCurrentSlot())
 
 		blockNum++
 
