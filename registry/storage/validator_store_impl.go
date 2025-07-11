@@ -829,7 +829,7 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 		key := hex.EncodeToString(pk[:])
 		state, exists := s.validators[key]
 		if !exists {
-			// Validator not found, skip
+			// Validator isn't found, skip
 			continue
 		}
 
@@ -841,6 +841,7 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 
 		// Update the share with new metadata
 		state.share.SetBeaconMetadata(newMetadata)
+		state.share.BeaconMetadataLastUpdated = time.Now() // TODO: confirm, moved from operator/validator/metadata/syncer.go
 		state.lastUpdated = time.Now()
 
 		// Update indices if beacon metadata changed
@@ -864,7 +865,7 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 		// Handle participation status change callbacks
 		participationChanged := oldParticipationStatus.IsParticipating != state.participationStatus.IsParticipating
 
-		// Only create snapshot if we need it for callbacks
+		// Only create a snapshot if we need it for callbacks
 		var snapshot *ValidatorSnapshot
 		if participationChanged || s.callbacks.OnValidatorUpdated != nil {
 			snapshot = s.createSnapshot(state)
