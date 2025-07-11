@@ -21,12 +21,18 @@ import (
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
 )
 
-// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-const timeout = 200 * time.Millisecond
+const (
+	// A generous timeout helps avoid flakes when the test suite is executed with
+	// high parallelism and additional scheduler overhead on busy CI runners.
+	// 500 ms has proven to be reliable while keeping the tests reasonably fast.
+	timeout = 500 * time.Millisecond
 
-const noActionTimeout = 20 * time.Millisecond
+	noActionTimeout = 20 * time.Millisecond
 
-const slotDuration = 150 * time.Millisecond
+	testSlotDuration = 150 * time.Millisecond
+
+	testEpochsPerSCPeriod = 4
+)
 
 type MockSlotTicker interface {
 	Next() <-chan time.Time
@@ -90,8 +96,34 @@ func setupSchedulerAndMocks(
 	ctx context.Context,
 	t *testing.T,
 	handlers []dutyHandler,
+) (
+	*Scheduler,
+	*mockSlotTickerService,
+	*pool.ContextPool,
+) {
+	return setupSchedulerAndMocksWithParams(ctx, t, handlers, 0, testSlotDuration, 256)
+}
+
+func setupSchedulerAndMocksWithFirstSlot(
+	ctx context.Context,
+	t *testing.T,
+	handlers []dutyHandler,
+	firstSlot phase0.Slot,
+) (
+	*Scheduler,
+	*mockSlotTickerService,
+	*pool.ContextPool,
+) {
+	return setupSchedulerAndMocksWithParams(ctx, t, handlers, firstSlot, testSlotDuration, 256)
+}
+
+func setupSchedulerAndMocksWithParams(
+	ctx context.Context,
+	t *testing.T,
+	handlers []dutyHandler,
 	startSlot phase0.Slot,
 	slotDuration time.Duration,
+	epochsPerSCPeriod uint64,
 ) (
 	*Scheduler,
 	*mockSlotTickerService,
@@ -111,6 +143,7 @@ func setupSchedulerAndMocks(
 	beaconCfg := *networkconfig.TestNetwork.BeaconConfig
 	beaconCfg.SlotDuration = slotDuration
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration * time.Duration(startSlot))
+	beaconCfg.EpochsPerSyncCommitteePeriod = epochsPerSCPeriod
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,

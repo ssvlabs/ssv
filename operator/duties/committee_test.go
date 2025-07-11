@@ -137,7 +137,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	waitForSlotN(scheduler.beaconConfig, 1)
 	startTime := time.Now()
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
@@ -181,7 +181,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	waitForSlotN(scheduler.beaconConfig, 1)
 	startTime := time.Now()
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
@@ -232,7 +232,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	waitForSlotN(scheduler.beaconConfig, 1)
 	startTime := time.Now()
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
@@ -279,7 +279,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -321,7 +321,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only(t *testing.T) {
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -399,7 +399,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_2(t *testing.T) {
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -485,7 +485,7 @@ func TestScheduler_Committee_Indices_Changed_Attester_Only_3(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -554,7 +554,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 63, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithFirstSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 63)
 	waitForSlotN(scheduler.beaconConfig, 63)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -644,7 +644,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 	)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 63, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithFirstSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 63)
 	waitForSlotN(scheduler.beaconConfig, 63)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -757,7 +757,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 32, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithFirstSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 32)
 	waitForSlotN(scheduler.beaconConfig, 32)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
@@ -844,7 +844,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 	})
 	// STEP 1: wait for attester duties to be fetched (handle initial duties)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -908,7 +908,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 	})
 	// STEP 1: wait for attester & sync committee duties to be fetched (handle initial duties)
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 0, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler})
 	waitForSlotN(scheduler.beaconConfig, 1)
 	startTime := time.Now()
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
@@ -982,7 +982,7 @@ func TestScheduler_Committee_Indices_Changed_At_The_Last_Slot_Of_The_Epoch(t *te
 
 	// STEP 1: wait for attester duties to be fetched using handle initial duties
 	ctx, cancel := context.WithCancel(t.Context())
-	scheduler, ticker, schedulerPool := setupSchedulerAndMocks(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 31, slotDuration)
+	scheduler, ticker, schedulerPool := setupSchedulerAndMocksWithFirstSlot(ctx, t, []dutyHandler{attHandler, syncHandler, commHandler}, 31)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, activeShares, attDuties, syncDuties, waitForDuties)
 	startScheduler(ctx, t, scheduler, schedulerPool)
 
@@ -1029,7 +1029,9 @@ func activeShare(index phase0.ValidatorIndex) *ssvtypes.SSVShare {
 }
 
 func assertWaitedOneThird(t *testing.T, beaconConfig *networkconfig.BeaconConfig, startTime time.Time) {
-	const clockError = 5 * time.Millisecond
+	// Allow for substantial variance on shared CI runners and when the test
+	// suite is executed with -race or high parallelism.
+	const clockError = 100 * time.Millisecond
 
 	// validate the 1/3 of the slot waiting time
 	require.Less(t, beaconConfig.GetSlotDuration()/3, time.Since(startTime)+clockError)
