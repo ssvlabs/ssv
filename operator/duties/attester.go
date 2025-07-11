@@ -343,10 +343,6 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 	if currentSlot >= duty.Slot && uint64(currentSlot-duty.Slot) <= attestationPropagationSlotRange {
 		return true
 	}
-	if currentSlot+1 == duty.Slot {
-		h.warnMisalignedSlotAndDuty(duty.String())
-		return true
-	}
 	return false
 }
 
