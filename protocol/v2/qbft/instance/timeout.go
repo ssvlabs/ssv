@@ -26,12 +26,12 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 	// round to be bumped before the round change message was created & broadcasted.
 	// Remember to track the impact of this change and revert/modify if necessary.
 	defer func() {
-		i.bumpToRound(ctx, newRound)
+		i.bumpToRound(newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
-	roundChange, err := CreateRoundChange(i.State, i.signer, newRound, i.StartValue)
+	roundChange, err := i.CreateRoundChange(newRound)
 	if err != nil {
 		return observability.Errorf(span, "could not generate round change msg: %w", err)
 	}
@@ -57,7 +57,7 @@ func (i *Instance) UponRoundTimeout(ctx context.Context, logger *zap.Logger) err
 		fields.Height(i.State.Height),
 		zap.String("reason", "timeout"))
 
-	if err := i.Broadcast(logger, roundChange); err != nil {
+	if err := i.Broadcast(roundChange); err != nil {
 		return observability.Errorf(span, "failed to broadcast round change message: %w", err)
 	}
 
