@@ -22,12 +22,12 @@ import (
 )
 
 const (
-	timeout               = 200 * time.Millisecond
-	noActionTimeout       = 15 * time.Millisecond
-	slotDuration          = 30 * time.Millisecond
+	timeout               = 50 * time.Millisecond
+	noActionTimeout       = 7 * time.Millisecond
+	slotDuration          = 15 * time.Millisecond
+	clockError            = 5 * time.Millisecond
 	testEpochsPerSCPeriod = 4
 	testSlotsPerEpoch     = 12
-	clockError            = 10 * time.Millisecond
 )
 
 type MockSlotTicker interface {
