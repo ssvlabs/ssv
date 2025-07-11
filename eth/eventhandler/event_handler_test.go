@@ -70,7 +70,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 	operatorsCount += uint64(len(ops))
 
-	netCfgVariableEpoch := &networkconfig.NetworkConfig{
+	netCfgVariableEpoch := &networkconfig.Network{
 		Name:   networkconfig.TestNetwork.Name,
 		Beacon: &networkconfig.Beacon{},
 		SSV:    &networkconfig.SSV{},
@@ -1361,7 +1361,7 @@ func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
 	logger *zap.Logger,
-	network *networkconfig.NetworkConfig,
+	network *networkconfig.Network,
 	operator *testOperator,
 	useMockCtrl bool,
 ) (*EventHandler, *mocks.MockController, error) {

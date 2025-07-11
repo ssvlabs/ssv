@@ -36,7 +36,7 @@ type Options struct {
 
 // CommonOptions represents options that all validators share.
 type CommonOptions struct {
-	NetworkConfig       *networkconfig.NetworkConfig
+	NetworkConfig       *networkconfig.Network
 	Network             specqbft.Network
 	Beacon              beacon.BeaconNode
 	Storage             *storage.ParticipantStores
@@ -54,7 +54,7 @@ type CommonOptions struct {
 }
 
 func NewCommonOptions(
-	networkConfig *networkconfig.NetworkConfig,
+	networkConfig *networkconfig.Network,
 	network specqbft.Network,
 	beacon beacon.BeaconNode,
 	storage *storage.ParticipantStores,

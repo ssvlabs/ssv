@@ -18,7 +18,7 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 )
 
-func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig *networkconfig.NetworkConfig) {
+func CheckBootnodes(t *testing.T, dvs *DiscV5Service, netConfig *networkconfig.Network) {
 
 	require.Len(t, dvs.bootnodes, len(netConfig.Bootnodes))
 
@@ -121,7 +121,7 @@ func TestDiscV5Service_DeregisterSubnets(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, netConfig *networkconfig.NetworkConfig) {
+func checkLocalNodeDomainTypeAlignment(t *testing.T, localNode *enode.LocalNode, netConfig *networkconfig.Network) {
 	// Check domain entry
 	domainEntry := records.DomainTypeEntry{
 		Key:        records.KeyDomainType,

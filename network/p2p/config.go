@@ -75,7 +75,7 @@ type Config struct {
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
 	// NetworkConfig defines a network configuration.
-	NetworkConfig *networkconfig.NetworkConfig
+	NetworkConfig *networkconfig.Network
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
 

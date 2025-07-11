@@ -69,7 +69,7 @@ type BaseRunner struct {
 	State          *State
 	Share          map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
-	NetworkConfig  *networkconfig.NetworkConfig
+	NetworkConfig  *networkconfig.Network
 	RunnerRoleType spectypes.RunnerRole
 	ssvtypes.OperatorSigner
 
@@ -136,7 +136,7 @@ func NewBaseRunner(
 	state *State,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
-	networkConfig *networkconfig.NetworkConfig,
+	networkConfig *networkconfig.Network,
 	runnerRoleType spectypes.RunnerRole,
 	highestDecidedSlot phase0.Slot,
 ) *BaseRunner {

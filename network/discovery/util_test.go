@@ -74,7 +74,7 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSV) *Option
 	}
 }
 
-// Testing discovery with a given NetworkConfig
+// Testing discovery with a given Network
 func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SSV) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, ssvConfig)
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)

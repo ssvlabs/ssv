@@ -12,7 +12,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-var TestNetwork = &NetworkConfig{
+var TestNetwork = &Network{
 	Name: "testnet",
 	Beacon: &Beacon{
 		NetworkName:                          string(spectypes.BeaconTestNetwork),
@@ -72,7 +72,7 @@ var TestNetwork = &NetworkConfig{
 }
 
 // TestRealNetwork is used in tests that require real network parameters.
-var TestRealNetwork = &NetworkConfig{
+var TestRealNetwork = &Network{
 	Name: "holesky",
 	Beacon: &Beacon{
 		NetworkName:                          string(spectypes.HoleskyNetwork),

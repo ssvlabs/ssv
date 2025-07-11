@@ -54,7 +54,7 @@ type peerIDWithMessageID struct {
 
 type messageValidator struct {
 	logger          *zap.Logger
-	netCfg          *networkconfig.NetworkConfig
+	netCfg          *networkconfig.Network
 	pectraForkEpoch phase0.Epoch
 	state           *ttlcache.Cache[peerIDWithMessageID, *ValidatorState]
 	validatorStore  validatorStore
@@ -80,7 +80,7 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 // It starts a goroutine that cleans up the state.
 func New(
-	netCfg *networkconfig.NetworkConfig,
+	netCfg *networkconfig.Network,
 	validatorStore validatorStore,
 	operators operators,
 	dutyStore *dutystore.Store,

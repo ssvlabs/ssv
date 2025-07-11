@@ -629,7 +629,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	const epoch1 = 1
 
-	netCfgEpoch1 := &networkconfig.NetworkConfig{
+	netCfgEpoch1 := &networkconfig.Network{
 		Name:   networkconfig.TestNetwork.Name,
 		Beacon: &networkconfig.Beacon{},
 		SSV:    &networkconfig.SSV{},
@@ -1862,7 +1862,7 @@ type shareSet struct {
 	noMetadata                  *ssvtypes.SSVShare
 }
 
-func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg *networkconfig.NetworkConfig) shareSet {
+func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg *networkconfig.Network) shareSet {
 	activeShare := &ssvtypes.SSVShare{
 		Share:      *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Status:     eth2apiv1.ValidatorStateActiveOngoing,

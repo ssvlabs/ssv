@@ -89,7 +89,7 @@ type ControllerOptions struct {
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validators.ValidatorsMap
 	DoppelgangerHandler        doppelganger.Provider
-	NetworkConfig              *networkconfig.NetworkConfig
+	NetworkConfig              *networkconfig.Network
 	ValidatorSyncer            *metadata.Syncer
 	Graffiti                   []byte
 	ProposerDelay              time.Duration
@@ -151,7 +151,7 @@ type controller struct {
 
 	logger *zap.Logger
 
-	networkConfig     *networkconfig.NetworkConfig
+	networkConfig     *networkconfig.Network
 	sharesStorage     SharesStorage
 	operatorsStorage  registrystorage.Operators
 	recipientsStorage Recipients

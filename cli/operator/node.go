@@ -174,7 +174,7 @@ var StartNodeCmd = &cobra.Command{
 				fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
 		}
 
-		networkConfig := &networkconfig.NetworkConfig{
+		networkConfig := &networkconfig.Network{
 			Name:   cfg.SSVOptions.NetworkName,
 			SSV:    ssvNetworkConfig,
 			Beacon: consensusClient.BeaconConfig(),
@@ -1079,7 +1079,7 @@ func syncContractEvents(
 	logger *zap.Logger,
 	executionClient executionclient.Provider,
 	validatorCtrl validator.Controller,
-	networkConfig *networkconfig.NetworkConfig,
+	networkConfig *networkconfig.Network,
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,

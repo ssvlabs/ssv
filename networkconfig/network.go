@@ -7,13 +7,13 @@ import (
 
 const forkName = "alan"
 
-type NetworkConfig struct {
+type Network struct {
 	Name string
 	*Beacon
 	*SSV
 }
 
-func (n NetworkConfig) String() string {
+func (n Network) String() string {
 	jsonBytes, err := json.Marshal(n)
 	if err != nil {
 		panic(err)
@@ -22,6 +22,6 @@ func (n NetworkConfig) String() string {
 	return string(jsonBytes)
 }
 
-func (n NetworkConfig) NetworkName() string {
+func (n Network) NetworkName() string {
 	return fmt.Sprintf("%s:%s", n.Name, forkName)
 }
