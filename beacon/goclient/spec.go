@@ -170,7 +170,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 	}
 
 	beaconConfig := &networkconfig.Beacon{
-		NetworkName:                          networkName,
+		BeaconNetwork:                        networkName,
 		SlotDuration:                         slotDuration,
 		SlotsPerEpoch:                        slotsPerEpoch,
 		EpochsPerSyncCommitteePeriod:         epochsPerSyncCommitteePeriod,
@@ -182,7 +182,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 		GenesisForkVersion:                   genesisResponse.GenesisForkVersion,
 		GenesisTime:                          genesisResponse.GenesisTime,
 		GenesisValidatorsRoot:                genesisResponse.GenesisValidatorsRoot,
-		Forks:                                forkData,
+		BeaconForks:                          forkData,
 	}
 
 	return beaconConfig, nil

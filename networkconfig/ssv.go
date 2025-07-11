@@ -13,14 +13,14 @@ import (
 )
 
 var supportedSSVConfigs = map[string]*SSV{
-	MainnetName:      MainnetSSV,
-	HoleskyName:      HoleskySSV,
-	HoleskyStageName: HoleskyStageSSV,
-	LocalTestnetName: LocalTestnetSSV,
-	HoleskyE2EName:   HoleskyE2ESSV,
-	HoodiName:        HoodiSSV,
-	HoodiStageName:   HoodiStageSSV,
-	SepoliaName:      SepoliaSSV,
+	MainnetSSV.SSVName:      MainnetSSV,
+	HoleskySSV.SSVName:      HoleskySSV,
+	HoleskyStageSSV.SSVName: HoleskyStageSSV,
+	LocalTestnetSSV.SSVName: LocalTestnetSSV,
+	HoleskyE2ESSV.SSVName:   HoleskyE2ESSV,
+	HoodiSSV.SSVName:        HoodiSSV,
+	HoodiStageSSV.SSVName:   HoodiStageSSV,
+	SepoliaSSV.SSVName:      SepoliaSSV,
 }
 
 func SSVConfigByName(name string) (*SSV, error) {
@@ -32,6 +32,10 @@ func SSVConfigByName(name string) (*SSV, error) {
 }
 
 type SSV struct {
+	// SSVName looks similar to Beacon.BeaconNetwork, however, it's used to differentiate configs on the same
+	// beacon network, e.g. holesky, holesky-stage, holesky-e2e, disallowing node start with different config,
+	// even if the beacon network is the same.
+	SSVName              string
 	DomainType           spectypes.DomainType
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr ethcommon.Address
@@ -43,6 +47,7 @@ type SSV struct {
 	// GasLimit36Epoch is an epoch when to upgrade from default gas limit value of 30_000_000
 	// to 36_000_000.
 	GasLimit36Epoch phase0.Epoch
+	SSVForks        []SSVFork // name has SSV prefix because of embedding
 }
 
 func (s *SSV) String() string {
@@ -55,6 +60,7 @@ func (s *SSV) String() string {
 }
 
 type marshaledConfig struct {
+	SSVName                 string            `json:"ssv_name,omitempty" yaml:"ssv_name,omitempty"`
 	DomainType              hexutil.Bytes     `json:"DomainType,omitempty" yaml:"DomainType,omitempty"`
 	RegistrySyncOffset      *big.Int          `json:"RegistrySyncOffset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
 	RegistryContractAddr    ethcommon.Address `json:"RegistryContractAddr,omitempty" yaml:"RegistryContractAddr,omitempty"`
@@ -62,11 +68,13 @@ type marshaledConfig struct {
 	DiscoveryProtocolID     hexutil.Bytes     `json:"DiscoveryProtocolID,omitempty" yaml:"DiscoveryProtocolID,omitempty"`
 	TotalEthereumValidators int               `json:"TotalEthereumValidators,omitempty" yaml:"TotalEthereumValidators,omitempty"`
 	GasLimit36Epoch         phase0.Epoch      `json:"GasLimit36Epoch,omitempty" yaml:"GasLimit36Epoch,omitempty"`
+	SSVForks                []SSVFork         `json:"SSVForks,omitempty" yaml:"SSVForks,omitempty"`
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
 func (s *SSV) marshal() *marshaledConfig {
 	return &marshaledConfig{
+		SSVName:                 s.SSVName,
 		DomainType:              s.DomainType[:],
 		RegistrySyncOffset:      s.RegistrySyncOffset,
 		RegistryContractAddr:    s.RegistryContractAddr,
@@ -74,6 +82,7 @@ func (s *SSV) marshal() *marshaledConfig {
 		DiscoveryProtocolID:     s.DiscoveryProtocolID[:],
 		TotalEthereumValidators: s.TotalEthereumValidators,
 		GasLimit36Epoch:         s.GasLimit36Epoch,
+		SSVForks:                s.SSVForks,
 	}
 }
 
@@ -96,6 +105,7 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 	}
 
 	*s = SSV{
+		SSVName:                 aux.SSVName,
 		DomainType:              spectypes.DomainType(aux.DomainType),
 		RegistrySyncOffset:      aux.RegistrySyncOffset,
 		RegistryContractAddr:    aux.RegistryContractAddr,
@@ -103,6 +113,7 @@ func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 		DiscoveryProtocolID:     [6]byte(aux.DiscoveryProtocolID),
 		TotalEthereumValidators: aux.TotalEthereumValidators,
 		GasLimit36Epoch:         aux.GasLimit36Epoch,
+		SSVForks:                aux.SSVForks,
 	}
 
 	return nil
@@ -124,4 +135,29 @@ func (s *SSV) UnmarshalJSON(data []byte) error {
 	}
 
 	return s.unmarshalFromConfig(aux)
+}
+
+type SSVFork struct {
+	Name  string
+	Epoch phase0.Epoch
+}
+
+func (s *SSV) ForkAtEpoch(epoch phase0.Epoch) SSVFork {
+	if len(s.SSVForks) == 0 {
+		panic("misconfiguration: config must have SSV forks")
+	}
+
+	var currentFork *SSVFork
+
+	for _, fork := range s.SSVForks {
+		if epoch >= fork.Epoch && (currentFork == nil || fork.Epoch > currentFork.Epoch) {
+			currentFork = &fork
+		}
+	}
+
+	if currentFork == nil {
+		panic(fmt.Sprintf("misconfiguration: no forks matching epoch %d: ", epoch))
+	}
+
+	return *currentFork
 }

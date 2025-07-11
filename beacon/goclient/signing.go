@@ -36,7 +36,7 @@ func (gc *GoClient) computeVoluntaryExitDomain() (phase0.Domain, error) {
 	beaconConfig := gc.getBeaconConfig()
 
 	forkData := &phase0.ForkData{
-		CurrentVersion:        beaconConfig.Forks[spec.DataVersionCapella].CurrentVersion,
+		CurrentVersion:        beaconConfig.BeaconForks[spec.DataVersionCapella].CurrentVersion,
 		GenesisValidatorsRoot: beaconConfig.GenesisValidatorsRoot,
 	}
 

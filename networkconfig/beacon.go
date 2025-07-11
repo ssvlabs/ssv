@@ -11,8 +11,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+// Beacon defines beacon network configuration. It is fetched from the consensus client during the node runtime.
+// Some fields have Beacon prefix because it's embedded to avoid ambiguity.
 type Beacon struct {
-	NetworkName                          string
+	BeaconNetwork                        string
 	SlotDuration                         time.Duration
 	SlotsPerEpoch                        uint64
 	EpochsPerSyncCommitteePeriod         uint64
@@ -24,7 +26,7 @@ type Beacon struct {
 	GenesisForkVersion                   phase0.Version
 	GenesisTime                          time.Time
 	GenesisValidatorsRoot                phase0.Root
-	Forks                                map[spec.DataVersion]phase0.Fork
+	BeaconForks                          map[spec.DataVersion]phase0.Fork
 }
 
 func (b *Beacon) String() string {
@@ -34,12 +36,6 @@ func (b *Beacon) String() string {
 	}
 
 	return string(marshaled)
-}
-
-// StorageName returns a config name used to make sure the stored network doesn't differ.
-// It combines the network name with fork name.
-func (b *Beacon) StorageName() string {
-	return fmt.Sprintf("%s:%s", b.NetworkName, forkName)
 }
 
 // SlotStartTime returns the start time for the given slot
@@ -153,25 +149,25 @@ func (b *Beacon) ForkAtEpoch(epoch phase0.Epoch) (spec.DataVersion, *phase0.Fork
 	}
 
 	for i, v := range versions {
-		if epoch < b.Forks[v].Epoch {
+		if epoch < b.BeaconForks[v].Epoch {
 			if i == 0 {
 				panic("epoch before genesis")
 			}
 
 			version := versions[i-1]
-			fork := b.Forks[version]
+			fork := b.BeaconForks[version]
 			return version, &fork
 		}
 	}
 
 	version := versions[len(versions)-1]
-	fork := b.Forks[version]
+	fork := b.BeaconForks[version]
 	return version, &fork
 }
 
 func (b *Beacon) AssertSame(other *Beacon) error {
-	if b.NetworkName != other.NetworkName {
-		return fmt.Errorf("different NetworkName")
+	if b.BeaconNetwork != other.BeaconNetwork {
+		return fmt.Errorf("different BeaconNetwork")
 	}
 	if b.SlotDuration != other.SlotDuration {
 		return fmt.Errorf("different SlotDuration")
@@ -207,8 +203,8 @@ func (b *Beacon) AssertSame(other *Beacon) error {
 		return fmt.Errorf("different GenesisValidatorsRoot")
 	}
 
-	if !maps.Equal(b.Forks, other.Forks) {
-		return fmt.Errorf("different Forks")
+	if !maps.Equal(b.BeaconForks, other.BeaconForks) {
+		return fmt.Errorf("different BeaconForks")
 	}
 	return nil
 }
