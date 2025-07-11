@@ -26,6 +26,7 @@ const (
 	noActionTimeout       = 20 * time.Millisecond
 	slotDuration          = 45 * time.Millisecond
 	testEpochsPerSCPeriod = 4
+	testSlotsPerEpoch     = 32
 )
 
 type MockSlotTicker interface {
@@ -137,6 +138,7 @@ func setupSchedulerAndMocksWithParams(
 	beaconCfg.SlotDuration = slotDuration
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration * time.Duration(startSlot))
 	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
+	beaconCfg.SlotsPerEpoch = testSlotsPerEpoch
 
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
