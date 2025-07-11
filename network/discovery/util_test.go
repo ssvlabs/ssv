@@ -74,18 +74,13 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSV) *Option
 	}
 }
 
-// Testing discovery with a given Network
-func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SSV) *DiscV5Service {
-	opts := testingDiscoveryOptions(t, ssvConfig)
+// Testing discovery service
+func testingDiscovery(t *testing.T) *DiscV5Service {
+	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
 	require.NotNil(t, dvs)
 	return dvs
-}
-
-// Testing discovery service
-func testingDiscovery(t *testing.T) *DiscV5Service {
-	return testingDiscoveryWithNetworkConfig(t, testNetConfig.SSV)
 }
 
 // Testing LocalNode

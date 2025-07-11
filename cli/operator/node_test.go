@@ -69,7 +69,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
 			validateConfig(nodeStorage, testNetworkName, true, true),
-			"incompatible config change: network mismatch. Stored network now_test_network:alan1 does not match current network now_test_network:alan. The database must be removed or reinitialized",
+			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
@@ -89,7 +89,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 		require.ErrorContains(t,
 			validateConfig(nodeStorage, testNetworkName, c.UsingLocalEvents, c.UsingSSVSigner),
-			"incompatible config change: network mismatch. Stored network now_test_network:alan1 does not match current network now_test_network:alan. The database must be removed or reinitialized",
+			"incompatible config change: network mismatch. Stored network testnet:alan1 does not match current network testnet:alan. The database must be removed or reinitialized",
 		)
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)

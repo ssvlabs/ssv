@@ -33,11 +33,6 @@ type Timer interface {
 	TimeoutForRound(height specqbft.Height, round specqbft.Round)
 }
 
-type BeaconNetwork interface {
-	SlotStartTime(slot phase0.Slot) time.Time
-	SlotDurationSec() time.Duration
-}
-
 type TimeoutOptions struct {
 	quickThreshold specqbft.Round
 	quick          time.Duration
