@@ -630,7 +630,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	const epoch1 = 1
 
 	netCfgEpoch1 := &networkconfig.Network{
-		Name:   networkconfig.TestNetwork.Name,
 		Beacon: &networkconfig.Beacon{},
 		SSV:    &networkconfig.SSV{},
 	}

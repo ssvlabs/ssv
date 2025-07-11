@@ -175,7 +175,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		networkConfig := &networkconfig.Network{
-			Name:   cfg.SSVOptions.NetworkName,
 			SSV:    ssvNetworkConfig,
 			Beacon: consensusClient.BeaconConfig(),
 		}

@@ -8,7 +8,6 @@ import (
 const forkName = "alan"
 
 type Network struct {
-	Name string
 	*Beacon
 	*SSV
 }
@@ -25,5 +24,5 @@ func (n Network) String() string {
 // StorageName returns a config name used to make sure the stored network doesn't differ.
 // It combines the network name with fork name.
 func (n Network) StorageName() string {
-	return fmt.Sprintf("%s:%s", n.Name, forkName)
+	return fmt.Sprintf("%s:%s", n.NetworkName, forkName)
 }

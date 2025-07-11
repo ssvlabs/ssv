@@ -13,7 +13,6 @@ import (
 )
 
 var TestNetwork = &Network{
-	Name: "testnet",
 	Beacon: &Beacon{
 		NetworkName:                          string(spectypes.BeaconTestNetwork),
 		SlotDuration:                         spectypes.BeaconTestNetwork.SlotDurationSec(),
@@ -73,7 +72,6 @@ var TestNetwork = &Network{
 
 // TestRealNetwork is used in tests that require real network parameters.
 var TestRealNetwork = &Network{
-	Name: "holesky",
 	Beacon: &Beacon{
 		NetworkName:                          string(spectypes.HoleskyNetwork),
 		SlotDuration:                         spectypes.HoleskyNetwork.SlotDurationSec(),

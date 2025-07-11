@@ -71,7 +71,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	operatorsCount += uint64(len(ops))
 
 	netCfgVariableEpoch := &networkconfig.Network{
-		Name:   networkconfig.TestNetwork.Name,
 		Beacon: &networkconfig.Beacon{},
 		SSV:    &networkconfig.SSV{},
 	}
