@@ -79,7 +79,7 @@ type SchedulerOptions struct {
 	Ctx                 context.Context
 	BeaconNode          BeaconNode
 	ExecutionClient     ExecutionClient
-	BeaconConfig        *networkconfig.BeaconConfig
+	BeaconConfig        *networkconfig.Beacon
 	ValidatorProvider   ValidatorProvider
 	ValidatorController ValidatorController
 	DutyExecutor        DutyExecutor
@@ -94,7 +94,7 @@ type Scheduler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
-	beaconConfig        *networkconfig.BeaconConfig
+	beaconConfig        *networkconfig.Beacon
 	validatorProvider   ValidatorProvider
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider

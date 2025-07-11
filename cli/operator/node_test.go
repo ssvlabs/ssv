@@ -22,7 +22,7 @@ func Test_verifyConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	network := networkconfig.TestNetwork
-	nodeStorage, err := operatorstorage.NewNodeStorage(network.BeaconConfig, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(network.Beacon, logger, db)
 	require.NoError(t, err)
 
 	testNetworkName := network.NetworkName()

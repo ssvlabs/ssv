@@ -12,7 +12,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
-var supportedSSVConfigs = map[string]*SSVConfig{
+var supportedSSVConfigs = map[string]*SSV{
 	MainnetName:      MainnetSSV,
 	HoleskyName:      HoleskySSV,
 	HoleskyStageName: HoleskyStageSSV,
@@ -23,7 +23,7 @@ var supportedSSVConfigs = map[string]*SSVConfig{
 	SepoliaName:      SepoliaSSV,
 }
 
-func GetSSVConfigByName(name string) (*SSVConfig, error) {
+func GetSSVConfigByName(name string) (*SSV, error) {
 	if network, ok := supportedSSVConfigs[name]; ok {
 		return network, nil
 	}
@@ -31,7 +31,7 @@ func GetSSVConfigByName(name string) (*SSVConfig, error) {
 	return nil, fmt.Errorf("network not supported: %v", name)
 }
 
-type SSVConfig struct {
+type SSV struct {
 	DomainType           spectypes.DomainType
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr ethcommon.Address
@@ -45,7 +45,7 @@ type SSVConfig struct {
 	GasLimit36Epoch phase0.Epoch
 }
 
-func (s *SSVConfig) String() string {
+func (s *SSV) String() string {
 	marshaled, err := json.Marshal(s)
 	if err != nil {
 		panic(err)
@@ -65,7 +65,7 @@ type marshaledConfig struct {
 }
 
 // Helper method to avoid duplication between MarshalJSON and MarshalYAML
-func (s *SSVConfig) marshal() *marshaledConfig {
+func (s *SSV) marshal() *marshaledConfig {
 	return &marshaledConfig{
 		DomainType:              s.DomainType[:],
 		RegistrySyncOffset:      s.RegistrySyncOffset,
@@ -77,16 +77,16 @@ func (s *SSVConfig) marshal() *marshaledConfig {
 	}
 }
 
-func (s *SSVConfig) MarshalJSON() ([]byte, error) {
+func (s *SSV) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.marshal())
 }
 
-func (s *SSVConfig) MarshalYAML() (interface{}, error) {
+func (s *SSV) MarshalYAML() (interface{}, error) {
 	return s.marshal(), nil
 }
 
 // Helper method to avoid duplication between UnmarshalJSON and UnmarshalYAML
-func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
+func (s *SSV) unmarshalFromConfig(aux marshaledConfig) error {
 	if len(aux.DomainType) != 4 {
 		return fmt.Errorf("invalid domain type length: expected 4 bytes, got %d", len(aux.DomainType))
 	}
@@ -95,7 +95,7 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 		return fmt.Errorf("invalid discovery protocol ID length: expected 6 bytes, got %d", len(aux.DiscoveryProtocolID))
 	}
 
-	*s = SSVConfig{
+	*s = SSV{
 		DomainType:              spectypes.DomainType(aux.DomainType),
 		RegistrySyncOffset:      aux.RegistrySyncOffset,
 		RegistryContractAddr:    aux.RegistryContractAddr,
@@ -108,7 +108,7 @@ func (s *SSVConfig) unmarshalFromConfig(aux marshaledConfig) error {
 	return nil
 }
 
-func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (s *SSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var aux marshaledConfig
 	if err := unmarshal(&aux); err != nil {
 		return err
@@ -117,7 +117,7 @@ func (s *SSVConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return s.unmarshalFromConfig(aux)
 }
 
-func (s *SSVConfig) UnmarshalJSON(data []byte) error {
+func (s *SSV) UnmarshalJSON(data []byte) error {
 	var aux marshaledConfig
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -126,10 +126,10 @@ func (s *SSVConfig) UnmarshalJSON(data []byte) error {
 	return s.unmarshalFromConfig(aux)
 }
 
-func (s *SSVConfig) GetDomainType() spectypes.DomainType {
+func (s *SSV) GetDomainType() spectypes.DomainType {
 	return s.DomainType
 }
 
-func (s *SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
+func (s *SSV) GetGasLimit36Epoch() phase0.Epoch {
 	return s.GasLimit36Epoch
 }

@@ -84,7 +84,7 @@ func TestNewController(t *testing.T) {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
+	registryStorage, newStorageErr := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	require.NoError(t, newStorageErr)
 
 	controllerOptions := ControllerOptions{
@@ -955,7 +955,7 @@ func setupCommonTestComponents(t *testing.T, operatorPrivKey keys.OperatorPrivat
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewLocalKeyManager(logger, db, networkconfig.TestNetwork.BeaconConfig, operatorPrivKey)
+	km, err := ekm.NewLocalKeyManager(logger, db, networkconfig.TestNetwork.Beacon, operatorPrivKey)
 	require.NoError(t, err)
 	return ctrl, logger, sharesStorage, network, km, recipientStorage, bc
 }

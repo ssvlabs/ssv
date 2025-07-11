@@ -82,7 +82,7 @@ func (mr *MockdutyHandlerMockRecorder) Name() *gomock.Call {
 }
 
 // Setup mocks base method.
-func (m *MockdutyHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, beaconConfig *networkconfig.BeaconConfig, validatorProvider ValidatorProvider, validatorController ValidatorController, dutiesExecutor DutiesExecutor, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
+func (m *MockdutyHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, beaconConfig *networkconfig.Beacon, validatorProvider ValidatorProvider, validatorController ValidatorController, dutiesExecutor DutiesExecutor, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Setup", name, logger, beaconNode, executionClient, beaconConfig, validatorProvider, validatorController, dutiesExecutor, slotTickerProvider, reorgEvents, indicesChange)
 }

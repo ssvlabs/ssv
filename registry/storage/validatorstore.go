@@ -57,7 +57,7 @@ type Committee struct {
 }
 
 // IsParticipating returns whether any validator in the committee should participate in the given epoch.
-func (c *Committee) IsParticipating(beaconCfg *networkconfig.BeaconConfig, epoch phase0.Epoch) bool {
+func (c *Committee) IsParticipating(beaconCfg *networkconfig.Beacon, epoch phase0.Epoch) bool {
 	for _, validator := range c.Validators {
 		if validator.IsParticipating(beaconCfg, epoch) {
 			return true
@@ -81,7 +81,7 @@ type validatorStore struct {
 	byCommitteeID     map[spectypes.CommitteeID]*Committee
 	byOperatorID      map[spectypes.OperatorID]*sharesAndCommittees
 
-	beaconCfg *networkconfig.BeaconConfig
+	beaconCfg *networkconfig.Beacon
 
 	mu sync.RWMutex
 }
@@ -90,7 +90,7 @@ func newValidatorStore(
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) (*types.SSVShare, bool),
 	pubkeyIndexMapping map[spectypes.ValidatorPK]phase0.ValidatorIndex,
-	beaconCfg *networkconfig.BeaconConfig,
+	beaconCfg *networkconfig.Beacon,
 ) *validatorStore {
 	return &validatorStore{
 		shares:            shares,

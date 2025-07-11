@@ -43,7 +43,7 @@ func BenchmarkTracer(b *testing.B) {
 	}
 
 	dutyStore := store.New(db)
-	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.BeaconConfig, db, nil)
+	_, vstore, _ := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, nil)
 
 	// Define different message counts to test
 	messageCounts := []int{10, 20, 50, 100, 200, 500, 1000, 2000, 4000, 8000}
@@ -56,7 +56,7 @@ func BenchmarkTracer(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				ctx, cancel := context.WithCancel(b.Context())
-				collector := New(ctx, zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.BeaconConfig)
+				collector := New(ctx, zap.NewNop(), vstore, mockDomainDataProvider{}, dutyStore, networkconfig.TestNetwork.Beacon)
 
 				var wg sync.WaitGroup
 				for _, msg := range traces[:actualCount] {

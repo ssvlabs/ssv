@@ -145,7 +145,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 	dvs, err := newDiscV5Service(ctx, testLogger, opts)
 	require.NoError(t, err)
 
@@ -159,7 +159,7 @@ func TestDiscV5Service_PublishENR(t *testing.T) {
 	checkLocalNodeDomainTypeAlignment(t, localNode, testNetConfig)
 
 	// Change network config
-	dvs.ssvConfig = networkconfig.TestNetwork.SSVConfig
+	dvs.ssvConfig = networkconfig.TestNetwork.SSV
 	// Test PublishENR method
 	dvs.PublishENR()
 
@@ -171,7 +171,7 @@ func TestDiscV5Service_Bootstrap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 
-	opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+	opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
@@ -366,7 +366,7 @@ func TestServiceAddressConfiguration(t *testing.T) {
 			defer cancel()
 
 			// create options with unique ports for parallel testing
-			opts := testingDiscoveryOptions(t, testNetConfig.SSVConfig)
+			opts := testingDiscoveryOptions(t, testNetConfig.SSV)
 			opts.DiscV5Opts.Port = uint16(13000 + i*10)
 			opts.DiscV5Opts.TCPPort = uint16(14000 + i*10)
 			opts.HostAddress = tc.hostAddress

@@ -84,7 +84,7 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-func waitForSlotN(beaconCfg *networkconfig.BeaconConfig, slots phase0.Slot) {
+func waitForSlotN(beaconCfg *networkconfig.Beacon, slots phase0.Slot) {
 	waitUntil := beaconCfg.GenesisTime.Add(beaconCfg.SlotDuration * time.Duration(slots))
 	if waitUntil.After(time.Now()) {
 		time.Sleep(time.Until(waitUntil))
@@ -138,7 +138,7 @@ func setupSchedulerAndMocksWithParams(
 	mockDutyExecutor := NewMockDutyExecutor(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 
-	beaconCfg := *networkconfig.TestNetwork.BeaconConfig
+	beaconCfg := *networkconfig.TestNetwork.Beacon
 	beaconCfg.SlotDuration = slotDuration
 	beaconCfg.GenesisTime = time.Now().Add(-beaconCfg.SlotDuration * time.Duration(startSlot))
 	beaconCfg.EpochsPerSyncCommitteePeriod = testEpochsPerSCPeriod
@@ -414,7 +414,7 @@ func TestScheduler_Run(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.BeaconConfig,
+		BeaconConfig:      networkconfig.TestNetwork.Beacon,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
@@ -462,7 +462,7 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	opts := &SchedulerOptions{
 		Ctx:               ctx,
 		BeaconNode:        mockBeaconNode,
-		BeaconConfig:      networkconfig.TestNetwork.BeaconConfig,
+		BeaconConfig:      networkconfig.TestNetwork.Beacon,
 		ValidatorProvider: mockValidatorProvider,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker

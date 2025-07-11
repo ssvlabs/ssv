@@ -19,8 +19,8 @@ import (
 )
 
 func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
-	// Create a sample SSVConfig
-	originalConfig := SSVConfig{
+	// Create a sample SSV
+	originalConfig := SSV{
 		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 		RegistrySyncOffset:   big.NewInt(123456),
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -34,7 +34,7 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	// Unmarshal from JSON
-	var unmarshaledConfig SSVConfig
+	var unmarshaledConfig SSV
 	err = json.Unmarshal(jsonBytes, &unmarshaledConfig)
 	require.NoError(t, err)
 
@@ -54,8 +54,8 @@ func TestSSVConfig_MarshalUnmarshalJSON(t *testing.T) {
 }
 
 func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
-	// Create a sample SSVConfig
-	originalConfig := SSVConfig{
+	// Create a sample SSV
+	originalConfig := SSV{
 		DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 		RegistrySyncOffset:   big.NewInt(123456),
 		RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -69,7 +69,7 @@ func TestSSVConfig_MarshalUnmarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 
 	// Unmarshal from YAML
-	var unmarshaledConfig SSVConfig
+	var unmarshaledConfig SSV
 	err = yaml.Unmarshal(yamlBytes, &unmarshaledConfig)
 	require.NoError(t, err)
 
@@ -120,8 +120,8 @@ func hashStructJSON(v interface{}) (string, error) {
 // marshal/unmarshal operations and that we can detect changes to the struct
 func TestFieldPreservation(t *testing.T) {
 	t.Run("test all fields are present after marshaling", func(t *testing.T) {
-		// Get all field names from SSVConfig
-		configType := reflect.TypeOf(SSVConfig{})
+		// Get all field names from SSV
+		configType := reflect.TypeOf(SSV{})
 		marshaledType := reflect.TypeOf(marshaledConfig{})
 
 		var configFields, marshaledFields []string
@@ -139,12 +139,12 @@ func TestFieldPreservation(t *testing.T) {
 		sort.Strings(marshaledFields)
 
 		// Ensure the same fields exist in both structs
-		assert.Equal(t, configFields, marshaledFields, "SSVConfig and marshaledConfig should have the same fields")
+		assert.Equal(t, configFields, marshaledFields, "SSV and marshaledConfig should have the same fields")
 	})
 
 	t.Run("hash comparison JSON", func(t *testing.T) {
 		// Create a sample config
-		config := SSVConfig{
+		config := SSV{
 			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 			RegistrySyncOffset:   big.NewInt(123456),
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -157,7 +157,7 @@ func TestFieldPreservation(t *testing.T) {
 		jsonBytes, err := json.Marshal(&config)
 		require.NoError(t, err)
 
-		var unmarshaled SSVConfig
+		var unmarshaled SSV
 		err = json.Unmarshal(jsonBytes, &unmarshaled)
 		require.NoError(t, err)
 
@@ -179,7 +179,7 @@ func TestFieldPreservation(t *testing.T) {
 
 	t.Run("hash comparison YAML", func(t *testing.T) {
 		// Create a sample config
-		config := SSVConfig{
+		config := SSV{
 			DomainType:           spectypes.DomainType{0x01, 0x02, 0x03, 0x04},
 			RegistrySyncOffset:   big.NewInt(123456),
 			RegistryContractAddr: ethcommon.HexToAddress("0x123456789abcdef0123456789abcdef012345678"),
@@ -192,7 +192,7 @@ func TestFieldPreservation(t *testing.T) {
 		yamlBytes, err := yaml.Marshal(&config)
 		require.NoError(t, err)
 
-		var unmarshaled SSVConfig
+		var unmarshaled SSV
 		err = yaml.Unmarshal(yamlBytes, &unmarshaled)
 		require.NoError(t, err)
 
@@ -217,7 +217,7 @@ func TestExistingNetworkConfigs(t *testing.T) {
 			jsonBytes, err := json.Marshal(config)
 			require.NoError(t, err)
 
-			var jsonUnmarshaled SSVConfig
+			var jsonUnmarshaled SSV
 			err = json.Unmarshal(jsonBytes, &jsonUnmarshaled)
 			require.NoError(t, err)
 
@@ -227,7 +227,7 @@ func TestExistingNetworkConfigs(t *testing.T) {
 			yamlBytes, err := yaml.Marshal(config)
 			require.NoError(t, err)
 
-			var yamlUnmarshaled SSVConfig
+			var yamlUnmarshaled SSV
 			err = yaml.Unmarshal(yamlBytes, &yamlUnmarshaled)
 			require.NoError(t, err)
 

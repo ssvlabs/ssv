@@ -48,8 +48,8 @@ func TestTimeoutForRound(t *testing.T) {
 	}
 }
 
-func setupMockBeaconConfig() *networkconfig.BeaconConfig {
-	config := networkconfig.TestNetwork.BeaconConfig
+func setupMockBeaconConfig() *networkconfig.Beacon {
+	config := networkconfig.TestNetwork.Beacon
 	config.SlotDuration = 120 * time.Millisecond
 	config.GenesisTime = time.Now()
 
@@ -58,7 +58,7 @@ func setupMockBeaconConfig() *networkconfig.BeaconConfig {
 
 func setupTimer(
 	t *testing.T,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	onTimeout OnRoundTimeoutF,
 	role spectypes.RunnerRole,
 	round specqbft.Round,

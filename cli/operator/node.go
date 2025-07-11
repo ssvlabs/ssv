@@ -175,9 +175,9 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		networkConfig := &networkconfig.NetworkConfig{
-			Name:         cfg.SSVOptions.NetworkName,
-			SSVConfig:    ssvNetworkConfig,
-			BeaconConfig: consensusClient.BeaconConfig(),
+			Name:   cfg.SSVOptions.NetworkName,
+			SSV:    ssvNetworkConfig,
+			Beacon: consensusClient.BeaconConfig(),
 		}
 
 		usingSSVSigner, usingKeystore, usingPrivKey := assertSigningConfig(logger)
@@ -274,10 +274,10 @@ var StartNodeCmd = &cobra.Command{
 		switch cfg.DBOptions.Engine {
 		case "pebble":
 			logger.Info("using pebble db")
-			db, err = setupPebbleDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
+			db, err = setupPebbleDB(logger, networkConfig.Beacon, operatorPrivKey)
 		case "badger":
 			logger.Info("using badger db")
-			db, err = setupBadgerDB(logger, networkConfig.BeaconConfig, operatorPrivKey)
+			db, err = setupBadgerDB(logger, networkConfig.Beacon, operatorPrivKey)
 		default:
 			err = fmt.Errorf("invalid db engine: %s", cfg.DBOptions.Engine)
 		}
@@ -290,7 +290,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}()
 
-		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig.BeaconConfig, logger, db)
+		nodeStorage, err := operatorstorage.NewNodeStorage(networkConfig.Beacon, logger, db)
 		if err != nil {
 			logger.Fatal("failed to create node storage", zap.Error(err))
 		}
@@ -368,7 +368,7 @@ var StartNodeCmd = &cobra.Command{
 			remoteKeyManager, err := ekm.NewRemoteKeyManager(
 				cmd.Context(),
 				logger,
-				networkConfig.BeaconConfig,
+				networkConfig.Beacon,
 				ssvSignerClient,
 				db,
 				operatorDataStore.GetOperatorID,
@@ -381,7 +381,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.OperatorSigner = remoteKeyManager
 			cfg.SSVOptions.ValidatorOptions.OperatorSigner = remoteKeyManager
 		} else {
-			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig.BeaconConfig, operatorPrivKey)
+			localKeyManager, err := ekm.NewLocalKeyManager(logger, db, networkConfig.Beacon, operatorPrivKey)
 			if err != nil {
 				logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 			}
@@ -511,7 +511,7 @@ var StartNodeCmd = &cobra.Command{
 				}
 				collector = dutytracer.New(cmd.Context(), logger,
 					nodeStorage.ValidatorStore(), consensusClient,
-					dstore, networkConfig.BeaconConfig)
+					dstore, networkConfig.Beacon)
 
 				go collector.Start(cmd.Context(), slotTickerProvider)
 				cfg.SSVOptions.ValidatorOptions.DutyTraceCollector = collector
@@ -525,7 +525,7 @@ var StartNodeCmd = &cobra.Command{
 		var doppelgangerHandler doppelganger.Provider
 		if cfg.EnableDoppelgangerProtection {
 			doppelgangerHandler = doppelganger.NewHandler(&doppelganger.Options{
-				BeaconConfig:       networkConfig.BeaconConfig,
+				BeaconConfig:       networkConfig.Beacon,
 				BeaconNode:         consensusClient,
 				ValidatorProvider:  nodeStorage.ValidatorStore().WithOperatorID(operatorDataStore.GetOperatorID),
 				SlotTickerProvider: slotTickerProvider,
@@ -838,7 +838,7 @@ func setupGlobal() (*zap.Logger, error) {
 
 func setupBadgerDB(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*badger.DB, error) {
 	db, err := badger.New(logger, cfg.DBOptions)
@@ -855,7 +855,7 @@ func setupBadgerDB(
 
 func setupPebbleDB(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 ) (*pebble.DB, error) {
 	dbPath := cfg.DBOptions.Path + "-pebble" // opinionated approach to avoid corrupting old db location
@@ -874,7 +874,7 @@ func setupPebbleDB(
 
 func applyMigrations(
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	operatorPrivKey keys.OperatorPrivateKey,
 	db basedb.Database,
 	dbPath string,
@@ -1006,8 +1006,8 @@ func ensureOperatorPubKey(nodeStorage operatorstorage.Storage, operatorPubKeyBas
 	return nil
 }
 
-func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSVConfig, error) {
-	var ssvConfig *networkconfig.SSVConfig
+func setupSSVNetwork(logger *zap.Logger) (*networkconfig.SSV, error) {
+	var ssvConfig *networkconfig.SSV
 
 	if cfg.SSVOptions.CustomNetwork != nil {
 		ssvConfig = cfg.SSVOptions.CustomNetwork

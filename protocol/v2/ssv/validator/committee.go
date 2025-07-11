@@ -36,7 +36,7 @@ type Committee struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	beaconConfig *networkconfig.BeaconConfig
+	beaconConfig *networkconfig.Beacon
 
 	// mtx syncs access to Queues, Runners, Shares.
 	mtx     sync.RWMutex
@@ -55,7 +55,7 @@ func NewCommittee(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	logger *zap.Logger,
-	beaconConfig *networkconfig.BeaconConfig,
+	beaconConfig *networkconfig.Beacon,
 	committeeMember *spectypes.CommitteeMember,
 	createRunnerFn CommitteeRunnerFunc,
 	shares map[phase0.ValidatorIndex]*spectypes.Share,

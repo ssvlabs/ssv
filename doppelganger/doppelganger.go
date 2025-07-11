@@ -55,7 +55,7 @@ type BeaconNode interface {
 
 // Options contains the configuration options for the Doppelgänger protection.
 type Options struct {
-	BeaconConfig       *networkconfig.BeaconConfig
+	BeaconConfig       *networkconfig.Beacon
 	BeaconNode         BeaconNode
 	ValidatorProvider  ValidatorProvider
 	SlotTickerProvider slotticker.Provider
@@ -68,7 +68,7 @@ type handler struct {
 	mu              sync.RWMutex
 	validatorsState map[phase0.ValidatorIndex]*doppelgangerState
 
-	beaconConfig       *networkconfig.BeaconConfig
+	beaconConfig       *networkconfig.Beacon
 	beaconNode         BeaconNode
 	validatorProvider  ValidatorProvider
 	slotTickerProvider slotticker.Provider

@@ -35,7 +35,7 @@ type CommitteeObserver struct {
 	msgID             spectypes.MessageID
 	logger            *zap.Logger
 	Storage           *storage.ParticipantStores
-	beaconConfig      *networkconfig.BeaconConfig
+	beaconConfig      *networkconfig.Beacon
 	ValidatorStore    registrystorage.ValidatorStore
 	newDecidedHandler qbftcontroller.NewDecidedHandler
 	attesterRoots     *ttlcache.Cache[phase0.Root, struct{}]
@@ -59,7 +59,7 @@ type BeaconVoteCacheKey struct {
 type CommitteeObserverOptions struct {
 	FullNode          bool
 	Logger            *zap.Logger
-	BeaconConfig      *networkconfig.BeaconConfig
+	BeaconConfig      *networkconfig.Beacon
 	Network           specqbft.Network
 	Storage           *storage.ParticipantStores
 	OperatorSigner    ssvtypes.OperatorSigner

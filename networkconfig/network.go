@@ -9,8 +9,8 @@ const forkName = "alan"
 
 type NetworkConfig struct {
 	Name string
-	*BeaconConfig
-	*SSVConfig
+	*Beacon
+	*SSV
 }
 
 func (n NetworkConfig) String() string {

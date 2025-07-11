@@ -52,7 +52,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
+	ns, err := storage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	require.NoError(t, err)
 
 	netCfg := networkconfig.TestNetwork
@@ -630,13 +630,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	const epoch1 = 1
 
 	netCfgEpoch1 := &networkconfig.NetworkConfig{
-		Name:         networkconfig.TestNetwork.Name,
-		BeaconConfig: &networkconfig.BeaconConfig{},
-		SSVConfig:    &networkconfig.SSVConfig{},
+		Name:   networkconfig.TestNetwork.Name,
+		Beacon: &networkconfig.Beacon{},
+		SSV:    &networkconfig.SSV{},
 	}
 
-	*netCfgEpoch1.BeaconConfig = *networkconfig.TestNetwork.BeaconConfig
-	*netCfgEpoch1.SSVConfig = *networkconfig.TestNetwork.SSVConfig
+	*netCfgEpoch1.Beacon = *networkconfig.TestNetwork.Beacon
+	*netCfgEpoch1.SSV = *networkconfig.TestNetwork.SSV
 	netCfgEpoch1.GenesisTime = time.Now().Add(-epoch1 * netCfgEpoch1.EpochDuration())
 
 	t.Run("accept pre-consensus randao message when epoch duties are not set", func(t *testing.T) {

@@ -409,7 +409,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.BeaconConfig, db, []byte("test"))
+	_, validatorStore, err := registrystorage.NewSharesStorage(networkconfig.TestNetwork.Beacon, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}

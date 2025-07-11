@@ -14,7 +14,7 @@ import (
 
 var TestNetwork = &NetworkConfig{
 	Name: "testnet",
-	BeaconConfig: &BeaconConfig{
+	Beacon: &Beacon{
 		NetworkName:                          string(spectypes.BeaconTestNetwork),
 		SlotDuration:                         spectypes.BeaconTestNetwork.SlotDurationSec(),
 		SlotsPerEpoch:                        spectypes.BeaconTestNetwork.SlotsPerEpoch(),
@@ -60,7 +60,7 @@ var TestNetwork = &NetworkConfig{
 			},
 		},
 	},
-	SSVConfig: &SSVConfig{
+	SSV: &SSV{
 		DomainType:           spectypes.DomainType{0x0, 0x0, spectypes.JatoNetworkID.Byte(), 0x2},
 		RegistrySyncOffset:   new(big.Int).SetInt64(9015219),
 		RegistryContractAddr: ethcommon.HexToAddress("0x4B133c68A084B8A88f72eDCd7944B69c8D545f03"),
@@ -74,7 +74,7 @@ var TestNetwork = &NetworkConfig{
 // TestRealNetwork is used in tests that require real network parameters.
 var TestRealNetwork = &NetworkConfig{
 	Name: "holesky",
-	BeaconConfig: &BeaconConfig{
+	Beacon: &Beacon{
 		NetworkName:                          string(spectypes.HoleskyNetwork),
 		SlotDuration:                         spectypes.HoleskyNetwork.SlotDurationSec(),
 		SlotsPerEpoch:                        spectypes.HoleskyNetwork.SlotsPerEpoch(),
@@ -126,7 +126,7 @@ var TestRealNetwork = &NetworkConfig{
 			},
 		},
 	},
-	SSVConfig: &SSVConfig{
+	SSV: &SSV{
 		DomainType:           spectypes.DomainType{0x0, 0x0, 0x5, 0x2},
 		RegistrySyncOffset:   new(big.Int).SetInt64(181612),
 		RegistryContractAddr: ethcommon.HexToAddress("0x38A4794cCEd47d3baf7370CcC43B560D3a1beEFA"),

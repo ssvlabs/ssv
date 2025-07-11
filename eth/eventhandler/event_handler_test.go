@@ -71,13 +71,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	operatorsCount += uint64(len(ops))
 
 	netCfgVariableEpoch := &networkconfig.NetworkConfig{
-		Name:         networkconfig.TestNetwork.Name,
-		BeaconConfig: &networkconfig.BeaconConfig{},
-		SSVConfig:    &networkconfig.SSVConfig{},
+		Name:   networkconfig.TestNetwork.Name,
+		Beacon: &networkconfig.Beacon{},
+		SSV:    &networkconfig.SSV{},
 	}
 
-	*netCfgVariableEpoch.BeaconConfig = *networkconfig.TestNetwork.BeaconConfig
-	*netCfgVariableEpoch.SSVConfig = *networkconfig.TestNetwork.SSVConfig
+	*netCfgVariableEpoch.Beacon = *networkconfig.TestNetwork.Beacon
+	*netCfgVariableEpoch.SSV = *networkconfig.TestNetwork.SSV
 	netCfgVariableEpoch.GenesisTime = time.Now().Add(-32 * netCfgVariableEpoch.SlotDuration)
 
 	eh, _, err := setupEventHandler(t, ctx, logger, netCfgVariableEpoch, ops[0], false)
@@ -1375,7 +1375,7 @@ func setupEventHandler(
 
 	operatorDataStore := operatordatastore.New(operatorData)
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, network.BeaconConfig, operator.privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, network.Beacon, operator.privateKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1450,7 +1450,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("empty test operator was passed")
 	}
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

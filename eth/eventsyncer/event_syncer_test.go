@@ -156,7 +156,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig.BeaconConfig, privateKey)
+	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig.Beacon, privateKey)
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}
@@ -204,7 +204,7 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.Backend {
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}

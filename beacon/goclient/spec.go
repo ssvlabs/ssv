@@ -28,7 +28,7 @@ const (
 )
 
 // BeaconConfig returns the network Beacon configuration
-func (gc *GoClient) BeaconConfig() *networkconfig.BeaconConfig {
+func (gc *GoClient) BeaconConfig() *networkconfig.Beacon {
 	// BeaconConfig must be called if GoClient is initialized (gc.beaconConfig is set)
 	// It fails otherwise.
 	config := gc.getBeaconConfig()
@@ -63,7 +63,7 @@ func specForClient(ctx context.Context, log *zap.Logger, provider client.Service
 }
 
 // fetchBeaconConfig must be called once on GoClient's initialization
-func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthttp.Service) (*networkconfig.BeaconConfig, error) {
+func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthttp.Service) (*networkconfig.Beacon, error) {
 	specResponse, err := specForClient(ctx, gc.log, client)
 	if err != nil {
 		gc.log.Error(clResponseErrMsg, zap.String("api", "Spec"), zap.Error(err))
@@ -169,7 +169,7 @@ func (gc *GoClient) fetchBeaconConfig(ctx context.Context, client *eth2clienthtt
 		return nil, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
 
-	beaconConfig := &networkconfig.BeaconConfig{
+	beaconConfig := &networkconfig.Beacon{
 		NetworkName:                          networkName,
 		SlotDuration:                         slotDuration,
 		SlotsPerEpoch:                        slotsPerEpoch,

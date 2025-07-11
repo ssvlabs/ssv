@@ -93,7 +93,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State              *State
 		Share              map[phase0.ValidatorIndex]*spectypes.Share
 		QBFTController     *controller.Controller
-		BeaconConfig       *networkconfig.BeaconConfig
+		BeaconConfig       *networkconfig.Beacon
 		RunnerRoleType     spectypes.RunnerRole
 		highestDecidedSlot phase0.Slot
 	}
@@ -103,7 +103,7 @@ func (b *BaseRunner) MarshalJSON() ([]byte, error) {
 		State:              b.State,
 		Share:              b.Share,
 		QBFTController:     b.QBFTController,
-		BeaconConfig:       b.NetworkConfig.BeaconConfig,
+		BeaconConfig:       b.NetworkConfig.Beacon,
 		RunnerRoleType:     b.RunnerRoleType,
 		highestDecidedSlot: b.highestDecidedSlot,
 	}

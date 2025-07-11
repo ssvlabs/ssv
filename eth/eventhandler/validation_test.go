@@ -22,7 +22,7 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.BeaconConfig, logger, db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(networkconfig.TestNetwork.Beacon, logger, db)
 	require.NoError(t, err)
 
 	eh := &EventHandler{

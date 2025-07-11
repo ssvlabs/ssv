@@ -1028,7 +1028,7 @@ func activeShare(index phase0.ValidatorIndex) *ssvtypes.SSVShare {
 	}
 }
 
-func assertWaitedOneThird(t *testing.T, beaconConfig *networkconfig.BeaconConfig, startTime time.Time) {
+func assertWaitedOneThird(t *testing.T, beaconConfig *networkconfig.Beacon, startTime time.Time) {
 	// validate the 1/3 of the slot waiting time
 	require.Less(t, beaconConfig.GetSlotDuration()/3, time.Since(startTime)+clockError)
 }

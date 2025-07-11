@@ -41,7 +41,7 @@ var (
 )
 
 // Options for the discovery service
-func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSVConfig) *Options {
+func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSV) *Options {
 	// Generate key
 	privKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func testingDiscoveryOptions(t *testing.T, ssvConfig *networkconfig.SSVConfig) *
 }
 
 // Testing discovery with a given NetworkConfig
-func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SSVConfig) *DiscV5Service {
+func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SSV) *DiscV5Service {
 	opts := testingDiscoveryOptions(t, ssvConfig)
 	dvs, err := newDiscV5Service(t.Context(), testLogger, opts)
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func testingDiscoveryWithNetworkConfig(t *testing.T, ssvConfig *networkconfig.SS
 
 // Testing discovery service
 func testingDiscovery(t *testing.T) *DiscV5Service {
-	return testingDiscoveryWithNetworkConfig(t, testNetConfig.SSVConfig)
+	return testingDiscoveryWithNetworkConfig(t, testNetConfig.SSV)
 }
 
 // Testing LocalNode
