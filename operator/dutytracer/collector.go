@@ -59,7 +59,7 @@ type DomainDataProvider interface {
 	DomainData(context.Context, phase0.Epoch, phase0.DomainType) (phase0.Domain, error)
 }
 
-func New(ctx context.Context,
+func New(
 	logger *zap.Logger,
 	validators registrystorage.ValidatorStore,
 	client DomainDataProvider,
