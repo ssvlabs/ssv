@@ -188,3 +188,34 @@ func (env *TestEnvironment) GetMigrationStatus() ([]string, error) {
 
 	return applied, nil
 }
+
+// applyMigrations applies all pending Web3Signer migrations
+func (env *TestEnvironment) applyMigrations() error {
+	if env.postgresDB == nil {
+		return fmt.Errorf("database connection not initialized")
+	}
+
+	if err := env.createMigrationTable(env.postgresDB); err != nil {
+		return fmt.Errorf("failed to create migration table: %w", err)
+	}
+
+	migrations, err := env.loadMigrations()
+	if err != nil {
+		return fmt.Errorf("failed to load migrations: %w", err)
+	}
+
+	for _, migration := range migrations {
+		applied, err := env.isMigrationApplied(env.postgresDB, migration.Version)
+		if err != nil {
+			return fmt.Errorf("failed to check migration status: %w", err)
+		}
+
+		if !applied {
+			if err = env.applyMigration(env.postgresDB, migration); err != nil {
+				return fmt.Errorf("failed to apply migration: %w", err)
+			}
+		}
+	}
+
+	return nil
+}

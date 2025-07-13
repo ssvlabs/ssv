@@ -146,10 +146,10 @@ func (s *E2ETestSuite) AddValidator(ctx context.Context) *common.ValidatorKeyPai
 	validatorKeyPair, err := common.GenerateValidatorShare(s.env.GetOperatorKey())
 	s.Require().NoError(err, "Failed to generate validator share")
 
-	err = remoteKeyManager.AddShare(ctx, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
+	err = remoteKeyManager.AddShare(ctx, nil, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
 	s.Require().NoError(err, "Failed to add share to remote key manager")
 
-	err = localKeyManager.AddShare(ctx, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
+	err = localKeyManager.AddShare(ctx, nil, validatorKeyPair.EncryptedShare, validatorKeyPair.BLSPubKey)
 	s.Require().NoError(err, "Failed to add share to local key manager")
 
 	// Verify SSV-Signer operational status and that validator was successfully added

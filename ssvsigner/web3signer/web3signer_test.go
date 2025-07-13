@@ -2,7 +2,6 @@ package web3signer
 
 import (
 	"bytes"
-	"context"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -438,7 +437,7 @@ func TestUpCheck(t *testing.T) {
 
 			_, web3Signer := setupTestServer(t, tt.setupServer)
 
-			err := web3Signer.UpCheck(context.Background())
+			err := web3Signer.UpCheck(t.Context())
 
 			if tt.wantErrContains != "" {
 				require.Error(t, err)
