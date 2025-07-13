@@ -254,8 +254,8 @@ func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall ch
 			}
 			require.True(t, found)
 		}
-		// Wait a tiny bit more to make sure no more duties are coming (if they are - setExecuteDutyFunc will panic
-		// - we just need to give it some time to check for that).
+		// Wait a tiny bit more to make sure no more duties are coming (mock expectations will catch that
+		// if that's the case).
 		time.Sleep(1 * time.Millisecond)
 	case <-time.After(timeout):
 		require.FailNow(t, "timed out waiting for duty to be executed")
