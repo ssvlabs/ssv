@@ -1,0 +1,30 @@
+name: 'Label and close stale PRs'
+on:
+  schedule:
+    # Runs at 1:30 AM every day
+    - cron: '30 1 * * *'
+  workflow_dispatch: # Allows manual triggering
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9.1.0
+        with:
+          days-before-stale: 60
+          days-before-close: 30
+          stale-pr-message: 'This pull request has been marked as stale due to 60 days of inactivity. It will be closed in 30 days if there are no updates. Please comment if you would like to keep it open.'
+          close-pr-message: 'Closing this pull request as it has been inactive for 30 days after being marked stale. You are welcome to reopen it if you wish to continue.'
+          stale-issue-message: 'This issue has been marked as stale due to 60 days of inactivity. It will be closed in 30 days if there are no updates. Please comment if you would like to keep it open.'
+          close-issue-message: 'Closing this issue as it has been inactive for 30 days after being marked stale. You are welcome to reopen it if you wish to continue.'
+          stale-issue-label: 'stale'
+          stale-pr-label: 'stale'
+          operations-per-run: 100
+          # Enable statistics in the logs
+          enable-statistics: true
