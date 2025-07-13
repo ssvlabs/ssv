@@ -40,7 +40,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeInfo.validatorIndices); err != nil {
-		return nil, err
+		return partialSignatureMessages, err
 	}
 
 	key := peerIDWithMessageID{
@@ -49,7 +49,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 	state := mv.validatorState(key, committeeInfo.committee)
 	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeInfo, receivedAt, state); err != nil {
-		return nil, err
+		return partialSignatureMessages, err
 	}
 
 	signature := signedSSVMessage.Signatures[0]
@@ -61,7 +61,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	if err := mv.updatePartialSignatureState(partialSignatureMessages, state, signer, committeeInfo); err != nil {
-		return nil, err
+		return partialSignatureMessages, err
 	}
 
 	return partialSignatureMessages, nil
