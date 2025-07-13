@@ -158,7 +158,6 @@ type controller struct {
 	ibftStorageMap    *storage.ParticipantStores
 
 	beacon         beaconprotocol.BeaconNode
-	beaconSigner   ekm.BeaconSigner
 	operatorSigner ssvtypes.OperatorSigner
 
 	operatorDataStore operatordatastore.OperatorDataStore
@@ -239,7 +238,6 @@ func NewController(logger *zap.Logger, options ControllerOptions, exporterOption
 		ctx:               options.Context,
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
-		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
 		traceCollector:    options.DutyTraceCollector,
