@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -26,8 +28,8 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			return duties, nil
 		}).AnyTimes()
 
-	getShares := func() []*types.SSVShare {
-		var proposerShares []*types.SSVShare
+	getSnapshots := func() []*registrystorage.ValidatorSnapshot {
+		var snapshots []*registrystorage.ValidatorSnapshot
 		dutiesMap.Range(func(epoch phase0.Epoch, duties []*eth2apiv1.ProposerDuty) bool {
 			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
@@ -36,7 +38,7 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			}
 
 			for index := range uniqueIndices {
-				attestingShare := &types.SSVShare{
+				proposerShare := &types.SSVShare{
 					Share: spectypes.Share{
 						ValidatorIndex: index,
 					},
@@ -44,16 +46,24 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 					Liquidated:      false,
 					Status:          eth2apiv1.ValidatorStateActiveOngoing,
 				}
-				proposerShares = append(proposerShares, attestingShare)
+
+				snapshot := &registrystorage.ValidatorSnapshot{
+					Share:          *proposerShare.Copy(),
+					IsOwnValidator: true,
+					ParticipationStatus: registrystorage.ParticipationStatus{
+						IsParticipating: true,
+					},
+				}
+				snapshots = append(snapshots, snapshot)
 			}
 			return true
 		})
 
-		return proposerShares
+		return snapshots
 	}
 
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetSelfValidators().DoAndReturn(getShares).AnyTimes()
-	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetAllValidators().DoAndReturn(getShares).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetSelfValidators().DoAndReturn(getSnapshots).AnyTimes()
+	s.validatorProvider.(*MockValidatorProvider).EXPECT().GetAllValidators().DoAndReturn(getSnapshots).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }
