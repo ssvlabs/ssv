@@ -228,8 +228,6 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 4 Liquidate Cluster
 		{
-			validatorCtrl.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
 			clusterLiquidate := NewTestClusterLiquidatedInput(common)
 			clusterLiquidate.prepare([]*ClusterLiquidatedEventInput{
 				{
@@ -258,8 +256,6 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 5 Reactivate Cluster
 		{
-			validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
 			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
@@ -310,8 +306,6 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 7 Update Fee Recipient
 		{
-			validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Times(1)
-
 			setFeeRecipient := NewSetFeeRecipientAddressInput(common)
 			setFeeRecipient.prepare([]*SetFeeRecipientAddressEventInput{
 				{auth, &testAddrBob},

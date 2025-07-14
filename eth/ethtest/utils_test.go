@@ -23,11 +23,9 @@ import (
 	"github.com/ssvlabs/ssv/eth/eventhandler"
 	"github.com/ssvlabs/ssv/eth/eventparser"
 	"github.com/ssvlabs/ssv/eth/simulator"
-	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
-	"github.com/ssvlabs/ssv/operator/validator"
 	"github.com/ssvlabs/ssv/operator/validator/mocks"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/ssvlabs/ssv/storage/basedb"
@@ -145,6 +143,8 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	return sharesDataSigned, nil
 }
 
+// setupEventHandler initializes the event handler for testing purposes.
+// TODO: it should be refactored. It has many antipatterns.
 func setupEventHandler(
 	t *testing.T,
 	ctx context.Context,
@@ -160,9 +160,9 @@ func setupEventHandler(
 		return nil, nil, nil, nil, err
 	}
 
-	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
 	operatorDataStore := operatordatastore.New(operatorData)
+
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewLocalKeyManager(logger, db, testNetworkConfig, operator.privateKey)
@@ -170,7 +170,16 @@ func setupEventHandler(
 		return nil, nil, nil, nil, err
 	}
 
-	ctrl := gomock.NewController(t)
+	validatorStore, err := registrystorage.NewValidatorStore(
+		logger,
+		nodeStorage.Shares(),
+		nodeStorage,
+		testNetworkConfig.BeaconConfig,
+		operatorDataStore.GetOperatorID,
+	)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	if err != nil {
@@ -178,17 +187,17 @@ func setupEventHandler(
 	}
 
 	dgHandler := doppelganger.NoOpHandler{}
+	parser := eventparser.New(contractFilterer)
 
 	if useMockCtrl {
+		ctrl := gomock.NewController(t)
 		validatorCtrl := mocks.NewMockController(ctrl)
-
-		parser := eventparser.New(contractFilterer)
 
 		eh, err := eventhandler.New(
 			nodeStorage,
 			parser,
 			testNetworkConfig,
-			validatorCtrl,
+			validatorStore,
 			operatorDataStore,
 			operator.privateKey,
 			keyManager,
@@ -204,22 +213,13 @@ func setupEventHandler(
 		return eh, validatorCtrl, ctrl, nodeStorage, nil
 	}
 
-	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:           ctx,
-		DB:                db,
-		RegistryStorage:   nodeStorage,
-		BeaconSigner:      keyManager,
-		StorageMap:        storageMap,
-		OperatorDataStore: operatorDataStore,
-	})
-
-	parser := eventparser.New(contractFilterer)
+	ctrl := gomock.NewController(t)
 
 	eh, err := eventhandler.New(
 		nodeStorage,
 		parser,
-		validatorCtrl,
 		testNetworkConfig,
+		validatorStore,
 		operatorDataStore,
 		operator.privateKey,
 		keyManager,
@@ -227,6 +227,7 @@ func setupEventHandler(
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)
+
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

@@ -397,17 +397,20 @@ func (eh *EventHandler) handleValidatorRemoved(ctx context.Context, txn basedb.T
 
 		// Remove validator from doppelganger service
 		eh.doppelgangerHandler.RemoveValidatorState(share.ValidatorIndex)
-
-		logger.Debug("processed event")
-		return share.ValidatorPubKey, nil
 	}
 
+	// Notify ValidatorStore about share removal for ALL shares (operator and non-operator)
 	opts := registrystorage.UpdateOptions{TriggerCallbacks: triggerCallbacks}
 	if err := eh.validatorStore.OnShareRemoved(ctx, share.ValidatorPubKey, opts); err != nil {
 		return emptyPK, fmt.Errorf("notify validator store of share removal: %w", err)
 	}
 
 	logger.Debug("processed event")
+
+	if isOperatorShare {
+		return share.ValidatorPubKey, nil
+	}
+
 	return emptyPK, nil
 }
 
