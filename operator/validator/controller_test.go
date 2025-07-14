@@ -86,6 +86,15 @@ func TestNewController(t *testing.T) {
 	registryStorage, newStorageErr := storage.NewNodeStorage(logger, db)
 	require.NoError(t, newStorageErr)
 
+	validatorStore, err := registrystorage.NewValidatorStore(
+		logger,
+		registryStorage.Shares(),
+		registryStorage,
+		networkconfig.TestNetwork,
+		operatorDataStore.GetOperatorID,
+	)
+	require.NoError(t, err)
+
 	controllerOptions := ControllerOptions{
 		NetworkConfig:     networkconfig.TestNetwork,
 		Beacon:            bc,
@@ -96,6 +105,7 @@ func TestNewController(t *testing.T) {
 		RegistryStorage:   registryStorage,
 		RecipientsStorage: recipientStorage,
 		KeyManager:        keyManager,
+		ValidatorStore:    validatorStore,
 		Context:           t.Context(),
 	}
 	control := NewController(logger, controllerOptions)
@@ -214,7 +224,6 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).AnyTimes()
 			}
 
-			// Convert shares to snapshots for the new interface
 			snapshotsWithMetadata := make([]*registrystorage.ValidatorSnapshot, len(sharesWithMetadata))
 			for i, share := range sharesWithMetadata {
 				snapshotsWithMetadata[i] = &registrystorage.ValidatorSnapshot{
@@ -759,50 +768,6 @@ func TestGetValidatorStats(t *testing.T) {
 		require.Equal(t, len(sharesSlice), int(allShares), "Unexpected total shares count")
 		require.Equal(t, 1, int(activeShares), "Unexpected active shares count")
 		require.Equal(t, 2, int(operatorShares), "Unexpected operator shares count")
-	})
-}
-
-func TestUpdateFeeRecipient(t *testing.T) {
-	// Setup logger for testing
-	logger := logging.TestLogger(t)
-
-	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
-	fakeOwnerAddressBytes := decodeHex(t, "61Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode fake owner address")
-	firstFeeRecipientBytes := decodeHex(t, "41E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode first fee recipient address")
-	secondFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
-
-	t.Run("Test with right owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
-
-		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-			createPubKey(byte('0')): testValidator,
-		}
-		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
-
-		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
-		ctr := setupController(t, logger, controllerOptions)
-
-		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
-		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
-
-		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
-		require.Equal(t, secondFeeRecipientBytes, actualFeeRecipient, "Fee recipient address did not update correctly")
-	})
-
-	t.Run("Test with wrong owner address", func(t *testing.T) {
-		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
-		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
-			createPubKey(byte('0')): testValidator,
-		}
-		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
-		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
-		ctr := setupController(t, logger, controllerOptions)
-
-		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
-		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
-
-		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
-		require.Equal(t, firstFeeRecipientBytes, actualFeeRecipient, "Fee recipient address should not have changed")
 	})
 }
 
