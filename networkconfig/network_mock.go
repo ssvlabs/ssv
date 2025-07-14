@@ -421,3 +421,17 @@ func (mr *MockNetworkMockRecorder) NetworkName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkName", reflect.TypeOf((*MockNetwork)(nil).NetworkName))
 }
+
+// NetworkTopologyFork mocks base method.
+func (m *MockNetwork) NetworkTopologyFork() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NetworkTopologyFork")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// NetworkTopologyFork indicates an expected call of NetworkTopologyFork.
+func (mr *MockNetworkMockRecorder) NetworkTopologyFork() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkTopologyFork", reflect.TypeOf((*MockNetwork)(nil).NetworkTopologyFork))
+}

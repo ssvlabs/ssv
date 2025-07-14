@@ -36,6 +36,7 @@ func GetSSVConfigByName(name string) (*SSVConfig, error) {
 type SSV interface {
 	GetDomainType() spectypes.DomainType
 	GetGasLimit36Epoch() phase0.Epoch
+	NetworkTopologyFork() bool
 }
 
 type SSVConfig struct {
@@ -139,4 +140,8 @@ func (s *SSVConfig) GetDomainType() spectypes.DomainType {
 
 func (s *SSVConfig) GetGasLimit36Epoch() phase0.Epoch {
 	return s.GasLimit36Epoch
+}
+
+func (s *SSVConfig) NetworkTopologyFork() bool {
+	return false // TODO: implement after https://github.com/ssvlabs/ssv/pull/2392 is merged
 }

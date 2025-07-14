@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
@@ -51,14 +52,18 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 
 	var topics []string
 
-	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		topics = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
+	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+		topics = commons.CommitteeTopicIDPostFork(msg.OperatorIDs)
 	} else {
-		val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
-		if !exists {
-			return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
+		if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+			topics = commons.CommitteeTopicID(spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:]))
+		} else {
+			val, exists := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
+			if !exists {
+				return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(msg.SSVMessage.MsgID.GetDutyExecutorID()))
+			}
+			topics = commons.CommitteeTopicID(val.CommitteeID())
 		}
-		topics = commons.CommitteeTopicID(val.CommitteeID())
 	}
 
 	for _, topic := range topics {
@@ -132,11 +137,20 @@ func (n *p2pNetwork) SubscribedSubnets() commons.Subnets {
 	// Compute the new subnets according to the active committees/validators.
 	updatedSubnets := n.persistentSubnets
 
-	n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
-		subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
-		updatedSubnets.Set(subnet)
-		return true
-	})
+	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+		n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
+			subnet := commons.CommitteeSubnet(spectypes.CommitteeID([]byte(cid)))
+			updatedSubnets.Set(subnet)
+			return true
+		})
+	} else {
+		n.activeCommitteesPostFork.Range(func(encodedCommittee string, status validatorStatus) bool {
+			committee := decodeCommittee(encodedCommittee)
+			subnet := commons.CommitteeSubnetPostFork(committee)
+			updatedSubnets.Set(subnet)
+			return true
+		})
+	}
 
 	return updatedSubnets
 }
@@ -152,9 +166,14 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return fmt.Errorf("could not find share for validator %s", hex.EncodeToString(pk[:]))
 	}
 
-	err := n.subscribeCommittee(share.CommitteeID())
-	if err != nil {
-		return fmt.Errorf("could not subscribe to committee: %w", err)
+	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+		if err := n.subscribeCommitteePostFork(share.OperatorIDs()); err != nil {
+			return fmt.Errorf("could not subscribe to committee (post-fork): %w", err)
+		}
+	} else {
+		if err := n.subscribeCommittee(share.CommitteeID()); err != nil {
+			return fmt.Errorf("could not subscribe to committee (pre-fork): %w", err)
+		}
 	}
 
 	return nil
@@ -162,7 +181,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 
 // subscribeCommittee handles the subscription logic for committee subnets
 func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
-	n.logger.Debug("subscribing to committee", fields.CommitteeID(cid))
+	n.logger.Debug("subscribing to committee (pre-fork)", fields.CommitteeID(cid))
 	status, found := n.activeCommittees.GetOrSet(string(cid[:]), validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
@@ -175,6 +194,47 @@ func (n *p2pNetwork) subscribeCommittee(cid spectypes.CommitteeID) error {
 	}
 	n.activeCommittees.Set(string(cid[:]), validatorStatusSubscribed)
 	return nil
+}
+
+func (n *p2pNetwork) subscribeCommitteePostFork(committee []spectypes.OperatorID) error {
+	n.logger.Debug("subscribing to committee (post-fork)", fields.OperatorIDs(committee))
+	status, found := n.activeCommitteesPostFork.GetOrSet(encodeCommittee(committee), validatorStatusSubscribing)
+	if found && status != validatorStatusInactive {
+		return nil
+	}
+
+	for _, topic := range commons.CommitteeTopicIDPostFork(committee) {
+		if err := n.topicsCtrl.Subscribe(topic); err != nil {
+			return fmt.Errorf("could not subscribe to topic %s: %w", topic, err)
+		}
+	}
+	n.activeCommitteesPostFork.Set(encodeCommittee(committee), validatorStatusSubscribed)
+	return nil
+}
+
+func encodeCommittee(committee []spectypes.OperatorID) string {
+	buf := make([]byte, len(committee)*8)
+	for i, operator := range committee {
+		binary.LittleEndian.PutUint64(buf[i*8:], operator)
+	}
+	return string(buf)
+}
+
+func decodeCommittee(committee string) []spectypes.OperatorID {
+	encodedData := []byte(committee)
+
+	if len(encodedData)%8 != 0 {
+		panic(fmt.Sprintf("bug: invalid committee encoding: length=%d is not a multiple of 8", len(encodedData)))
+	}
+
+	count := len(encodedData) / 8
+	result := make([]spectypes.OperatorID, count)
+
+	for i := 0; i < count; i++ {
+		result[i] = binary.LittleEndian.Uint64(encodedData[i*8:])
+	}
+
+	return result
 }
 
 func (n *p2pNetwork) unsubscribeSubnet(subnet uint64) error {
@@ -202,13 +262,22 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	}
 
 	cmtid := share.CommitteeID()
-	topics := commons.CommitteeTopicID(cmtid)
+	var topics []string
+	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+		topics = commons.CommitteeTopicIDPostFork(share.OperatorIDs())
+	} else {
+		topics = commons.CommitteeTopicID(cmtid)
+	}
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 			return err
 		}
 	}
-	n.activeCommittees.Delete(string(cmtid[:]))
+	if n.cfg.NetworkConfig.NetworkTopologyFork() {
+		n.activeCommitteesPostFork.Delete(encodeCommittee(share.OperatorIDs()))
+	} else {
+		n.activeCommittees.Delete(string(cmtid[:]))
+	}
 	return nil
 }
 

@@ -69,11 +69,11 @@ func CommitteeSubnetPostFork(committee []spectypes.OperatorID) uint64 {
 	}
 
 	var lowestHash *big.Int
+	var operatorBytes [8]byte
 
 	for _, v := range committee {
-		operatorBytes := make([]byte, 8)
 		binary.LittleEndian.PutUint64(operatorBytes[:], v)
-		operatorHash := sha256.Sum256(operatorBytes)
+		operatorHash := sha256.Sum256(operatorBytes[:])
 		operatorHashNum := new(big.Int).SetBytes(operatorHash[:])
 
 		if lowestHash == nil || operatorHashNum.Cmp(lowestHash) == -1 {

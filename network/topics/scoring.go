@@ -14,6 +14,7 @@ import (
 	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/network/peers"
 	"github.com/ssvlabs/ssv/network/topics/params"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/registry/storage"
 )
 
@@ -193,7 +194,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 
 		// Get committees
 		committees := committeesProvider.Committees()
-		topicCommittees := filterCommitteesForTopic(t, committees)
+		topicCommittees := filterCommitteesForTopic(cfg.NetworkConfig, t, committees)
 
 		// Log
 		validatorsInTopic := 0
@@ -218,13 +219,18 @@ func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig, committeesProvider 
 }
 
 // Returns a new committee list with only the committees that belong to the given topic
-func filterCommitteesForTopic(topic string, committees []*storage.Committee) []*storage.Committee {
+func filterCommitteesForTopic(netCfg *networkconfig.NetworkConfig, topic string, committees []*storage.Committee) []*storage.Committee {
 
 	topicCommittees := make([]*storage.Committee, 0)
 
 	for _, committee := range committees {
 		// Get topic
-		subnet := commons.CommitteeSubnet(committee.ID)
+		var subnet uint64
+		if netCfg.NetworkTopologyFork() {
+			subnet = commons.CommitteeSubnetPostFork(committee.Operators)
+		} else {
+			subnet = commons.CommitteeSubnet(committee.ID)
+		}
 		committeeTopic := commons.SubnetTopicID(subnet)
 		committeeTopicFullName := commons.GetTopicFullName(committeeTopic)
 
