@@ -383,7 +383,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
@@ -404,7 +404,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		},
 	})
-	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
@@ -461,7 +461,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
@@ -482,7 +482,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		},
 	})
-	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: trigger a change in active indices
@@ -567,7 +567,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 			Slot: 2,
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*v1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*v1.HeadEvent))
 	waitForDutiesExecution(t, fetchDutiesCall, executeDutiesCall, timeout, expected)
 	require.Greater(t, time.Since(startTime), time.Duration(float64(scheduler.beaconConfig.SlotDuration/3)*0.90))
 

@@ -581,7 +581,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
@@ -603,7 +603,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Attester_only(t *te
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot testSlotsPerEpoch*2
@@ -671,7 +671,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
@@ -693,7 +693,7 @@ func TestScheduler_Committee_Reorg_Previous_Epoch_Transition_Indices_Changed_Att
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	// wait for attester duties to be fetched
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot testSlotsPerEpoch*2
@@ -770,7 +770,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoActionCommittee(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
@@ -792,7 +792,7 @@ func TestScheduler_Committee_Reorg_Previous_Attester_only(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	// wait for attester duties to be fetched again for the current epoch
 	waitForDutiesFetchCommittee(t, fetchDutiesCall, executeDutiesCall, timeout)
 	// no execution should happen in slot testSlotsPerEpoch+1
@@ -871,7 +871,7 @@ func TestScheduler_Committee_Early_Block_Attester_Only(t *testing.T) {
 			Slot: 2,
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecutionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 	require.Less(t, time.Since(startTime), scheduler.beaconConfig.SlotDuration/3)
 
@@ -939,7 +939,7 @@ func TestScheduler_Committee_Early_Block(t *testing.T) {
 			Slot: 2,
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForDutiesExecutionCommittee(t, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 	require.Less(t, time.Since(startTime), scheduler.beaconConfig.SlotDuration/3)
 

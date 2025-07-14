@@ -322,7 +322,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
@@ -344,7 +344,7 @@ func TestScheduler_Proposer_Reorg_Current(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: wait for proposer duties to be fetched again for the current epoch.
@@ -400,7 +400,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 3: Ticker with no action
@@ -422,7 +422,7 @@ func TestScheduler_Proposer_Reorg_Current_Indices_Changed(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	})
-	scheduler.HandleHeadEvent()(e.Data.(*eth2apiv1.HeadEvent))
+	scheduler.HandleHeadEvent()(t.Context(), e.Data.(*eth2apiv1.HeadEvent))
 	waitForNoAction(t, fetchDutiesCall, executeDutiesCall, noActionTimeout)
 
 	// STEP 5: trigger a change in active indices in the same slot
