@@ -63,7 +63,6 @@ type MockControllerOptions struct {
 	sharesStorage     SharesStorage
 	beacon            beacon.BeaconNode
 	validatorOptions  validator.Options
-	signer            ekm.BeaconSigner
 	StorageMap        *ibftstorage.ParticipantStores
 	validatorsMap     *validators.ValidatorsMap
 	validatorStore    registrystorage.ValidatorStore

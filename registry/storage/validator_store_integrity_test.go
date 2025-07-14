@@ -2,8 +2,8 @@ package storage
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"math"
-	"math/rand"
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -186,7 +186,7 @@ func requireValidatorStoreIntegrity(t *testing.T, store ValidatorStore, shares [
 	const nonExistingIndex = phase0.ValidatorIndex(math.MaxUint64 - 1)
 	const nonExistingOperatorID = spectypes.OperatorID(math.MaxUint64 - 1)
 	var nonExistingCommitteeID spectypes.CommitteeID
-	n, err := rand.Read(nonExistingCommitteeID[:])
+	n, err := cryptorand.Read(nonExistingCommitteeID[:])
 	require.NoError(t, err)
 	require.Equal(t, len(nonExistingCommitteeID), n)
 

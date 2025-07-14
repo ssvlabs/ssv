@@ -29,7 +29,7 @@ func createTestingValidatorSnapshots(n int) []*storage.ValidatorSnapshot {
 func createTestingSingleCommittees(n uint64) []*storage.CommitteeSnapshot {
 	ret := make([]*storage.CommitteeSnapshot, 0)
 	for i := uint64(0); i <= n; i++ {
-		opRef := spectypes.OperatorID(i*4 + 1)
+		opRef := i*4 + 1
 		ret = append(ret, &storage.CommitteeSnapshot{
 			Operators:  []spectypes.OperatorID{opRef, opRef + 1, opRef + 2, opRef + 3},
 			Validators: createTestingValidatorSnapshots(1),
