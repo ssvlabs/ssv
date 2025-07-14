@@ -5,7 +5,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -72,19 +71,19 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	validatorStore.EXPECT().GetCommittee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) (*registrystorage.CommitteeSnapshot, bool) {
 		if id == committeeID {
 
-			share1 := cloneSSVShare(t, shares.active)
-			share2 := cloneSSVShare(t, share1)
+			share1 := shares.active.Copy()
+			share2 := share1.Copy()
 			share2.ValidatorIndex = share1.ValidatorIndex + 1
-			share3 := cloneSSVShare(t, share2)
+			share3 := share2.Copy()
 			share3.ValidatorIndex = share2.ValidatorIndex + 1
 
 			return &registrystorage.CommitteeSnapshot{
 				ID:        id,
 				Operators: committee,
 				Validators: []*registrystorage.ValidatorSnapshot{
-					{Share: *share1},
-					{Share: *share2},
-					{Share: *share3},
+					{Share: *share1.Copy()},
+					{Share: *share2.Copy()},
+					{Share: *share3.Copy()},
 				},
 			}, true
 		}
@@ -110,7 +109,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			shares.noMetadata,
 		} {
 			if bytes.Equal(share.ValidatorPubKey[:], pubKey) {
-				return &registrystorage.ValidatorSnapshot{Share: *share}, true
+				return &registrystorage.ValidatorSnapshot{Share: *share.Copy()}, true
 			}
 		}
 		return nil, false
@@ -1858,19 +1857,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, peerID, receivedAt)
 		require.ErrorContains(t, err, ErrValidatorIndexMismatch.Error())
 	})
-}
-
-// Deep copy helper function for testing purposes only
-func cloneSSVShare(t *testing.T, original *ssvtypes.SSVShare) *ssvtypes.SSVShare {
-	// json encode original
-	originalJSON, err := json.Marshal(original)
-	require.NoError(t, err)
-
-	// json decode original
-	cloned := new(ssvtypes.SSVShare)
-	require.NoError(t, json.Unmarshal(originalJSON, cloned))
-
-	return cloned
 }
 
 type shareSet struct {

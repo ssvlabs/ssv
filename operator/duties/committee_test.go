@@ -82,7 +82,7 @@ func setupCommitteeDutiesMock(
 			snapshots := make([]*registrystorage.ValidatorSnapshot, len(activeShares))
 			for i, share := range activeShares {
 				snapshots[i] = &registrystorage.ValidatorSnapshot{
-					Share:          *share,
+					Share:          *share.Copy(),
 					LastUpdated:    time.Now(),
 					IsOwnValidator: true,
 					ParticipationStatus: registrystorage.ParticipationStatus{
@@ -100,7 +100,7 @@ func setupCommitteeDutiesMock(
 			snapshots := make([]*registrystorage.ValidatorSnapshot, len(activeShares))
 			for i, share := range activeShares {
 				snapshots[i] = &registrystorage.ValidatorSnapshot{
-					Share:          *share,
+					Share:          *share.Copy(),
 					LastUpdated:    time.Now(),
 					IsOwnValidator: true,
 					ParticipationStatus: registrystorage.ParticipationStatus{
@@ -169,7 +169,7 @@ func setupCommitteeDutiesMock(
 
 			if ssvShare != nil {
 				snapshot := &registrystorage.ValidatorSnapshot{
-					Share:          *ssvShare,
+					Share:          *ssvShare.Copy(),
 					LastUpdated:    time.Now(),
 					IsOwnValidator: true,
 					ParticipationStatus: registrystorage.ParticipationStatus{
