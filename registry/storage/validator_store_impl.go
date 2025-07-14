@@ -819,6 +819,7 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 	var (
 		changedShares   []*types.SSVShare
 		changedMetadata beacon.ValidatorMetadataMap
+		indicesChanged  bool
 	)
 
 	for pk, newMetadata := range metadata {
@@ -839,6 +840,11 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 			continue
 		}
 
+		// Check if this is an index change (new index or index value changed)
+		oldIndex := state.share.ValidatorIndex
+		hadIndex := state.share.HasBeaconMetadata()
+		willHaveIndex := newMetadata.Index != 0
+
 		// Update the share with new metadata
 		state.share.SetBeaconMetadata(newMetadata)
 		state.share.BeaconMetadataLastUpdated = time.Now() // TODO: confirm, moved from operator/validator/metadata/syncer.go
@@ -847,6 +853,11 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 		// Update indices if beacon metadata changed
 		if state.share.HasBeaconMetadata() {
 			s.indices[state.share.ValidatorIndex] = state.share.ValidatorPubKey
+		}
+
+		// Track if indices changed (validator got an index for first time or index value changed)
+		if (!hadIndex && willHaveIndex) || (hadIndex && willHaveIndex && oldIndex != newMetadata.Index) {
+			indicesChanged = true
 		}
 
 		// Recalculate participation status as it may have changed
@@ -917,6 +928,15 @@ func (s *validatorStoreImpl) UpdateValidatorsMetadata(ctx context.Context, metad
 		s.logger.Debug("metadata updated",
 			zap.Int("total_validators", len(metadata)),
 			zap.Int("changed_validators", len(changedShares)))
+
+		// Trigger indices changed callback only if there were actual index changes
+		if indicesChanged && s.callbacks.OnIndicesChanged != nil {
+			go func() {
+				if err := s.callbacks.OnIndicesChanged(ctx); err != nil {
+					s.logger.Error("indices changed callback failed", zap.Error(err))
+				}
+			}()
+		}
 	}
 
 	return changedMetadata, nil
