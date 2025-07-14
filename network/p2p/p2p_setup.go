@@ -348,13 +348,16 @@ func (n *p2pNetwork) setupPubsub() (topics.Controller, error) {
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	si := s.NewGossipScoreIndex()
-	_, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), si)
+	pubsub, tc, err := topics.NewPubSub(n.ctx, n.logger, cfg, n.nodeStorage.ValidatorStore(), si)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not setup pubsub")
 	}
 
 	n.topicsCtrl = tc
 	n.logger.Debug("topics controller is ready")
+
+	n.pubsub = pubsub
+
 	return tc, nil
 }
 
