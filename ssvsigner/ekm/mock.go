@@ -7,30 +7,31 @@ import (
 	"github.com/ssvlabs/eth2-key-manager/core"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/ssvlabs/ssv/storage/basedb"
+
 	ssvclient "github.com/ssvlabs/ssv/ssvsigner"
 	"github.com/ssvlabs/ssv/ssvsigner/web3signer"
-	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 type MockRemoteSigner struct {
 	mock.Mock
 }
 
-func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) error {
+func (m *MockRemoteSigner) AddValidators(ctx context.Context, shares ...ssvclient.ShareKeys) ([]web3signer.Status, error) {
 	args := m.Called(ctx, shares[0])
 	if args.Get(0) == nil {
-		return args.Error(0)
+		return nil, args.Error(1)
 	}
-	return args.Error(0)
+	return args.Get(0).([]web3signer.Status), args.Error(1)
 }
 
-func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) error {
+func (m *MockRemoteSigner) RemoveValidators(ctx context.Context, pubKeys ...phase0.BLSPubKey) ([]web3signer.Status, error) {
 	args := m.Called(ctx, pubKeys)
 	result := args.Get(0)
 	if result == nil {
-		return args.Error(0)
+		return nil, args.Error(1)
 	}
-	return args.Error(0)
+	return args.Get(0).([]web3signer.Status), args.Error(1)
 }
 
 func (m *MockRemoteSigner) Sign(ctx context.Context, sharePubKey phase0.BLSPubKey, payload web3signer.SignRequest) (phase0.BLSSignature, error) {
@@ -246,17 +247,17 @@ func (m *MockSlashingProtector) UpdateHighestProposal(pubKey phase0.BLSPubKey, s
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) BumpSlashingProtection(pubKey phase0.BLSPubKey) error {
-	args := m.Called(pubKey)
+func (m *MockSlashingProtector) BumpSlashingProtectionTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestAttestation(pubKey phase0.BLSPubKey) error {
-	args := m.Called(pubKey)
+func (m *MockSlashingProtector) RemoveHighestAttestationTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }
 
-func (m *MockSlashingProtector) RemoveHighestProposal(pubKey phase0.BLSPubKey) error {
-	args := m.Called(pubKey)
+func (m *MockSlashingProtector) RemoveHighestProposalTxn(txn basedb.Txn, pubKey phase0.BLSPubKey) error {
+	args := m.Called(txn, pubKey)
 	return args.Error(0)
 }

@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/exporter"
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/network"
@@ -59,18 +59,18 @@ const (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	network           P2PNetwork
-	recipientsStorage Recipients
-	sharesStorage     SharesStorage
-	beacon            beacon.BeaconNode
-	validatorOptions  validator.Options
-	signer            ekm.BeaconSigner
-	StorageMap        *ibftstorage.ParticipantStores
-	validatorsMap     *validators.ValidatorsMap
-	validatorStore    registrystorage.ValidatorStore
-	operatorDataStore operatordatastore.OperatorDataStore
-	operatorStorage   registrystorage.Operators
-	networkConfig     networkconfig.NetworkConfig
+	network             P2PNetwork
+	recipientsStorage   Recipients
+	sharesStorage       SharesStorage
+	beacon              beacon.BeaconNode
+	validatorCommonOpts *validator.CommonOptions
+	signer              ekm.BeaconSigner
+	StorageMap          *ibftstorage.ParticipantStores
+	validatorsMap       *validators.ValidatorsMap
+	validatorStore      registrystorage.ValidatorStore
+	operatorDataStore   operatordatastore.OperatorDataStore
+	operatorStorage     registrystorage.Operators
+	networkConfig       *networkconfig.NetworkConfig
 }
 
 func TestNewController(t *testing.T) {
@@ -97,7 +97,7 @@ func TestNewController(t *testing.T) {
 		RecipientsStorage: recipientStorage,
 		Context:           t.Context(),
 	}
-	control := NewController(logger, controllerOptions)
+	control := NewController(logger, controllerOptions, exporter.Options{})
 	require.IsType(t, &controller{}, control)
 }
 
@@ -166,9 +166,9 @@ func TestSetupValidatorsExporter(t *testing.T) {
 		syncHighestDecidedResponse error
 		getValidatorDataResponse   error
 	}{
-		{"no shares of non committee", nil, nil, nil},
-		{"set up non committee validators", sharesWithMetadata, nil, nil},
-		{"set up non committee validators without metadata", sharesWithoutMetadata, nil, nil},
+		{"no shares of non-committee", nil, nil, nil},
+		{"set up non-committee validators", sharesWithMetadata, nil, nil},
+		{"set up non-committee validators without metadata", sharesWithoutMetadata, nil, nil},
 		{"fail to sync highest decided", sharesWithMetadata, errors.New("failed to sync highest decided"), nil},
 		{"fail to update validators metadata", sharesWithMetadata, nil, errors.New("could not update all validators")},
 	}
@@ -181,7 +181,7 @@ func TestSetupValidatorsExporter(t *testing.T) {
 			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t, operatorPrivateKey)
 
 			defer ctrl.Finish()
-			mockValidatorsMap := validators.New(context.TODO())
+			mockValidatorsMap := validators.New(t.Context())
 
 			subnets := commons.Subnets{}
 			for _, share := range sharesWithMetadata {
@@ -228,87 +228,96 @@ func TestSetupValidatorsExporter(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorStore:    mockValidatorStore,
-				validatorOptions: validator.Options{
-					Exporter: true,
+				validatorCommonOpts: &validator.CommonOptions{
+					ExporterOptions: exporter.Options{
+						Enabled: true,
+					},
 				},
 			}
 			ctr := setupController(t, logger, controllerOptions)
 			ctr.validatorStartFunc = validatorStartFunc
-			ctr.StartValidators(context.TODO())
+			ctr.StartValidators(t.Context())
 		})
 	}
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
-	mockValidatorsMap := validators.New(context.TODO())
+	mockValidatorsMap := validators.New(t.Context())
 	controllerOptions := MockControllerOptions{
-		validatorsMap: mockValidatorsMap,
+		validatorsMap:       mockValidatorsMap,
+		validatorCommonOpts: &validator.CommonOptions{},
 	}
-	ctr := setupController(t, logger, controllerOptions) // none committee
+	ctr := setupController(t, logger, controllerOptions) // non-committee
 
-	// Only exporter handles non committee messages
-	ctr.validatorOptions.Exporter = true
+	// Only exporter handles non-committee messages
+	ctr.validatorCommonOpts.ExporterOptions.Enabled = true
 
 	go ctr.handleRouterMessages()
 
-	var wg sync.WaitGroup
-
+	receivedMsgs := make(chan network.DecodedSSVMessage, 1)
 	ctr.messageWorker.UseHandler(func(ctx context.Context, msg network.DecodedSSVMessage) error {
-		wg.Done()
+		receivedMsgs <- msg
 		return nil
 	})
 
-	wg.Add(3)
+	logger.Debug("starting to send messages")
 
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.DomainType, []byte("pk"), spectypes.RoleCommittee)
 
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
+			MsgType: spectypes.SSVConsensusMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    generateDecidedMessage(t, identifier),
 		},
 	})
-
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
+			MsgType: spectypes.SSVConsensusMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    generateChangeRoundMsg(t, identifier),
 		},
 	})
-
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-			MsgType: message.SSVSyncMsgType,
-			MsgID:   identifier,
-			Data:    []byte("data"),
-		},
-	})
-
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
-			MsgType: 123,
-			MsgID:   identifier,
-			Data:    []byte("data"),
-		},
-	})
-
-	ctr.messageRouter.Route(context.TODO(), &queue.SSVMessage{
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
-			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgType: message.SSVSyncMsgType, // this message will be skipped
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
+	})
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: 123, // this message will be skipped
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
+	})
+	ctr.messageRouter.Route(t.Context(), &queue.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType, // this message will be processed
 			MsgID:   identifier,
 			Data:    []byte("data2"),
 		},
 	})
 
-	go func() {
-		time.Sleep(time.Second * 4)
-		panic("time out!")
-	}()
-
-	wg.Wait()
+	receivedMsgsCnt := 0
+	timeout := time.After(30 * time.Second)
+	for {
+		select {
+		case msg := <-receivedMsgs:
+			logger.Debug("received message", zap.Any("msg", msg))
+			receivedMsgsCnt++
+			if receivedMsgsCnt == 3 {
+				// Wait a bit and check in case there are unexpected messages still to come.
+				time.Sleep(100 * time.Millisecond)
+				require.Equal(t, 0, len(receivedMsgs), "unexpectedly received more than 3 messages")
+				return
+			}
+		case <-timeout:
+			require.Fail(t, "timed out waiting for all 3 messages to arrive")
+		}
+	}
 }
 
 func TestSetupValidators(t *testing.T) {
@@ -525,7 +534,7 @@ func TestSetupValidators(t *testing.T) {
 				createPubKey(byte('0')): testValidator,
 			}
 			committeeMap := make(map[spectypes.CommitteeID]*validator.Committee)
-			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, committeeMap))
+			mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, committeeMap))
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
@@ -537,7 +546,7 @@ func TestSetupValidators(t *testing.T) {
 				recipientsStorage: recipientStorage,
 				operatorStorage:   opStorage,
 				validatorsMap:     mockValidatorsMap,
-				validatorOptions: validator.Options{
+				validatorCommonOpts: &validator.CommonOptions{
 					NetworkConfig: networkconfig.TestNetwork,
 					Storage:       storageMap,
 				},
@@ -569,7 +578,7 @@ func TestGetValidator(t *testing.T) {
 	testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 		createPubKey(byte('0')): testValidator,
 	}
-	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
+	mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
 	// Set up the controller with mock data
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
@@ -619,7 +628,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     mockShares(sharesSlice),
-			validatorsMap:     validators.New(context.TODO()),
+			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -655,7 +664,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     mockShares(sharesSlice),
-			validatorsMap:     validators.New(context.TODO()),
+			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -683,7 +692,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     mockShares(sharesSlice),
-			validatorsMap:     validators.New(context.TODO()),
+			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -724,7 +733,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     mockShares(sharesSlice),
-			validatorsMap:     validators.New(context.TODO()),
+			validatorsMap:     validators.New(t.Context()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -754,7 +763,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			createPubKey(byte('0')): testValidator,
 		}
-		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
+		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
 
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(t, logger, controllerOptions)
@@ -771,7 +780,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		testValidatorsMap := map[spectypes.ValidatorPK]*validator.Validator{
 			createPubKey(byte('0')): testValidator,
 		}
-		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap, nil))
+		mockValidatorsMap := validators.New(t.Context(), validators.WithInitialState(testValidatorsMap, nil))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(t, logger, controllerOptions)
 
@@ -785,7 +794,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 
 func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOptions) controller {
 	// Default to test network config if not provided.
-	if opts.networkConfig.Name == "" {
+	if opts.networkConfig == nil {
 		opts.networkConfig = networkconfig.TestNetwork
 	}
 
@@ -800,7 +809,7 @@ func setupController(t *testing.T, logger *zap.Logger, opts MockControllerOption
 		validatorsMap:           opts.validatorsMap,
 		validatorStore:          opts.validatorStore,
 		ctx:                     t.Context(),
-		validatorOptions:        opts.validatorOptions,
+		validatorCommonOpts:     opts.validatorCommonOpts,
 		recipientsStorage:       opts.recipientsStorage,
 		networkConfig:           opts.networkConfig,
 		messageRouter:           newMessageRouter(logger),
@@ -1207,7 +1216,7 @@ func prepareController(t *testing.T) (*controller, *mocks.MockSharesStorage) {
 		validatorsMap:     mockValidatorsMap,
 		networkConfig:     networkconfig.TestNetwork,
 		indicesChangeCh:   make(chan struct{}, 1), // Buffered channel for each test
-		validatorOptions: validator.Options{
+		validatorCommonOpts: &validator.CommonOptions{
 			NetworkConfig: networkconfig.TestNetwork,
 		},
 		validatorStartFunc: func(validator *validator.Validator) (bool, error) {

@@ -166,11 +166,12 @@ func (n *p2pNetwork) SetupServices() error {
 	if err := n.setupPeerServices(); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
-	_, err := n.setupPubsub()
 
+	_, err := n.setupPubsub()
 	if err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
+
 	if err := n.setupDiscovery(); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
 	}
@@ -379,7 +380,16 @@ func (n *p2pNetwork) inboundLimit() int {
 	return int(float64(n.cfg.MaxPeers) * inboundLimitRatio)
 }
 
+// connectionStats returns the number of inbound and outbound connections.
+// It safely handles the case where the host is not yet initialized, which can
+// occur during network setup when the connection gater is active but libp2p.New()
+// hasn't completed yet. In this case, it returns (0, 0) since no connections
+// exist before the host is fully initialized.
 func (n *p2pNetwork) connectionStats() (inbound, outbound int) {
+	if n.host == nil {
+		return 0, 0
+	}
+
 	return connectionStats(n.host)
 }
 

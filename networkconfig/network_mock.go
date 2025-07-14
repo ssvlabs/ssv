@@ -15,9 +15,8 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	gomock "go.uber.org/mock/gomock"
-
 	types "github.com/ssvlabs/ssv-spec/types"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockNetwork is a mock of Network interface.
@@ -239,6 +238,20 @@ func (m *MockNetwork) GetEpochsPerSyncCommitteePeriod() uint64 {
 func (mr *MockNetworkMockRecorder) GetEpochsPerSyncCommitteePeriod() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockNetwork)(nil).GetEpochsPerSyncCommitteePeriod))
+}
+
+// GetGasLimit36Epoch mocks base method.
+func (m *MockNetwork) GetGasLimit36Epoch() phase0.Epoch {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetGasLimit36Epoch")
+	ret0, _ := ret[0].(phase0.Epoch)
+	return ret0
+}
+
+// GetGasLimit36Epoch indicates an expected call of GetGasLimit36Epoch.
+func (mr *MockNetworkMockRecorder) GetGasLimit36Epoch() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGasLimit36Epoch", reflect.TypeOf((*MockNetwork)(nil).GetGasLimit36Epoch))
 }
 
 // GetGenesisTime mocks base method.

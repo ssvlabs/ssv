@@ -16,6 +16,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
+	"github.com/ssvlabs/ssv/ssvsigner/keys"
+
 	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
@@ -23,7 +25,6 @@ import (
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
-	"github.com/ssvlabs/ssv/ssvsigner/keys"
 	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
@@ -58,13 +59,13 @@ func TestController_LiquidateCluster(t *testing.T) {
 		return true, nil
 	}
 	controllerOptions := MockControllerOptions{
-		beacon:            bc,
-		network:           network,
-		operatorDataStore: operatorDataStore,
-		sharesStorage:     sharesStorage,
-		recipientsStorage: recipientStorage,
-		validatorsMap:     mockValidatorsMap,
-		validatorOptions:  validator.Options{},
+		beacon:              bc,
+		network:             network,
+		operatorDataStore:   operatorDataStore,
+		sharesStorage:       sharesStorage,
+		recipientsStorage:   recipientStorage,
+		validatorsMap:       mockValidatorsMap,
+		validatorCommonOpts: &validator.CommonOptions{},
 	}
 	ctr := setupController(t, logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
@@ -123,14 +124,14 @@ func TestController_StopValidator(t *testing.T) {
 		return true, nil
 	}
 	controllerOptions := MockControllerOptions{
-		beacon:            bc,
-		network:           network,
-		operatorDataStore: operatorDataStore,
-		sharesStorage:     sharesStorage,
-		recipientsStorage: recipientStorage,
-		validatorsMap:     mockValidatorsMap,
-		validatorOptions:  validator.Options{},
-		signer:            signer,
+		beacon:              bc,
+		network:             network,
+		operatorDataStore:   operatorDataStore,
+		sharesStorage:       sharesStorage,
+		recipientsStorage:   recipientStorage,
+		validatorsMap:       mockValidatorsMap,
+		validatorCommonOpts: &validator.CommonOptions{},
+		signer:              signer,
 	}
 	ctr := setupController(t, logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
@@ -138,7 +139,7 @@ func TestController_StopValidator(t *testing.T) {
 	encryptedSharePrivKey, err := operatorPrivateKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(t.Context(), encryptedSharePrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
+	require.NoError(t, signer.AddShare(t.Context(), nil, encryptedSharePrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	d, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
@@ -201,7 +202,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,
 		networkConfig:     networkconfig.TestNetwork,
-		validatorOptions: validator.Options{
+		validatorCommonOpts: &validator.CommonOptions{
 			Storage:       storageMap,
 			NetworkConfig: networkconfig.TestNetwork,
 		},
@@ -214,7 +215,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	encryptedPrivKey, err := operatorPrivKey.Public().Encrypt([]byte(secretKey.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	require.NoError(t, signer.AddShare(t.Context(), encryptedPrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
+	require.NoError(t, signer.AddShare(t.Context(), nil, encryptedPrivKey, phase0.BLSPubKey(secretKey.GetPublicKey().Serialize())))
 
 	testingBC := testingutils.NewTestingBeaconNode()
 	d, err := testingBC.DomainData(1, spectypes.DomainSyncCommittee)
