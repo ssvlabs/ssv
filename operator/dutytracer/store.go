@@ -205,7 +205,7 @@ func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes
 		return nil, fmt.Errorf("get committee duties: %w", err)
 	}
 
-	links, err := c.store.GetCommitteeDutyLinks(slot)
+	links, err := c.GetCommitteeDutyLinks(slot)
 	if err != nil {
 		return nil, fmt.Errorf("get committee duty links: %w", err)
 	}
@@ -244,6 +244,26 @@ func (c *Collector) GetAllCommitteeDecideds(slot phase0.Slot, roles ...spectypes
 		})
 	}
 
+	return out, nil
+}
+
+func (c *Collector) GetCommitteeDutyLinks(slot phase0.Slot) (out []*model.CommitteeDutyLink, err error) {
+	c.validatorIndexToCommitteeLinks.Range(func(vi phase0.ValidatorIndex, m *hashmap.Map[phase0.Slot, spectypes.CommitteeID]) bool {
+		cid, found := m.Get(slot)
+		if found {
+			out = append(out, &model.CommitteeDutyLink{
+				ValidatorIndex: vi,
+				CommitteeID:    cid,
+			})
+		}
+		return true
+	})
+
+	links, err := c.store.GetCommitteeDutyLinks(slot)
+	if err != nil {
+		return nil, fmt.Errorf("get committee duty links: %w", err)
+	}
+	out = append(out, links...)
 	return out, nil
 }
 

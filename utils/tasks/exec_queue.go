@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -63,7 +64,7 @@ func (eq *executionQueue) Stop() {
 }
 
 // Start starts to execute events
-func (eq *executionQueue) Start() {
+func (eq *executionQueue) Start(ctx context.Context) {
 	eq.lock.Lock()
 	eq.stopped = false
 	eq.lock.Unlock()
@@ -82,7 +83,11 @@ func (eq *executionQueue) Start() {
 			continue
 		}
 		eq.lock.Unlock()
-		time.Sleep(eq.interval)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(eq.interval):
+		}
 	}
 }
 
