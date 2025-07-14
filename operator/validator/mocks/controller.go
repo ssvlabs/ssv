@@ -321,6 +321,21 @@ func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRecipientData", reflect.TypeOf((*MockRecipients)(nil).GetRecipientData), r, owner)
 }
 
+// SaveRecipientData mocks base method.
+func (m *MockRecipients) SaveRecipientData(rw basedb.ReadWriter, recipientData *storage.RecipientData) (*storage.RecipientData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveRecipientData", rw, recipientData)
+	ret0, _ := ret[0].(*storage.RecipientData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SaveRecipientData indicates an expected call of SaveRecipientData.
+func (mr *MockRecipientsMockRecorder) SaveRecipientData(rw, recipientData any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveRecipientData", reflect.TypeOf((*MockRecipients)(nil).SaveRecipientData), rw, recipientData)
+}
+
 // MockSharesStorage is a mock of SharesStorage interface.
 type MockSharesStorage struct {
 	ctrl     *gomock.Controller

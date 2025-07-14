@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
@@ -131,6 +130,7 @@ type Nonce uint16
 
 type Recipients interface {
 	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
+	SaveRecipientData(rw basedb.ReadWriter, recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error)
 }
 
 type SharesStorage interface {
@@ -812,7 +812,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		return nil, nil, nil
 	}
 
-	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
+	if err := c.setShareFeeRecipient(share); err != nil {
 		return nil, nil, fmt.Errorf("could not set share fee recipient: %w", err)
 	}
 
@@ -950,23 +950,36 @@ func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	)
 }
 
-func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipientData GetRecipientDataFunc) error {
-	data, found, err := getRecipientData(nil, share.OwnerAddress)
+func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare) error {
+	data, found, err := c.recipientsStorage.GetRecipientData(nil, share.OwnerAddress)
 	if err != nil {
 		return errors.Wrap(err, "could not get recipient data")
 	}
 
-	var feeRecipient bellatrix.ExecutionAddress
-	if !found {
-		c.logger.Debug("setting fee recipient to owner address",
-			fields.Validator(share.ValidatorPubKey[:]), fields.FeeRecipient(share.OwnerAddress.Bytes()))
-		copy(feeRecipient[:], share.OwnerAddress.Bytes())
-	} else {
-		c.logger.Debug("setting fee recipient to storage data",
-			fields.Validator(share.ValidatorPubKey[:]), fields.FeeRecipient(data.FeeRecipient[:]))
-		feeRecipient = data.FeeRecipient
+	if found {
+		c.logger.Debug(
+			"setting fee recipient to the value from recipient storage",
+			fields.Validator(share.ValidatorPubKey[:]),
+			fields.FeeRecipient(data.FeeRecipient[:]),
+		)
+		share.FeeRecipientAddress = data.FeeRecipient
+		return nil
 	}
-	share.FeeRecipientAddress = feeRecipient
+
+	c.logger.Debug(
+		"setting fee recipient to owner address",
+		fields.Validator(share.ValidatorPubKey[:]),
+		fields.FeeRecipient(share.OwnerAddress.Bytes()),
+	)
+	copy(share.FeeRecipientAddress[:], share.OwnerAddress.Bytes())
+	recipientData := &registrystorage.RecipientData{
+		Owner: share.OwnerAddress,
+	}
+	copy(recipientData.FeeRecipient[:], share.OwnerAddress.Bytes())
+	_, err = c.recipientsStorage.SaveRecipientData(nil, recipientData)
+	if err != nil {
+		return fmt.Errorf("save recipient data: %w", err)
+	}
 
 	return nil
 }
